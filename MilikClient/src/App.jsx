@@ -11,6 +11,7 @@ import "./App.css";
 import { hasCompanyPermission } from "./utils/permissions";
 import { GL_ACCESS_MODULES, hasAnyCompanyModule, hasCompanyModule, isPropertyManagerCompany, isSelfManagingLandlordCompany } from "./utils/companyModules";
 import { ConfirmProvider } from "./context/ConfirmContext";
+import { ESSContextProvider } from "./context/ESSContext";
 
 // ─── Page loader shown while lazy chunks are downloading ─────────────────────
 const PageLoader = () => (
@@ -37,6 +38,16 @@ const PropertySalesPage = lazy(() => import("./pages/Modules/PropertySalesPage")
 const Login             = lazy(() => import("./pages/Login/Login"));
 const SetupAdmin        = lazy(() => import("./pages/Login/SetupAdmin"));
 const FirstTimePassword = lazy(() => import("./pages/Login/FirstTimePassword"));
+
+// ESS Portal
+const ESSLogin      = lazy(() => import("./pages/ESS/ESSLogin"));
+const ESSLayout     = lazy(() => import("./pages/ESS/ESSLayout"));
+const ESSDashboard  = lazy(() => import("./pages/ESS/ESSDashboard"));
+const ESSPayslips   = lazy(() => import("./pages/ESS/ESSPayslips"));
+const ESSLeave      = lazy(() => import("./pages/ESS/ESSLeave"));
+const ESSAttendance = lazy(() => import("./pages/ESS/ESSAttendance"));
+const ESSLetters    = lazy(() => import("./pages/ESS/ESSLetters"));
+const ESSProfile    = lazy(() => import("./pages/ESS/ESSProfile"));
 
 // Core
 const ModulesDashboard  = lazy(() => import("./pages/moduleDashboard/ModulesDashboard"));
@@ -366,6 +377,12 @@ function CompanyModuleRoute({ children, moduleKey, fallback = "/moduleDashboard"
   return children;
 }
 
+function ESSProtectedRoute({ children }) {
+  const token = localStorage.getItem('ess_token');
+  if (!token) return <Navigate to="/ess/login" replace />;
+  return children;
+}
+
 function SuperAdminRoute({ children }) {
   const { currentUser } = useSelector((state) => state.auth);
   const storedSession = getStoredAuthSession();
@@ -524,6 +541,7 @@ function App() {
   }, [currentCompany, currentUser]);
 
   return (
+    <ESSContextProvider>
     <ConfirmProvider>
       <BrowserRouter>
         <AppDocumentTitleGuard />
@@ -775,11 +793,24 @@ function App() {
             <Route path="/help/support"       element={<ProtectedRoute><SupportDocumentation /></ProtectedRoute>} />
             <Route path="/help/about"         element={<ProtectedRoute><AboutMilik /></ProtectedRoute>} />
 
+            {/* ── ESS Portal ───────────────────────────────────────────── */}
+            <Route path="/ess/login" element={<ESSLogin />} />
+            <Route path="/ess" element={<ESSProtectedRoute><ESSLayout /></ESSProtectedRoute>}>
+              <Route index element={<Navigate to="/ess/dashboard" replace />} />
+              <Route path="dashboard"  element={<ESSDashboard />} />
+              <Route path="payslips"   element={<ESSPayslips />} />
+              <Route path="leave"      element={<ESSLeave />} />
+              <Route path="attendance" element={<ESSAttendance />} />
+              <Route path="letters"    element={<ESSLetters />} />
+              <Route path="profile"    element={<ESSProfile />} />
+            </Route>
+
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
       </BrowserRouter>
     </ConfirmProvider>
+    </ESSContextProvider>
   );
 }
 

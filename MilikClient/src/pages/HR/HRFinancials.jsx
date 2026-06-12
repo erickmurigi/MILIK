@@ -90,14 +90,11 @@ export default function HRFinancials() {
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const currentUser    = useSelector((s) => s.auth?.currentUser || s.auth?.user);
 
-  const canViewAccounts = hasCompanyPermission(
-    currentUser || {},
-    currentCompany,
-    "chartOfAccounts",
-    "view",
-    GL_ACCESS_MODULES
+  const canViewAccounts = useMemo(
+    () => hasCompanyPermission(currentUser || {}, currentCompany, "chartOfAccounts", "view", GL_ACCESS_MODULES),
+    [currentUser, currentCompany]
   );
-  const hasFullAccounts = hasCompanyModule(currentCompany, "accounts");
+  const hasFullAccounts = useMemo(() => hasCompanyModule(currentCompany, "accounts"), [currentCompany]);
 
   // ── State ──────────────────────────────────────────────────────────────────
   const [tab, setTab]           = useState("journals");
@@ -186,10 +183,10 @@ export default function HRFinancials() {
   }, [journals]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
     loadJournals();
     setAcctLoaded(false);
-  };
+  }, [loadJournals]);
 
   // ─────────────────────────────────────────────────────────────────────────
   return (

@@ -1,9 +1,9 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   FaBuilding, FaTag, FaPlus, FaEdit, FaTrash, FaRedoAlt,
   FaToggleOn, FaToggleOff, FaSearch, FaCheck, FaTimes,
   FaUserTie, FaFileAlt, FaMoneyBillWave, FaPercent,
-  FaStar, FaUndo, FaInfoCircle,
+  FaStar, FaUndo, FaInfoCircle, FaEye, FaCode,
 } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import MilikConfirmDialog from '../../components/Modals/MilikConfirmDialog';
@@ -203,6 +203,8 @@ export default function HRSetup() {
   const [tplLoading,     setTplLoading]     = useState(false);
   const [tplSaving,      setTplSaving]      = useState(false);
   const [tplIsCustom,    setTplIsCustom]    = useState(false);
+  const [tplPreview,     setTplPreview]     = useState(false);
+  const tplBodyRef = useRef(null);
 
   // ── Tab 3 state ─────────────────────────────────────────────────────────────
   const [allowances,  setAllowances]  = useState([]);
@@ -259,6 +261,7 @@ export default function HRSetup() {
   // Load template when letter type changes
   useEffect(() => {
     if (tab !== 'docs') return;
+    setTplPreview(false);
     setTplLoading(true);
     adminRequests.get(`/hr/letter-templates/${selLetterType}`)
       .then((res) => {
@@ -400,6 +403,29 @@ export default function HRSetup() {
     } catch (e) { toast.error(e?.response?.data?.message || 'Failed'); }
     finally { setConfirm((p) => ({ ...p, isOpen: false })); }
   }});
+
+  const insertPlaceholder = useCallback((tag) => {
+    setTplPreview(false);
+    const el = tplBodyRef.current;
+    if (!el) { setTplBody((p) => p + tag); return; }
+    const start = el.selectionStart;
+    const end   = el.selectionEnd;
+    const next  = tplBody.slice(0, start) + tag + tplBody.slice(end);
+    setTplBody(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(start + tag.length, start + tag.length);
+    });
+  }, [tplBody]);
+
+  const previewDoc = useMemo(() => `<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  body{font-family:Arial,sans-serif;font-size:12px;color:#1e293b;padding:40px;max-width:680px;margin:0 auto;line-height:1.6}
+  p{margin:0 0 1em}h1,h2,h3{color:#0B3B2E}
+  table{width:100%;border-collapse:collapse;margin-bottom:1em}
+  td,th{padding:6px 8px;border:1px solid #e2e8f0}th{background:#f8fafc;font-weight:bold}
+</style></head><body>${tplBody}</body></html>`, [tplBody]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // Pay Component CRUD
@@ -730,7 +756,16 @@ export default function HRSetup() {
                       <div className="flex min-h-0 flex-1 gap-3 overflow-hidden p-3">
                         <div className="flex min-w-0 flex-1 flex-col">
                           <div className="mb-2 flex items-center justify-between">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{LETTER_TYPE_LABELS[selLetterType]} — Body HTML</span>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                              {LETTER_TYPE_LABELS[selLetterType]} — {tplPreview ? 'Preview' : 'Body HTML'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setTplPreview((p) => !p)}
+                              className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold transition-colors ${tplPreview ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+                            >
+                              {tplPreview ? <><FaCode size={8}/> Edit HTML</> : <><FaEye size={8}/> Preview</>}
+                            </button>
                           </div>
                           {/* Signatory selector */}
                           <div className="mb-2">
@@ -740,7 +775,23 @@ export default function HRSetup() {
                               {signatories.map((s) => <option key={s._id} value={s._id}>{s.name} — {s.title}</option>)}
                             </select>
                           </div>
-                          <textarea value={tplBody} onChange={(e) => setTplBody(e.target.value)} className="flex-1 w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-[11px] font-mono text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] resize-none" placeholder="Enter HTML body with {{placeholders}}…" spellCheck={false}/>
+                          {tplPreview ? (
+                            <iframe
+                              srcDoc={previewDoc}
+                              className="flex-1 w-full rounded-lg border border-slate-200 bg-white"
+                              sandbox="allow-same-origin"
+                              title="Letter preview"
+                            />
+                          ) : (
+                            <textarea
+                              ref={tplBodyRef}
+                              value={tplBody}
+                              onChange={(e) => setTplBody(e.target.value)}
+                              className="flex-1 w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-[11px] font-mono text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] resize-none"
+                              placeholder="Enter HTML body with {{placeholders}}…"
+                              spellCheck={false}
+                            />
+                          )}
                           <div className="mt-2">
                             <Label>Internal Notes (not printed)</Label>
                             <input value={tplNotes} onChange={(e) => setTplNotes(e.target.value)} className={inp} placeholder="e.g. Updated per legal review May 2026"/>
@@ -748,14 +799,22 @@ export default function HRSetup() {
                         </div>
                         {/* Placeholder reference */}
                         <div className="w-52 flex-shrink-0 overflow-y-auto rounded-lg border border-slate-100 bg-slate-50 p-3">
-                          <div className="flex items-center gap-1 mb-2">
+                          <div className="flex items-center gap-1 mb-1.5">
                             <FaInfoCircle size={9} className="text-slate-400"/>
                             <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Placeholders</span>
                           </div>
+                          <p className="text-[9px] text-indigo-500 mb-2">Click to insert at cursor</p>
                           <div className="space-y-1.5">
                             {PLACEHOLDERS.map(([tag, desc]) => (
                               <div key={tag}>
-                                <code className="block text-[10px] font-mono text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">{tag}</code>
+                                <button
+                                  type="button"
+                                  onClick={() => insertPlaceholder(tag)}
+                                  title="Click to insert at cursor position"
+                                  className="block w-full text-left text-[10px] font-mono text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded hover:bg-indigo-100 hover:text-indigo-800 transition-colors"
+                                >
+                                  {tag}
+                                </button>
                                 <span className="text-[9px] text-slate-500">{desc}</span>
                               </div>
                             ))}

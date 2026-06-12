@@ -76,6 +76,10 @@ const employeeSchema = new mongoose.Schema({
   terminationDate: { type: Date, default: null },
   terminationReason: { type: String, trim: true, default: '' },
 
+  // ── ESS Portal Access ─────────────────────────────────────────────
+  essEnabled:  { type: Boolean, default: false },
+  essPassword: { type: String, default: '' },
+
   // ── Audit ─────────────────────────────────────────────────────
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },

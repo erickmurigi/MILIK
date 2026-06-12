@@ -6,7 +6,7 @@ import HREmployee from '../models/HREmployee.js';
 import HRSignatory from '../models/HRSignatory.js';
 import HRLetterTemplate from '../models/HRLetterTemplate.js';
 import Company from '../../../models/Company.js';
-import { resolveCompanyId, currentUserId } from '../services/hrScope.js';
+import { resolveCompanyId, currentUserId, escapeRegex } from '../services/hrScope.js';
 import { isSystemAdminUser } from '../../../utils/permissionControl.js';
 import { LETTER_META, renderLetterBody, applyCustomTemplate, renderWithCustomBody } from '../utils/letterTemplates.js';
 
@@ -60,12 +60,23 @@ router.get('/', async (req, res) => {
   try {
     const companyId = await resolveCompanyId(req);
     const oid = new mongoose.Types.ObjectId(companyId);
-    const { employeeId, letterType, status, page = 1, limit = 25 } = req.query;
+    const { employeeId, letterType, status, page = 1, limit = 25, search } = req.query;
 
     const filter = { company: oid };
     if (employeeId)  filter.employee   = new mongoose.Types.ObjectId(employeeId);
     if (letterType)  filter.letterType = letterType;
     if (status)      filter.status     = status;
+
+    if (search) {
+      const regex = new RegExp(escapeRegex(search), 'i');
+      const empMatches = await HREmployee.find({
+        company: oid,
+        $or: [{ surname: regex }, { otherNames: regex }],
+      }).select('_id').lean();
+      const searchConds = [{ subject: regex }];
+      if (empMatches.length > 0) searchConds.push({ employee: { $in: empMatches.map((e) => e._id) } });
+      filter.$or = searchConds;
+    }
 
     const skip = (Math.max(1, Number(page)) - 1) * Math.min(100, Number(limit));
     const lim  = Math.min(100, Number(limit));

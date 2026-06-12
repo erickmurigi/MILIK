@@ -188,19 +188,27 @@ router.get('/p9', async (req, res) => {
     }
 
     const yr = parseInt(year);
-    const [employee, payslips] = await Promise.all([
+
+    // Fetch only period IDs for this year up front, then join payslips at DB level
+    const [employee, periodIds] = await Promise.all([
       HREmployee.findOne({ _id: employeeId, company: oid })
         .populate('department', 'name')
         .populate('designation', 'name')
         .lean(),
-      HRPayslip.find({ employee: employeeId, company: oid })
-        .populate({ path: 'payrollPeriod', match: { year: yr }, select: 'month year label status' })
-        .lean(),
+      HRPayrollPeriod.find({ company: oid, year: yr }).select('_id month label status').lean(),
     ]);
 
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
 
+    const pidSet = new Map(periodIds.map((p) => [p._id.toString(), p]));
+    const payslips = await HRPayslip.find({
+      employee: employeeId,
+      company: oid,
+      payrollPeriod: { $in: periodIds.map((p) => p._id) },
+    }).lean();
+
     const filtered = payslips
+      .map((ps) => ({ ...ps, payrollPeriod: pidSet.get(ps.payrollPeriod?.toString()) }))
       .filter((ps) => ps.payrollPeriod)
       .sort((a, b) => a.payrollPeriod.month - b.payrollPeriod.month);
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import {
@@ -65,11 +65,17 @@ export default function EmployeeProfile() {
   const [uploading, setUploading]   = useState(false);
   const fileInputRef                = useRef(null);
 
+  const [essForm,      setEssForm]    = useState({ password: '', enabled: false, sendInvite: true });
+  const [essSaving,    setEssSaving]  = useState(false);
+  const [essInviting,  setEssInviting] = useState(false);
+  const [essMsg,       setEssMsg]     = useState(null); // { type: 'ok'|'err', text }
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const res = await adminRequests.get(`/hr/employees/${id}`);
       setEmp(res.data);
+      setEssForm((p) => ({ ...p, enabled: !!res.data.essEnabled }));
     } catch (e) {
       toast.error(e?.response?.data?.message || 'Failed to load employee');
     } finally {
@@ -78,6 +84,69 @@ export default function EmployeeProfile() {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+
+  const saveEssAccess = useCallback(async () => {
+    setEssSaving(true);
+    setEssMsg(null);
+    try {
+      const payload = { enabled: essForm.enabled, sendInvite: essForm.sendInvite };
+      if (essForm.password) payload.password = essForm.password;
+      const { data } = await adminRequests.patch(`/hr/employees/${id}/ess-access`, payload);
+      setEssForm((p) => ({ ...p, password: '' }));
+      setEmp((p) => ({ ...p, essEnabled: essForm.enabled, essPassword: data.hasPassword ? '***' : '' }));
+      if (data.emailSent) {
+        setEssMsg({ type: 'ok', text: `ESS access saved and invite email sent to ${emp?.email}` });
+      } else if (data.noEmail) {
+        setEssMsg({ type: 'ok', text: 'ESS access saved. No email sent — employee has no email address on file.' });
+      } else if (data.emailError) {
+        setEssMsg({ type: 'err', text: `ESS saved but email failed: ${data.emailError}` });
+      } else {
+        setEssMsg({ type: 'ok', text: 'ESS access updated' });
+      }
+    } catch (e) {
+      setEssMsg({ type: 'err', text: e?.response?.data?.message || 'Failed to update ESS access' });
+    } finally { setEssSaving(false); }
+  }, [id, essForm, emp?.email]);
+
+  const sendEssInvite = useCallback(async () => {
+    if (!essForm.password) {
+      setEssMsg({ type: 'err', text: 'Enter a temporary password to include in the invite email' });
+      return;
+    }
+    setEssInviting(true);
+    setEssMsg(null);
+    try {
+      const toEmail = emp?.email || '';
+      const payload = { password: essForm.password };
+      if (!toEmail) {
+        const override = window.prompt('Employee has no email on file. Enter an email address to send to:');
+        if (!override) { setEssInviting(false); return; }
+        payload.email = override.trim();
+      }
+      const { data } = await adminRequests.post(`/hr/employees/${id}/ess-invite`, payload);
+      setEssForm((p) => ({ ...p, password: '' }));
+      setEssMsg({ type: 'ok', text: `Invite sent to ${data.to}` });
+    } catch (e) {
+      const d = e?.response?.data;
+      if (d?.noEmail) {
+        const override = window.prompt('No email on file. Enter an address to send to:');
+        if (override) {
+          setEssInviting(false);
+          try {
+            const { data } = await adminRequests.post(`/hr/employees/${id}/ess-invite`, {
+              password: essForm.password, email: override.trim(),
+            });
+            setEssForm((p) => ({ ...p, password: '' }));
+            setEssMsg({ type: 'ok', text: `Invite sent to ${data.to}` });
+          } catch (e2) {
+            setEssMsg({ type: 'err', text: e2?.response?.data?.message || 'Failed to send invite' });
+          }
+          return;
+        }
+      }
+      setEssMsg({ type: 'err', text: d?.message || 'Failed to send invite' });
+    } finally { setEssInviting(false); }
+  }, [id, essForm.password, emp?.email]);
 
   const handleTerminate = () => {
     setConfirm({
@@ -150,6 +219,17 @@ export default function EmployeeProfile() {
     });
   };
 
+  const grossSalary = useMemo(() => {
+    if (!emp) return 0;
+    const basic = Number(emp.basicSalary) || 0;
+    return basic + (emp.salaryComponents || [])
+      .filter((c) => c.type === 'Allowance')
+      .reduce((sum, c) => {
+        const amt = c.isPercentage ? (basic * Number(c.amount)) / 100 : Number(c.amount);
+        return sum + (amt || 0);
+      }, 0);
+  }, [emp]);
+
   const company = useSelector(selectCurrentCompany) || {};
 
   const printProfile = useCallback(() => {
@@ -157,7 +237,6 @@ export default function EmployeeProfile() {
     const { companyName = '', logo = '', roadStreet = '', town = '', phoneNo = '', email: coEmail = '', taxPIN = '' } = company;
     const addr = [roadStreet, town].filter(Boolean).join(', ');
     const basic = Number(emp.basicSalary) || 0;
-    const gross = basic + (emp.salaryComponents || []).filter((c) => c.type === 'Allowance').reduce((s, c) => s + (c.isPercentage ? (basic * Number(c.amount)) / 100 : Number(c.amount)), 0);
     const fmtC = (n) => n > 0 ? `KES ${Number(n).toLocaleString('en-KE', { minimumFractionDigits: 2 })}` : '—';
     const f = (v) => v || '—';
 
@@ -271,7 +350,7 @@ export default function EmployeeProfile() {
     <div class="card-head">Compensation</div>
     <div class="fields">
       <div><div class="fl">Basic Salary</div><div class="fv">${fmtC(emp.basicSalary)}</div></div>
-      <div><div class="fl">Gross Salary</div><div class="fv">${fmtC(gross)}</div></div>
+      <div><div class="fl">Gross Salary</div><div class="fv">${fmtC(grossSalary)}</div></div>
       <div><div class="fl">Payment Method</div><div class="fv">${f(emp.paymentMethod)}</div></div>
       ${emp.bankName?`<div><div class="fl">Bank</div><div class="fv">${emp.bankName}</div></div>`:''}
       ${emp.bankAccountNumber?`<div><div class="fl">Account No.</div><div class="fv mono">${emp.bankAccountNumber}</div></div>`:''}
@@ -280,7 +359,7 @@ export default function EmployeeProfile() {
     ${componentRows?`<table class="comp">
       <thead><tr><th>Component</th><th>Type</th><th style="text-align:right">Amount</th></tr></thead>
       <tbody>${componentRows}</tbody>
-      <tfoot class="gross"><tr><td colspan="2">Gross Salary</td><td style="text-align:right">${fmtC(gross)}</td></tr></tfoot>
+      <tfoot class="gross"><tr><td colspan="2">Gross Salary</td><td style="text-align:right">${fmtC(grossSalary)}</td></tr></tfoot>
     </table>`:''}
   </div>
 </div>
@@ -288,23 +367,11 @@ export default function EmployeeProfile() {
 </body></html>`);
     win.document.close();
     win.onload = () => { win.focus(); win.print(); };
-  }, [emp, company]);
+  }, [emp, company, grossSalary]);
 
   const status    = emp?.status || 'Active';
   const style     = STATUS_STYLE[status] || STATUS_STYLE.Active;
   const typeStyle = TYPE_STYLE[emp?.employmentType] || 'bg-slate-100 text-slate-600';
-
-  const grossSalary = (() => {
-    if (!emp) return 0;
-    const basic = Number(emp.basicSalary) || 0;
-    const allowances = (emp.salaryComponents || [])
-      .filter((c) => c.type === 'Allowance')
-      .reduce((sum, c) => {
-        const amt = c.isPercentage ? (basic * Number(c.amount)) / 100 : Number(c.amount);
-        return sum + (amt || 0);
-      }, 0);
-    return basic + allowances;
-  })();
 
   return (
     <DashboardLayout lockContentScroll>
@@ -607,6 +674,88 @@ export default function EmployeeProfile() {
                     </div>
 
                   </div>
+                </div>
+
+                {/* ESS Access */}
+                <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Employee Self-Service Access</span>
+                    {emp.essEnabled && (
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-emerald-700">Active</span>
+                    )}
+                  </div>
+                  <p className="mb-3 text-xs text-slate-500">
+                    Enable ESS so this employee can log into the portal to view payslips, apply for leave, check in/out, and see letters.
+                    {emp.email ? ` An invite email will be sent to ${emp.email}.` : ' Add an email address to this employee to send invite emails.'}
+                  </p>
+
+                  {essMsg && (
+                    <div className={`mb-3 rounded-lg px-3 py-2 text-xs font-medium ${essMsg.type === 'ok' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                      {essMsg.text}
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap items-end gap-3">
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={essForm.enabled}
+                        onChange={(e) => setEssForm((p) => ({ ...p, enabled: e.target.checked }))}
+                        className="h-4 w-4 rounded accent-green-700"
+                      />
+                      <span className="text-xs font-semibold text-slate-700">ESS Enabled</span>
+                    </label>
+
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                        {emp.essPassword ? 'New Password (leave blank to keep)' : 'Set Initial Password'}
+                      </span>
+                      <input
+                        type="password"
+                        placeholder="Min 6 characters"
+                        value={essForm.password}
+                        onChange={(e) => setEssForm((p) => ({ ...p, password: e.target.value }))}
+                        className="w-48 rounded-lg border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-green-600"
+                      />
+                    </div>
+
+                    <label className="flex cursor-pointer items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        checked={essForm.sendInvite}
+                        onChange={(e) => setEssForm((p) => ({ ...p, sendInvite: e.target.checked }))}
+                        className="h-3.5 w-3.5 rounded accent-green-700"
+                      />
+                      <span className="text-[11px] font-medium text-slate-600">Send invite email</span>
+                    </label>
+
+                    <button
+                      onClick={saveEssAccess}
+                      disabled={essSaving}
+                      className="rounded-lg bg-[#027333] px-4 py-1.5 text-xs font-bold text-white hover:bg-[#0c5d2b] disabled:opacity-60"
+                    >
+                      {essSaving ? 'Saving…' : 'Save'}
+                    </button>
+
+                    {emp.essEnabled && (
+                      <button
+                        onClick={sendEssInvite}
+                        disabled={essInviting || !essForm.password}
+                        title={!essForm.password ? 'Enter a password above to include in the invite' : 'Resend invite email with a new password'}
+                        className="rounded-lg border border-[#027333] px-4 py-1.5 text-xs font-bold text-[#027333] hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {essInviting ? 'Sending…' : 'Resend Invite'}
+                      </button>
+                    )}
+                  </div>
+
+                  {emp.essEnabled && (
+                    <div className="mt-3 flex flex-wrap gap-4 rounded-lg bg-slate-50 px-3 py-2 text-[10px] text-slate-500">
+                      <span>Portal: <strong className="text-slate-700">/ess/login</strong></span>
+                      <span>Company Code: <strong className="font-mono text-slate-700">{company?.companyCode || '—'}</strong></span>
+                      <span>Employee No.: <strong className="font-mono text-slate-700">{emp.employeeNumber}</strong></span>
+                    </div>
+                  )}
                 </div>
 
               </div>

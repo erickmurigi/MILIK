@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import { verifyUser } from '../../../controllers/verifyToken.js';
 import HRLeaveApplication from '../models/HRLeaveApplication.js';
 import HRLeaveType from '../models/HRLeaveType.js';
@@ -35,7 +36,7 @@ router.get('/stats', verifyUser, async (req, res) => {
 
     const [statusCounts, pending] = await Promise.all([
       HRLeaveApplication.aggregate([
-        { $match: { company: HRLeaveApplication.schema.path('company').cast(companyId), createdAt: { $gte: yearStart } } },
+        { $match: { company: new mongoose.Types.ObjectId(companyId), createdAt: { $gte: yearStart } } },
         { $group: { _id: '$status', count: { $sum: 1 } } },
       ]),
       HRLeaveApplication.find({ company: companyId, status: 'Pending' })
@@ -109,13 +110,12 @@ router.post('/', verifyUser, async (req, res) => {
     const end   = new Date(endDate);
     if (end < start) return res.status(400).json({ message: 'End date must be on or after start date' });
 
-    // Check employee exists
-    const emp = await HREmployee.findOne({ _id: employee, company: companyId });
+    const [emp, lt] = await Promise.all([
+      HREmployee.findOne({ _id: employee, company: companyId }),
+      HRLeaveType.findOne({ _id: leaveType, company: companyId, isActive: true }),
+    ]);
     if (!emp) return res.status(404).json({ message: 'Employee not found' });
-
-    // Check leave type exists and is active
-    const lt = await HRLeaveType.findOne({ _id: leaveType, company: companyId, isActive: true });
-    if (!lt) return res.status(404).json({ message: 'Leave type not found or inactive' });
+    if (!lt)  return res.status(404).json({ message: 'Leave type not found or inactive' });
 
     // Check for overlapping approved/pending applications
     const overlap = await HRLeaveApplication.findOne({

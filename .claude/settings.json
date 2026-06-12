@@ -38,7 +38,8 @@
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikApi\\\\modules\\\\hr\\\\\" -Recurse | Select-Object FullName | head -50)",
       "Bash(Find \"C:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikClient\\\\src\" -iname \"*hr*\" -o -iname \"*employee*\" -o -iname \"*payroll*\" -o -iname \"*payslip*\" -o -iname \"*leave*\" -o -iname \"*appraisal*\" -o -iname \"*kpi*\")",
       "Bash(Find \"C:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikClient\\\\src\\\\components\\\\HR\" -type f)",
-      "Bash(xargs grep -l \"printTabularList\\\\|printPettyCash\")"
+      "Bash(xargs grep -l \"printTabularList\\\\|printPettyCash\")",
+      "Bash(xargs grep -l \"verifyEmployee\\\\|isEmployee\\\\|employeePortal\\\\|ess\\\\|ESS\")"
     ]
   }
 }

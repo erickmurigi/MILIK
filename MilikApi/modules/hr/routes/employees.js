@@ -1,4 +1,5 @@
 import express from 'express';
+import bcrypt from 'bcryptjs';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import { v2 as cloudinary } from 'cloudinary';
@@ -9,6 +10,9 @@ import HRLeaveApplication from '../models/HRLeaveApplication.js';
 import HRPayrollPeriod from '../models/HRPayrollPeriod.js';
 import HRPayslip from '../models/HRPayslip.js';
 import { resolveCompanyId, currentUserId, parsePage, parseLimit } from '../services/hrScope.js';
+import Company from '../../../models/Company.js';
+import { buildSmtpTransporter, hasSmtpConfig, resolveMailSender } from '../../../utils/smtpMailer.js';
+import { buildESSInviteEmail } from '../utils/hrEmailTemplates.js';
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -107,19 +111,15 @@ router.get('/stats', verifyUser, async (req, res) => {
     const byType   = Object.fromEntries(typeCounts.map((t)   => [t._id, t.count]));
     const byGender = Object.fromEntries(genderCounts.map((g) => [g._id || 'Unknown', g.count]));
 
-    // payroll summary for latest period
+    // payroll summary for latest period — totals are stored on the period document
     let payrollSummary = null;
     if (latestPeriod) {
-      const payslipAgg = await HRPayslip.aggregate([
-        { $match: { company: oid, payrollPeriod: latestPeriod._id } },
-        { $group: { _id: null, grossTotal: { $sum: '$grossSalary' }, netTotal: { $sum: '$netSalary' }, count: { $sum: 1 } } },
-      ]);
       payrollSummary = {
         periodName: latestPeriod.label,
         status:     latestPeriod.status,
-        grossTotal: payslipAgg[0]?.grossTotal || latestPeriod.totalGross || 0,
-        netTotal:   payslipAgg[0]?.netTotal   || latestPeriod.totalNet   || 0,
-        count:      payslipAgg[0]?.count      || latestPeriod.employeeCount || 0,
+        grossTotal: latestPeriod.totalGross        || 0,
+        netTotal:   latestPeriod.totalNet          || 0,
+        count:      latestPeriod.employeeCount     || 0,
       };
     }
 
@@ -343,6 +343,126 @@ router.post('/:id/photo', verifyUser, (req, res) => {
       res.status(500).json({ message: e.message });
     }
   });
+});
+
+// shared helper — resolve portal URL from request origin or env
+function resolvePortalUrl(req) {
+  const env = process.env.FRONTEND_URL || process.env.ESS_PORTAL_URL || '';
+  if (env) return `${env.replace(/\/$/, '')}/ess/login`;
+  const origin = req.headers.origin || req.headers.referer || '';
+  if (origin) {
+    try { return `${new URL(origin).origin}/ess/login`; } catch {}
+  }
+  return '';
+}
+
+// PATCH /api/hr/employees/:id/ess-access  — enable/disable ESS + set password
+router.patch('/:id/ess-access', verifyUser, async (req, res) => {
+  try {
+    const companyId = resolveCompanyId(req);
+    const emp = await HREmployee.findOne({ _id: req.params.id, company: companyId });
+    if (!emp) return res.status(404).json({ message: 'Employee not found' });
+
+    const { enabled, password, sendInvite } = req.body;
+    if (typeof enabled === 'boolean') emp.essEnabled = enabled;
+
+    let plainPassword = null;
+    if (password) {
+      if (String(password).length < 6) {
+        return res.status(400).json({ message: 'Password must be at least 6 characters' });
+      }
+      plainPassword = String(password);
+      emp.essPassword = await bcrypt.hash(plainPassword, 10);
+    }
+
+    emp.updatedBy = currentUserId(req);
+    await emp.save();
+
+    // Auto-send invite email if requested and employee has an email address
+    let emailSent = false;
+    let emailError = null;
+    if (sendInvite && plainPassword && emp.email && emp.essEnabled && hasSmtpConfig()) {
+      try {
+        const company = await Company.findById(companyId).lean();
+        const { subject, html, text } = buildESSInviteEmail({
+          employee: emp,
+          company:  company || {},
+          password: plainPassword,
+          portalUrl: resolvePortalUrl(req),
+        });
+        await buildSmtpTransporter().sendMail({
+          from: resolveMailSender('SMTP_FROM_EMAIL'),
+          to:   emp.email,
+          subject, html, text,
+        });
+        emailSent = true;
+      } catch (e) {
+        emailError = e.message;
+      }
+    }
+
+    res.json({
+      message:     'ESS access updated',
+      essEnabled:  emp.essEnabled,
+      hasPassword: !!emp.essPassword,
+      emailSent,
+      emailError,
+      noEmail: sendInvite && !emp.email ? true : undefined,
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({ message: err.message });
+  }
+});
+
+// POST /api/hr/employees/:id/ess-invite  — (re)send invite email
+router.post('/:id/ess-invite', verifyUser, async (req, res) => {
+  try {
+    if (!hasSmtpConfig()) {
+      return res.status(503).json({ message: 'Email service is not configured on this server' });
+    }
+    const companyId = resolveCompanyId(req);
+    const emp = await HREmployee.findOne({ _id: req.params.id, company: companyId }).lean();
+    if (!emp)           return res.status(404).json({ message: 'Employee not found' });
+    if (!emp.essEnabled) return res.status(400).json({ message: 'ESS access is not enabled for this employee' });
+
+    const toEmail = req.body?.email?.trim() || emp.email;
+    if (!toEmail) {
+      return res.status(400).json({
+        message: 'This employee has no email address on file. Please provide one or update their profile.',
+        noEmail: true,
+      });
+    }
+
+    const { password: plainPassword } = req.body || {};
+    if (!plainPassword) {
+      return res.status(400).json({ message: 'A temporary password is required to send the invite' });
+    }
+    if (String(plainPassword).length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters' });
+    }
+
+    // Set the new password
+    const hashed = await bcrypt.hash(String(plainPassword), 10);
+    await HREmployee.updateOne({ _id: emp._id }, { essPassword: hashed, updatedBy: currentUserId(req) });
+
+    const company = await Company.findById(companyId).lean();
+    const { subject, html, text } = buildESSInviteEmail({
+      employee: emp,
+      company:  company || {},
+      password: plainPassword,
+      portalUrl: resolvePortalUrl(req),
+    });
+
+    await buildSmtpTransporter().sendMail({
+      from: resolveMailSender('SMTP_FROM_EMAIL'),
+      to:   toEmail,
+      subject, html, text,
+    });
+
+    res.json({ sent: true, to: toEmail, subject });
+  } catch (err) {
+    res.status(err.status || 500).json({ message: err.message });
+  }
 });
 
 // DELETE /api/hr/employees/:id/photo

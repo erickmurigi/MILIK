@@ -67,7 +67,7 @@ export default function AppraisalCycles() {
   });
 
   useEffect(() => { if (error) toast.error('Failed to load cycles'); }, [error]);
-  useEffect(() => { setPage(1); }, [yearFilter, statusFilter, pageSize]);
+  useEffect(() => { setPage(1); }, [yearFilter, statusFilter]);
 
   const openCreate = () => { setForm(EMPTY); setModal('create'); };
   const openEdit   = (c) => {
@@ -126,9 +126,15 @@ export default function AppraisalCycles() {
     finally { setActing(null); }
   };
 
-  const nDraft = useMemo(() => cycles.filter((c) => c.status === 'Draft').length, [cycles]);
-  const nOpen  = useMemo(() => cycles.filter((c) => c.status === 'Open').length,  [cycles]);
-  const nClosed= useMemo(() => cycles.filter((c) => c.status === 'Closed').length,[cycles]);
+  const { nDraft, nOpen, nClosed } = useMemo(() => {
+    let nDraft = 0, nOpen = 0, nClosed = 0;
+    for (const c of cycles) {
+      if      (c.status === 'Draft')  nDraft++;
+      else if (c.status === 'Open')   nOpen++;
+      else if (c.status === 'Closed') nClosed++;
+    }
+    return { nDraft, nOpen, nClosed };
+  }, [cycles]);
 
   const totalPages  = useMemo(() => Math.ceil(cycles.length / pageSize) || 1, [cycles.length, pageSize]);
   const pagedCycles = useMemo(() => cycles.slice((page - 1) * pageSize, page * pageSize), [cycles, page, pageSize]);

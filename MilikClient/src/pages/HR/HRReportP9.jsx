@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { FaFileAlt, FaRedoAlt, FaPrint, FaSearch } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
@@ -157,10 +157,14 @@ export default function HRReportP9() {
     win.onload = () => { win.focus(); win.print(); };
   }, [data, emp, months, totals, company]);
 
-  const filtered = employees.filter((e) => {
+  const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return !q || `${e.surname} ${e.otherNames}`.toLowerCase().includes(q) || (e.employeeNumber || '').toLowerCase().includes(q);
-  });
+    if (!q) return employees;
+    return employees.filter((e) =>
+      `${e.surname} ${e.otherNames}`.toLowerCase().includes(q)
+      || (e.employeeNumber || '').toLowerCase().includes(q)
+    );
+  }, [employees, search]);
 
   const emp = data?.employee;
   const months = data?.months || [];

@@ -394,7 +394,7 @@ export default function HRRemittance() {
                             <td className="py-2 pl-4 pr-2 font-mono text-[10px] text-slate-400">{r.employeeNumber}</td>
                             <td className="py-2 px-2 font-black text-slate-900">{r.name}</td>
                             <td className="py-2 px-2 text-slate-600">{r.paymentMethod || '—'}</td>
-                            <td className="py-2 px-2 text-slate-600">{r.bankName || r.mpesaNumber ? 'M-Pesa' : '—'}</td>
+                            <td className="py-2 px-2 text-slate-600">{r.bankName || (r.mpesaNumber ? 'M-Pesa' : '—')}</td>
                             <td className="py-2 px-2 font-mono text-slate-700">{r.bankAccountNumber || r.mpesaNumber || '—'}</td>
                             <td className="py-2 px-2 text-slate-500">{r.bankBranch || '—'}</td>
                             <td className="py-2 pl-2 pr-4 text-right tabular-nums font-black text-emerald-700">{fmtKES(r.netSalary)}</td>

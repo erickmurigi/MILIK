@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   FaArrowLeft, FaSave, FaUser, FaBriefcase, FaMoneyBillWave,
@@ -163,6 +163,9 @@ export default function AddEmployee() {
       setSaving(false);
     }
   };
+
+  const compAllowances = useMemo(() => payComponents.filter((c) => c.type === 'allowance'), [payComponents]);
+  const compDeductions = useMemo(() => payComponents.filter((c) => c.type === 'deduction'), [payComponents]);
 
   return (
     <DashboardLayout lockContentScroll>
@@ -331,8 +334,8 @@ export default function AddEmployee() {
                     ) : (
                       <div className="space-y-2">
                         {form.salaryComponents.map((comp, idx) => {
-                          const allowances = payComponents.filter((c) => c.type === 'allowance');
-                          const deductions = payComponents.filter((c) => c.type === 'deduction');
+                          const allowances = compAllowances;
+                          const deductions = compDeductions;
                           return (
                           <div key={idx} className="grid gap-2 rounded-lg border border-slate-100 p-3 sm:grid-cols-5">
                             <div className="sm:col-span-2">

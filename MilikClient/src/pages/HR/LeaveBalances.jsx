@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSelector } from 'react-redux';
 import { FaCalendarCheck, FaRedoAlt, FaPrint, FaFilter, FaUsers } from 'react-icons/fa';
@@ -38,7 +38,7 @@ export default function LeaveBalances() {
     queryFn: () => adminRequests.get('/hr/leave-types').then((r) => r.data || []),
     staleTime: 5 * 60_000,
   });
-  const leaveTypes = allLeaveTypes.filter((t) => t.daysPerYear > 0);
+  const leaveTypes = useMemo(() => allLeaveTypes.filter((t) => t.daysPerYear > 0), [allLeaveTypes]);
 
   const { data: rows = [], isLoading: loading, error, refetch } = useQuery({
     queryKey: ['hr-leave-balances', year, departmentId, leaveTypeId],
@@ -52,6 +52,19 @@ export default function LeaveBalances() {
   });
 
   React.useEffect(() => { if (error) toast.error('Failed to load leave balances'); }, [error]);
+
+  // Summary stats — must be declared before handlePrint to avoid TDZ in its deps array
+  const totalUsed      = useMemo(() => rows.reduce((s, r) => s + r.used, 0),        [rows]);
+  const totalRemaining = useMemo(() => rows.reduce((s, r) => s + r.remaining, 0),   [rows]);
+  const totalEntitled  = useMemo(() => rows.reduce((s, r) => s + r.entitlement, 0), [rows]);
+  const avgUtil        = useMemo(
+    () => totalEntitled > 0 ? Math.round((totalUsed / totalEntitled) * 100) : 0,
+    [totalEntitled, totalUsed]
+  );
+  const uniqueEmployeeCount = useMemo(
+    () => new Set(rows.map((r) => r.employeeId.toString())).size,
+    [rows]
+  );
 
   const company = useSelector(selectCurrentCompany) || {};
 
@@ -144,12 +157,6 @@ export default function LeaveBalances() {
 
   const inputCls = 'h-8 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]';
 
-  // Summary stats
-  const totalUsed      = rows.reduce((s, r) => s + r.used, 0);
-  const totalRemaining = rows.reduce((s, r) => s + r.remaining, 0);
-  const totalEntitled  = rows.reduce((s, r) => s + r.entitlement, 0);
-  const avgUtil        = totalEntitled > 0 ? Math.round((totalUsed / totalEntitled) * 100) : 0;
-
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
@@ -191,7 +198,7 @@ export default function LeaveBalances() {
             </select>
             {rows.length > 0 && (
               <span className="ml-auto text-[11px] font-semibold text-slate-500">
-                {rows.length} balance{rows.length !== 1 ? 's' : ''} · {[...new Set(rows.map((r) => r.employeeId.toString()))].length} employees
+                {rows.length} balance{rows.length !== 1 ? 's' : ''} · {uniqueEmployeeCount} employees
               </span>
             )}
           </div>

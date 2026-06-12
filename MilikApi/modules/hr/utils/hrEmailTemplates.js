@@ -171,6 +171,74 @@ ${brandHeader(company, typeLabel, letter.subject || empName, issuedOn ? `Issued 
   };
 }
 
+// ── ESS Portal Invite ─────────────────────────────────────────────────────────
+export function buildESSInviteEmail({ employee, company, password, portalUrl }) {
+  const empName = [employee.surname, employee.otherNames].filter(Boolean).join(' ') || 'Employee';
+  const { companyName = '', companyCode = '' } = company;
+  const loginUrl = portalUrl || 'your company\'s MILIK employee portal';
+  const isLink   = portalUrl && portalUrl.startsWith('http');
+
+  const body = `
+${brandHeader(company, 'Employee Self-Service', `Welcome to the Portal, ${employee.otherNames || empName}!`, 'Your account is ready — sign in to get started')}
+
+<div style="background:#fff;padding:24px;border:1px solid #e2e8f0;border-top:none">
+  <p style="margin:0 0 16px;font-size:13px;color:#334155;line-height:1.6">
+    Hi <strong>${empName}</strong>,<br><br>
+    Your access to the <strong>${companyName}</strong> Employee Self-Service portal has been set up.
+    You can now view your payslips, apply for leave, check in and out, and view your HR letters — all in one place.
+  </p>
+
+  <div style="background:#f0f9f2;border:1px solid #b9e3c3;border-radius:10px;padding:16px 20px;margin-bottom:20px">
+    <p style="margin:0 0 12px;font-size:9px;font-weight:900;color:#027333;text-transform:uppercase;letter-spacing:0.15em">Your Login Credentials</p>
+    <table style="width:100%;border-collapse:collapse">
+      <tr>
+        <td style="padding:5px 0;font-size:11px;font-weight:700;color:#6b7280;width:40%">Company Code</td>
+        <td style="padding:5px 0;font-size:14px;font-weight:900;color:#0c5d2b;font-family:monospace;letter-spacing:0.08em">${companyCode}</td>
+      </tr>
+      <tr>
+        <td style="padding:5px 0;font-size:11px;font-weight:700;color:#6b7280">Employee Number</td>
+        <td style="padding:5px 0;font-size:14px;font-weight:900;color:#0c5d2b;font-family:monospace;letter-spacing:0.08em">${employee.employeeNumber}</td>
+      </tr>
+      <tr>
+        <td style="padding:5px 0;font-size:11px;font-weight:700;color:#6b7280">Password</td>
+        <td style="padding:5px 0;font-size:14px;font-weight:900;color:#0c5d2b;font-family:monospace;letter-spacing:0.08em">${password}</td>
+      </tr>
+    </table>
+  </div>
+
+  ${isLink ? `
+  <div style="text-align:center;margin-bottom:20px">
+    <a href="${loginUrl}" style="display:inline-block;background:#027333;color:#fff;text-decoration:none;font-size:13px;font-weight:700;padding:12px 32px;border-radius:8px;letter-spacing:0.04em">
+      Sign In to Portal →
+    </a>
+    <p style="margin:8px 0 0;font-size:10px;color:#94a3b8">${loginUrl}</p>
+  </div>` : `
+  <p style="font-size:12px;color:#334155;background:#f8fafc;padding:10px 14px;border-radius:6px;margin-bottom:16px">
+    Portal: <strong>${loginUrl}</strong>
+  </p>`}
+
+  <div style="border-top:1px solid #e2e8f0;padding-top:16px">
+    <p style="margin:0;font-size:11px;color:#6b7280;line-height:1.6">
+      <strong style="color:#374151">Important:</strong> Please change your password after your first login via
+      <em>My Profile → Account Security → Change Password</em>.<br>
+      Keep your credentials confidential. If you have any issues, contact your HR department.
+    </p>
+  </div>
+</div>
+
+<div style="background:#1B3D2F;padding:14px 24px;border-radius:0 0 12px 12px;text-align:center">
+  <p style="margin:0;font-size:10px;color:#a7f3d0">
+    This invitation was sent by <strong style="color:#fff">${companyName}</strong> HR. If you received this in error, please ignore it.
+  </p>
+</div>`;
+
+  return {
+    subject: `Your Employee Portal Access — ${companyName}`,
+    html: emailShell(body),
+    text: `Hi ${empName},\n\nYour ${companyName} Employee Self-Service portal access is ready.\n\nCompany Code: ${companyCode}\nEmployee Number: ${employee.employeeNumber}\nPassword: ${password}\n\nPortal: ${loginUrl}\n\nPlease change your password after your first login.\n\n${companyName} HR`,
+  };
+}
+
 // ── Payroll Register (send to management/approver) ────────────────────────────
 export function buildRegisterEmail({ register, company }) {
   const { period = {}, rows = [], totals = {} } = register;

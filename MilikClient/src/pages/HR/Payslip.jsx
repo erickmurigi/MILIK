@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { FaArrowLeft, FaPrint, FaRedoAlt, FaEnvelope } from 'react-icons/fa';
@@ -57,9 +57,9 @@ export default function Payslip() {
   const [showEmail, setShowEmail] = useState(false);
   const company = useSelector(selectCurrentCompany) || {};
 
-  const ps = payslip;
+  const ps     = payslip;
   const period = ps?.payrollPeriod;
-  const snap = ps?.snapshot || {};
+  const snap   = useMemo(() => ps?.snapshot ?? {}, [ps]);
 
   const printPayslip = useCallback(() => {
     if (!ps) return;
@@ -224,7 +224,7 @@ export default function Payslip() {
     win.onload = () => { win.focus(); win.print(); };
   }, [ps, snap, period, company]);
 
-  const sendEmail = async (email) => {
+  const sendEmail = useCallback(async (email) => {
     try {
       const res = await adminRequests.post(`/hr/emails/payslip/${payslipId}`, { email });
       toast.success(`Payslip emailed to ${res.data.to}`);
@@ -233,7 +233,7 @@ export default function Payslip() {
       toast.error(e?.response?.data?.message || 'Failed to send email');
       throw e;
     }
-  };
+  }, [payslipId]);
 
   return (
     <DashboardLayout lockContentScroll>
@@ -369,10 +369,10 @@ export default function Payslip() {
                     <div className="mb-3 text-[10px] font-black uppercase tracking-widest text-rose-600">Deductions</div>
                     <table className="w-full text-xs">
                       <tbody className="divide-y divide-slate-50">
-                        <DeductionRow label="PAYE (Tax)"             amount={ps.paye} />
-                        <DeductionRow label="SHA / NHIF"             amount={ps.nhif} />
-                        <DeductionRow label="NSSF"                   amount={ps.nssf} />
-                        <DeductionRow label="Housing Levy (AHL)"     amount={ps.ahl} />
+                        {ps.paye > 0 && <DeductionRow label="PAYE (Tax)"         amount={ps.paye} />}
+                        {ps.nhif > 0 && <DeductionRow label="SHA / NHIF"         amount={ps.nhif} />}
+                        {ps.nssf > 0 && <DeductionRow label="NSSF"               amount={ps.nssf} />}
+                        {ps.ahl  > 0 && <DeductionRow label="Housing Levy (AHL)" amount={ps.ahl}  />}
                         {(ps.otherDeductions || []).map((d, i) => (
                           <DeductionRow key={i} label={d.name} amount={d.amount} />
                         ))}

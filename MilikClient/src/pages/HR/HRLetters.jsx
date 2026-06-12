@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
+import useDebounce from '../../hooks/useDebounce';
 import {
   FaPlus, FaSearch, FaPrint, FaTrash, FaCheck, FaFileAlt,
   FaRedoAlt, FaChevronRight, FaTimes, FaArrowLeft, FaEnvelope, FaBan,
@@ -44,13 +45,16 @@ function ComposeModal({ employees, letterMeta, onClose, onCreate }) {
   const [fields, setFields]     = useState({});
   const [saving, setSaving]     = useState(false);
 
-  const meta = letterMeta[letterType];
+  const meta = useMemo(() => letterMeta[letterType], [letterMeta, letterType]);
 
-  const filteredEmps = employees.filter((e) => {
+  const filteredEmps = useMemo(() => {
     const q = empSearch.toLowerCase();
-    return !q || `${e.surname} ${e.otherNames}`.toLowerCase().includes(q)
-      || (e.employeeNumber || '').toLowerCase().includes(q);
-  });
+    if (!q) return employees;
+    return employees.filter((e) =>
+      `${e.surname} ${e.otherNames}`.toLowerCase().includes(q)
+      || (e.employeeNumber || '').toLowerCase().includes(q)
+    );
+  }, [employees, empSearch]);
 
   const handleCreate = async () => {
     setSaving(true);
@@ -232,6 +236,8 @@ function ComposeModal({ employees, letterMeta, onClose, onCreate }) {
   );
 }
 
+const LIMIT = 25;
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function HRLetters() {
   const [letters, setLetters]       = useState([]);
@@ -245,7 +251,6 @@ export default function HRLetters() {
   const [page, setPage]             = useState(1);
   const [total, setTotal]           = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const LIMIT = 25;
   const [showCompose, setShowCompose] = useState(false);
   const [issuing, setIssuing]       = useState(false);
   const [deleting, setDeleting]     = useState(false);
@@ -253,6 +258,7 @@ export default function HRLetters() {
   const [revokeDialog, setRevokeDialog] = useState({ isOpen: false, reason: '', busy: false });
   const currentUser = useSelector(selectCurrentUser);
   const printRef = useRef();
+  const debouncedSearch = useDebounce(search, 300);
 
   const printLetter = useCallback(() => {
     if (!selected) return;
@@ -383,8 +389,9 @@ export default function HRLetters() {
     setLoading(true);
     try {
       const params = { page, limit: LIMIT };
-      if (filterType)   params.letterType = filterType;
-      if (filterStatus) params.status     = filterStatus;
+      if (filterType)     params.letterType = filterType;
+      if (filterStatus)   params.status     = filterStatus;
+      if (debouncedSearch) params.search    = debouncedSearch;
       const res = await adminRequests.get('/hr/letters', { params });
       setLetters(res.data.letters || []);
       setTotal(res.data.total || 0);
@@ -394,10 +401,10 @@ export default function HRLetters() {
     } finally {
       setLoading(false);
     }
-  }, [filterType, filterStatus, page, LIMIT]);
+  }, [filterType, filterStatus, page, debouncedSearch]);
 
   useEffect(() => { loadLetters(); }, [loadLetters]);
-  useEffect(() => { setPage(1); }, [filterType, filterStatus]);
+  useEffect(() => { setPage(1); }, [filterType, filterStatus, debouncedSearch]);
 
   useEffect(() => {
     Promise.all([
@@ -462,13 +469,6 @@ export default function HRLetters() {
     }
   };
 
-  const filtered = letters.filter((l) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    const emp = l.employee;
-    const name = emp ? `${emp.surname} ${emp.otherNames}`.toLowerCase() : '';
-    return name.includes(q) || (l.subject || '').toLowerCase().includes(q);
-  });
 
   return (
     <DashboardLayout lockContentScroll>
@@ -529,13 +529,13 @@ export default function HRLetters() {
             <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
               {loading ? (
                 <div className="flex h-24 items-center justify-center text-xs text-slate-400">Loading…</div>
-              ) : filtered.length === 0 ? (
+              ) : letters.length === 0 ? (
                 <div className="flex h-32 flex-col items-center justify-center gap-2 text-slate-300">
                   <FaFileAlt size={20} />
                   <p className="text-xs font-black">No letters found</p>
                 </div>
               ) : (
-                filtered.map((l) => {
+                letters.map((l) => {
                   const emp = l.employee;
                   return (
                     <button

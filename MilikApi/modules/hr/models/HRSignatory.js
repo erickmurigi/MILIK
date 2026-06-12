@@ -16,5 +16,6 @@ const hrSignatorySchema = new mongoose.Schema({
 }, { timestamps: true });
 
 hrSignatorySchema.index({ company: 1, isDefault: 1 });
+hrSignatorySchema.index({ company: 1, letterTypes: 1 });
 
 export default mongoose.model('HRSignatory', hrSignatorySchema);
