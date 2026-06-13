@@ -466,7 +466,7 @@ function Home() {
     const hasUtilityQuery = params.has("demoAccess") || params.has("token");
     const canonicalUrl = `${PUBLIC_SITE_URL}/`;
 
-    document.title = "ilik | Business Management Software Kenya — Property, Car Wash, HR & Inventory";
+    document.title = "Milik | Business Management Software Kenya — Property, Car Wash, HR & Inventory";
     setDocumentDescription(
       "Milik is Kenya's business management platform — property management, car wash operations, HR, inventory and property sales in one workspace. Start your free demo today."
     );
