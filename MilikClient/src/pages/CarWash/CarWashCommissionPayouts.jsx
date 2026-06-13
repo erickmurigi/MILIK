@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
 import { FaMoneyBillWave, FaPiggyBank, FaRedoAlt, FaSearch, FaTimes, FaUndo, FaBan } from "react-icons/fa";
@@ -51,8 +52,6 @@ const Modal = ({ title, subtitle, children, footer, onClose }) => (
 const CarWashCommissionPayouts = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const [payouts, setPayouts]           = useState([]);
-  const [staff, setStaff]               = useState([]);
-  const [cashbooks, setCashbooks]       = useState([]);
   const [payableComms, setPayableComms] = useState([]);
   const [loading, setLoading]           = useState(false);
   const [page, setPage]                 = useState(1);
@@ -78,20 +77,22 @@ const CarWashCommissionPayouts = () => {
     [commIdSet, selectedStaffPayable]
   );
 
-  // Static data — load once
-  const loadStatic = useCallback(async () => {
-    if (staff.length) return;
-    try {
-      const [staffPayload, cbPayload] = await Promise.all([
-        carWashApi.listStaff({ active: true }),
-        currentCompany?._id
-          ? carWashApi.listChartOfAccounts({ business: currentCompany._id, type: "asset", moduleScope: "carwash", search: "Cashbooks" })
-          : Promise.resolve([]),
-      ]);
-      setStaff(normalizeListPayload(staffPayload, "staff"));
-      setCashbooks(Array.isArray(cbPayload) ? cbPayload : []);
-    } catch { /* non-critical */ }
-  }, [currentCompany?._id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const { data: staffRaw } = useQuery({
+    queryKey: ["cw-staff-ref"],
+    queryFn: () => carWashApi.listStaff({ active: true }),
+    staleTime: 5 * 60_000,
+    select: (data) => normalizeListPayload(data, "staff"),
+  });
+  const staff = staffRaw ?? [];
+
+  const { data: cashbooksRaw } = useQuery({
+    queryKey: ["cw-payout-cashbooks", currentCompany?._id],
+    queryFn: () => carWashApi.listChartOfAccounts({ business: currentCompany._id, type: "asset", moduleScope: "carwash", search: "Cashbooks" }),
+    enabled: !!currentCompany?._id,
+    staleTime: 5 * 60_000,
+    select: (data) => Array.isArray(data) ? data : [],
+  });
+  const cashbooks = cashbooksRaw ?? [];
 
   const loadPayouts = useCallback(async () => {
     setLoading(true);
@@ -112,7 +113,6 @@ const CarWashCommissionPayouts = () => {
     }
   }, [applied, page]);
 
-  useEffect(() => { loadStatic(); }, [loadStatic]);
   useEffect(() => { loadPayouts(); }, [loadPayouts]);
 
   useEffect(() => {

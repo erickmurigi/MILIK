@@ -60,7 +60,10 @@
       "Bash(grep -v \"//\\\\|className\\\\|title=\\\\|disabled=\\\\|navigation\\\\|pagination\\\\|FaTimes\\\\|FaArrow\")",
       "Bash(grep -v \"//\\\\|node_modules\")",
       "Bash(Get-ChildItem \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikClient\\\\src\\\\pages\\\\CarWash\\\\\" -Name)",
-      "Bash(grep -v \"className\\\\|disabled=\\\\|//\\\\|title=\")"
+      "Bash(grep -v \"className\\\\|disabled=\\\\|//\\\\|title=\")",
+      "Bash(grep -v \"//\\\\|className\\\\|<span\\\\|<div\\\\|label\\\\|title=\")",
+      "Bash(xargs -I {} basename {})",
+      "Bash(xargs grep -l \"deposit\" -i)"
     ]
   }
 }

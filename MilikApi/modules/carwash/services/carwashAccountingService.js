@@ -125,6 +125,28 @@ export const postCarWashTopupLedger = async ({ businessId, topup, cashbookAccoun
   }
 };
 
+// ─── Reverse prepaid top-up ledger ───────────────────────────────────────────
+export const reverseCarWashTopupLedger = async ({ businessId, topupId, reason, req = null }) => {
+  try {
+    const entries = await FinancialLedgerEntry.find({
+      business: new mongoose.Types.ObjectId(String(businessId)),
+      sourceTransactionType: "carwash_prepaid_topup",
+      sourceTransactionId: String(topupId),
+      status: { $ne: "reversed" },
+    }).lean();
+    if (!entries.length) return;
+    const actorId = await resolveAuditActorUserId({ req, businessId });
+    const touchedIds = new Set();
+    for (const entry of entries) {
+      await reverseCwEntry(entry, actorId, reason || "Prepaid top-up voided");
+      touchedIds.add(String(entry.accountId));
+    }
+    if (touchedIds.size) await aggregateChartOfAccountBalances(businessId, [...touchedIds]);
+  } catch (err) {
+    console.error("[CW Accounting] Top-up ledger reversal error topup=%s: %s", topupId, err?.message || err);
+  }
+};
+
 // ─── Payment ledger: Dr Cashbook / Cr Revenue (4400) ─────────────────────────
 /**
  * Posts the double-entry for a manually-recorded or M-Pesa car wash payment.
@@ -678,6 +700,33 @@ export const reverseCarWashPaymentLedger = async ({ businessId, paymentId, req =
   }
 };
 
+// ─── Expense ledger reversal ──────────────────────────────────────────────────
+/**
+ * Reverses all FinancialLedgerEntry rows tied to a carwash_expense.
+ * Marks originals as "reversed" (consistent with payment/commission reversal pattern).
+ */
+export const reverseCarWashExpenseLedger = async ({ businessId, expense, req = null }) => {
+  try {
+    const entries = await FinancialLedgerEntry.find({
+      business: new mongoose.Types.ObjectId(String(businessId)),
+      sourceTransactionType: "carwash_expense",
+      sourceTransactionId: String(expense._id),
+      status: { $ne: "reversed" },
+    }).lean();
+    if (!entries.length) return;
+    const actorId = await resolveAuditActorUserId({ req, businessId });
+    const touchedIds = new Set();
+    const reason = `CW expense cancelled – ${expense.payee || expense.category || expense.expenseNumber || ""}`;
+    for (const entry of entries) {
+      await reverseCwEntry(entry, actorId, reason);
+      touchedIds.add(String(entry.accountId));
+    }
+    if (touchedIds.size) await aggregateChartOfAccountBalances(businessId, [...touchedIds]);
+  } catch (err) {
+    console.error("[CW Accounting] Expense reversal error expense=%s: %s", expense._id, err?.message || err);
+  }
+};
+
 // ─── Repair: reverse orphaned payment ledger entries ─────────────────────────
 /**
  * Finds every approved FinancialLedgerEntry of type "carwash_payment" whose
@@ -750,7 +799,7 @@ export const deduplicateCarWashLedgerEntries = async (businessId, req = null) =>
 
   const entries = await FinancialLedgerEntry.find({
     business: businessOid,
-    sourceTransactionType: { $in: ["carwash_payment", "carwash_commission"] },
+    sourceTransactionType: { $in: ["carwash_payment", "carwash_commission", "carwash_expense"] },
     status: "approved",
   }).sort({ createdAt: 1 }).lean();
 

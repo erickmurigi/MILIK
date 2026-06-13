@@ -10,10 +10,13 @@ import {
   FaRedoAlt,
   FaSearch,
   FaTimes,
+  FaTools,
+  FaUndo,
   FaWallet,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { hasCompanyModule } from "../../utils/companyModules";
+import useCarWashPermission from "../../hooks/useCarWashPermission";
 import useDebounce from "../../hooks/useDebounce";
 import { carWashApi, formatMoney } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
@@ -26,11 +29,25 @@ const fmtDate = (d) =>
   d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
 const SOURCE_LABELS = {
-  carwash_payment:           "Payment",
-  carwash_expense:           "Expense",
-  carwash_commission:        "Commission",
-  carwash_commission_payout: "Commission Payout",
+  carwash_payment:              "Payment",
+  carwash_expense:              "Expense",
+  carwash_commission:           "Commission",
+  carwash_commission_payout:    "Comm. Payout",
+  carwash_savings_disbursement: "Savings Payout",
+  carwash_prepaid_topup:        "Prepaid Top-up",
+  carwash_expense_reversal:     "Expense Reversal",
 };
+
+const REVERSAL_LABELS = {
+  carwash_payment:              "payment",
+  carwash_expense:              "expense",
+  carwash_commission:           "commission accrual",
+  carwash_commission_payout:    "commission payout",
+  carwash_savings_disbursement: "savings payout",
+  carwash_prepaid_topup:        "prepaid top-up",
+};
+
+const REVERSIBLE_TYPES = new Set(Object.keys(REVERSAL_LABELS));
 
 const entryTypeLabel = (e) => {
   if (e.category === "REVERSAL") return "Reversal";
@@ -75,10 +92,13 @@ export default function CarWashFinancials() {
   const navigate = useNavigate();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const hasFullAccounts = hasCompanyModule(currentCompany, "accounts");
+  const canReverse = useCarWashPermission("carwash-financials", "reverse");
 
   // ── state ──────────────────────────────────────────────────────────────────
   const [entries, setEntries]         = useState([]);
   const [loading, setLoading]         = useState(false);
+  const [repairing, setRepairing]     = useState(false);
+  const [reversingId, setReversingId] = useState(null);
   const [search, setSearch]           = useState("");
   const [statusFilter, setStatusFilter]   = useState("approved");
   const [sourceFilter, setSourceFilter]   = useState("all");
@@ -111,12 +131,54 @@ export default function CarWashFinancials() {
     }
   }, [currentCompany?._id, statusFilter, sourceFilter, directionFilter, startDate, endDate]);
 
+  // Seed, backfill + deduplicate once on mount — not on every filter change
   useEffect(() => {
-    // Silently seed accounts + backfill any missing entries on every page load
     carWashApi.seedAccounts().catch(() => {});
     carWashApi.backfillPaymentLedger().catch(() => {});
-    loadLedger();
-  }, [loadLedger]);
+    carWashApi.repairLedger().catch(() => {});
+  }, []);
+
+  useEffect(() => { loadLedger(); }, [loadLedger]);
+
+  // ── reversal handler ──────────────────────────────────────────────────────
+  const handleReverse = async (entry) => {
+    const { sourceTransactionType: type, sourceTransactionId: id } = entry;
+    const label = REVERSAL_LABELS[type] || "transaction";
+    const reason = window.prompt(`Reason for reversing this ${label}?`, "");
+    if (reason === null) return;
+
+    setReversingId(id);
+    try {
+      switch (type) {
+        case "carwash_payment":
+          await carWashApi.deletePayment(id);
+          break;
+        case "carwash_expense":
+          await carWashApi.updateExpenseStatus(id, { status: "cancelled", notes: reason });
+          break;
+        case "carwash_commission":
+          await carWashApi.reverseCommission(id, reason);
+          break;
+        case "carwash_commission_payout":
+          await carWashApi.reverseCommissionPayout(id, reason);
+          break;
+        case "carwash_savings_disbursement":
+          await carWashApi.reverseSavingsPayout(id, reason);
+          break;
+        case "carwash_prepaid_topup":
+          await carWashApi.voidTopupDirect(id, reason);
+          break;
+        default:
+          throw new Error("Cannot reverse this transaction type");
+      }
+      toast.success("Reversed — ledger updated");
+      await loadLedger();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || err?.message || "Reversal failed");
+    } finally {
+      setReversingId(null);
+    }
+  };
 
   // ── derived KPIs ──────────────────────────────────────────────────────────
   const kpis = useMemo(() => {
@@ -131,7 +193,6 @@ export default function CarWashFinancials() {
     return { count, revenue, expenses, commissions, net: revenue - expenses - commissions };
   }, [entries]);
 
-  // ── client-side search filter ─────────────────────────────────────────────
   const filteredEntries = useMemo(() => {
     if (!debouncedSearch) return entries;
     const term = debouncedSearch.toLowerCase();
@@ -157,6 +218,20 @@ export default function CarWashFinancials() {
         className="inline-flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors">
         <FaRedoAlt size={10} /> Refresh
       </button>
+      <button
+        onClick={async () => {
+          setRepairing(true);
+          try {
+            await carWashApi.repairLedger();
+            await loadLedger();
+            toast.success("Ledger repaired — duplicate entries removed");
+          } catch { toast.error("Repair failed"); }
+          finally { setRepairing(false); }
+        }}
+        disabled={repairing}
+        className="inline-flex items-center gap-1.5 border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-50">
+        <FaTools size={10} /> {repairing ? "Repairing…" : "Repair"}
+      </button>
       {hasFullAccounts && (
         <button onClick={() => navigate("/financial/journals")}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-black text-white transition-colors"
@@ -169,7 +244,7 @@ export default function CarWashFinancials() {
 
   return (
     <CarWashShell title="Financials" action={headerAction}>
-      <div className="flex min-h-0 flex-col gap-3">
+      <div className="flex min-h-0 flex-col gap-3 overflow-y-auto">
 
         {/* ── KPI strip ─────────────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -242,7 +317,7 @@ export default function CarWashFinancials() {
               <table className="w-full min-w-[780px] border-collapse text-xs">
                 <thead className="border-b border-slate-200 bg-slate-50">
                   <tr>
-                    {["Date", "Type", "Account", "Notes", "Debit (KES)", "Credit (KES)", "Status"].map((col) => (
+                    {["Date", "Type", "Account", "Notes", "Debit (KES)", "Credit (KES)", "Status", ...(canReverse ? ["Action"] : [])].map((col) => (
                       <th key={col} className="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-slate-500 whitespace-nowrap">
                         {col}
                       </th>
@@ -250,39 +325,67 @@ export default function CarWashFinancials() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredEntries.map((e) => (
-                    <tr key={e._id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-3 py-2 whitespace-nowrap text-slate-600">{fmtDate(e.transactionDate)}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${DIRECTION_BADGE[e.direction] || ""}`}>
-                          {e.direction === "debit" ? "Dr" : "Cr"}
-                        </span>
-                        <span className="ml-1.5 text-[10px] font-semibold text-slate-500">
-                          {entryTypeLabel(e)}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 text-slate-700 max-w-[180px]">
-                        {e.accountId ? (
-                          <span className="font-semibold">
-                            <span className="font-mono text-slate-500">{e.accountId.code}</span>
-                            {" "}{e.accountId.name}
+                  {(() => { const seenTxn = new Set(); return filteredEntries.map((e) => {
+                    const isReversing = reversingId === e.sourceTransactionId;
+                    const isReversible = canReverse
+                      && e.status === "approved"
+                      && e.category !== "REVERSAL"
+                      && REVERSIBLE_TYPES.has(e.sourceTransactionType);
+                    const isFirstLeg = isReversible && !seenTxn.has(e.sourceTransactionId);
+                    if (isFirstLeg) seenTxn.add(e.sourceTransactionId);
+                    const canReverseRow = isFirstLeg;
+                    return (
+                      <tr key={e._id} className={`hover:bg-slate-50 transition-colors ${e.status === "reversed" ? "opacity-50" : ""}`}>
+                        <td className="px-3 py-2 whitespace-nowrap text-slate-600">{fmtDate(e.transactionDate)}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${DIRECTION_BADGE[e.direction] || ""}`}>
+                            {e.direction === "debit" ? "Dr" : "Cr"}
                           </span>
-                        ) : "—"}
-                      </td>
-                      <td className="px-3 py-2 text-slate-500 max-w-[220px] truncate">{e.notes || "—"}</td>
-                      <td className="px-3 py-2 text-right font-mono font-black text-rose-700 whitespace-nowrap">
-                        {e.direction === "debit" ? formatMoney(e.amount) : ""}
-                      </td>
-                      <td className="px-3 py-2 text-right font-mono font-black text-emerald-700 whitespace-nowrap">
-                        {e.direction === "credit" ? formatMoney(e.amount) : ""}
-                      </td>
-                      <td className="px-3 py-2">
-                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black capitalize ${STATUS_BADGE[e.status] || "bg-slate-100 text-slate-500 border-slate-200"}`}>
-                          {e.status || "—"}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                          <span className="ml-1.5 text-[10px] font-semibold text-slate-500">
+                            {entryTypeLabel(e)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-slate-700 max-w-[180px]">
+                          {e.accountId ? (
+                            <span className="font-semibold">
+                              <span className="font-mono text-slate-500">{e.accountId.code}</span>
+                              {" "}{e.accountId.name}
+                            </span>
+                          ) : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-slate-500 max-w-[220px] truncate">{e.notes || "—"}</td>
+                        <td className="px-3 py-2 text-right font-mono font-black text-rose-700 whitespace-nowrap">
+                          {e.direction === "debit" ? formatMoney(e.amount) : ""}
+                        </td>
+                        <td className="px-3 py-2 text-right font-mono font-black text-emerald-700 whitespace-nowrap">
+                          {e.direction === "credit" ? formatMoney(e.amount) : ""}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black capitalize ${STATUS_BADGE[e.status] || "bg-slate-100 text-slate-500 border-slate-200"}`}>
+                            {e.status || "—"}
+                          </span>
+                        </td>
+                        {canReverse && (
+                          <td className="px-3 py-2">
+                            {canReverseRow ? (
+                              <button
+                                type="button"
+                                disabled={isReversing}
+                                onClick={() => handleReverse(e)}
+                                className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-600 hover:bg-rose-100 disabled:cursor-wait disabled:opacity-50"
+                                title={`Reverse this ${REVERSAL_LABELS[e.sourceTransactionType] || "entry"}`}
+                              >
+                                {isReversing ? "…" : <><FaUndo size={8} /> Reverse</>}
+                              </button>
+                            ) : (
+                              <span className="text-slate-300">—</span>
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  });
+                  })()}
                 </tbody>
               </table>
             </div>

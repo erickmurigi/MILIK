@@ -8,6 +8,7 @@ import {
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, photoUrl, VEHICLE_TYPES } from "../../services/carWashApi";
 import { useFormDraft } from "../../hooks/useFormDraft";
+import useCarWashPermission from "../../hooks/useCarWashPermission";
 import CarWashShell from "./CarWashShell";
 import CarpetCameraModal from "../../components/common/CarpetCameraModal";
 
@@ -347,6 +348,8 @@ const CarWashAddJob = () => {
   const location  = useLocation();
   const { id: editId } = useParams();
   const isEditMode = Boolean(editId);
+  const canCreate = useCarWashPermission("carwash-jobs", "create");
+  const canUpdate = useCarWashPermission("carwash-jobs", "update");
 
   const [jobType, setJobType] = useState("vehicle");
   const [plateNumber, setPlateNumber] = useState("");
@@ -1245,18 +1248,20 @@ const CarWashAddJob = () => {
             </div>
 
             {/* Save button */}
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex w-full items-center justify-center gap-2 py-3 text-sm font-extrabold uppercase tracking-wide text-white bg-[#0B3B2E] hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <FaSave />
-              {saving ? "Saving…"
-                : isEditMode ? "Save Changes"
-                : applyReward ? "Save Job + Apply Reward"
-                : jobType === "carpet" ? "Save & Add Photos →"
-                : "Save Job"}
-            </button>
+            {(isEditMode ? canUpdate : canCreate) && (
+              <button
+                type="submit"
+                disabled={saving}
+                className="flex w-full items-center justify-center gap-2 py-3 text-sm font-extrabold uppercase tracking-wide text-white bg-[#0B3B2E] hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <FaSave />
+                {saving ? "Saving…"
+                  : isEditMode ? "Save Changes"
+                  : applyReward ? "Save Job + Apply Reward"
+                  : jobType === "carpet" ? "Save & Add Photos →"
+                  : "Save Job"}
+              </button>
+            )}
 
             {/* Carpet photos panel — edit mode only */}
             {jobType === "carpet" && isEditMode && (

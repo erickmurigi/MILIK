@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   FaCar, FaCarSide, FaClock, FaCommentDots, FaEdit,
   FaExclamationTriangle, FaIdCard, FaMobileAlt, FaMoneyBillWave,
@@ -10,6 +11,7 @@ import { FaBalanceScale } from "react-icons/fa";
 import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import CwSmsModal from "./CwSmsModal";
+import useCarWashPermission from "../../hooks/useCarWashPermission";
 
 const GRN = "#0B3B2E";
 const fmt = formatMoney;
@@ -154,14 +156,14 @@ const ActionBtn = ({ icon: Icon, title, onClick, color = "slate" }) => {
 // ─── Main component ────────────────────────────────────────────────────────────
 export default function CarWashCustomers() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const canManage = useCarWashPermission("carwash-loyalty", "manage");
 
-  const [customers, setCustomers] = useState([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filterOutstanding, setFilterOutstanding] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const searchRef = useRef(null);
@@ -177,7 +179,6 @@ export default function CarWashCustomers() {
   const [smsSending, setSmsSending] = useState(false);
 
   // ── Settle / payment modal ──
-  const [cashbooks, setCashbooks] = useState([]);
   const [payTarget, setPayTarget] = useState(null);
   const [payJobs, setPayJobs] = useState([]);
   const [payJobsLoading, setPayJobsLoading] = useState(false);
@@ -185,39 +186,41 @@ export default function CarWashCustomers() {
   const [paying, setPaying] = useState(false);
   const [stkPushing, setStkPushing] = useState(false);
 
-  const load = useCallback(async (params = {}) => {
-    setLoading(true);
-    const reqPage   = params.page   ?? page;
-    const reqSearch = params.search ?? search;
-    try {
-      let result;
+  const customerQueryKey = ["cw-customers", page, limit, debouncedSearch];
+
+  const { data: customersData, isLoading: loading, error } = useQuery({
+    queryKey: customerQueryKey,
+    queryFn: async () => {
       try {
-        result = await carWashApi.listCustomersEnriched({ page: reqPage, limit, search: reqSearch });
+        return await carWashApi.listCustomersEnriched({ page, limit, search: debouncedSearch });
       } catch {
-        result = await carWashApi.listLoyaltyCustomers({ page: reqPage, limit, search: reqSearch });
+        return carWashApi.listLoyaltyCustomers({ page, limit, search: debouncedSearch });
       }
-      const data = Array.isArray(result) ? result : (result?.data ?? []);
-      setCustomers(data);
-      setTotal(result?.total ?? data.length);
-    } catch (err) {
-      toast.error(err?.message || "Failed to load customers");
-    } finally {
-      setLoading(false);
-    }
-  }, [page, limit, search]);
+    },
+    placeholderData: (prev) => prev,
+    staleTime: 30_000,
+  });
+  useEffect(() => { if (error) toast.error(error?.message || "Failed to load customers"); }, [error]);
 
-  useEffect(() => { load(); }, [load]);
+  const customers = useMemo(() => {
+    const raw = customersData;
+    return Array.isArray(raw) ? raw : (raw?.data ?? []);
+  }, [customersData]);
+  const total = Array.isArray(customersData) ? customersData.length : (customersData?.total ?? customers.length);
 
-  useEffect(() => {
-    carWashApi.listCashbooks().then(setCashbooks).catch(() => {});
-  }, []);
+  const { data: cashbooksRaw } = useQuery({
+    queryKey: ["cw-customer-cashbooks"],
+    queryFn: () => carWashApi.listCashbooks(),
+    staleTime: 5 * 60_000,
+  });
+  const cashbooks = cashbooksRaw ?? [];
 
   const handleSearch = (val) => {
     setSearch(val);
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       setPage(1);
-      load({ page: 1, search: val });
+      setDebouncedSearch(val);
     }, 350);
   };
 
@@ -246,11 +249,7 @@ export default function CarWashCustomers() {
         name: editForm.name.trim(),
         phone: editForm.phone.trim(),
       });
-      setCustomers((prev) =>
-        prev.map((c) =>
-          c._id === editTarget._id ? { ...c, name: editForm.name.trim(), phone: editForm.phone.trim() } : c
-        )
-      );
+      queryClient.invalidateQueries({ queryKey: ["cw-customers"] });
       toast.success("Customer updated");
       setEditTarget(null);
     } catch (err) {
@@ -356,7 +355,7 @@ export default function CarWashCustomers() {
       });
       toast.success("Payment recorded successfully");
       setPayTarget(null);
-      load();
+      queryClient.invalidateQueries({ queryKey: ["cw-customers"] });
     } catch (err) {
       toast.error(err?.message || err?.response?.data?.message || "Failed to record payment");
     } finally {
@@ -423,6 +422,7 @@ export default function CarWashCustomers() {
               </button>
 
               {/* Sync */}
+              {canManage && (
               <button
                 type="button"
                 onClick={async () => {
@@ -430,7 +430,7 @@ export default function CarWashCustomers() {
                   try {
                     const r = await carWashApi.backfillCustomersAndStamps();
                     toast.success(`Sync done — ${r?.customersCreated ?? 0} created, ${r?.stampsAwarded ?? 0} stamps`);
-                    await load();
+                    queryClient.invalidateQueries({ queryKey: ["cw-customers"] });
                   } catch (err) {
                     toast.error(err?.message || "Sync failed");
                   } finally { setSyncing(false); }
@@ -441,11 +441,12 @@ export default function CarWashCustomers() {
                 <FaRedoAlt size={9} className={syncing ? "animate-spin" : ""} />
                 <span className="hidden sm:inline">{syncing ? "Syncing..." : "Sync Jobs"}</span>
               </button>
+              )}
 
               {/* Refresh */}
               <button
                 type="button"
-                onClick={() => load()}
+                onClick={() => queryClient.invalidateQueries({ queryKey: ["cw-customers"] })}
                 disabled={loading}
                 className="flex items-center gap-1 h-7 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
               >
@@ -550,9 +551,9 @@ export default function CarWashCustomers() {
                   {/* Mobile action buttons */}
                   <div className="flex items-center gap-1.5 pt-1">
                     <ActionBtn icon={FaCar} title="View Jobs" color="green" onClick={(e) => viewJobs(e, c)} />
-                    <ActionBtn icon={FaEdit} title="Edit customer" color="amber" onClick={(e) => openEdit(e, c)} />
+                    {canManage && <ActionBtn icon={FaEdit} title="Edit customer" color="amber" onClick={(e) => openEdit(e, c)} />}
                     {c.phone && <ActionBtn icon={FaCommentDots} title="Send SMS" color="blue" onClick={(e) => openSms(e, c)} />}
-                    {hasOutstanding && <ActionBtn icon={FaMoneyBillWave} title="Settle outstanding" color="red" onClick={(e) => openSettle(e, c)} />}
+                    {hasOutstanding && canManage && <ActionBtn icon={FaMoneyBillWave} title="Settle outstanding" color="red" onClick={(e) => openSettle(e, c)} />}
                   </div>
                 </div>
               );
@@ -698,9 +699,9 @@ export default function CarWashCustomers() {
                         <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-1">
                             <ActionBtn icon={FaCar} title="View jobs" color="green" onClick={(e) => viewJobs(e, c)} />
-                            <ActionBtn icon={FaEdit} title="Edit customer" color="amber" onClick={(e) => openEdit(e, c)} />
+                            {canManage && <ActionBtn icon={FaEdit} title="Edit customer" color="amber" onClick={(e) => openEdit(e, c)} />}
                             {c.phone && <ActionBtn icon={FaCommentDots} title="Send SMS" color="blue" onClick={(e) => openSms(e, c)} />}
-                            {hasOutstanding && (
+                            {hasOutstanding && canManage && (
                               <ActionBtn icon={FaMoneyBillWave} title={`Settle ${fmt(c.outstanding)} outstanding`} color="red" onClick={(e) => openSettle(e, c)} />
                             )}
                           </div>

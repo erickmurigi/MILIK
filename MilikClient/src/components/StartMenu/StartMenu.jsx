@@ -61,9 +61,7 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
   const [open, setOpen]                         = useState(false);
   const [showSwitchModal, setShowSwitchModal]   = useState(false);
   const [companies, setCompanies]               = useState([]);
-  const [switchLoading, setSwitchLoading]       = useState(false);
   const [loadingCompanies, setLoadingCompanies] = useState(false);
-  const [companiesLoadedAt, setCompaniesLoadedAt] = useState(0);
   const [search, setSearch]                     = useState("");
 
   const anchorRef = useRef(null);
@@ -120,21 +118,17 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
   const openSwitchCompany = useCallback(async ({ forceRefresh = false } = {}) => {
     setSearch("");
     setShowSwitchModal(true);
-    const fresh = companies.length > 0 && Date.now() - companiesLoadedAt < 60_000;
-    if (!forceRefresh && fresh) return;
     setLoadingCompanies(true);
     try {
       const items = await getAccessibleCompanies({ forceRefresh });
       setCompanies(Array.isArray(items) ? items : []);
-      setCompaniesLoadedAt(Date.now());
     } catch (err) {
       setCompanies([]);
-      setCompaniesLoadedAt(0);
       toast.error(err?.response?.data?.message || err?.message || "Failed to load companies");
     } finally {
       setLoadingCompanies(false);
     }
-  }, [companies, companiesLoadedAt]);
+  }, []);
 
   const filteredCompanies = useMemo(() => {
     const activeId = String(currentCompany?._id || currentUser?.company?._id || "");
@@ -174,20 +168,17 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
       navigate("/moduleDashboard", { replace: true });
       return;
     }
-    if (isCompanySwitching || switchLoading) return;
-    setSwitchLoading(true);
+    if (isCompanySwitching) return;
     try {
       await dispatch(switchCompany(company._id));
       setShowSwitchModal(false); setOpen(false);
       navigate("/moduleDashboard", { replace: true });
     } catch (err) {
       toast.error(err?.response?.data?.message || err?.message || "Failed to switch company");
-    } finally {
-      setSwitchLoading(false);
     }
-  }, [currentCompany?._id, currentUser?.company?._id, isCompanySwitching, switchLoading, dispatch, navigate]);
+  }, [currentCompany?._id, currentUser?.company?._id, isCompanySwitching, dispatch, navigate]);
 
-  const isBusy = switchLoading || isCompanySwitching;
+  const isBusy = isCompanySwitching;
 
   // ── Trigger button ──────────────────────────────────────────────────────────
   const triggerBtn = (

@@ -9,7 +9,7 @@ import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import { createError } from "../../../utils/error.js";
 import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { sendAdHocSms } from "../../../services/communicationService.js";
-import { postCarWashTopupLedger } from "../services/carwashAccountingService.js";
+import { postCarWashTopupLedger, reverseCarWashTopupLedger } from "../services/carwashAccountingService.js";
 import { resolveCarWashSmsBody } from "../services/carwashSmsService.js";
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
@@ -54,7 +54,7 @@ const computeAccountBalance = async (business, accountId) => {
     business,
     status: { $nin: ["cancelled"] },
     $or: orConditions,
-  }).select("_id price").lean();
+  }).select("_id price discountAmount").lean();
 
   if (!jobs.length) return 0;
 
@@ -67,7 +67,7 @@ const computeAccountBalance = async (business, accountId) => {
     { $group: { _id: null, paid: { $sum: "$amount" } } },
   ]);
 
-  const totalInvoiced = uniqueJobs.reduce((sum, j) => sum + Number(j.price || 0), 0);
+  const totalInvoiced = uniqueJobs.reduce((sum, j) => sum + Math.max(0, Number(j.price || 0) - Number(j.discountAmount || 0)), 0);
   return round2(totalInvoiced - Number(totals[0]?.paid || 0));
 };
 
@@ -85,7 +85,7 @@ const computeAllBalances = async (business, accounts) => {
     business: businessOid,
     status: { $nin: ["cancelled"] },
     $or: jobOrConditions,
-  }).select("_id price creditAccount plateNumber").lean();
+  }).select("_id price discountAmount creditAccount plateNumber").lean();
 
   if (!allJobs.length) return {};
 
@@ -125,7 +125,8 @@ const computeAllBalances = async (business, accounts) => {
   for (const [accIdStr, jobIdSet] of accountJobIds) {
     let invoiced = 0, paid = 0;
     for (const jid of jobIdSet) {
-      invoiced += Number(jobById.get(jid)?.price || 0);
+      const j = jobById.get(jid);
+      invoiced += Math.max(0, Number(j?.price || 0) - Number(j?.discountAmount || 0));
       paid     += paidByJob.get(jid) || 0;
     }
     result[accIdStr] = round2(invoiced - paid);
@@ -395,15 +396,21 @@ export const recordAccountPayment = async (req, res, next) => {
 
 const refreshStatementStatuses = async (business, accountId) => {
   const statements = await CarWashAccountStatement.find({ business, account: accountId, status: { $nin: ["paid"] } });
-  for (const stmt of statements) {
-    const jobIds = stmt.jobs.map((l) => l.job);
-    const jobs = await CarWashJob.find({ _id: { $in: jobIds } }).lean();
-    const allPaid = jobs.every((j) => j.paymentStatus === "paid");
-    const anyPaid = jobs.some((j) => j.paymentStatus !== "unpaid");
+  if (!statements.length) return;
+
+  // One query for all jobs referenced by any statement (instead of N queries)
+  const allJobIds = [...new Set(statements.flatMap((s) => s.jobs.map((l) => String(l.job))))];
+  const jobs = await CarWashJob.find({ _id: { $in: allJobIds } }, { _id: 1, paymentStatus: 1 }).lean();
+  const jobMap = new Map(jobs.map((j) => [String(j._id), j.paymentStatus]));
+
+  await Promise.all(statements.map((stmt) => {
+    const statuses = stmt.jobs.map((l) => jobMap.get(String(l.job)) || "unpaid");
+    const allPaid = statuses.every((s) => s === "paid");
+    const anyPaid = statuses.some((s) => s !== "unpaid");
     if (allPaid) stmt.status = "paid";
     else if (anyPaid) stmt.status = "partial";
-    await stmt.save();
-  }
+    return stmt.save();
+  }));
 };
 
 export const generateStatement = async (req, res, next) => {
@@ -729,6 +736,64 @@ export const listAccountTopups = async (req, res, next) => {
       .lean();
 
     res.json({ success: true, data: topups });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Called from the financials journal — no account ID required
+export const voidTopupDirect = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const topup = await CarWashAccountTopup.findOne({ _id: req.params.topupId, business });
+    if (!topup) return next(createError(404, "Top-up not found"));
+    if (topup.isVoided) return next(createError(400, "This top-up has already been voided"));
+    const userId = currentUserId(req);
+    const reason = String(req.body.reason || "").trim();
+    await reverseCarWashTopupLedger({ businessId: business, topupId: topup._id, reason: reason || "Top-up voided", req });
+    const account = await CarWashCreditAccount.findOne({ _id: topup.account, business });
+    if (account) {
+      account.accountCredit = Math.max(0, round2((account.accountCredit || 0) - topup.amount));
+      account.updatedBy = userId;
+      await account.save();
+    }
+    topup.isVoided   = true;
+    topup.voidedAt   = new Date();
+    topup.voidedBy   = userId;
+    topup.voidReason = reason;
+    await topup.save();
+    res.json({ success: true, message: "Top-up voided and ledger reversed", data: topup });
+  } catch (err) { next(err); }
+};
+
+export const voidTopup = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const topup = await CarWashAccountTopup.findOne({ _id: req.params.topupId, business, account: req.params.id });
+    if (!topup) return next(createError(404, "Top-up not found"));
+    if (topup.isVoided) return next(createError(400, "This top-up has already been voided"));
+
+    const userId = currentUserId(req);
+    const reason = String(req.body.reason || "").trim();
+
+    // Reverse ledger entries
+    await reverseCarWashTopupLedger({ businessId: business, topupId: topup._id, reason: reason || "Top-up voided", req });
+
+    // Reduce the account credit by the voided amount
+    const account = await CarWashCreditAccount.findOne({ _id: req.params.id, business });
+    if (account) {
+      account.accountCredit = Math.max(0, round2((account.accountCredit || 0) - topup.amount));
+      account.updatedBy = userId;
+      await account.save();
+    }
+
+    topup.isVoided  = true;
+    topup.voidedAt  = new Date();
+    topup.voidedBy  = userId;
+    topup.voidReason = reason;
+    await topup.save();
+
+    res.json({ success: true, message: "Top-up voided and ledger reversed", data: topup });
   } catch (err) {
     next(err);
   }

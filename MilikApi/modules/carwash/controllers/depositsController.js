@@ -165,28 +165,38 @@ export const createDeposit = async (req, res, next) => {
 export const updateDepositStatus = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const status = String(req.body.status || "").trim().toLowerCase();
+    const status   = String(req.body.status || "").trim().toLowerCase();
     if (!STATUSES.has(status)) return next(createError(400, "Invalid Car Wash deposit status"));
 
-    const update = {
-      status,
-      notes: String(req.body.notes || "").trim(),
-      updatedBy: currentUserId(req),
-    };
+    const deposit = await CarWashDeposit.findOne({ _id: req.params.id, business });
+    if (!deposit) return next(createError(404, "Car Wash deposit not found"));
+
+    // State machine guards
+    if (deposit.status === "cancelled") return next(createError(400, "Cancelled deposits cannot be changed"));
+    if (deposit.status === "confirmed" && status === "pending") return next(createError(400, "Confirmed deposits cannot be moved back to pending — cancel instead"));
+    if (deposit.status === status) return next(createError(400, `Deposit is already ${status}`));
+
+    const userId = currentUserId(req);
+    deposit.status    = status;
+    deposit.notes     = String(req.body.notes || deposit.notes || "").trim();
+    deposit.updatedBy = userId;
+
     if (status === "confirmed") {
-      update.confirmedBy = currentUserId(req);
-      update.confirmedAt = new Date();
+      deposit.confirmedBy = userId;
+      deposit.confirmedAt = new Date();
     }
-    if (status !== "confirmed") {
-      update.confirmedBy = null;
-      update.confirmedAt = null;
+    if (status === "cancelled") {
+      deposit.cancelledBy     = userId;
+      deposit.cancelledAt     = new Date();
+      deposit.cancellationNote = String(req.body.notes || "").trim();
     }
 
-    const deposit = await CarWashDeposit.findOneAndUpdate({ _id: req.params.id, business }, update, { new: true, runValidators: true })
-      .populate("depositedBy", "name username email")
-      .populate("confirmedBy", "name username email")
-      .populate("cashbookAccount", "code name type subGroup balance");
-    if (!deposit) return next(createError(404, "Car Wash deposit not found"));
+    await deposit.save();
+    await deposit.populate([
+      { path: "depositedBy",  select: "name username email" },
+      { path: "confirmedBy",  select: "name username email" },
+      { path: "cashbookAccount", select: "code name type subGroup balance" },
+    ]);
     res.status(200).json({ success: true, data: deposit, deposit, message: "Car Wash deposit status updated" });
   } catch (error) {
     next(error);

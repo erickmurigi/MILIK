@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
-import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
+import { selectCurrentCompany } from "../../redux/selectors";
 import { FaBook, FaCheckSquare, FaEdit, FaEye, FaPlus, FaRedoAlt, FaSearch, FaSquare, FaTimes, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney } from "../../services/carWashApi";
-import { hasCompanyPermission } from "../../utils/permissions";
 import CarWashShell from "./CarWashShell";
+import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { useConfirm } from "../../context/ConfirmContext";
 
 const PAGE_SIZE = 30;
@@ -70,7 +70,6 @@ const CarWashChartOfAccounts = () => {
   const confirm = useConfirm();
   const queryClient = useQueryClient();
   const currentCompany = useSelector(selectCurrentCompany);
-  const currentUser = useSelector(selectCurrentUser);
   const [filters, setFilters] = useState(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -80,15 +79,17 @@ const CarWashChartOfAccounts = () => {
   const [activityModal, setActivityModal] = useState({ open: false, account: null, rows: [], openingBalance: 0, closingBalance: 0 });
   const [saving, setSaving] = useState(false);
 
-  const canCreate = hasCompanyPermission(currentUser || {}, currentCompany, "chartOfAccounts", "create", "accounts");
-  const canUpdate = hasCompanyPermission(currentUser || {}, currentCompany, "chartOfAccounts", "update", "accounts");
-  const canDelete = hasCompanyPermission(currentUser || {}, currentCompany, "chartOfAccounts", "delete", "accounts");
+  const canManageSettings = useCarWashPermission("carwash-settings", "manage");
+  const canCreate = canManageSettings;
+  const canUpdate = canManageSettings;
+  const canDelete = canManageSettings;
 
   const { data: rawAccounts, isLoading: loading, error, refetch } = useQuery({
     queryKey: ["cw-chart-accounts", currentCompany?._id],
     queryFn: () => carWashApi.listChartOfAccounts({ business: currentCompany._id, moduleScope: "carwash" }),
     enabled: !!currentCompany?._id,
     select: (rows) => Array.isArray(rows) ? rows : [],
+    staleTime: 2 * 60_000,
   });
 
   useEffect(() => { if (error) toast.error(error?.response?.data?.message || "Failed to load Car Wash chart of accounts"); }, [error]);
@@ -144,10 +145,6 @@ const CarWashChartOfAccounts = () => {
   };
 
   const openCreate = () => {
-    if (!canCreate) {
-      toast.warning("You do not have permission to create chart accounts.");
-      return;
-    }
     setEditingId("");
     setForm(emptyForm);
     setShowForm(true);
@@ -160,10 +157,6 @@ const CarWashChartOfAccounts = () => {
     }
     if (selectedAccount.isSystem) {
       toast.info("System accounts are locked. Create a custom Car Wash account for changes.");
-      return;
-    }
-    if (!canUpdate) {
-      toast.warning("You do not have permission to edit chart accounts.");
       return;
     }
     setEditingId(selectedAccount._id);
@@ -223,10 +216,6 @@ const CarWashChartOfAccounts = () => {
       toast.info("System accounts cannot be deleted from the Car Wash ledger.");
       return;
     }
-    if (!canDelete) {
-      toast.warning("You do not have permission to delete chart accounts.");
-      return;
-    }
     const confirmed = await confirm({ title: "Delete Accounts", message: `Delete ${selectedAccounts.length} selected Car Wash account(s)?`, confirmText: "Delete", isDangerous: true });
     if (!confirmed) return;
 
@@ -269,9 +258,9 @@ const CarWashChartOfAccounts = () => {
       action={
         <>
           <button type="button" onClick={openActivity} disabled={selectedAccounts.length !== 1} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45"><FaEye /> Ledger</button>
-          <button type="button" onClick={openCreate} disabled={!canCreate} className="inline-flex h-8 items-center gap-1.5 bg-[#FF8C00] px-3 text-xs font-bold text-white hover:bg-[#E67E00] disabled:cursor-not-allowed disabled:bg-slate-300"><FaPlus /> Add Account</button>
-          <button type="button" onClick={openEdit} disabled={selectedAccounts.length !== 1 || selectedHasSystem || !canUpdate} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45"><FaEdit /> Edit</button>
-          <button type="button" onClick={deleteSelected} disabled={!selectedAccounts.length || selectedHasSystem || !canDelete || saving} className="inline-flex h-8 items-center gap-1.5 border border-red-200 bg-red-50 px-2.5 text-xs font-bold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-45"><FaTrash /> Delete</button>
+          {canCreate && <button type="button" onClick={openCreate} className="inline-flex h-8 items-center gap-1.5 bg-[#FF8C00] px-3 text-xs font-bold text-white hover:bg-[#E67E00]"><FaPlus /> Add Account</button>}
+          {canUpdate && <button type="button" onClick={openEdit} disabled={selectedAccounts.length !== 1 || selectedHasSystem} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45"><FaEdit /> Edit</button>}
+          {canDelete && <button type="button" onClick={deleteSelected} disabled={!selectedAccounts.length || selectedHasSystem || saving} className="inline-flex h-8 items-center gap-1.5 border border-red-200 bg-red-50 px-2.5 text-xs font-bold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-45"><FaTrash /> Delete</button>}
           <button type="button" onClick={() => refetch()} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"><FaRedoAlt className={loading ? "animate-spin" : ""} />Refresh</button>
         </>
       }

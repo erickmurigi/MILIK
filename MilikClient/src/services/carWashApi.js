@@ -135,6 +135,8 @@ export const carWashApi = {
   recordAccountPayment: async (id, payload) => unwrap(await adminRequests.post(`/carwash/accounts/${id}/pay`, payload)),
   recordAccountTopup: async (id, payload) => unwrap(await adminRequests.post(`/carwash/accounts/${id}/topup`, payload)),
   listAccountTopups: async (id) => unwrap(await adminRequests.get(`/carwash/accounts/${id}/topups`)),
+  voidTopup: async (accountId, topupId, reason = "") => unwrap(await adminRequests.post(`/carwash/accounts/${accountId}/topups/${topupId}/void`, { reason })),
+  voidTopupDirect: async (topupId, reason = "") => unwrap(await adminRequests.post(`/carwash/accounts/topups/${topupId}/void`, { reason })),
   generateStatement: async (id, payload = {}) => unwrap(await adminRequests.post(`/carwash/accounts/${id}/statements`, payload)),
   listStatements: async (id, params = {}) => unwrap(await adminRequests.get(`/carwash/accounts/${id}/statements`, { params })),
   getStatement: async (id, statementId) => unwrap(await adminRequests.get(`/carwash/accounts/${id}/statements/${statementId}`)),

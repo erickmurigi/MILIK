@@ -344,20 +344,15 @@ const extractList = (payload) => {
 };
 
 
-const resetPersistedWorkspaceCache = async () => {
+const resetPersistedWorkspaceCache = () => {
   const transientKeys = [
     "app-tabs",
     "active-tab",
     "milik_demo_mode",
     "milik_demo_company_id",
   ];
-
   transientKeys.forEach((key) => {
-    try {
-      localStorage.removeItem(key);
-    } catch (_error) {
-      // no-op
-    }
+    try { localStorage.removeItem(key); } catch (_e) {}
   });
 };
 
@@ -427,9 +422,7 @@ export const switchCompany = (companyId) => async (dispatch) => {
       null;
 
     invalidateAccessibleCompaniesCache();
-    await resetPersistedWorkspaceCache();
-    localStorage.removeItem("milik_demo_mode");
-    localStorage.removeItem("milik_demo_company_id");
+    resetPersistedWorkspaceCache();
 
     dispatch(resetCompanyScopedState());
 

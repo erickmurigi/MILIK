@@ -11,7 +11,12 @@ import CarWashShell from "./CarWashShell";
 
 const DEFAULT_PAGE_SIZE = 25;
 const destinations = ["bank", "mpesa", "safe", "other"];
-const statuses = ["pending", "confirmed", "cancelled"];
+// Only the allowed forward transitions from each status
+const nextStatuses = {
+  pending:   ["pending", "confirmed", "cancelled"],
+  confirmed: ["confirmed", "cancelled"],
+  cancelled: ["cancelled"],
+};
 const defaultFilters = { date: todayISO(), status: "", destination: "", cashbookAccount: "", reference: "" };
 const emptyForm = { depositDate: todayISO(), amount: "", destination: "bank", cashbookAccount: "", reference: "", notes: "" };
 const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
@@ -50,6 +55,7 @@ const CarWashDeposits = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const canCreate = useCarWashPermission("carwash-deposits", "create");
+  const canUpdate = useCarWashPermission("carwash-deposits", "update");
 
   const depositsQueryKey = ["cw-deposits", appliedFilters, page, pageSize];
 
@@ -57,6 +63,7 @@ const CarWashDeposits = () => {
     queryKey: depositsQueryKey,
     queryFn: () => carWashApi.listDeposits({ ...appliedFilters, limit: pageSize, page }),
     placeholderData: (prev) => prev,
+    staleTime: 30_000,
   });
 
   const { data: cashbooksRaw } = useQuery({
@@ -214,9 +221,13 @@ const CarWashDeposits = () => {
                     </div>
                     <div className="flex-shrink-0 text-right">
                       <div className="font-extrabold text-slate-900">{formatMoney(row.amount)}</div>
-                      <select className={`mt-1 h-6 border px-1.5 text-[10px] font-bold uppercase ${statusBadgeClass[row.status || "pending"] || statusBadgeClass.pending}`} value={row.status || "pending"} onChange={(e) => updateStatus(row, e.target.value)}>
-                        {statuses.map((s) => <option key={s} value={s}>{s.toUpperCase()}</option>)}
-                      </select>
+                      {canUpdate ? (
+                        <select className={`mt-1 h-6 border px-1.5 text-[10px] font-bold uppercase ${statusBadgeClass[row.status || "pending"] || statusBadgeClass.pending}`} value={row.status || "pending"} onChange={(e) => updateStatus(row, e.target.value)}>
+                          {(nextStatuses[row.status || "pending"] || ["pending"]).map((s) => <option key={s} value={s}>{s.toUpperCase()}</option>)}
+                        </select>
+                      ) : (
+                        <span className={`mt-1 inline-flex border px-1.5 py-0.5 text-[10px] font-bold uppercase ${statusBadgeClass[row.status || "pending"] || statusBadgeClass.pending}`}>{(row.status || "pending").toUpperCase()}</span>
+                      )}
                     </div>
                   </div>
                   {row.reference && <div className="mt-1 text-xs text-slate-500">Ref: {row.reference}</div>}
@@ -269,9 +280,13 @@ const CarWashDeposits = () => {
                     <td className="px-2 py-1 text-slate-700">{row.reference || "-"}</td>
                     {isConsolidated && <td className="px-2 py-1 text-slate-600">{row.branch?.name || <span className="text-slate-400">—</span>}</td>}
                     <td className="px-2 py-1">
-                      <select className={`h-6 border px-2 text-[11px] font-bold uppercase ${statusBadgeClass[row.status || "pending"] || statusBadgeClass.pending}`} value={row.status || "pending"} onChange={(event) => updateStatus(row, event.target.value)}>
-                        {statuses.map((status) => <option key={status} value={status}>{status.toUpperCase()}</option>)}
-                      </select>
+                      {canUpdate ? (
+                        <select className={`h-6 border px-2 text-[11px] font-bold uppercase ${statusBadgeClass[row.status || "pending"] || statusBadgeClass.pending}`} value={row.status || "pending"} onChange={(event) => updateStatus(row, event.target.value)}>
+                          {statuses.map((status) => <option key={status} value={status}>{status.toUpperCase()}</option>)}
+                        </select>
+                      ) : (
+                        <span className={`inline-flex border px-2 py-0.5 text-[11px] font-bold uppercase ${statusBadgeClass[row.status || "pending"] || statusBadgeClass.pending}`}>{(row.status || "pending").toUpperCase()}</span>
+                      )}
                     </td>
                     <td className="px-2 py-1 text-right font-extrabold text-slate-900">{formatMoney(row.amount)}</td>
                   </tr>

@@ -11,6 +11,10 @@ const carWashAccountTopupSchema = new mongoose.Schema(
     paymentDate:     { type: Date, default: Date.now },
     notes:           { type: String, trim: true, default: "" },
     createdBy:       { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    isVoided:        { type: Boolean, default: false },
+    voidedAt:        { type: Date,    default: null },
+    voidedBy:        { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    voidReason:      { type: String,  trim: true, default: "" },
   },
   { timestamps: true }
 );

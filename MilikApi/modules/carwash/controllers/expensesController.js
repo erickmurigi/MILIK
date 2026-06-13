@@ -4,10 +4,11 @@ import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import CarWashExpense from "../models/CarWashExpense.js";
 import CarWashBranch from "../models/CarWashBranch.js";
 import CarWashExpenseCategoryConfig from "../models/CarWashExpenseCategoryConfig.js";
+import FinancialLedgerEntry from "../../../models/FinancialLedgerEntry.js";
 import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { postEntry } from "../../../services/ledgerPostingService.js";
 import { aggregateChartOfAccountBalances } from "../../../services/chartAccountAggregationService.js";
-import { resolveExpenseAccountForCategory } from "../services/carwashAccountingService.js";
+import { resolveExpenseAccountForCategory, reverseCarWashExpenseLedger } from "../services/carwashAccountingService.js";
 
 const METHODS  = new Set(["cash", "mpesa", "bank", "card", "other"]);
 const STATUSES = new Set(["draft", "approved", "paid", "cancelled"]);
@@ -39,6 +40,13 @@ const postCwExpenseLedger = async ({ business, expense, cashbookAccountId, userI
   try {
     const expenseAccount = await resolveExpenseAccountForCategory(business, expense.category);
     if (!expenseAccount?._id || !cashbookAccountId) return;
+    // Idempotency guard: skip if this expense already has ledger entries
+    const alreadyPosted = await FinancialLedgerEntry.exists({
+      business,
+      sourceTransactionType: "carwash_expense",
+      sourceTransactionId: String(expense._id),
+    });
+    if (alreadyPosted) return;
     const txDate = expense.expenseDate || expense.paidAt || new Date();
     const { start, end } = cwDayRange(txDate);
     const base = {
@@ -63,34 +71,6 @@ const postCwExpenseLedger = async ({ business, expense, cashbookAccountId, userI
   } catch { /* ledger failure must not block the expense */ }
 };
 
-const reverseCwExpenseLedger = async ({ business, expense, userId }) => {
-  try {
-    const expenseAccount  = await resolveExpenseAccountForCategory(business, expense.category);
-    const cashbookAccountId = String(expense.cashbookAccount || "");
-    if (!expenseAccount?._id || !cashbookAccountId) return;
-    const now = new Date();
-    const { start, end } = cwDayRange(now);
-    const base = {
-      business,
-      sourceTransactionType: "carwash_expense_reversal",
-      sourceTransactionId:   String(expense._id),
-      transactionDate:       now,
-      statementPeriodStart:  start,
-      statementPeriodEnd:    end,
-      category:              "CARWASH_EXPENSE_REVERSAL",
-      amount:                Number(expense.amount),
-      payer:                 "vendor",
-      receiver:              "n/a",
-      createdBy:             userId,
-      approvedBy:            userId,
-      allowUnscoped:         true,
-    };
-    const desc = expense.payee || expense.category || expense.expenseNumber || "";
-    await postEntry({ ...base, accountId: expenseAccount._id, direction: "credit", notes: `CW expense reversal – ${desc}` });
-    await postEntry({ ...base, accountId: cashbookAccountId,  direction: "debit",  notes: `CW expense reversal – ${expense.expenseNumber || ""}` });
-    await aggregateChartOfAccountBalances(business, [String(expenseAccount._id), cashbookAccountId]);
-  } catch { /* ledger failure must not block the expense */ }
-};
 
 const generateExpenseNumber = async (business) => {
   const stamp  = new Date().toISOString().slice(0, 10).replace(/-/g, "");
@@ -436,7 +416,7 @@ export const updateExpenseStatus = async (req, res, next) => {
       await postCwExpenseLedger({ business, expense, cashbookAccountId: String(expense.cashbookAccount), userId });
     }
     if (status === "cancelled" && wasPaid) {
-      await reverseCwExpenseLedger({ business, expense, userId });
+      await reverseCarWashExpenseLedger({ businessId: business, expense, req });
     }
 
     const populated = await populateExpense(CarWashExpense.findById(expense._id)).lean();

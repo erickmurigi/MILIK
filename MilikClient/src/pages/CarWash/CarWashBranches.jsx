@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaEdit, FaPlus, FaRedoAlt, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, normalizeListPayload } from "../../services/carWashApi";
@@ -39,31 +40,27 @@ const Modal = ({ title, children, footer, onClose }) => (
 );
 
 const CarWashBranches = () => {
-  const [rows, setRows]         = useState([]);
-  const [cashbooks, setCashbooks] = useState([]);
+  const queryClient = useQueryClient();
   const [form, setForm]         = useState(emptyForm);
   const [editingId, setEditingId] = useState("");
   const [showModal, setShowModal] = useState(false);
-  const [loading, setLoading]   = useState(false);
   const canManage = useCarWashPermission("carwash-branches", "manage");
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      const [branchPayload, cbPayload] = await Promise.all([
-        carWashApi.listBranches(),
-        carWashApi.listCashbooks(),
-      ]);
-      setRows(normalizeListPayload(branchPayload, "branches"));
-      setCashbooks(normalizeListPayload(cbPayload, "accounts"));
-    } catch {
-      toast.error("Failed to load branches");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: branchesRaw, isLoading: loading, refetch } = useQuery({
+    queryKey: ["cw-branches"],
+    queryFn: () => carWashApi.listBranches(),
+    staleTime: 30_000,
+    select: (data) => normalizeListPayload(data, "branches"),
+  });
+  const rows = branchesRaw ?? [];
 
-  useEffect(() => { load(); }, []);
+  const { data: cashbooksRaw } = useQuery({
+    queryKey: ["cw-branch-cashbooks"],
+    queryFn: () => carWashApi.listCashbooks(),
+    staleTime: 5 * 60_000,
+    select: (data) => normalizeListPayload(data, "accounts"),
+  });
+  const cashbooks = cashbooksRaw ?? [];
 
   const closeModal = () => { setShowModal(false); setEditingId(""); setForm(emptyForm); };
 
@@ -98,7 +95,7 @@ const CarWashBranches = () => {
       if (editingId) await carWashApi.updateBranch(editingId, form);
       else await carWashApi.createBranch(form);
       closeModal();
-      await load();
+      queryClient.invalidateQueries({ queryKey: ["cw-branches"] });
       toast.success("Branch saved");
     } catch (error) {
       toast.error(error?.response?.data?.message || "Unable to save branch");
@@ -109,7 +106,7 @@ const CarWashBranches = () => {
     if (!window.confirm(`Delete branch "${row.name}"? This cannot be undone.`)) return;
     try {
       await carWashApi.deleteBranch(row._id);
-      await load();
+      queryClient.invalidateQueries({ queryKey: ["cw-branches"] });
       toast.success("Branch deleted");
     } catch (error) {
       toast.error(error?.response?.data?.message || "Unable to delete branch");
@@ -121,7 +118,7 @@ const CarWashBranches = () => {
       title="Branch Management"
       action={
         <>
-          <button type="button" onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+          <button type="button" onClick={() => refetch()} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
             <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
           </button>
           {canManage && (

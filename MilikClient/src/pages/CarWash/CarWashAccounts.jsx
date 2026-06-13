@@ -4,12 +4,13 @@ import { useSelector } from "react-redux";
 import {
   FaCalendarAlt, FaCheckCircle, FaChevronDown, FaChevronRight,
   FaFileInvoice, FaMoneyBillWave, FaPlus, FaRedoAlt, FaSms,
-  FaTimes, FaUser, FaExclamationTriangle, FaWallet, FaHistory,
+  FaTimes, FaUndo, FaUser, FaExclamationTriangle, FaWallet, FaHistory,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import CwSmsModal from "./CwSmsModal";
+import useCarWashPermission from "../../hooks/useCarWashPermission";
 
 const GRN = "#0B3B2E";
 const ORG = "#FF8C00";
@@ -300,6 +301,9 @@ const CarWashAccounts = () => {
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const businessId = currentCompany?._id;
 
+  const canManage = useCarWashPermission("carwash-loyalty", "manage");
+  const canRecord  = useCarWashPermission("carwash-payments", "record");
+
   const [expandedId, setExpandedId] = useState(null);
   const [expandedStatements, setExpandedStatements] = useState({});
   const [showCreate, setShowCreate] = useState(false);
@@ -324,6 +328,7 @@ const CarWashAccounts = () => {
     },
     enabled: !!businessId,
     placeholderData: (prev) => prev,
+    staleTime: 30_000,
   });
 
   const { data: refData } = useQuery({
@@ -461,9 +466,11 @@ const CarWashAccounts = () => {
                 <option value="monthly">Monthly</option>
               </select>
               <button onClick={() => refetchAccounts()} className="flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50"><FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /></button>
-              <button onClick={() => setShowCreate(true)} className="flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]">
-                <FaPlus size={9} /> New Account
-              </button>
+              {canManage && (
+                <button onClick={() => setShowCreate(true)} className="flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]">
+                  <FaPlus size={9} /> New Account
+                </button>
+              )}
             </div>
           </div>
 
@@ -571,12 +578,12 @@ const CarWashAccounts = () => {
                       </td>
                       <td className="px-3 py-2 text-right">
                         <div className="inline-flex gap-1" onClick={(e) => e.stopPropagation()}>
-                          {acc.accountType === "prepaid" && acc.status === "active" && (
+                          {acc.accountType === "prepaid" && acc.status === "active" && canRecord && (
                             <button onClick={() => setTopupTarget(acc)} className="inline-flex items-center gap-1 border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100">
                               <FaWallet /> Top Up
                             </button>
                           )}
-                          {acc.accountType !== "prepaid" && balance > 0 && acc.status === "active" && (
+                          {acc.accountType !== "prepaid" && balance > 0 && acc.status === "active" && canRecord && (
                             <button onClick={() => setPayTarget(acc)} className="inline-flex items-center gap-1 border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700 hover:bg-orange-100">
                               <FaMoneyBillWave /> Pay
                             </button>
@@ -632,12 +639,33 @@ const CarWashAccounts = () => {
                                 ) : (expandedTopups[acc._id] || []).length === 0 ? (
                                   <div className="text-[11px] text-slate-400">No top-ups yet</div>
                                 ) : (expandedTopups[acc._id] || []).map((t) => (
-                                  <div key={t._id} className="mb-1.5 flex items-center justify-between rounded border border-slate-200 bg-white px-3 py-2">
-                                    <div>
-                                      <div className="font-black text-emerald-700 text-[11px]">+{fmt(t.amount)}</div>
+                                  <div key={t._id} className={`mb-1.5 flex items-center justify-between rounded border px-3 py-2 ${t.isVoided ? "border-red-200 bg-red-50" : "border-slate-200 bg-white"}`}>
+                                    <div className="min-w-0">
+                                      <div className={`font-black text-[11px] ${t.isVoided ? "text-slate-400 line-through" : "text-emerald-700"}`}>+{fmt(t.amount)}</div>
                                       <div className="text-[10px] text-slate-500">{t.method} {t.reference ? `· ${t.reference}` : ""} · {fmtDate(t.paymentDate)}</div>
+                                      {t.isVoided && <div className="text-[10px] text-red-500 font-bold">VOIDED{t.voidReason ? ` — ${t.voidReason}` : ""}</div>}
                                     </div>
-                                    {t.notes && <div className="text-[10px] text-slate-400 italic max-w-[120px] truncate">{t.notes}</div>}
+                                    {!t.isVoided && canRecord && (
+                                      <button
+                                        type="button"
+                                        onClick={async () => {
+                                          const reason = window.prompt(`Reason for voiding this top-up of ${fmt(t.amount)}?`, "");
+                                          if (reason === null) return;
+                                          try {
+                                            await carWashApi.voidTopup(acc._id, t._id, reason);
+                                            toast.success("Top-up voided and ledger reversed");
+                                            loadTopups(acc._id);
+                                            queryClient.invalidateQueries({ queryKey: ["cw-credit-accounts"] });
+                                          } catch (err) {
+                                            toast.error(err?.response?.data?.message || "Failed to void top-up");
+                                          }
+                                        }}
+                                        className="ml-2 inline-flex shrink-0 items-center gap-1 rounded border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-600 hover:bg-red-100"
+                                        title="Void this top-up"
+                                      >
+                                        <FaUndo size={8} /> Void
+                                      </button>
+                                    )}
                                   </div>
                                 ))}
                               </div>

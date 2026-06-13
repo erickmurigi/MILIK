@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
@@ -501,10 +502,54 @@ const CarWashJobs = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const isConsolidated = !getActiveBranchId();
   const [jobs, setJobs] = useState([]);
-  const [services, setServices] = useState([]);
-  const [staff, setStaff] = useState([]);
-  const [cashbooks, setCashbooks] = useState([]);
-  const [cashbookDefaults, setCashbookDefaults] = useState({});
+
+  // Reference data — cached across navigations; avoids refetch on every mount
+  const { data: servicesRaw } = useQuery({
+    queryKey: ["cw-services-ref"],
+    queryFn: () => carWashApi.listServices({ active: true }),
+    staleTime: 5 * 60_000,
+    select: (data) => normalizeListPayload(data, "services"),
+  });
+  const services = servicesRaw ?? [];
+
+  const { data: staffRaw } = useQuery({
+    queryKey: ["cw-staff-ref"],
+    queryFn: () => carWashApi.listStaff({ active: true }),
+    staleTime: 5 * 60_000,
+    select: (data) => normalizeListPayload(data, "staff"),
+  });
+  const staff = staffRaw ?? [];
+
+  const { data: cashbooksRaw } = useQuery({
+    queryKey: ["cw-job-cashbooks", currentCompany?._id],
+    queryFn: () => carWashApi.listChartOfAccounts({ business: currentCompany._id, type: "asset", moduleScope: "carwash", search: "Cashbooks" }),
+    enabled: !!currentCompany?._id,
+    staleTime: 5 * 60_000,
+    select: (data) => Array.isArray(data) ? data : [],
+  });
+  const cashbooks = cashbooksRaw ?? [];
+
+  const { data: settingsAndBranch } = useQuery({
+    queryKey: ["cw-job-defaults", currentCompany?._id],
+    queryFn: () => Promise.allSettled([
+      carWashApi.getCarWashSettings(),
+      carWashApi.getActiveBranch(),
+    ]).then(([s, b]) => ({ settings: s.value ?? null, branch: b.value ?? null })),
+    enabled: !!currentCompany?._id,
+    staleTime: 5 * 60_000,
+  });
+
+  const cashbookDefaults = useMemo(() => {
+    const companyDefaults = settingsAndBranch?.settings?.defaultCashbooks || {};
+    const branchDefaults  = settingsAndBranch?.branch?.defaultCashbooks   || {};
+    const defs = {};
+    ["cash", "mpesa", "bank", "card", "other"].forEach((m) => {
+      const branch  = branchDefaults[m]?._id  || branchDefaults[m]  || "";
+      const company = companyDefaults[m]?._id || companyDefaults[m] || "";
+      defs[m] = branch || company;
+    });
+    return defs;
+  }, [settingsAndBranch]);
   const [paymentForm, setPaymentForm] = useState(emptyPaymentForm);
   const [filters, setFilters] = useState(() => {
     const p      = new URLSearchParams(location.search);
@@ -582,35 +627,6 @@ const CarWashJobs = () => {
   useEffect(() => { cashbookDefaultsRef.current = cashbookDefaults; }, [cashbookDefaults]);
   const loadJobsRef = useRef(null);
 
-  const loadReferenceData = async () => {
-    try {
-      const [servicePayload, staffPayload, cashbookPayload, settingsPayload, branchData] = await Promise.all([
-        carWashApi.listServices({ active: true }),
-        carWashApi.listStaff({ active: true }),
-        currentCompany?._id
-          ? carWashApi.listChartOfAccounts({ business: currentCompany._id, type: "asset", moduleScope: "carwash", search: "Cashbooks" })
-          : Promise.resolve([]),
-        carWashApi.getCarWashSettings().catch(() => null),
-        carWashApi.getActiveBranch().catch(() => null),
-      ]);
-      setServices(normalizeListPayload(servicePayload, "services"));
-      setStaff(normalizeListPayload(staffPayload, "staff"));
-      setCashbooks(Array.isArray(cashbookPayload) ? cashbookPayload : []);
-      // Branch cashbooks take priority over company-wide defaults
-      const companyDefaults = settingsPayload?.defaultCashbooks || {};
-      const branchDefaults  = branchData?.defaultCashbooks || {};
-      const defs = {};
-      ["cash","mpesa","bank","card","other"].forEach((m) => {
-        const branch  = branchDefaults[m]?._id  || branchDefaults[m]  || "";
-        const company = companyDefaults[m]?._id || companyDefaults[m] || "";
-        defs[m] = branch || company;
-      });
-      setCashbookDefaults(defs);
-    } catch {
-      toast.error("Failed to load reference data");
-    }
-  };
-
   const loadJobs = useCallback(async () => {
     setLoading(true);
     try {
@@ -641,7 +657,6 @@ const CarWashJobs = () => {
 
   const load = useCallback(() => loadJobsRef.current?.(), []);
 
-  useEffect(() => { loadReferenceData(); }, []);
   useEffect(() => { loadJobs(); }, [loadJobs]);
 
   useEffect(() => {

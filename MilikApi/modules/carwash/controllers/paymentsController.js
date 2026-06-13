@@ -221,6 +221,12 @@ export const deletePayment = async (req, res, next) => {
     }
 
     await reverseCarWashPaymentLedger({ businessId: business, paymentId: payment._id, req });
+    if (payment.method === "prepaid" && jobBeforeDelete.creditAccount) {
+      await CarWashCreditAccount.updateOne(
+        { _id: jobBeforeDelete.creditAccount, business },
+        { $inc: { accountCredit: round2(Number(payment.amount || 0)) } }
+      );
+    }
     await revokeStampForJob({ business, jobId: jobBeforeDelete._id, plate: jobBeforeDelete.plateNumber });
     await payment.deleteOne();
     const { job } = await refreshJobPaymentStatus(business, payment.job);

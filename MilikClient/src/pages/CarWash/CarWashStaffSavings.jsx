@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
 import {
@@ -6,13 +7,16 @@ import {
   FaChevronDown,
   FaChevronUp,
   FaPiggyBank,
+  FaPrint,
   FaRedoAlt,
   FaTimes,
   FaTrash,
+  FaUndo,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
+import useCarWashPermission from "../../hooks/useCarWashPermission";
 
 // Backend returns: { staffId, staffName, daily, disbursed, balance }
 const ic  = "h-7 border border-slate-300 bg-white px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
@@ -38,11 +42,12 @@ const DETAIL_LIMIT = 30;
 
 const CarWashStaffSavings = () => {
   const currentCompany = useSelector(selectCurrentCompany);
+  const canPay    = useCarWashPermission("carwash-commissions", "pay");
+  const canManage = useCarWashPermission("carwash-commissions", "manage");
 
   // ── Balances ────────────────────────────────────────────────────────────────
   const [balances,        setBalances]        = useState([]);
   const [balancesLoading, setBalancesLoading] = useState(false);
-  const [savingsEnabled,  setSavingsEnabled]  = useState(true);
 
   // ── Detail panel — selectedStaff shape: { staffId, staffName, balance } ────
   const [selectedStaff,  setSelectedStaff]  = useState(null);
@@ -55,8 +60,25 @@ const CarWashStaffSavings = () => {
   const detailRef  = useRef(null);
   const prevStaffId = useRef(null);
 
+  // ── Reference data (cached) ──────────────────────────────────────────────────
+  const { data: cashbooksRaw } = useQuery({
+    queryKey: ["cw-savings-cashbooks", currentCompany?._id],
+    queryFn: () => carWashApi.listChartOfAccounts({ type: "asset", moduleScope: "carwash" }),
+    enabled: !!currentCompany?._id,
+    staleTime: 5 * 60_000,
+    select: (data) => Array.isArray(data) ? data : normalizeListPayload(data, "accounts"),
+  });
+  const cashbooks = cashbooksRaw ?? [];
+
+  const { data: settingsRaw } = useQuery({
+    queryKey: ["cw-savings-settings", currentCompany?._id],
+    queryFn: () => carWashApi.getCarWashSettings(),
+    enabled: !!currentCompany?._id,
+    staleTime: 5 * 60_000,
+  });
+  const savingsEnabled = settingsRaw?.savingsEnabled !== false;
+
   // ── Disbursement modal ──────────────────────────────────────────────────────
-  const [cashbooks,     setCashbooks]     = useState([]);
   const [showDisburse,  setShowDisburse]  = useState(false);
   const [disburseStaff, setDisburseStaff] = useState(null);
   const [dForm,         setDForm]         = useState({ amount: "", cashbookAccount: "", notes: "" });
@@ -70,23 +92,11 @@ const CarWashStaffSavings = () => {
   const loadBalances = useCallback(async () => {
     setBalancesLoading(true);
     try {
-      const [balRes, settingsRes, cbRes] = await Promise.allSettled([
-        carWashApi.listSavingsBalances(),
-        carWashApi.getCarWashSettings(),
-        currentCompany?._id
-          ? carWashApi.listChartOfAccounts({ type: "asset", moduleScope: "carwash" })
-          : Promise.resolve([]),
-      ]);
-      if (balRes.status === "fulfilled")      setBalances(balRes.value?.balances || []);
-      if (settingsRes.status === "fulfilled") setSavingsEnabled(settingsRes.value?.savingsEnabled !== false);
-      if (cbRes.status === "fulfilled") {
-        const list = Array.isArray(cbRes.value) ? cbRes.value : normalizeListPayload(cbRes.value, "accounts");
-        setCashbooks(list);
-      }
-    } finally {
-      setBalancesLoading(false);
-    }
-  }, [currentCompany?._id]);
+      const res = await carWashApi.listSavingsBalances();
+      setBalances(res?.balances || []);
+    } catch { /* balances reload is best-effort */ }
+    finally { setBalancesLoading(false); }
+  }, []);
 
   const loadRecords = useCallback(async (staffId, from, to, page) => {
     setRecordsLoading(true);
@@ -170,6 +180,130 @@ const CarWashStaffSavings = () => {
     setShowDisburse(true);
   };
 
+  const [printing, setPrinting] = useState(false);
+
+  const printStatement = async () => {
+    if (!selectedStaff) return;
+    setPrinting(true);
+    try {
+      const [savingsRes, payoutsRes] = await Promise.all([
+        carWashApi.listSavings({ staff: selectedStaff.staffId, dateFrom: detailFrom, dateTo: detailTo, limit: 200, page: 1 }),
+        carWashApi.listCommissionPayouts({ staff: selectedStaff.staffId, dateFrom: detailFrom, dateTo: detailTo, limit: 200 }),
+      ]);
+
+      const savings  = normalizeListPayload(savingsRes,  "records");
+      const payouts  = normalizeListPayload(payoutsRes,  "payouts");
+      const business = currentCompany?.name || currentCompany?.companyName || "Milik Car Wash";
+      const fmt = (v) => `KES ${Number(v || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      const fmtD = (v) => v ? new Date(v).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+      const period = `${fmtD(detailFrom)} – ${fmtD(detailTo)}`;
+
+      const totalDeducted   = savings.filter((r) => r.type !== "disbursement").reduce((s, r) => s + Number(r.amount || 0), 0);
+      const totalDisbursed  = savings.filter((r) => r.type === "disbursement").reduce((s, r) => s + Number(r.amount || 0), 0);
+      const netBalance      = selectedStaff.balance;
+
+      const savingsRows = savings.map((r) => `
+        <tr>
+          <td>${fmtD(r.savingsDate || r.date)}</td>
+          <td><span class="pill ${r.type === 'disbursement' ? 'pill-green' : 'pill-amber'}">${r.type.toUpperCase()}</span></td>
+          <td class="amount ${r.type === 'disbursement' ? 'neg' : 'pos'}">${r.type === 'disbursement' ? '−' : '+'}${fmt(r.amount)}</td>
+          <td>${r.savingsPayoutNumber || r.notes || '—'}</td>
+          <td>${fmtD(r.date)}</td>
+        </tr>`).join("") || `<tr><td colspan="5" class="empty">No savings records in this period.</td></tr>`;
+
+      const payoutRows = payouts.map((p) => `
+        <tr>
+          <td>${p.payoutNumber || '—'}</td>
+          <td>${fmtD(p.payoutDate)}</td>
+          <td class="amount">${fmt(p.amount)}</td>
+          <td class="amount neg">−${fmt(p.savingsHeld || 0)}</td>
+          <td class="amount pos">${fmt(p.netCash ?? p.amount)}</td>
+          <td>${(p.method || 'cash').toUpperCase()}</td>
+        </tr>`).join("") || `<tr><td colspan="6" class="empty">No commission payouts in this period.</td></tr>`;
+
+      const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+        <title>Statement — ${selectedStaff.staffName}</title>
+        <style>
+          *{margin:0;padding:0;box-sizing:border-box}
+          body{font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;padding:28px 32px}
+          .header{border-bottom:3px solid #0B3B2E;padding-bottom:12px;margin-bottom:16px}
+          .header h1{font-size:18px;font-weight:900;color:#0B3B2E;text-transform:uppercase;letter-spacing:1px}
+          .header h2{font-size:13px;font-weight:700;color:#444;margin-top:3px}
+          .meta{display:flex;gap:32px;margin-bottom:16px;font-size:10px;color:#555}
+          .meta span strong{color:#0B3B2E;font-weight:800}
+          .summary{display:flex;gap:12px;margin-bottom:20px}
+          .card{flex:1;border:1.5px solid #B7C9C0;padding:10px 14px;background:#F1F6F3}
+          .card .label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:#666;margin-bottom:4px}
+          .card .val{font-size:15px;font-weight:900;color:#0B3B2E}
+          .card.highlight .val{color:#C8511A}
+          section{margin-bottom:22px}
+          section h3{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.8px;color:#0B3B2E;background:#EDF5F1;border:1px solid #B7C9C0;padding:5px 8px;margin-bottom:0}
+          table{width:100%;border-collapse:collapse;font-size:10px}
+          th{background:#0B3B2E;color:#fff;font-weight:700;text-transform:uppercase;font-size:9px;letter-spacing:.5px;padding:5px 7px;text-align:left}
+          td{padding:4px 7px;border-bottom:1px solid #e5e7eb;vertical-align:middle}
+          tr:nth-child(even) td{background:#f9fbfa}
+          .amount{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+          .pos{color:#15803d}.neg{color:#C8511A}
+          .pill{display:inline-block;padding:1px 6px;border-radius:2px;font-size:8px;font-weight:800;letter-spacing:.5px}
+          .pill-amber{background:#fef3c7;color:#92400e;border:1px solid #fcd34d}
+          .pill-green{background:#d1fae5;color:#065f46;border:1px solid #6ee7b7}
+          .empty{text-align:center;color:#9ca3af;padding:14px;font-style:italic}
+          .footer{margin-top:24px;border-top:1px solid #e5e7eb;padding-top:10px;font-size:9px;color:#9ca3af;display:flex;justify-content:space-between}
+          @media print{body{padding:10px 16px}@page{margin:15mm 12mm}}
+        </style></head><body>
+        <div class="header">
+          <h1>${business}</h1>
+          <h2>Staff Savings &amp; Commissions Statement</h2>
+        </div>
+        <div class="meta">
+          <span><strong>Staff:</strong> ${selectedStaff.staffName}</span>
+          <span><strong>Period:</strong> ${period}</span>
+          <span><strong>Printed:</strong> ${new Date().toLocaleString("en-KE")}</span>
+        </div>
+        <div class="summary">
+          <div class="card highlight">
+            <div class="label">Total Saved (Period)</div>
+            <div class="val">${fmt(totalDeducted)}</div>
+          </div>
+          <div class="card">
+            <div class="label">Total Disbursed (Period)</div>
+            <div class="val">${fmt(totalDisbursed)}</div>
+          </div>
+          <div class="card">
+            <div class="label">Current Balance (All-Time)</div>
+            <div class="val">${fmt(netBalance)}</div>
+          </div>
+        </div>
+        <section>
+          <h3>Savings Transactions</h3>
+          <table><thead><tr>
+            <th>Savings Date</th><th>Type</th><th style="text-align:right">Amount</th><th>Reference / Notes</th><th>Recorded On</th>
+          </tr></thead><tbody>${savingsRows}</tbody></table>
+        </section>
+        <section>
+          <h3>Commission Payouts</h3>
+          <table><thead><tr>
+            <th>Payout #</th><th>Date</th><th style="text-align:right">Gross Comm.</th><th style="text-align:right">Savings Held</th><th style="text-align:right">Net Cash</th><th>Method</th>
+          </tr></thead><tbody>${payoutRows}</tbody></table>
+        </section>
+        <div class="footer">
+          <span>Generated by Milik · ${business}</span>
+          <span>${new Date().toLocaleString("en-KE")}</span>
+        </div>
+      </body></html>`;
+
+      const win = window.open("", "_blank", "width=900,height=700");
+      win.document.write(html);
+      win.document.close();
+      win.focus();
+      setTimeout(() => { win.print(); }, 400);
+    } catch {
+      toast.error("Failed to generate statement");
+    } finally {
+      setPrinting(false);
+    }
+  };
+
   const saveDisbursement = async (e) => {
     e.preventDefault();
     if (!disburseStaff || !dForm.amount || !dForm.cashbookAccount) return;
@@ -208,7 +342,7 @@ const CarWashStaffSavings = () => {
           >
             <FaRedoAlt size={9} /> Refresh
           </button>
-          {savingsEnabled && (
+          {savingsEnabled && canPay && (
             <button
               type="button"
               onClick={processToday}
@@ -277,7 +411,7 @@ const CarWashStaffSavings = () => {
                       </td>
                       <td className="px-2 py-1 text-right">
                         <div className="inline-flex items-center gap-1.5">
-                          {b.balance > 0 && (
+                          {b.balance > 0 && canPay && (
                             <button
                               type="button"
                               onClick={() => openDisburse(b)}
@@ -307,6 +441,7 @@ const CarWashStaffSavings = () => {
             </table>
           </div>
 
+          {canManage && (
           <div className="flex items-center justify-end border-t border-slate-100 bg-slate-50 px-4 py-1.5">
             <button
               type="button"
@@ -318,6 +453,7 @@ const CarWashStaffSavings = () => {
               {resetting ? "Resetting…" : "Reset all savings data"}
             </button>
           </div>
+          )}
         </div>
 
         {/* ── Detail Panel ─────────────────────────────────────────────────── */}
@@ -329,11 +465,20 @@ const CarWashStaffSavings = () => {
                 <p className="text-[9px] font-semibold uppercase tracking-widest text-white/60">Savings History</p>
                 <p className="text-sm font-extrabold text-white">{selectedStaff.staffName}</p>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <div className="text-right">
                   <p className="text-[9px] font-semibold uppercase tracking-widest text-white/60">Balance</p>
                   <p className="text-base font-black text-white">{formatMoney(selectedStaff.balance)}</p>
                 </div>
+                <button
+                  type="button"
+                  onClick={printStatement}
+                  disabled={printing}
+                  title="Print savings & commissions statement"
+                  className="inline-flex items-center gap-1.5 border border-white/30 px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-white/10 disabled:opacity-50"
+                >
+                  <FaPrint size={10} /> {printing ? "Printing…" : "Print"}
+                </button>
                 <button
                   type="button"
                   onClick={() => setSelectedStaff(null)}
@@ -375,30 +520,56 @@ const CarWashStaffSavings = () => {
                     <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Amount</th>
                     <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Reference / Notes</th>
                     <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Recorded On</th>
+                    {canPay && <th className="px-2 py-1.5 text-center font-bold uppercase tracking-wide">Action</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {recordsLoading ? (
-                    <tr><td colSpan={5} className="px-3 py-10 text-center text-xs font-semibold text-slate-500">Loading…</td></tr>
+                    <tr><td colSpan={canPay ? 6 : 5} className="px-3 py-10 text-center text-xs font-semibold text-slate-500">Loading…</td></tr>
                   ) : records.length === 0 ? (
-                    <tr><td colSpan={5} className="px-3 py-10 text-center text-xs font-semibold text-slate-500">No records in this date range.</td></tr>
+                    <tr><td colSpan={canPay ? 6 : 5} className="px-3 py-10 text-center text-xs font-semibold text-slate-500">No records in this date range.</td></tr>
                   ) : records.map((r) => (
-                    <tr key={r._id} className="border-b border-slate-200 hover:bg-slate-50">
+                    <tr key={r._id} className={`border-b border-slate-200 hover:bg-slate-50 ${r.isReversed ? "opacity-50" : ""}`}>
                       <td className="px-2 py-1 font-semibold text-slate-800">
                         {r.savingsDate ? fmtDate(r.savingsDate) : "—"}
                       </td>
                       <td className="px-2 py-1">
-                        <span className={`border px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider ${typePill(r.type)}`}>
-                          {r.type}
+                        <span className={`border px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider ${r.isReversed ? "border-red-200 bg-red-50 text-red-500" : typePill(r.type)}`}>
+                          {r.isReversed ? "REVERSED" : r.type}
                         </span>
                       </td>
-                      <td className={`px-2 py-1 text-right font-extrabold tabular-nums ${r.type === "disbursement" ? "text-emerald-600" : "text-[#C8511A]"}`}>
+                      <td className={`px-2 py-1 text-right font-extrabold tabular-nums ${r.isReversed ? "text-slate-400 line-through" : r.type === "disbursement" ? "text-emerald-600" : "text-[#C8511A]"}`}>
                         {r.type === "disbursement" ? "−" : "+"}{formatMoney(r.amount)}
                       </td>
                       <td className="max-w-xs truncate px-2 py-1 text-slate-600">
                         {r.savingsPayoutNumber || r.notes || "—"}
                       </td>
                       <td className="px-2 py-1 text-slate-400">{fmtDate(r.date)}</td>
+                      {canPay && (
+                        <td className="px-2 py-1 text-center">
+                          {r.type === "disbursement" && !r.isReversed ? (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const reason = window.prompt(`Reason for reversing savings payout of ${formatMoney(r.amount)}?`, "");
+                                if (reason === null) return;
+                                try {
+                                  await carWashApi.reverseSavingsPayout(r._id, reason);
+                                  toast.success("Savings payout reversed");
+                                  loadBalances();
+                                  loadRecords(selectedStaff.staffId, detailFrom, detailTo, detailPage);
+                                } catch (err) {
+                                  toast.error(err?.response?.data?.message || "Reversal failed");
+                                }
+                              }}
+                              className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-600 hover:bg-rose-100"
+                              title="Reverse this savings payout"
+                            >
+                              <FaUndo size={8} /> Reverse
+                            </button>
+                          ) : <span className="text-slate-300">—</span>}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

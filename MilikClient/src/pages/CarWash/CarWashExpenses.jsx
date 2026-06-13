@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { clearDraft, readDraft, writeDraft } from "../../hooks/useFormDraft";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
@@ -211,14 +212,13 @@ const ExpenseForm = ({ form, setForm, cashbooks, categories, isEditing }) => {
 // ── Main component ────────────────────────────────────────────────────────────
 const CarWashExpenses = () => {
   const currentCompany = useSelector(selectCurrentCompany);
+  const queryClient = useQueryClient();
   const isConsolidated = !getActiveBranchId();
   const canCreate = useCarWashPermission("carwash-expenses", "create");
   const canUpdate = useCarWashPermission("carwash-expenses", "update");
   const canDelete = useCarWashPermission("carwash-expenses", "delete");
 
   const [rows,         setRows]         = useState([]);
-  const [cashbooks,    setCashbooks]    = useState([]);
-  const [categories,   setCategories]   = useState(DEFAULT_CATEGORIES);
   const [filters,      setFilters]      = useState(defaultFilters);
   const [applied,      setApplied]      = useState(defaultFilters);
   const [expandedIds,  setExpandedIds]  = useState([]);
@@ -238,6 +238,30 @@ const CarWashExpenses = () => {
   const [catDraft,     setCatDraft]     = useState([]);
   const [catInput,     setCatInput]     = useState("");
 
+  // Reference data — cached 5 min so navigating away and back is instant
+  const { data: cashbooksRaw } = useQuery({
+    queryKey: ["cw-expense-cashbooks", currentCompany?._id],
+    queryFn: async () => {
+      const res = await carWashApi.listChartOfAccounts({ business: currentCompany._id, type: "asset", moduleScope: "carwash", search: "Cashbooks" });
+      return (Array.isArray(res) ? res : []).filter((cb) => String(cb?.subGroup || "").toLowerCase().includes("cashbook") && cb.isPosting !== false);
+    },
+    enabled: !!currentCompany?._id,
+    staleTime: 5 * 60_000,
+  });
+  const cashbooks = cashbooksRaw ?? [];
+
+  const { data: categoriesRaw } = useQuery({
+    queryKey: ["cw-expense-categories"],
+    queryFn: async () => {
+      const res = await carWashApi.getExpenseCategories();
+      const list = Array.isArray(res?.categories) ? res.categories : (Array.isArray(res) ? res : DEFAULT_CATEGORIES);
+      return list.length > 0 ? list : DEFAULT_CATEGORIES;
+    },
+    staleTime: 5 * 60_000,
+    placeholderData: DEFAULT_CATEGORIES,
+  });
+  const categories = categoriesRaw ?? DEFAULT_CATEGORIES;
+
   // ── Data loaders ─────────────────────────────────────────────────────────────
   const load = useCallback(async () => {
     setLoading(true);
@@ -251,27 +275,13 @@ const CarWashExpenses = () => {
     finally { setLoading(false); }
   }, [applied, page, pageSize]);
 
-  const loadCashbooks = useCallback(async () => {
-    if (!currentCompany?._id) return;
-    try {
-      const res  = await carWashApi.listChartOfAccounts({ business: currentCompany._id, type: "asset", moduleScope: "carwash", search: "Cashbooks" });
-      const list = (Array.isArray(res) ? res : []).filter((cb) => String(cb?.subGroup || "").toLowerCase().includes("cashbook") && cb.isPosting !== false);
-      setCashbooks(list);
-      setForm((p) => p.cashbookAccount || !list[0]?._id ? p : { ...p, cashbookAccount: preferredCashbook(list, p.method) });
-    } catch { toast.error("Failed to load cashbooks"); }
-  }, [currentCompany?._id]);
-
-  const loadCategories = useCallback(async () => {
-    try {
-      const res  = await carWashApi.getExpenseCategories();
-      const list = Array.isArray(res?.categories) ? res.categories : (Array.isArray(res) ? res : DEFAULT_CATEGORIES);
-      if (list.length > 0) setCategories(list);
-    } catch { /* keep defaults */ }
-  }, []);
-
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { loadCashbooks(); }, [loadCashbooks]);
-  useEffect(() => { loadCategories(); }, [loadCategories]);
+
+  // Auto-select the best cashbook when cashbooks first arrive and form has none yet
+  useEffect(() => {
+    if (!cashbooks.length) return;
+    setForm((p) => p.cashbookAccount ? p : { ...p, cashbookAccount: preferredCashbook(cashbooks, p.method) });
+  }, [cashbooks]);
 
   // Auto-save draft for create form only
   useEffect(() => {
@@ -298,7 +308,7 @@ const CarWashExpenses = () => {
     try {
       const res  = await carWashApi.updateExpenseCategories(catDraft);
       const list = Array.isArray(res?.categories) ? res.categories : catDraft;
-      setCategories(list);
+      queryClient.setQueryData(["cw-expense-categories"], list);
       setShowCatModal(false);
       toast.success("Categories saved");
     } catch { toast.error("Failed to save categories"); }

@@ -170,7 +170,7 @@ export const listCustomersEnriched = async (req, res, next) => {
         { $group: {
           _id: '$plateNumber',
           totalJobs: { $sum: 1 },
-          totalInvoiced: { $sum: '$price' },
+          totalInvoiced: { $sum: { $subtract: ['$price', { $ifNull: ['$discountAmount', 0] }] } },
           lastVisit: { $max: '$createdAt' },
           jobIds: { $push: '$_id' },
         }},

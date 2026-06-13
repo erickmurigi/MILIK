@@ -50,6 +50,7 @@ const CarWashServices = () => {
       active: appliedFilters.status === "active" ? true : appliedFilters.status === "inactive" ? false : undefined,
     }),
     placeholderData: (prev) => prev,
+    staleTime: 30_000,
   });
 
   const { data: categoriesData } = useQuery({

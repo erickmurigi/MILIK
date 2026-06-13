@@ -56,6 +56,7 @@ const CarWashCommissions = () => {
       limit: PAGE_SIZE,
     }),
     placeholderData: (prev) => prev,
+    staleTime: 30_000,
   });
 
   const { data: staffRaw } = useQuery({

@@ -7,6 +7,7 @@ import { toast } from "react-toastify";
 import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import CwSmsModal from "./CwSmsModal";
+import useCarWashPermission from "../../hooks/useCarWashPermission";
 
 const defaultFilters = { date: todayISO(), method: "", cashbookAccount: "", reference: "", reconciliationStatus: "" };
 const DEFAULT_PAGE_SIZE = 25;
@@ -23,6 +24,7 @@ const CarWashPayments = () => {
   const queryClient = useQueryClient();
   const currentCompany = useSelector(selectCurrentCompany);
   const isConsolidated = !getActiveBranchId();
+  const canReconcile = useCarWashPermission("carwash-payments", "reconcile");
   const [filters, setFilters] = useState(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
   const [expandedIds, setExpandedIds] = useState([]);
@@ -36,6 +38,7 @@ const CarWashPayments = () => {
     queryKey: ["cw-payments", appliedFilters, page, pageSize],
     queryFn: () => carWashApi.listPayments({ ...appliedFilters, limit: pageSize, page }),
     placeholderData: (prev) => prev,
+    staleTime: 30_000,
   });
 
   const { data: cashbooksRaw } = useQuery({
@@ -230,13 +233,19 @@ const CarWashPayments = () => {
                     </div>
                     <div className="flex-shrink-0 text-right">
                       <div className="font-extrabold text-slate-900">{formatMoney(row.amount)}</div>
-                      <select
-                        className={`mt-1 h-6 border px-1.5 text-[10px] font-bold uppercase ${reconciliationBadgeClass[row.reconciliationStatus || "pending"] || reconciliationBadgeClass.pending}`}
-                        value={row.reconciliationStatus || "pending"}
-                        onChange={(e) => updateReconciliation(row, e.target.value)}
-                      >
-                        {reconciliationStatuses.map((s) => <option key={s} value={s}>{s.toUpperCase()}</option>)}
-                      </select>
+                      {canReconcile ? (
+                        <select
+                          className={`mt-1 h-6 border px-1.5 text-[10px] font-bold uppercase ${reconciliationBadgeClass[row.reconciliationStatus || "pending"] || reconciliationBadgeClass.pending}`}
+                          value={row.reconciliationStatus || "pending"}
+                          onChange={(e) => updateReconciliation(row, e.target.value)}
+                        >
+                          {reconciliationStatuses.map((s) => <option key={s} value={s}>{s.toUpperCase()}</option>)}
+                        </select>
+                      ) : (
+                        <span className={`mt-1 inline-flex border px-1.5 py-0.5 text-[10px] font-bold uppercase ${reconciliationBadgeClass[row.reconciliationStatus || "pending"] || reconciliationBadgeClass.pending}`}>
+                          {(row.reconciliationStatus || "pending").toUpperCase()}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -304,15 +313,21 @@ const CarWashPayments = () => {
                       <td className="px-2 py-1 font-semibold text-slate-700">{row.cashbookAccount ? `${row.cashbookAccount.code} - ${row.cashbookAccount.name}` : "-"}</td>
                       <td className="px-2 py-1 text-slate-700">{row.reference || "-"}</td>
                       <td className="px-2 py-1">
-                        <select
-                          className={`h-6 border px-2 text-[11px] font-bold uppercase ${reconciliationBadgeClass[row.reconciliationStatus || "pending"] || reconciliationBadgeClass.pending}`}
-                          value={row.reconciliationStatus || "pending"}
-                          onChange={(event) => updateReconciliation(row, event.target.value)}
-                        >
-                          {reconciliationStatuses.map((status) => (
-                            <option key={status} value={status}>{status.toUpperCase()}</option>
-                          ))}
-                        </select>
+                        {canReconcile ? (
+                          <select
+                            className={`h-6 border px-2 text-[11px] font-bold uppercase ${reconciliationBadgeClass[row.reconciliationStatus || "pending"] || reconciliationBadgeClass.pending}`}
+                            value={row.reconciliationStatus || "pending"}
+                            onChange={(event) => updateReconciliation(row, event.target.value)}
+                          >
+                            {reconciliationStatuses.map((status) => (
+                              <option key={status} value={status}>{status.toUpperCase()}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className={`inline-flex border px-2 py-0.5 text-[11px] font-bold uppercase ${reconciliationBadgeClass[row.reconciliationStatus || "pending"] || reconciliationBadgeClass.pending}`}>
+                            {(row.reconciliationStatus || "pending").toUpperCase()}
+                          </span>
+                        )}
                       </td>
                       <td className="px-2 py-1 text-right font-extrabold text-slate-900">{formatMoney(row.amount)}</td>
                     </tr>

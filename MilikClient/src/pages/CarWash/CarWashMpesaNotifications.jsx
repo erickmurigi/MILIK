@@ -6,6 +6,7 @@ import {
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
+import useCarWashPermission from "../../hooks/useCarWashPermission";
 
 const PAGE_SIZE = 50;
 
@@ -185,6 +186,8 @@ function AssignModal({ notif, onClose, onAssigned }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function CarWashMpesaNotifications() {
+  const canRecord = useCarWashPermission("carwash-payments", "record");
+
   const [notifications, setNotifications] = useState([]);
   const [summary, setSummary] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, limit: PAGE_SIZE, total: 0, pages: 1 });
@@ -335,7 +338,7 @@ export default function CarWashMpesaNotifications() {
               </tr>
             )}
             {notifications.map((n) => {
-              const canAssign = n.status === "unmatched" || n.status === "error";
+              const canAssign = canRecord && (n.status === "unmatched" || n.status === "error");
               return (
                 <React.Fragment key={n._id}>
                   <tr className={`border-b border-slate-100 hover:bg-slate-50 ${STATUS_META[n.status]?.bg || ""}`}>

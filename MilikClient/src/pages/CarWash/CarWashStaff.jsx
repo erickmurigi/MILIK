@@ -265,6 +265,7 @@ const CarWashStaff = () => {
       return { staffPayload: payload, cashbooksPayload: cbRes };
     },
     placeholderData: (prev) => prev,
+    staleTime: 30_000,
   });
 
   useEffect(() => { if (error) toast.error("Failed to load staff"); }, [error]);

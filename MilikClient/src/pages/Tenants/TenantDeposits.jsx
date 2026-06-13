@@ -24,6 +24,7 @@ import {
   FaSpinner,
   FaTimes,
   FaTrash,
+  FaUndo,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
@@ -671,18 +672,27 @@ const TenantDeposits = () => {
 
   const handleDeleteSingle = async (row) => {
     if (!canDeleteInvoice || !row?.invoiceId) return;
-    const confirmed = await confirm({ title: "Delete Deposit Invoice", message: `Delete deposit invoice ${row.id}?`, confirmText: "Delete", isDangerous: true });
+    const isOnLedger = row.originalInvoice?.ledgerMode !== "off_ledger";
+    const action = isOnLedger ? "Reverse" : "Delete";
+    const confirmed = await confirm({
+      title: `${action} Deposit Invoice`,
+      message: isOnLedger
+        ? `Reverse deposit invoice ${row.id}? The ledger entries will be reversed.`
+        : `Permanently delete deposit invoice ${row.id}?`,
+      confirmText: action,
+      isDangerous: true,
+    });
     if (!confirmed) return;
 
     setDeleting(true);
     try {
       await deleteTenantInvoice(row.invoiceId);
-      toast.success("Deposit invoice deleted successfully.");
+      toast.success(isOnLedger ? "Deposit invoice reversed." : "Deposit invoice deleted.");
       setSelectedInvoices((prev) => prev.filter((key) => key !== row.key));
       await loadDepositInvoices();
       window.dispatchEvent(new Event("invoicesUpdated"));
     } catch (error) {
-      toast.error(error?.message || "Failed to delete deposit invoice.");
+      toast.error(error?.message || `Failed to ${action.toLowerCase()} deposit invoice.`);
     } finally {
       setDeleting(false);
     }
@@ -899,14 +909,25 @@ const TenantDeposits = () => {
                             >
                               <FaReceipt size={12} />
                             </button>
-                            <button
-                              onClick={() => handleDeleteSingle(row)}
-                              disabled={!canDeleteInvoice || deleting}
-                              className="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800 disabled:cursor-not-allowed disabled:opacity-40"
-                              title={canDeleteInvoice ? "Delete invoice" : "You do not have permission to delete invoices"}
-                            >
-                              <FaTrash size={12} />
-                            </button>
+                            {(() => {
+                              const isOnLedger = row.originalInvoice?.ledgerMode !== "off_ledger";
+                              const isPaid = ["paid", "partially_paid"].includes(row.rawStatus);
+                              const disabledReason = !canDeleteInvoice
+                                ? "You do not have permission"
+                                : isPaid
+                                ? "Paid deposits must be reversed via receipts first"
+                                : null;
+                              return (
+                                <button
+                                  onClick={() => handleDeleteSingle(row)}
+                                  disabled={!!disabledReason || deleting}
+                                  className={`rounded p-1 disabled:cursor-not-allowed disabled:opacity-40 ${isOnLedger ? "text-amber-600 hover:bg-amber-50 hover:text-amber-800" : "text-red-600 hover:bg-red-50 hover:text-red-800"}`}
+                                  title={disabledReason || (isOnLedger ? "Reverse deposit invoice (ledger will be reversed)" : "Delete deposit invoice")}
+                                >
+                                  {isOnLedger ? <FaUndo size={12} /> : <FaTrash size={12} />}
+                                </button>
+                              );
+                            })()}
                             <button
                               onClick={() => navigate(`/tenant/${row.tenantId}/statement`)}
                               className="rounded p-1 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800"

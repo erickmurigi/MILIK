@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaEdit, FaPlus, FaRedoAlt, FaSave, FaTimes, FaToggleOff, FaToggleOn } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, normalizeListPayload } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
+import useCarWashPermission from "../../hooks/useCarWashPermission";
 
 const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
@@ -25,33 +27,36 @@ const Modal = ({ title, subtitle, children, footer, onClose }) => (
 );
 
 const CarWashCommissionRules = () => {
-  const [rules, setRules]       = useState([]);
-  const [services, setServices] = useState([]);
-  const [staff, setStaff]       = useState([]);
-  const [loading, setLoading]   = useState(false);
+  const queryClient = useQueryClient();
+  const canManage = useCarWashPermission("carwash-commissions", "manage");
+
   const [form, setForm]         = useState(emptyRule);
   const [editId, setEditId]     = useState("");
   const [showModal, setShowModal] = useState(false);
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      const [rulePayload, svcPayload, staffPayload] = await Promise.all([
-        carWashApi.listCommissionRules(),
-        carWashApi.listServices({ active: true }),
-        carWashApi.listStaff({ active: true }),
-      ]);
-      setRules(normalizeListPayload(rulePayload, "rules"));
-      setServices(normalizeListPayload(svcPayload, "services"));
-      setStaff(normalizeListPayload(staffPayload, "staff"));
-    } catch {
-      toast.error("Failed to load commission rules");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: rulesRaw, isLoading: loading, refetch } = useQuery({
+    queryKey: ["cw-commission-rules"],
+    queryFn: () => carWashApi.listCommissionRules(),
+    staleTime: 30_000,
+    select: (data) => normalizeListPayload(data, "rules"),
+  });
+  const rules = rulesRaw ?? [];
 
-  useEffect(() => { load(); }, []);
+  const { data: servicesRaw } = useQuery({
+    queryKey: ["cw-services-ref"],
+    queryFn: () => carWashApi.listServices({ active: true }),
+    staleTime: 5 * 60_000,
+    select: (data) => normalizeListPayload(data, "services"),
+  });
+  const services = servicesRaw ?? [];
+
+  const { data: staffRaw } = useQuery({
+    queryKey: ["cw-staff-ref"],
+    queryFn: () => carWashApi.listStaff({ active: true }),
+    staleTime: 5 * 60_000,
+    select: (data) => normalizeListPayload(data, "staff"),
+  });
+  const staff = staffRaw ?? [];
 
   const openNew = () => { setEditId(""); setForm(emptyRule); setShowModal(true); };
   const openEdit = (rule) => {
@@ -76,7 +81,7 @@ const CarWashCommissionRules = () => {
       if (editId) await carWashApi.updateCommissionRule(editId, payload);
       else await carWashApi.createCommissionRule(payload);
       setShowModal(false);
-      await load();
+      queryClient.invalidateQueries({ queryKey: ["cw-commission-rules"] });
       toast.success("Commission rule saved");
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to save rule");
@@ -88,12 +93,14 @@ const CarWashCommissionRules = () => {
       title="Commission Rules"
       action={
         <>
-          <button onClick={load} className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+          <button type="button" onClick={() => refetch()} className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
             <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh
           </button>
-          <button onClick={openNew} className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]">
-            <FaPlus size={9} /> New Rule
-          </button>
+          {canManage && (
+            <button type="button" onClick={openNew} className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]">
+              <FaPlus size={9} /> New Rule
+            </button>
+          )}
         </>
       }
     >
@@ -113,7 +120,7 @@ const CarWashCommissionRules = () => {
               <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide">Rate</th>
               <th className="px-3 py-1.5 text-center font-bold uppercase tracking-wide">Priority</th>
               <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Status</th>
-              <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide">Action</th>
+              {canManage && <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide">Action</th>}
             </tr>
           </thead>
           <tbody>
@@ -132,15 +139,17 @@ const CarWashCommissionRules = () => {
                     ? <span className="inline-flex items-center gap-1 border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-bold text-slate-500"><FaToggleOff size={10} /> Inactive</span>
                     : <span className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700"><FaToggleOn size={10} /> Active</span>}
                 </td>
-                <td className="px-3 py-2 text-right">
-                  <button onClick={() => openEdit(rule)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                    <FaEdit size={9} /> Edit
-                  </button>
-                </td>
+                {canManage && (
+                  <td className="px-3 py-2 text-right">
+                    <button type="button" onClick={() => openEdit(rule)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                      <FaEdit size={9} /> Edit
+                    </button>
+                  </td>
+                )}
               </tr>
             )) : (
-              <tr><td colSpan={8} className="px-3 py-12 text-center text-xs font-semibold text-slate-500">
-                No commission rules yet. Click "New Rule" to create one.
+              <tr><td colSpan={canManage ? 8 : 7} className="px-3 py-12 text-center text-xs font-semibold text-slate-500">
+                {loading ? "Loading…" : "No commission rules yet. Click \"New Rule\" to create one."}
               </td></tr>
             )}
           </tbody>
@@ -155,7 +164,7 @@ const CarWashCommissionRules = () => {
           footer={
             <>
               <button type="button" onClick={() => setShowModal(false)} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
-              <button type="submit" form="cw-rule-form" className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127]"><FaSave /> Save Rule</button>
+              {canManage && <button type="submit" form="cw-rule-form" className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127]"><FaSave /> Save Rule</button>}
             </>
           }
         >

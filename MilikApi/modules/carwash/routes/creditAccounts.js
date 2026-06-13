@@ -16,6 +16,8 @@ import {
   recordAccountTopup,
   sendStatementSms,
   updateAccount,
+  voidTopup,
+  voidTopupDirect,
 } from "../controllers/creditAccountsController.js";
 
 const router = express.Router();
@@ -29,6 +31,8 @@ router.put("/:id",                                updateAccount);
 router.post("/:id/pay",                           recordAccountPayment);
 router.post("/:id/topup",                         recordAccountTopup);
 router.get("/:id/topups",                         listAccountTopups);
+router.post("/:id/topups/:topupId/void",          voidTopup);
+router.post("/topups/:topupId/void",              voidTopupDirect);
 router.post("/:id/statements",                    generateStatement);
 router.get("/:id/statements",                     listStatements);
 router.get("/:id/statements/:statementId",        getStatement);
