@@ -8,6 +8,7 @@ import {
 } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { selectCurrentUser, selectCurrentCompany, selectAllProperties, selectAllUnits, selectAllExpenseProperties } from '../../redux/selectors';
+import { hasCompanyPermission } from '../../utils/permissions';
 import { getProperties } from '../../redux/propertyRedux';
 import { getUnits } from '../../redux/unitRedux';
 import {
@@ -204,6 +205,10 @@ const PropertyExpenses = () => {
   const businessId = currentCompany?._id || currentUser?.company?._id || currentUser?.company || '';
   const currency   = currentCompany?.baseCurrency || 'KES';
 
+  const canCreateExpense = hasCompanyPermission(currentUser || {}, currentCompany, 'propertyExpenses', 'create', 'propertyManagement');
+  const canUpdateExpense = hasCompanyPermission(currentUser || {}, currentCompany, 'propertyExpenses', 'update', 'propertyManagement');
+  const canDeleteExpense = hasCompanyPermission(currentUser || {}, currentCompany, 'propertyExpenses', 'delete', 'propertyManagement');
+
   // ─── filters ──────────────────────────────────────────────────────────────
   const defaultStart = toInput(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [filters, setFilters] = useState({ startDate: defaultStart, endDate: today(), propertyId: '', category: '', search: '' });
@@ -341,10 +346,12 @@ const PropertyExpenses = () => {
                 className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 hover:bg-gray-50 transition">
                 <FaSync size={11} className={loading ? 'animate-spin' : ''} />
               </button>
-              <button onClick={() => { setEditing(null); setModalOpen(true); }}
-                className="flex items-center gap-1.5 rounded-lg bg-[#31694E] px-4 py-2 text-xs font-extrabold text-white hover:bg-[#1f4a35] transition shadow-sm">
-                <FaPlus size={11} /> Record Expense
-              </button>
+              {canCreateExpense && (
+                <button onClick={() => { setEditing(null); setModalOpen(true); }}
+                  className="flex items-center gap-1.5 rounded-lg bg-[#31694E] px-4 py-2 text-xs font-extrabold text-white hover:bg-[#1f4a35] transition shadow-sm">
+                  <FaPlus size={11} /> Record Expense
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -424,10 +431,12 @@ const PropertyExpenses = () => {
               <div className="flex flex-col items-center gap-3 py-16">
                 <FaReceipt size={28} className="text-gray-200" />
                 <p className="text-xs font-semibold text-gray-400">No expenses found for this period</p>
-                <button onClick={() => { setEditing(null); setModalOpen(true); }}
-                  className="mt-1 flex items-center gap-1.5 rounded-lg bg-[#31694E] px-4 py-2 text-xs font-extrabold text-white hover:bg-[#1f4a35] transition">
-                  <FaPlus size={10} /> Record your first expense
-                </button>
+                {canCreateExpense && (
+                  <button onClick={() => { setEditing(null); setModalOpen(true); }}
+                    className="mt-1 flex items-center gap-1.5 rounded-lg bg-[#31694E] px-4 py-2 text-xs font-extrabold text-white hover:bg-[#1f4a35] transition">
+                    <FaPlus size={10} /> Record your first expense
+                  </button>
+                )}
               </div>
             ) : (
               <>
@@ -479,14 +488,18 @@ const PropertyExpenses = () => {
                             </td>
                             <td className="px-3 py-2.5">
                               <div className="flex items-center gap-1">
-                                <button onClick={() => { setEditing(exp); setModalOpen(true); }}
-                                  className="rounded p-1.5 text-[#31694E] hover:bg-[#ECF6F1] transition" title="Edit">
-                                  <FaEdit size={11} />
-                                </button>
-                                <button onClick={() => handleDelete(exp)} disabled={deleting === exp._id}
-                                  className="rounded p-1.5 text-red-500 hover:bg-red-50 transition disabled:opacity-40" title="Delete">
-                                  <FaTrash size={11} />
-                                </button>
+                                {canUpdateExpense && (
+                                  <button onClick={() => { setEditing(exp); setModalOpen(true); }}
+                                    className="rounded p-1.5 text-[#31694E] hover:bg-[#ECF6F1] transition" title="Edit">
+                                    <FaEdit size={11} />
+                                  </button>
+                                )}
+                                {canDeleteExpense && (
+                                  <button onClick={() => handleDelete(exp)} disabled={deleting === exp._id}
+                                    className="rounded p-1.5 text-red-500 hover:bg-red-50 transition disabled:opacity-40" title="Delete">
+                                    <FaTrash size={11} />
+                                  </button>
+                                )}
                               </div>
                             </td>
                           </tr>

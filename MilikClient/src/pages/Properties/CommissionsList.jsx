@@ -3,6 +3,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { getProperties, updateProperty } from '../../redux/propertyRedux';
 import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from '../../redux/selectors';
+import { hasCompanyPermission } from '../../utils/permissions';
 import { toast } from 'react-toastify';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { FaEdit, FaTrash, FaPlus, FaCheck, FaTimes, FaSearch, FaArrowLeft, FaRedoAlt } from 'react-icons/fa';
@@ -21,6 +22,8 @@ const CommissionsList = () => {
   const currentUser = useSelector(selectCurrentUser);
   const currentCompany = useSelector(selectCurrentCompany);
   const properties = useSelector(selectAllProperties);
+
+  const canWrite = hasCompanyPermission(currentUser || {}, currentCompany, "commissions", "create", "propertyManagement");
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMode, setFilterMode] = useState('all'); // all, configured, unconfigured
@@ -190,12 +193,14 @@ const CommissionsList = () => {
         <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
           <div className="flex-shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1.5 shadow-sm">
             <div className="flex flex-wrap items-center justify-end gap-2">
+              {canWrite && (
               <button
                 onClick={() => setShowAddModal(true)}
                 className={`inline-flex h-7 items-center gap-1 rounded-md px-2.5 text-[10px] font-black text-white shadow-sm transition ${MILIK_GREEN_BG} ${MILIK_GREEN_HOVER}`}
               >
                 <FaPlus /> Add Commission
               </button>
+              )}
               <button
                 onClick={() => navigate(-1)}
                 className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 text-[10px] font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
@@ -374,18 +379,22 @@ const CommissionsList = () => {
                               </td>
                               <td className="px-2 py-1 text-right">
                                 <div className="inline-flex flex-wrap justify-end gap-2">
+                                  {canWrite && (
                                   <button
                                     onClick={(event) => { event.stopPropagation(); handleEdit(property); }}
                                     className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-2 py-1.5 text-xs font-black text-blue-700 transition hover:bg-blue-100"
                                   >
                                     <FaEdit /> Edit
                                   </button>
+                                  )}
+                                  {canWrite && (
                                   <button
                                     onClick={(event) => { event.stopPropagation(); handleDelete(property._id); }}
                                     className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-2 py-1.5 text-xs font-black text-rose-700 transition hover:bg-rose-100"
                                   >
                                     <FaTrash /> Remove
                                   </button>
+                                  )}
                                 </div>
                               </td>
                             </tr>

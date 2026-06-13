@@ -13,6 +13,7 @@ import {
   FaTools,
 } from 'react-icons/fa';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
+import { hasCompanyPermission } from '../../utils/permissions';
 import {
   selectCurrentUser,
   selectCurrentCompany,
@@ -78,6 +79,11 @@ const QuickActions = ({
 
   const activeCompanyContext = currentCompany || currentUser?.company || null;
   const isLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);
+
+  const canViewInvoices = hasCompanyPermission(currentUser || {}, currentCompany, 'tenantInvoices', 'view', 'propertyManagement');
+  const canViewReceipts = hasCompanyPermission(currentUser || {}, currentCompany, 'receipts', 'view', 'propertyManagement');
+  const canViewVouchers = hasCompanyPermission(currentUser || {}, currentCompany, 'paymentVouchers', 'view', 'accounts');
+  const canViewProcessedStatements = hasCompanyPermission(currentUser || {}, currentCompany, 'processedStatements', 'view', 'accounts');
 
   const today = useMemo(() => {
     const now = new Date();
@@ -243,7 +249,7 @@ const QuickActions = ({
         route: '/vacants',
         tabTitle: 'Availability Status',
       },
-      {
+      ...(canViewInvoices ? [{
         id: 'overdue-invoices',
         label: 'Overdue invoices',
         value: overdueInvoices,
@@ -252,7 +258,7 @@ const QuickActions = ({
         helper: 'Open rental invoices to follow up overdue tenant balances.',
         route: '/invoices/rental',
         tabTitle: 'Rental Invoices',
-      },
+      }] : []),
       {
         id: 'leases-expiring',
         label: isLandlordMode ? 'Lease renewals due in 30 days' : 'Leases expiring in 30 days',
@@ -265,7 +271,7 @@ const QuickActions = ({
         route: '/tenants',
         tabTitle: 'Tenants',
       },
-      {
+      ...(canViewReceipts ? [{
         id: 'unposted-receipts',
         label: isLandlordMode ? 'Receipts awaiting posting' : 'Unposted receipts',
         value: unpostedReceipts,
@@ -274,7 +280,7 @@ const QuickActions = ({
         helper: 'Open receipts to post or confirm incoming collections.',
         route: '/receipts',
         tabTitle: 'Receipts',
-      },
+      }] : []),
       {
         id: 'pending-maintenance',
         label: 'Pending maintenance requests',
@@ -285,7 +291,7 @@ const QuickActions = ({
         route: '/maintenances',
         tabTitle: 'Maintenance',
       },
-      {
+      ...(canViewVouchers ? [{
         id: 'pending-vouchers',
         label: isLandlordMode ? 'Outgoing payments pending approval' : 'Payment vouchers pending approvals',
         value: pendingVoucherApprovals,
@@ -296,11 +302,11 @@ const QuickActions = ({
           : 'Open payment vouchers for approval and posting workflow.',
         route: '/financial/payment-vouchers',
         tabTitle: 'Payment Vouchers',
-      },
+      }] : []),
     ];
 
     if (isLandlordMode) {
-      baseItems.splice(5, 0, {
+      baseItems.push({
         id: 'monthly-expenses',
         label: 'Property expenses logged this month',
         value: thisMonthExpenseCount,
@@ -310,8 +316,8 @@ const QuickActions = ({
         route: '/property-expenses',
         tabTitle: 'Property Expenses',
       });
-    } else {
-      baseItems.splice(5, 0, {
+    } else if (canViewProcessedStatements) {
+      baseItems.push({
         id: 'pending-statements',
         label: 'Landlord statements pending settlement',
         value: pendingStatements,
@@ -324,7 +330,7 @@ const QuickActions = ({
     }
 
     return baseItems;
-  }, [isLandlordMode, leasesExpiringSoon, overdueInvoices, pendingMaintenance, pendingStatements, pendingVoucherApprovals, thisMonthExpenseCount, unpostedReceipts, vacantUnits]);
+  }, [canViewInvoices, canViewProcessedStatements, canViewReceipts, canViewVouchers, isLandlordMode, leasesExpiringSoon, overdueInvoices, pendingMaintenance, pendingStatements, pendingVoucherApprovals, thisMonthExpenseCount, unpostedReceipts, vacantUnits]);
 
   const getToneClasses = (tone) => {
     const tones = {

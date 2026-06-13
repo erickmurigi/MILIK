@@ -705,36 +705,36 @@ function App() {
 
             {/* ── Landlords ─────────────────────────────────────────────── */}
             <Route path="/landlords"                    element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="landlords" moduleKey="propertyManagement"><Landlords /></PermissionRoute></CompanyModeRoute>} />
-            <Route path="/landlords/new"                element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><AddLandlord /></ProtectedRoute></CompanyModeRoute>} />
-            <Route path="/landlord-payments"            element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><LandlordPayments /></ProtectedRoute></CompanyModeRoute>} />
-            <Route path="/landlord-payment-history"     element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><LandlordPaymentHistory /></ProtectedRoute></CompanyModeRoute>} />
-            <Route path="/financial/landlord-statement" element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><LandlordCommissionsStatement /></ProtectedRoute></CompanyModeRoute>} />
+            <Route path="/landlords/new"                element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="landlords" action="create" moduleKey="propertyManagement"><AddLandlord /></PermissionRoute></CompanyModeRoute>} />
+            <Route path="/landlord-payments"            element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="landlordPayments" action="view" moduleKey="accounts"><LandlordPayments /></PermissionRoute></CompanyModeRoute>} />
+            <Route path="/landlord-payment-history"     element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="landlordPayments" action="view" moduleKey="accounts"><LandlordPaymentHistory /></PermissionRoute></CompanyModeRoute>} />
+            <Route path="/financial/landlord-statement" element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="statements" moduleKey="propertyManagement"><LandlordCommissionsStatement /></PermissionRoute></CompanyModeRoute>} />
             <Route path="/invoices/landlord"            element={<ProtectedRoute><Navigate to="/landlord/statements" replace /></ProtectedRoute>} />
             <Route path="/landlord/processed-statements"element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="processedStatements" moduleKey="accounts"><ProcessedStatements /></PermissionRoute></CompanyModeRoute>} />
             <Route path="/landlord/statements"          element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="statements" moduleKey="propertyManagement"><LandlordCommissionsStatement /></PermissionRoute></CompanyModeRoute>} />
-            <Route path="/landlords/standing-orders"    element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><LandlordStandingOrders /></ProtectedRoute></CompanyModeRoute>} />
-            <Route path="/landlords/advancement"        element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><LandlordAdvancements /></ProtectedRoute></CompanyModeRoute>} />
+            <Route path="/landlords/standing-orders"    element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="standingOrders" action="view" moduleKey="accounts"><LandlordStandingOrders /></PermissionRoute></CompanyModeRoute>} />
+            <Route path="/landlords/advancement"        element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="landlordAdvancements" action="view" moduleKey="accounts"><LandlordAdvancements /></PermissionRoute></CompanyModeRoute>} />
 
             {/* ── Properties & Units ────────────────────────────────────── */}
             <Route path="/properties"                    element={<PermissionRoute resource="properties" moduleKey="propertyManagement"><Properties /></PermissionRoute>} />
-            <Route path="/properties/new"                element={<ProtectedRoute><AddProperty /></ProtectedRoute>} />
+            <Route path="/properties/new"                element={<PermissionRoute resource="properties" action="create" moduleKey="propertyManagement"><AddProperty /></PermissionRoute>} />
             <Route path="/properties/:id"                element={<ProtectedRoute><PropertyDetail /></ProtectedRoute>} />
-            <Route path="/properties/edit/:id"           element={<ProtectedRoute><EditProperty /></ProtectedRoute>} />
-            <Route path="/properties/commission-settings"element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><PropertyCommissionSettings /></ProtectedRoute></CompanyModeRoute>} />
-            <Route path="/properties/commissions-list"   element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><CommissionsList /></ProtectedRoute></CompanyModeRoute>} />
-            <Route path="/property-expenses"             element={<ProtectedRoute><PropertyExpenses /></ProtectedRoute>} />
+            <Route path="/properties/edit/:id"           element={<PermissionRoute resource="properties" action="update" moduleKey="propertyManagement"><EditProperty /></PermissionRoute>} />
+            <Route path="/properties/commission-settings"element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="commissions" action="view" moduleKey="propertyManagement"><PropertyCommissionSettings /></PermissionRoute></CompanyModeRoute>} />
+            <Route path="/properties/commissions-list"   element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="commissions" action="view" moduleKey="propertyManagement"><CommissionsList /></PermissionRoute></CompanyModeRoute>} />
+            <Route path="/property-expenses"             element={<PermissionRoute resource="propertyExpenses" moduleKey="propertyManagement"><PropertyExpenses /></PermissionRoute>} />
             <Route path="/units"                         element={<PermissionRoute resource="units" moduleKey="propertyManagement"><Units /></PermissionRoute>} />
-            <Route path="/units/new"                     element={<ProtectedRoute><AddUnit /></ProtectedRoute>} />
-            <Route path="/units/:id"                     element={<ProtectedRoute><AddUnit /></ProtectedRoute>} />
+            <Route path="/units/new"                     element={<PermissionRoute resource="units" action="create" moduleKey="propertyManagement"><AddUnit /></PermissionRoute>} />
+            <Route path="/units/:id"                     element={<PermissionRoute resource="units" action="update" moduleKey="propertyManagement"><AddUnit /></PermissionRoute>} />
             <Route path="/units/space-types"             element={<PermissionRoute resource="units" moduleKey="propertyManagement"><UnitTypesPage /></PermissionRoute>} />
 
             {/* ── Tenants ───────────────────────────────────────────────── */}
             <Route path="/agreements"              element={<PermissionRoute resource="tenants" moduleKey="propertyManagement"><TenantAgreements /></PermissionRoute>} />
             <Route path="/tenants"                 element={<PermissionRoute resource="tenants" moduleKey="propertyManagement"><Tenants /></PermissionRoute>} />
             <Route path="/tenants/terminated"      element={<PermissionRoute resource="tenants" moduleKey="propertyManagement"><TerminatedTenants /></PermissionRoute>} />
-            <Route path="/tenant/new"              element={<ProtectedRoute><AddTenant /></ProtectedRoute>} />
+            <Route path="/tenant/new"              element={<PermissionRoute resource="tenants" action="create" moduleKey="propertyManagement"><AddTenant /></PermissionRoute>} />
             <Route path="/tenant/:id/statement"    element={<ProtectedRoute><TenantStatement /></ProtectedRoute>} />
-            <Route path="/tenant/:id/edit"         element={<ProtectedRoute><AddTenant /></ProtectedRoute>} />
+            <Route path="/tenant/:id/edit"         element={<PermissionRoute resource="tenants" action="update" moduleKey="propertyManagement"><AddTenant /></PermissionRoute>} />
             <Route path="/tenants/deposits"        element={<PermissionRoute resource="tenants" moduleKey="propertyManagement"><TenantDeposits /></PermissionRoute>} />
             <Route path="/tenants/take-on-balances"element={<PermissionRoute resource="tenants" moduleKey="propertyManagement"><TakeOnBalances /></PermissionRoute>} />
             <Route path="/tenants/financing"       element={<ProtectedRoute><Navigate to="/tenants/take-on-balances" replace /></ProtectedRoute>} />
@@ -769,7 +769,7 @@ function App() {
             <Route path="/expenses/payment-vouchers"               element={<ProtectedRoute><PaymentVouchers /></ProtectedRoute>} />
 
             {/* ── Operations ────────────────────────────────────────────── */}
-            <Route path="/vacants"             element={<ProtectedRoute><Vacants /></ProtectedRoute>} />
+            <Route path="/vacants"             element={<PermissionRoute resource="units" moduleKey="propertyManagement"><Vacants /></PermissionRoute>} />
             <Route path="/maintenances"        element={<PermissionRoute resource="maintenances" moduleKey="propertyManagement"><Maintenances /></PermissionRoute>} />
             <Route path="/inspections"         element={<PermissionRoute resource="inspections" moduleKey="propertyManagement"><Inspections /></PermissionRoute>} />
             <Route path="/meter-readings"      element={<PermissionRoute resource="meterReadings" moduleKey="propertyManagement"><MeterReadings /></PermissionRoute>} />
@@ -785,7 +785,7 @@ function App() {
             <Route path="/reports/paid-balance"           element={<ProtectedRoute><PaidBalanceReport /></ProtectedRoute>} />
             <Route path="/reports/aged-analysis"          element={<ProtectedRoute><AgedAnalysisReport /></ProtectedRoute>} />
             <Route path="/reports/rental-aged-analysis"   element={<ProtectedRoute><RentalAgedAnalysisReport /></ProtectedRoute>} />
-            <Route path="/reports/commissions"            element={<CompanyModeRoute allowLandlordMode={false}><ProtectedRoute><CommissionReports /></ProtectedRoute></CompanyModeRoute>} />
+            <Route path="/reports/commissions"            element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="commissionReports" action="view" moduleKey="propertyManagement"><CommissionReports /></PermissionRoute></CompanyModeRoute>} />
             <Route path="/reports/trial-balance"          element={<PermissionRoute resource="financialReports" moduleKey="accounts"><TrialBalanceReport /></PermissionRoute>} />
             <Route path="/reports/income-statement"       element={<PermissionRoute resource="financialReports" moduleKey="accounts"><IncomeStatementReport /></PermissionRoute>} />
             <Route path="/reports/balance-sheet"          element={<PermissionRoute resource="financialReports" moduleKey="accounts"><BalanceSheetReport /></PermissionRoute>} />

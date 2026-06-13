@@ -106,7 +106,7 @@ const getCommissionStructureLabel = (statement = {}) => {
 const CommissionReports = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
-  const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
+  const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "commissionReports", "export", "propertyManagement");
 
   const [loading, setLoading] = useState(false);
   const [statementRows, setStatementRows] = useState([]);
@@ -477,19 +477,23 @@ const CommissionReports = () => {
                 <FaRedoAlt className="text-xs" /> Reload
               </button>
 
+              {canExportReports && (
               <button
-                onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"}
+                onClick={handleExportCSV}
                 className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
               >
                 <FaFileDownload className="text-xs" /> Export
               </button>
+              )}
 
+              {canExportReports && (
               <button
-                onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"}
+                onClick={handlePrint}
                 className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
               >
                 <FaPrint className="text-xs" /> Print
               </button>
+              )}
             </div>
           </div>
         </div>

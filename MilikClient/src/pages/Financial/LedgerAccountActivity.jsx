@@ -137,7 +137,7 @@ const LedgerAccountActivity = () => {
   const businessId = currentCompany?._id || "";
   const canManage =
     accountCanManage(currentUser) &&
-    hasCompanyPermission(currentUser || {}, currentCompany, "ledger", "reverse", "accounts");
+    hasCompanyPermission(currentUser || {}, currentCompany, "journals", "reverse", "accounts");
 
   const loadActivity = useCallback(async () => {
     if (!businessId || !accountId) return;

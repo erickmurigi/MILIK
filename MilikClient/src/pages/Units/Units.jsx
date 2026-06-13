@@ -27,6 +27,7 @@ import {
 import { getUnits, deleteUnit, updateUnit } from "../../redux/unitRedux";
 import { getProperties } from "../../redux/propertyRedux";
 import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "../../redux/selectors";
+import { hasCompanyPermission } from "../../utils/permissions";
 import { toast } from "react-toastify";
 import MilikConfirmDialog from "../../components/Modals/MilikConfirmDialog";
 import UnitsImportModal from "../../components/Modals/UnitsImportModal";
@@ -95,6 +96,10 @@ const Units = () => {
   const currentUser = useSelector(selectCurrentUser);
   const { units: unitsData, isFetching } = useSelector((state) => state.unit);
   const properties = useSelector(selectAllProperties);
+
+  const canCreateUnit = hasCompanyPermission(currentUser || {}, currentCompany, "units", "create", "propertyManagement");
+  const canUpdateUnit = hasCompanyPermission(currentUser || {}, currentCompany, "units", "update", "propertyManagement");
+  const canDeleteUnit = hasCompanyPermission(currentUser || {}, currentCompany, "units", "delete", "propertyManagement");
 
   // ---------------------------
   // UI STATE
@@ -490,7 +495,7 @@ const Units = () => {
   };
 
   const selectedCount = selectedUnits.length;
-  const canEdit = selectedCount === 1;
+  const canEdit = selectedCount === 1 && canUpdateUnit;
 
   const selectedUnitRows = useMemo(
     () => transformedUnits.filter((unit) => selectedUnits.includes(unit.id)),
@@ -913,37 +918,45 @@ const Units = () => {
               className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${filteredUnits && filteredUnits.length > 0 ? allUnitsExpanded ? "bg-orange-600 hover:bg-orange-700" : "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
               {allUnitsExpanded ? <><FaCompressAlt size={9} /> Collapse</> : <><FaExpandAlt size={9} /> Expand</>}
             </button>
-            <button disabled={!canEdit} onClick={() => { const id = selectedUnits[0]; if (id) navigate(`/units/${id}`); }}
-              className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${canEdit ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
-              <FaEdit size={9} /> Edit
-            </button>
-
-            <div className="relative shrink-0" ref={actionMenuRef}>
-              <button onClick={() => setActionMenuOpen((v) => !v)} disabled={selectedCount === 0}
-                className={`h-7 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedCount > 0 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
-                <FaArchive size={9} /> Actions <FaChevronDown size={8} />
+            {canUpdateUnit && (
+              <button disabled={!canEdit} onClick={() => { const id = selectedUnits[0]; if (id) navigate(`/units/${id}`); }}
+                className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${canEdit ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
+                <FaEdit size={9} /> Edit
               </button>
-              {actionMenuOpen && selectedCount > 0 && (
-                <div className="absolute mt-1 right-0 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden">
-                  <button onClick={archiveSelected} disabled={selectedArchivableUnits.length === 0}
-                    className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${selectedArchivableUnits.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
-                    <FaArchive className="text-xs text-gray-700" /> Archive
-                  </button>
-                  <button onClick={restoreSelected} disabled={selectedRestorableUnits.length === 0}
-                    className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${selectedRestorableUnits.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
-                    <FaUndo className="text-xs text-gray-700" /> Restore
-                  </button>
-                </div>
-              )}
-            </div>
+            )}
 
-            <button onClick={deleteSelected} disabled={selectedCount === 0 || selectedDeletableUnits.length === 0}
-              className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedCount > 0 && selectedDeletableUnits.length > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}>
-              <FaTrash size={9} /> Delete{selectedCount > 0 ? ` (${selectedCount})` : ""}
-            </button>
-            <button onClick={() => navigate("/units/new")} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]">
-              <FaPlus size={9} /> Add
-            </button>
+            {canUpdateUnit && (
+              <div className="relative shrink-0" ref={actionMenuRef}>
+                <button onClick={() => setActionMenuOpen((v) => !v)} disabled={selectedCount === 0}
+                  className={`h-7 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedCount > 0 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
+                  <FaArchive size={9} /> Actions <FaChevronDown size={8} />
+                </button>
+                {actionMenuOpen && selectedCount > 0 && (
+                  <div className="absolute mt-1 right-0 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden">
+                    <button onClick={archiveSelected} disabled={selectedArchivableUnits.length === 0}
+                      className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${selectedArchivableUnits.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
+                      <FaArchive className="text-xs text-gray-700" /> Archive
+                    </button>
+                    <button onClick={restoreSelected} disabled={selectedRestorableUnits.length === 0}
+                      className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${selectedRestorableUnits.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
+                      <FaUndo className="text-xs text-gray-700" /> Restore
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {canDeleteUnit && (
+              <button onClick={deleteSelected} disabled={selectedCount === 0 || selectedDeletableUnits.length === 0}
+                className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedCount > 0 && selectedDeletableUnits.length > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}>
+                <FaTrash size={9} /> Delete{selectedCount > 0 ? ` (${selectedCount})` : ""}
+              </button>
+            )}
+            {canCreateUnit && (
+              <button onClick={() => navigate("/units/new")} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]">
+                <FaPlus size={9} /> Add
+              </button>
+            )}
             <button onClick={handlePrintList} className="h-7 shrink-0 flex items-center gap-1 rounded bg-slate-700 px-2.5 text-xs font-semibold text-white hover:bg-slate-800">
               <FaPrint size={9} /> Print
             </button>

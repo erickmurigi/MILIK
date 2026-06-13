@@ -22,7 +22,8 @@ import {
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { getLandlords, getRentPayments, getLandlordPayments, createLandlordPayment, getChartOfAccounts } from "../../redux/apiCalls";
-import { selectCurrentCompany, selectAllProperties, selectAllLandlords, selectAllTenants, selectAllRentPayments } from "../../redux/selectors";
+import { selectCurrentCompany, selectCurrentUser, selectAllProperties, selectAllLandlords, selectAllTenants, selectAllRentPayments } from "../../redux/selectors";
+import { hasCompanyPermission } from "../../utils/permissions";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import { getProperties } from "../../redux/propertyRedux";
 import { getTenants } from "../../redux/tenantsRedux";
@@ -43,10 +44,14 @@ const LandlordPayments = ({ mode = "payments" }) => {
 
   // Redux state
   const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
   const { landlords = [], isFetching } = useSelector((state) => state.landlord || {});
   const properties = useSelector(selectAllProperties);
   const rentPayments = useSelector(selectAllRentPayments);
   const tenants = useSelector(selectAllTenants);
+
+  const canProcessPayment = hasCompanyPermission(currentUser || {}, currentCompany, "landlordPayments", "process", "accounts");
+  const canExportPayment   = hasCompanyPermission(currentUser || {}, currentCompany, "landlordPayments", "export", "accounts");
 
   // Local state
   const [filters, setFilters] = useState({
@@ -834,6 +839,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
                             >
                               <FaFileInvoiceDollar size={11} />
                             </button>
+                            {canProcessPayment && (
                             <button
                               onClick={() => handleOpenPayment(landlord)}
                               className={`px-2 py-1 rounded ${MILIK_ORANGE} hover:bg-[#e67e00] text-white`}
@@ -842,6 +848,8 @@ const LandlordPayments = ({ mode = "payments" }) => {
                             >
                               <FaMoneyBillWave size={11} />
                             </button>
+                            )}
+                            {canExportPayment && (
                             <button
                               onClick={() => handlePrintLandlordStatement(landlord)}
                               className="px-2 py-1 rounded bg-purple-600 hover:bg-purple-700 text-white"
@@ -849,6 +857,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
                             >
                               <FaPrint size={11} />
                             </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1211,6 +1220,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
             </div>
 
             <div className="px-4 py-3 border-t border-slate-200 flex justify-end gap-2 sticky bottom-0 bg-white">
+              {canExportPayment && (
               <button
                 onClick={() => handlePrintLandlordStatement(activeDetail)}
                 className="px-4 py-2 text-xs rounded-md text-white font-semibold bg-purple-600 hover:bg-purple-700 flex items-center gap-2"
@@ -1218,6 +1228,8 @@ const LandlordPayments = ({ mode = "payments" }) => {
                 <FaPrint />
                 Print Statement
               </button>
+              )}
+              {canProcessPayment && (
               <button
                 onClick={() => handleOpenPayment(activeDetail)}
                 className={`px-4 py-2 text-xs rounded-md text-white font-semibold ${MILIK_ORANGE} hover:bg-[#e67e00] flex items-center gap-2`}
@@ -1226,6 +1238,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
                 <FaMoneyBillWave />
                 Make Payment
               </button>
+              )}
               <button
                 onClick={() => setShowDetailModal(false)}
                 className="px-4 py-2 text-xs border border-slate-300 rounded-md font-semibold hover:bg-slate-50"

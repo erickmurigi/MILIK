@@ -1513,10 +1513,12 @@ const confirmTransferUnit = async () => {
               <button onClick={collapseAllTenants} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 px-2 text-xs text-gray-600 hover:bg-gray-50" title="Collapse all">
                 <FaCompressAlt size={9} />
               </button>
-              <button onClick={handleEditTenant} disabled={!canUpdateTenant || selectedTenants.length !== 1}
-                className="h-7 shrink-0 flex items-center gap-1 rounded bg-blue-500 px-2.5 text-xs font-semibold text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed">
-                <FaEdit size={9} /> Edit
-              </button>
+              {canUpdateTenant && (
+                <button onClick={handleEditTenant} disabled={selectedTenants.length !== 1}
+                  className="h-7 shrink-0 flex items-center gap-1 rounded bg-blue-500 px-2.5 text-xs font-semibold text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed">
+                  <FaEdit size={9} /> Edit
+                </button>
+              )}
               {selectedTenants.length > 0 && (
                 <span className="shrink-0 text-[10px] font-bold text-slate-500 tabular-nums">{selectedTenants.length} selected</span>
               )}
@@ -1585,18 +1587,21 @@ const confirmTransferUnit = async () => {
                 )}
               </div>
 
-              <button onClick={() => isTerminatedView ? navigate("/invoices/new") : navigate("/tenant/new")}
-                disabled={!isTerminatedView && !canCreateTenant}
-                className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${canCreateTenant ? "bg-[#FF8C00] hover:bg-[#e67e00]" : "bg-gray-400 cursor-not-allowed"}`}>
-                <FaPlus size={9} /> {isTerminatedView ? "Final Billing" : "Add"}
-              </button>
+              {(isTerminatedView || canCreateTenant) && (
+                <button onClick={() => isTerminatedView ? navigate("/invoices/new") : navigate("/tenant/new")}
+                  className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#FF8C00] hover:bg-[#e67e00] px-2.5 text-xs font-semibold text-white">
+                  <FaPlus size={9} /> {isTerminatedView ? "Final Billing" : "Add"}
+                </button>
+              )}
               <button onClick={handleDownloadTemplate} className="h-7 shrink-0 flex items-center gap-1 rounded bg-blue-500 px-2.5 text-xs font-semibold text-white hover:bg-blue-600">
                 <FaDownload size={9} /> Template
               </button>
-              <button onClick={() => setShowImportModal(true)} disabled={isTerminatedView || !canCreateTenant}
-                className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${canCreateTenant && !isTerminatedView ? "bg-[#FF8C00] hover:bg-[#e67e00]" : "bg-gray-400 cursor-not-allowed"}`}>
-                <FaFileExport size={9} className="rotate-180" /> Import
-              </button>
+              {canCreateTenant && !isTerminatedView && (
+                <button onClick={() => setShowImportModal(true)}
+                  className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#FF8C00] hover:bg-[#e67e00] px-2.5 text-xs font-semibold text-white">
+                  <FaFileExport size={9} className="rotate-180" /> Import
+                </button>
+              )}
               <button onClick={handlePrintList} className="h-7 shrink-0 flex items-center gap-1 rounded bg-slate-700 px-2.5 text-xs font-semibold text-white hover:bg-slate-800">
                 <FaPrint size={9} /> Print
               </button>

@@ -10,6 +10,7 @@ import {
   YAxis,
 } from 'recharts';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
+import { hasCompanyPermission } from '../../utils/permissions';
 import {
   selectCurrentUser,
   selectCurrentCompany,
@@ -41,6 +42,7 @@ const FinancialOverview = ({ darkMode, invoices = [] }) => {
 
   const activeCompanyContext = currentCompany || currentUser?.company || null;
   const isLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);
+  const canViewFinancials = hasCompanyPermission(currentUser || {}, currentCompany, 'financialReports', 'view', ['accounts', 'propertyManagement']);
 
   useEffect(() => {
     const element = chartRef.current;
@@ -202,6 +204,8 @@ const FinancialOverview = ({ darkMode, invoices = [] }) => {
       </div>
     );
   };
+
+  if (!canViewFinancials) return null;
 
   return (
     <div

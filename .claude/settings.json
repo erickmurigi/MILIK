@@ -41,7 +41,26 @@
       "Bash(xargs grep -l \"printTabularList\\\\|printPettyCash\")",
       "Bash(xargs grep -l \"verifyEmployee\\\\|isEmployee\\\\|employeePortal\\\\|ess\\\\|ESS\")",
       "PowerShell(Get-ChildItem \"C:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikApi\\\\modules\" | Where-Object {$_.PSIsContainer} | Select-Object Name)",
-      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\('API port env check:'\\); require\\('fs'\\).existsSync\\('.env'\\) && console.log\\('.env exists'\\) || console.log\\('NO .env'\\);\")"
+      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\('API port env check:'\\); require\\('fs'\\).existsSync\\('.env'\\) && console.log\\('.env exists'\\) || console.log\\('NO .env'\\);\")",
+      "Bash(find c:\\\\\\\\Users\\\\\\\\murig\\\\\\\\OneDrive\\\\\\\\Desktop\\\\\\\\MILIKPMS\\\\\\\\Milik\\\\\\\\MilikClient\\\\\\\\src\\\\\\\\pages -name \"Tenants.jsx\" -o -name \"Properties.jsx\" -o -name \"Units.jsx\" -o -name \"Receipts.jsx\" -o -name \"RentalInvoices.jsx\" -o -name \"Maintenances.jsx\" -o -name \"Inspections.jsx\" -o -name \"Vacants.jsx\" -o -name \"Leases.jsx\")",
+      "Bash(ls -la \"c:\\\\\\\\Users\\\\\\\\murig\\\\\\\\OneDrive\\\\\\\\Desktop\\\\\\\\MILIKPMS\\\\\\\\Milik\\\\\\\\MilikClient\\\\\\\\src\\\\\\\\pages\\\\\\\\Tenants\\\\\\\\\")",
+      "Bash(grep -E \"\\\\.jsx$\")",
+      "Bash(ls -la \"c:\\\\\\\\Users\\\\\\\\murig\\\\\\\\OneDrive\\\\\\\\Desktop\\\\\\\\MILIKPMS\\\\\\\\Milik\\\\\\\\MilikClient\\\\\\\\src\\\\\\\\pages\\\\\\\\Properties\\\\\\\\\")",
+      "Bash(ls -la \"c:\\\\\\\\Users\\\\\\\\murig\\\\\\\\OneDrive\\\\\\\\Desktop\\\\\\\\MILIKPMS\\\\\\\\Milik\\\\\\\\MilikClient\\\\\\\\src\\\\\\\\pages\\\\\\\\Units\\\\\\\\\")",
+      "Bash(ls -la \"c:\\\\\\\\Users\\\\\\\\murig\\\\\\\\OneDrive\\\\\\\\Desktop\\\\\\\\MILIKPMS\\\\\\\\Milik\\\\\\\\MilikClient\\\\\\\\src\\\\\\\\pages\\\\\\\\Maintenances\\\\\\\\\")",
+      "Bash(ls -la \"c:\\\\\\\\Users\\\\\\\\murig\\\\\\\\OneDrive\\\\\\\\Desktop\\\\\\\\MILIKPMS\\\\\\\\Milik\\\\\\\\MilikClient\\\\\\\\src\\\\\\\\pages\\\\\\\\Inspections\\\\\\\\\")",
+      "Bash(ls -la \"c:\\\\\\\\Users\\\\\\\\murig\\\\\\\\OneDrive\\\\\\\\Desktop\\\\\\\\MILIKPMS\\\\\\\\Milik\\\\\\\\MilikClient\\\\\\\\src\\\\\\\\pages\\\\\\\\Vacants\\\\\\\\\")",
+      "Bash(find c:\\\\\\\\Users\\\\\\\\murig\\\\\\\\OneDrive\\\\\\\\Desktop\\\\\\\\MILIKPMS\\\\\\\\Milik\\\\\\\\MilikClient\\\\\\\\src\\\\\\\\pages -name \"*ease*\" -o -name \"*tatement*\")",
+      "Bash(ls -la \"c:\\\\\\\\Users\\\\\\\\murig\\\\\\\\OneDrive\\\\\\\\Desktop\\\\\\\\MILIKPMS\\\\\\\\Milik\\\\\\\\MilikClient\\\\\\\\src\\\\\\\\pages\\\\\\\\Lease\\\\\\\\\")",
+      "Bash(ls -la \"c:\\\\\\\\Users\\\\\\\\murig\\\\\\\\OneDrive\\\\\\\\Desktop\\\\\\\\MILIKPMS\\\\\\\\Milik\\\\\\\\MilikClient\\\\\\\\src\\\\\\\\pages\\\\\\\\\\\\\" 2>/dev/null | grep -i statement)",
+      "Bash(grep -v \"//\\\\|function\\\\|CompanyModule\\\\|CompanyMode\\\\|ESS\\\\|allowMust\\\\|moduleDash\\\\|dashboard\\\\|account\\\\|first-time\\\\|my-account\\\\|sms\\\\|email\\\\|sales\\\\|carwash\\\\|hr\\\\|settings\\\\|users\\\\|notifications\\\\|property-detail\\\\|invoices/new\\\\|receipts/new\\\\|properties/:id\\\\|deposits\")",
+      "Bash(grep -v \"//\\\\|disabled={\\\\|className\\\\|title=\\\\|type=\")",
+      "Bash(grep -v \"//\\\\|type=\\\\\"button\\\\\"\\\\|className\\\\|title=\")",
+      "Bash(grep -v \"//\\\\|className\\\\|title=\\\\|disabled=\")",
+      "Bash(grep -v \"//\\\\|className\\\\|title=\\\\|disabled=\\\\|navigation\\\\|pagination\\\\|FaTimes\\\\|FaArrow\")",
+      "Bash(grep -v \"//\\\\|node_modules\")",
+      "Bash(Get-ChildItem \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikClient\\\\src\\\\pages\\\\CarWash\\\\\" -Name)",
+      "Bash(grep -v \"className\\\\|disabled=\\\\|//\\\\|title=\")"
     ]
   }
 }

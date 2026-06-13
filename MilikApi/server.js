@@ -412,17 +412,6 @@ const buildStore = (prefix) => {
   });
 };
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  message: {
-    success: false,
-    message: "Too many login attempts, please try again after 15 minutes",
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  store: buildStore("auth"),
-});
 
 const trialLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -524,8 +513,6 @@ app.get("/api", (req, res) => {
 
 app.use("/uploads", express.static(UPLOADS_ROOT));
 
-app.use("/api/auth/login", authLimiter);
-app.use("/api/auth/super-admin", authLimiter);
 app.use("/api/auth", authRoutes);
 app.use("/api/trial", trialLimiter, trialRoutes);
 app.use("/api", tryAttachUserFromToken, enforceRequestedCompanyScope, enforceRoutePermissions);
@@ -753,6 +740,11 @@ async function startServer() {
       const businesses = await Company.find({ 'modules.carwash': true }).select('_id').lean();
       let totalBackfilled = 0;
 
+      // "Today" expressed as UTC midnight, but computed using Africa/Nairobi (UTC+3) wall time
+      // so that restarts between midnight and 3 am EAT still see the correct EAT calendar day.
+      const nowEAT   = new Date(Date.now() + 3 * 60 * 60 * 1000);
+      const today    = new Date(Date.UTC(nowEAT.getUTCFullYear(), nowEAT.getUTCMonth(), nowEAT.getUTCDate()));
+
       for (const biz of businesses) {
         const last = await CarWashStaffSaving.findOne(
           { business: biz._id, type: 'daily' },
@@ -760,11 +752,16 @@ async function startServer() {
           { sort: { savingsDate: -1 } }
         ).lean();
 
-        if (!last?.savingsDate) continue; // no history yet — cron starts fresh tonight
+        if (!last?.savingsDate) {
+          // No history yet — post today immediately so savings start on first run
+          // regardless of whether the 23:59 cron has ever fired.
+          const result = await processDailySavings(String(biz._id), today);
+          console.log(`[CW Savings Catchup] ${today.toISOString().slice(0,10)} (first ever) biz …${String(biz._id).slice(-6)}: posted=${result.posted}`);
+          if (result.posted > 0) totalBackfilled += result.posted;
+          continue;
+        }
 
         const lastDate = new Date(last.savingsDate);
-        const today = new Date();
-        today.setUTCHours(0, 0, 0, 0);
         console.log(`[CW Savings Catchup] biz …${String(biz._id).slice(-6)}: lastSavingsDate=${lastDate.toISOString().slice(0,10)} today=${today.toISOString().slice(0,10)}`);
 
         const cur = new Date(lastDate);

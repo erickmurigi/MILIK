@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { selectCurrentUser, selectCurrentCompany } from '../../redux/selectors';
+import { hasCompanyPermission } from '../../utils/permissions';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import MetricsGrid from '../../components/Dashboard/MetricsGrid';
 import PropertiesOverview from '../../components/Dashboard/PropertiesOverview';
@@ -54,6 +55,8 @@ const Dashboard = ({ darkMode }) => {
 
     let active = true;
 
+    const hasAccountsAccess = hasCompanyPermission(currentUser || {}, currentCompany, 'paymentVouchers', 'view', 'accounts');
+
     const refreshDashboardData = async () => {
       setOperationalLoading(true);
       setDashboardError(null);
@@ -65,8 +68,8 @@ const Dashboard = ({ darkMode }) => {
       try {
         const results = await Promise.allSettled([
           adminRequests.get(`/tenant-invoices?business=${businessId}&includeSnapshots=true`),
-          adminRequests.get(`/payment-vouchers?business=${businessId}`),
-          adminRequests.get(`/processed-statements/business/${businessId}`),
+          hasAccountsAccess ? adminRequests.get(`/payment-vouchers?business=${businessId}`) : Promise.resolve({ data: [] }),
+          hasAccountsAccess ? adminRequests.get(`/processed-statements/business/${businessId}`) : Promise.resolve({ data: [] }),
           getRentPayments(dispatch, businessId),
           getMaintenances(dispatch, businessId),
           getLeases(dispatch, businessId),
@@ -91,7 +94,7 @@ const Dashboard = ({ darkMode }) => {
       active = false;
       clearInterval(intervalId);
     };
-  }, [dispatch, currentCompany?._id, currentUser?.company]);
+  }, [dispatch, currentCompany?._id, currentUser?.company, currentUser?._id]);
 
   useEffect(() => {
     const companyFromUser =

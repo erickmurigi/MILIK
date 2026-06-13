@@ -425,7 +425,9 @@ const Maintenances = () => {
                 <button onClick={loadRequests} className="h-7 shrink-0 inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50"><FaRedoAlt size={9} /></button>
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 <button onClick={exportCsv} className="h-7 shrink-0 inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaDownload size={9} /> CSV</button>
-                <button onClick={openCreateModal} disabled={isDemoUser || !canCreate} className="h-7 shrink-0 inline-flex items-center gap-1 rounded bg-[#0B3B2E] px-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60"><FaPlus size={9} /> New Request</button>
+                {canCreate && !isDemoUser && (
+                  <button onClick={openCreateModal} className="h-7 shrink-0 inline-flex items-center gap-1 rounded bg-[#0B3B2E] px-2 text-xs font-black text-white hover:bg-[#0A3127]"><FaPlus size={9} /> New Request</button>
+                )}
               </div>
             </div>
 
@@ -503,38 +505,40 @@ const Maintenances = () => {
                           </td>
                           <td className="px-3 py-2 text-right">
                             <div className="inline-flex flex-wrap justify-end gap-1.5">
-                              {item?.status === "pending" && (
+                              {canUpdate && !isDemoUser && item?.status === "pending" && (
                                 <button
                                   onClick={() => quickUpdateStatus(item, "in_progress")}
-                                  disabled={busy || isDemoUser || !canUpdate}
+                                  disabled={busy}
                                   className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[10px] font-black text-blue-700 hover:bg-blue-100 disabled:opacity-50"
                                 >
                                   Start
                                 </button>
                               )}
-                              {(item?.status === "pending" || item?.status === "in_progress") && (
+                              {canUpdate && !isDemoUser && (item?.status === "pending" || item?.status === "in_progress") && (
                                 <button
                                   onClick={() => quickUpdateStatus(item, "completed")}
-                                  disabled={busy || isDemoUser || !canUpdate}
+                                  disabled={busy}
                                   className="rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
                                 >
                                   Complete
                                 </button>
                               )}
-                              <button
-                                onClick={() => openEditModal(item)}
-                                disabled={isDemoUser || !canUpdate}
-                                className="rounded border border-slate-300 bg-white px-2 py-1 text-[10px] font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                              >
-                                <FaEdit />
-                              </button>
-                              <button
-                                onClick={() => handleDelete(item)}
-                                disabled={isDemoUser || !canDelete}
-                                className="rounded border border-rose-300 bg-white px-2 py-1 text-[10px] font-black text-rose-600 hover:bg-rose-50 disabled:opacity-50"
-                              >
-                                <FaTrash />
-                              </button>
+                              {canUpdate && !isDemoUser && (
+                                <button
+                                  onClick={() => openEditModal(item)}
+                                  className="rounded border border-slate-300 bg-white px-2 py-1 text-[10px] font-black text-slate-700 hover:bg-slate-50"
+                                >
+                                  <FaEdit />
+                                </button>
+                              )}
+                              {canDelete && !isDemoUser && (
+                                <button
+                                  onClick={() => handleDelete(item)}
+                                  className="rounded border border-rose-300 bg-white px-2 py-1 text-[10px] font-black text-rose-600 hover:bg-rose-50"
+                                >
+                                  <FaTrash />
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>

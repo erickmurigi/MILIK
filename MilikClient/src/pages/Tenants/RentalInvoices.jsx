@@ -910,30 +910,33 @@ function InvoiceTableRowBase({
           >
             <FaEye size={12} />
           </button>
-          <button
-            onClick={() => onPrint(invoice)}
-            disabled={!canExportInvoice}
-            className="rounded p-1 text-purple-600 hover:bg-purple-50 hover:text-purple-800 disabled:cursor-not-allowed disabled:opacity-40"
-            title={canExportInvoice ? "Print Invoice" : "You do not have permission to print invoices"}
-          >
-            <FaPrint size={12} />
-          </button>
-          <button
-            onClick={() => onDownload(invoice)}
-            disabled={!canExportInvoice}
-            className="rounded p-1 text-green-600 hover:bg-green-50 hover:text-green-800 disabled:cursor-not-allowed disabled:opacity-40"
-            title={canExportInvoice ? "Download Invoice" : "You do not have permission to download invoices"}
-          >
-            <FaDownload size={12} />
-          </button>
-          <button
-            onClick={() => onDelete(invoice)}
-            disabled={!canDeleteInvoice}
-            className="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800 disabled:cursor-not-allowed disabled:opacity-40"
-            title={canDeleteInvoice ? "Delete Invoice" : "You do not have permission to delete invoices"}
-          >
-            <FaTrash size={12} />
-          </button>
+          {canExportInvoice && (
+            <button
+              onClick={() => onPrint(invoice)}
+              className="rounded p-1 text-purple-600 hover:bg-purple-50 hover:text-purple-800"
+              title="Print Invoice"
+            >
+              <FaPrint size={12} />
+            </button>
+          )}
+          {canExportInvoice && (
+            <button
+              onClick={() => onDownload(invoice)}
+              className="rounded p-1 text-green-600 hover:bg-green-50 hover:text-green-800"
+              title="Download Invoice"
+            >
+              <FaDownload size={12} />
+            </button>
+          )}
+          {canDeleteInvoice && (
+            <button
+              onClick={() => onDelete(invoice)}
+              className="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800"
+              title="Delete Invoice"
+            >
+              <FaTrash size={12} />
+            </button>
+          )}
           {showTenantColumns && (
             <button
               onClick={() => onViewStatement(invoice.tenantId)}
@@ -3318,9 +3321,15 @@ const createInvoiceForTenant = async (
                 <input type="date" value={draftFilters.toDate} onChange={(e) => setDraftFilters((prev) => ({ ...prev, toDate: e.target.value }))} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
                 <button onClick={applySearch} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaSearch size={10} /></button>
                 <button onClick={resetFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={10} /></button>
-                <button onClick={handleEditSelected} disabled={!canUpdateInvoice || !canEdit} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${canEdit ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaEdit size={10} /></button>
-                <button onClick={handleDeleteSelected} disabled={!canDeleteInvoice || selectedCount === 0} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${selectedCount > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}><FaTrash size={10} /></button>
-                <button onClick={handlePrintList} disabled={!canExportInvoice || totalFilteredCount === 0} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${totalFilteredCount > 0 ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaPrint size={10} /></button>
+                {canUpdateInvoice && (
+                  <button onClick={handleEditSelected} disabled={!canEdit} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${canEdit ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaEdit size={10} /></button>
+                )}
+                {canDeleteInvoice && (
+                  <button onClick={handleDeleteSelected} disabled={selectedCount === 0} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${selectedCount > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}><FaTrash size={10} /></button>
+                )}
+                {canExportInvoice && (
+                  <button onClick={handlePrintList} disabled={totalFilteredCount === 0} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${totalFilteredCount > 0 ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaPrint size={10} /></button>
+                )}
                 <button
                   onClick={() => setShowSmsModal(true)}
                   disabled={selectedCount === 0}
@@ -3338,15 +3347,19 @@ const createInvoiceForTenant = async (
                   <FaEnvelope size={11} />
                 </button>
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                <button type="button" onClick={() => navigate("/tenants/deposits")} disabled={!canCreateInvoice} className={`h-7 shrink-0 rounded px-2.5 text-xs font-semibold text-white ${canCreateInvoice ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}>Deposit</button>
-                <div className="flex shrink-0 items-center gap-1">
-                  <FaPlus className="text-[10px] text-[#0B3B2E]" />
-                  <select value={bookingAction} disabled={!canCreateInvoice} onChange={(e) => handleBookingActionChange(e.target.value)} className="h-7 rounded border border-[#0B3B2E] bg-[#E7F5EC] px-2 text-xs font-semibold text-[#0B3B2E]">
-                    <option value="">Booking</option>
-                    <option value="single">Single Booking</option>
-                    <option value="batch">Batch Booking</option>
-                  </select>
-                </div>
+                {canCreateInvoice && (
+                  <button type="button" onClick={() => navigate("/tenants/deposits")} className={`h-7 shrink-0 rounded px-2.5 text-xs font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}>Deposit</button>
+                )}
+                {canCreateInvoice && (
+                  <div className="flex shrink-0 items-center gap-1">
+                    <FaPlus className="text-[10px] text-[#0B3B2E]" />
+                    <select value={bookingAction} onChange={(e) => handleBookingActionChange(e.target.value)} className="h-7 rounded border border-[#0B3B2E] bg-[#E7F5EC] px-2 text-xs font-semibold text-[#0B3B2E]">
+                      <option value="">Booking</option>
+                      <option value="single">Single Booking</option>
+                      <option value="batch">Batch Booking</option>
+                    </select>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -4155,23 +4168,29 @@ const createInvoiceForTenant = async (
 
               {/* ── ACTION BAR ── */}
               <div className="shrink-0 flex flex-wrap items-center gap-1.5 border-b border-slate-100 bg-slate-50 px-6 py-2.5">
-                <button type="button" onClick={() => handlePrintInvoice(activeInvoice)} disabled={!canExportInvoice}
-                  className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-40">
-                  <FaPrint size={10} /> Print
-                </button>
-                <button type="button" onClick={() => handleDownloadInvoice(activeInvoice)} disabled={!canExportInvoice}
-                  className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-40">
-                  <FaDownload size={10} /> Download
-                </button>
+                {canExportInvoice && (
+                  <button type="button" onClick={() => handlePrintInvoice(activeInvoice)}
+                    className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 transition hover:bg-slate-50">
+                    <FaPrint size={10} /> Print
+                  </button>
+                )}
+                {canExportInvoice && (
+                  <button type="button" onClick={() => handleDownloadInvoice(activeInvoice)}
+                    className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 transition hover:bg-slate-50">
+                    <FaDownload size={10} /> Download
+                  </button>
+                )}
                 <button type="button" onClick={() => handleViewTenantStatement(activeInvoice.tenantId)}
                   className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 transition hover:bg-slate-50">
                   <FaArrowRight size={10} /> Tenant Statement
                 </button>
-                <button type="button" onClick={() => handleDeleteSingle(activeInvoice)} disabled={!canDeleteActiveInvoice}
-                  className="ml-auto inline-flex items-center gap-1.5 rounded border border-rose-200 bg-white px-3 py-1.5 text-[11px] font-bold text-rose-600 transition hover:bg-rose-50 disabled:opacity-40"
-                  title={canDeleteActiveInvoice ? "Delete invoice" : canDeleteInvoice ? "Paid invoices cannot be deleted" : "No delete permission"}>
-                  <FaTrash size={10} /> Delete
-                </button>
+                {canDeleteInvoice && (
+                  <button type="button" onClick={() => handleDeleteSingle(activeInvoice)} disabled={!canDeleteActiveInvoice}
+                    className="ml-auto inline-flex items-center gap-1.5 rounded border border-rose-200 bg-white px-3 py-1.5 text-[11px] font-bold text-rose-600 transition hover:bg-rose-50 disabled:opacity-40"
+                    title={canDeleteActiveInvoice ? "Delete invoice" : "Paid invoices cannot be deleted"}>
+                    <FaTrash size={10} /> Delete
+                  </button>
+                )}
               </div>
 
               {/* ── BODY ── */}

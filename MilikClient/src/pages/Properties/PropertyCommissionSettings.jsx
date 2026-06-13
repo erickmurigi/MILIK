@@ -7,6 +7,7 @@ import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { getProperties, updateProperty } from '../../redux/propertyRedux';
 import { adminRequests } from '../../utils/requestMethods';
 import { selectCurrentCompany, selectCurrentUser } from '../../redux/selectors';
+import { hasCompanyPermission } from '../../utils/permissions';
 
 const CARD = 'rounded-2xl border border-slate-200 bg-white shadow-sm';
 const INPUT = 'w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100';
@@ -74,6 +75,7 @@ const PropertyCommissionSettings = () => {
   const navigate = useNavigate();
   const currentUser = useSelector(selectCurrentUser);
   const currentCompany = useSelector(selectCurrentCompany);
+  const canWrite = hasCompanyPermission(currentUser || {}, currentCompany, "commissions", "create", "propertyManagement");
   const propertyState = useSelector((state) => state.property || {});
   const properties = Array.isArray(propertyState?.properties)
     ? propertyState.properties
@@ -541,6 +543,7 @@ const PropertyCommissionSettings = () => {
                 >
                   Reset
                 </button>
+                {canWrite && (
                 <button
                   type="submit"
                   disabled={saving}
@@ -548,6 +551,7 @@ const PropertyCommissionSettings = () => {
                 >
                   <FaSave /> {saving ? 'Saving...' : 'Save Commission Settings'}
                 </button>
+                )}
               </div>
             </form>
           )}

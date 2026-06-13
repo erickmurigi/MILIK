@@ -33,7 +33,8 @@ import { getUnits, updateUnit } from "../../redux/unitRedux";
 import { getProperties } from "../../redux/propertyRedux";
 import { getTenants } from "../../redux/tenantsRedux";
 import { getMaintenances } from "../../redux/apiCalls";
-import { selectCurrentCompany, selectAllProperties, selectAllTenants, selectAllMaintenances } from "../../redux/selectors";
+import { selectCurrentCompany, selectCurrentUser, selectAllProperties, selectAllTenants, selectAllMaintenances } from "../../redux/selectors";
+import { hasCompanyPermission } from "../../utils/permissions";
 import MilikConfirmDialog from "../../components/Modals/MilikConfirmDialog";
 import { printTabularList } from "../../utils/printList";
 
@@ -212,6 +213,11 @@ const Vacants = () => {
   const navigate = useNavigate();
 
   const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
+  const canCreateTenant = hasCompanyPermission(currentUser || {}, currentCompany, 'tenants', 'create', 'propertyManagement');
+  const canCreateUnit   = hasCompanyPermission(currentUser || {}, currentCompany, 'units', 'create', 'propertyManagement');
+  const canUpdateUnit   = hasCompanyPermission(currentUser || {}, currentCompany, 'units', 'update', 'propertyManagement');
+
   const units = useSelector((state) => state.unit?.units || []);
   const unitsLoading = useSelector((state) => state.unit?.isFetching || false);
   const properties = useSelector(selectAllProperties);
@@ -779,8 +785,8 @@ const Vacants = () => {
             <button onClick={resetFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded-md px-2 text-[10px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={9} /></button>
             <button onClick={allExpanded ? collapseAll : expandAll} disabled={!currentRows.length} className={`h-7 shrink-0 flex items-center gap-1 rounded-md px-2 text-[10px] font-bold text-white shadow-sm ${currentRows.length ? (allExpanded ? "bg-orange-600 hover:bg-orange-700" : `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`) : "cursor-not-allowed bg-gray-400"}`}>{allExpanded ? <FaCompressAlt size={9} /> : <FaExpandAlt size={9} />}</button>
             <div className="mx-1 h-4 w-px shrink-0 bg-gray-300" />
-            <button onClick={() => navigate("/tenant/new")} className={`h-7 shrink-0 flex items-center gap-1 rounded-md px-2 text-[10px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaUserPlus size={9} /> Add Tenant</button>
-            <button onClick={() => navigate("/units/new")} className={`h-7 shrink-0 flex items-center gap-1 rounded-md px-2 text-[10px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaPlus size={9} /> Add Unit</button>
+            {canCreateTenant && <button onClick={() => navigate("/tenant/new")} className={`h-7 shrink-0 flex items-center gap-1 rounded-md px-2 text-[10px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaUserPlus size={9} /> Add Tenant</button>}
+            {canCreateUnit && <button onClick={() => navigate("/units/new")} className={`h-7 shrink-0 flex items-center gap-1 rounded-md px-2 text-[10px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaPlus size={9} /> Add Unit</button>}
             <div className="mx-1 h-4 w-px shrink-0 bg-gray-300" />
             <button onClick={handlePrint} className="h-7 shrink-0 flex items-center gap-1 rounded-md bg-slate-700 px-2 text-[10px] font-bold text-white shadow-sm hover:bg-slate-800"><FaPrint size={9} /></button>
             <button onClick={handleExport} className="h-7 shrink-0 flex items-center gap-1 rounded-md border border-gray-300 px-2 text-[10px] font-bold shadow-sm hover:bg-gray-50"><FaFileExport size={9} /></button>
@@ -943,13 +949,15 @@ const Vacants = () => {
                             </td>
                             <td className="px-1.5 py-1 align-top">
                               <div className="flex min-w-0 flex-wrap gap-1.5">
-                                <button
-                                  onClick={() => navigate(`/units/${row.id}`)}
-                                  className={`flex items-center gap-1 whitespace-nowrap rounded-lg px-1.5 py-0.5 text-[10px] text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                                >
-                                  <FaUserEdit size={10} />
-                                  View Unit
-                                </button>
+                                {canUpdateUnit && (
+                                  <button
+                                    onClick={() => navigate(`/units/${row.id}`)}
+                                    className={`flex items-center gap-1 whitespace-nowrap rounded-lg px-1.5 py-0.5 text-[10px] text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                                  >
+                                    <FaUserEdit size={10} />
+                                    View Unit
+                                  </button>
+                                )}
 
                                 {row.tenantId ? (
                                   <button
@@ -959,7 +967,7 @@ const Vacants = () => {
                                     <FaUserEdit size={10} />
                                     Review Tenant
                                   </button>
-                                ) : (
+                                ) : canCreateTenant && (
                                   <button
                                     onClick={() => openTenantTakeOn(row)}
                                     disabled={!canAddTenant}
@@ -972,7 +980,7 @@ const Vacants = () => {
                                   </button>
                                 )}
 
-                                {["vacant", "notice_given"].includes(row.status) && (
+                                {canUpdateUnit && ["vacant", "notice_given"].includes(row.status) && (
                                   <button
                                     onClick={() => handleReserve(row)}
                                     className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-violet-600 px-1.5 py-0.5 text-[10px] text-white shadow-sm transition-colors hover:bg-violet-700"
@@ -982,7 +990,7 @@ const Vacants = () => {
                                   </button>
                                 )}
 
-                                {["vacant", "notice_given", "reserved"].includes(row.status) && (
+                                {canUpdateUnit && ["vacant", "notice_given", "reserved"].includes(row.status) && (
                                   <button
                                     onClick={() => handleMaintenance(row)}
                                     className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-amber-600 px-1.5 py-0.5 text-[10px] text-white shadow-sm transition-colors hover:bg-amber-700"
@@ -992,7 +1000,7 @@ const Vacants = () => {
                                   </button>
                                 )}
 
-                                {row.status === "off_market" ? (
+                                {canUpdateUnit && (row.status === "off_market" ? (
                                   <button
                                     onClick={() => handleRestore(row)}
                                     className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-emerald-600 px-1.5 py-0.5 text-[10px] text-white shadow-sm transition-colors hover:bg-emerald-700"
@@ -1008,9 +1016,9 @@ const Vacants = () => {
                                     <FaArchive size={10} />
                                     Off Market
                                   </button>
-                                )}
+                                ))}
 
-                                {["reserved", "under_maintenance"].includes(row.status) && (
+                                {canUpdateUnit && ["reserved", "under_maintenance"].includes(row.status) && (
                                   <button
                                     onClick={() => handleReady(row)}
                                     className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-green-600 px-1.5 py-0.5 text-[10px] text-white shadow-sm transition-colors hover:bg-green-700"

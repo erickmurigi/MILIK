@@ -9,6 +9,7 @@ import {
   FaChartLine,
 } from 'react-icons/fa';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
+import { hasCompanyPermission } from '../../utils/permissions';
 import {
   selectCurrentUser,
   selectCurrentCompany,
@@ -29,6 +30,7 @@ const MetricsGrid = ({ darkMode }) => {
 
   const activeCompanyContext = currentCompany || currentUser?.company || null;
   const isLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);
+  const canViewFinancials = hasCompanyPermission(currentUser || {}, currentCompany, 'financialReports', 'view', ['accounts', 'propertyManagement']);
 
   const totalProperties = properties.length;
   const totalUnits = units.filter((u) => {
@@ -109,7 +111,7 @@ const MetricsGrid = ({ darkMode }) => {
         iconBg: 'bg-[#4a9976]/25',
         loading: propertiesLoading,
       },
-      {
+      ...(canViewFinancials ? [{
         id: 4,
         label: isLandlordMode ? 'Collected This Month' : 'Total Collected This Month',
         value: formatCurrency(monthlyCollected),
@@ -117,13 +119,13 @@ const MetricsGrid = ({ darkMode }) => {
         color: 'from-[#E85C0D] to-[#c7490a]',
         iconBg: 'bg-[#E85C0D]/25',
         loading: propertiesLoading,
-      },
+      }] : []),
     ],
-    [isLandlordMode, monthlyCollected, occupancyRate, propertiesLoading, totalProperties, totalUnits]
+    [canViewFinancials, isLandlordMode, monthlyCollected, occupancyRate, propertiesLoading, totalProperties, totalUnits]
   );
 
   const landlordExtraMetrics = useMemo(() => {
-    if (!isLandlordMode) return [];
+    if (!isLandlordMode || !canViewFinancials) return [];
     return [
       {
         id: 5,
@@ -144,13 +146,13 @@ const MetricsGrid = ({ darkMode }) => {
         loading: propertiesLoading,
       },
     ];
-  }, [isLandlordMode, monthlyExpenses, netIncome, propertiesLoading]);
+  }, [canViewFinancials, isLandlordMode, monthlyExpenses, netIncome, propertiesLoading]);
 
   const metrics = [...baseMetrics, ...landlordExtraMetrics];
 
   return (
     <div className={`sticky top-0 z-20 grid gap-2 border-b border-gray-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur ${
-      isLandlordMode
+      isLandlordMode && canViewFinancials
         ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'
         : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'
     }`}>

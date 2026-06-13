@@ -27,7 +27,8 @@ import {
 import { toast } from "react-toastify";
 import { getProperties, deleteProperty, archiveProperty, restoreProperty } from "../../redux/propertyRedux";
 import { getLandlords } from "../../redux/apiCalls";
-import { selectCurrentCompany, selectAllLandlords } from "../../redux/selectors";
+import { selectCurrentCompany, selectCurrentUser, selectAllLandlords } from "../../redux/selectors";
+import { hasCompanyPermission } from "../../utils/permissions";
 import MilikConfirmDialog from "../../components/Modals/MilikConfirmDialog";
 import PropertyImportModal from "../../components/Modals/PropertyImportModal";
 import { downloadPropertiesTemplate, exportPropertiesToExcel } from "../../utils/excelTemplates";
@@ -51,6 +52,11 @@ const Properties = () => {
   const { properties, error, pagination } = useSelector((state) => state.property);
   const landlords = useSelector(selectAllLandlords);
   const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
+
+  const canCreateProperty = hasCompanyPermission(currentUser || {}, currentCompany, "properties", "create", "propertyManagement");
+  const canUpdateProperty = hasCompanyPermission(currentUser || {}, currentCompany, "properties", "update", "propertyManagement");
+  const canDeleteProperty = hasCompanyPermission(currentUser || {}, currentCompany, "properties", "delete", "propertyManagement");
 
   const landlordOptions = useMemo(() =>
     landlords.map(l => ({ id: l._id || l.id, label: l.fullName || l.name || l.landlordName || "Unnamed" })),
@@ -661,51 +667,59 @@ const Properties = () => {
               className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${properties && properties.length > 0 ? allRowsExpanded ? "bg-orange-600 hover:bg-orange-700" : "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
               {allRowsExpanded ? <><FaCompressAlt size={9} /> Collapse</> : <><FaExpandAlt size={9} /> Expand</>}
             </button>
-            <button onClick={() => openEditProperty(selectedProperties[0])} disabled={selectedProperties.length !== 1}
-              className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedProperties.length === 1 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
-              <FaEdit size={9} /> Edit
-            </button>
-
-            <div className="shrink-0">
-              <button
-                ref={actionMenuBtnRef}
-                onClick={() => {
-                  if (!actionMenuOpen) {
-                    const rect = actionMenuBtnRef.current?.getBoundingClientRect();
-                    if (rect) setActionMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
-                  }
-                  setActionMenuOpen((v) => !v);
-                }}
-                disabled={selectedProperties.length === 0}
-                className={`h-7 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedProperties.length > 0 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}
-              >
-                <FaArchive size={9} /> Actions <FaChevronDown size={8} />
+            {canUpdateProperty && (
+              <button onClick={() => openEditProperty(selectedProperties[0])} disabled={selectedProperties.length !== 1}
+                className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedProperties.length === 1 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
+                <FaEdit size={9} /> Edit
               </button>
-              {actionMenuOpen && selectedProperties.length > 0 && (
-                <div
-                  ref={actionMenuRef}
-                  style={{ position: "fixed", top: actionMenuPos.top, right: actionMenuPos.right, zIndex: 9999 }}
-                  className="w-40 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden"
+            )}
+
+            {canUpdateProperty && (
+              <div className="shrink-0">
+                <button
+                  ref={actionMenuBtnRef}
+                  onClick={() => {
+                    if (!actionMenuOpen) {
+                      const rect = actionMenuBtnRef.current?.getBoundingClientRect();
+                      if (rect) setActionMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                    }
+                    setActionMenuOpen((v) => !v);
+                  }}
+                  disabled={selectedProperties.length === 0}
+                  className={`h-7 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedProperties.length > 0 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}
                 >
-                  <button onClick={archiveSelected} className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-2">
-                    <FaArchive className="text-xs text-gray-700" /> Archive
-                  </button>
-                  <button onClick={restoreSelected} className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-2">
-                    <FaUndo className="text-xs text-gray-700" /> Restore
-                  </button>
-                </div>
-              )}
-            </div>
+                  <FaArchive size={9} /> Actions <FaChevronDown size={8} />
+                </button>
+                {actionMenuOpen && selectedProperties.length > 0 && (
+                  <div
+                    ref={actionMenuRef}
+                    style={{ position: "fixed", top: actionMenuPos.top, right: actionMenuPos.right, zIndex: 9999 }}
+                    className="w-40 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden"
+                  >
+                    <button onClick={archiveSelected} className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-2">
+                      <FaArchive className="text-xs text-gray-700" /> Archive
+                    </button>
+                    <button onClick={restoreSelected} className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-2">
+                      <FaUndo className="text-xs text-gray-700" /> Restore
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
-            <button onClick={handleBulkDelete} disabled={selectedProperties.length === 0}
-              className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedProperties.length > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}>
-              <FaTrash size={9} /> Delete{selectedProperties.length > 0 ? ` (${selectedProperties.length})` : ""}
-            </button>
-            <Link to="/properties/new" className="shrink-0">
-              <button className="h-7 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]">
-                <FaPlus size={9} /> Add
+            {canDeleteProperty && (
+              <button onClick={handleBulkDelete} disabled={selectedProperties.length === 0}
+                className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedProperties.length > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}>
+                <FaTrash size={9} /> Delete{selectedProperties.length > 0 ? ` (${selectedProperties.length})` : ""}
               </button>
-            </Link>
+            )}
+            {canCreateProperty && (
+              <Link to="/properties/new" className="shrink-0">
+                <button className="h-7 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]">
+                  <FaPlus size={9} /> Add
+                </button>
+              </Link>
+            )}
             <button onClick={() => downloadPropertiesTemplate()} className="h-7 shrink-0 flex items-center gap-1 rounded border border-blue-300 bg-blue-50 px-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
               <FaFileDownload size={9} /> Template
             </button>
@@ -943,27 +957,31 @@ const Properties = () => {
                                           </button>
                                         </Link>
 
-                                        <Link
-                                          to={`/properties/edit/${property._id}`}
-                                          state={{ tabTitle: "Property Details" }}
-                                          onClick={(e) => e.stopPropagation()}
-                                        >
-                                          <button
-                                            className={`px-3 py-2 text-xs text-white rounded-lg flex items-center justify-center gap-2 transition-colors w-full font-bold ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                                        {canUpdateProperty && (
+                                          <Link
+                                            to={`/properties/edit/${property._id}`}
+                                            state={{ tabTitle: "Property Details" }}
+                                            onClick={(e) => e.stopPropagation()}
                                           >
-                                            <FaEdit /> Edit Property
-                                          </button>
-                                        </Link>
+                                            <button
+                                              className={`px-3 py-2 text-xs text-white rounded-lg flex items-center justify-center gap-2 transition-colors w-full font-bold ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                                            >
+                                              <FaEdit /> Edit Property
+                                            </button>
+                                          </Link>
+                                        )}
 
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setShowDeleteConfirm(property._id);
-                                          }}
-                                          className="px-3 py-2 text-xs bg-red-600 text-white rounded-lg flex items-center justify-center gap-2 hover:bg-red-700 transition-colors w-full font-bold"
-                                        >
-                                          <FaTrash /> Delete Property
-                                        </button>
+                                        {canDeleteProperty && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setShowDeleteConfirm(property._id);
+                                            }}
+                                            className="px-3 py-2 text-xs bg-red-600 text-white rounded-lg flex items-center justify-center gap-2 hover:bg-red-700 transition-colors w-full font-bold"
+                                          >
+                                            <FaTrash /> Delete Property
+                                          </button>
+                                        )}
                                       </div>
                                     </div>
                                   </div>
@@ -982,13 +1000,15 @@ const Properties = () => {
                             
                               <div className="text-lg font-bold text-gray-400 mb-2">No properties found</div>
                               <div className="text-sm text-gray-500 mb-4">Use the filter fields above, then click Search</div>
-                              <Link to="/properties/new">
-                                <button
-                                  className={`px-4 py-2 text-white rounded-lg transition-colors ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                                >
-                                  Add New Property
-                                </button>
-                              </Link>
+                              {canCreateProperty && (
+                                <Link to="/properties/new">
+                                  <button
+                                    className={`px-4 py-2 text-white rounded-lg transition-colors ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                                  >
+                                    Add New Property
+                                  </button>
+                                </Link>
+                              )}
                             </div>
                           </td>
                         </tr>
