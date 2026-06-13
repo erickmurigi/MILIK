@@ -89,8 +89,16 @@ const CarWashChartOfAccounts = () => {
     queryFn: () => carWashApi.listChartOfAccounts({ business: currentCompany._id, moduleScope: "carwash" }),
     enabled: !!currentCompany?._id,
     select: (rows) => Array.isArray(rows) ? rows : [],
-    staleTime: 2 * 60_000,
+    staleTime: 0,           // always refetch on mount / window-focus
+    refetchOnWindowFocus: true,
   });
+
+  // Immediately refetch when any car wash mutation signals data changed
+  useEffect(() => {
+    const onDataChanged = () => refetch();
+    window.addEventListener("carwash-data-changed", onDataChanged);
+    return () => window.removeEventListener("carwash-data-changed", onDataChanged);
+  }, [refetch]);
 
   useEffect(() => { if (error) toast.error(error?.response?.data?.message || "Failed to load Car Wash chart of accounts"); }, [error]);
   useEffect(() => { setSelectedIds([]); }, [rawAccounts]);

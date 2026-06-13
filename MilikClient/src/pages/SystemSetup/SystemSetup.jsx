@@ -1055,41 +1055,42 @@ export default function SystemSetupPage() {
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
 
           {/* ── Sticky header ─────────────────────────────────────────────── */}
-          <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-              <div>
-                <div className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-700">System Administration</div>
-                <h1 className="text-sm font-black text-slate-900 leading-none mt-0.5">Control Centre</h1>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-black text-slate-700">
-                  <FaBuilding className="text-emerald-600 text-[10px]" />
-                  {companyList.length} companies
+          <div className="sticky top-0 z-20 flex-shrink-0">
+            <div className="bg-[#0B3B2E] px-4 py-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="text-[10px] font-black uppercase tracking-[0.22em] text-[#B7C9C0]">System Administration</div>
+                  <h1 className="text-sm font-black text-white leading-none mt-0.5">Control Centre</h1>
                 </div>
-                <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-black text-slate-700">
-                  <FaUsers className="text-orange-500 text-[10px]" />
-                  {userList.length} users
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-1.5 rounded-lg border border-[#2A5C4A] bg-[#0A3127] px-3 py-1.5 text-[11px] font-black text-white">
+                    <FaBuilding className="text-[#B7C9C0] text-[10px]" />
+                    {companyList.length} companies
+                  </div>
+                  <div className="flex items-center gap-1.5 rounded-lg border border-[#2A5C4A] bg-[#0A3127] px-3 py-1.5 text-[11px] font-black text-white">
+                    <FaUsers className="text-orange-400 text-[10px]" />
+                    {userList.length} users
+                  </div>
+                  <button
+                    onClick={handleRefresh}
+                    disabled={companiesFetching || usersFetching}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#2A5C4A] px-3 py-1.5 text-[11px] font-bold text-white hover:bg-[#0A3127] disabled:opacity-50 transition"
+                  >
+                    <FaRedoAlt className={`text-[9px] ${(companiesFetching || usersFetching) ? "animate-spin" : ""}`} /> Refresh
+                  </button>
                 </div>
-                <button
-                  onClick={handleRefresh}
-                  disabled={companiesFetching || usersFetching}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition"
-                >
-                  <FaRedoAlt className={`text-[9px] ${(companiesFetching || usersFetching) ? "animate-spin" : ""}`} /> Refresh
-                </button>
               </div>
             </div>
-
-            {/* Tab bar */}
-            <div className="flex items-center gap-1 border-t border-slate-100 px-3 py-1.5">
+            {/* Tab bar with orange active indicator */}
+            <div className="flex items-center border-b border-slate-200 bg-white px-3">
               {sections.map((section) => (
                 <button
                   key={section.key}
                   onClick={() => goToSection(section.key, section.key === "users" && selectedCompanyId ? `?company=${selectedCompanyId}` : "")}
-                  className={`relative inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all ${
+                  className={`inline-flex items-center gap-1.5 border-b-2 px-3.5 py-2.5 text-xs font-bold transition-all whitespace-nowrap ${
                     activeSection === section.key
-                      ? "bg-emerald-900 text-white shadow-sm"
-                      : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                      ? "border-[#FF8C00] bg-[#EDF5F1] text-[#0B3B2E]"
+                      : "border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800"
                   }`}
                 >
                   <section.icon className="text-[11px]" />

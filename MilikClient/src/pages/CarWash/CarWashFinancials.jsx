@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import {
@@ -87,6 +87,10 @@ const EmptyState = ({ message }) => (
   </div>
 );
 
+// ── maintenance throttle (module-level, resets on full page reload) ───────────
+let _lastCwMaintenance = 0;
+const CW_MAINTENANCE_TTL = 5 * 60_000; // at most once per 5 min
+
 // ── main component ────────────────────────────────────────────────────────────
 export default function CarWashFinancials() {
   const navigate = useNavigate();
@@ -131,14 +135,30 @@ export default function CarWashFinancials() {
     }
   }, [currentCompany?._id, statusFilter, sourceFilter, directionFilter, startDate, endDate]);
 
-  // Seed, backfill + deduplicate once on mount — not on every filter change
+  // Throttled maintenance: seed/backfill/repair at most once every 5 min.
+  // These are integrity ops, not data-freshness ops — running them on every
+  // mount was masking missing aggregation calls and hammering the backend.
   useEffect(() => {
+    if (Date.now() - _lastCwMaintenance < CW_MAINTENANCE_TTL) return;
+    _lastCwMaintenance = Date.now();
     carWashApi.seedAccounts().catch(() => {});
     carWashApi.backfillPaymentLedger().catch(() => {});
     carWashApi.repairLedger().catch(() => {});
   }, []);
 
+  // Always reload ledger when filters change or on mount
   useEffect(() => { loadLedger(); }, [loadLedger]);
+
+  // Reload ledger when the user tabs back in (handles stale SPA state)
+  const loadLedgerRef = useRef(loadLedger);
+  useEffect(() => { loadLedgerRef.current = loadLedger; }, [loadLedger]);
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") loadLedgerRef.current();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
 
   // ── reversal handler ──────────────────────────────────────────────────────
   const handleReverse = async (entry) => {
@@ -172,6 +192,7 @@ export default function CarWashFinancials() {
           throw new Error("Cannot reverse this transaction type");
       }
       toast.success("Reversed — ledger updated");
+      window.dispatchEvent(new CustomEvent("carwash-data-changed"));
       await loadLedger();
     } catch (err) {
       toast.error(err?.response?.data?.message || err?.message || "Reversal failed");
