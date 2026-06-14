@@ -901,7 +901,6 @@ const sendSmsViaAfricasTalkingMasked = async ({ profile, maskedNumber, body }) =
   const params = new URLSearchParams();
   params.append('username', profile.accountUsername);
   params.append('message', body);
-  params.append('to', maskedNumber);       // standard endpoint requires 'to'; AT routes it via maskedNumber+telco
   params.append('maskedNumber', maskedNumber);
   params.append('telco', 'safaricom');
   if (profile?.senderId) params.append('from', profile.senderId);
