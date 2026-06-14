@@ -896,17 +896,18 @@ const sendSmsViaAfricasTalkingMasked = async ({ profile, maskedNumber, body }) =
     ? 'https://api.sandbox.africastalking.com/version1/messaging/bulk'
     : 'https://api.africastalking.com/version1/messaging/bulk';
 
-  const params = new URLSearchParams();
-  params.append('username', profile.accountUsername);
-  params.append('message', body);
-  params.append('maskedNumber', maskedNumber);
-  params.append('telco', 'Safaricom');
-  params.append('phoneNumbers', '');
-  if (profile?.senderId) params.append('from', profile.senderId);
+  const payload = {
+    username: profile.accountUsername,
+    message: body,
+    maskedNumber,
+    telco: 'Safaricom',
+    phoneNumbers: [],
+  };
+  if (profile?.senderId) payload.from = profile.senderId;
 
-  const response = await axios.post(baseUrl, params.toString(), {
+  const response = await axios.post(baseUrl, payload, {
     headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
+      'Content-Type': 'application/json',
       Accept: 'application/json',
       apiKey,
     },
