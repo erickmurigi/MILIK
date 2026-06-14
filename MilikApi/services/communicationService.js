@@ -902,20 +902,27 @@ const sendSmsViaAfricasTalkingMasked = async ({ profile, maskedNumber, body }) =
   params.append('username', profile.accountUsername);
   params.append('message', body);
   params.append('maskedNumber', maskedNumber);
-  params.append('telco', 'Safaricom');
-  params.append('phoneNumbers', '');
+  params.append('telco', 'safaricom');
   if (profile?.senderId) params.append('from', profile.senderId);
 
-  const response = await axios.post(baseUrl, params.toString(), {
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      Accept: 'application/json',
-      apiKey,
-    },
-    timeout: 30000,
-  });
+  let response;
+  try {
+    response = await axios.post(baseUrl, params.toString(), {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+        apiKey,
+      },
+      timeout: 30000,
+    });
+  } catch (err) {
+    const atError = err?.response?.data;
+    console.error('[AT Masked] HTTP error status=%s body=%s', err?.response?.status, JSON.stringify(atError));
+    throw new Error(err?.response?.data?.description || err?.response?.data?.message || err?.message);
+  }
 
   const smsData = response?.data?.SMSMessageData;
+  console.log('[AT Masked] response:', JSON.stringify(response?.data));
   if (!smsData) throw new Error(`Africa's Talking masked: unexpected response — ${JSON.stringify(response?.data || {})}`);
 
   const first = (smsData.Recipients || [])[0];
