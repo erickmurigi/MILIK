@@ -892,22 +892,23 @@ const sendSmsViaAfricasTalkingMasked = async ({ profile, maskedNumber, body }) =
   if (!apiKey) throw new Error("Africa's Talking API key is missing for masked SMS.");
   if (!profile?.accountUsername) throw new Error("Africa's Talking username is missing for masked SMS.");
 
+  // AT masked-number routing uses the same /messaging endpoint as regular SMS,
+  // with maskedNumber + telco replacing the to field.
   const baseUrl = profile?.useSandbox
-    ? 'https://api.sandbox.africastalking.com/version1/messaging/bulk'
-    : 'https://api.africastalking.com/version1/messaging/bulk';
+    ? 'https://api.sandbox.africastalking.com/version1/messaging'
+    : 'https://api.africastalking.com/version1/messaging';
 
-  const payload = {
-    username: profile.accountUsername,
-    message: body,
-    maskedNumber,
-    telco: 'Safaricom',
-    phoneNumbers: [],
-  };
-  if (profile?.senderId) payload.from = profile.senderId;
+  const params = new URLSearchParams();
+  params.append('username', profile.accountUsername);
+  params.append('message', body);
+  params.append('maskedNumber', maskedNumber);
+  params.append('telco', 'Safaricom');
+  params.append('phoneNumbers', '');
+  if (profile?.senderId) params.append('from', profile.senderId);
 
-  const response = await axios.post(baseUrl, payload, {
+  const response = await axios.post(baseUrl, params.toString(), {
     headers: {
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded',
       Accept: 'application/json',
       apiKey,
     },
