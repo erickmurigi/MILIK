@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useState } from "react";
+﻿import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  FaBoxes, FaExchangeAlt, FaFileInvoice, FaMapMarkerAlt,
+  FaBoxes, FaExchangeAlt, FaExclamationTriangle, FaFileInvoice, FaMapMarkerAlt,
   FaRedoAlt, FaShoppingCart, FaTruck, FaWarehouse,
 } from "react-icons/fa";
 import InventoryShell from "./InventoryShell";
@@ -35,7 +35,7 @@ const KpiCard = ({ label, value, sub, icon: Icon, accent }) => (
 
 const Section = ({ title, children }) => (
   <section className="border border-slate-200 bg-white shadow-sm">
-    <div className="border-b border-slate-200 bg-[#1a5c3a] px-3 py-2">
+    <div className="border-b border-slate-200 bg-[#0B3B2E] px-3 py-2">
       <h2 className="text-[11px] font-extrabold uppercase tracking-wide text-white">{title}</h2>
     </div>
     {children}
@@ -47,15 +47,17 @@ const InventoryDashboard = () => {
   const [summary, setSummary] = useState(null);
   const [recentTransfers, setRecentTransfers] = useState([]);
   const [recentPOs, setRecentPOs] = useState([]);
+  const [lowStockCount, setLowStockCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [val, transfers, pos] = await Promise.allSettled([
+      const [val, transfers, pos, lowStock] = await Promise.allSettled([
         inventoryApi.getValuation(),
         inventoryApi.listTransfers({ limit: 6 }),
         inventoryApi.listPurchaseOrders({ limit: 6 }),
+        inventoryApi.getLowStock(),
       ]);
       if (val.status === "fulfilled") setSummary(val.value);
       if (transfers.status === "fulfilled") {
@@ -65,6 +67,11 @@ const InventoryDashboard = () => {
       if (pos.status === "fulfilled") {
         const d = pos.value;
         setRecentPOs(Array.isArray(d) ? d : (d?.data ?? []));
+      }
+      if (lowStock.status === "fulfilled") {
+        const d = lowStock.value;
+        const arr = Array.isArray(d) ? d : (d?.data ?? []);
+        setLowStockCount(arr.length);
       }
     } finally {
       setLoading(false);
@@ -79,18 +86,18 @@ const InventoryDashboard = () => {
   const inTransit   = recentTransfers.filter((t) => t.status === "in_transit").length;
 
   const QUICK_LINKS = [
-    { label: "Products",        icon: FaBoxes,        path: "/inventory/products" },
-    { label: "Purchase Orders", icon: FaFileInvoice,  path: "/inventory/purchase-orders" },
-    { label: "Transfers",       icon: FaExchangeAlt,  path: "/inventory/transfers" },
-    { label: "Locations",       icon: FaMapMarkerAlt, path: "/inventory/locations" },
-    { label: "POS Sales",       icon: FaShoppingCart, path: "/pos/sales" },
+    { label: "Products",        icon: FaBoxes,               path: "/inventory/products" },
+    { label: "Purchase Orders", icon: FaFileInvoice,          path: "/inventory/purchase-orders" },
+    { label: "Transfers",       icon: FaExchangeAlt,          path: "/inventory/transfers" },
+    { label: "Low Stock",       icon: FaExclamationTriangle,  path: "/inventory/low-stock" },
+    { label: "POS Sales",       icon: FaShoppingCart,         path: "/pos/sales" },
   ];
 
   return (
     <InventoryShell
       title="Dashboard"
       action={
-        <button type="button" onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
+        <button type="button" onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
           <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
         </button>
       }
@@ -100,11 +107,12 @@ const InventoryDashboard = () => {
       ) : (
         <div className="space-y-3">
           {/* KPI cards */}
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <KpiCard label="Stock Value"  value={formatMoney(totalValue)} sub="across all locations" icon={FaWarehouse}    accent="border-l-[#1a5c3a]" />
-            <KpiCard label="SKUs in Stock" value={skuCount}              sub="distinct products"     icon={FaBoxes}         accent="border-l-blue-500" />
-            <KpiCard label="Open POs"      value={openPOs}              sub="awaiting receipt"       icon={FaFileInvoice}   accent="border-l-amber-500" />
-            <KpiCard label="In-Transit"    value={inTransit}            sub="transfers dispatched"   icon={FaTruck}         accent="border-l-orange-500" />
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+            <KpiCard label="Stock Value"   value={formatMoney(totalValue)} sub="across all locations" icon={FaWarehouse}           accent="border-l-[#0B3B2E]" />
+            <KpiCard label="SKUs in Stock" value={skuCount}               sub="distinct products"     icon={FaBoxes}               accent="border-l-blue-500" />
+            <KpiCard label="Open POs"      value={openPOs}               sub="awaiting receipt"       icon={FaFileInvoice}         accent="border-l-amber-500" />
+            <KpiCard label="In-Transit"    value={inTransit}             sub="transfers dispatched"   icon={FaTruck}               accent="border-l-orange-500" />
+            <KpiCard label="Low Stock"     value={lowStockCount}         sub="below reorder level"    icon={FaExclamationTriangle} accent="border-l-red-500" />
           </div>
 
           {/* Quick links */}
@@ -114,9 +122,9 @@ const InventoryDashboard = () => {
                 key={path}
                 type="button"
                 onClick={() => navigate(path)}
-                className="flex items-center gap-2 border border-slate-200 bg-white px-3 py-3 text-left shadow-sm hover:border-[#1a5c3a] hover:bg-[#EDF5F1] transition-colors"
+                className="flex items-center gap-2 border border-slate-200 bg-white px-3 py-3 text-left shadow-sm hover:border-[#0B3B2E] hover:bg-[#EDF5F1] transition-colors"
               >
-                <Icon className="shrink-0 text-sm text-[#1a5c3a]" />
+                <Icon className="shrink-0 text-sm text-[#0B3B2E]" />
                 <span className="text-xs font-bold text-slate-700">{label}</span>
               </button>
             ))}
@@ -127,9 +135,9 @@ const InventoryDashboard = () => {
             <Section title="Recent Transfers">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50">
+                  <tr className="bg-[#0B3B2E]">
                     {["TRF #", "From", "To", "Status", "Date"].map((h) => (
-                      <th key={h} className="px-3 py-1.5 text-left text-[10px] font-extrabold uppercase tracking-wide text-slate-500">{h}</th>
+                      <th key={h} className="px-3 py-1.5 text-left text-[10px] font-extrabold uppercase tracking-wide text-white">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -138,7 +146,7 @@ const InventoryDashboard = () => {
                     <tr><td colSpan={5} className="px-3 py-8 text-center text-xs text-slate-400">No transfers yet</td></tr>
                   ) : recentTransfers.map((t) => (
                     <tr key={t._id} className="cursor-pointer border-b border-slate-50 hover:bg-slate-50" onClick={() => navigate("/inventory/transfers")}>
-                      <td className="px-3 py-1.5 font-mono font-bold text-[#1a5c3a]">{t.transferNumber || "—"}</td>
+                      <td className="px-3 py-1.5 font-mono font-bold text-[#0B3B2E]">{t.transferNumber || "—"}</td>
                       <td className="px-3 py-1.5 text-slate-700">{t.fromLocation?.name || "—"}</td>
                       <td className="px-3 py-1.5 text-slate-700">{t.toLocation?.name || "—"}</td>
                       <td className="px-3 py-1.5"><StatusPill status={t.status} /></td>
@@ -153,9 +161,9 @@ const InventoryDashboard = () => {
             <Section title="Recent Purchase Orders">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50">
+                  <tr className="bg-[#0B3B2E]">
                     {["PO #", "Supplier", "Total", "Status"].map((h) => (
-                      <th key={h} className="px-3 py-1.5 text-left text-[10px] font-extrabold uppercase tracking-wide text-slate-500">{h}</th>
+                      <th key={h} className="px-3 py-1.5 text-left text-[10px] font-extrabold uppercase tracking-wide text-white">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -164,7 +172,7 @@ const InventoryDashboard = () => {
                     <tr><td colSpan={4} className="px-3 py-8 text-center text-xs text-slate-400">No purchase orders yet</td></tr>
                   ) : recentPOs.map((po) => (
                     <tr key={po._id} className="cursor-pointer border-b border-slate-50 hover:bg-slate-50" onClick={() => navigate("/inventory/purchase-orders")}>
-                      <td className="px-3 py-1.5 font-mono font-bold text-[#1a5c3a]">{po.poNumber || "—"}</td>
+                      <td className="px-3 py-1.5 font-mono font-bold text-[#0B3B2E]">{po.poNumber || "—"}</td>
                       <td className="px-3 py-1.5 text-slate-700">{po.supplier?.name || "—"}</td>
                       <td className="px-3 py-1.5 font-bold text-slate-800">{formatMoney(po.totalAmount)}</td>
                       <td className="px-3 py-1.5"><StatusPill status={po.status} /></td>

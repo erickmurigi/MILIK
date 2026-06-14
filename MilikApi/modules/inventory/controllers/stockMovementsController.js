@@ -130,6 +130,46 @@ export const createManualEntry = async (req, res, next) => {
   }
 };
 
+// Low-stock alert: products where balance ≤ reorderLevel (and reorderLevel > 0)
+export const getLowStock = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+
+    const balances = await InvStockEntry.aggregate([
+      { $match: { business: new mongoose.Types.ObjectId(String(business)) } },
+      { $group: { _id: "$product", balance: { $sum: "$qty" } } },
+    ]);
+
+    if (!balances.length) return res.json({ success: true, data: [], total: 0 });
+
+    const productIds = balances.map((b) => b._id);
+    const products = await InvProduct.find({
+      _id: { $in: productIds },
+      business,
+      trackStock: true,
+      reorderLevel: { $gt: 0 },
+    })
+      .populate("category", "name")
+      .lean();
+
+    const balanceMap = new Map(balances.map((b) => [String(b._id), b.balance]));
+
+    const items = products
+      .map((p) => ({
+        product: p,
+        balance: balanceMap.get(String(p._id)) ?? 0,
+        reorderLevel: p.reorderLevel,
+        deficit: Math.max(0, p.reorderLevel - (balanceMap.get(String(p._id)) ?? 0)),
+      }))
+      .filter((item) => item.balance <= item.reorderLevel)
+      .sort((a, b) => a.balance - b.balance);
+
+    res.json({ success: true, data: items, total: items.length });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // Stock valuation: balance × cost per product per location
 export const stockValuation = async (req, res, next) => {
   try {

@@ -101,9 +101,16 @@ export const hasCompanyPermission = (
   if (explicit === true) return true;
 
   if (user?.adminAccess) return true;
-  if (explicit === false) return false;
 
   const moduleAccess = assignment?.moduleAccess || user?.moduleAccess || {};
+
+  // Full access at module level overrides any explicit false from unset granular permissions
+  if (moduleKey && !Array.isArray(moduleKey)) {
+    const accessText = String(moduleAccess?.[MODULE_ACCESS_MAP[moduleKey] || moduleKey] || '').toLowerCase();
+    if (accessText === 'full access') return true;
+  }
+
+  if (explicit === false) return false;
 
   // Accept moduleKey as string or string[].
   // String[]: user must have access through at least one of the listed modules (OR semantics).

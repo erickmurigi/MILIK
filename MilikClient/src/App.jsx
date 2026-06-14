@@ -185,6 +185,7 @@ const InvStockTransfers     = lazy(() => import("./pages/Inventory/InvStockTrans
 const InvStockMovements     = lazy(() => import("./pages/Inventory/InvStockMovements"));
 const InvStockAdjustments  = lazy(() => import("./pages/Inventory/InvStockAdjustments"));
 const InvStockValuation    = lazy(() => import("./pages/Inventory/InvStockValuation"));
+const InvLowStock          = lazy(() => import("./pages/Inventory/InvLowStock"));
 const InvTills              = lazy(() => import("./pages/Inventory/InvTills"));
 const POSTerminal           = lazy(() => import("./pages/Inventory/POSTerminal"));
 const POSSalesHistory       = lazy(() => import("./pages/Inventory/POSSalesHistory"));
@@ -635,6 +636,7 @@ function App() {
             <Route path="/inventory/stock-movements" element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-stock"     moduleKey="inventory"><InvStockMovements /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/inventory/adjustments"    element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-stock"     moduleKey="inventory"><InvStockAdjustments /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/inventory/valuation"      element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-reports"   moduleKey="inventory"><InvStockValuation /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/inventory/low-stock"      element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-reports"   moduleKey="inventory"><InvLowStock /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/pos/terminal"              element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="pos-terminal"  moduleKey="inventory"><POSTerminal /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/pos/sales"                 element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="pos-sales"           moduleKey="inventory"><POSSalesHistory /></PermissionRoute></CompanyModuleRoute>} />
             <Route path="/inventory/tills"           element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-tills"           moduleKey="inventory"><InvTills /></PermissionRoute></CompanyModuleRoute>} />

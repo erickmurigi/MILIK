@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaCashRegister, FaPlus, FaRedoAlt, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -6,12 +6,12 @@ import InventoryShell from "./InventoryShell";
 import { inventoryApi } from "../../services/inventoryApi";
 
 const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
-const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#1a5c3a] focus:outline-none";
+const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 
 const Modal = ({ title, onClose, children, footer }) => (
   <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
     <div className="w-full max-w-md border border-slate-200 bg-white shadow-2xl">
-      <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#1a5c3a] px-4 py-3 text-white">
+      <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
         <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
         <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
       </div>
@@ -110,10 +110,10 @@ const InvTills = () => {
       title="Tills & Registers"
       action={
         <>
-          <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
+          <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
             <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
           </button>
-          <button type="button" onClick={openCreate} className="inline-flex h-8 items-center gap-1.5 bg-[#1a5c3a] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#154d30]">
+          <button type="button" onClick={openCreate} className="inline-flex h-8 items-center gap-1.5 bg-[#FF8C00] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#E67E00]">
             <FaPlus /> New Till
           </button>
         </>
@@ -123,14 +123,14 @@ const InvTills = () => {
         {/* Filter strip */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-slate-200 bg-[#EDF5F1] px-3 py-2">
           <span className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
-            Total: <strong className="text-[#1a5c3a]">{tills.length}</strong>
+            Total: <strong className="text-[#0B3B2E]">{tills.length}</strong>
             {activeCount > 0 && <> &nbsp;·&nbsp; Active: <strong className="text-emerald-600">{activeCount}</strong></>}
           </span>
           <div className="ml-auto">
             <select
               value={locFilter}
               onChange={(e) => setLocFilter(e.target.value)}
-              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#1a5c3a]"
+              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#0B3B2E]"
             >
               <option value="">All Locations</option>
               {locations.map((l) => <option key={l._id} value={l._id}>{l.name}</option>)}
@@ -139,7 +139,7 @@ const InvTills = () => {
         </div>
 
         <table className="w-full min-w-[600px] text-xs">
-          <thead className="bg-[#1a5c3a] text-white">
+          <thead className="bg-[#0B3B2E] text-white">
             <tr>
               <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Till Name</th>
               <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Location</th>
@@ -163,7 +163,7 @@ const InvTills = () => {
               <tr key={till._id} className="border-b border-slate-100 hover:bg-slate-50">
                 <td className="px-3 py-2 font-bold text-slate-800">
                   <span className="flex items-center gap-1.5">
-                    <FaCashRegister className="shrink-0 text-[#1a5c3a] text-[10px]" />
+                    <FaCashRegister className="shrink-0 text-[#0B3B2E] text-[10px]" />
                     {till.name}
                   </span>
                 </td>
@@ -196,7 +196,7 @@ const InvTills = () => {
           footer={
             <>
               <button type="button" onClick={closeModal} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
-              <button type="submit" form="till-form" disabled={saving} className="bg-[#1a5c3a] px-4 py-2 text-xs font-bold text-white hover:bg-[#154d30] disabled:opacity-50">
+              <button type="submit" form="till-form" disabled={saving} className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50">
                 {saving ? "Saving…" : editing ? "Save Changes" : "Create Till"}
               </button>
             </>

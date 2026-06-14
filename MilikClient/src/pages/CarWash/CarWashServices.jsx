@@ -334,10 +334,10 @@ const CarWashServices = () => {
                             <div className="max-w-sm">
                               <p className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">Vehicle Type Pricing</p>
                               <table className="w-full border border-slate-200 text-xs">
-                                <thead className="bg-slate-100">
+                                <thead className="bg-[#0B3B2E]">
                                   <tr>
-                                    <th className="px-3 py-1.5 text-left font-bold text-slate-600">Vehicle Type</th>
-                                    <th className="px-3 py-1.5 text-right font-bold text-slate-600">Price</th>
+                                    <th className="px-3 py-1.5 text-left text-[10px] font-black uppercase tracking-widest text-white">Vehicle Type</th>
+                                    <th className="px-3 py-1.5 text-right text-[10px] font-black uppercase tracking-widest text-white">Price</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -524,10 +524,10 @@ const CarWashServices = () => {
                 </p>
               ) : (
                 <table className="w-full text-xs">
-                  <thead className="border-b border-slate-200 bg-slate-50">
+                  <thead className="bg-[#0B3B2E]">
                     <tr>
-                      <th className="px-3 py-2 text-left font-bold uppercase tracking-wide text-slate-500">Vehicle Type</th>
-                      <th className="px-3 py-2 text-right font-bold uppercase tracking-wide text-slate-500">Price (KES)</th>
+                      <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Vehicle Type</th>
+                      <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-white">Price (KES)</th>
                       <th className="w-8 px-2 py-2" />
                     </tr>
                   </thead>

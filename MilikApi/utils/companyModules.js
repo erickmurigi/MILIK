@@ -123,7 +123,7 @@ const MODULE_REGISTRY = {
     label: 'MILIK Car Wash',
     category: 'expansion',
     defaultEnabled: false,
-    userAccessKey: null,
+    userAccessKey: 'carwash',
   },
 };
 

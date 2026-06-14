@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaCashRegister, FaRedoAlt, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -75,7 +75,7 @@ const POSSessions = () => {
     <InventoryShell
       title="POS Sessions"
       action={
-        <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
+        <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
           <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
         </button>
       }
@@ -84,7 +84,7 @@ const POSSessions = () => {
         {/* Filter strip */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-slate-200 bg-[#EDF5F1] px-3 py-2">
           <div className="flex items-baseline gap-4 text-[11px] font-bold uppercase tracking-wide text-slate-600">
-            <span>Total: <strong className="text-[#1a5c3a]">{total}</strong></span>
+            <span>Total: <strong className="text-[#0B3B2E]">{total}</strong></span>
             {openCount > 0 && <span>Open: <strong className="text-emerald-600">{openCount}</strong></span>}
             {closedCount > 0 && <span>Closed: <strong className="text-slate-500">{closedCount}</strong></span>}
           </div>
@@ -92,7 +92,7 @@ const POSSessions = () => {
             <select
               value={locationFilter}
               onChange={(e) => { setLocationFilter(e.target.value); setPage(1); }}
-              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#1a5c3a]"
+              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#0B3B2E]"
             >
               <option value="">All Locations</option>
               {locations.map((l) => <option key={l._id} value={l._id}>{l.name}</option>)}
@@ -100,7 +100,7 @@ const POSSessions = () => {
             <select
               value={statusFilter}
               onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#1a5c3a]"
+              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#0B3B2E]"
             >
               <option value="">All Statuses</option>
               <option value="open">Open</option>
@@ -110,7 +110,7 @@ const POSSessions = () => {
         </div>
 
         <table className="w-full min-w-[1050px] text-xs">
-          <thead className="bg-[#1a5c3a] text-white">
+          <thead className="bg-[#0B3B2E] text-white">
             <tr>
               <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Session #</th>
               <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Location</th>
@@ -139,7 +139,7 @@ const POSSessions = () => {
               </tr>
             ) : sessions.map((s) => (
               <tr key={s._id} className="border-b border-slate-100 hover:bg-slate-50">
-                <td className="px-3 py-2 font-mono font-bold text-[#1a5c3a]">{s.sessionNumber || "—"}</td>
+                <td className="px-3 py-2 font-mono font-bold text-[#0B3B2E]">{s.sessionNumber || "—"}</td>
                 <td className="px-3 py-2 text-slate-700">{s.location?.name || "—"}</td>
                 <td className="px-3 py-2 font-semibold text-slate-700">{s.till?.name || "—"}</td>
                 <td className="px-3 py-2 text-slate-600">{s.openedBy?.name || "—"}</td>
@@ -185,9 +185,9 @@ const POSSessions = () => {
 
         {total > 30 && (
           <div className="flex items-center justify-between border-t border-slate-100 px-3 py-2">
-            <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#1a5c3a]">← Previous</button>
+            <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#0B3B2E]">← Previous</button>
             <span className="text-xs text-slate-500">Page {page} of {Math.ceil(total / 30)}</span>
-            <button type="button" onClick={() => setPage((p) => p + 1)} disabled={sessions.length < 30} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#1a5c3a]">Next →</button>
+            <button type="button" onClick={() => setPage((p) => p + 1)} disabled={sessions.length < 30} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#0B3B2E]">Next →</button>
           </div>
         )}
       </div>
@@ -215,7 +215,7 @@ const POSSessions = () => {
                   value={closingFloat}
                   onChange={(e) => setClosingFloat(e.target.value)}
                   placeholder="0.00"
-                  className="h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#1a5c3a] focus:outline-none"
+                  className="h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
                 />
               </div>
             </div>

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+﻿import React, { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaEdit, FaMapMarkerAlt, FaPlus, FaRedoAlt, FaSearch, FaTimes, FaWarehouse } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -9,7 +9,7 @@ const TYPES = ["warehouse", "retail", "counter"];
 
 const emptyForm = () => ({ name: "", code: "", type: "retail", address: "", phone: "", isDefault: false });
 
-const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#1a5c3a] focus:outline-none";
+const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 
 const TYPE_STYLES = {
@@ -33,7 +33,7 @@ const StatusBadge = ({ active }) => (
 const Modal = ({ title, onClose, children, footer }) => (
   <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
     <div className="w-full max-w-lg border border-slate-200 bg-white shadow-2xl">
-      <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#1a5c3a] px-4 py-3 text-white">
+      <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
         <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
         <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10 hover:text-white">
           <FaTimes />
@@ -109,10 +109,10 @@ const InvLocations = () => {
       title="Locations"
       action={
         <>
-          <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
+          <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
             <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
           </button>
-          <button type="button" onClick={openAdd} className="inline-flex h-8 items-center gap-1.5 bg-[#1a5c3a] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#154d30]">
+          <button type="button" onClick={openAdd} className="inline-flex h-8 items-center gap-1.5 bg-[#FF8C00] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#E67E00]">
             <FaPlus /> New Location
           </button>
         </>
@@ -122,10 +122,10 @@ const InvLocations = () => {
         {/* Summary + search strip */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-slate-200 bg-[#EDF5F1] px-3 py-2">
           <span className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
-            Total: <strong className="text-[#1a5c3a]">{locations.length}</strong>
+            Total: <strong className="text-[#0B3B2E]">{locations.length}</strong>
           </span>
           <span className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
-            Active: <strong className="text-[#1a5c3a]">{activeCount}</strong>
+            Active: <strong className="text-[#0B3B2E]">{activeCount}</strong>
           </span>
           <div className="ml-auto flex items-center gap-1.5 border border-slate-300 bg-white px-2 py-1 text-xs">
             <FaSearch className="text-slate-400 text-[10px]" />
@@ -139,7 +139,7 @@ const InvLocations = () => {
         </div>
 
         <table className="w-full min-w-[700px] text-xs">
-          <thead className="bg-[#1a5c3a] text-white">
+          <thead className="bg-[#0B3B2E] text-white">
             <tr>
               <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Name</th>
               <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Code</th>
@@ -170,7 +170,7 @@ const InvLocations = () => {
               <tr key={loc._id} className="border-b border-slate-100 hover:bg-slate-50">
                 <td className="px-3 py-2">
                   <span className="flex items-center gap-1.5 font-extrabold text-slate-900">
-                    <FaMapMarkerAlt className="shrink-0 text-[#1a5c3a]" /> {loc.name}
+                    <FaMapMarkerAlt className="shrink-0 text-[#0B3B2E]" /> {loc.name}
                   </span>
                   {loc.isDefault && (
                     <span className="mt-0.5 inline-flex border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold uppercase text-emerald-700">Default</span>
@@ -188,7 +188,7 @@ const InvLocations = () => {
                 <td className="px-3 py-2"><StatusBadge active={loc.active !== false} /></td>
                 <td className="px-3 py-2 text-right">
                   <div className="flex items-center justify-end gap-1">
-                    <button type="button" onClick={() => openEdit(loc)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
+                    <button type="button" onClick={() => openEdit(loc)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
                       <FaEdit /> Edit
                     </button>
                     <button type="button" onClick={() => handleToggleActive(loc)} className={`inline-flex items-center gap-1 border px-2 py-0.5 text-[11px] font-bold ${loc.active !== false ? "border-orange-200 bg-white text-orange-600 hover:bg-orange-50" : "border-emerald-200 bg-white text-emerald-600 hover:bg-emerald-50"}`}>
@@ -209,7 +209,7 @@ const InvLocations = () => {
           footer={
             <>
               <button type="button" onClick={closeModal} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
-              <button type="submit" form="location-form" disabled={saving} className="bg-[#1a5c3a] px-4 py-2 text-xs font-bold text-white hover:bg-[#154d30] disabled:opacity-50">
+              <button type="submit" form="location-form" disabled={saving} className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50">
                 {saving ? "Saving…" : "Save Location"}
               </button>
             </>
@@ -240,7 +240,7 @@ const InvLocations = () => {
             </div>
             <div className="flex items-end pb-1">
               <label className="flex cursor-pointer items-center gap-2 text-sm font-bold text-slate-700">
-                <input type="checkbox" checked={form.isDefault} onChange={(e) => setForm((f) => ({ ...f, isDefault: e.target.checked }))} className="accent-[#1a5c3a]" />
+                <input type="checkbox" checked={form.isDefault} onChange={(e) => setForm((f) => ({ ...f, isDefault: e.target.checked }))} className="accent-[#0B3B2E]" />
                 Set as default location
               </label>
             </div>

@@ -150,13 +150,13 @@ export default function CarWashOpeningBalances() {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[700px] text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50">
-                    <th className="w-[130px] px-3 py-2 text-left font-bold uppercase tracking-wide text-slate-500">Plate *</th>
-                    <th className="px-3 py-2 text-left font-bold uppercase tracking-wide text-slate-500">Customer Name</th>
-                    <th className="w-[120px] px-3 py-2 text-left font-bold uppercase tracking-wide text-slate-500">Phone</th>
-                    <th className="w-[110px] px-3 py-2 text-right font-bold uppercase tracking-wide text-slate-500">Amount (KES) *</th>
-                    <th className="w-[130px] px-3 py-2 text-left font-bold uppercase tracking-wide text-slate-500">Date</th>
-                    <th className="px-3 py-2 text-left font-bold uppercase tracking-wide text-slate-500">Notes</th>
+                  <tr className="bg-[#0B3B2E]">
+                    <th className="w-[130px] px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Plate *</th>
+                    <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Customer Name</th>
+                    <th className="w-[120px] px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Phone</th>
+                    <th className="w-[110px] px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-white">Amount (KES) *</th>
+                    <th className="w-[130px] px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Date</th>
+                    <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Notes</th>
                     <th className="w-8 px-2 py-2" />
                   </tr>
                 </thead>

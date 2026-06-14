@@ -443,24 +443,61 @@ router.put('/:id', verifyUser, async (req, res) => {
       authUser = await User.findById(req.user.id).select('company primaryCompany accessibleCompanies companyAssignments');
     }
 
-    const updatePayload = { ...req.body };
-    if (!hasRequiredUserFields({ ...existingUser.toObject(), ...updatePayload })) {
-      return res.status(400).json({ message: 'Surname, other names, email, phone number and profile are required' });
-    }
-    if (!isSystemAdmin(req.user) && hasSystemAccessPayload(updatePayload)) {
-      return res.status(403).json({ message: 'Only Milik Admin can grant system admin access' });
-    }
+    // Block edits on system admin accounts by non-system-admins
     if (!isSystemAdmin(req.user) && isSystemAdmin(existingUser)) {
       return res.status(403).json({ message: 'Normal company users cannot edit Milik/System Admin accounts' });
     }
-    if (updatePayload.password === '') delete updatePayload.password;
-    if (updatePayload.password) {
-      const salt = await bcrypt.genSalt(10);
-      updatePayload.password = await bcrypt.hash(updatePayload.password, salt);
+
+    // Whitelist the fields that are allowed to be updated — never spread req.body directly
+    const body = req.body || {};
+    const updatePayload = {
+      surname:       body.surname,
+      otherNames:    body.otherNames,
+      idNumber:      body.idNumber,
+      gender:        body.gender,
+      postalAddress: body.postalAddress,
+      phoneNumber:   body.phoneNumber,
+      email:         body.email,
+      profile:       body.profile,
+      // Privilege flags — strictly guarded by caller role
+      adminAccess:        isSystemAdmin(req.user)
+                            ? normalizeBoolean(body.adminAccess, existingUser.adminAccess)
+                            : existingUser.adminAccess,
+      setupAccess:        (isSystemAdmin(req.user) || req.user?.adminAccess)
+                            ? normalizeBoolean(body.setupAccess, existingUser.setupAccess)
+                            : existingUser.setupAccess,
+      companySetupAccess: (isSystemAdmin(req.user) || req.user?.adminAccess)
+                            ? normalizeBoolean(body.companySetupAccess, existingUser.companySetupAccess)
+                            : existingUser.companySetupAccess,
+      // superAdminAccess / isSystemAdmin / isSystemAuditUser are never touched here
+      // Company assignment fields (resolved below)
+      primaryCompany:      body.primaryCompany,
+      accessibleCompanies: body.accessibleCompanies,
+      companyAssignments:  body.companyAssignments,
+      moduleAccess:        body.moduleAccess,
+      permissions:         body.permissions,
+      rights:              body.rights,
+    };
+
+    // Remove undefined keys so Mongoose doesn't unset existing values
+    Object.keys(updatePayload).forEach((key) => updatePayload[key] === undefined && delete updatePayload[key]);
+
+    if (!hasRequiredUserFields({ ...existingUser.toObject(), ...updatePayload })) {
+      return res.status(400).json({ message: 'Surname, other names, email, phone number and profile are required' });
     }
 
+    let hashedPassword = null;
+    if (body.password && body.password !== '') {
+      if (String(body.password).length < 8) {
+        return res.status(400).json({ message: 'Password must be at least 8 characters' });
+      }
+      const salt = await bcrypt.genSalt(10);
+      hashedPassword = await bcrypt.hash(body.password, salt);
+    }
+    if (hashedPassword) updatePayload.password = hashedPassword;
+
     const companyIds = buildCompanyIds({ ...existingUser.toObject(), ...updatePayload });
-    const primaryCompany = String(updatePayload.primaryCompany || updatePayload.company || existingUser.primaryCompany || existingUser.company || companyIds[0] || '');
+    const primaryCompany = String(updatePayload.primaryCompany || existingUser.primaryCompany || existingUser.company || companyIds[0] || '');
 
     if (!isSystemAdmin(req.user)) {
       const currentCompanyId = String(authUser?.company || '');
@@ -485,7 +522,7 @@ router.put('/:id', verifyUser, async (req, res) => {
       updatePayload.permissions || existingUser.permissions || {}
     );
 
-    const user = await User.findByIdAndUpdate(req.params.id, updatePayload, { new: true, runValidators: true });
+    const user = await User.findByIdAndUpdate(req.params.id, { $set: updatePayload }, { new: true, runValidators: true });
     await logAuditEvent({
       req,
       company: primaryCompany,

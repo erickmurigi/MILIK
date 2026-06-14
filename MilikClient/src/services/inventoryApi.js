@@ -34,6 +34,7 @@ export const inventoryApi = {
   listMovements:    (p = {}) => adminRequests.get("/inventory/stock-movements", { params: p }).then(unwrap),
   getBalance:       (p)      => adminRequests.get("/inventory/stock-movements/balance", { params: p }).then(unwrap),
   getValuation:     (p = {}) => adminRequests.get("/inventory/stock-movements/valuation", { params: p }).then(unwrap),
+  getLowStock:      (p = {}) => adminRequests.get("/inventory/stock-movements/low-stock", { params: p }).then(unwrap),
   createManualEntry:(b)      => adminRequests.post("/inventory/stock-movements", b).then(unwrap),
 
   // Stock transfers

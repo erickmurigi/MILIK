@@ -913,14 +913,14 @@ const CarWashAddJob = () => {
               {/* Desktop table */}
               <div className="hidden sm:block overflow-x-auto">
                 <table className="w-full min-w-[700px] text-xs">
-                  <thead className="border-b border-slate-200 bg-slate-50">
+                  <thead className="bg-[#0B3B2E]">
                     <tr>
-                      <th className="px-3 py-2 text-left font-bold uppercase tracking-wide text-slate-500">Service</th>
-                      <th className="px-3 py-2 text-left font-bold uppercase tracking-wide text-slate-500">Name *</th>
-                      {jobType === "vehicle" && <th className="px-3 py-2 text-left font-bold uppercase tracking-wide text-slate-500">Vehicle Type</th>}
-                      <th className="px-3 py-2 text-right font-bold uppercase tracking-wide text-slate-500">Price (KES) *</th>
-                      <th className="px-3 py-2 text-left font-bold uppercase tracking-wide text-slate-500">
-                        Attendants <span className="normal-case font-normal text-slate-400">(select who handles this)</span>
+                      <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Service</th>
+                      <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Name *</th>
+                      {jobType === "vehicle" && <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Vehicle Type</th>}
+                      <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-white">Price (KES) *</th>
+                      <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">
+                        Attendants <span className="normal-case font-normal text-white/60">(select who handles this)</span>
                       </th>
                       <th className="w-8 px-2 py-2" />
                     </tr>

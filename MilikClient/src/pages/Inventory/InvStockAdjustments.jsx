@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaArrowDown, FaArrowUp, FaClipboardCheck, FaPlus, FaRedoAlt, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -31,7 +31,7 @@ const ADJ_TYPES = {
 const MANUAL_TYPE_CSV = Object.keys(ADJ_TYPES).join(",");
 
 const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
-const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#1a5c3a] focus:outline-none";
+const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 
 const TypePill = ({ type }) => {
   const info = ADJ_TYPES[type] || { label: type, color: "border-slate-200 bg-slate-50 text-slate-600" };
@@ -120,10 +120,10 @@ const InvStockAdjustments = () => {
       title="Stock Adjustments"
       action={
         <>
-          <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
+          <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
             <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
           </button>
-          <button type="button" onClick={() => setShowModal(true)} className="inline-flex h-8 items-center gap-1.5 bg-[#1a5c3a] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#154d30]">
+          <button type="button" onClick={() => setShowModal(true)} className="inline-flex h-8 items-center gap-1.5 bg-[#FF8C00] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#E67E00]">
             <FaPlus /> New Adjustment
           </button>
         </>
@@ -133,16 +133,16 @@ const InvStockAdjustments = () => {
         {/* Filter strip */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-slate-200 bg-[#EDF5F1] px-3 py-2">
           <span className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
-            Adjustments: <strong className="text-[#1a5c3a]">{total}</strong>
+            Adjustments: <strong className="text-[#0B3B2E]">{total}</strong>
           </span>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <select value={locFilter} onChange={(e) => { setLocFilter(e.target.value); setPage(1); }}
-              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#1a5c3a]">
+              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#0B3B2E]">
               <option value="">All Locations</option>
               {locations.map((l) => <option key={l._id} value={l._id}>{l.name}</option>)}
             </select>
             <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
-              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#1a5c3a]">
+              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#0B3B2E]">
               <option value="">All Types</option>
               {Object.entries(ADJ_TYPES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
             </select>
@@ -150,7 +150,7 @@ const InvStockAdjustments = () => {
         </div>
 
         <table className="w-full min-w-[850px] text-xs">
-          <thead className="bg-[#1a5c3a] text-white">
+          <thead className="bg-[#0B3B2E] text-white">
             <tr>
               <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Date</th>
               <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Product</th>
@@ -203,9 +203,9 @@ const InvStockAdjustments = () => {
 
         {total > 50 && (
           <div className="flex items-center justify-between border-t border-slate-100 px-3 py-2">
-            <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#1a5c3a]">← Previous</button>
+            <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#0B3B2E]">← Previous</button>
             <span className="text-xs text-slate-500">Page {page} of {Math.ceil(total / 50)}</span>
-            <button type="button" onClick={() => setPage((p) => p + 1)} disabled={entries.length < 50} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#1a5c3a]">Next →</button>
+            <button type="button" onClick={() => setPage((p) => p + 1)} disabled={entries.length < 50} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#0B3B2E]">Next →</button>
           </div>
         )}
       </div>
@@ -213,7 +213,7 @@ const InvStockAdjustments = () => {
       {showModal && (
         <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
           <div className="w-full max-w-md border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#1a5c3a] px-4 py-3 text-white">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
               <h2 className="text-sm font-extrabold uppercase tracking-wide">New Stock Adjustment</h2>
               <button type="button" onClick={closeModal} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
             </div>
@@ -244,7 +244,7 @@ const InvStockAdjustments = () => {
                   ) : (
                     <span className="text-slate-700">
                       Current balance:{" "}
-                      <strong className="text-[#1a5c3a]">
+                      <strong className="text-[#0B3B2E]">
                         {balance ?? 0} {selectedProduct?.unitOfMeasure || "units"}
                       </strong>
                     </span>
@@ -303,7 +303,7 @@ const InvStockAdjustments = () => {
 
             <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
               <button type="button" onClick={closeModal} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
-              <button type="submit" form="adj-form" disabled={saving} className="bg-[#1a5c3a] px-4 py-2 text-xs font-bold text-white hover:bg-[#154d30] disabled:opacity-50">
+              <button type="submit" form="adj-form" disabled={saving} className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50">
                 {saving ? "Posting…" : "Post Adjustment"}
               </button>
             </div>

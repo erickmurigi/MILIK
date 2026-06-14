@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaEdit, FaPlus, FaRedoAlt, FaSearch, FaTimes, FaTruck } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -7,7 +7,7 @@ import { inventoryApi } from "../../services/inventoryApi";
 
 const emptyForm = () => ({ name: "", contactName: "", phone: "", email: "", kraPin: "", address: "", notes: "" });
 
-const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#1a5c3a] focus:outline-none";
+const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 
 const StatusBadge = ({ active }) => (
@@ -19,7 +19,7 @@ const StatusBadge = ({ active }) => (
 const Modal = ({ title, onClose, children, footer }) => (
   <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
     <div className="w-full max-w-lg border border-slate-200 bg-white shadow-2xl">
-      <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#1a5c3a] px-4 py-3 text-white">
+      <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
         <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
         <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10 hover:text-white">
           <FaTimes />
@@ -87,10 +87,10 @@ const InvSuppliers = () => {
       title="Suppliers"
       action={
         <>
-          <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
+          <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
             <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
           </button>
-          <button type="button" onClick={openAdd} className="inline-flex h-8 items-center gap-1.5 bg-[#1a5c3a] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#154d30]">
+          <button type="button" onClick={openAdd} className="inline-flex h-8 items-center gap-1.5 bg-[#FF8C00] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#E67E00]">
             <FaPlus /> New Supplier
           </button>
         </>
@@ -100,10 +100,10 @@ const InvSuppliers = () => {
         {/* Summary + search strip */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-slate-200 bg-[#EDF5F1] px-3 py-2">
           <span className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
-            Total: <strong className="text-[#1a5c3a]">{total}</strong>
+            Total: <strong className="text-[#0B3B2E]">{total}</strong>
           </span>
           <span className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
-            Active: <strong className="text-[#1a5c3a]">{activeCount}</strong>
+            Active: <strong className="text-[#0B3B2E]">{activeCount}</strong>
           </span>
           <div className="ml-auto flex items-center gap-1.5 border border-slate-300 bg-white px-2 py-1 text-xs">
             <FaSearch className="text-slate-400 text-[10px]" />
@@ -117,7 +117,7 @@ const InvSuppliers = () => {
         </div>
 
         <table className="w-full min-w-[700px] text-xs">
-          <thead className="bg-[#1a5c3a] text-white">
+          <thead className="bg-[#0B3B2E] text-white">
             <tr>
               <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Name</th>
               <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Contact</th>
@@ -147,7 +147,7 @@ const InvSuppliers = () => {
               <tr key={s._id} className="border-b border-slate-100 hover:bg-slate-50">
                 <td className="px-3 py-2">
                   <span className="flex items-center gap-1.5 font-extrabold text-slate-900">
-                    <FaTruck className="shrink-0 text-[#1a5c3a]" /> {s.name}
+                    <FaTruck className="shrink-0 text-[#0B3B2E]" /> {s.name}
                   </span>
                 </td>
                 <td className="px-3 py-2 text-slate-600">{s.contactName || "—"}</td>
@@ -156,7 +156,7 @@ const InvSuppliers = () => {
                 <td className="px-3 py-2 font-mono text-slate-600">{s.kraPin || "—"}</td>
                 <td className="px-3 py-2"><StatusBadge active={s.active} /></td>
                 <td className="px-3 py-2 text-right">
-                  <button type="button" onClick={() => openEdit(s)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
+                  <button type="button" onClick={() => openEdit(s)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
                     <FaEdit /> Edit
                   </button>
                 </td>
@@ -173,7 +173,7 @@ const InvSuppliers = () => {
           footer={
             <>
               <button type="button" onClick={closeModal} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
-              <button type="submit" form="supplier-form" disabled={saving} className="bg-[#1a5c3a] px-4 py-2 text-xs font-bold text-white hover:bg-[#154d30] disabled:opacity-50">
+              <button type="submit" form="supplier-form" disabled={saving} className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50">
                 {saving ? "Saving…" : "Save Supplier"}
               </button>
             </>
@@ -206,7 +206,7 @@ const InvSuppliers = () => {
             </div>
             <div className="md:col-span-2">
               <label className={labelClass}>Notes</label>
-              <textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} rows={2} className="w-full border border-slate-300 px-2 py-1.5 text-sm text-slate-800 outline-none focus:border-[#1a5c3a] resize-none" />
+              <textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} rows={2} className="w-full border border-slate-300 px-2 py-1.5 text-sm text-slate-800 outline-none focus:border-[#0B3B2E] resize-none" />
             </div>
           </form>
         </Modal>

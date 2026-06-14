@@ -411,6 +411,44 @@ const formatDateTime = (value) => {
   }).format(date);
 };
 
+const logStatusBadge = (status) => {
+  if (status === "sent") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (status === "failed") return "border-red-200 bg-red-50 text-red-700";
+  return "border-slate-200 bg-slate-50 text-slate-600";
+};
+
+const PaginationBar = ({ page, totalPages, total, pageSize, onPage, label }) => {
+  const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
+  const pages = [];
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i++) pages.push(i);
+  } else if (page <= 4) {
+    pages.push(1, 2, 3, 4, 5, "…", totalPages);
+  } else if (page >= totalPages - 3) {
+    pages.push(1, "…", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages);
+  } else {
+    pages.push(1, "…", page - 1, page, page + 1, "…", totalPages);
+  }
+  return (
+    <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/80 px-3 py-2">
+      <span className="text-[11px] text-slate-500">{total === 0 ? `No ${label}` : `${from}–${to} of ${total} ${label}`}</span>
+      <div className="flex items-center gap-1">
+        <button disabled={page <= 1} onClick={() => onPage(1)} className="h-6 w-6 rounded border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-30">«</button>
+        <button disabled={page <= 1} onClick={() => onPage(page - 1)} className="h-6 w-6 rounded border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-30">‹</button>
+        {pages.map((p, i) =>
+          p === "…" ? (
+            <span key={`e${i}`} className="px-1 text-[11px] text-slate-400">…</span>
+          ) : (
+            <button key={p} onClick={() => onPage(p)} className={`h-6 min-w-[24px] rounded border px-1 text-[11px] font-bold transition ${p === page ? "border-[#0B3B2E] bg-[#0B3B2E] text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>{p}</button>
+          )
+        )}
+        <button disabled={page >= totalPages} onClick={() => onPage(page + 1)} className="h-6 w-6 rounded border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-30">›</button>
+        <button disabled={page >= totalPages} onClick={() => onPage(totalPages)} className="h-6 w-6 rounded border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-30">»</button>
+      </div>
+    </div>
+  );
+};
 
 const buildEmailStatus = (config = {}) => {
   const senderName = String(config.senderName || "").trim();
@@ -2107,22 +2145,22 @@ export default function CompanySetupPage() {
 
           <div>
             <label className="text-xs font-bold text-slate-700">Logo URL</label>
-            <Input value={company.logo} onChange={(e) => setCompany({ ...company, logo: e.target.value })} placeholder="https://.../logo.png" />
+            <Input value={company.logo} onChange={(e) => handleCompanyFieldChange("logo", e.target.value)} placeholder="https://.../logo.png" />
           </div>
 
           <div>
             <label className="text-xs font-bold text-slate-700">Slogan</label>
-            <Input value={company.slogan} onChange={(e) => setCompany({ ...company, slogan: e.target.value })} placeholder="Reliable property management" />
+            <Input value={company.slogan} onChange={(e) => handleCompanyFieldChange("slogan", e.target.value)} placeholder="Reliable property management" />
           </div>
 
           <div>
             <label className="text-xs font-bold text-slate-700">Contact Email</label>
-            <Input type="email" value={company.email} onChange={(e) => setCompany({ ...company, email: e.target.value })} placeholder="info@company.com" />
+            <Input type="email" value={company.email} onChange={(e) => handleCompanyFieldChange("email", e.target.value)} placeholder="info@company.com" />
           </div>
 
           <div>
             <label className="text-xs font-bold text-slate-700">Phone Number</label>
-            <Input value={company.phoneNo} onChange={(e) => setCompany({ ...company, phoneNo: e.target.value })} placeholder="0700 000 000" />
+            <Input value={company.phoneNo} onChange={(e) => handleCompanyFieldChange("phoneNo", e.target.value)} placeholder="0700 000 000" />
           </div>
         </div>
       </Card>
@@ -2132,35 +2170,35 @@ export default function CompanySetupPage() {
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="md:col-span-2">
               <label className="text-xs font-bold text-slate-700">Company Name</label>
-              <Input value={company.companyName} onChange={(e) => setCompany({ ...company, companyName: e.target.value })} placeholder="Milik Property Management" />
+              <Input value={company.companyName} onChange={(e) => handleCompanyFieldChange("companyName", e.target.value)} placeholder="Milik Property Management" />
             </div>
             <div>
               <label className="text-xs font-bold text-slate-700">Registration No</label>
-              <Input value={company.registrationNo} onChange={(e) => setCompany({ ...company, registrationNo: e.target.value })} placeholder="PVT-001" />
+              <Input value={company.registrationNo} onChange={(e) => handleCompanyFieldChange("registrationNo", e.target.value)} placeholder="PVT-001" />
             </div>
             <div>
               <label className="text-xs font-bold text-slate-700">Tax PIN</label>
-              <Input value={company.taxPIN} onChange={(e) => setCompany({ ...company, taxPIN: e.target.value })} placeholder="A123456789X" />
+              <Input value={company.taxPIN} onChange={(e) => handleCompanyFieldChange("taxPIN", e.target.value)} placeholder="A123456789X" />
             </div>
             <div>
               <label className="text-xs font-bold text-slate-700">Tax Exempt Code</label>
-              <Input value={company.taxExemptCode} onChange={(e) => setCompany({ ...company, taxExemptCode: e.target.value })} placeholder="Optional" />
+              <Input value={company.taxExemptCode} onChange={(e) => handleCompanyFieldChange("taxExemptCode", e.target.value)} placeholder="Optional" />
             </div>
             <div>
               <label className="text-xs font-bold text-slate-700">Country</label>
-              <Input value={company.country} onChange={(e) => setCompany({ ...company, country: e.target.value })} placeholder="Kenya" />
+              <Input value={company.country} onChange={(e) => handleCompanyFieldChange("country", e.target.value)} placeholder="Kenya" />
             </div>
             <div>
               <label className="text-xs font-bold text-slate-700">Town / City</label>
-              <Input value={company.town} onChange={(e) => setCompany({ ...company, town: e.target.value })} placeholder="Nairobi" />
+              <Input value={company.town} onChange={(e) => handleCompanyFieldChange("town", e.target.value)} placeholder="Nairobi" />
             </div>
             <div className="md:col-span-2">
               <label className="text-xs font-bold text-slate-700">Postal Address</label>
-              <Input value={company.postalAddress} onChange={(e) => setCompany({ ...company, postalAddress: e.target.value })} placeholder="P.O. Box 12345 - 00100" />
+              <Input value={company.postalAddress} onChange={(e) => handleCompanyFieldChange("postalAddress", e.target.value)} placeholder="P.O. Box 12345 - 00100" />
             </div>
             <div className="md:col-span-2">
               <label className="text-xs font-bold text-slate-700">Road / Street</label>
-              <Input value={company.roadStreet} onChange={(e) => setCompany({ ...company, roadStreet: e.target.value })} placeholder="Westlands Road" />
+              <Input value={company.roadStreet} onChange={(e) => handleCompanyFieldChange("roadStreet", e.target.value)} placeholder="Westlands Road" />
             </div>
           </div>
         </Card>
@@ -2169,7 +2207,7 @@ export default function CompanySetupPage() {
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div>
               <label className="text-xs font-bold text-slate-700">Currency</label>
-              <Select value={company.baseCurrency} onChange={(e) => setCompany({ ...company, baseCurrency: e.target.value })}>
+              <Select value={company.baseCurrency} onChange={(e) => handleCompanyFieldChange("baseCurrency", e.target.value)}>
                 <option value="KES">KES</option>
                 <option value="USD">USD</option>
                 <option value="UGX">UGX</option>
@@ -2178,7 +2216,7 @@ export default function CompanySetupPage() {
             </div>
             <div>
               <label className="text-xs font-bold text-slate-700">Tax Regime</label>
-              <Select value={company.taxRegime} onChange={(e) => setCompany({ ...company, taxRegime: e.target.value })}>
+              <Select value={company.taxRegime} onChange={(e) => handleCompanyFieldChange("taxRegime", e.target.value)}>
                 <option value="VAT">VAT</option>
                 <option value="No Tax">No Tax</option>
                 <option value="GST">GST</option>
@@ -2186,7 +2224,7 @@ export default function CompanySetupPage() {
             </div>
             <div>
               <label className="text-xs font-bold text-slate-700">Fiscal Start Month</label>
-              <Select value={company.fiscalStartMonth} onChange={(e) => setCompany({ ...company, fiscalStartMonth: e.target.value })}>
+              <Select value={company.fiscalStartMonth} onChange={(e) => handleCompanyFieldChange("fiscalStartMonth", e.target.value)}>
                 {months.map((month) => (
                   <option key={month} value={month}>
                     {month}
@@ -2199,17 +2237,12 @@ export default function CompanySetupPage() {
               <Input
                 type="number"
                 value={company.fiscalStartYear}
-                onChange={(e) =>
-                  setCompany({
-                    ...company,
-                    fiscalStartYear: Number(e.target.value) || new Date().getFullYear(),
-                  })
-                }
+                onChange={(e) => handleCompanyFieldChange("fiscalStartYear", Number(e.target.value) || new Date().getFullYear())}
               />
             </div>
             <div>
               <label className="text-xs font-bold text-slate-700">Operation Period Type</label>
-              <Select value={company.operationPeriodType} onChange={(e) => setCompany({ ...company, operationPeriodType: e.target.value })}>
+              <Select value={company.operationPeriodType} onChange={(e) => handleCompanyFieldChange("operationPeriodType", e.target.value)}>
                 <option value="Monthly">Monthly</option>
                 <option value="Quarterly">Quarterly</option>
                 <option value="Semi Annual">Semi Annual</option>
@@ -2495,12 +2528,6 @@ export default function CompanySetupPage() {
     const emailLogsStart = filteredEmailLogs.length === 0 ? 0 : (emailLogsSafePage - 1) * EMAIL_LOGS_PAGE_SIZE;
     const emailLogsEnd = emailLogsStart + EMAIL_LOGS_PAGE_SIZE;
     const emailLogsPaged = filteredEmailLogs.slice(emailLogsStart, emailLogsEnd);
-
-    const logStatusBadge = (status) => {
-      if (status === "sent") return "border-emerald-200 bg-emerald-50 text-emerald-700";
-      if (status === "failed") return "border-red-200 bg-red-50 text-red-700";
-      return "border-slate-200 bg-slate-50 text-slate-600";
-    };
 
     return (
       <div className="space-y-3">
@@ -3045,12 +3072,6 @@ export default function CompanySetupPage() {
     const smsLogsEnd = smsLogsStart + SMS_LOGS_PAGE_SIZE;
     const smsLogsPaged = filteredSmsLogs.slice(smsLogsStart, smsLogsEnd);
 
-    const logStatusBadge = (status) => {
-      if (status === "sent") return "border-emerald-200 bg-emerald-50 text-emerald-700";
-      if (status === "failed") return "border-red-200 bg-red-50 text-red-700";
-      return "border-slate-200 bg-slate-50 text-slate-600";
-    };
-
     return (
       <div className="space-y-3">
         {/* Sub-tab bar */}
@@ -3217,39 +3238,6 @@ export default function CompanySetupPage() {
     const sesTotalPages = Math.max(1, Math.ceil(userSessions.length / SESSIONS_PAGE_SIZE));
     const sesPage = Math.min(sessionsPage, sesTotalPages);
     const sesSlice = userSessions.slice((sesPage - 1) * SESSIONS_PAGE_SIZE, sesPage * SESSIONS_PAGE_SIZE);
-
-    const PaginationBar = ({ page, totalPages, total, pageSize, onPage, label }) => {
-      const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
-      const to = Math.min(page * pageSize, total);
-      const pages = [];
-      if (totalPages <= 7) {
-        for (let i = 1; i <= totalPages; i++) pages.push(i);
-      } else if (page <= 4) {
-        pages.push(1, 2, 3, 4, 5, "…", totalPages);
-      } else if (page >= totalPages - 3) {
-        pages.push(1, "…", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages);
-      } else {
-        pages.push(1, "…", page - 1, page, page + 1, "…", totalPages);
-      }
-      return (
-        <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/80 px-3 py-2">
-          <span className="text-[11px] text-slate-500">{total === 0 ? `No ${label}` : `${from}–${to} of ${total} ${label}`}</span>
-          <div className="flex items-center gap-1">
-            <button disabled={page <= 1} onClick={() => onPage(1)} className="h-6 w-6 rounded border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-30">«</button>
-            <button disabled={page <= 1} onClick={() => onPage(page - 1)} className="h-6 w-6 rounded border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-30">‹</button>
-            {pages.map((p, i) =>
-              p === "…" ? (
-                <span key={`e${i}`} className="px-1 text-[11px] text-slate-400">…</span>
-              ) : (
-                <button key={p} onClick={() => onPage(p)} className={`h-6 min-w-[24px] rounded border px-1 text-[11px] font-bold transition ${p === page ? "border-[#0B3B2E] bg-[#0B3B2E] text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>{p}</button>
-              )
-            )}
-            <button disabled={page >= totalPages} onClick={() => onPage(page + 1)} className="h-6 w-6 rounded border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-30">›</button>
-            <button disabled={page >= totalPages} onClick={() => onPage(totalPages)} className="h-6 w-6 rounded border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-30">»</button>
-          </div>
-        </div>
-      );
-    };
 
     return (
       <div className="flex flex-col gap-2">

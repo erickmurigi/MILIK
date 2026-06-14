@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+﻿import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FaBoxes, FaRedoAlt } from "react-icons/fa";
 import InventoryShell from "./InventoryShell";
@@ -42,7 +42,7 @@ const InvStockValuation = () => {
     <InventoryShell
       title="Stock Valuation"
       action={
-        <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
+        <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
           <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
         </button>
       }
@@ -51,12 +51,12 @@ const InvStockValuation = () => {
         {/* Filter strip */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-slate-200 bg-[#EDF5F1] px-3 py-2">
           <div className="flex items-baseline gap-4 text-[11px] font-bold uppercase tracking-wide text-slate-600">
-            <span>SKUs on Hand: <strong className="text-[#1a5c3a]">{rows.length}</strong></span>
-            <span>Stock Value: <strong className="text-[#1a5c3a]">{formatMoney(grandTotal)}</strong></span>
+            <span>SKUs on Hand: <strong className="text-[#0B3B2E]">{rows.length}</strong></span>
+            <span>Stock Value: <strong className="text-[#0B3B2E]">{formatMoney(grandTotal)}</strong></span>
           </div>
           <div className="ml-auto">
             <select value={locFilter} onChange={(e) => setLocFilter(e.target.value)}
-              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#1a5c3a]">
+              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#0B3B2E]">
               <option value="">All Locations</option>
               {locations.map((l) => <option key={l._id} value={l._id}>{l.name}</option>)}
             </select>
@@ -64,7 +64,7 @@ const InvStockValuation = () => {
         </div>
 
         <table className="w-full min-w-[700px] text-xs">
-          <thead className="bg-[#1a5c3a] text-white">
+          <thead className="bg-[#0B3B2E] text-white">
             <tr>
               <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Product</th>
               <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">SKU</th>
@@ -105,7 +105,7 @@ const InvStockValuation = () => {
                     <td className="px-3 py-2 text-slate-500">{row.product?.unitOfMeasure || "—"}</td>
                     <td className="px-3 py-2 text-right font-bold text-slate-800">{row.balance}</td>
                     <td className="px-3 py-2 text-right text-slate-600">{formatMoney(row.unitCost)}</td>
-                    <td className="px-3 py-2 text-right font-extrabold text-[#1a5c3a]">{formatMoney(row.totalValue)}</td>
+                    <td className="px-3 py-2 text-right font-extrabold text-[#0B3B2E]">{formatMoney(row.totalValue)}</td>
                   </tr>
                 ))}
               </React.Fragment>
@@ -113,11 +113,11 @@ const InvStockValuation = () => {
           </tbody>
           {rows.length > 0 && !loading && (
             <tfoot>
-              <tr className="border-t-2 border-[#1a5c3a] bg-[#EDF5F1]">
-                <td colSpan={5} className="px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-[#1a5c3a]">
+              <tr className="border-t-2 border-[#0B3B2E] bg-[#EDF5F1]">
+                <td colSpan={5} className="px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-[#0B3B2E]">
                   Grand Total
                 </td>
-                <td className="px-3 py-2 text-right text-sm font-extrabold text-[#1a5c3a]">
+                <td className="px-3 py-2 text-right text-sm font-extrabold text-[#0B3B2E]">
                   {formatMoney(grandTotal)}
                 </td>
               </tr>

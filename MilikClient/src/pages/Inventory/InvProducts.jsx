@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useMemo, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FaBarcode, FaBoxOpen, FaEdit, FaPlus, FaRedoAlt, FaSearch, FaTimes } from "react-icons/fa";
+import { FaArrowDown, FaArrowUp, FaBarcode, FaBoxOpen, FaChartLine, FaEdit, FaPlus, FaRedoAlt, FaSearch, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import InventoryShell from "./InventoryShell";
 import { inventoryApi, formatMoney } from "../../services/inventoryApi";
@@ -15,12 +15,12 @@ const emptyForm = () => ({
   reorderLevel: "0", description: "",
 });
 
-const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#1a5c3a] focus:outline-none";
+const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 
 const SectionHead = ({ children }) => (
   <div className="col-span-2 border-b border-slate-100 pb-1 pt-1">
-    <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#1a5c3a]">{children}</span>
+    <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#0B3B2E]">{children}</span>
   </div>
 );
 
@@ -30,20 +30,111 @@ const StatusBadge = ({ active }) => (
   </span>
 );
 
-const Modal = ({ title, onClose, children, footer }) => (
+const TYPE_LABELS = {
+  purchase: "Purchase", sale: "Sale", return: "Return",
+  transfer_out: "Transfer Out", transfer_in: "Transfer In",
+  adjustment: "Adjustment", writeoff: "Write-off", opening: "Opening",
+};
+
+const Modal = ({ title, onClose, children, footer, wide }) => (
   <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
-    <div className="w-full max-w-xl border border-slate-200 bg-white shadow-2xl">
-      <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#1a5c3a] px-4 py-3 text-white">
+    <div className={`w-full border border-slate-200 bg-white shadow-2xl ${wide ? "max-w-4xl" : "max-w-xl"}`}>
+      <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
         <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
         <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10 hover:text-white">
           <FaTimes />
         </button>
       </div>
-      <div className="max-h-[75vh] overflow-y-auto p-4">{children}</div>
-      <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{footer}</div>
+      <div className="max-h-[78vh] overflow-y-auto p-4">{children}</div>
+      {footer && <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{footer}</div>}
     </div>
   </div>
 );
+
+const StockCardModal = ({ product, onClose }) => {
+  const { data: rawMovements = [], isLoading } = useQuery({
+    queryKey: ["inv-stock-card", product._id],
+    queryFn: async () => {
+      const res = await inventoryApi.listMovements({ product: product._id, limit: 500 });
+      return Array.isArray(res) ? res : (res?.data ?? []);
+    },
+    staleTime: 30_000,
+  });
+
+  const { rows, totalIn, totalOut, closingBalance } = useMemo(() => {
+    const asc = [...rawMovements].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    let running = 0, totalIn = 0, totalOut = 0;
+    const enriched = asc.map((e) => {
+      running += Number(e.qty);
+      if (Number(e.qty) > 0) totalIn += Number(e.qty);
+      else totalOut += Math.abs(Number(e.qty));
+      return { ...e, runningBalance: running };
+    });
+    return { rows: enriched.reverse(), totalIn, totalOut, closingBalance: running };
+  }, [rawMovements]);
+
+  return (
+    <Modal title={`Stock Card — ${product.name}`} onClose={onClose} wide>
+      {/* Summary bar */}
+      <div className="mb-3 grid grid-cols-3 gap-2 text-center">
+        <div className="border border-emerald-200 bg-emerald-50 px-3 py-2">
+          <div className="text-[10px] font-extrabold uppercase tracking-wide text-emerald-700">Total In</div>
+          <div className="text-xl font-extrabold text-emerald-700">{totalIn} <span className="text-xs font-normal">{product.unitOfMeasure}</span></div>
+        </div>
+        <div className="border border-red-200 bg-red-50 px-3 py-2">
+          <div className="text-[10px] font-extrabold uppercase tracking-wide text-red-700">Total Out</div>
+          <div className="text-xl font-extrabold text-red-700">{totalOut} <span className="text-xs font-normal">{product.unitOfMeasure}</span></div>
+        </div>
+        <div className="border border-[#0B3B2E] bg-[#EDF5F1] px-3 py-2">
+          <div className="text-[10px] font-extrabold uppercase tracking-wide text-[#0B3B2E]">Balance</div>
+          <div className={`text-xl font-extrabold ${closingBalance < 0 ? "text-red-600" : "text-[#0B3B2E]"}`}>{closingBalance} <span className="text-xs font-normal">{product.unitOfMeasure}</span></div>
+        </div>
+      </div>
+
+      <table className="w-full text-xs">
+        <thead className="bg-[#0B3B2E] text-white">
+          <tr>
+            <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Date</th>
+            <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Type</th>
+            <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Location</th>
+            <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Reference</th>
+            <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">In</th>
+            <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Out</th>
+            <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Balance</th>
+          </tr>
+        </thead>
+        <tbody>
+          {isLoading ? (
+            <tr><td colSpan={7} className="px-3 py-10 text-center text-slate-400">Loading movements…</td></tr>
+          ) : !rows.length ? (
+            <tr><td colSpan={7} className="px-3 py-10 text-center text-slate-400">No movements found for this product.</td></tr>
+          ) : rows.map((e) => {
+            const qty = Number(e.qty);
+            return (
+              <tr key={e._id} className="border-b border-slate-100 hover:bg-slate-50">
+                <td className="px-2 py-1.5 text-slate-500 whitespace-nowrap">
+                  {new Date(e.createdAt).toLocaleDateString("en-KE", { dateStyle: "short" })}
+                </td>
+                <td className="px-2 py-1.5 text-slate-700">{TYPE_LABELS[e.type] || e.type}</td>
+                <td className="px-2 py-1.5 text-slate-600">{e.location?.name || "—"}</td>
+                <td className="px-2 py-1.5 font-mono text-[10px] text-slate-400">{e.reference || "—"}</td>
+                <td className="px-2 py-1.5 text-right font-bold text-emerald-600">
+                  {qty > 0 ? <span className="inline-flex items-center gap-0.5"><FaArrowUp className="text-[9px]" />{qty}</span> : "—"}
+                </td>
+                <td className="px-2 py-1.5 text-right font-bold text-red-600">
+                  {qty < 0 ? <span className="inline-flex items-center gap-0.5"><FaArrowDown className="text-[9px]" />{Math.abs(qty)}</span> : "—"}
+                </td>
+                <td className={`px-2 py-1.5 text-right font-extrabold ${e.runningBalance < 0 ? "text-red-600" : "text-[#0B3B2E]"}`}>
+                  {e.runningBalance}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </Modal>
+  );
+};
 
 const InvProducts = () => {
   const queryClient = useQueryClient();
@@ -54,6 +145,7 @@ const InvProducts = () => {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
+  const [stockCardProduct, setStockCardProduct] = useState(null);
 
   const { data: categories = [] } = useQuery({
     queryKey: ['inv-categories-ref'],
@@ -145,10 +237,10 @@ const InvProducts = () => {
       title="Product Catalog"
       action={
         <>
-          <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
+          <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
             <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
           </button>
-          <button type="button" onClick={openAdd} className="inline-flex h-8 items-center gap-1.5 bg-[#1a5c3a] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#154d30]">
+          <button type="button" onClick={openAdd} className="inline-flex h-8 items-center gap-1.5 bg-[#FF8C00] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#E67E00]">
             <FaPlus /> New Product
           </button>
         </>
@@ -158,19 +250,19 @@ const InvProducts = () => {
         {/* Summary + filters strip */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-slate-200 bg-[#EDF5F1] px-3 py-2">
           <span className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
-            Total: <strong className="text-[#1a5c3a]">{total}</strong>
+            Total: <strong className="text-[#0B3B2E]">{total}</strong>
           </span>
           <span className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
-            Active: <strong className="text-[#1a5c3a]">{activeCount}</strong>
+            Active: <strong className="text-[#0B3B2E]">{activeCount}</strong>
           </span>
           <span className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
-            Tracked: <strong className="text-[#1a5c3a]">{trackedCount}</strong>
+            Tracked: <strong className="text-[#0B3B2E]">{trackedCount}</strong>
           </span>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <select
               value={categoryFilter}
               onChange={(e) => { setCategoryFilter(e.target.value); setPage(1); }}
-              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#1a5c3a]"
+              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#0B3B2E]"
             >
               <option value="">All Categories</option>
               {categories.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
@@ -188,7 +280,7 @@ const InvProducts = () => {
         </div>
 
         <table className="w-full min-w-[800px] text-xs">
-          <thead className="bg-[#1a5c3a] text-white">
+          <thead className="bg-[#0B3B2E] text-white">
             <tr>
               <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Name</th>
               <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">SKU</th>
@@ -220,7 +312,7 @@ const InvProducts = () => {
               <tr key={p._id} className="border-b border-slate-100 hover:bg-slate-50">
                 <td className="px-3 py-2">
                   <span className="flex items-center gap-1.5 font-extrabold text-slate-900">
-                    <FaBoxOpen className="shrink-0 text-[#1a5c3a]" /> {p.name}
+                    <FaBoxOpen className="shrink-0 text-[#0B3B2E]" /> {p.name}
                   </span>
                   {p.barcode && (
                     <span className="mt-0.5 flex items-center gap-1 font-mono text-[9px] text-slate-400">
@@ -248,7 +340,12 @@ const InvProducts = () => {
                 <td className="px-3 py-2"><StatusBadge active={p.active} /></td>
                 <td className="px-3 py-2 text-right">
                   <div className="flex items-center justify-end gap-1">
-                    <button type="button" onClick={() => openEdit(p)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
+                    {p.trackStock && (
+                      <button type="button" onClick={() => setStockCardProduct(p)} className="inline-flex items-center gap-1 border border-blue-200 bg-white px-2 py-0.5 text-[11px] font-bold text-blue-600 hover:bg-blue-50">
+                        <FaChartLine className="text-[9px]" /> Stock Card
+                      </button>
+                    )}
+                    <button type="button" onClick={() => openEdit(p)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
                       <FaEdit /> Edit
                     </button>
                     <button type="button" onClick={() => handleToggleActive(p)} className={`inline-flex items-center gap-1 border px-2 py-0.5 text-[11px] font-bold ${p.active !== false ? "border-orange-200 bg-white text-orange-600 hover:bg-orange-50" : "border-emerald-200 bg-white text-emerald-600 hover:bg-emerald-50"}`}>
@@ -263,9 +360,9 @@ const InvProducts = () => {
 
         {total > 50 && (
           <div className="flex items-center justify-between border-t border-slate-100 px-3 py-2">
-            <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#1a5c3a]">← Previous</button>
+            <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#0B3B2E]">← Previous</button>
             <span className="text-xs text-slate-500">Page {page} of {Math.ceil(total / 50)}</span>
-            <button type="button" onClick={() => setPage((p) => p + 1)} disabled={products.length < 50} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#1a5c3a]">Next →</button>
+            <button type="button" onClick={() => setPage((p) => p + 1)} disabled={products.length < 50} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#0B3B2E]">Next →</button>
           </div>
         )}
       </div>
@@ -277,7 +374,7 @@ const InvProducts = () => {
           footer={
             <>
               <button type="button" onClick={closeModal} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
-              <button type="submit" form="product-form" disabled={saving} className="bg-[#1a5c3a] px-4 py-2 text-xs font-bold text-white hover:bg-[#154d30] disabled:opacity-50">
+              <button type="submit" form="product-form" disabled={saving} className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50">
                 {saving ? "Saving…" : "Save Product"}
               </button>
             </>
@@ -348,7 +445,7 @@ const InvProducts = () => {
 
             <div className="col-span-2 flex flex-col gap-2">
               <label className="flex cursor-pointer items-center gap-2.5 rounded border border-slate-200 bg-slate-50 px-3 py-2.5">
-                <input type="checkbox" checked={form.trackStock} onChange={setCheck("trackStock")} className="accent-[#1a5c3a] h-4 w-4" />
+                <input type="checkbox" checked={form.trackStock} onChange={setCheck("trackStock")} className="accent-[#0B3B2E] h-4 w-4" />
                 <div>
                   <div className="text-sm font-bold text-slate-800">Track stock for this product</div>
                   <div className="text-[11px] text-slate-500">Quantities are monitored across locations. Disable for services or non-physical items.</div>
@@ -375,6 +472,10 @@ const InvProducts = () => {
             )}
           </form>
         </Modal>
+      )}
+
+      {stockCardProduct && (
+        <StockCardModal product={stockCardProduct} onClose={() => setStockCardProduct(null)} />
       )}
     </InventoryShell>
   );

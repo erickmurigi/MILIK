@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaCheck, FaExchangeAlt, FaPlus, FaRedoAlt, FaTimes, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -21,7 +21,7 @@ const StatusPill = ({ status }) => (
   </span>
 );
 
-const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#1a5c3a] focus:outline-none";
+const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 
 const emptyLine = () => ({ product: "", qtyDispatched: "", unitCost: "" });
@@ -29,7 +29,7 @@ const emptyLine = () => ({ product: "", qtyDispatched: "", unitCost: "" });
 const Modal = ({ title, onClose, children, footer, wide }) => (
   <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
     <div className={`w-full border border-slate-200 bg-white shadow-2xl ${wide ? "max-w-2xl" : "max-w-lg"}`}>
-      <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#1a5c3a] px-4 py-3 text-white">
+      <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
         <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
         <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10 hover:text-white"><FaTimes /></button>
       </div>
@@ -191,10 +191,10 @@ const InvStockTransfers = () => {
       title="Stock Transfers"
       action={
         <>
-          <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
+          <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
             <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
           </button>
-          <button type="button" onClick={openCreate} className="inline-flex h-8 items-center gap-1.5 bg-[#1a5c3a] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#154d30]">
+          <button type="button" onClick={openCreate} className="inline-flex h-8 items-center gap-1.5 bg-[#FF8C00] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#E67E00]">
             <FaPlus /> New Transfer
           </button>
         </>
@@ -204,7 +204,7 @@ const InvStockTransfers = () => {
         {/* Summary + filter strip */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-slate-200 bg-[#EDF5F1] px-3 py-2">
           <span className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
-            Total: <strong className="text-[#1a5c3a]">{total}</strong>
+            Total: <strong className="text-[#0B3B2E]">{total}</strong>
           </span>
           {inTransitCount > 0 && (
             <span className="text-[11px] font-bold uppercase tracking-wide text-blue-600">
@@ -213,7 +213,7 @@ const InvStockTransfers = () => {
           )}
           <div className="ml-auto">
             <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#1a5c3a]">
+              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#0B3B2E]">
               <option value="">All Statuses</option>
               {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
             </select>
@@ -221,7 +221,7 @@ const InvStockTransfers = () => {
         </div>
 
         <table className="w-full min-w-[700px] text-xs">
-          <thead className="bg-[#1a5c3a] text-white">
+          <thead className="bg-[#0B3B2E] text-white">
             <tr>
               <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">TRF #</th>
               <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">From</th>
@@ -250,7 +250,7 @@ const InvStockTransfers = () => {
             ) : transfers.map((t) => (
               <tr key={t._id} className="border-b border-slate-100 hover:bg-slate-50">
                 <td className="px-3 py-2">
-                  <span className="flex items-center gap-1.5 font-mono font-bold text-[#1a5c3a]">
+                  <span className="flex items-center gap-1.5 font-mono font-bold text-[#0B3B2E]">
                     <FaExchangeAlt className="shrink-0 text-[10px]" /> {t.transferNumber}
                   </span>
                 </td>
@@ -285,9 +285,9 @@ const InvStockTransfers = () => {
 
         {total > 30 && (
           <div className="flex items-center justify-between border-t border-slate-100 px-3 py-2">
-            <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#1a5c3a]">← Previous</button>
+            <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#0B3B2E]">← Previous</button>
             <span className="text-xs text-slate-500">Page {page} of {Math.ceil(total / 30)}</span>
-            <button type="button" onClick={() => setPage((p) => p + 1)} disabled={transfers.length < 30} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#1a5c3a]">Next →</button>
+            <button type="button" onClick={() => setPage((p) => p + 1)} disabled={transfers.length < 30} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#0B3B2E]">Next →</button>
           </div>
         )}
       </div>
@@ -297,7 +297,7 @@ const InvStockTransfers = () => {
         <Modal title="New Stock Transfer" onClose={() => setShowCreate(false)} wide footer={
           <>
             <button type="button" onClick={() => setShowCreate(false)} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
-            <button type="submit" form="create-transfer-form" disabled={creating} className="bg-[#1a5c3a] px-4 py-2 text-xs font-bold text-white hover:bg-[#154d30] disabled:opacity-50">
+            <button type="submit" form="create-transfer-form" disabled={creating} className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50">
               {creating ? "Creating…" : "Create Transfer"}
             </button>
           </>
@@ -327,18 +327,18 @@ const InvStockTransfers = () => {
             {/* Line items */}
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-[11px] font-extrabold uppercase tracking-widest text-[#1a5c3a]">Items to Transfer</span>
-                <button type="button" onClick={addLine} className="inline-flex items-center gap-1 border border-[#1a5c3a] px-2 py-0.5 text-[11px] font-bold text-[#1a5c3a] hover:bg-[#EDF5F1]">
+                <span className="text-[11px] font-extrabold uppercase tracking-widest text-[#0B3B2E]">Items to Transfer</span>
+                <button type="button" onClick={addLine} className="inline-flex items-center gap-1 border border-[#0B3B2E] px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#EDF5F1]">
                   <FaPlus className="text-[9px]" /> Add Item
                 </button>
               </div>
               <div className="border border-slate-200">
                 <table className="w-full text-xs">
-                  <thead className="bg-slate-50">
-                    <tr className="border-b border-slate-200">
-                      <th className="px-2 py-1.5 text-left text-[10px] font-extrabold uppercase tracking-wide text-slate-500">Product</th>
-                      <th className="px-2 py-1.5 text-right text-[10px] font-extrabold uppercase tracking-wide text-slate-500 w-24">Qty</th>
-                      <th className="px-2 py-1.5 text-right text-[10px] font-extrabold uppercase tracking-wide text-slate-500 w-28">Unit Cost</th>
+                  <thead className="bg-[#0B3B2E]">
+                    <tr>
+                      <th className="px-2 py-1.5 text-left text-[10px] font-extrabold uppercase tracking-wide text-white">Product</th>
+                      <th className="px-2 py-1.5 text-right text-[10px] font-extrabold uppercase tracking-wide text-white w-24">Qty</th>
+                      <th className="px-2 py-1.5 text-right text-[10px] font-extrabold uppercase tracking-wide text-white w-28">Unit Cost</th>
                       <th className="w-8" />
                     </tr>
                   </thead>
@@ -347,7 +347,7 @@ const InvStockTransfers = () => {
                       <tr key={idx} className="border-b border-slate-100">
                         <td className="px-2 py-1.5">
                           <select required value={line.product} onChange={(e) => setLineField(idx, "product", e.target.value)}
-                            className="h-8 w-full border border-slate-300 px-1.5 text-xs text-slate-800 outline-none focus:border-[#1a5c3a]">
+                            className="h-8 w-full border border-slate-300 px-1.5 text-xs text-slate-800 outline-none focus:border-[#0B3B2E]">
                             <option value="">— Select product —</option>
                             {products.map((p) => <option key={p._id} value={p._id}>{p.name}{p.sku ? ` · ${p.sku}` : ""}</option>)}
                           </select>
@@ -355,12 +355,12 @@ const InvStockTransfers = () => {
                         <td className="px-2 py-1.5">
                           <input type="number" required min="0.001" step="0.001" placeholder="0" value={line.qtyDispatched}
                             onChange={(e) => setLineField(idx, "qtyDispatched", e.target.value)}
-                            className="h-8 w-full border border-slate-300 px-1.5 text-right text-xs outline-none focus:border-[#1a5c3a]" />
+                            className="h-8 w-full border border-slate-300 px-1.5 text-right text-xs outline-none focus:border-[#0B3B2E]" />
                         </td>
                         <td className="px-2 py-1.5">
                           <input type="number" min="0" step="0.01" placeholder="0.00" value={line.unitCost}
                             onChange={(e) => setLineField(idx, "unitCost", e.target.value)}
-                            className="h-8 w-full border border-slate-300 px-1.5 text-right text-xs outline-none focus:border-[#1a5c3a]" />
+                            className="h-8 w-full border border-slate-300 px-1.5 text-right text-xs outline-none focus:border-[#0B3B2E]" />
                         </td>
                         <td className="px-2 py-1.5 text-center">
                           {createForm.lines.length > 1 && (
@@ -384,7 +384,7 @@ const InvStockTransfers = () => {
         <Modal title={`Receive Transfer — ${selected.transferNumber}`} onClose={() => setShowReceive(false)} wide footer={
           <>
             <button type="button" onClick={() => setShowReceive(false)} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
-            <button type="button" onClick={handleReceive} disabled={receiving} className="inline-flex items-center gap-1.5 bg-[#1a5c3a] px-4 py-2 text-xs font-bold text-white hover:bg-[#154d30] disabled:opacity-50">
+            <button type="button" onClick={handleReceive} disabled={receiving} className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50">
               <FaCheck className="text-[9px]" /> {receiving ? "Posting…" : "Confirm Receipt"}
             </button>
           </>
@@ -394,9 +394,9 @@ const InvStockTransfers = () => {
           </div>
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50">
+              <tr className="bg-[#0B3B2E]">
                 {["Product", "SKU", "Dispatched", "Received", "Pending", "Receiving Now"].map((h) => (
-                  <th key={h} className="px-2 py-1.5 text-left text-[10px] font-extrabold uppercase tracking-wide text-slate-500">{h}</th>
+                  <th key={h} className="px-2 py-1.5 text-left text-[10px] font-extrabold uppercase tracking-wide text-white">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -411,7 +411,7 @@ const InvStockTransfers = () => {
                   <td className="px-2 py-1.5">
                     <input type="number" min="0" max={line.pending} step="0.001" value={line.toReceive}
                       onChange={(e) => setReceiveLines((prev) => prev.map((l, i) => i === idx ? { ...l, toReceive: e.target.value } : l))}
-                      className="h-8 w-24 border border-slate-300 px-1.5 text-right text-xs outline-none focus:border-[#1a5c3a]" />
+                      className="h-8 w-24 border border-slate-300 px-1.5 text-right text-xs outline-none focus:border-[#0B3B2E]" />
                   </td>
                 </tr>
               ))}

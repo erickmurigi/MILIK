@@ -1152,6 +1152,8 @@ export const createCompany = async (req, res, next) => {
       POBOX,
       Street,
       City,
+      isActive: true,
+      accountStatus: 'Active',
     });
 
     const savedCompany = await newCompany.save();

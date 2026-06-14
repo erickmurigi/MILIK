@@ -607,7 +607,7 @@ const companySchema = new mongoose.Schema(
     ],
 
     // Status flags
-    isActive: { type: Boolean, default: false },
+    isActive: { type: Boolean, default: true },
     accountActive: { type: Boolean, default: true },
     accountStatus: { type: String, default: 'Active' },
     locked: { type: Boolean, default: false },

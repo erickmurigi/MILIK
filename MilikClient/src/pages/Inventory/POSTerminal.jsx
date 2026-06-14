@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+﻿import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
@@ -29,7 +29,7 @@ const ProductSearchRow = ({ product, onAdd }) => (
       <div className="text-[10px] text-slate-500">{product.sku || ""} · {product.unitOfMeasure || "Unit"}</div>
     </div>
     <div className="text-right shrink-0">
-      <div className="text-xs font-extrabold text-[#1a5c3a]">{formatMoney(product.sellingPrice)}</div>
+      <div className="text-xs font-extrabold text-[#0B3B2E]">{formatMoney(product.sellingPrice)}</div>
     </div>
   </button>
 );
@@ -38,12 +38,12 @@ const ProductCard = ({ product, onAdd }) => (
   <button
     type="button"
     onClick={() => onAdd(product)}
-    className="flex flex-col gap-1 border border-slate-200 bg-white p-2 text-left hover:border-[#1a5c3a] hover:bg-[#EDF5F1] transition-colors active:scale-95"
+    className="flex flex-col gap-1 border border-slate-200 bg-white p-2 text-left hover:border-[#0B3B2E] hover:bg-[#EDF5F1] transition-colors active:scale-95"
   >
     <div className="text-[11px] font-bold text-slate-800 leading-tight line-clamp-2">{product.name}</div>
     {product.sku && <div className="text-[9px] text-slate-400 font-mono">{product.sku}</div>}
     <div className="mt-auto flex items-end justify-between gap-1">
-      <span className="text-xs font-extrabold text-[#1a5c3a]">{formatMoney(product.sellingPrice)}</span>
+      <span className="text-xs font-extrabold text-[#0B3B2E]">{formatMoney(product.sellingPrice)}</span>
       {product.trackStock && (
         <span className="text-[9px] font-bold text-slate-400">{product.stockQty ?? ""}  {product.unitOfMeasure || ""}</span>
       )}
@@ -63,7 +63,7 @@ const CartLine = ({ line, onQtyChange, onRemove, onDiscountChange }) => {
             type="number" min="0" step="0.01"
             value={line.discount === 0 ? "" : line.discount}
             onChange={(e) => onDiscountChange(line._key, Number(e.target.value || 0))}
-            className="w-16 border border-slate-200 px-1 py-0.5 text-[10px] outline-none focus:border-[#1a5c3a]"
+            className="w-16 border border-slate-200 px-1 py-0.5 text-[10px] outline-none focus:border-[#0B3B2E]"
             placeholder="- Disc"
           />
         </div>
@@ -75,7 +75,7 @@ const CartLine = ({ line, onQtyChange, onRemove, onDiscountChange }) => {
         <input
           type="number" min="0.001" step="0.001" value={line.qty}
           onChange={(e) => onQtyChange(line._key, Number(e.target.value))}
-          className="w-12 border border-slate-200 text-center text-xs py-0.5 outline-none focus:border-[#1a5c3a]"
+          className="w-12 border border-slate-200 text-center text-xs py-0.5 outline-none focus:border-[#0B3B2E]"
         />
         <button onClick={() => onQtyChange(line._key, line.qty + 1)} className="flex h-5 w-5 items-center justify-center border border-slate-200 hover:bg-slate-100">
           <FaPlus className="text-[9px]" />
@@ -94,7 +94,7 @@ const CartLine = ({ line, onQtyChange, onRemove, onDiscountChange }) => {
 const XReadRow = ({ label, value, neg, bold }) => (
   <div className={`flex justify-between py-0.5 text-[11px] ${bold ? "font-extrabold text-slate-900" : "text-slate-600"}`}>
     <span>{label}</span>
-    <span className={neg ? "text-red-600" : bold ? "text-[#1a5c3a]" : ""}>{neg ? "−" : ""}{formatMoney(value)}</span>
+    <span className={neg ? "text-red-600" : bold ? "text-[#0B3B2E]" : ""}>{neg ? "−" : ""}{formatMoney(value)}</span>
   </div>
 );
 
@@ -509,7 +509,7 @@ const POSTerminal = () => {
 
           {/* Search */}
           <div className="relative border-b border-slate-200 bg-white px-2 py-2">
-            <div className="flex items-center gap-2 border border-slate-300 bg-white px-2.5 py-1.5 focus-within:border-[#1a5c3a]">
+            <div className="flex items-center gap-2 border border-slate-300 bg-white px-2.5 py-1.5 focus-within:border-[#0B3B2E]">
               <FaSearch className="text-slate-400 text-xs shrink-0" />
               <input
                 ref={scanRef}
@@ -569,13 +569,13 @@ const POSTerminal = () => {
               <button onClick={clearCart} disabled={!cart.length} className="flex items-center gap-1 text-[11px] font-bold text-red-400 hover:text-red-600 disabled:opacity-30">
                 <FaTrash className="text-[9px]" /> Clear
               </button>
-              <span className="text-xl font-extrabold text-[#1a5c3a]">{formatMoney(grandTotal)}</span>
+              <span className="text-xl font-extrabold text-[#0B3B2E]">{formatMoney(grandTotal)}</span>
             </div>
             {/* Charge button — always prominent */}
             <button
               onClick={() => { if (cart.length) { setPayments([{ method: "cash", amount: String(grandTotal) }]); setAmountTendered(String(grandTotal)); setShowCheckout(true); } }}
               disabled={!cart.length}
-              className="w-full bg-[#1a5c3a] py-3 text-sm font-extrabold text-white hover:bg-[#154d30] disabled:bg-slate-200 disabled:text-slate-400 transition-colors"
+              className="w-full bg-[#0B3B2E] py-3 text-sm font-extrabold text-white hover:bg-[#0A3127] disabled:bg-slate-200 disabled:text-slate-400 transition-colors"
             >
               {cart.length ? `Charge — ${formatMoney(grandTotal)}` : "Add items to charge"}
             </button>
@@ -602,7 +602,7 @@ const POSTerminal = () => {
               {showReceipt && (
                 <div className="border-t border-emerald-200 bg-white px-3 py-2 text-[10px] text-slate-600">
                   <div className="mb-1 flex items-center justify-between">
-                    <span className="font-mono font-bold text-[#1a5c3a]">{lastReceipt.receiptNumber}</span>
+                    <span className="font-mono font-bold text-[#0B3B2E]">{lastReceipt.receiptNumber}</span>
                     <div className="flex gap-2">
                       <button className="flex items-center gap-1 border border-slate-200 px-2 py-0.5 text-[9px] font-bold text-slate-600 hover:bg-slate-50">
                         <FaPrint className="text-[8px]" /> Print
@@ -631,7 +631,7 @@ const POSTerminal = () => {
             <button
               type="button"
               onClick={() => setCatFilter("all")}
-              className={`shrink-0 border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors ${catFilter === "all" ? "border-[#1a5c3a] bg-[#1a5c3a] text-white" : "border-slate-200 text-slate-600 hover:border-[#1a5c3a] hover:text-[#1a5c3a]"}`}
+              className={`shrink-0 border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors ${catFilter === "all" ? "border-[#0B3B2E] bg-[#0B3B2E] text-white" : "border-slate-200 text-slate-600 hover:border-[#0B3B2E] hover:text-[#0B3B2E]"}`}
             >
               All
             </button>
@@ -640,7 +640,7 @@ const POSTerminal = () => {
                 key={cat._id}
                 type="button"
                 onClick={() => setCatFilter(cat._id)}
-                className={`shrink-0 border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors ${catFilter === cat._id ? "border-[#1a5c3a] bg-[#1a5c3a] text-white" : "border-slate-200 text-slate-600 hover:border-[#1a5c3a] hover:text-[#1a5c3a]"}`}
+                className={`shrink-0 border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors ${catFilter === cat._id ? "border-[#0B3B2E] bg-[#0B3B2E] text-white" : "border-slate-200 text-slate-600 hover:border-[#0B3B2E] hover:text-[#0B3B2E]"}`}
               >
                 {cat.name}
               </button>
@@ -656,7 +656,7 @@ const POSTerminal = () => {
                 <FaBarcode className="text-3xl" />
                 <p className="text-sm font-semibold">No products found</p>
                 {catFilter !== "all" && (
-                  <button type="button" onClick={() => setCatFilter("all")} className="text-xs text-[#1a5c3a] hover:underline">Clear category filter</button>
+                  <button type="button" onClick={() => setCatFilter("all")} className="text-xs text-[#0B3B2E] hover:underline">Clear category filter</button>
                 )}
               </div>
             ) : (
@@ -693,7 +693,7 @@ const POSTerminal = () => {
                 <input
                   type="number" min="0" step="0.01" autoFocus
                   value={closeFloat} onChange={(e) => setCloseFloat(e.target.value)} placeholder="0.00"
-                  className="h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#1a5c3a] focus:outline-none"
+                  className="h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
                 />
               </div>
               <div className="rounded border border-red-100 bg-red-50 px-3 py-2 text-[11px] text-red-700">
@@ -727,7 +727,7 @@ const POSTerminal = () => {
                 <input
                   type="number" min="0.01" step="0.01" autoFocus
                   value={cashAmount} onChange={(e) => setCashAmount(e.target.value)} placeholder="0.00"
-                  className="h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#1a5c3a] focus:outline-none"
+                  className="h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
                 />
               </div>
               <div>
@@ -735,7 +735,7 @@ const POSTerminal = () => {
                 <input
                   value={cashReason} onChange={(e) => setCashReason(e.target.value)}
                   placeholder={cashModalType === "cash_in" ? "e.g. Petty cash top-up" : "e.g. Supplier payment, banking"}
-                  className="h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#1a5c3a] focus:outline-none"
+                  className="h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
                 />
               </div>
             </div>
@@ -855,11 +855,11 @@ const POSTerminal = () => {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500">Customer Name</label>
-                  <input value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-[#1a5c3a]" />
+                  <input value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-[#0B3B2E]" />
                 </div>
                 <div>
                   <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500">Phone</label>
-                  <input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="w-full border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-[#1a5c3a]" />
+                  <input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="w-full border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-[#0B3B2E]" />
                 </div>
               </div>
 
@@ -867,16 +867,16 @@ const POSTerminal = () => {
               <div>
                 <div className="mb-1 flex items-center justify-between">
                   <label className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Payment</label>
-                  <button type="button" onClick={addPaymentLine} className="text-[10px] font-bold text-[#1a5c3a] hover:underline">+ Add Method</button>
+                  <button type="button" onClick={addPaymentLine} className="text-[10px] font-bold text-[#0B3B2E] hover:underline">+ Add Method</button>
                 </div>
                 {payments.map((p, idx) => (
                   <div key={idx} className="mb-1.5 flex items-center gap-2">
                     <select value={p.method} onChange={(e) => setPayLine(idx, "method", e.target.value)}
-                      className="border border-slate-200 px-1.5 py-1.5 text-xs outline-none focus:border-[#1a5c3a]">
+                      className="border border-slate-200 px-1.5 py-1.5 text-xs outline-none focus:border-[#0B3B2E]">
                       {METHODS.map((m) => <option key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>)}
                     </select>
                     <input type="number" min="0" step="0.01" value={p.amount} onChange={(e) => setPayLine(idx, "amount", e.target.value)}
-                      className="flex-1 border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-[#1a5c3a]" placeholder="Amount" />
+                      className="flex-1 border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-[#0B3B2E]" placeholder="Amount" />
                     {payments.length > 1 && (
                       <button onClick={() => removePaymentLine(idx)}><FaTimes className="text-red-400 text-xs" /></button>
                     )}
@@ -889,7 +889,7 @@ const POSTerminal = () => {
                 <div>
                   <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500">Amount Tendered</label>
                   <input type="number" min="0" step="0.01" value={amountTendered} onChange={(e) => setAmountTendered(e.target.value)}
-                    className="w-full border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-[#1a5c3a]" />
+                    className="w-full border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-[#0B3B2E]" />
                 </div>
                 <div>
                   <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500">Change</label>
@@ -905,13 +905,13 @@ const POSTerminal = () => {
 
               <div>
                 <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500">Notes</label>
-                <input value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-[#1a5c3a]" />
+                <input value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-[#0B3B2E]" />
               </div>
 
               <button
                 onClick={handleCheckout}
                 disabled={submitting || payTotal < grandTotal}
-                className="flex w-full items-center justify-center gap-2 bg-[#1a5c3a] py-3 text-sm font-extrabold text-white hover:bg-[#154d30] disabled:opacity-50"
+                className="flex w-full items-center justify-center gap-2 bg-[#0B3B2E] py-3 text-sm font-extrabold text-white hover:bg-[#0A3127] disabled:opacity-50"
               >
                 <FaCheck />
                 {submitting ? "Processing…" : `Complete Sale — ${formatMoney(grandTotal)}`}

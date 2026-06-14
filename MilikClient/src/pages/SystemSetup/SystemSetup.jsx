@@ -75,9 +75,13 @@ const normalizeText = (value) => String(value ?? "").trim().toLowerCase();
 const isCompanyActive = (company = {}) => {
   if (company?.locked) return false;
   const s = normalizeText(company?.accountStatus);
+  // Explicit inactive statuses always win
   if (["inactive", "disabled", "suspended", "archived"].includes(s)) return false;
+  // If accountStatus is set to something active-ish, trust it over the isActive flag
+  if (s && s !== "") return true;
+  // Fallback to isActive boolean only when accountStatus is absent
   if (typeof company?.isActive === "boolean") return company.isActive;
-  return s !== "inactive";
+  return true;
 };
 
 const getCompanyStatusLabel = (company = {}) => {
@@ -216,19 +220,20 @@ const StatusBadge = ({ label }) => (
   <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black ${getStatusTone(label)}`}>{label}</span>
 );
 
+const STAT_ACCENTS = {
+  emerald: { dot: "bg-[#0B3B2E]",   icon: "text-white", border: "border-slate-200", val: "text-[#0B3B2E]"  },
+  green:   { dot: "bg-emerald-500", icon: "text-white", border: "border-slate-200", val: "text-emerald-700" },
+  violet:  { dot: "bg-violet-500",  icon: "text-white", border: "border-slate-200", val: "text-violet-700"  },
+  orange:  { dot: "bg-[#FF8C00]",   icon: "text-white", border: "border-slate-200", val: "text-[#FF8C00]"   },
+  rose:    { dot: "bg-rose-500",    icon: "text-white", border: "border-rose-200",  val: "text-rose-700"    },
+};
+
 const StatCard = ({ label, value, icon: Icon, accent = "emerald", sub }) => {
-  const accents = {
-    emerald: { bg: "bg-emerald-50", icon: "text-emerald-700", border: "border-emerald-100", val: "text-slate-900" },
-    green:   { bg: "bg-green-50",   icon: "text-green-700",   border: "border-green-100",   val: "text-slate-900" },
-    violet:  { bg: "bg-violet-50",  icon: "text-violet-700",  border: "border-violet-100",  val: "text-slate-900" },
-    orange:  { bg: "bg-orange-50",  icon: "text-orange-700",  border: "border-orange-100",  val: "text-slate-900" },
-    rose:    { bg: "bg-rose-50",    icon: "text-rose-700",    border: "border-rose-100",    val: "text-rose-700"  },
-  };
-  const c = accents[accent] || accents.emerald;
+  const c = STAT_ACCENTS[accent] || STAT_ACCENTS.emerald;
   return (
     <div className={`flex items-center gap-3 rounded-xl border ${c.border} bg-white px-4 py-3 shadow-sm`}>
-      <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${c.bg} shrink-0`}>
-        <Icon className={`text-base ${c.icon}`} />
+      <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${c.dot} shrink-0`}>
+        <Icon className={`text-sm ${c.icon}`} />
       </div>
       <div>
         <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">{label}</div>
@@ -253,7 +258,7 @@ const Pagination = ({ page, totalPages, total, pageSize, onPage, onPageSize }) =
           <select
             value={pageSize}
             onChange={(e) => onPageSize(Number(e.target.value))}
-            className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition"
+            className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition"
           >
             {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
@@ -316,34 +321,52 @@ const ActionMenu = ({ items }) => {
 
 // ─── Overview Panel ────────────────────────────────────────────────────────────
 const OverviewPanel = ({ companies, users, companyReadiness, companyUserCounts, onAddCompany, onAddUser, onOpenCompanySetup, onOpenWorkspace }) => {
-  const activeCompanies = companies.filter((c) => isCompanyActive(c) && !c?.isDemoWorkspace);
-  const demoCompanies = companies.filter((c) => c?.isDemoWorkspace);
-  const attentionCompanies = companies.filter((c) => (companyReadiness.get(normalizeId(c))?.score || 0) < 80).slice(0, 6);
-  const recentCompanies = [...companies].sort((a, b) => new Date(b?.createdAt || 0) - new Date(a?.createdAt || 0)).slice(0, 6);
-  const recentUsers = [...users].sort((a, b) => new Date(b?.createdAt || 0) - new Date(a?.createdAt || 0)).slice(0, 6);
+  const { activeCount, demoCount, attentionCount, attentionQueue, recentCompanies } = useMemo(() => {
+    let activeCount = 0, demoCount = 0;
+    const needsAttention = [];
+    for (const c of companies) {
+      if (c?.isDemoWorkspace) demoCount++;
+      else if (isCompanyActive(c)) activeCount++;
+      if ((companyReadiness.get(normalizeId(c))?.score || 0) < 80) needsAttention.push(c);
+    }
+    return {
+      activeCount,
+      demoCount,
+      attentionCount: needsAttention.length,
+      attentionQueue: needsAttention.slice(0, 6),
+      recentCompanies: [...companies]
+        .sort((a, b) => new Date(b?.createdAt || 0) - new Date(a?.createdAt || 0))
+        .slice(0, 6),
+    };
+  }, [companies, companyReadiness]);
+
+  const recentUsers = useMemo(
+    () => [...users].sort((a, b) => new Date(b?.createdAt || 0) - new Date(a?.createdAt || 0)).slice(0, 6),
+    [users]
+  );
 
   return (
     <div className="p-4 space-y-4">
       <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
         <StatCard label="Companies" value={companies.length} icon={FaBuilding} accent="emerald" />
-        <StatCard label="Active" value={activeCompanies.length} icon={FaCheckCircle} accent="green" />
-        <StatCard label="Demo" value={demoCompanies.length} icon={FaStore} accent="violet" />
+        <StatCard label="Active" value={activeCount} icon={FaCheckCircle} accent="green" />
+        <StatCard label="Demo" value={demoCount} icon={FaStore} accent="violet" />
         <StatCard label="Users" value={users.length} icon={FaUsers} accent="orange" />
-        <StatCard label="Needs Attention" value={attentionCompanies.length} icon={FaExclamationTriangle} accent="rose" />
+        <StatCard label="Needs Attention" value={attentionCount} icon={FaExclamationTriangle} accent="rose" />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">
         {/* Attention Queue */}
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2.5 border-b border-slate-100 bg-rose-50/60 px-4 py-2.5">
-            <div className="h-2 w-2 rounded-full bg-rose-500 shrink-0" />
+          <div className="flex items-center gap-2.5 bg-[#0B3B2E] px-4 py-2.5">
+            <div className="h-2 w-2 rounded-full bg-rose-400 shrink-0" />
             <div>
-              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-rose-600">Attention Queue</div>
-              <div className="text-xs font-black text-slate-800 mt-0.5">Companies needing setup</div>
+              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B7C9C0]">Attention Queue</div>
+              <div className="text-xs font-black text-white mt-0.5">Companies needing setup</div>
             </div>
           </div>
           <div className="divide-y divide-slate-50">
-            {attentionCompanies.length ? attentionCompanies.map((company) => {
+            {attentionQueue.length ? attentionQueue.map((company) => {
               const readiness = companyReadiness.get(normalizeId(company));
               const userCount = companyUserCounts.get(normalizeId(company)) || 0;
               return (
@@ -355,7 +378,7 @@ const OverviewPanel = ({ companies, users, companyReadiness, companyUserCounts, 
                   </div>
                   <div className="text-right shrink-0">
                     <div className="text-[10px] text-slate-400">{userCount} user{userCount !== 1 ? "s" : ""}</div>
-                    <button onClick={() => onOpenCompanySetup(company)} className="text-[11px] font-bold text-emerald-700 hover:underline">Setup →</button>
+                    <button onClick={() => onOpenCompanySetup(company)} className="text-[11px] font-bold text-[#FF8C00] hover:underline">Setup →</button>
                   </div>
                 </div>
               );
@@ -370,11 +393,11 @@ const OverviewPanel = ({ companies, users, companyReadiness, companyUserCounts, 
 
         {/* Recent Onboarding */}
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2.5 border-b border-slate-100 bg-emerald-50/60 px-4 py-2.5">
-            <div className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+          <div className="flex items-center gap-2.5 bg-[#0B3B2E] px-4 py-2.5">
+            <div className="h-2 w-2 rounded-full bg-emerald-400 shrink-0" />
             <div>
-              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Recent Onboarding</div>
-              <div className="text-xs font-black text-slate-800 mt-0.5">Latest companies</div>
+              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B7C9C0]">Recent Onboarding</div>
+              <div className="text-xs font-black text-white mt-0.5">Latest companies</div>
             </div>
           </div>
           <div className="divide-y divide-slate-50">
@@ -387,7 +410,7 @@ const OverviewPanel = ({ companies, users, companyReadiness, companyUserCounts, 
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   <StatusBadge label={getCompanyStatusLabel(company)} />
-                  <button onClick={() => onOpenWorkspace(company)} className="text-[11px] font-bold text-emerald-700 hover:underline">Open →</button>
+                  <button onClick={() => onOpenWorkspace(company)} className="text-[11px] font-bold text-[#FF8C00] hover:underline">Open →</button>
                 </div>
               </div>
             ))}
@@ -396,11 +419,11 @@ const OverviewPanel = ({ companies, users, companyReadiness, companyUserCounts, 
 
         {/* Recent Users */}
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2.5 border-b border-slate-100 bg-orange-50/60 px-4 py-2.5">
-            <div className="h-2 w-2 rounded-full bg-orange-500 shrink-0" />
+          <div className="flex items-center gap-2.5 bg-[#0B3B2E] px-4 py-2.5">
+            <div className="h-2 w-2 rounded-full bg-[#FF8C00] shrink-0" />
             <div>
-              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-orange-600">Recent User Access</div>
-              <div className="text-xs font-black text-slate-800 mt-0.5">Latest users</div>
+              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B7C9C0]">Recent User Access</div>
+              <div className="text-xs font-black text-white mt-0.5">Latest users</div>
             </div>
           </div>
           <div className="divide-y divide-slate-50">
@@ -422,15 +445,16 @@ const OverviewPanel = ({ companies, users, companyReadiness, companyUserCounts, 
       </div>
 
       {/* Quick Actions */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        <div className="border-b border-slate-100 px-4 py-2.5">
-          <div className="text-xs font-black text-slate-800">Quick Actions</div>
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2.5">
+          <FaCog className="text-[10px] text-[#B7C9C0]" />
+          <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B7C9C0]">Quick Actions</div>
         </div>
         <div className="flex flex-wrap gap-3 p-4">
-          <button onClick={onAddCompany} className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#0A3127] transition shadow-sm">
+          <button onClick={onAddCompany} className="inline-flex items-center gap-2 rounded-xl border border-[#0B3B2E] bg-[#0B3B2E] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#0A3127] transition shadow-sm">
             <FaPlus /> Register Company
           </button>
-          <button onClick={onAddUser} className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-5 py-2.5 text-xs font-bold text-white hover:bg-orange-600 transition shadow-sm">
+          <button onClick={onAddUser} className="inline-flex items-center gap-2 rounded-xl bg-[#FF8C00] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#E67E00] transition shadow-sm">
             <FaUserPlus /> Add User
           </button>
         </div>
@@ -473,9 +497,9 @@ const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, onAddC
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[240px] flex-1">
             <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-slate-400" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search company, code, email, town..." className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-3 text-xs text-slate-800 focus:border-emerald-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-200 transition" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search company, code, email, town..." className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-3 text-xs text-slate-800 focus:border-[#0B3B2E] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20 transition" />
           </div>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 focus:border-emerald-400 focus:outline-none transition">
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition">
             <option value="all">All statuses</option>
             <option value="Active">Active</option>
             <option value="Inactive">Inactive</option>
@@ -483,7 +507,7 @@ const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, onAddC
             <option value="Demo">Demo</option>
             <option value="attention">Needs attention</option>
           </select>
-          <select value={modeFilter} onChange={(e) => setModeFilter(e.target.value)} className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 focus:border-emerald-400 focus:outline-none transition">
+          <select value={modeFilter} onChange={(e) => setModeFilter(e.target.value)} className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition">
             <option value="all">All operating models</option>
             <option value="property manager">Property Manager</option>
             <option value="self-managing landlord">Self-Managing Landlord</option>
@@ -491,7 +515,7 @@ const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, onAddC
           </select>
           <div className="ml-auto flex items-center gap-2">
             <span className="text-[11px] font-semibold text-slate-400">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
-            <button onClick={onAddCompany} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127] transition">
+            <button onClick={onAddCompany} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#E67E00] transition">
               <FaPlus className="text-[9px]" /> Register Company
             </button>
           </div>
@@ -502,7 +526,7 @@ const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, onAddC
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="min-w-full text-xs">
           <thead className="sticky top-0 z-10">
-            <tr className="bg-slate-900 text-white">
+            <tr className="bg-[#0B3B2E] text-white">
               <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Company</th>
               <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Mode</th>
               <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Status</th>
@@ -614,13 +638,13 @@ const UsersPanel = ({ users, companies, companyMap, selectedCompanyId, onSelecte
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[240px] flex-1">
             <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-slate-400" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search user, email, phone, role..." className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-3 text-xs text-slate-800 focus:border-emerald-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-200 transition" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search user, email, phone, role..." className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-3 text-xs text-slate-800 focus:border-[#0B3B2E] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20 transition" />
           </div>
-          <select value={selectedCompanyId} onChange={(e) => onSelectedCompanyIdChange(e.target.value)} className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 focus:border-emerald-400 focus:outline-none transition">
+          <select value={selectedCompanyId} onChange={(e) => onSelectedCompanyIdChange(e.target.value)} className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition">
             <option value="">All companies</option>
             {companies.map((c) => <option key={c._id} value={c._id}>{c.companyName}</option>)}
           </select>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 focus:border-emerald-400 focus:outline-none transition">
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition">
             <option value="all">All statuses</option>
             <option value="active">Active</option>
             <option value="locked">Locked</option>
@@ -628,7 +652,7 @@ const UsersPanel = ({ users, companies, companyMap, selectedCompanyId, onSelecte
           </select>
           <div className="ml-auto flex items-center gap-2">
             <span className="text-[11px] font-semibold text-slate-400">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
-            <button onClick={onAddUser} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-orange-500 px-3 text-[11px] font-bold text-white hover:bg-orange-600 transition">
+            <button onClick={onAddUser} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#E67E00] transition">
               <FaUserPlus className="text-[9px]" /> Add User
             </button>
           </div>
@@ -638,7 +662,7 @@ const UsersPanel = ({ users, companies, companyMap, selectedCompanyId, onSelecte
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="min-w-full text-xs">
           <thead className="sticky top-0 z-10">
-            <tr className="bg-slate-900 text-white">
+            <tr className="bg-[#0B3B2E] text-white">
               <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">User</th>
               <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Email</th>
               <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Role</th>
@@ -701,20 +725,21 @@ const TrialsPanel = ({ companies, companyReadiness, companyUserCounts, onOpenWor
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
-  const spotlightCompanies = useMemo(() => {
+  const { spotlightCompanies, demoCount, inactiveCount, attentionCount } = useMemo(() => {
     const demoCompanies = companies.filter((c) => c?.isDemoWorkspace);
     const inactiveCompanies = companies.filter((c) => !c?.isDemoWorkspace && !isCompanyActive(c));
     const attentionCompanies = companies.filter((c) => (companyReadiness.get(normalizeId(c))?.score || 0) < 80);
-    return [...new Map([...demoCompanies, ...inactiveCompanies, ...attentionCompanies].map((c) => [normalizeId(c), c])).values()];
+    return {
+      spotlightCompanies: [...new Map([...demoCompanies, ...inactiveCompanies, ...attentionCompanies].map((c) => [normalizeId(c), c])).values()],
+      demoCount: demoCompanies.length,
+      inactiveCount: inactiveCompanies.length,
+      attentionCount: attentionCompanies.length,
+    };
   }, [companies, companyReadiness]);
 
   const totalPages = Math.max(1, Math.ceil(spotlightCompanies.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const pageRows = spotlightCompanies.slice((safePage - 1) * pageSize, safePage * pageSize);
-
-  const demoCount = companies.filter((c) => c?.isDemoWorkspace).length;
-  const inactiveCount = companies.filter((c) => !c?.isDemoWorkspace && !isCompanyActive(c)).length;
-  const attentionCount = companies.filter((c) => (companyReadiness.get(normalizeId(c))?.score || 0) < 80).length;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -736,7 +761,7 @@ const TrialsPanel = ({ companies, companyReadiness, companyUserCounts, onOpenWor
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="min-w-full text-xs">
           <thead className="sticky top-0 z-10">
-            <tr className="bg-slate-900 text-white">
+            <tr className="bg-[#0B3B2E] text-white">
               <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Company</th>
               <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Type</th>
               <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Mode</th>
@@ -775,10 +800,10 @@ const TrialsPanel = ({ companies, companyReadiness, companyUserCounts, onOpenWor
                   <td className="px-4 py-3 text-[11px] text-slate-400 whitespace-nowrap">{formatDate(company.updatedAt || company.createdAt)}</td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-1.5">
-                      <button onClick={() => onOpenWorkspace(company)} className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 transition">
+                      <button onClick={() => onOpenWorkspace(company)} className="inline-flex items-center gap-1 rounded-lg border border-[#0B3B2E]/30 bg-[#EDF5F1] px-2.5 py-1 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#EDF5F1]/80 transition">
                         <FaEye className="text-[10px]" /> Workspace
                       </button>
-                      <button onClick={() => onOpenCompanySetup(company)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-700 hover:bg-slate-50 transition">
+                      <button onClick={() => onOpenCompanySetup(company)} className="inline-flex items-center gap-1 rounded-lg border border-[#FF8C00]/30 bg-orange-50 px-2.5 py-1 text-[11px] font-bold text-[#FF8C00] hover:bg-orange-100 transition">
                         <FaCog className="text-[10px]" /> Setup
                       </button>
                     </div>
@@ -837,9 +862,9 @@ const AuditPanel = ({ companies, users, companyMap }) => {
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[240px] flex-1">
             <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-slate-400" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search events..." className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-3 text-xs text-slate-800 focus:border-emerald-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-200 transition" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search events..." className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-3 text-xs text-slate-800 focus:border-[#0B3B2E] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20 transition" />
           </div>
-          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 focus:border-emerald-400 focus:outline-none transition">
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition">
             <option value="all">All types</option>
             <option value="Company">Company</option>
             <option value="User">User</option>
@@ -851,7 +876,7 @@ const AuditPanel = ({ companies, users, companyMap }) => {
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="min-w-full text-xs">
           <thead className="sticky top-0 z-10">
-            <tr className="bg-slate-900 text-white">
+            <tr className="bg-[#0B3B2E] text-white">
               <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Date</th>
               <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Event</th>
               <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Type</th>
@@ -950,7 +975,12 @@ export default function SystemSetupPage() {
   const handleOpenCompanySetup = (company) => handleSwitchAndNavigate(company, "/company-setup", `Opened ${company?.companyName || "company"} in Company Setup`);
   const handleOpenOperationalSettings = (company) => handleSwitchAndNavigate(company, "/settings", `Opened ${company?.companyName || "company"} in Operational Settings`);
   const handleOpenWorkspace = (company) => handleSwitchAndNavigate(company, "/dashboard", `Opened ${company?.companyName || "company"} workspace`);
-  const handleManageUsers = (company) => { const id = normalizeId(company); if (!id) return; handleCompanyFilterChange(id); goToSection("users", `?company=${id}`); };
+  const handleManageUsers = (company) => {
+    const id = normalizeId(company);
+    if (!id) return;
+    setSelectedCompanyId(id);
+    navigate(`/system-setup/users?company=${id}`);
+  };
   const handleEditCompany = (company) => { const id = normalizeId(company); if (!id) { toast.error("Unable to open this company record."); return; } navigate(`/add-company/${id}`, { state: { tabTitle: company?.companyName || "Company" } }); };
 
   const handleToggleCompanyLock = (company) => {

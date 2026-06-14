@@ -169,10 +169,14 @@ export const hasCompanyActionPermission = ({ user = {}, company = {}, moduleKey 
   if (explicit === true) return true;
 
   if (user?.adminAccess) return true;
-  if (explicit === false) return false;
 
   const scopedLevel = moduleKey ? String(getScopedModuleAccess(user, moduleKey, companyId) || "") : "";
   const lower = scopedLevel.toLowerCase();
+
+  // Full access at module level overrides any explicit false from unset granular permissions
+  if (moduleKey && lower === "full access") return true;
+
+  if (explicit === false) return false;
 
   if (!moduleKey) {
     return normalizedAction === "view" || normalizedAction === "export";

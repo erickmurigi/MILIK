@@ -290,15 +290,15 @@ const CarWashDashboard = () => {
           <div className="hidden overflow-x-auto xl:block">
             <table className="w-full min-w-[700px] text-xs">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50">
-                  <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Time</th>
-                  <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Job No.</th>
-                  <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Plate</th>
-                  <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Service</th>
-                  <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Staff</th>
-                  <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Status</th>
-                  <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-slate-500">Payment</th>
-                  <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide text-slate-500">Price</th>
+                <tr className="bg-[#0B3B2E]">
+                  <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Time</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Job No.</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Plate</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Service</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Staff</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Status</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Payment</th>
+                  <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-white">Price</th>
                 </tr>
               </thead>
               <tbody>

@@ -63,7 +63,8 @@
       "Bash(grep -v \"className\\\\|disabled=\\\\|//\\\\|title=\")",
       "Bash(grep -v \"//\\\\|className\\\\|<span\\\\|<div\\\\|label\\\\|title=\")",
       "Bash(xargs -I {} basename {})",
-      "Bash(xargs grep -l \"deposit\" -i)"
+      "Bash(xargs grep -l \"deposit\" -i)",
+      "Bash(xargs wc -l)"
     ]
   }
 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaReceipt, FaRedoAlt, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -19,7 +19,7 @@ const StatusPill = ({ status }) => (
 const Modal = ({ title, onClose, children, footer, accent }) => (
   <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
     <div className="w-full max-w-md border border-slate-200 bg-white shadow-2xl">
-      <div className={`flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 text-white ${accent || "bg-[#1a5c3a]"}`}>
+      <div className={`flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 text-white ${accent || "bg-[#0B3B2E]"}`}>
         <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
         <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10 hover:text-white"><FaTimes /></button>
       </div>
@@ -29,7 +29,7 @@ const Modal = ({ title, onClose, children, footer, accent }) => (
   </div>
 );
 
-const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#1a5c3a] focus:outline-none";
+const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 
 const POSSalesHistory = () => {
@@ -100,7 +100,7 @@ const POSSalesHistory = () => {
     <InventoryShell
       title="Sales History"
       action={
-        <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#1a5c3a] hover:bg-[#F1F6F3]">
+        <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
           <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
         </button>
       }
@@ -113,7 +113,7 @@ const POSSalesHistory = () => {
             {SUMMARY_COLS.map(([label, val, bold]) => (
               <div key={label} className="flex items-baseline gap-1">
                 <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}:</span>
-                <span className={bold ? "font-extrabold text-[#1a5c3a]" : "font-bold text-slate-800"}>{val}</span>
+                <span className={bold ? "font-extrabold text-[#0B3B2E]" : "font-bold text-slate-800"}>{val}</span>
               </div>
             ))}
             {summary?.byPaymentMethod && Object.entries(summary.byPaymentMethod).map(([method, amt]) => (
@@ -128,12 +128,12 @@ const POSSalesHistory = () => {
             <input
               type="date" value={date}
               onChange={(e) => { setDate(e.target.value); setPage(1); }}
-              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#1a5c3a]"
+              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#0B3B2E]"
             />
             <select
               value={locationFilter}
               onChange={(e) => { setLocationFilter(e.target.value); setPage(1); }}
-              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#1a5c3a]"
+              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#0B3B2E]"
             >
               <option value="">All Locations</option>
               {locations.map((l) => <option key={l._id} value={l._id}>{l.name}</option>)}
@@ -141,7 +141,7 @@ const POSSalesHistory = () => {
             <select
               value={statusFilter}
               onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#1a5c3a]"
+              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#0B3B2E]"
             >
               <option value="">All Statuses</option>
               <option value="completed">Completed</option>
@@ -151,16 +151,16 @@ const POSSalesHistory = () => {
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               placeholder="Receipt #"
-              className="w-32 border border-slate-300 bg-white px-2 py-1 text-xs outline-none focus:border-[#1a5c3a]"
+              className="w-32 border border-slate-300 bg-white px-2 py-1 text-xs outline-none focus:border-[#0B3B2E]"
             />
             <span className="ml-auto text-[11px] font-bold uppercase tracking-wide text-slate-600">
-              Total: <strong className="text-[#1a5c3a]">{total}</strong>
+              Total: <strong className="text-[#0B3B2E]">{total}</strong>
             </span>
           </div>
         </div>
 
         <table className="w-full min-w-[860px] text-xs">
-          <thead className="bg-[#1a5c3a] text-white">
+          <thead className="bg-[#0B3B2E] text-white">
             <tr>
               {["Receipt #", "Time", "Location", "Customer", "Grand Total", "Payment", "Status", "Cashier", ""].map((h) => (
                 <th key={h} className="px-3 py-2 text-left font-bold uppercase tracking-wide">{h}</th>
@@ -183,7 +183,7 @@ const POSSalesHistory = () => {
             ) : sales.map((s) => (
               <tr key={s._id} className="border-b border-slate-100 hover:bg-slate-50">
                 <td className="px-3 py-2">
-                  <span className="inline-flex items-center gap-1.5 font-mono font-bold text-[#1a5c3a]">
+                  <span className="inline-flex items-center gap-1.5 font-mono font-bold text-[#0B3B2E]">
                     <FaReceipt className="shrink-0 text-[10px]" />{s.receiptNumber}
                   </span>
                 </td>
@@ -216,9 +216,9 @@ const POSSalesHistory = () => {
 
         {total > 30 && (
           <div className="flex items-center justify-between border-t border-slate-100 px-3 py-2">
-            <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#1a5c3a]">← Previous</button>
+            <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#0B3B2E]">← Previous</button>
             <span className="text-xs text-slate-500">Page {page} of {Math.ceil(total / 30)}</span>
-            <button type="button" onClick={() => setPage((p) => p + 1)} disabled={sales.length < 30} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#1a5c3a]">Next →</button>
+            <button type="button" onClick={() => setPage((p) => p + 1)} disabled={sales.length < 30} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#0B3B2E]">Next →</button>
           </div>
         )}
       </div>

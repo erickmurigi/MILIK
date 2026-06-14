@@ -48,6 +48,7 @@ const REVERSAL_LABELS = {
 };
 
 const REVERSIBLE_TYPES = new Set(Object.keys(REVERSAL_LABELS));
+const PAGE_SIZE = 30;
 
 const entryTypeLabel = (e) => {
   if (e.category === "REVERSAL") return "Reversal";
@@ -67,7 +68,7 @@ const STATUS_BADGE = {
 };
 
 // ── sub-components ────────────────────────────────────────────────────────────
-const KpiCard = ({ icon: Icon, label, value, sub, bg = "#174D3A" }) => (
+const KpiCard = ({ icon: Icon, label, value, sub, bg = "#0B3B2E" }) => (
   <div className="flex items-center gap-3 border border-slate-200 bg-white px-4 py-3 shadow-sm">
     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white" style={{ backgroundColor: bg }}>
       <Icon className="text-sm" />
@@ -109,6 +110,7 @@ export default function CarWashFinancials() {
   const [directionFilter, setDirFilter]   = useState("all");
   const [startDate, setStartDate]     = useState(firstOfMonthISO());
   const [endDate, setEndDate]         = useState(todayISO());
+  const [page, setPage]               = useState(1);
 
   const debouncedSearch = useDebounce(search, 350);
 
@@ -148,6 +150,7 @@ export default function CarWashFinancials() {
 
   // Always reload ledger when filters change or on mount
   useEffect(() => { loadLedger(); }, [loadLedger]);
+  useEffect(() => { setPage(1); }, [debouncedSearch, statusFilter, sourceFilter, directionFilter, startDate, endDate]);
 
   // Reload ledger when the user tabs back in (handles stale SPA state)
   const loadLedgerRef = useRef(loadLedger);
@@ -225,6 +228,12 @@ export default function CarWashFinancials() {
     );
   }, [entries, debouncedSearch]);
 
+  const totalPages = Math.max(1, Math.ceil(filteredEntries.length / PAGE_SIZE));
+  const pagedEntries = useMemo(
+    () => filteredEntries.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filteredEntries, page]
+  );
+
   const headerAction = (
     <div className="flex flex-wrap items-center gap-2">
       <div className="flex flex-wrap items-center gap-1.5 rounded border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs">
@@ -256,7 +265,7 @@ export default function CarWashFinancials() {
       {hasFullAccounts && (
         <button onClick={() => navigate("/financial/journals")}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-black text-white transition-colors"
-          style={{ backgroundColor: "#174D3A" }}>
+          style={{ backgroundColor: "#0B3B2E" }}>
           <FaExternalLinkAlt size={9} /> Full Accounts
         </button>
       )}
@@ -270,9 +279,9 @@ export default function CarWashFinancials() {
         {/* ── KPI strip ─────────────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <KpiCard icon={FaBook}          label="Total Entries"      value={kpis.count.toLocaleString()}        sub="active ledger lines"        bg="#374151" />
-          <KpiCard icon={FaMoneyBillWave} label="Service Revenue"    value={formatMoney(kpis.revenue)}          sub="credit-side payment entries" bg="#174D3A" />
+          <KpiCard icon={FaMoneyBillWave} label="Service Revenue"    value={formatMoney(kpis.revenue)}          sub="credit-side payment entries" bg="#0B3B2E" />
           <KpiCard icon={FaWallet}        label="Operating Expenses" value={formatMoney(kpis.expenses)}         sub="debit-side expense entries"  bg="#E65F1A" />
-          <KpiCard icon={FaLayerGroup}    label="Net Position"       value={formatMoney(kpis.net)}              sub={kpis.net >= 0 ? "surplus" : "deficit"} bg={kpis.net >= 0 ? "#174D3A" : "#DC2626"} />
+          <KpiCard icon={FaLayerGroup}    label="Net Position"       value={formatMoney(kpis.net)}              sub={kpis.net >= 0 ? "surplus" : "deficit"} bg={kpis.net >= 0 ? "#0B3B2E" : "#DC2626"} />
         </div>
 
         {/* ── GL Ledger ─────────────────────────────────────────────────────── */}
@@ -283,7 +292,7 @@ export default function CarWashFinancials() {
               <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={10} />
               <input value={search} onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search account, notes…"
-                className="w-full rounded border border-slate-200 py-1.5 pl-8 pr-8 text-xs text-slate-700 placeholder-slate-400 focus:border-[#174D3A] focus:outline-none" />
+                className="w-full rounded border border-slate-200 py-1.5 pl-8 pr-8 text-xs text-slate-700 placeholder-slate-400 focus:border-[#0B3B2E] focus:outline-none" />
               {search && (
                 <button onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700">
                   <FaTimes size={10} />
@@ -292,7 +301,7 @@ export default function CarWashFinancials() {
             </div>
 
             <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)}
-              className="rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 focus:border-[#174D3A] focus:outline-none">
+              className="rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none">
               <option value="all">All Types</option>
               <option value="carwash_payment">Payments</option>
               <option value="carwash_expense">Expenses</option>
@@ -301,14 +310,14 @@ export default function CarWashFinancials() {
             </select>
 
             <select value={directionFilter} onChange={(e) => setDirFilter(e.target.value)}
-              className="rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 focus:border-[#174D3A] focus:outline-none">
+              className="rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none">
               <option value="all">Dr + Cr</option>
               <option value="debit">Debit only</option>
               <option value="credit">Credit only</option>
             </select>
 
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 focus:border-[#174D3A] focus:outline-none">
+              className="rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none">
               <option value="all">All Status</option>
               <option value="approved">Approved</option>
               <option value="reversed">Reversed</option>
@@ -329,24 +338,24 @@ export default function CarWashFinancials() {
 
           {loading ? (
             <div className="flex h-40 items-center justify-center">
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-200 border-t-[#174D3A]" />
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-200 border-t-[#0B3B2E]" />
             </div>
           ) : filteredEntries.length === 0 ? (
             <EmptyState message="No Car Wash ledger entries found. Entries are posted automatically when payments and expenses are processed." />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[780px] border-collapse text-xs">
-                <thead className="border-b border-slate-200 bg-slate-50">
+                <thead className="bg-[#0B3B2E] sticky top-0 z-10">
                   <tr>
                     {["Date", "Type", "Account", "Notes", "Debit (KES)", "Credit (KES)", "Status", ...(canReverse ? ["Action"] : [])].map((col) => (
-                      <th key={col} className="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-slate-500 whitespace-nowrap">
+                      <th key={col} className="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-white whitespace-nowrap">
                         {col}
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {(() => { const seenTxn = new Set(); return filteredEntries.map((e) => {
+                  {(() => { const seenTxn = new Set(); return pagedEntries.map((e) => {
                     const isReversing = reversingId === e.sourceTransactionId;
                     const isReversible = canReverse
                       && e.status === "approved"
@@ -409,6 +418,20 @@ export default function CarWashFinancials() {
                   })()}
                 </tbody>
               </table>
+            </div>
+          )}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/80 px-3 py-2">
+              <span className="text-[11px] text-slate-500">
+                {filteredEntries.length === 0 ? "No entries" : `${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, filteredEntries.length)} of ${filteredEntries.length} entries`}
+              </span>
+              <div className="flex items-center gap-1">
+                <button disabled={page <= 1} onClick={() => setPage(1)} className="h-6 w-6 rounded border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-30">«</button>
+                <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="h-6 w-6 rounded border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-30">‹</button>
+                <span className="px-2 text-[11px] font-bold text-slate-600">{page} / {totalPages}</span>
+                <button disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} className="h-6 w-6 rounded border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-30">›</button>
+                <button disabled={page >= totalPages} onClick={() => setPage(totalPages)} className="h-6 w-6 rounded border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-30">»</button>
+              </div>
             </div>
           )}
         </div>
