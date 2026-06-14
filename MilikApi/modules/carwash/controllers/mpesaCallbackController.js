@@ -551,9 +551,11 @@ export const confirmCarWashCallback = async (req, res) => {
     // Save matched notification immediately so it appears in the UI
     const savedNotif = await saveNotif({ matchedJob: job._id, matchedPayment: payment._id, status: "matched", resultCode: 0, resultDesc: "Payment matched and recorded" });
 
-    // If MSISDN was hashed, fire Transaction Status Query to retrieve actual payer phone async
+    // If MSISDN was hashed: prefer TSQ (resolves real phone + sends SMS after).
+    // Fall back to AT masked-number endpoint only when TSQ is not configured.
+    const tsqWillFire = !normalizedMsisdn && transactionCode && config?.initiatorName && (config?.securityCredential || config?.initiatorPassword);
     console.log(`[TxnStatus Check] msisdn=${normalizedMsisdn} txnCode=${transactionCode} initiatorName=${config?.initiatorName || ""} hasCred=${Boolean(config?.securityCredential || config?.initiatorPassword)} hasCallbackBase=${Boolean(process.env.MPESA_CALLBACK_BASE_URL)}`);
-    if (!normalizedMsisdn && transactionCode && config?.initiatorName && (config?.securityCredential || config?.initiatorPassword)) {
+    if (tsqWillFire) {
       triggerTransactionStatusQuery({ config, transId: transactionCode, businessId, notifId: savedNotif?._id }).catch(() => {});
     }
 
@@ -578,7 +580,7 @@ export const confirmCarWashCallback = async (req, res) => {
     if (updatedJob) {
       await accrueCommissionForJob({ req: null, job: updatedJob });
       const remainingBalance = round2(Math.max(0, outstanding - paidAmount));
-      await sendPaymentConfirmationSms({ business: businessId, job: updatedJob, amount: paidAmount, remaining: remainingBalance, overridePhone: normalizedMsisdn });
+      await sendPaymentConfirmationSms({ business: businessId, job: updatedJob, amount: paidAmount, remaining: remainingBalance, overridePhone: normalizedMsisdn, maskedMsisdn: !normalizedMsisdn && msisdn && !tsqWillFire ? msisdn : null });
       if (updatedJob.paymentStatus === "paid") {
         await markJobCommissionsPayable({ business: businessId, jobId: updatedJob._id });
       }

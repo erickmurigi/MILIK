@@ -8,7 +8,7 @@ import CarWashCreditAccount from '../models/CarWashCreditAccount.js';
 import { accrueCommissionForJob, markJobCommissionsPayable } from '../services/commissionService.js';
 import { createError } from '../../../utils/error.js';
 import { currentUserId, escapeRegex, netJobPrice, resolveActiveBusinessId } from '../services/businessScope.js';
-import { sendAdHocSms } from '../../../services/communicationService.js';
+import { sendAdHocSms, sendAdHocSmsToMasked } from '../../../services/communicationService.js';
 import { resolveCarWashSmsBody } from '../services/carwashSmsService.js';
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
@@ -606,7 +606,7 @@ export const redeemReward = async (req, res, next) => {
 
 // ─── Payment confirmation SMS (called from payments flow) ─────────────────────
 
-export const sendPaymentConfirmationSms = async ({ business, job, amount, remaining = null, overridePhone = null }) => {
+export const sendPaymentConfirmationSms = async ({ business, job, amount, remaining = null, overridePhone = null, maskedMsisdn = null }) => {
   if (!job?.plateNumber) return;
   try {
     const plate = String(job.plateNumber).trim().toUpperCase();
@@ -615,10 +615,8 @@ export const sendPaymentConfirmationSms = async ({ business, job, amount, remain
     const phone = overridePhone
       || String(job.phone || '').trim()
       || (await CarWashCustomer.findOne({ business, plates: plate }).select('phone').lean())?.phone;
-    if (!phone) return;
 
     const customerName = job.customerName || 'Valued Customer';
-    // Use caller-supplied remaining balance when available (accurate for multi-payment jobs)
     const outstanding = remaining !== null
       ? remaining
       : round2(Math.max(0, netJobPrice(job) - Number(amount || 0)));
@@ -629,10 +627,16 @@ export const sendPaymentConfirmationSms = async ({ business, job, amount, remain
     const body = await resolveCarWashSmsBody(business, 'carwash_payment_confirmed', {
       customerName,
       plate,
-      amount:      Number(amount || 0).toLocaleString(),
+      amount: Number(amount || 0).toLocaleString(),
       balanceLine,
     });
-    await sendLoyaltySms(business, phone, body, 'carwash_payment_confirmed');
+
+    if (phone) {
+      await sendLoyaltySms(business, phone, body, 'carwash_payment_confirmed');
+    } else if (maskedMsisdn) {
+      // Real phone not yet known — send to hashed MSISDN via AT's masked-number endpoint
+      sendAdHocSmsToMasked({ businessId: business, maskedNumber: maskedMsisdn, body, templateKey: 'carwash_payment_confirmed', recipientName: customerName }).catch(() => {});
+    }
   } catch (_err) {
     // Never break the main flow
   }

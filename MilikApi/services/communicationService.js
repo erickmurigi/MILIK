@@ -883,6 +883,47 @@ const sendSmsViaAfricasTalking = async ({ profile, to, body }) => {
   };
 };
 
+// Africa's Talking "Send to Hashed/Masked Number" — uses the /bulk endpoint.
+// maskedNumber = the hashed MSISDN from Safaricom's C2B callback when the real
+// phone is withheld. AT routes the message to the payer's Safaricom number
+// without us ever knowing the real digits.
+const sendSmsViaAfricasTalkingMasked = async ({ profile, maskedNumber, body }) => {
+  const apiKey = decryptStoredSecret(profile?.apiKeyEncrypted || '');
+  if (!apiKey) throw new Error("Africa's Talking API key is missing for masked SMS.");
+  if (!profile?.accountUsername) throw new Error("Africa's Talking username is missing for masked SMS.");
+
+  const baseUrl = profile?.useSandbox
+    ? 'https://api.sandbox.africastalking.com/version1/messaging/bulk'
+    : 'https://api.africastalking.com/version1/messaging/bulk';
+
+  const params = new URLSearchParams();
+  params.append('username', profile.accountUsername);
+  params.append('message', body);
+  params.append('maskedNumber', maskedNumber);
+  params.append('telco', 'Safaricom');
+  params.append('phoneNumbers', '');
+  if (profile?.senderId) params.append('from', profile.senderId);
+
+  const response = await axios.post(baseUrl, params.toString(), {
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Accept: 'application/json',
+      apiKey,
+    },
+    timeout: 30000,
+  });
+
+  const smsData = response?.data?.SMSMessageData;
+  if (!smsData) throw new Error(`Africa's Talking masked: unexpected response — ${JSON.stringify(response?.data || {})}`);
+
+  const first = (smsData.Recipients || [])[0];
+  return {
+    messageId: String(first?.messageId || ''),
+    status: String(first?.status || smsData.Message || 'dispatched'),
+    cost: String(first?.cost || ''),
+  };
+};
+
 const sendSmsViaTwilio = async ({ profile, to, body }) => {
   const accountSid = normalizeText(profile?.accountUsername);
   const authToken = decryptStoredSecret(profile?.apiKeyEncrypted || '');
@@ -1255,6 +1296,54 @@ export const sendAdHocSms = async ({ businessId, phone, body, templateKey = 'adh
       status: 'failed',
       error: String(err?.message || 'Unknown error').slice(0, 500),
       provider: 'unknown',
+      sentAt: new Date(),
+    }).catch(() => {});
+    return null;
+  }
+};
+
+/**
+ * Send an SMS to a masked/hashed M-Pesa number via Africa's Talking bulk endpoint.
+ * Only works when the default SMS profile is Africa's Talking.
+ * maskedNumber = raw hashed MSISDN string from Safaricom C2B callback.
+ */
+export const sendAdHocSmsToMasked = async ({ businessId, maskedNumber, body, templateKey = 'adhoc_masked', recipientName = '' } = {}) => {
+  if (!maskedNumber || !body) return null;
+  try {
+    const company = await ensureCompany(businessId);
+    const profiles = getRawSmsProfiles(company.communication || {});
+    const profile = getPrimarySmsProfile(profiles, company.communication?.defaultSmsProfileId || null);
+    if (!profile?.enabled || safeLower(profile?.provider) !== 'africas_talking') return null;
+
+    const result = await sendSmsViaAfricasTalkingMasked({ profile, maskedNumber, body });
+
+    await SmsLog.create({
+      business: businessId,
+      channel: 'sms',
+      templateKey,
+      to: `masked:${maskedNumber}`,
+      recipientName,
+      body,
+      status: 'sent',
+      providerMessageId: result?.messageId || '',
+      providerStatus: result?.status || '',
+      provider: 'africas_talking',
+      sentAt: new Date(),
+    }).catch(() => {});
+
+    return result;
+  } catch (err) {
+    console.error('[SMS] sendAdHocSmsToMasked failed maskedNumber=%s template=%s: %s', maskedNumber, templateKey, err?.message || err);
+    SmsLog.create({
+      business: businessId,
+      channel: 'sms',
+      templateKey,
+      to: `masked:${maskedNumber}`,
+      recipientName,
+      body,
+      status: 'failed',
+      error: String(err?.message || 'Unknown error').slice(0, 500),
+      provider: 'africas_talking',
       sentAt: new Date(),
     }).catch(() => {});
     return null;
