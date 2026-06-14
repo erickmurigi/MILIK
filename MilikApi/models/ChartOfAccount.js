@@ -92,7 +92,7 @@ const ChartOfAccountSchema = new mongoose.Schema(
 
     moduleScopes: {
       type: [String],
-      enum: ["general", "propertyManagement", "carwash", "hr"],
+      enum: ["general", "propertyManagement", "carwash", "hr", "inventory"],
       default: [],
       index: true,
     },

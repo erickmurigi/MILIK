@@ -51,15 +51,23 @@ const Modal = ({ title, onClose, children, footer, wide }) => (
   </div>
 );
 
+const STOCK_CARD_LIMIT = 50;
+
 const StockCardModal = ({ product, onClose }) => {
-  const { data: rawMovements = [], isLoading } = useQuery({
-    queryKey: ["inv-stock-card", product._id],
+  const [scPage, setScPage] = useState(1);
+
+  const { data: scData, isLoading } = useQuery({
+    queryKey: ["inv-stock-card", product._id, scPage],
     queryFn: async () => {
-      const res = await inventoryApi.listMovements({ product: product._id, limit: 500 });
-      return Array.isArray(res) ? res : (res?.data ?? []);
+      const res = await inventoryApi.listMovements({ product: product._id, limit: STOCK_CARD_LIMIT, page: scPage });
+      return { data: Array.isArray(res) ? res : (res?.data ?? []), total: res?.total ?? 0 };
     },
     staleTime: 30_000,
+    placeholderData: (prev) => prev,
   });
+
+  const rawMovements = scData?.data ?? [];
+  const scTotal = scData?.total ?? 0;
 
   const { rows, totalIn, totalOut, closingBalance } = useMemo(() => {
     const asc = [...rawMovements].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
@@ -132,6 +140,13 @@ const StockCardModal = ({ product, onClose }) => {
           })}
         </tbody>
       </table>
+      {scTotal > STOCK_CARD_LIMIT && (
+        <div className="flex items-center justify-between border-t border-slate-100 px-3 py-2">
+          <button type="button" onClick={() => setScPage((p) => Math.max(1, p - 1))} disabled={scPage === 1} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#0B3B2E]">← Newer</button>
+          <span className="text-xs text-slate-500">Page {scPage} of {Math.ceil(scTotal / STOCK_CARD_LIMIT)}</span>
+          <button type="button" onClick={() => setScPage((p) => p + 1)} disabled={rawMovements.length < STOCK_CARD_LIMIT} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#0B3B2E]">Older →</button>
+        </div>
+      )}
     </Modal>
   );
 };
@@ -229,8 +244,8 @@ const InvProducts = () => {
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
   const setCheck = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.checked }));
 
-  const activeCount = products.filter((p) => p.active !== false).length;
-  const trackedCount = products.filter((p) => p.trackStock && p.active !== false).length;
+  const activeCount = useMemo(() => products.filter((p) => p.active !== false).length, [products]);
+  const trackedCount = useMemo(() => products.filter((p) => p.trackStock && p.active !== false).length, [products]);
 
   return (
     <InventoryShell

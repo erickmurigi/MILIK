@@ -7,7 +7,7 @@ import {
   currentUserId,
   escapeRegex,
 } from "../services/inventoryScope.js";
-import { postStockEntry, assertSufficientStock } from "../services/stockLedger.js";
+import { postStockEntry, getMultiProductBalances } from "../services/stockLedger.js";
 import { nextSequenceNumber } from "../services/sequenceService.js";
 
 const populateTransfer = (q) =>
@@ -89,10 +89,13 @@ export const createTransfer = async (req, res, next) => {
     }
     if (!Array.isArray(lines) || !lines.length) throw createError(400, "At least one line is required");
 
+    const seenProducts = new Set();
     for (const line of lines) {
       if (!line.product || !mongoose.Types.ObjectId.isValid(String(line.product))) {
         throw createError(400, "Each line must have a valid product");
       }
+      if (seenProducts.has(String(line.product))) throw createError(400, "Duplicate products in lines — combine quantities instead");
+      seenProducts.add(String(line.product));
       if (!line.qtyDispatched || Number(line.qtyDispatched) <= 0) {
         throw createError(400, "Each line qtyDispatched must be positive");
       }
@@ -166,19 +169,23 @@ export const dispatchTransfer = async (req, res, next) => {
     if (!transfer) throw createError(404, "Transfer not found");
     if (transfer.status !== "draft") throw createError(400, "Only draft transfers can be dispatched");
 
-    // Check all lines have sufficient stock
+    // Batch stock check — single aggregation for all products
+    const lineProductIds = transfer.lines.map((l) => String(l.product));
+    const balances = await getMultiProductBalances(business, String(transfer.fromLocation), lineProductIds);
     for (const line of transfer.lines) {
-      await assertSufficientStock(
-        business,
-        String(transfer.fromLocation),
-        String(line.product),
-        Number(line.qtyDispatched)
-      );
+      const balance = balances[String(line.product)] ?? 0;
+      if (balance < Number(line.qtyDispatched)) {
+        throw createError(409, `Insufficient stock. Available: ${balance}, Required: ${line.qtyDispatched}`);
+      }
     }
+
+    // Batch fetch product costs — single query
+    const products = await InvProduct.find({ _id: { $in: lineProductIds }, business }).select("costPrice").lean();
+    const productMap = new Map(products.map((p) => [String(p._id), p]));
 
     // Post transfer_out entries
     for (const line of transfer.lines) {
-      const product = await InvProduct.findById(line.product).lean();
+      const product = productMap.get(String(line.product));
       await postStockEntry({
         business,
         location: String(transfer.fromLocation),
@@ -274,8 +281,11 @@ export const cancelTransfer = async (req, res, next) => {
 
     // If already in_transit, reverse the transfer_out entries
     if (transfer.status === "in_transit") {
+      const cancelProductIds = transfer.lines.map((l) => String(l.product));
+      const cancelProducts = await InvProduct.find({ _id: { $in: cancelProductIds }, business }).select("costPrice").lean();
+      const cancelProductMap = new Map(cancelProducts.map((p) => [String(p._id), p]));
       for (const line of transfer.lines) {
-        const product = await InvProduct.findById(line.product).lean();
+        const product = cancelProductMap.get(String(line.product));
         await postStockEntry({
           business,
           location: String(transfer.fromLocation),

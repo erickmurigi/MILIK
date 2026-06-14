@@ -72,7 +72,7 @@ const SYSTEM_CHART_TEMPLATE = [
 const SYSTEM_CHART_CODES = SYSTEM_CHART_TEMPLATE.map((account) => account.code);
 const ensureCache = new Map();
 const ENSURE_CACHE_TTL_MS = 5 * 60 * 1000;
-const VALID_MODULE_SCOPES = new Set(["general", "propertyManagement", "carwash", "hr", "propertySale"]);
+const VALID_MODULE_SCOPES = new Set(["general", "propertyManagement", "carwash", "hr", "propertySale", "inventory"]);
 const CARWASH_ACCOUNT_CODES = new Set(["2160", "2161", "4400", "5310", "5311", "5312"]);
 const SHARED_CASHBOOK_CODES = new Set(["1100", "1110", "1130"]);
 const HR_ACCOUNT_CODES = new Set(["2170", "2171", "2172", "2173", "2174", "2175", "5400", "5401", "5402", "5403"]);

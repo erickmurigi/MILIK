@@ -103,6 +103,9 @@ export const openSession = async (req, res, next) => {
       throw createError(400, "Valid till is required");
     }
 
+    const float = Number(openingFloat || 0);
+    if (float < 0) throw createError(400, "Opening float cannot be negative");
+
     const till = await InvTill.findOne({ _id: String(tillId), business, isActive: true }).lean();
     if (!till) throw createError(404, "Till not found or inactive");
 
@@ -110,7 +113,6 @@ export const openSession = async (req, res, next) => {
     if (existing) throw createError(409, "There is already an open session for this till");
 
     const sessionNumber = await nextSequenceNumber(business, "pos_session", "SES");
-    const float         = Number(openingFloat || 0);
 
     const session = await POSSession.create({
       business,
@@ -153,30 +155,41 @@ export const closeSession = async (req, res, next) => {
     if (!session)              throw createError(404, "Session not found");
     if (session.status !== "open") throw createError(400, "Session is already closed");
 
-    const paymentRows = await POSSale.aggregate([
-      { $match: { business: session.business, session: session._id, status: "completed" } },
-      { $unwind: "$payments" },
-      { $group: { _id: "$payments.method", total: { $sum: "$payments.amount" } } },
+    // Single aggregation pass + movements fetch in parallel
+    const [[facet], movements] = await Promise.all([
+      POSSale.aggregate([
+        { $match: { business: session.business, session: session._id } },
+        {
+          $facet: {
+            payments: [
+              { $match: { status: "completed" } },
+              { $unwind: "$payments" },
+              { $group: { _id: "$payments.method", total: { $sum: "$payments.amount" } } },
+            ],
+            sales: [
+              { $match: { status: "completed" } },
+              { $group: { _id: null, totalSales: { $sum: "$grandTotal" }, salesCount: { $sum: 1 } } },
+            ],
+            voids: [
+              { $match: { status: "voided" } },
+              { $count: "count" },
+            ],
+          },
+        },
+      ]),
+      POSTillMovement.find({ business, session: session._id }).lean(),
     ]);
-    const paymentMap = {};
-    for (const row of paymentRows) paymentMap[row._id] = row.total;
 
-    const [salesAgg] = await POSSale.aggregate([
-      { $match: { business: session.business, session: session._id, status: "completed" } },
-      { $group: { _id: null, totalSales: { $sum: "$grandTotal" }, salesCount: { $sum: 1 } } },
-    ]);
-    const [voidAgg] = await POSSale.aggregate([
-      { $match: { business: session.business, session: session._id, status: "voided" } },
-      { $count: "count" },
-    ]);
+    const paymentMap = Object.fromEntries((facet.payments ?? []).map((r) => [r._id, r.total]));
+    const salesAgg   = facet.sales?.[0];
+    const voidAgg    = facet.voids?.[0];
 
     const totalCash  = paymentMap["cash"]  ?? 0;
     const totalMpesa = paymentMap["mpesa"] ?? 0;
     const totalCard  = paymentMap["card"]  ?? 0;
 
-    const movements = await POSTillMovement.find({ business, session: session._id }).lean();
-    const totalCashIn  = movements.filter(m => m.type === "cash_in").reduce((s, m) => s + m.amount, 0);
-    const totalCashOut = movements.filter(m => m.type === "cash_out").reduce((s, m) => s + m.amount, 0);
+    const totalCashIn  = movements.filter((m) => m.type === "cash_in").reduce((s, m) => s + m.amount, 0);
+    const totalCashOut = movements.filter((m) => m.type === "cash_out").reduce((s, m) => s + m.amount, 0);
 
     const closingFloat = Number(req.body.closingFloat ?? 0);
     const expectedCash = session.openingFloat + totalCash + totalCashIn - totalCashOut;

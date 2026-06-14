@@ -89,7 +89,14 @@ export const createProduct = async (req, res, next) => {
     } = req.body;
 
     if (!name?.trim()) throw createError(400, "Product name is required");
-    if (sellingPrice === undefined || sellingPrice === null) throw createError(400, "Selling price is required");
+    if (sellingPrice === undefined || sellingPrice === null || isNaN(Number(sellingPrice))) {
+      throw createError(400, "Selling price is required and must be a number");
+    }
+    if (Number(sellingPrice) < 0) throw createError(400, "Selling price cannot be negative");
+    if (Number(costPrice || 0) < 0) throw createError(400, "Cost price cannot be negative");
+    const parsedVat = Number(vatRate || 0);
+    if (![0, 8, 16].includes(parsedVat)) throw createError(400, "VAT rate must be 0, 8, or 16");
+    if (Number(reorderLevel || 0) < 0) throw createError(400, "Reorder level cannot be negative");
 
     const product = await InvProduct.create({
       business,
@@ -97,10 +104,10 @@ export const createProduct = async (req, res, next) => {
       sku: sku ? String(sku).trim().toUpperCase() : undefined,
       barcode: barcode ? String(barcode).trim() : undefined,
       category: category && mongoose.Types.ObjectId.isValid(String(category)) ? String(category) : undefined,
-      unitOfMeasure: unitOfMeasure ? String(unitOfMeasure).trim() : "Unit",
+      unitOfMeasure: unitOfMeasure ? String(unitOfMeasure).trim() : "pcs",
       costPrice: Number(costPrice || 0),
       sellingPrice: Number(sellingPrice),
-      vatRate: Number(vatRate || 0),
+      vatRate: parsedVat,
       trackStock: parseBoolean(trackStock, true),
       serialized: parseBoolean(serialized, false),
       reorderLevel: Number(reorderLevel || 0),
@@ -120,18 +127,39 @@ export const updateProduct = async (req, res, next) => {
     const product = await InvProduct.findOne({ _id: req.params.id, business });
     if (!product) throw createError(404, "Product not found");
 
-    const allowed = [
-      "name", "sku", "barcode", "unitOfMeasure", "costPrice", "sellingPrice",
-      "vatRate", "trackStock", "serialized", "reorderLevel", "description", "imageUrl", "active",
-    ];
-    for (const key of allowed) {
-      if (req.body[key] !== undefined) product[key] = req.body[key];
+    const b = req.body;
+    if (b.name !== undefined) {
+      if (!String(b.name).trim()) throw createError(400, "Product name cannot be empty");
+      product.name = String(b.name).trim();
     }
-    if (req.body.name) product.name = String(req.body.name).trim();
-    if (req.body.sku) product.sku = String(req.body.sku).trim().toUpperCase();
-    if (req.body.category !== undefined) {
-      product.category = req.body.category && mongoose.Types.ObjectId.isValid(String(req.body.category))
-        ? String(req.body.category)
+    if (b.sku !== undefined) product.sku = b.sku ? String(b.sku).trim().toUpperCase() : "";
+    if (b.barcode !== undefined) product.barcode = b.barcode ? String(b.barcode).trim() : "";
+    if (b.unitOfMeasure !== undefined) product.unitOfMeasure = String(b.unitOfMeasure).trim() || "pcs";
+    if (b.description !== undefined) product.description = String(b.description).trim();
+    if (b.imageUrl !== undefined) product.imageUrl = String(b.imageUrl).trim();
+    if (b.costPrice !== undefined) {
+      if (isNaN(Number(b.costPrice)) || Number(b.costPrice) < 0) throw createError(400, "Cost price cannot be negative");
+      product.costPrice = Number(b.costPrice);
+    }
+    if (b.sellingPrice !== undefined) {
+      if (isNaN(Number(b.sellingPrice)) || Number(b.sellingPrice) < 0) throw createError(400, "Selling price cannot be negative");
+      product.sellingPrice = Number(b.sellingPrice);
+    }
+    if (b.vatRate !== undefined) {
+      const vat = Number(b.vatRate);
+      if (![0, 8, 16].includes(vat)) throw createError(400, "VAT rate must be 0, 8, or 16");
+      product.vatRate = vat;
+    }
+    if (b.reorderLevel !== undefined) {
+      if (isNaN(Number(b.reorderLevel)) || Number(b.reorderLevel) < 0) throw createError(400, "Reorder level cannot be negative");
+      product.reorderLevel = Number(b.reorderLevel);
+    }
+    if (b.trackStock !== undefined) product.trackStock = Boolean(b.trackStock);
+    if (b.serialized !== undefined) product.serialized = Boolean(b.serialized);
+    if (b.active !== undefined) product.active = Boolean(b.active);
+    if (b.category !== undefined) {
+      product.category = b.category && mongoose.Types.ObjectId.isValid(String(b.category))
+        ? String(b.category)
         : undefined;
     }
 

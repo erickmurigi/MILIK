@@ -7,9 +7,10 @@ import {
   currentUserId,
   escapeRegex,
 } from "../services/inventoryScope.js";
+import InvStockEntry from "../models/InvStockEntry.js";
 import { postStockEntry } from "../services/stockLedger.js";
 import { nextSequenceNumber } from "../services/sequenceService.js";
-import { postPurchaseReceiptLedger } from "../services/inventoryAccountingService.js";
+import { postPurchaseReceiptLedger, reversePurchaseReceiptLedger } from "../services/inventoryAccountingService.js";
 
 const populatePO = (q) =>
   q
@@ -86,15 +87,19 @@ export const createPurchaseOrder = async (req, res, next) => {
     }
     if (!Array.isArray(lines) || !lines.length) throw createError(400, "At least one line is required");
 
+    const seenProducts = new Set();
     let totalAmount = 0;
     const processedLines = lines.map((l) => {
       if (!l.product || !mongoose.Types.ObjectId.isValid(String(l.product))) {
         throw createError(400, "Each line must have a valid product");
       }
+      if (seenProducts.has(String(l.product))) throw createError(400, "Duplicate products in lines — combine quantities instead");
+      seenProducts.add(String(l.product));
       if (!l.qtyOrdered || Number(l.qtyOrdered) <= 0) {
         throw createError(400, "Each line qtyOrdered must be positive");
       }
       const unitCost = Number(l.unitCost || 0);
+      if (unitCost < 0) throw createError(400, "Unit cost cannot be negative");
       const totalCost = Math.round(Number(l.qtyOrdered) * unitCost * 100) / 100;
       totalAmount += totalCost;
       return {
@@ -203,6 +208,7 @@ export const receiveGoods = async (req, res, next) => {
       if (qty <= 0) continue;
 
       const unitCost = Number(recv.unitCost ?? line.unitCost ?? 0);
+      if (unitCost < 0) throw createError(400, "Unit cost cannot be negative");
 
       const [stockEntry] = await Promise.all([
         postStockEntry({
@@ -258,6 +264,46 @@ export const cancelPurchaseOrder = async (req, res, next) => {
     if (["received", "cancelled"].includes(order.status)) {
       throw createError(400, "Cannot cancel a received or already-cancelled purchase order");
     }
+
+    // If goods were partially received, reverse the stock entries and GL
+    if (order.status === "partially_received") {
+      const receivedLines = order.lines.filter((l) => Number(l.qtyReceived) > 0);
+
+      // Fetch the original stock entries for this PO to get their IDs for GL reversal
+      const stockEntries = await InvStockEntry.find({
+        business,
+        purchaseOrder: order._id,
+        type: "purchase",
+      }).select("_id product qtyReceived unitCost").lean();
+
+      const stockEntryIds = stockEntries.map((e) => String(e._id));
+
+      // Reverse each received line's stock entry (post negative purchase = return to supplier)
+      for (const line of receivedLines) {
+        const unitCost = Number(line.unitCost || 0);
+        await postStockEntry({
+          business,
+          location: String(order.location),
+          product: String(line.product),
+          type: "adjustment",
+          qty: -Number(line.qtyReceived),
+          unitCost,
+          reference: order.poNumber,
+          purchaseOrder: order._id,
+          notes: `PO ${order.poNumber} cancelled — reversing received qty`,
+          createdBy: userId,
+        });
+      }
+
+      // Reverse GL entries for all received stock entries
+      reversePurchaseReceiptLedger({
+        businessId: business,
+        stockEntryIds,
+        poNumber: order.poNumber,
+        userId,
+      }).catch((err) => console.error("[INV GL] reversePurchaseReceiptLedger failed:", err.message));
+    }
+
     order.status = "cancelled";
     order.updatedBy = userId;
     await order.save();

@@ -37,7 +37,14 @@ const _postMovement = async (req, res, next, type) => {
     if (!session.till)        throw createError(400, "Session has no associated till");
 
     const amount = Number(req.body.amount);
-    if (!amount || amount <= 0) throw createError(400, "Amount must be greater than zero");
+    if (!amount || amount <= 0 || !Number.isFinite(amount)) throw createError(400, "Amount must be a positive number");
+
+    if (type === "cash_out") {
+      const availableCash = session.openingFloat + (session.totalCash || 0) + (session.totalCashIn || 0) - (session.totalCashOut || 0);
+      if (amount > availableCash) {
+        throw createError(400, `Insufficient cash. Available: KES ${availableCash.toFixed(2)}, Requested: KES ${amount.toFixed(2)}`);
+      }
+    }
 
     const movement = await POSTillMovement.create({
       business,

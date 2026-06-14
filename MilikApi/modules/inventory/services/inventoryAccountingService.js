@@ -9,9 +9,10 @@
  *
  * Accounts used:
  *   1300 — Inventory / Stock on Hand     (asset)
- *   1310 — POS Receipts Control          (asset)   debit side for sales revenue
+ *   1310 — POS Receipts Control          (asset)   debit side for sales
  *   2000 — Accounts Payable – Suppliers  (liability)
- *   4000 — POS Sales Revenue             (income)
+ *   2190 — VAT Payable – Output Tax      (liability)
+ *   4000 — POS Sales Revenue             (income)  net of VAT
  *   5000 — Cost of Goods Sold            (expense)
  *   5010 — Stock Adjustments & Write-offs(expense)
  */
@@ -22,12 +23,13 @@ import FinancialLedgerEntry from "../../../models/FinancialLedgerEntry.js";
 import { postEntry, postReversal } from "../../../services/ledgerPostingService.js";
 
 const INV_ACCOUNT_TEMPLATES = {
-  "1300": { name: "Inventory / Stock on Hand",        type: "asset",     group: "assets",      subGroup: "Current Assets" },
-  "1310": { name: "POS Receipts Control",             type: "asset",     group: "assets",      subGroup: "Current Assets" },
-  "2000": { name: "Accounts Payable – Suppliers",     type: "liability", group: "liabilities", subGroup: "Trade Payables" },
-  "4000": { name: "POS Sales Revenue",                type: "income",    group: "income",      subGroup: "Sales Revenue" },
-  "5000": { name: "Cost of Goods Sold",               type: "expense",   group: "expenses",    subGroup: "Cost of Revenue" },
-  "5010": { name: "Stock Adjustments & Write-offs",   type: "expense",   group: "expenses",    subGroup: "Inventory Adjustments" },
+  "1300": { name: "Inventory / Stock on Hand",       type: "asset",     group: "assets",      subGroup: "Current Assets" },
+  "1310": { name: "POS Receipts Control",            type: "asset",     group: "assets",      subGroup: "Current Assets" },
+  "2000": { name: "Accounts Payable – Suppliers",    type: "liability", group: "liabilities", subGroup: "Trade Payables" },
+  "2190": { name: "VAT Payable – Output Tax",        type: "liability", group: "liabilities", subGroup: "Tax Liabilities" },
+  "4000": { name: "POS Sales Revenue",               type: "income",    group: "income",      subGroup: "Sales Revenue" },
+  "5000": { name: "Cost of Goods Sold",              type: "expense",   group: "expenses",    subGroup: "Cost of Revenue" },
+  "5010": { name: "Stock Adjustments & Write-offs",  type: "expense",   group: "expenses",    subGroup: "Inventory Adjustments" },
 };
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
@@ -69,18 +71,18 @@ const resolveInvAccount = async (businessId, code) => {
   );
 };
 
-// ─── POS Sale — revenue + COGS ────────────────────────────────────────────────
+// ─── POS Sale — revenue + VAT + COGS ─────────────────────────────────────────
 
 /**
- * Posts two double-entry pairs when a POS sale is completed:
- *   Dr 1310 POS Receipts / Cr 4000 Sales Revenue  — grandTotal
- *   Dr 5000 COGS         / Cr 1300 Inventory       — total cost of goods sold
+ * Posts for a completed POS sale:
+ *   Dr 1310 POS Receipts         / Cr 4000 Sales Revenue  — net of VAT
+ *                                  Cr 2190 VAT Payable     — output VAT (if any)
+ *   Dr 5000 COGS                 / Cr 1300 Inventory       — total cost
  */
 export const postPosSaleLedger = async ({ businessId, sale, userId }) => {
-  const amount = round2(Number(sale.grandTotal || 0));
-  if (amount <= 0) return;
+  const grandTotal = round2(Number(sale.grandTotal || 0));
+  if (grandTotal <= 0) return;
 
-  // Idempotency: skip if already posted
   const existing = await FinancialLedgerEntry.countDocuments({
     business: businessId,
     sourceTransactionType: "pos_sale",
@@ -89,6 +91,8 @@ export const postPosSaleLedger = async ({ businessId, sale, userId }) => {
   });
   if (existing > 0) return;
 
+  const totalVat  = round2(Number(sale.totalVat || 0));
+  const netRevenue = round2(grandTotal - totalVat);
   const totalCOGS = round2(
     (sale.lines || []).reduce(
       (sum, l) => sum + round2(Number(l.qty || 0) * Number(l.costPrice || 0)),
@@ -99,12 +103,11 @@ export const postPosSaleLedger = async ({ businessId, sale, userId }) => {
   const { start, end } = dayRange(sale.createdAt);
   const journalGroupId = new mongoose.Types.ObjectId();
 
-  const [receiptsAcc, revenueAcc, cogsAcc, inventoryAcc] = await Promise.all([
-    resolveInvAccount(businessId, "1310"),
-    resolveInvAccount(businessId, "4000"),
-    resolveInvAccount(businessId, "5000"),
-    resolveInvAccount(businessId, "1300"),
-  ]);
+  // Resolve accounts in parallel — include VAT account only if needed
+  const accountCodes = ["1310", "4000", "5000", "1300"];
+  if (totalVat > 0) accountCodes.push("2190");
+  const resolved = await Promise.all(accountCodes.map((c) => resolveInvAccount(businessId, c)));
+  const accMap = Object.fromEntries(accountCodes.map((c, i) => [c, resolved[i]]));
 
   const base = {
     business: businessId,
@@ -114,22 +117,29 @@ export const postPosSaleLedger = async ({ businessId, sale, userId }) => {
     statementPeriodStart: start,
     statementPeriodEnd: end,
     journalGroupId,
+    category: "POS_SALE",
     createdBy: userId,
     allowUnscoped: true,
   };
 
-  // Revenue pair
-  await Promise.all([
-    postEntry({ ...base, accountId: receiptsAcc._id, direction: "debit",  amount, category: "POS_SALE", notes: `POS sale ${sale.receiptNumber} — receipts control` }),
-    postEntry({ ...base, accountId: revenueAcc._id,  direction: "credit", amount, category: "POS_SALE", notes: `POS sale ${sale.receiptNumber} — sales revenue` }),
-  ]);
+  // Revenue pair — debit receipts, credit revenue + VAT payable
+  const revenueEntries = [
+    postEntry({ ...base, accountId: accMap["1310"]._id, direction: "debit",  amount: grandTotal,  notes: `POS sale ${sale.receiptNumber} — receipts control` }),
+    postEntry({ ...base, accountId: accMap["4000"]._id, direction: "credit", amount: netRevenue,  notes: `POS sale ${sale.receiptNumber} — sales revenue (net)` }),
+  ];
+  if (totalVat > 0) {
+    revenueEntries.push(
+      postEntry({ ...base, accountId: accMap["2190"]._id, direction: "credit", amount: totalVat, notes: `POS sale ${sale.receiptNumber} — output VAT payable` })
+    );
+  }
+  await Promise.all(revenueEntries);
 
-  // COGS pair (only if there is a measurable cost)
+  // COGS pair
   if (totalCOGS > 0) {
     const cogsGroupId = new mongoose.Types.ObjectId();
     await Promise.all([
-      postEntry({ ...base, journalGroupId: cogsGroupId, accountId: cogsAcc._id,       direction: "debit",  amount: totalCOGS, category: "POS_SALE", notes: `POS sale ${sale.receiptNumber} — COGS` }),
-      postEntry({ ...base, journalGroupId: cogsGroupId, accountId: inventoryAcc._id,  direction: "credit", amount: totalCOGS, category: "POS_SALE", notes: `POS sale ${sale.receiptNumber} — inventory reduction` }),
+      postEntry({ ...base, journalGroupId: cogsGroupId, accountId: accMap["5000"]._id, direction: "debit",  amount: totalCOGS, notes: `POS sale ${sale.receiptNumber} — COGS` }),
+      postEntry({ ...base, journalGroupId: cogsGroupId, accountId: accMap["1300"]._id, direction: "credit", amount: totalCOGS, notes: `POS sale ${sale.receiptNumber} — inventory reduction` }),
     ]);
   }
 };
@@ -157,7 +167,6 @@ export const reversePosSaleLedger = async ({ businessId, sale, userId }) => {
 /**
  * Posts one double-entry pair per goods-received stock entry:
  *   Dr 1300 Inventory / Cr 2000 Accounts Payable — qty × unitCost
- * stockEntry = saved InvStockEntry document.
  */
 export const postPurchaseReceiptLedger = async ({ businessId, stockEntry, poNumber, userId }) => {
   const amount = round2(Number(stockEntry.totalCost || 0));
@@ -198,13 +207,36 @@ export const postPurchaseReceiptLedger = async ({ businessId, stockEntry, poNumb
   ]);
 };
 
+// ─── Purchase receipt reversal — used on PO cancellation ─────────────────────
+
+/**
+ * Reverses all GL entries posted for stock entries linked to a purchase order.
+ * stockEntryIds = array of InvStockEntry _id strings for the received lines.
+ */
+export const reversePurchaseReceiptLedger = async ({ businessId, stockEntryIds, poNumber, userId }) => {
+  if (!stockEntryIds?.length) return;
+
+  for (const stockEntryId of stockEntryIds) {
+    const entries = await FinancialLedgerEntry.find({
+      business: businessId,
+      sourceTransactionType: "pos_purchase_receipt",
+      sourceTransactionId: String(stockEntryId),
+      status: { $nin: ["reversed", "void"] },
+    }).lean();
+
+    const reason = `PO ${poNumber} cancelled — reversing receipt`;
+    for (const entry of entries) {
+      await postReversal({ entryId: entry._id, reason, userId });
+    }
+  }
+};
+
 // ─── Stock adjustment / write-off ─────────────────────────────────────────────
 
 /**
  * Posts GL for manual stock entries (adjustment, writeoff, opening, return).
- *   Positive qty (stock added):  Dr 1300 Inventory / Cr 5010 Adjustments
+ *   Positive qty (stock added):   Dr 1300 Inventory / Cr 5010 Adjustments
  *   Negative qty (stock removed): Dr 5010 Adjustments / Cr 1300 Inventory
- * stockEntry = saved InvStockEntry document.
  */
 export const postStockAdjustmentLedger = async ({ businessId, stockEntry, userId }) => {
   const GL_TYPES = new Set(["adjustment", "writeoff", "opening", "return"]);

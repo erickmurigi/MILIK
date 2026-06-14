@@ -9,7 +9,7 @@ import {
   escapeRegex,
   parseDateRange,
 } from "../services/inventoryScope.js";
-import { postStockEntry, assertSufficientStock } from "../services/stockLedger.js";
+import { postStockEntry, getMultiProductBalances } from "../services/stockLedger.js";
 import { nextSequenceNumber } from "../services/sequenceService.js";
 import { postPosSaleLedger, reversePosSaleLedger } from "../services/inventoryAccountingService.js";
 
@@ -108,27 +108,55 @@ export const createSale = async (req, res, next) => {
     if (!Array.isArray(lines) || !lines.length) throw createError(400, "At least one sale line is required");
     if (!Array.isArray(payments) || !payments.length) throw createError(400, "At least one payment is required");
 
-    // Validate and enrich each line
+    const VALID_PAYMENT_METHODS = ["cash", "mpesa", "card", "credit"];
+    for (const p of payments) {
+      if (!VALID_PAYMENT_METHODS.includes(String(p.method || ""))) {
+        throw createError(400, `Invalid payment method "${p.method}". Must be one of: ${VALID_PAYMENT_METHODS.join(", ")}`);
+      }
+      if (!p.amount || Number(p.amount) <= 0 || !Number.isFinite(Number(p.amount))) {
+        throw createError(400, "Each payment amount must be greater than zero");
+      }
+    }
+
+    // Validate line structure upfront before any DB calls
+    for (const line of lines) {
+      if (!line.product || !mongoose.Types.ObjectId.isValid(String(line.product))) {
+        throw createError(400, "Each line must have a valid product");
+      }
+      if (Number(line.qty || 0) <= 0) throw createError(400, "Line qty must be positive");
+    }
+
+    // Batch fetch all products in one query
+    const lineProductIds = [...new Set(lines.map((l) => String(l.product)))];
+    const productDocs = await InvProduct.find({ _id: { $in: lineProductIds }, business, active: true }).lean();
+    const productMap = new Map(productDocs.map((p) => [String(p._id), p]));
+    for (const id of lineProductIds) {
+      if (!productMap.has(id)) throw createError(404, `Product ${id} not found or inactive`);
+    }
+
+    // Batch stock check — single aggregation for all tracked products
+    const trackedIds = lineProductIds.filter((id) => productMap.get(id)?.trackStock);
+    const balances = trackedIds.length ? await getMultiProductBalances(business, String(location), trackedIds) : {};
+    for (const line of lines) {
+      const product = productMap.get(String(line.product));
+      if (product?.trackStock) {
+        const qty = Number(line.qty || 0);
+        const balance = balances[String(line.product)] ?? 0;
+        if (balance < qty) {
+          throw createError(409, `Insufficient stock for ${product.name}. Available: ${balance}, Required: ${qty}`);
+        }
+      }
+    }
+
+    // Enrich lines using already-fetched products
     let subtotal = 0;
     let totalDiscount = 0;
     let totalVat = 0;
     const enrichedLines = [];
 
     for (const line of lines) {
-      if (!line.product || !mongoose.Types.ObjectId.isValid(String(line.product))) {
-        throw createError(400, "Each line must have a valid product");
-      }
+      const product = productMap.get(String(line.product));
       const qty = Number(line.qty || 0);
-      if (qty <= 0) throw createError(400, "Line qty must be positive");
-
-      const product = await InvProduct.findOne({ _id: line.product, business, active: true }).lean();
-      if (!product) throw createError(404, `Product ${line.product} not found`);
-
-      // Block sale if tracked product has insufficient stock
-      if (product.trackStock) {
-        await assertSufficientStock(business, String(location), String(line.product), qty);
-      }
-
       const unitPrice = Number(line.unitPrice ?? product.sellingPrice ?? 0);
       const discount = Number(line.discount || 0);
       const vatRate = Number(line.vatRate ?? product.vatRate ?? 0);

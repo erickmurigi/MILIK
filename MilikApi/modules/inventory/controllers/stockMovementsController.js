@@ -100,6 +100,8 @@ export const createManualEntry = async (req, res, next) => {
     if (qty === undefined || qty === null || Number(qty) === 0) {
       throw createError(400, "Qty cannot be zero");
     }
+    if (isNaN(Number(qty))) throw createError(400, "Qty must be a number");
+    if (unitCost !== undefined && Number(unitCost) < 0) throw createError(400, "Unit cost cannot be negative");
 
     const invProduct = await InvProduct.findOne({ _id: product, business, active: true }).lean();
     if (!invProduct) throw createError(404, "Product not found");

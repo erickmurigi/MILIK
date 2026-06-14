@@ -43,8 +43,11 @@ export const createLocation = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const { name, code, type, address, phone, isDefault } = req.body;
 
+    const LOCATION_TYPES = ["warehouse", "retail", "counter"];
     if (!name?.trim()) throw createError(400, "Location name is required");
-    if (!type) throw createError(400, "Location type is required");
+    if (!type || !LOCATION_TYPES.includes(String(type))) {
+      throw createError(400, `Location type must be one of: ${LOCATION_TYPES.join(", ")}`);
+    }
 
     // Only one default per business
     if (isDefault) {
@@ -73,11 +76,21 @@ export const updateLocation = async (req, res, next) => {
     const location = await InvLocation.findOne({ _id: req.params.id, business });
     if (!location) throw createError(404, "Location not found");
 
-    const allowed = ["name", "code", "type", "address", "phone", "active"];
-    for (const key of allowed) {
-      if (req.body[key] !== undefined) location[key] = req.body[key];
+    const LOCATION_TYPES = ["warehouse", "retail", "counter"];
+    if (req.body.name !== undefined) {
+      if (!String(req.body.name).trim()) throw createError(400, "Location name cannot be empty");
+      location.name = String(req.body.name).trim();
     }
-    if (req.body.code) location.code = String(req.body.code).trim().toUpperCase();
+    if (req.body.type !== undefined) {
+      if (!LOCATION_TYPES.includes(String(req.body.type))) {
+        throw createError(400, `Location type must be one of: ${LOCATION_TYPES.join(", ")}`);
+      }
+      location.type = String(req.body.type);
+    }
+    if (req.body.code !== undefined) location.code = req.body.code ? String(req.body.code).trim().toUpperCase() : "";
+    if (req.body.address !== undefined) location.address = String(req.body.address).trim();
+    if (req.body.phone !== undefined) location.phone = String(req.body.phone).trim();
+    if (req.body.active !== undefined) location.active = Boolean(req.body.active);
 
     if (req.body.isDefault === true || req.body.isDefault === "true") {
       await InvLocation.updateMany(

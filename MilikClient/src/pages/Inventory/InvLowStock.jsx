@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { FaBoxOpen, FaExclamationTriangle, FaFileInvoice, FaRedoAlt } from "react-icons/fa";
@@ -22,16 +22,20 @@ const InvLowStock = () => {
     },
   });
 
-  if (error) toast.error("Failed to load low-stock report");
+  useEffect(() => { if (error) toast.error("Failed to load low-stock report"); }, [error]);
 
-  const categories = [...new Set(rawItems.map((i) => i.product?.category?.name).filter(Boolean))].sort();
+  const categories = useMemo(
+    () => [...new Set(rawItems.map((i) => i.product?.category?.name).filter(Boolean))].sort(),
+    [rawItems]
+  );
 
-  const items = categoryFilter
-    ? rawItems.filter((i) => i.product?.category?.name === categoryFilter)
-    : rawItems;
+  const items = useMemo(
+    () => categoryFilter ? rawItems.filter((i) => i.product?.category?.name === categoryFilter) : rawItems,
+    [rawItems, categoryFilter]
+  );
 
-  const outCount  = items.filter((i) => i.balance <= 0).length;
-  const lowCount  = items.filter((i) => i.balance > 0 && i.balance <= i.reorderLevel).length;
+  const outCount = useMemo(() => items.filter((i) => i.balance <= 0).length, [items]);
+  const lowCount = useMemo(() => items.filter((i) => i.balance > 0 && i.balance <= i.reorderLevel).length, [items]);
 
   return (
     <InventoryShell

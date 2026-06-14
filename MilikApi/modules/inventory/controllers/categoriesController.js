@@ -44,7 +44,10 @@ export const updateCategory = async (req, res, next) => {
     const category = await InvCategory.findOne({ _id: req.params.id, business });
     if (!category) throw createError(404, "Category not found");
 
-    if (req.body.name !== undefined) category.name = String(req.body.name).trim();
+    if (req.body.name !== undefined) {
+      if (!String(req.body.name).trim()) throw createError(400, "Category name cannot be empty");
+      category.name = String(req.body.name).trim();
+    }
     if (req.body.description !== undefined) category.description = String(req.body.description).trim();
     if (req.body.active !== undefined) category.active = Boolean(req.body.active);
 

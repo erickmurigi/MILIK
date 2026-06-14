@@ -73,7 +73,10 @@ export const updateTill = async (req, res, next) => {
     for (const key of allowed) {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
     }
-    if (updates.name) updates.name = String(updates.name).trim();
+    if (updates.name !== undefined) {
+      updates.name = String(updates.name).trim();
+      if (!updates.name) throw createError(400, "Till name cannot be empty");
+    }
 
     const till = await InvTill.findOneAndUpdate(
       { _id: req.params.id, business },
