@@ -201,12 +201,12 @@ const MobileJobCard = React.memo(({
             Pay
           </button>
         )}
-        {job.phone && job.status === "done" && job.paymentStatus !== "paid" && (
+        {(job.phone || job.maskedMsisdn) && job.status === "done" && job.paymentStatus !== "paid" && (
           <button type="button" onClick={() => onOpenSms(job, "ready")} className="inline-flex items-center gap-1 border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
             <FaSms /> Ready
           </button>
         )}
-        {job.phone && (
+        {(job.phone || job.maskedMsisdn) && (
           <button type="button" onClick={() => onOpenSms(job)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
             <FaSms /> SMS
           </button>
@@ -337,7 +337,7 @@ const DesktopJobRow = React.memo(({
                 Pay
               </button>
             )}
-            {job.phone && job.status === "done" && job.paymentStatus !== "paid" && (
+            {(job.phone || job.maskedMsisdn) && job.status === "done" && job.paymentStatus !== "paid" && (
               <button
                 type="button"
                 onClick={() => onOpenSms(job, "ready")}
@@ -347,12 +347,12 @@ const DesktopJobRow = React.memo(({
                 <FaSms /> Ready
               </button>
             )}
-            {job.phone && (
+            {(job.phone || job.maskedMsisdn) && (
               <button
                 type="button"
                 onClick={() => onOpenSms(job)}
                 className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-                title={`Send SMS to ${job.phone}`}
+                title={job.phone ? `Send SMS to ${job.phone}` : "Send SMS via M-Pesa masked number"}
               >
                 <FaSms /> SMS
               </button>
@@ -960,7 +960,8 @@ ${discount > 0 ? `<tr class="dis"><td>Discount</td><td class="amt">- ${fmtAmt(di
     if (!smsTarget) return;
     setSmsSending(true);
     try {
-      await carWashApi.sendJobSms(smsTarget._id, { phone, body });
+      // phone is null in masked-MSISDN mode — backend falls back to job.maskedMsisdn
+      await carWashApi.sendJobSms(smsTarget._id, { ...(phone ? { phone } : {}), body });
       toast.success("SMS sent successfully");
       setSmsTarget(null);
     } catch (error) {
@@ -1484,7 +1485,7 @@ ${discount > 0 ? `<tr class="dis"><td>Discount</td><td class="amt">- ${fmtAmt(di
 
       {smsTarget && (
         <CwSmsModal
-          target={{ _id: smsTarget._id, name: smsTarget.customerName, phone: smsTarget.phone }}
+          target={{ _id: smsTarget._id, name: smsTarget.customerName, phone: smsTarget.phone, maskedMsisdn: smsTarget.maskedMsisdn }}
           defaultBody={smsBody}
           templates={buildJobTemplates(smsTarget)}
           context={smsTarget.jobNumber}

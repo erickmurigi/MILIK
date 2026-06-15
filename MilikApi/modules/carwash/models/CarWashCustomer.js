@@ -5,6 +5,7 @@ const carWashCustomerSchema = new mongoose.Schema(
     business: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
     name: { type: String, required: true, trim: true },
     phone: { type: String, trim: true, default: null },
+    maskedMsisdn: { type: String, trim: true, default: null },
     plates: {
       type: [{ type: String, trim: true, uppercase: true }],
       default: [],

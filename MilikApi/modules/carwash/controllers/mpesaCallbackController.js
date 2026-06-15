@@ -563,6 +563,8 @@ export const confirmCarWashCallback = async (req, res) => {
     const jobUpdates = { ...(branchId && !job.branch ? { branch: branchId } : {}) };
     // M-Pesa number is Safaricom-verified — always overwrite job & customer phone
     if (normalizedMsisdn) jobUpdates.phone = normalizedMsisdn;
+    // Store masked MSISDN on job so SMS icon shows even without a real phone
+    if (!normalizedMsisdn && msisdn) jobUpdates.maskedMsisdn = msisdn;
     if (Object.keys(jobUpdates).length) {
       await CarWashJob.updateOne({ _id: job._id, business: businessId }, { $set: jobUpdates });
     }
@@ -573,7 +575,7 @@ export const confirmCarWashCallback = async (req, res) => {
       ).catch(() => {});
     }
 
-    await autoEnrollPlate({ business: businessId, plate: job.plateNumber, customerName: job.customerName, phone: normalizedMsisdn })
+    await autoEnrollPlate({ business: businessId, plate: job.plateNumber, customerName: job.customerName, phone: normalizedMsisdn, maskedMsisdn: !normalizedMsisdn && msisdn ? msisdn : null })
       .catch((err) => console.error('[CW M-Pesa] autoEnroll failed:', err?.message));
 
     const updatedJob = await refreshJobPaymentStatus(businessId, job._id);
@@ -586,7 +588,7 @@ export const confirmCarWashCallback = async (req, res) => {
         await markJobCommissionsPayable({ business: businessId, jobId: updatedJob._id });
       }
       if (["paid", "partial"].includes(updatedJob.paymentStatus)) {
-        await awardLoyaltyStamp({ business: businessId, job: updatedJob, overridePhone: normalizedMsisdn });
+        await awardLoyaltyStamp({ business: businessId, job: updatedJob, overridePhone: normalizedMsisdn, maskedMsisdn: !normalizedMsisdn && msisdn && !tsqWillFire ? msisdn : null });
       }
     }
 

@@ -360,7 +360,7 @@ export const lookupPlate = async (req, res, next) => {
 
 // ─── Stamp awarding (called internally from payments flow) ────────────────────
 
-export const awardLoyaltyStamp = async ({ business, job, overridePhone = null }) => {
+export const awardLoyaltyStamp = async ({ business, job, overridePhone = null, maskedMsisdn = null }) => {
   if (!job?.plateNumber) return null;
 
   const plate = String(job.plateNumber).trim().toUpperCase();
@@ -428,29 +428,36 @@ export const awardLoyaltyStamp = async ({ business, job, overridePhone = null })
 
   // 7. SMS — always automatic, no smsOn* flag gates
   const smsPhone = overridePhone || customer.phone;
+  const effectiveMasked = maskedMsisdn || customer.maskedMsisdn || null;
   const customerName = customer.name || 'Valued Customer';
 
-  if (smsPhone) {
+  if (smsPhone || effectiveMasked) {
+    let smsBody;
+    let templateKey;
     if (rewardTriggered) {
       const rewardDesc = program.rewardType === 'free_wash'
         ? 'a FREE wash'
         : program.rewardType === 'discount_percent'
           ? `${program.rewardValue}% off your next wash`
           : `KES ${program.rewardValue} off your next wash`;
-      const rewardBody = await resolveCarWashSmsBody(business, 'carwash_reward_ready', {
-        customerName, plate, rewardDesc,
-      });
-      await sendLoyaltySms(business, smsPhone, rewardBody, 'carwash_reward_ready');
+      smsBody     = await resolveCarWashSmsBody(business, 'carwash_reward_ready', { customerName, plate, rewardDesc });
+      templateKey = 'carwash_reward_ready';
     } else {
       const remaining = program.stampsRequired - card.currentStamps;
-      const stampBody = await resolveCarWashSmsBody(business, 'carwash_stamp_earned', {
+      smsBody     = await resolveCarWashSmsBody(business, 'carwash_stamp_earned', {
         customerName, plate,
         currentStamps:  card.currentStamps,
         stampsRequired: program.stampsRequired,
         remaining,
         washesWord: remaining !== 1 ? 'washes' : 'wash',
       });
-      await sendLoyaltySms(business, smsPhone, stampBody, 'carwash_stamp_earned');
+      templateKey = 'carwash_stamp_earned';
+    }
+
+    if (smsPhone) {
+      sendLoyaltySms(business, smsPhone, smsBody, templateKey);
+    } else if (effectiveMasked) {
+      sendAdHocSmsToMasked({ businessId: business, maskedNumber: effectiveMasked, body: smsBody, templateKey, recipientName: customerName }).catch(() => {});
     }
   }
 
@@ -461,11 +468,12 @@ export const awardLoyaltyStamp = async ({ business, job, overridePhone = null })
 // Creates or updates the CarWashCustomer record for a plate.
 // Called at job creation AND as a safety net before stamp awarding.
 // Never throws — failure must not block any calling flow.
-export const ensureCarWashCustomer = async ({ business, plate, customerName, phone }) => {
+export const ensureCarWashCustomer = async ({ business, plate, customerName, phone, maskedMsisdn = null }) => {
   try {
     const normalizedPlate = String(plate || '').trim().toUpperCase();
     if (!normalizedPlate) return null;
     const cleanPhone = String(phone || '').trim() || null;
+    const cleanMasked = String(maskedMsisdn || '').trim() || null;
 
     // Plate is the sole identity key — every unique plate is its own customer record.
     // Phone is stored as metadata only and is never used for lookup or merging.
@@ -480,6 +488,7 @@ export const ensureCarWashCustomer = async ({ business, plate, customerName, pho
           notes: 'Auto-enrolled at first wash',
         };
         if (cleanPhone) doc.phone = cleanPhone;
+        if (cleanMasked) doc.maskedMsisdn = cleanMasked;
         customer = await CarWashCustomer.create(doc);
       } catch (createErr) {
         // Race condition: another request created the customer between our findOne and create
@@ -490,9 +499,13 @@ export const ensureCarWashCustomer = async ({ business, plate, customerName, pho
       }
     }
 
-    // Keep phone up to date if job has one and customer record doesn't yet
-    if (customer && !customer.phone && cleanPhone) {
-      await CarWashCustomer.updateOne({ _id: customer._id }, { $set: { phone: cleanPhone } });
+    // Keep phone and maskedMsisdn up to date if the customer record doesn't have them yet
+    const updates = {};
+    if (!customer.phone && cleanPhone) updates.phone = cleanPhone;
+    if (cleanMasked && customer.maskedMsisdn !== cleanMasked) updates.maskedMsisdn = cleanMasked;
+    if (Object.keys(updates).length) {
+      await CarWashCustomer.updateOne({ _id: customer._id }, { $set: updates });
+      Object.assign(customer, updates);
     }
 
     return customer;
@@ -504,10 +517,10 @@ export const ensureCarWashCustomer = async ({ business, plate, customerName, pho
 
 // ─── Auto-enroll plate at job creation ───────────────────────────────────────
 // Called from jobsController.createJob. Never throws — failure must not block job creation.
-export const autoEnrollPlate = async ({ business, plate, customerName, phone }) => {
+export const autoEnrollPlate = async ({ business, plate, customerName, phone, maskedMsisdn = null }) => {
   try {
     // Customer creation is always guaranteed via ensureCarWashCustomer
-    const customer = await ensureCarWashCustomer({ business, plate, customerName, phone });
+    const customer = await ensureCarWashCustomer({ business, plate, customerName, phone, maskedMsisdn });
     if (!customer) return null;
 
     // Loyalty card creation is optional — only if a program is active

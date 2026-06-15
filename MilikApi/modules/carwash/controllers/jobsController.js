@@ -10,7 +10,7 @@ import { currentUserId, escapeRegex, netJobPrice, parseDateRange, resolveActiveB
 import { accrueCommissionForJob, cancelJobCommissions } from "../services/commissionService.js";
 import { carpetUpload, fileUrlFromName, deletePhotoFile } from "../middleware/carpetUpload.js";
 import { autoEnrollPlate, awardLoyaltyStamp } from "./loyaltyController.js";
-import { sendAdHocSms } from "../../../services/communicationService.js";
+import { sendAdHocSms, sendAdHocSmsToMasked } from "../../../services/communicationService.js";
 
 const JOB_STATUSES = new Set(["waiting", "washing", "done", "paid", "cancelled"]);
 const JOB_TYPES = new Set(["vehicle", "carpet", "balance_bf"]);
@@ -636,10 +636,16 @@ export const sendJobSms = async (req, res, next) => {
     const job = await CarWashJob.findOne({ _id: req.params.id, business }).lean();
     if (!job) throw createError(404, "Car Wash job not found");
     const phone = String(req.body.phone || job.phone || "").trim();
-    if (!phone) throw createError(400, "No phone number available for this job");
+    const masked = String(job.maskedMsisdn || "").trim();
     const body = String(req.body.body || "").trim();
     if (!body) throw createError(400, "Message body is required");
-    await sendAdHocSms({ businessId: business, phone, body, templateKey: "carwash_job_manual" });
+    if (phone) {
+      await sendAdHocSms({ businessId: business, phone, body, templateKey: "carwash_job_manual" });
+    } else if (masked) {
+      await sendAdHocSmsToMasked({ businessId: business, maskedNumber: masked, body, templateKey: "carwash_job_manual", recipientName: job.customerName || "Customer" });
+    } else {
+      throw createError(400, "No phone number available for this job");
+    }
     res.json({ success: true, message: "SMS sent" });
   } catch (err) {
     next(err);

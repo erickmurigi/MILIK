@@ -31,6 +31,7 @@ const carWashJobSchema = new mongoose.Schema(
     jobNumber: { type: String, required: true, trim: true },
     customerName: { type: String, trim: true, default: "" },
     phone: { type: String, trim: true, default: "" },
+    maskedMsisdn: { type: String, trim: true, default: null },
     plateNumber: { type: String, trim: true, uppercase: true, default: "" },
     itemDescription: { type: String, trim: true, default: "" },
     expectedReadyAt: { type: Date, default: null },

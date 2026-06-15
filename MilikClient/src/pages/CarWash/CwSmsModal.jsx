@@ -44,15 +44,16 @@ const TemplateChip = ({ label, color = "slate", onClick }) => {
  * CwSmsModal — shared SMS compose modal for all car wash pages.
  *
  * Props:
- *  target      — { name, phone } of recipient
+ *  target      — { name, phone, maskedMsisdn? } of recipient
  *  defaultBody — initial message text
  *  templates   — [{ label, body, color? }] quick-select templates
  *  context     — short string shown in header subtitle (e.g. "Job CW-…")
- *  onSend      — async (phone, body) => void
+ *  onSend      — async (phone|null, body) => void  (null when masked)
  *  onClose     — () => void
  *  sending     — boolean (disables send while in flight)
  */
 const CwSmsModal = ({ target, defaultBody = "", templates = [], context = "", onSend, onClose, sending }) => {
+  const isMasked = !target?.phone && Boolean(target?.maskedMsisdn);
   const [phone, setPhone] = useState(target?.phone || "");
   const [body, setBody]   = useState(defaultBody);
   const [phoneError, setPhoneError] = useState("");
@@ -68,6 +69,7 @@ const CwSmsModal = ({ target, defaultBody = "", templates = [], context = "", on
   const overLimit = chars > MAX_CHARS;
 
   const validatePhone = (val) => {
+    if (isMasked) return true;
     const cleaned = val.replace(/\s/g, "");
     if (!cleaned) { setPhoneError("Phone number is required"); return false; }
     if (!/^\+?\d{7,15}$/.test(cleaned)) { setPhoneError("Enter a valid phone number (digits only, 7–15 chars)"); return false; }
@@ -81,10 +83,10 @@ const CwSmsModal = ({ target, defaultBody = "", templates = [], context = "", on
   };
 
   const handleSend = () => {
-    if (!validatePhone(phone)) return;
+    if (!isMasked && !validatePhone(phone)) return;
     if (!body.trim()) return;
     if (overLimit) return;
-    onSend(phone.trim(), body.trim());
+    onSend(isMasked ? null : phone.trim(), body.trim());
   };
 
   const applyTemplate = (tmpl) => setBody(tmpl.body);
@@ -121,28 +123,39 @@ const CwSmsModal = ({ target, defaultBody = "", templates = [], context = "", on
 
         <div className="space-y-3 p-4">
 
-          {/* ── To (editable phone) ── */}
+          {/* ── To ── */}
           <div>
             <label className="mb-1 block text-[11px] font-extrabold uppercase tracking-widest text-slate-500">
               To
             </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="tel"
-                value={phone}
-                onChange={handlePhoneChange}
-                onBlur={() => validatePhone(phone)}
-                placeholder="e.g. 0712345678"
-                className={`h-8 flex-1 border px-3 text-sm text-slate-800 outline-none focus:ring-1 ${
-                  phoneError ? "border-red-400 focus:ring-red-300" : "border-slate-300 focus:border-[#0B3B2E] focus:ring-[#0B3B2E]/20"
-                }`}
-              />
-              {target?.name && (
-                <span className="max-w-[140px] truncate text-[11px] font-semibold text-slate-500">
-                  {target.name}
-                </span>
-              )}
-            </div>
+            {isMasked ? (
+              <div className="flex h-8 items-center gap-2 border border-slate-200 bg-slate-50 px-3">
+                <span className="text-sm font-semibold text-slate-500 italic">M-Pesa masked number</span>
+                {target?.name && (
+                  <span className="max-w-[140px] truncate text-[11px] font-semibold text-slate-400">
+                    · {target.name}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={handlePhoneChange}
+                  onBlur={() => validatePhone(phone)}
+                  placeholder="e.g. 0712345678"
+                  className={`h-8 flex-1 border px-3 text-sm text-slate-800 outline-none focus:ring-1 ${
+                    phoneError ? "border-red-400 focus:ring-red-300" : "border-slate-300 focus:border-[#0B3B2E] focus:ring-[#0B3B2E]/20"
+                  }`}
+                />
+                {target?.name && (
+                  <span className="max-w-[140px] truncate text-[11px] font-semibold text-slate-500">
+                    {target.name}
+                  </span>
+                )}
+              </div>
+            )}
             {phoneError && <p className="mt-1 text-[11px] text-red-500">{phoneError}</p>}
           </div>
 
