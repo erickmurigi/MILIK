@@ -887,35 +887,38 @@ const sendSmsViaAfricasTalking = async ({ profile, to, body }) => {
 // maskedNumber = the hashed MSISDN from Safaricom's C2B callback when the real
 // phone is withheld. AT routes the message to the payer's Safaricom number
 // without us ever knowing the real digits.
+// Requires JSON body with phoneNumbers: [] + maskedNumber + telco per AT spec.
 const sendSmsViaAfricasTalkingMasked = async ({ profile, maskedNumber, body }) => {
   const apiKey = decryptStoredSecret(profile?.apiKeyEncrypted || '');
   if (!apiKey) throw new Error("Africa's Talking API key is missing for masked SMS.");
   if (!profile?.accountUsername) throw new Error("Africa's Talking username is missing for masked SMS.");
 
-  // AT masked-number routing uses the same /messaging endpoint as regular SMS,
-  // with maskedNumber + telco replacing the to field.
   const baseUrl = profile?.useSandbox
-    ? 'https://api.sandbox.africastalking.com/version1/messaging'
-    : 'https://api.africastalking.com/version1/messaging';
+    ? 'https://api.sandbox.africastalking.com/version1/messaging/bulk'
+    : 'https://api.africastalking.com/version1/messaging/bulk';
 
-  const params = new URLSearchParams();
-  params.append('username', profile.accountUsername);
-  params.append('message', body);
-  params.append('maskedNumber', maskedNumber);
-  params.append('telco', 'safaricom');
-  if (profile?.senderId) params.append('from', profile.senderId);
+  const payload = {
+    username: profile.accountUsername,
+    message: body,
+    maskedNumber,
+    telco: 'Safaricom',
+    phoneNumbers: [],
+  };
+  if (profile?.senderId) payload.from = profile.senderId;
 
-  const response = await axios.post(baseUrl, params.toString(), {
+  const response = await axios.post(baseUrl, payload, {
     headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
+      'Content-Type': 'application/json',
       Accept: 'application/json',
       apiKey,
     },
     timeout: 30000,
   });
 
+  console.log('[AT Masked SMS] Raw response:', JSON.stringify(response.data, null, 2));
+
   const smsData = response?.data?.SMSMessageData;
-  if (!smsData) throw new Error(`Africa's Talking masked: unexpected response — ${JSON.stringify(response?.data || {})}`);
+  if (!smsData) throw new Error(`Africa's Talking masked bulk: unexpected response — ${JSON.stringify(response?.data || {})}`);
 
   const first = (smsData.Recipients || [])[0];
   return {

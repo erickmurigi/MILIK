@@ -11,10 +11,11 @@ import CarWashPayment from "../models/CarWashPayment.js";
 import CarWashBranch from "../models/CarWashBranch.js";
 import CarWashMpesaNotification from "../models/CarWashMpesaNotification.js";
 import CarWashCustomer from "../models/CarWashCustomer.js";
-import { getRawMpesaPaybillConfigs, getPrimaryMpesaPaybillConfig } from "../../../utils/companyModules.js";
+import { getRawMpesaPaybillConfigs, getPrimaryMpesaPaybillConfig, getRawSmsProfiles, getPrimarySmsProfile } from "../../../utils/companyModules.js";
 import { accrueCommissionForJob, markJobCommissionsPayable } from "../services/commissionService.js";
 import { postCarWashPaymentLedger } from "../services/carwashAccountingService.js";
 import { autoEnrollPlate, awardLoyaltyStamp, sendPaymentConfirmationSms } from "./loyaltyController.js";
+import { sendAdHocSmsToMasked } from "../../../services/communicationService.js";
 
 const normalizeText = (v = "") => String(v || "").trim();
 const normalizeUpper = (v = "") => normalizeText(v).toUpperCase();
@@ -835,6 +836,56 @@ export const registerCarWashPaybillUrls = async (req, res, next) => {
       success: true,
       message: "Callback URLs registered with Safaricom successfully. Payments will now flow through.",
       data: { validationURL, confirmationURL, safaricomResponse },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── Dev-only: test masked/hashed number SMS without a real payment ───────────
+// Blocked in production. Finds the first company with AT enabled automatically.
+export const devTestHashedSms = async (req, res, next) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(403).json({ message: 'Not available in production' });
+  }
+  try {
+    const { maskedNumber, message } = req.body;
+    if (!maskedNumber || !message) {
+      return res.status(400).json({ message: 'maskedNumber and message are required' });
+    }
+
+    const companies = await Company.find({}).select('name communication').lean();
+    let businessId = null;
+    let companyName = null;
+    for (const company of companies) {
+      const profiles = getRawSmsProfiles(company.communication || {});
+      const profile  = getPrimarySmsProfile(profiles, company.communication?.defaultSmsProfileId || null);
+      if (profile?.enabled && String(profile?.provider || '').toLowerCase() === 'africas_talking') {
+        businessId  = company._id;
+        companyName = company.name;
+        break;
+      }
+    }
+
+    if (!businessId) {
+      return res.status(404).json({ message: "No active Africa's Talking SMS profile found in any company" });
+    }
+
+    console.log(`[devTestHashedSms] Company: ${companyName} | maskedNumber: ${maskedNumber}`);
+
+    const result = await sendAdHocSmsToMasked({
+      businessId,
+      maskedNumber,
+      body: message,
+      templateKey: 'test_hashed_sms',
+      recipientName: 'Test',
+    });
+
+    res.json({
+      success: true,
+      company: companyName,
+      result,
+      note: 'Full raw AT response is printed in server console logs above',
     });
   } catch (err) {
     next(err);

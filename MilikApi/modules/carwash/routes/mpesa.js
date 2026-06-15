@@ -1,5 +1,5 @@
 import express from "express";
-import { confirmCarWashCallback, validateCarWashCallback, listMpesaNotifications, reassignMpesaNotification, registerCarWashPaybillUrls } from "../controllers/mpesaCallbackController.js";
+import { confirmCarWashCallback, validateCarWashCallback, listMpesaNotifications, reassignMpesaNotification, registerCarWashPaybillUrls, devTestHashedSms } from "../controllers/mpesaCallbackController.js";
 import { verifyUser, requireCompanyModule, requireCompanyPermission } from "../../../controllers/verifyToken.js";
 
 const router = express.Router();
@@ -30,6 +30,9 @@ router.post(
   requireCompanyPermission("carwash-settings", "manage", "carwash"),
   registerCarWashPaybillUrls
 );
+
+// Dev only — test masked SMS without a real payment (blocked in production)
+router.post("/dev/test-hashed-sms", devTestHashedSms);
 
 // No auth — Safaricom calls these directly
 router.post("/validation/:shortCode", validateCarWashCallback);

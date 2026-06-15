@@ -225,9 +225,6 @@ function isMongoSrvDnsError(error) {
 function configureMongoDnsResolvers() {
   if (!usesSrvMongoUrl(process.env.MONGO_URL)) return;
 
-  const envResolvers = parseEnvList(process.env.MONGO_DNS_SERVERS);
-  const resolvers = envResolvers.length ? envResolvers : PUBLIC_DNS_RESOLVERS;
-
   try {
     if (typeof dns.setDefaultResultOrder === "function") {
       dns.setDefaultResultOrder("ipv4first");
@@ -236,8 +233,15 @@ function configureMongoDnsResolvers() {
     console.warn("Unable to set DNS default result order:", error.message);
   }
 
+  const envResolvers = parseEnvList(process.env.MONGO_DNS_SERVERS);
+  if (!envResolvers.length) {
+    // Use system DNS — don't override. ipv4first (above) is sufficient in most environments.
+    console.log("MongoDB DNS: using system resolvers (ipv4first)");
+    return;
+  }
+
   try {
-    dns.setServers(resolvers);
+    dns.setServers(envResolvers);
     console.log("MongoDB SRV DNS resolvers:", dns.getServers().join(", "));
   } catch (error) {
     console.warn("Unable to override DNS servers for MongoDB SRV lookups:", error.message);
