@@ -10,35 +10,18 @@ import CarWashJob from "../models/CarWashJob.js";
 import CarWashPayment from "../models/CarWashPayment.js";
 import CarWashBranch from "../models/CarWashBranch.js";
 import CarWashMpesaNotification from "../models/CarWashMpesaNotification.js";
-import CarWashCustomer from "../models/CarWashCustomer.js";
 import { getRawMpesaPaybillConfigs, getPrimaryMpesaPaybillConfig, getRawSmsProfiles, getPrimarySmsProfile } from "../../../utils/companyModules.js";
 import { accrueCommissionForJob, markJobCommissionsPayable } from "../services/commissionService.js";
 import { postCarWashPaymentLedger } from "../services/carwashAccountingService.js";
 import { autoEnrollPlate, awardLoyaltyStamp, sendPaymentConfirmationSms } from "./loyaltyController.js";
 import { sendAdHocSmsToMasked } from "../../../services/communicationService.js";
+import { normalizePlate, buildPlateRegex } from "../utils/plateUtils.js";
 
 const normalizeText = (v = "") => String(v || "").trim();
 const normalizeUpper = (v = "") => normalizeText(v).toUpperCase();
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 const netJobPrice = (job) => Math.max(0, Number(job?.price || 0) - Number(job?.discountAmount || 0));
 
-// Strip everything except letters and digits, then uppercase.
-// Handles: "kca123a", "KCA 123A", "kca-123a", "KCA.123A", "k c a 1 2 3 a", etc.
-const normalizePlate = (v = "") =>
-  normalizeUpper(v).replace(/[^A-Z0-9]/g, "");
-
-// Build a regex that matches the normalized plate whether the DB stores it with or
-// without separators (spaces, hyphens, dots) and regardless of case.
-// e.g. normalizePlate("kca-123a") → "KCA123A"
-//      buildPlateRegex("KCA123A") → /^K[^A-Z0-9]*C[^A-Z0-9]*A[^A-Z0-9]*1[^A-Z0-9]*2[^A-Z0-9]*3[^A-Z0-9]*A$/i
-const buildPlateRegex = (plate = "") =>
-  new RegExp(
-    `^${plate
-      .split("")
-      .map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-      .join("[^A-Z0-9]*")}$`,
-    "i"
-  );
 
 const parseMpesaDate = (raw = "") => {
   const text = normalizeText(raw);
@@ -474,7 +457,8 @@ export const confirmCarWashCallback = async (req, res) => {
     const normalizedMsisdn = _local || null;
     const transDate = parseMpesaDate(transTimeRaw);
 
-    notifBase = { ...notifBase, transactionCode, billRefNumber, plate, amount, msisdn: normalizedMsisdn || "", senderName, transactionDate: transDate };
+    const maskedMsisdn = !normalizedMsisdn && msisdn ? msisdn : "";
+    notifBase = { ...notifBase, transactionCode, billRefNumber, plate, amount, msisdn: normalizedMsisdn || "", maskedMsisdn, senderName, transactionDate: transDate };
 
     if (!plate || amount <= 0) {
       await saveNotif({ status: "error", resultCode: 0, resultDesc: "Accepted – insufficient data" });
@@ -688,6 +672,9 @@ export const reassignMpesaNotification = async (req, res, next) => {
     const paidAmount = round2(Math.min(notif.amount, outstanding));
     const branch = job.branch || notif.branch || null;
     const normalizedMsisdn = notif.msisdn || null;
+    // Masked MSISDN: stored on new notifications; fall back to rawPayload for older records
+    const rawMasked = normalizeText(notif.maskedMsisdn || notif.rawPayload?.MSISDN || notif.rawPayload?.Msisdn || "");
+    const maskedMsisdn = !normalizedMsisdn && rawMasked.length > 15 ? rawMasked : null;
 
     let payment;
     try {
@@ -720,24 +707,31 @@ export const reassignMpesaNotification = async (req, res, next) => {
     const updatedJob = await refreshJobPaymentStatus(business, job._id);
     await postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: req.user?._id || null });
 
-    // Update job + customer phone with payer's verified M-Pesa number
-    if (normalizedMsisdn) {
-      CarWashJob.updateOne({ _id: job._id, business }, { $set: { phone: normalizedMsisdn } }).catch(() => {});
-      CarWashCustomer.updateOne(
-        { business, plates: normalizePlate(job.plateNumber) },
-        { $set: { phone: normalizedMsisdn } }
-      ).catch(() => {});
+    // Update job + customer with payer's M-Pesa identity (real phone or masked MSISDN)
+    const jobContactUpdates = {};
+    if (normalizedMsisdn) jobContactUpdates.phone = normalizedMsisdn;
+    else if (maskedMsisdn) jobContactUpdates.maskedMsisdn = maskedMsisdn;
+    if (Object.keys(jobContactUpdates).length) {
+      CarWashJob.updateOne({ _id: job._id, business }, { $set: jobContactUpdates }).catch(() => {});
     }
+    autoEnrollPlate({
+      business,
+      plate: normalizePlate(job.plateNumber),
+      customerName: job.customerName,
+      phone: normalizedMsisdn || null,
+      maskedMsisdn: maskedMsisdn || null,
+      payerName: notif.senderName || null,
+    }).catch(() => {});
 
     if (updatedJob) {
       await accrueCommissionForJob({ req, job: updatedJob });
       const reassignRemaining = round2(Math.max(0, outstanding - paidAmount));
-      await sendPaymentConfirmationSms({ business, job: updatedJob, amount: paidAmount, remaining: reassignRemaining, overridePhone: normalizedMsisdn });
+      await sendPaymentConfirmationSms({ business, job: updatedJob, amount: paidAmount, remaining: reassignRemaining, overridePhone: normalizedMsisdn, maskedMsisdn });
       if (updatedJob.paymentStatus === "paid") {
         await markJobCommissionsPayable({ business, jobId: updatedJob._id });
       }
       if (["paid", "partial"].includes(updatedJob.paymentStatus)) {
-        await awardLoyaltyStamp({ business, job: updatedJob, overridePhone: normalizedMsisdn });
+        await awardLoyaltyStamp({ business, job: updatedJob, overridePhone: normalizedMsisdn, maskedMsisdn });
       }
     }
 

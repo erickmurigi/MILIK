@@ -13,9 +13,9 @@ const toOidOrNull = (value) => {
 };
 
 const sanitizeBranchPayload = (body = {}) => ({
-  name: String(body.name || "").trim(),
-  location: String(body.location || "").trim(),
-  address: String(body.address || "").trim(),
+  name: String(body.name || "").trim().toUpperCase(),
+  location: String(body.location || "").trim().toUpperCase(),
+  address: String(body.address || "").trim().toUpperCase(),
   phone: String(body.phone || "").trim(),
   mpesaShortCode: String(body.mpesaShortCode || "").trim(),
   branchType: BRANCH_TYPES.includes(body.branchType) ? body.branchType : "both",

@@ -10,6 +10,7 @@ import { currentUserId, escapeRegex, netJobPrice, parseDateRange, resolveActiveB
 import { accrueCommissionForJob, cancelJobCommissions } from "../services/commissionService.js";
 import { carpetUpload, fileUrlFromName, deletePhotoFile } from "../middleware/carpetUpload.js";
 import { autoEnrollPlate, awardLoyaltyStamp } from "./loyaltyController.js";
+import { normalizePlate } from "../utils/plateUtils.js";
 import { sendAdHocSms, sendAdHocSmsToMasked } from "../../../services/communicationService.js";
 
 const JOB_STATUSES = new Set(["waiting", "washing", "done", "paid", "cancelled"]);
@@ -182,9 +183,10 @@ export const listJobs = async (req, res, next) => {
     }
     if (req.query.search) {
       const search = escapeRegex(String(req.query.search).trim());
+      const plateSearch = escapeRegex(normalizePlate(String(req.query.search)));
       const searchOr = [
         { jobNumber: new RegExp(search, "i") },
-        { plateNumber: new RegExp(search, "i") },
+        { plateNumber: new RegExp(plateSearch || search, "i") },
         { itemDescription: new RegExp(search, "i") },
         { customerName: new RegExp(search, "i") },
         { phone: new RegExp(search, "i") },
@@ -234,7 +236,7 @@ export const createJob = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const jobType = JOB_TYPES.has(String(req.body.jobType || "").toLowerCase()) ? String(req.body.jobType).toLowerCase() : "vehicle";
 
-    const plateNumber = String(req.body.plateNumber || "").trim().toUpperCase();
+    const plateNumber = normalizePlate(req.body.plateNumber || "");
     const itemDescription = String(req.body.itemDescription || "").trim();
     if (jobType === "vehicle" && !plateNumber) return next(createError(400, "Plate number is required for vehicle jobs"));
     if (jobType === "carpet" && !itemDescription) return next(createError(400, "Item description is required for carpet jobs"));
@@ -456,7 +458,7 @@ export const updateJob = async (req, res, next) => {
     existing.customerName = String(req.body.customerName ?? existing.customerName).trim();
     existing.phone = String(req.body.phone ?? existing.phone).trim();
     if (existing.jobType === "vehicle") {
-      const updatedPlate = String(req.body.plateNumber ?? existing.plateNumber).trim().toUpperCase();
+      const updatedPlate = normalizePlate(req.body.plateNumber ?? existing.plateNumber);
       if (!updatedPlate) return next(createError(400, "Plate number is required for vehicle jobs"));
       existing.plateNumber = updatedPlate;
     } else {

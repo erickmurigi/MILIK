@@ -19,6 +19,7 @@ const CW_ACCOUNT_TEMPLATES = {
   "5310": { name: "Car Wash Supplies Expense",            type: "expense",   group: "expenses",    subGroup: "Car Wash Expenses" },
   "5311": { name: "Car Wash Staff Wages",                 type: "expense",   group: "expenses",    subGroup: "Car Wash Expenses" },
   "5312": { name: "Car Wash Water and Utilities",         type: "expense",   group: "expenses",    subGroup: "Car Wash Expenses" },
+  "5313": { name: "Car Wash Loyalty Discount",            type: "expense",   group: "expenses",    subGroup: "Car Wash Expenses" },
   "2160": { name: "Car Wash Staff Commissions Payable",   type: "liability", group: "liabilities", subGroup: "Car Wash Liabilities" },
   "2161": { name: "Car Wash Staff Savings Payable",       type: "liability", group: "liabilities", subGroup: "Car Wash Liabilities" },
 };
@@ -205,6 +206,65 @@ export const postCarWashPaymentLedger = async ({ businessId, payment, cashbookAc
     await aggregateChartOfAccountBalances(businessId, [String(cashbookAccountId), String(revenueAccount._id)]);
   } catch (err) {
     console.error("[CW Accounting] Payment ledger error job=%s: %s", job?.jobNumber || payment._id, err?.message || err);
+  }
+};
+
+// ─── Loyalty discount ledger: Dr Discount (5313) / Cr Revenue (4400) ────────
+/**
+ * Posts the discount write-off when a loyalty reward is redeemed.
+ * Grosses up revenue to the full price and surfaces the loyalty cost as an expense.
+ * Never throws — caller is never blocked.
+ */
+export const postCarWashLoyaltyDiscountLedger = async ({ businessId, job, discountAmount, rewardType, req = null }) => {
+  const amount = round2(Number(discountAmount || 0));
+  if (amount <= 0) return;
+
+  try {
+    const existingCount = await FinancialLedgerEntry.countDocuments({
+      business: new mongoose.Types.ObjectId(String(businessId)),
+      sourceTransactionType: "carwash_loyalty_redemption",
+      sourceTransactionId: String(job._id),
+      status: { $ne: "reversed" },
+    });
+    if (existingCount > 0) return;
+
+    const [discountAccount, revenueAccount] = await Promise.all([
+      resolveCarWashAccount(businessId, "5313"),
+      resolveCarWashAccount(businessId, "4400"),
+    ]);
+    const actorId = await resolveAuditActorUserId({ req, businessId });
+    const { start, end } = dayRange(new Date());
+    const base = {
+      business: businessId,
+      sourceTransactionType: "carwash_loyalty_redemption",
+      sourceTransactionId: String(job._id),
+      transactionDate: new Date(),
+      statementPeriodStart: start,
+      statementPeriodEnd: end,
+      category: "CARWASH_LOYALTY_REDEMPTION",
+      amount,
+      payer: "loyalty",
+      receiver: "n/a",
+      createdBy: actorId,
+      approvedBy: actorId,
+      allowUnscoped: true,
+    };
+
+    await postEntry({
+      ...base,
+      accountId: discountAccount._id,
+      direction: "debit",
+      notes: `CW loyalty discount – Job #${job.jobNumber || ""} (${rewardType || ""})`,
+    });
+    await postEntry({
+      ...base,
+      accountId: revenueAccount._id,
+      direction: "credit",
+      notes: `CW service income (loyalty) – Job #${job.jobNumber || ""}`,
+    });
+    await aggregateChartOfAccountBalances(businessId, [String(discountAccount._id), String(revenueAccount._id)]);
+  } catch (err) {
+    console.error("[CW Accounting] Loyalty discount ledger error job=%s: %s", job?.jobNumber || job?._id, err?.message || err);
   }
 };
 

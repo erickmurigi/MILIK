@@ -56,10 +56,11 @@ export default function CarWashOpeningBalances() {
     const plate = raw.toUpperCase();
     updateRow(key, "plate", plate);
     clearTimeout(debounceRefs.current[key]);
-    if (plate.length < 4) { updateRow(key, "found", null); return; }
+    const normalizedPlate = plate.replace(/[^A-Z0-9]/g, "");
+    if (normalizedPlate.length < 4) { updateRow(key, "found", null); return; }
     debounceRefs.current[key] = setTimeout(async () => {
       try {
-        const result = await carWashApi.lookupPlate(plate);
+        const result = await carWashApi.lookupPlate(normalizedPlate);
         if (result?.customer) {
           setRows((p) => p.map((r) =>
             r._key === key

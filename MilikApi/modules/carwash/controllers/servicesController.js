@@ -4,8 +4,8 @@ import CarWashService from "../models/CarWashService.js";
 import { currentUserId, escapeRegex, parseBoolean, resolveActiveBusinessId } from "../services/businessScope.js";
 
 const sanitizeServicePayload = (body = {}) => ({
-  name:         String(body.name || "").trim(),
-  category:     String(body.category || "").trim(),
+  name:         String(body.name || "").trim().toUpperCase(),
+  category:     String(body.category || "").trim().toUpperCase(),
   pricingType:  body.pricingType === "per_sqft" ? "per_sqft" : "flat",
   defaultPrice: Number(body.defaultPrice || 0),
   active:       parseBoolean(body.active, true),
@@ -15,7 +15,7 @@ const sanitizePricingTiers = (tiers) => {
   if (!Array.isArray(tiers)) return [];
   return tiers
     .filter((t) => t?.vehicleType && String(t.vehicleType).trim() && Number.isFinite(Number(t.price)) && Number(t.price) >= 0)
-    .map((t) => ({ vehicleType: String(t.vehicleType).trim(), price: Number(t.price) }));
+    .map((t) => ({ vehicleType: String(t.vehicleType).trim().toUpperCase(), price: Number(t.price) }));
 };
 
 export const listServices = async (req, res, next) => {

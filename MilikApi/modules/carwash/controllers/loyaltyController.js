@@ -10,6 +10,8 @@ import { createError } from '../../../utils/error.js';
 import { currentUserId, escapeRegex, netJobPrice, resolveActiveBusinessId } from '../services/businessScope.js';
 import { sendAdHocSms, sendAdHocSmsToMasked } from '../../../services/communicationService.js';
 import { resolveCarWashSmsBody } from '../services/carwashSmsService.js';
+import { postCarWashLoyaltyDiscountLedger } from '../services/carwashAccountingService.js';
+import { normalizePlate, buildPlateRegex } from '../utils/plateUtils.js';
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
@@ -334,10 +336,10 @@ export const updateCustomer = async (req, res, next) => {
 export const lookupPlate = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const plate = String(req.params.plate || '').trim().toUpperCase();
+    const plate = normalizePlate(req.params.plate || '');
     if (!plate) return next(createError(400, 'Plate number is required'));
 
-    const customer = await CarWashCustomer.findOne({ business, plates: plate }).lean();
+    const customer = await CarWashCustomer.findOne({ business, plates: buildPlateRegex(plate) }).lean();
     const card = customer
       ? await CarWashLoyaltyCard.findOne({ business, customer: customer._id })
           .populate('program', 'name stampsRequired rewardType rewardValue isActive')
@@ -470,7 +472,7 @@ export const awardLoyaltyStamp = async ({ business, job, overridePhone = null, m
 // Never throws — failure must not block any calling flow.
 export const ensureCarWashCustomer = async ({ business, plate, customerName, phone, maskedMsisdn = null, payerName = null }) => {
   try {
-    const normalizedPlate = String(plate || '').trim().toUpperCase();
+    const normalizedPlate = normalizePlate(plate);
     if (!normalizedPlate) return null;
     const cleanPhone = String(phone || '').trim() || null;
     const cleanMasked = String(maskedMsisdn || '').trim() || null;
@@ -478,7 +480,8 @@ export const ensureCarWashCustomer = async ({ business, plate, customerName, pho
 
     // Plate is the sole identity key — every unique plate is its own customer record.
     // Phone is stored as metadata only and is never used for lookup or merging.
-    let customer = await CarWashCustomer.findOne({ business, plates: normalizedPlate }).lean();
+    // buildPlateRegex handles existing records stored with spaces/dashes.
+    let customer = await CarWashCustomer.findOne({ business, plates: buildPlateRegex(normalizedPlate) }).lean();
 
     if (!customer) {
       try {
@@ -494,7 +497,7 @@ export const ensureCarWashCustomer = async ({ business, plate, customerName, pho
       } catch (createErr) {
         // Race condition: another request created the customer between our findOne and create
         if (createErr.code === 11000) {
-          customer = await CarWashCustomer.findOne({ business, plates: normalizedPlate }).lean();
+          customer = await CarWashCustomer.findOne({ business, plates: buildPlateRegex(normalizedPlate) }).lean();
         }
         if (!customer) throw createErr;
       }
@@ -553,7 +556,7 @@ export const redeemReward = async (req, res, next) => {
     const plate = String(job.plateNumber || '').trim().toUpperCase();
     if (!plate) return next(createError(400, 'Job has no plate number'));
 
-    const customer = await CarWashCustomer.findOne({ business, plates: plate }).lean();
+    const customer = await CarWashCustomer.findOne({ business, plates: buildPlateRegex(plate) }).lean();
     if (!customer) return next(createError(404, 'No loyalty customer found for this plate'));
 
     const card = await CarWashLoyaltyCard.findOne({ business, customer: customer._id });
@@ -583,6 +586,17 @@ export const redeemReward = async (req, res, next) => {
     }
     await job.save();
 
+    // Post loyalty discount ledger entry (Dr 5313 / Cr 4400)
+    if (discountAmount > 0) {
+      postCarWashLoyaltyDiscountLedger({
+        businessId: business,
+        job,
+        discountAmount,
+        rewardType: program?.rewardType,
+        req,
+      }).catch(() => {});
+    }
+
     // Award commission on gross price — the attendant did the work regardless of who covered the cost.
     // For a full discount (free wash), no payment record will ever trigger commission accrual, so we
     // must do it here. paidLineSet: null tells the service all lines are recognised.
@@ -605,12 +619,26 @@ export const redeemReward = async (req, res, next) => {
     });
     await card.save();
 
-    if (program?.smsOnReward && customer?.phone) {
-      const redeemBody = await resolveCarWashSmsBody(business, 'carwash_reward_redeemed', {
-        customerName: customer.name || 'Valued Customer',
-        plate,
-      });
-      await sendLoyaltySms(business, customer.phone, redeemBody, 'carwash_reward_redeemed');
+    if (program?.smsOnReward) {
+      const effectiveMasked = customer.maskedMsisdn || null;
+      const smsPhone = customer.phone || null;
+      if (smsPhone || effectiveMasked) {
+        const redeemBody = await resolveCarWashSmsBody(business, 'carwash_reward_redeemed', {
+          customerName: customer.name || 'Valued Customer',
+          plate,
+        });
+        if (smsPhone) {
+          sendLoyaltySms(business, smsPhone, redeemBody, 'carwash_reward_redeemed');
+        } else if (effectiveMasked) {
+          sendAdHocSmsToMasked({
+            businessId: business,
+            maskedNumber: effectiveMasked,
+            body: redeemBody,
+            templateKey: 'carwash_reward_redeemed',
+            recipientName: customer.name || 'Customer',
+          }).catch(() => {});
+        }
+      }
     }
 
     res.json({ success: true, data: { card, job }, job, message: 'Reward redeemed successfully' });

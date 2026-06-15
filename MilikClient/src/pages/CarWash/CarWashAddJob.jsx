@@ -22,7 +22,7 @@ const PlateLookupWidget = ({ plate, onPlateChange, onCustomerFound, onRewardData
   const timerRef = useRef(null);
 
   const lookup = useCallback(async (value) => {
-    const p = value.trim().toUpperCase();
+    const p = value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
     if (p.length < 3) { setLookupResult(null); onRewardData?.(null); return; }
     setLooking(true);
     try {
@@ -112,7 +112,7 @@ const CreditAccountBanner = ({ plate, onAccountDetected }) => {
   const prevPlate = useRef("");
 
   useEffect(() => {
-    const p = String(plate || "").trim().toUpperCase();
+    const p = String(plate || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
     if (!p || p === prevPlate.current) return;
     prevPlate.current = p;
     setAccount(null);

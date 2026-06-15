@@ -4,9 +4,9 @@ import CarWashStaff from "../models/CarWashStaff.js";
 import { currentUserId, escapeRegex, parseBoolean, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 
 const sanitizeStaffPayload = (body = {}) => ({
-  name: String(body.name || "").trim(),
+  name: String(body.name || "").trim().toUpperCase(),
   phone: String(body.phone || "").trim(),
-  role: String(body.role || "").trim(),
+  role: String(body.role || "").trim().toUpperCase(),
   active: parseBoolean(body.active, true),
 });
 

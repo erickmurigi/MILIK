@@ -277,7 +277,7 @@ const CarWashLoyalty = () => {
   const saveCustomer = async () => {
     if (!customerForm.name.trim()) { toast.error("Name is required"); return; }
     if (!customerForm.phone.trim()) { toast.error("Phone is required"); return; }
-    const plates = customerForm.plates.map(p => p.trim().toUpperCase()).filter(Boolean);
+    const plates = customerForm.plates.map(p => p.trim().toUpperCase().replace(/[^A-Z0-9]/g, "")).filter(Boolean);
     setSaving(true);
     try {
       if (editingCustomer) {
