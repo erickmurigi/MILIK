@@ -854,7 +854,7 @@ export const devTestHashedSms = async (req, res, next) => {
       return res.status(400).json({ message: 'maskedNumber and message are required' });
     }
 
-    const companies = await Company.find({}).select('name communication').lean();
+    const companies = await Company.find({}).select('companyName communication').lean();
     let businessId = null;
     let companyName = null;
     for (const company of companies) {
@@ -862,7 +862,7 @@ export const devTestHashedSms = async (req, res, next) => {
       const profile  = getPrimarySmsProfile(profiles, company.communication?.defaultSmsProfileId || null);
       if (profile?.enabled && String(profile?.provider || '').toLowerCase() === 'africas_talking') {
         businessId  = company._id;
-        companyName = company.name;
+        companyName = company.companyName;
         break;
       }
     }

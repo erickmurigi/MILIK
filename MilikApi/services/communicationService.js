@@ -898,18 +898,18 @@ const sendSmsViaAfricasTalkingMasked = async ({ profile, maskedNumber, body }) =
     : 'https://api.africastalking.com/version1/messaging/bulk';
 
   const payload = {
-    username: profile.accountUsername,
-    message: body,
+    username:     profile.accountUsername,
+    message:      body,
     maskedNumber,
-    telco: 'Safaricom',
+    telco:        'Safaricom',
     phoneNumbers: [],
   };
-  if (profile?.senderId) payload.from = profile.senderId;
+  if (profile?.senderId) payload.senderId = profile.senderId;
 
   const response = await axios.post(baseUrl, payload, {
     headers: {
       'Content-Type': 'application/json',
-      Accept: 'application/json',
+      Accept:         'application/json',
       apiKey,
     },
     timeout: 30000,
@@ -1338,6 +1338,7 @@ export const sendAdHocSmsToMasked = async ({ businessId, maskedNumber, body, tem
     return result;
   } catch (err) {
     console.error('[SMS] sendAdHocSmsToMasked failed maskedNumber=%s template=%s: %s', maskedNumber, templateKey, err?.message || err);
+    if (err?.response?.data) console.error('[SMS] AT error body:', JSON.stringify(err.response.data, null, 2));
     SmsLog.create({
       business: businessId,
       channel: 'sms',
