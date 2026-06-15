@@ -15,6 +15,8 @@ export const listOffers = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const { search = "", status = "", listingId = "", buyerId = "" } = req.query;
+    const page = Math.max(Number(req.query.page || 1), 1);
+    const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);
     const filter = { business };
     if (status) filter.status = status;
     if (listingId) filter.listing = listingId;
@@ -23,8 +25,11 @@ export const listOffers = async (req, res, next) => {
       const rx = new RegExp(escapeRegex(search.trim()), "i");
       filter.$or = [{ offerNumber: rx }];
     }
-    const offers = await populateOffer(SaleOffer.find(filter).sort({ createdAt: -1 })).lean();
-    res.status(200).json(offers);
+    const [offers, total] = await Promise.all([
+      populateOffer(SaleOffer.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit)).lean(),
+      SaleOffer.countDocuments(filter),
+    ]);
+    res.status(200).json({ offers, total, page, pages: Math.ceil(total / limit) });
   } catch (err) {
     next(err);
   }
@@ -99,13 +104,29 @@ export const updateOffer = async (req, res, next) => {
   }
 };
 
+// Offer state machine: terminal statuses are rejected, expired, withdrawn (no transitions out)
+const OFFER_TRANSITIONS = {
+  pending:     ["negotiating", "accepted", "rejected", "expired", "withdrawn"],
+  negotiating: ["accepted", "rejected", "expired", "withdrawn"],
+  accepted:    ["withdrawn"],  // back-out only; deal cancellation handles the normal reversal
+  rejected:    [],
+  expired:     [],
+  withdrawn:   [],
+};
+
 export const updateOfferStatus = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
-    const VALID = ["pending", "negotiating", "accepted", "rejected", "expired", "withdrawn"];
     const { status, counterOfferAmount, negotiationNotes } = req.body;
-    if (!VALID.includes(status)) return next(createError(400, "Invalid offer status"));
+
+    const existingOffer = await SaleOffer.findOne({ _id: req.params.id, business }).lean();
+    if (!existingOffer) return next(createError(404, "Offer not found"));
+
+    const allowed = OFFER_TRANSITIONS[existingOffer.status] ?? [];
+    if (!allowed.includes(status)) {
+      return next(createError(400, `Cannot transition offer from "${existingOffer.status}" to "${status}"`));
+    }
 
     const update = { status, updatedBy: userId };
     if (counterOfferAmount !== undefined) update.counterOfferAmount = counterOfferAmount;
@@ -117,7 +138,7 @@ export const updateOfferStatus = async (req, res, next) => {
       { new: true }
     ).populate("listing buyer agent");
 
-    if (!offer) return next(createError(404, "Offer not found"));
+    if (!offer) return next(createError(404, "Offer not found")); // should not happen — already fetched above
 
     if (["rejected", "expired", "withdrawn"].includes(status)) {
       const otherActive = await SaleOffer.findOne({

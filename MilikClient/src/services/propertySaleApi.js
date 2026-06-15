@@ -30,7 +30,7 @@ export const saleApi = {
   deleteAgent: async (id) => unwrap(await adminRequests.delete(`/sale/agents/${id}`)),
 
   // Offers
-  listOffers: async (params = {}) => unwrap(await adminRequests.get("/sale/offers", { params })),
+  listOffers: async (params = {}) => unwrapPage(await adminRequests.get("/sale/offers", { params })),
   getOffer: async (id, params = {}) => unwrap(await adminRequests.get(`/sale/offers/${id}`, { params })),
   createOffer: async (payload) => unwrap(await adminRequests.post("/sale/offers", payload)),
   updateOffer: async (id, payload) => unwrap(await adminRequests.put(`/sale/offers/${id}`, payload)),
@@ -47,20 +47,35 @@ export const saleApi = {
   deleteDeal: async (id) => unwrap(await adminRequests.delete(`/sale/deals/${id}`)),
 
   // Payments
-  listPayments: async (params = {}) => unwrap(await adminRequests.get("/sale/payments", { params })),
+  listPayments: async (params = {}) => unwrapPage(await adminRequests.get("/sale/payments", { params })),
   createPayment: async (payload) => unwrap(await adminRequests.post("/sale/payments", payload)),
   updatePayment: async (id, payload) => unwrap(await adminRequests.put(`/sale/payments/${id}`, payload)),
   voidPayment: async (id, payload = {}) => unwrap(await adminRequests.patch(`/sale/payments/${id}/void`, payload)),
   deletePayment: async (id) => unwrap(await adminRequests.delete(`/sale/payments/${id}`)),
 
   // Commissions
-  listCommissions: async (params = {}) => unwrap(await adminRequests.get("/sale/commissions", { params })),
+  listCommissions: async (params = {}) => unwrapPage(await adminRequests.get("/sale/commissions", { params })),
   updateCommissionStatus: async (id, payload) => unwrap(await adminRequests.patch(`/sale/commissions/${id}/status`, payload)),
 
   // Reports
   getDashboardStats: async (params = {}) => unwrap(await adminRequests.get("/sale/reports/dashboard", { params })),
-  getSalesReport: async (params = {}) => unwrap(await adminRequests.get("/sale/reports/sales", { params })),
-  getMonthlyDetail: async (params = {}) => unwrap(await adminRequests.get("/sale/reports/monthly-detail", { params })),
+  getSalesReport:    async (params = {}) => unwrap(await adminRequests.get("/sale/reports/sales",          { params })),
+  getMonthlyDetail:  async (params = {}) => unwrap(await adminRequests.get("/sale/reports/monthly-detail", { params })),
+
+  // CRM — Leads
+  listLeads:      async (params = {}) => unwrapPage(await adminRequests.get("/sale/leads",             { params })),
+  getLead:        async (id, params = {}) => unwrap(await adminRequests.get(`/sale/leads/${id}`,        { params })),
+  createLead:     async (payload)    => unwrap(await adminRequests.post("/sale/leads",                 payload)),
+  updateLead:     async (id, payload) => unwrap(await adminRequests.put(`/sale/leads/${id}`,           payload)),
+  deleteLead:     async (id)         => unwrap(await adminRequests.delete(`/sale/leads/${id}`)),
+  convertLead:    async (id, payload) => unwrap(await adminRequests.patch(`/sale/leads/${id}/convert`, payload)),
+  getLeadsPipeline: async (params = {}) => unwrap(await adminRequests.get("/sale/leads/pipeline",      { params })),
+
+  // CRM — Activities
+  listActivities:   async (params = {}) => unwrapPage(await adminRequests.get("/sale/activities",         { params })),
+  createActivity:   async (payload)     => unwrap(await adminRequests.post("/sale/activities",            payload)),
+  updateActivity:   async (id, payload) => unwrap(await adminRequests.put(`/sale/activities/${id}`,      payload)),
+  deleteActivity:   async (id)          => unwrap(await adminRequests.delete(`/sale/activities/${id}`)),
 };
 
 export const todayISO = () => new Date().toISOString().slice(0, 10);

@@ -1,10 +1,15 @@
+import mongoose from "mongoose";
 import { createError } from "../../../utils/error.js";
 import SaleAgent from "../models/SaleAgent.js";
+import SaleDeal from "../models/SaleDeal.js";
+import SaleCommission from "../models/SaleCommission.js";
+import SaleOffer from "../models/SaleOffer.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 
 export const listAgents = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
+    const bId = new mongoose.Types.ObjectId(String(business));
     const { search = "", status = "", page = 1, limit = 50 } = req.query;
     const pageNum = Math.max(parseInt(page, 10) || 1, 1);
     const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 500);
@@ -13,11 +18,20 @@ export const listAgents = async (req, res, next) => {
     if (search.trim()) {
       filter.$text = { $search: search.trim() };
     }
-    const [agents, total] = await Promise.all([
+    const [agents, total, statsRaw] = await Promise.all([
       SaleAgent.find(filter).sort({ createdAt: -1 }).skip((pageNum - 1) * limitNum).limit(limitNum).lean(),
       SaleAgent.countDocuments(filter),
+      SaleAgent.aggregate([
+        { $match: { business: bId } },
+        { $group: { _id: "$status", count: { $sum: 1 }, avgRate: { $avg: "$commissionRate" } } },
+      ]),
     ]);
-    res.status(200).json({ data: agents, total, page: pageNum, pages: Math.ceil(total / limitNum) || 1 });
+    const statsMap = Object.fromEntries(statsRaw.map((s) => [s._id, { count: s.count, avgRate: s.avgRate }]));
+    const stats = {
+      active:   statsMap.active   || { count: 0, avgRate: 0 },
+      inactive: statsMap.inactive || { count: 0, avgRate: 0 },
+    };
+    res.status(200).json({ data: agents, total, page: pageNum, pages: Math.ceil(total / limitNum) || 1, stats });
   } catch (err) {
     next(err);
   }
@@ -74,6 +88,16 @@ export const deleteAgent = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const agent = await SaleAgent.findOne({ _id: req.params.id, business });
     if (!agent) return next(createError(404, "Agent not found"));
+
+    const [deals, commissions, offers] = await Promise.all([
+      SaleDeal.countDocuments({ business, agent: agent._id }),
+      SaleCommission.countDocuments({ business, agent: agent._id }),
+      SaleOffer.countDocuments({ business, agent: agent._id }),
+    ]);
+    if (deals > 0 || commissions > 0 || offers > 0) {
+      return next(createError(400, `Cannot delete agent with existing records (${deals} deals, ${commissions} commissions, ${offers} offers)`));
+    }
+
     await agent.deleteOne();
     res.status(200).json({ message: "Agent deleted" });
   } catch (err) {

@@ -63,6 +63,7 @@ const SaleListings = () => {
 
   const listings = listingsData?.data ?? [];
   const serverTotal = listingsData?.total ?? 0;
+  const backendStats = listingsData?.stats ?? null;
   const agents = agentsData?.data ?? [];
   const totalPages = Math.max(1, Math.ceil(serverTotal / ITEMS_PER_PAGE));
   const safePage = page;
@@ -71,10 +72,10 @@ const SaleListings = () => {
 
   const stats = useMemo(() => ({
     total: serverTotal,
-    available: listings.filter((l) => l.status === "available").length,
-    sold: listings.filter((l) => l.status === "sold").length,
-    totalValue: listings.reduce((a, l) => a + Number(l.askingPrice || 0), 0),
-  }), [listings, serverTotal]);
+    available: backendStats?.available?.count ?? listings.filter((l) => l.status === "available").length,
+    sold: backendStats?.sold?.count ?? listings.filter((l) => l.status === "sold").length,
+    totalValue: (backendStats?.available?.totalValue ?? 0) + (backendStats?.reserved?.totalValue ?? 0) + (backendStats?.under_contract?.totalValue ?? 0),
+  }), [listings, serverTotal, backendStats]);
 
   const openCreate = () => { setEditingId(""); setForm(blankForm); setShowModal(true); };
   const openEdit = (row) => {

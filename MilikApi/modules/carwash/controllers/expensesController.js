@@ -325,11 +325,13 @@ export const updateExpenseCategories = async (req, res, next) => {
 
 export const getExpensesReport = async (req, res, next) => {
   try {
-    const business = resolveActiveBusinessId(req);
-    const filter   = buildFilter(req, business);
-    const paidFilter = { ...toAggFilter(filter), status: "paid" };
+    const business   = resolveActiveBusinessId(req);
+    const filter     = buildFilter(req, business);
+    const baseFilter = toAggFilter(filter);
+    const paidFilter = { ...baseFilter, status: "paid" };
+    const pendingFilter = { ...baseFilter, status: { $in: ["draft", "approved"] } };
 
-    const [byCategory, byMethod, byBranch, byMonth] = await Promise.all([
+    const [byCategory, byMethod, byBranch, byMonth, byPayee, topExpenses, pendingRows] = await Promise.all([
       CarWashExpense.aggregate([
         { $match: paidFilter },
         { $group: { _id: "$category", amount: { $sum: "$amount" }, count: { $sum: 1 } } },
@@ -354,25 +356,62 @@ export const getExpensesReport = async (req, res, next) => {
         }},
         { $sort: { "_id.year": 1, "_id.month": 1 } },
       ]),
+      // Top 10 payees by paid spend
+      CarWashExpense.aggregate([
+        { $match: { ...paidFilter, payee: { $nin: ["", null] } } },
+        { $group: { _id: "$payee", amount: { $sum: "$amount" }, count: { $sum: 1 } } },
+        { $sort: { amount: -1 } },
+        { $limit: 10 },
+      ]),
+      // Top 5 individual paid expenses
+      CarWashExpense.find(paidFilter)
+        .sort({ amount: -1 })
+        .limit(5)
+        .select("expenseNumber expenseDate category payee description amount method")
+        .lean(),
+      // Pending obligations (draft + approved)
+      CarWashExpense.aggregate([
+        { $match: pendingFilter },
+        { $group: { _id: "$status", amount: { $sum: "$amount" }, count: { $sum: 1 } } },
+      ]),
     ]);
 
-    const branchIds = byBranch.map((b) => b._id).filter(Boolean);
+    const branchIds  = byBranch.map((b) => b._id).filter(Boolean);
     const branchDocs = branchIds.length > 0
       ? await CarWashBranch.find({ _id: { $in: branchIds } }).select("name").lean()
       : [];
-    const branchMap = new Map(branchDocs.map((b) => [String(b._id), b.name]));
+    const branchMap  = new Map(branchDocs.map((b) => [String(b._id), b.name]));
 
     const total = byCategory.reduce((s, c) => s + c.amount, 0);
     const count = byCategory.reduce((s, c) => s + c.count, 0);
+
+    const pending = { draft: 0, approved: 0, total: 0, count: 0 };
+    pendingRows.forEach((r) => {
+      const key = r._id;
+      if (key === "draft" || key === "approved") pending[key] = r.amount;
+      pending.total += r.amount;
+      pending.count += r.count;
+    });
 
     res.json({
       success: true,
       data: {
         total, count,
-        byCategory: byCategory.map((c) => ({ category: c._id || "Unspecified", amount: c.amount, count: c.count })),
-        byMethod:   byMethod.map((m)   => ({ method: m._id || "other", amount: m.amount, count: m.count })),
-        byBranch:   byBranch.map((b)   => ({ branchId: b._id, branchName: b._id ? (branchMap.get(String(b._id)) || "Unknown") : "Unassigned", amount: b.amount, count: b.count })),
-        byMonth:    byMonth.map((m)    => ({ year: m._id.year, month: m._id.month, amount: m.amount, count: m.count })),
+        pending,
+        byCategory:   byCategory.map((c) => ({ category: c._id || "Unspecified", amount: c.amount, count: c.count })),
+        byMethod:     byMethod.map((m)   => ({ method: m._id || "other", amount: m.amount, count: m.count })),
+        byBranch:     byBranch.map((b)   => ({ branchId: b._id, branchName: b._id ? (branchMap.get(String(b._id)) || "Unknown") : "Unassigned", amount: b.amount, count: b.count })),
+        byMonth:      byMonth.map((m)    => ({ year: m._id.year, month: m._id.month, amount: m.amount, count: m.count })),
+        byPayee:      byPayee.map((p)    => ({ payee: p._id, amount: p.amount, count: p.count })),
+        topExpenses:  topExpenses.map((e) => ({
+          expenseNumber: e.expenseNumber,
+          expenseDate:   e.expenseDate,
+          category:      e.category,
+          payee:         e.payee,
+          description:   e.description,
+          amount:        e.amount,
+          method:        e.method,
+        })),
       },
     });
   } catch (error) { next(error); }

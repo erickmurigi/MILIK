@@ -17,7 +17,7 @@ import {
   FaToolbox, FaDatabase, FaWrench, FaHeadset, FaInfoCircle, FaList,
   FaBuilding, FaKey, FaUserSlash, FaRedoAlt, FaCar, FaUserPlus, FaUserCheck,
   FaLayerGroup, FaStar, FaCodeBranch,
-  FaBoxes, FaWarehouse, FaCashRegister, FaEnvelope, FaSms, FaUserClock,
+  FaBoxes, FaWarehouse, FaCashRegister, FaEnvelope, FaSms, FaUserClock, FaUserFriends,
 } from "react-icons/fa";
 import "./dashboard.css";
 import TabManager from "../../components/Layout/TabManager";
@@ -142,15 +142,17 @@ const MENU_PERMISSION_MAP = {
   "comm-sms-templates":   { resource: "sms",   action: "manage" },
   "comm-email-manager":   { resource: "email", action: "view"   },
   "comm-email-templates": { resource: "email", action: "manage" },
-  "sale-dashboard": { resource: "sale-dashboard", action: "view", moduleKey: "propertySale" },
-  "sale-listings": { resource: "sale-listings", action: "view", moduleKey: "propertySale" },
-  "sale-buyers": { resource: "sale-buyers", action: "view", moduleKey: "propertySale" },
-  "sale-agents": { resource: "sale-agents", action: "view", moduleKey: "propertySale" },
-  "sale-offers": { resource: "sale-offers", action: "view", moduleKey: "propertySale" },
-  "sale-deals": { resource: "sale-deals", action: "view", moduleKey: "propertySale" },
-  "sale-payments": { resource: "sale-payments", action: "view", moduleKey: "propertySale" },
-  "sale-commissions": { resource: "sale-commissions", action: "view", moduleKey: "propertySale" },
-  "sale-reports": { resource: "sale-reports", action: "view", moduleKey: "propertySale" },
+  "sale-dashboard":       { resource: "sale-dashboard",       action: "view", moduleKey: "propertySale" },
+  "sale-listings":        { resource: "sale-listings",        action: "view", moduleKey: "propertySale" },
+  "sale-buyers":          { resource: "sale-buyers",          action: "view", moduleKey: "propertySale" },
+  "sale-agents":          { resource: "sale-agents",          action: "view", moduleKey: "propertySale" },
+  "sale-offers":          { resource: "sale-offers",          action: "view", moduleKey: "propertySale" },
+  "sale-deals":           { resource: "sale-deals",           action: "view", moduleKey: "propertySale" },
+  "sale-payments":        { resource: "sale-payments",        action: "view", moduleKey: "propertySale" },
+  "sale-commissions":     { resource: "sale-commissions",     action: "view", moduleKey: "propertySale" },
+  "sale-reports":         { resource: "sale-reports",         action: "view", moduleKey: "propertySale" },
+  "sale-crm-leads":       { resource: "saleLeads",            action: "view", moduleKey: "propertySale" },
+  "sale-crm-activities":  { resource: "saleActivities",       action: "view", moduleKey: "propertySale" },
 };
 
 const filterMenuByPermissions = (items = [], currentUser = {}, activeCompany = null) =>
@@ -728,15 +730,17 @@ const TopToolbar = ({
 
     if (isPropertySaleWorkspace) {
       return {
-        "sale-dashboard": "/sale/dashboard",
-        "sale-listings": "/sale/listings",
-        "sale-buyers": "/sale/buyers",
-        "sale-agents": "/sale/agents",
-        "sale-offers": "/sale/offers",
-        "sale-deals": "/sale/deals",
-        "sale-payments": "/sale/payments",
-        "sale-commissions": "/sale/commissions",
-        "sale-reports": "/sale/reports",
+        "sale-dashboard":      "/sale/dashboard",
+        "sale-listings":       "/sale/listings",
+        "sale-buyers":         "/sale/buyers",
+        "sale-agents":         "/sale/agents",
+        "sale-offers":         "/sale/offers",
+        "sale-deals":          "/sale/deals",
+        "sale-payments":       "/sale/payments",
+        "sale-commissions":    "/sale/commissions",
+        "sale-reports":        "/sale/reports",
+        "sale-crm-leads":      "/sale/crm/leads",
+        "sale-crm-activities": "/sale/crm/activities",
         documentation: "/help/documentation",
         support: "/help/support",
         about: "/help/about",
@@ -962,9 +966,18 @@ const TopToolbar = ({
           label: "Finance",
           icon: FaMoneyBillWave,
           submenu: [
-            { id: "sale-payments", label: "Payments", icon: FaMoneyBillWave },
-            { id: "sale-commissions", label: "Commissions", icon: FaChartLine },
-            { id: "sale-reports", label: "Sales Reports", icon: FaFileAlt },
+            { id: "sale-payments",    label: "Payments",      icon: FaMoneyBillWave },
+            { id: "sale-commissions", label: "Commissions",   icon: FaChartLine },
+            { id: "sale-reports",     label: "Sales Reports", icon: FaFileAlt },
+          ],
+        },
+        {
+          id: "sale-crm",
+          label: "CRM",
+          icon: FaUserClock,
+          submenu: [
+            { id: "sale-crm-leads",      label: "Leads Pipeline", icon: FaUserFriends },
+            { id: "sale-crm-activities", label: "Activity Log",   icon: FaClipboard },
           ],
         },
       ];

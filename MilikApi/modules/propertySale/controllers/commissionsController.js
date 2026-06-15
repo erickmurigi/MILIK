@@ -10,6 +10,14 @@ const populateCommission = (query) =>
     .populate("listing", "title listingNumber")
     .populate("buyer", "fullName buyerNumber");
 
+// State machine: which transitions are permitted
+const ALLOWED_TRANSITIONS = {
+  pending:  ["approved", "cancelled"],
+  approved: ["paid", "cancelled"],
+  paid:     [],          // terminal — cannot be reversed via this endpoint
+  cancelled: [],         // terminal
+};
+
 export const listCommissions = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
@@ -20,11 +28,25 @@ export const listCommissions = async (req, res, next) => {
     if (agentId) filter.agent = agentId;
     if (status) filter.status = status;
     if (dealId) filter.deal = dealId;
-    const [commissions, total] = await Promise.all([
+
+    const [commissions, total, statsRaw] = await Promise.all([
       populateCommission(SaleCommission.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit)).lean(),
       SaleCommission.countDocuments(filter),
+      SaleCommission.aggregate([
+        { $match: { business: filter.business, ...(agentId && { agent: filter.agent }), ...(dealId && { deal: filter.deal }) } },
+        { $group: { _id: "$status", count: { $sum: 1 }, totalAmount: { $sum: "$commissionAmount" } } },
+      ]),
     ]);
-    res.status(200).json({ data: commissions, total, page, pages: Math.ceil(total / limit) });
+
+    const statsMap = Object.fromEntries(statsRaw.map((s) => [s._id, { count: s.count, amount: s.totalAmount }]));
+    const stats = {
+      pending:  statsMap.pending  || { count: 0, amount: 0 },
+      approved: statsMap.approved || { count: 0, amount: 0 },
+      paid:     statsMap.paid     || { count: 0, amount: 0 },
+      cancelled: statsMap.cancelled || { count: 0, amount: 0 },
+    };
+
+    res.status(200).json({ commissions, total, page, pages: Math.ceil(total / limit), stats });
   } catch (err) {
     next(err);
   }
@@ -34,18 +56,24 @@ export const updateCommissionStatus = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
-    const VALID = ["pending", "approved", "paid", "cancelled"];
     const { status, payoutDate, payoutMethod, payoutReference, notes } = req.body;
-    if (!VALID.includes(status)) return next(createError(400, "Invalid commission status"));
 
-    // Fetch old commission to detect transition before applying update
     const oldCommission = await SaleCommission.findOne({ _id: req.params.id, business }).lean();
     if (!oldCommission) return next(createError(404, "Commission not found"));
 
+    const allowed = ALLOWED_TRANSITIONS[oldCommission.status] ?? [];
+    if (!allowed.includes(status)) {
+      return next(createError(400, `Cannot transition commission from "${oldCommission.status}" to "${status}"`));
+    }
+
     const update = { status, updatedBy: userId };
-    if (payoutDate) update.payoutDate = payoutDate;
-    if (payoutMethod) update.payoutMethod = payoutMethod;
-    if (payoutReference) update.payoutReference = payoutReference;
+    if (status === "paid") {
+      if (!payoutDate) return next(createError(400, "Payout date is required when marking a commission as paid"));
+      if (!payoutMethod) return next(createError(400, "Payout method is required when marking a commission as paid"));
+      update.payoutDate = payoutDate;
+      update.payoutMethod = payoutMethod;
+      if (payoutReference) update.payoutReference = payoutReference;
+    }
     if (notes) update.notes = notes;
 
     const commission = await populateCommission(
@@ -53,9 +81,9 @@ export const updateCommissionStatus = async (req, res, next) => {
     );
     if (!commission) return next(createError(404, "Commission not found"));
 
-    // GL hooks based on status transition
-    if (status === "paid" && oldCommission.status !== "paid") {
-      postPropertySaleCommissionPayout({ businessId: business, commission: oldCommission, userId }).catch((err) =>
+    // GL hooks based on transition
+    if (status === "paid") {
+      postPropertySaleCommissionPayout({ businessId: business, commission: oldCommission, userId, payoutMethod, payoutDate }).catch((err) =>
         console.error("[PS GL] postPropertySaleCommissionPayout failed:", err.message)
       );
     } else if (status === "cancelled" && oldCommission.status === "approved") {

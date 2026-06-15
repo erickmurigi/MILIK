@@ -1,9 +1,10 @@
 import mongoose from "mongoose";
-import SaleListing from "../models/SaleListing.js";
-import SaleDeal from "../models/SaleDeal.js";
-import SalePayment from "../models/SalePayment.js";
+import SaleListing   from "../models/SaleListing.js";
+import SaleDeal      from "../models/SaleDeal.js";
+import SalePayment   from "../models/SalePayment.js";
 import SaleCommission from "../models/SaleCommission.js";
-import SaleOffer from "../models/SaleOffer.js";
+import SaleOffer     from "../models/SaleOffer.js";
+import SaleLead      from "../models/SaleLead.js";
 import { resolveActiveBusinessId } from "../services/businessScope.js";
 
 export const getDashboardStats = async (req, res, next) => {
@@ -11,7 +12,8 @@ export const getDashboardStats = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const bId = new mongoose.Types.ObjectId(String(business));
 
-    const [listingStats, dealStats, paymentStats, commissionStats, recentDeals, recentListings] = await Promise.all([
+    const now = new Date();
+    const [listingStats, dealStats, paymentStats, commissionStats, leadStats, overdueLeads, recentDeals, recentListings] = await Promise.all([
       SaleListing.aggregate([
         { $match: { business: bId } },
         { $group: { _id: "$status", count: { $sum: 1 } } },
@@ -28,6 +30,15 @@ export const getDashboardStats = async (req, res, next) => {
         { $match: { business: bId } },
         { $group: { _id: "$status", totalAmount: { $sum: "$commissionAmount" } } },
       ]),
+      SaleLead.aggregate([
+        { $match: { business: bId } },
+        { $group: { _id: "$status", count: { $sum: 1 } } },
+      ]),
+      SaleLead.countDocuments({
+        business: bId,
+        status: { $nin: ["converted", "lost"] },
+        nextFollowUpDate: { $lt: now },
+      }),
       SaleDeal.find({ business })
         .sort({ createdAt: -1 })
         .limit(5)
@@ -41,9 +52,12 @@ export const getDashboardStats = async (req, res, next) => {
         .lean(),
     ]);
 
-    const listingMap = Object.fromEntries(listingStats.map((s) => [s._id, s.count]));
-    const dealMap = Object.fromEntries(dealStats.map((s) => [s._id, { count: s.count, value: s.totalValue }]));
+    const listingMap    = Object.fromEntries(listingStats.map((s) => [s._id, s.count]));
+    const dealMap       = Object.fromEntries(dealStats.map((s) => [s._id, { count: s.count, value: s.totalValue }]));
     const commissionMap = Object.fromEntries(commissionStats.map((s) => [s._id, s.totalAmount]));
+    const leadMap       = Object.fromEntries(leadStats.map((s) => [s._id, s.count]));
+    const activeLeads   = (leadMap.new || 0) + (leadMap.contacted || 0) + (leadMap.qualified || 0) +
+                          (leadMap.site_visited || 0) + (leadMap.proposal_sent || 0) + (leadMap.negotiating || 0);
 
     res.status(200).json({
       listings: {
@@ -68,6 +82,19 @@ export const getDashboardStats = async (req, res, next) => {
         pending: commissionMap.pending || 0,
         approved: commissionMap.approved || 0,
         paid: commissionMap.paid || 0,
+      },
+      leads: {
+        new:          leadMap.new          || 0,
+        contacted:    leadMap.contacted    || 0,
+        qualified:    leadMap.qualified    || 0,
+        siteVisited:  leadMap.site_visited || 0,
+        proposalSent: leadMap.proposal_sent || 0,
+        negotiating:  leadMap.negotiating  || 0,
+        converted:    leadMap.converted    || 0,
+        lost:         leadMap.lost         || 0,
+        active:       activeLeads,
+        overdue:      overdueLeads,
+        total:        Object.values(leadMap).reduce((a, b) => a + b, 0),
       },
       recentDeals,
       recentListings,

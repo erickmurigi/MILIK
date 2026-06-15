@@ -24,6 +24,7 @@ const saleOfferSchema = new mongoose.Schema(
 
 saleOfferSchema.index({ business: 1, offerNumber: 1 }, { unique: true });
 saleOfferSchema.index({ business: 1, listing: 1, status: 1 });
+saleOfferSchema.index({ business: 1, buyer: 1 });
 saleOfferSchema.index({ business: 1, createdAt: -1 });
 
 export default mongoose.model("SaleOffer", saleOfferSchema);

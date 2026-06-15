@@ -125,6 +125,18 @@ export const hasCompanyPermission = (
   return checkModuleAccess(moduleAccess, moduleKey, normalizedAction);
 };
 
+// Checks ONLY whether the user has module-level access (View Only or Full Access).
+// Used by routes that have no granular resource but still need to honor moduleAccess = 'none'.
+export const checkUserModuleAccess = (user, company, moduleKey) => {
+  if (!moduleKey) return true;
+  if (user?.isSystemAdmin || user?.superAdminAccess || user?.adminAccess) return true;
+  const assignment = getAssignment(user, company);
+  const moduleAccess = assignment?.moduleAccess || user?.moduleAccess || {};
+  const key = MODULE_ACCESS_MAP[moduleKey] || moduleKey;
+  const accessText = String(moduleAccess?.[key] || '').toLowerCase();
+  return accessText === 'view only' || accessText === 'full access';
+};
+
 export const guardButtonProps = (
   allowed,
   titleWhenDenied = 'You do not have permission for this action'

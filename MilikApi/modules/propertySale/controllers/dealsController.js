@@ -85,6 +85,7 @@ export const createDeal = async (req, res, next) => {
     ]);
     if (!listing) return next(createError(400, "Listing not found"));
     if (listing.status === "sold") return next(createError(400, "This listing is already sold"));
+    if (listing.status === "under_contract") return next(createError(400, "This listing already has an active deal"));
     if (!buyer) return next(createError(400, "Buyer not found"));
     if (req.body.agent && !agent) return next(createError(400, "Agent not found"));
 
@@ -141,7 +142,8 @@ export const updateDeal = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
-    const { business: _b, dealNumber: _n, createdBy: _c, listing: _l, buyer: _by, offer: _o, ...updates } = req.body;
+    // status must go through closeDeal / cancelDeal — strip it here to prevent bypassing validation
+    const { business: _b, dealNumber: _n, createdBy: _c, listing: _l, buyer: _by, offer: _o, status: _s, ...updates } = req.body;
     const deal = await populateDeal(
       SaleDeal.findOneAndUpdate(
         { _id: req.params.id, business },
@@ -203,6 +205,12 @@ export const cancelDeal = async (req, res, next) => {
     const deal = await SaleDeal.findOne({ _id: req.params.id, business });
     if (!deal) return next(createError(404, "Deal not found"));
     if (deal.status === "closed") return next(createError(400, "Cannot cancel a closed deal"));
+    if (deal.status === "cancelled") return next(createError(400, "Deal is already cancelled"));
+
+    const paidPaymentCount = await SalePayment.countDocuments({ business, deal: deal._id, status: "paid" });
+    if (paidPaymentCount > 0) {
+      return next(createError(400, `${paidPaymentCount} payment(s) must be voided before cancelling this deal`));
+    }
 
     deal.status = "cancelled";
     deal.notes = req.body.cancellationReason ? `Cancelled: ${req.body.cancellationReason}` : deal.notes;

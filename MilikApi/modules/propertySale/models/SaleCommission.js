@@ -29,5 +29,6 @@ const saleCommissionSchema = new mongoose.Schema(
 saleCommissionSchema.index({ business: 1, commissionNumber: 1 }, { unique: true });
 saleCommissionSchema.index({ business: 1, agent: 1, status: 1 });
 saleCommissionSchema.index({ business: 1, deal: 1, status: 1 });
+saleCommissionSchema.index({ business: 1, status: 1, createdAt: -1 });
 
 export default mongoose.model("SaleCommission", saleCommissionSchema);

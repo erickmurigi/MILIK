@@ -11,6 +11,7 @@ import CarWashShell from "./CarWashShell";
 
 const DEFAULT_PAGE_SIZE = 25;
 const destinations = ["bank", "mpesa", "safe", "other"];
+const statuses = ["pending", "confirmed", "cancelled"];
 // Only the allowed forward transitions from each status
 const nextStatuses = {
   pending:   ["pending", "confirmed", "cancelled"],

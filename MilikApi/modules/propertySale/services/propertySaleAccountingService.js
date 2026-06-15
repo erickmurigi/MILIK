@@ -14,10 +14,11 @@ import FinancialLedgerEntry from "../../../models/FinancialLedgerEntry.js";
 import { postEntry, postReversal } from "../../../services/ledgerPostingService.js";
 
 const PS_ACCOUNT_TEMPLATES = {
-  "1311": { name: "Property Sale Receipts Control",   type: "asset",     group: "assets",      subGroup: "Current Assets" },
-  "2180": { name: "Agent Commission Payable",          type: "liability", group: "liabilities", subGroup: "Agent Payables" },
-  "4410": { name: "Property Sale Revenue",             type: "income",    group: "income",      subGroup: "Property Sales" },
-  "5320": { name: "Property Sale Commission Expense",  type: "expense",   group: "expenses",    subGroup: "Sales Commissions" },
+  "1311": { name: "Property Sale Receipts Control",       type: "asset",     group: "assets",      subGroup: "Current Assets" },
+  "2180": { name: "Agent Commission Payable",              type: "liability", group: "liabilities", subGroup: "Agent Payables" },
+  "4410": { name: "Property Sale Revenue",                 type: "income",    group: "income",      subGroup: "Property Sales" },
+  "5320": { name: "Property Sale Commission Expense",      type: "expense",   group: "expenses",    subGroup: "Sales Commissions" },
+  "5321": { name: "Agent Commission Disbursements",        type: "expense",   group: "expenses",    subGroup: "Sales Commissions" },
 };
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
@@ -172,16 +173,57 @@ export const postPropertySaleCommissionAccrual = async ({ businessId, commission
   ]);
 };
 
-// ─── Commission payout — ensure accrual only ─────────────────────────────────
+// ─── Commission payout — accrual + payable clearance ─────────────────────────
 
 /**
  * Called when a commission is marked "paid".
- * Only ensures the accrual entry exists (Dr 5320 / Cr 2180).
- * The actual cash outflow (Dr 2180 / Cr Bank) must be recorded via a Payment Voucher,
- * which is the correct accounting treatment for agent commission payments.
+ * Step 1: ensure the accrual exists  — Dr 5320 Commission Expense / Cr 2180 Commission Payable
+ * Step 2: clear the payable          — Dr 2180 Commission Payable / Cr 5321 Commission Disbursements
+ * The 5321 clearing account lets accounts reconcile the cash outflow separately.
  */
-export const postPropertySaleCommissionPayout = async ({ businessId, commission, userId }) => {
+export const postPropertySaleCommissionPayout = async ({ businessId, commission, userId, payoutDate }) => {
   await postPropertySaleCommissionAccrual({ businessId, commission, userId });
+
+  const amount = round2(Number(commission.commissionAmount || 0));
+  if (amount <= 0) return;
+
+  // Idempotency: skip if payout clearing already posted
+  const existingPayout = await FinancialLedgerEntry.countDocuments({
+    business: businessId,
+    sourceTransactionType: "property_sale_commission_payout",
+    sourceTransactionId: String(commission._id),
+    status: { $ne: "reversed" },
+  });
+  if (existingPayout > 0) return;
+
+  const effectiveDate = payoutDate ? new Date(payoutDate) : new Date();
+  const { start, end } = dayRange(effectiveDate);
+  const journalGroupId = new mongoose.Types.ObjectId();
+
+  const [payableAcc, disbursementAcc] = await Promise.all([
+    resolvePSAccount(businessId, "2180"),
+    resolvePSAccount(businessId, "5321"),
+  ]);
+
+  const ref = commission.commissionNumber || String(commission._id);
+
+  const base = {
+    business: businessId,
+    sourceTransactionType: "property_sale_commission_payout",
+    sourceTransactionId: String(commission._id),
+    transactionDate: effectiveDate,
+    statementPeriodStart: start,
+    statementPeriodEnd: end,
+    journalGroupId,
+    category: "PROPERTY_SALE_COMMISSION_PAYOUT",
+    createdBy: userId,
+    allowUnscoped: true,
+  };
+
+  await Promise.all([
+    postEntry({ ...base, accountId: payableAcc._id,      direction: "debit",  amount, notes: `Agent commission payable cleared — ${ref}` }),
+    postEntry({ ...base, accountId: disbursementAcc._id, direction: "credit", amount, notes: `Agent commission disbursed — ${ref}` }),
+  ]);
 };
 
 // ─── Commission reversal — when cancelled after accrual ──────────────────────

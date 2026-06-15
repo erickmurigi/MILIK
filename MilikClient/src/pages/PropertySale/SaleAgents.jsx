@@ -42,6 +42,7 @@ const SaleAgents = () => {
 
   const agents = agentsData?.data ?? [];
   const serverTotal = agentsData?.total ?? 0;
+  const backendStats = agentsData?.stats ?? null;
   const totalPages = Math.max(1, Math.ceil(serverTotal / ITEMS_PER_PAGE));
   const safePage = page;
   const pageRows = agents;
@@ -152,13 +153,15 @@ ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[
             { label: "Total Agents", value: serverTotal, cls: "bg-slate-900 text-white" },
-            { label: "Active", value: agents.filter((a) => a.status === "active").length, cls: "bg-[#027333] text-white" },
-            { label: "Inactive", value: agents.filter((a) => a.status !== "active").length, cls: "bg-slate-100 border border-slate-200 text-slate-700" },
+            { label: "Active", value: backendStats?.active?.count ?? agents.filter((a) => a.status === "active").length, cls: "bg-[#027333] text-white" },
+            { label: "Inactive", value: backendStats?.inactive?.count ?? agents.filter((a) => a.status !== "active").length, cls: "bg-slate-100 border border-slate-200 text-slate-700" },
             {
               label: "Avg Commission",
-              value: agents.length > 0
-                ? `${(agents.reduce((s, a) => s + Number(a.commissionRate || 0), 0) / agents.length).toFixed(1)}%`
-                : "—",
+              value: backendStats?.active?.avgRate != null
+                ? `${Number(backendStats.active.avgRate).toFixed(1)}%`
+                : agents.length > 0
+                  ? `${(agents.reduce((s, a) => s + Number(a.commissionRate || 0), 0) / agents.length).toFixed(1)}%`
+                  : "—",
               cls: "bg-emerald-50 border border-emerald-200 text-emerald-900",
             },
           ].map((c) => (

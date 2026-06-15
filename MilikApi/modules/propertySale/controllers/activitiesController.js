@@ -1,0 +1,108 @@
+import { createError } from "../../../utils/error.js";
+import SaleActivity from "../models/SaleActivity.js";
+import SaleLead     from "../models/SaleLead.js";
+import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
+
+export const listActivities = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const {
+      relatedLead = "", relatedBuyer = "", relatedDeal = "",
+      type = "", outcome = "", from = "", to = "",
+      page = 1, limit = 50,
+    } = req.query;
+
+    const pageNum  = Math.max(parseInt(page,  10) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+
+    const filter = { business };
+    if (relatedLead)  filter.relatedLead  = relatedLead;
+    if (relatedBuyer) filter.relatedBuyer = relatedBuyer;
+    if (relatedDeal)  filter.relatedDeal  = relatedDeal;
+    if (type)    filter.type    = type;
+    if (outcome) filter.outcome = outcome;
+    if (from || to) {
+      filter.date = {};
+      if (from) filter.date.$gte = new Date(from);
+      if (to)   filter.date.$lte = new Date(new Date(to).setHours(23, 59, 59, 999));
+    }
+
+    const [activities, total] = await Promise.all([
+      SaleActivity.find(filter)
+        .populate("relatedLead",    "leadNumber fullName")
+        .populate("relatedBuyer",   "buyerNumber fullName")
+        .populate("relatedDeal",    "dealNumber")
+        .populate("relatedListing", "listingNumber title")
+        .populate("createdBy",      "name fullName")
+        .sort({ date: -1 })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+        .lean(),
+      SaleActivity.countDocuments(filter),
+    ]);
+
+    res.status(200).json({ data: activities, total, page: pageNum, pages: Math.ceil(total / limitNum) || 1 });
+  } catch (err) { next(err); }
+};
+
+export const createActivity = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const userId   = currentUserId(req);
+    const activityNumber = await generateSequentialNumber(SaleActivity, business, "ACT");
+
+    const activity = await SaleActivity.create({
+      ...req.body,
+      business,
+      activityNumber,
+      createdBy: userId,
+      updatedBy: userId,
+    });
+
+    // Update lead's lastContactDate when an activity is logged against it
+    if (req.body.relatedLead) {
+      await SaleLead.findOneAndUpdate(
+        { _id: req.body.relatedLead, business },
+        { lastContactDate: activity.date, updatedBy: userId }
+      );
+    }
+
+    const populated = await SaleActivity.findById(activity._id)
+      .populate("relatedLead",    "leadNumber fullName")
+      .populate("relatedBuyer",   "buyerNumber fullName")
+      .populate("relatedDeal",    "dealNumber")
+      .lean();
+
+    res.status(201).json(populated);
+  } catch (err) { next(err); }
+};
+
+export const updateActivity = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const userId   = currentUserId(req);
+    const { business: _b, activityNumber: _n, createdBy: _c, ...updates } = req.body;
+
+    const activity = await SaleActivity.findOneAndUpdate(
+      { _id: req.params.id, business },
+      { ...updates, updatedBy: userId },
+      { new: true, runValidators: true }
+    )
+      .populate("relatedLead",  "leadNumber fullName")
+      .populate("relatedBuyer", "buyerNumber fullName")
+      .populate("relatedDeal",  "dealNumber");
+
+    if (!activity) return next(createError(404, "Activity not found"));
+    res.status(200).json(activity);
+  } catch (err) { next(err); }
+};
+
+export const deleteActivity = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const activity = await SaleActivity.findOne({ _id: req.params.id, business });
+    if (!activity) return next(createError(404, "Activity not found"));
+    await activity.deleteOne();
+    res.status(200).json({ message: "Activity deleted" });
+  } catch (err) { next(err); }
+};

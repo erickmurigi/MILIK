@@ -64,7 +64,13 @@
       "Bash(grep -v \"//\\\\|className\\\\|<span\\\\|<div\\\\|label\\\\|title=\")",
       "Bash(xargs -I {} basename {})",
       "Bash(xargs grep -l \"deposit\" -i)",
-      "Bash(xargs wc -l)"
+      "Bash(xargs wc -l)",
+      "Bash(npm run *)",
+      "Bash(xargs grep -l \"PropertySale\\\\|propertySale\")",
+      "Bash(xargs grep -l \"PropertySale\\\\|/sale\")",
+      "Bash(grep -E \"\\\\.\\(jsx|js\\)$\")",
+      "Bash(grep -E \"\\\\.js$\")",
+      "Bash(xargs grep -l \"window.open.*print\\\\|window.print\")"
     ]
   }
 }

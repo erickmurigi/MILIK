@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { createError } from "../../../utils/error.js";
 import SaleListing from "../models/SaleListing.js";
 import SaleAgent from "../models/SaleAgent.js";
@@ -6,6 +7,7 @@ import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from
 export const listListings = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
+    const bId = new mongoose.Types.ObjectId(String(business));
     const { search = "", status = "", propertyType = "", agentId = "", page = 1, limit = 50 } = req.query;
     const pageNum = Math.max(parseInt(page, 10) || 1, 1);
     const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 500);
@@ -16,7 +18,7 @@ export const listListings = async (req, res, next) => {
     if (search.trim()) {
       filter.$text = { $search: search.trim() };
     }
-    const [listings, total] = await Promise.all([
+    const [listings, total, statsRaw] = await Promise.all([
       SaleListing.find(filter)
         .populate("assignedAgent", "fullName agentNumber phone")
         .sort({ createdAt: -1 })
@@ -24,8 +26,20 @@ export const listListings = async (req, res, next) => {
         .limit(limitNum)
         .lean(),
       SaleListing.countDocuments(filter),
+      SaleListing.aggregate([
+        { $match: { business: bId } },
+        { $group: { _id: "$status", count: { $sum: 1 }, totalValue: { $sum: "$askingPrice" } } },
+      ]),
     ]);
-    res.status(200).json({ data: listings, total, page: pageNum, pages: Math.ceil(total / limitNum) || 1 });
+    const statsMap = Object.fromEntries(statsRaw.map((s) => [s._id, { count: s.count, totalValue: s.totalValue }]));
+    const stats = {
+      available:     statsMap.available     || { count: 0, totalValue: 0 },
+      reserved:      statsMap.reserved      || { count: 0, totalValue: 0 },
+      under_contract: statsMap.under_contract || { count: 0, totalValue: 0 },
+      sold:          statsMap.sold          || { count: 0, totalValue: 0 },
+      withdrawn:     statsMap.withdrawn     || { count: 0, totalValue: 0 },
+    };
+    res.status(200).json({ data: listings, total, page: pageNum, pages: Math.ceil(total / limitNum) || 1, stats });
   } catch (err) {
     next(err);
   }
@@ -114,12 +128,18 @@ export const updateListingStatus = async (req, res, next) => {
     const VALID = ["available", "reserved", "under_contract", "sold", "withdrawn"];
     const { status } = req.body;
     if (!VALID.includes(status)) return next(createError(400, "Invalid listing status"));
+
+    const existing = await SaleListing.findOne({ _id: req.params.id, business }).lean();
+    if (!existing) return next(createError(404, "Listing not found"));
+    if (existing.status === "sold") {
+      return next(createError(400, "A sold listing cannot be manually re-listed — cancel the deal instead"));
+    }
+
     const listing = await SaleListing.findOneAndUpdate(
       { _id: req.params.id, business },
       { status, updatedBy: userId },
       { new: true }
     );
-    if (!listing) return next(createError(404, "Listing not found"));
     res.status(200).json(listing);
   } catch (err) {
     next(err);

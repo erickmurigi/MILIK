@@ -8,7 +8,7 @@ import useInactivityLogout from "./hooks/useInactivityLogout";
 import { clearClientSessionStorage } from "./utils/sessionCleanup";
 import { hasSessionTimedOut } from "./utils/sessionTimeout";
 import "./App.css";
-import { hasCompanyPermission } from "./utils/permissions";
+import { checkUserModuleAccess, hasCompanyPermission } from "./utils/permissions";
 import { GL_ACCESS_MODULES, hasAnyCompanyModule, hasCompanyModule, isPropertyManagerCompany, isSelfManagingLandlordCompany } from "./utils/companyModules";
 import { ConfirmProvider } from "./context/ConfirmContext";
 import { ESSContextProvider } from "./context/ESSContext";
@@ -230,6 +230,8 @@ const SaleCommissions       = lazy(() => import("./pages/PropertySale/SaleCommis
 const SaleReports           = lazy(() => import("./pages/PropertySale/SaleReports"));
 const SaleMonthlyDetail     = lazy(() => import("./pages/PropertySale/SaleMonthlyDetail"));
 const SaleFinancials        = lazy(() => import("./pages/PropertySale/SaleFinancials"));
+const SaleLeads             = lazy(() => import("./pages/PropertySale/SaleLeads"));
+const SaleActivities        = lazy(() => import("./pages/PropertySale/SaleActivities"));
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const DEMO_EXPIRED_NOTICE_KEY = "milik_demo_expired_notice";
@@ -303,13 +305,40 @@ const getSignedOutRedirectPath = () =>
   hasDemoExpiredNotice() ? "/?demoExpired=1" : "/login";
 
 // ─── Route guards ─────────────────────────────────────────────────────────────
-function ProtectedRoute({ children, allowMustChangePassword = false }) {
-  const { currentUser } = useSelector((state) => state.auth);
+// Single unified guard that replaces ProtectedRoute, CompanyModuleRoute,
+// PermissionRoute, and CompanyModeRoute. Reads Redux state once per render.
+//
+// Props:
+//   moduleKey   – company module key (string | string[]).
+//                 Gates on: (a) module enabled for the company AND
+//                           (b) user has at least view-only module-level access.
+//   resource    – granular permission resource. When supplied, hasCompanyPermission
+//                 runs the full check (module-level + granular + adminAccess).
+//   action      – permission action (default "view").
+//   companyMode – { allowLandlord?, allowManager?, allowOther?, fallback? }
+//                 Replicates CompanyModeRoute behaviour inline.
+//   fallback    – redirect when denied (default "/moduleDashboard").
+//   allowMustChangePassword – set true only for /first-time-password itself.
+function Guard({
+  children,
+  moduleKey   = null,
+  resource    = null,
+  action      = "view",
+  companyMode = null,
+  fallback    = "/moduleDashboard",
+  allowMustChangePassword = false,
+}) {
+  const { currentUser }    = useSelector((state) => state.auth);
+  const { currentCompany } = useSelector((state) => state.company);
   const storedSession = getStoredAuthSession();
-  const resolvedUser = getResolvedAuthUser(currentUser, storedSession);
-  const isAuthenticated = Boolean(resolvedUser || storedSession.token);
+  const resolvedUser  = getResolvedAuthUser(currentUser, storedSession);
 
-  if (!isAuthenticated) return <Navigate to={getSignedOutRedirectPath()} replace />;
+  // 1. Authentication
+  if (!resolvedUser && !storedSession.token) {
+    return <Navigate to={getSignedOutRedirectPath()} replace />;
+  }
+
+  // 2. Force password change
   if (
     !allowMustChangePassword &&
     resolvedUser?.mustChangePassword &&
@@ -318,67 +347,52 @@ function ProtectedRoute({ children, allowMustChangePassword = false }) {
   ) {
     return <Navigate to="/first-time-password" replace />;
   }
-  return children;
-}
 
-function PermissionRoute({ children, resource, action = "view", moduleKey = null, fallback = "/moduleDashboard" }) {
-  const { currentUser } = useSelector((state) => state.auth);
-  const { currentCompany } = useSelector((state) => state.company);
-  const storedSession = getStoredAuthSession();
-  const resolvedUser = getResolvedAuthUser(currentUser, storedSession);
-  const isAuthenticated = Boolean(resolvedUser || storedSession.token);
+  // Super/sys admins bypass all module and permission checks
+  if (resolvedUser?.isSystemAdmin || resolvedUser?.superAdminAccess) return children;
 
-  if (!isAuthenticated) return <Navigate to={getSignedOutRedirectPath()} replace />;
   const activeCompany = currentCompany || resolvedUser?.company || null;
-  if (Array.isArray(moduleKey)) {
-    if (!hasAnyCompanyModule(activeCompany, moduleKey)) return <Navigate to={fallback} replace />;
-  } else if (moduleKey && !hasCompanyModule(activeCompany, moduleKey)) {
-    return <Navigate to={fallback} replace />;
+
+  // 3. Company operating-mode gate (replaces CompanyModeRoute)
+  if (companyMode) {
+    const isLandlord = isSelfManagingLandlordCompany(activeCompany);
+    const isManager  = isPropertyManagerCompany(activeCompany);
+    const isOther    = !isLandlord && !isManager;
+    const modeFallback = companyMode.fallback ?? "/dashboard";
+    if (
+      (isLandlord && companyMode.allowLandlord === false) ||
+      (isManager  && companyMode.allowManager  === false) ||
+      (isOther    && companyMode.allowOther    === false)
+    ) {
+      return <Navigate to={modeFallback} replace />;
+    }
   }
-  const allowed = hasCompanyPermission(resolvedUser || {}, activeCompany, resource, action, moduleKey);
-  return allowed ? children : <Navigate to={fallback} replace />;
-}
 
-function CompanyModeRoute({
-  children,
-  allowLandlordMode = true,
-  allowPropertyManagerMode = true,
-  allowOtherMode = allowLandlordMode && allowPropertyManagerMode,
-  fallback = "/dashboard",
-}) {
-  const { currentUser } = useSelector((state) => state.auth);
-  const { currentCompany } = useSelector((state) => state.company);
-  const storedSession = getStoredAuthSession();
-  const resolvedUser = getResolvedAuthUser(currentUser, storedSession);
-  const isAuthenticated = Boolean(resolvedUser || storedSession.token);
-
-  if (!isAuthenticated) return <Navigate to={getSignedOutRedirectPath()} replace />;
-
-  const activeCompany = currentCompany || resolvedUser?.company || null;
-  const landlordMode = isSelfManagingLandlordCompany(activeCompany);
-  const propertyManagerMode = isPropertyManagerCompany(activeCompany);
-  const otherMode = !landlordMode && !propertyManagerMode;
-
-  if (
-    (landlordMode && !allowLandlordMode) ||
-    (propertyManagerMode && !allowPropertyManagerMode) ||
-    (otherMode && !allowOtherMode)
-  ) {
-    return <Navigate to={fallback} replace />;
+  // 4. Company subscription check — is this module enabled for the company?
+  if (moduleKey) {
+    const enabled = Array.isArray(moduleKey)
+      ? hasAnyCompanyModule(activeCompany, moduleKey)
+      : hasCompanyModule(activeCompany, moduleKey);
+    if (!enabled) return <Navigate to={fallback} replace />;
   }
-  return children;
-}
 
-function CompanyModuleRoute({ children, moduleKey, fallback = "/moduleDashboard" }) {
-  const { currentUser } = useSelector((state) => state.auth);
-  const { currentCompany } = useSelector((state) => state.company);
-  const storedSession = getStoredAuthSession();
-  const resolvedUser = getResolvedAuthUser(currentUser, storedSession);
-  const isAuthenticated = Boolean(resolvedUser || storedSession.token);
+  // 5. User-level access
+  //    • With resource → hasCompanyPermission handles adminAccess + module-level +
+  //      granular permissions in one call.
+  //    • Without resource but with moduleKey → checkUserModuleAccess enforces
+  //      moduleAccess != 'none', which is the check that was missing on dashboard
+  //      routes and all HR / Property Sale routes.
+  if (resource) {
+    if (!hasCompanyPermission(resolvedUser, activeCompany, resource, action, moduleKey)) {
+      return <Navigate to={fallback} replace />;
+    }
+  } else if (moduleKey) {
+    const key = Array.isArray(moduleKey) ? moduleKey[0] : moduleKey;
+    if (!checkUserModuleAccess(resolvedUser, activeCompany, key)) {
+      return <Navigate to={fallback} replace />;
+    }
+  }
 
-  if (!isAuthenticated) return <Navigate to={getSignedOutRedirectPath()} replace />;
-  const activeCompany = currentCompany || resolvedUser?.company || null;
-  if (!hasCompanyModule(activeCompany, moduleKey)) return <Navigate to={fallback} replace />;
   return children;
 }
 
@@ -563,127 +577,133 @@ function App() {
             <Route path="/trial-access" element={<PublicOnlyRoute><DemoAccessEntry /></PublicOnlyRoute>} />
             <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
             <Route path="/setup-admin" element={<SetupAdmin />} />
-            <Route path="/first-time-password" element={<ProtectedRoute allowMustChangePassword><FirstTimePassword /></ProtectedRoute>} />
+            <Route path="/first-time-password" element={<Guard allowMustChangePassword><FirstTimePassword /></Guard>} />
 
             {/* ── Core dashboards ───────────────────────────────────────── */}
-            <Route path="/moduleDashboard" element={<ProtectedRoute><ModulesDashboard /></ProtectedRoute>} />
-            <Route path="/dashboard" element={<CompanyModuleRoute moduleKey="propertyManagement"><ProtectedRoute><Dashboard /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/my-account"            element={<ProtectedRoute><MyAccount /></ProtectedRoute>} />
-            <Route path="/communications/sms"   element={<ProtectedRoute><SmsManager /></ProtectedRoute>} />
-            <Route path="/communications/email" element={<ProtectedRoute><EmailManager /></ProtectedRoute>} />
+            <Route path="/moduleDashboard" element={<Guard><ModulesDashboard /></Guard>} />
+            <Route path="/dashboard"       element={<Guard moduleKey="propertyManagement"><Dashboard /></Guard>} />
+            <Route path="/my-account"      element={<Guard><MyAccount /></Guard>} />
+            <Route path="/communications/sms"   element={<Guard resource="communications"><SmsManager /></Guard>} />
+            <Route path="/communications/email" element={<Guard resource="communications"><EmailManager /></Guard>} />
 
             {/* ── Financial Accounts module ─────────────────────────────── */}
             <Route path="/accounts" element={<Navigate to="/accounts/dashboard" replace />} />
-            <Route path="/accounts/dashboard"         element={<CompanyModuleRoute moduleKey="accounts"><ProtectedRoute><AccountsDashboard /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/accounts/chart-of-accounts" element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="chartOfAccounts" moduleKey="accounts"><ChartOfAccounts /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/accounts/chart-of-accounts/:accountId/activity" element={<CompanyModuleRoute moduleKey="accounts"><ProtectedRoute><LedgerAccountActivity /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/accounts/journals"          element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="journals" moduleKey="accounts"><JournalEntries /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/accounts/payment-vouchers"  element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="paymentVouchers" moduleKey="accounts"><PaymentVouchers /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/accounts/petty-cash"        element={<CompanyModuleRoute moduleKey="accounts"><ProtectedRoute><PettyCash /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/accounts/expenses"          element={<CompanyModuleRoute moduleKey="accounts"><ProtectedRoute><ExpenseRequisition /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/accounts/service-providers" element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="expenses" moduleKey="accounts"><ServiceProviders /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/accounts/trial-balance"     element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><TrialBalanceReport /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/accounts/income-statement"  element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><IncomeStatementReport /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/accounts/balance-sheet"     element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><BalanceSheetReport /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/accounts/tax-reports"       element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><TaxReports /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/accounts/cash-flow"        element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><CashFlowReport /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/accounts/arrears-aged-analysis" element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><ArrearsAgedAnalysis /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/accounts/payment-aged-analysis" element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><PaymentAgedAnalysis /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/accounts/bank-reconciliation"   element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><BankReconciliation /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/accounts/fixed-assets"              element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><FixedAssets /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/accounts/fixed-assets/depreciation" element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><FixedAssetsDepreciation /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/accounts/budget"                    element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><BudgetVsActual /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/accounts/budget/analysis"           element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="financialReports" moduleKey="accounts"><BudgetVsActual /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/accounts/creditor-ledger"           element={<CompanyModuleRoute moduleKey="accounts"><PermissionRoute resource="expenses" moduleKey="accounts"><CreditorLedger /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/accounts/dashboard"                              element={<Guard moduleKey="accounts"><AccountsDashboard /></Guard>} />
+            <Route path="/accounts/chart-of-accounts"                      element={<Guard moduleKey="accounts" resource="chartOfAccounts"><ChartOfAccounts /></Guard>} />
+            <Route path="/accounts/chart-of-accounts/:accountId/activity"  element={<Guard moduleKey="accounts" resource="chartOfAccounts"><LedgerAccountActivity /></Guard>} />
+            <Route path="/accounts/journals"                               element={<Guard moduleKey="accounts" resource="journals"><JournalEntries /></Guard>} />
+            <Route path="/accounts/payment-vouchers"                       element={<Guard moduleKey="accounts" resource="paymentVouchers"><PaymentVouchers /></Guard>} />
+            <Route path="/accounts/petty-cash"                             element={<Guard moduleKey="accounts" resource="pettyCash"><PettyCash /></Guard>} />
+            <Route path="/accounts/expenses"                               element={<Guard moduleKey="accounts" resource="expenses"><ExpenseRequisition /></Guard>} />
+            <Route path="/accounts/service-providers"                      element={<Guard moduleKey="accounts" resource="expenses"><ServiceProviders /></Guard>} />
+            <Route path="/accounts/trial-balance"                          element={<Guard moduleKey="accounts" resource="financialReports"><TrialBalanceReport /></Guard>} />
+            <Route path="/accounts/income-statement"                       element={<Guard moduleKey="accounts" resource="financialReports"><IncomeStatementReport /></Guard>} />
+            <Route path="/accounts/balance-sheet"                          element={<Guard moduleKey="accounts" resource="financialReports"><BalanceSheetReport /></Guard>} />
+            <Route path="/accounts/tax-reports"                            element={<Guard moduleKey="accounts" resource="financialReports"><TaxReports /></Guard>} />
+            <Route path="/accounts/cash-flow"                              element={<Guard moduleKey="accounts" resource="financialReports"><CashFlowReport /></Guard>} />
+            <Route path="/accounts/arrears-aged-analysis"                  element={<Guard moduleKey="accounts" resource="financialReports"><ArrearsAgedAnalysis /></Guard>} />
+            <Route path="/accounts/payment-aged-analysis"                  element={<Guard moduleKey="accounts" resource="financialReports"><PaymentAgedAnalysis /></Guard>} />
+            <Route path="/accounts/bank-reconciliation"                    element={<Guard moduleKey="accounts" resource="bankReconciliation"><BankReconciliation /></Guard>} />
+            <Route path="/accounts/fixed-assets"                           element={<Guard moduleKey="accounts" resource="fixedAssets"><FixedAssets /></Guard>} />
+            <Route path="/accounts/fixed-assets/depreciation"              element={<Guard moduleKey="accounts" resource="fixedAssets" action="depreciate"><FixedAssetsDepreciation /></Guard>} />
+            <Route path="/accounts/budget"                                 element={<Guard moduleKey="accounts" resource="budgets"><BudgetVsActual /></Guard>} />
+            <Route path="/accounts/budget/analysis"                        element={<Guard moduleKey="accounts" resource="budgets"><BudgetVsActual /></Guard>} />
+            <Route path="/accounts/creditor-ledger"                        element={<Guard moduleKey="accounts" resource="creditorLedger"><CreditorLedger /></Guard>} />
 
             {/* ── Car Wash module ───────────────────────────────────────── */}
-            <Route path="/carwash/dashboard"         element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-dashboard" moduleKey="carwash"><CarWashDashboard /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/jobs"              element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-jobs" moduleKey="carwash"><CarWashJobs /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/jobs/new"         element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-jobs" moduleKey="carwash"><CarWashAddJob /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/customers"                  element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-loyalty" moduleKey="carwash"><CarWashCustomers /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/customers/opening-balances" element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-loyalty" moduleKey="carwash"><CarWashOpeningBalances /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/accounts"         element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-payments" moduleKey="carwash"><CarWashAccounts /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/jobs/:id/edit"   element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-jobs" moduleKey="carwash"><CarWashAddJob /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/services"          element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-services" moduleKey="carwash"><CarWashServices /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/payments"          element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-payments" moduleKey="carwash"><CarWashPayments /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/deposits"          element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-deposits" moduleKey="carwash"><CarWashDeposits /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/expenses"          element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-expenses" moduleKey="carwash"><CarWashExpenses /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/cashbooks"         element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="chartOfAccounts" moduleKey={GL_ACCESS_MODULES}><CarWashCashbooks /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/chart-of-accounts" element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="chartOfAccounts" moduleKey={GL_ACCESS_MODULES}><ChartOfAccounts /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/financials"        element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="chartOfAccounts" moduleKey={GL_ACCESS_MODULES}><CarWashFinancials /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/staff"             element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-staff" moduleKey="carwash"><CarWashStaff /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/reports"                element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-reports" moduleKey="carwash"><CarWashReports /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/reports/services"       element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-reports" moduleKey="carwash"><CarWashServiceReport /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/reports/staff"          element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-reports" moduleKey="carwash"><CarWashStaffReport /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/reports/expenses"       element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-reports" moduleKey="carwash"><CarWashExpensesReport /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/commissions"            element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-commissions" moduleKey="carwash"><CarWashCommissions /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/commissions/payouts"    element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-commissions" moduleKey="carwash"><CarWashCommissionPayouts /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/commissions/rules"      element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-commissions" moduleKey="carwash"><CarWashCommissionRules /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/commissions/savings"    element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-commissions" moduleKey="carwash"><CarWashStaffSavings /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/loyalty"           element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-loyalty" moduleKey="carwash"><CarWashLoyalty /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/branches"          element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-branches" moduleKey="carwash"><CarWashBranches /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/settings"          element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-settings" moduleKey="carwash"><CarWashSettings /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/carwash/mpesa-notifications" element={<CompanyModuleRoute moduleKey="carwash"><PermissionRoute resource="carwash-payments" moduleKey="carwash"><CarWashMpesaNotifications /></PermissionRoute></CompanyModuleRoute>} />
+            {/* Dashboard falls back to /carwash/jobs so users without dashboard access don't get ejected from the module */}
+            <Route path="/carwash/dashboard"                  element={<Guard moduleKey="carwash" resource="carwash-dashboard" fallback="/carwash/jobs"><CarWashDashboard /></Guard>} />
+            <Route path="/carwash/jobs"                       element={<Guard moduleKey="carwash" resource="carwash-jobs"><CarWashJobs /></Guard>} />
+            <Route path="/carwash/jobs/new"                   element={<Guard moduleKey="carwash" resource="carwash-jobs" action="create"><CarWashAddJob /></Guard>} />
+            <Route path="/carwash/jobs/:id/edit"              element={<Guard moduleKey="carwash" resource="carwash-jobs" action="update"><CarWashAddJob /></Guard>} />
+            <Route path="/carwash/customers"                  element={<Guard moduleKey="carwash" resource="carwash-loyalty"><CarWashCustomers /></Guard>} />
+            <Route path="/carwash/customers/opening-balances" element={<Guard moduleKey="carwash" resource="carwash-loyalty"><CarWashOpeningBalances /></Guard>} />
+            <Route path="/carwash/accounts"                   element={<Guard moduleKey="carwash" resource="carwash-payments"><CarWashAccounts /></Guard>} />
+            <Route path="/carwash/services"                   element={<Guard moduleKey="carwash" resource="carwash-services"><CarWashServices /></Guard>} />
+            <Route path="/carwash/payments"                   element={<Guard moduleKey="carwash" resource="carwash-payments"><CarWashPayments /></Guard>} />
+            <Route path="/carwash/deposits"                   element={<Guard moduleKey="carwash" resource="carwash-deposits"><CarWashDeposits /></Guard>} />
+            <Route path="/carwash/expenses"                   element={<Guard moduleKey="carwash" resource="carwash-expenses"><CarWashExpenses /></Guard>} />
+            <Route path="/carwash/cashbooks"                  element={<Guard moduleKey={GL_ACCESS_MODULES} resource="chartOfAccounts"><CarWashCashbooks /></Guard>} />
+            <Route path="/carwash/chart-of-accounts"          element={<Guard moduleKey={GL_ACCESS_MODULES} resource="chartOfAccounts"><ChartOfAccounts /></Guard>} />
+            <Route path="/carwash/chart-of-accounts/:accountId/activity" element={<Guard moduleKey="carwash" resource="chartOfAccounts"><LedgerAccountActivity /></Guard>} />
+            <Route path="/carwash/financials"                 element={<Guard moduleKey={GL_ACCESS_MODULES} resource="chartOfAccounts"><CarWashFinancials /></Guard>} />
+            <Route path="/carwash/staff"                      element={<Guard moduleKey="carwash" resource="carwash-staff"><CarWashStaff /></Guard>} />
+            <Route path="/carwash/reports"                    element={<Guard moduleKey="carwash" resource="carwash-reports"><CarWashReports /></Guard>} />
+            <Route path="/carwash/reports/services"           element={<Guard moduleKey="carwash" resource="carwash-reports"><CarWashServiceReport /></Guard>} />
+            <Route path="/carwash/reports/staff"              element={<Guard moduleKey="carwash" resource="carwash-reports"><CarWashStaffReport /></Guard>} />
+            <Route path="/carwash/reports/expenses"           element={<Guard moduleKey="carwash" resource="carwash-reports"><CarWashExpensesReport /></Guard>} />
+            <Route path="/carwash/commissions"                element={<Guard moduleKey="carwash" resource="carwash-commissions"><CarWashCommissions /></Guard>} />
+            <Route path="/carwash/commissions/payouts"        element={<Guard moduleKey="carwash" resource="carwash-commissions"><CarWashCommissionPayouts /></Guard>} />
+            <Route path="/carwash/commissions/rules"          element={<Guard moduleKey="carwash" resource="carwash-commissions"><CarWashCommissionRules /></Guard>} />
+            <Route path="/carwash/commissions/savings"        element={<Guard moduleKey="carwash" resource="carwash-commissions"><CarWashStaffSavings /></Guard>} />
+            <Route path="/carwash/loyalty"                    element={<Guard moduleKey="carwash" resource="carwash-loyalty"><CarWashLoyalty /></Guard>} />
+            <Route path="/carwash/branches"                   element={<Guard moduleKey="carwash" resource="carwash-branches"><CarWashBranches /></Guard>} />
+            <Route path="/carwash/settings"                   element={<Guard moduleKey="carwash" resource="carwash-settings"><CarWashSettings /></Guard>} />
+            <Route path="/carwash/mpesa-notifications"        element={<Guard moduleKey="carwash" resource="carwash-payments"><CarWashMpesaNotifications /></Guard>} />
 
             {/* ── Inventory & POS module ────────────────────────────────── */}
-            <Route path="/inventory/dashboard"       element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-dashboard"       moduleKey="inventory"><InventoryDashboard /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/inventory/locations"       element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-locations"       moduleKey="inventory"><InvLocations /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/inventory/categories"      element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-categories"      moduleKey="inventory"><InvCategories /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/inventory/products"        element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-products"        moduleKey="inventory"><InvProducts /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/inventory/suppliers"       element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-suppliers"       moduleKey="inventory"><InvSuppliers /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/inventory/purchase-orders" element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-purchase-orders" moduleKey="inventory"><InvPurchaseOrders /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/inventory/transfers"       element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-transfers"       moduleKey="inventory"><InvStockTransfers /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/inventory/stock-movements" element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-stock"     moduleKey="inventory"><InvStockMovements /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/inventory/adjustments"    element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-stock"     moduleKey="inventory"><InvStockAdjustments /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/inventory/valuation"      element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-reports"   moduleKey="inventory"><InvStockValuation /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/inventory/low-stock"      element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-reports"   moduleKey="inventory"><InvLowStock /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/pos/terminal"              element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="pos-terminal"  moduleKey="inventory"><POSTerminal /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/pos/sales"                 element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="pos-sales"           moduleKey="inventory"><POSSalesHistory /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/inventory/tills"           element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="inv-tills"           moduleKey="inventory"><InvTills /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/pos/sessions"              element={<CompanyModuleRoute moduleKey="inventory"><PermissionRoute resource="pos-sessions"        moduleKey="inventory"><POSSessions /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/inventory/dashboard"       element={<Guard moduleKey="inventory" resource="inv-dashboard"><InventoryDashboard /></Guard>} />
+            <Route path="/inventory/locations"       element={<Guard moduleKey="inventory" resource="inv-locations"><InvLocations /></Guard>} />
+            <Route path="/inventory/categories"      element={<Guard moduleKey="inventory" resource="inv-categories"><InvCategories /></Guard>} />
+            <Route path="/inventory/products"        element={<Guard moduleKey="inventory" resource="inv-products"><InvProducts /></Guard>} />
+            <Route path="/inventory/suppliers"       element={<Guard moduleKey="inventory" resource="inv-suppliers"><InvSuppliers /></Guard>} />
+            <Route path="/inventory/purchase-orders" element={<Guard moduleKey="inventory" resource="inv-purchase-orders"><InvPurchaseOrders /></Guard>} />
+            <Route path="/inventory/transfers"       element={<Guard moduleKey="inventory" resource="inv-transfers"><InvStockTransfers /></Guard>} />
+            <Route path="/inventory/stock-movements" element={<Guard moduleKey="inventory" resource="inv-stock"><InvStockMovements /></Guard>} />
+            <Route path="/inventory/adjustments"     element={<Guard moduleKey="inventory" resource="inv-stock"><InvStockAdjustments /></Guard>} />
+            <Route path="/inventory/valuation"       element={<Guard moduleKey="inventory" resource="inv-reports"><InvStockValuation /></Guard>} />
+            <Route path="/inventory/low-stock"       element={<Guard moduleKey="inventory" resource="inv-reports"><InvLowStock /></Guard>} />
+            <Route path="/inventory/tills"           element={<Guard moduleKey="inventory" resource="inv-tills"><InvTills /></Guard>} />
+            <Route path="/pos/terminal"              element={<Guard moduleKey="inventory" resource="pos-terminal"><POSTerminal /></Guard>} />
+            <Route path="/pos/sales"                 element={<Guard moduleKey="inventory" resource="pos-sales"><POSSalesHistory /></Guard>} />
+            <Route path="/pos/sessions"              element={<Guard moduleKey="inventory" resource="pos-sessions"><POSSessions /></Guard>} />
 
             {/* ── HR module ─────────────────────────────────────────────── */}
-            <Route path="/hr/dashboard"           element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRDashboard /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/employees"           element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HREmployees /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/employees/new"       element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRAddEmployee /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/employees/:id"       element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HREmployeeProfile /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/employees/:id/edit"  element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRAddEmployee /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/setup"               element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRSetup /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/leave"               element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRLeaveApplications /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/leave/types"         element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRLeaveTypes /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/payroll"             element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRPayrollPeriods /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/payroll/:periodId"   element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRPayrollPeriodDetail /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/payroll/:periodId/payslip/:payslipId" element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRPayslip /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/reports/headcount" element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRReportHeadcount /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/reports/payroll"   element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRReportPayroll /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/reports/leave"     element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRReportLeave /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/reports/p9"        element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRReportP9 /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/reports/attendance" element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRReportAttendance /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/leave/balances"    element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRLeaveBalances /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/statutory"         element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRStatutoryDeductions /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/appraisals/kpis"   element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRKpiLibrary /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/appraisals/cycles" element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRAppraisalCycles /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/appraisals"            element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRAppraisals /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/payroll/register"      element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRPayrollRegister /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/reports/remittance"    element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRRemittance /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/letters"               element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRLetters /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/attendance"            element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><HRAttendance /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/financials"            element={<CompanyModuleRoute moduleKey="hr"><PermissionRoute resource="chartOfAccounts" moduleKey={GL_ACCESS_MODULES}><HRFinancials /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/hr/chart-of-accounts" element={<CompanyModuleRoute moduleKey="hr"><PermissionRoute resource="chartOfAccounts" moduleKey={GL_ACCESS_MODULES}><ChartOfAccounts /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/hr/dashboard"                        element={<Guard moduleKey="hr"><HRDashboard /></Guard>} />
+            <Route path="/hr/employees"                        element={<Guard moduleKey="hr" resource="hrEmployees"><HREmployees /></Guard>} />
+            <Route path="/hr/employees/new"                    element={<Guard moduleKey="hr" resource="hrEmployees" action="create"><HRAddEmployee /></Guard>} />
+            <Route path="/hr/employees/:id"                    element={<Guard moduleKey="hr" resource="hrEmployees"><HREmployeeProfile /></Guard>} />
+            <Route path="/hr/employees/:id/edit"               element={<Guard moduleKey="hr" resource="hrEmployees" action="update"><HRAddEmployee /></Guard>} />
+            <Route path="/hr/setup"                            element={<Guard moduleKey="hr" resource="hrSetup"><HRSetup /></Guard>} />
+            <Route path="/hr/leave"                            element={<Guard moduleKey="hr" resource="hrLeave"><HRLeaveApplications /></Guard>} />
+            <Route path="/hr/leave/types"                      element={<Guard moduleKey="hr" resource="hrLeave"><HRLeaveTypes /></Guard>} />
+            <Route path="/hr/leave/balances"                   element={<Guard moduleKey="hr" resource="hrLeave"><HRLeaveBalances /></Guard>} />
+            <Route path="/hr/payroll"                          element={<Guard moduleKey="hr" resource="hrPayroll"><HRPayrollPeriods /></Guard>} />
+            <Route path="/hr/payroll/register"                 element={<Guard moduleKey="hr" resource="hrPayroll"><HRPayrollRegister /></Guard>} />
+            <Route path="/hr/payroll/:periodId"                element={<Guard moduleKey="hr" resource="hrPayroll"><HRPayrollPeriodDetail /></Guard>} />
+            <Route path="/hr/payroll/:periodId/payslip/:payslipId" element={<Guard moduleKey="hr" resource="hrPayroll"><HRPayslip /></Guard>} />
+            <Route path="/hr/statutory"                        element={<Guard moduleKey="hr" resource="hrStatutory"><HRStatutoryDeductions /></Guard>} />
+            <Route path="/hr/appraisals"                       element={<Guard moduleKey="hr" resource="hrAppraisals"><HRAppraisals /></Guard>} />
+            <Route path="/hr/appraisals/kpis"                  element={<Guard moduleKey="hr" resource="hrAppraisals"><HRKpiLibrary /></Guard>} />
+            <Route path="/hr/appraisals/cycles"                element={<Guard moduleKey="hr" resource="hrAppraisals"><HRAppraisalCycles /></Guard>} />
+            <Route path="/hr/reports/headcount"                element={<Guard moduleKey="hr" resource="hrReports"><HRReportHeadcount /></Guard>} />
+            <Route path="/hr/reports/payroll"                  element={<Guard moduleKey="hr" resource="hrReports"><HRReportPayroll /></Guard>} />
+            <Route path="/hr/reports/leave"                    element={<Guard moduleKey="hr" resource="hrReports"><HRReportLeave /></Guard>} />
+            <Route path="/hr/reports/p9"                       element={<Guard moduleKey="hr" resource="hrReports"><HRReportP9 /></Guard>} />
+            <Route path="/hr/reports/attendance"               element={<Guard moduleKey="hr" resource="hrReports"><HRReportAttendance /></Guard>} />
+            <Route path="/hr/reports/remittance"               element={<Guard moduleKey="hr" resource="hrReports"><HRRemittance /></Guard>} />
+            <Route path="/hr/letters"                          element={<Guard moduleKey="hr" resource="hrEmployees"><HRLetters /></Guard>} />
+            <Route path="/hr/attendance"                       element={<Guard moduleKey="hr" resource="hrEmployees"><HRAttendance /></Guard>} />
+            <Route path="/hr/financials"                       element={<Guard moduleKey={GL_ACCESS_MODULES} resource="chartOfAccounts"><HRFinancials /></Guard>} />
+            <Route path="/hr/chart-of-accounts"                element={<Guard moduleKey={GL_ACCESS_MODULES} resource="chartOfAccounts"><ChartOfAccounts /></Guard>} />
+            <Route path="/hr/chart-of-accounts/:accountId/activity" element={<Guard moduleKey="hr" resource="chartOfAccounts"><LedgerAccountActivity /></Guard>} />
 
             {/* ── Property Sale module ──────────────────────────────────── */}
-            <Route path="/sale/dashboard"                      element={<CompanyModuleRoute moduleKey="propertySale"><PropertySaleDashboard /></CompanyModuleRoute>} />
-            <Route path="/sale/listings"                       element={<CompanyModuleRoute moduleKey="propertySale"><SaleListings /></CompanyModuleRoute>} />
-            <Route path="/sale/buyers"                         element={<CompanyModuleRoute moduleKey="propertySale"><SaleBuyers /></CompanyModuleRoute>} />
-            <Route path="/sale/agents"                         element={<CompanyModuleRoute moduleKey="propertySale"><SaleAgents /></CompanyModuleRoute>} />
-            <Route path="/sale/offers"                         element={<CompanyModuleRoute moduleKey="propertySale"><SaleOffers /></CompanyModuleRoute>} />
-            <Route path="/sale/deals"                          element={<CompanyModuleRoute moduleKey="propertySale"><SaleDeals /></CompanyModuleRoute>} />
-            <Route path="/sale/payments"                       element={<CompanyModuleRoute moduleKey="propertySale"><SalePayments /></CompanyModuleRoute>} />
-            <Route path="/sale/commissions"                    element={<CompanyModuleRoute moduleKey="propertySale"><SaleCommissions /></CompanyModuleRoute>} />
-            <Route path="/sale/reports"                        element={<CompanyModuleRoute moduleKey="propertySale"><SaleReports /></CompanyModuleRoute>} />
-            <Route path="/sale/reports/monthly/:year/:month"   element={<CompanyModuleRoute moduleKey="propertySale"><SaleMonthlyDetail /></CompanyModuleRoute>} />
-            <Route path="/sale/financials"                       element={<CompanyModuleRoute moduleKey="propertySale"><PermissionRoute resource="chartOfAccounts" moduleKey={GL_ACCESS_MODULES}><SaleFinancials /></PermissionRoute></CompanyModuleRoute>} />
-            <Route path="/sale/chart-of-accounts"              element={<CompanyModuleRoute moduleKey="propertySale"><PermissionRoute resource="chartOfAccounts" moduleKey={GL_ACCESS_MODULES}><ChartOfAccounts /></PermissionRoute></CompanyModuleRoute>} />
+            <Route path="/sale/dashboard"                    element={<Guard moduleKey="propertySale"><PropertySaleDashboard /></Guard>} />
+            <Route path="/sale/listings"                     element={<Guard moduleKey="propertySale" resource="saleListings"><SaleListings /></Guard>} />
+            <Route path="/sale/buyers"                       element={<Guard moduleKey="propertySale" resource="saleBuyers"><SaleBuyers /></Guard>} />
+            <Route path="/sale/agents"                       element={<Guard moduleKey="propertySale" resource="saleAgents"><SaleAgents /></Guard>} />
+            <Route path="/sale/offers"                       element={<Guard moduleKey="propertySale" resource="saleOffers"><SaleOffers /></Guard>} />
+            <Route path="/sale/deals"                        element={<Guard moduleKey="propertySale" resource="saleDeals"><SaleDeals /></Guard>} />
+            <Route path="/sale/payments"                     element={<Guard moduleKey="propertySale" resource="salePayments"><SalePayments /></Guard>} />
+            <Route path="/sale/commissions"                  element={<Guard moduleKey="propertySale" resource="saleCommissions"><SaleCommissions /></Guard>} />
+            <Route path="/sale/reports"                      element={<Guard moduleKey="propertySale" resource="saleReports"><SaleReports /></Guard>} />
+            <Route path="/sale/reports/monthly/:year/:month" element={<Guard moduleKey="propertySale" resource="saleReports"><SaleMonthlyDetail /></Guard>} />
+            <Route path="/sale/financials"                   element={<Guard moduleKey={GL_ACCESS_MODULES} resource="chartOfAccounts"><SaleFinancials /></Guard>} />
+            <Route path="/sale/crm/leads"                    element={<Guard moduleKey="propertySale" resource="saleLeads"><SaleLeads /></Guard>} />
+            <Route path="/sale/crm/activities"               element={<Guard moduleKey="propertySale" resource="saleActivities"><SaleActivities /></Guard>} />
+            <Route path="/sale/chart-of-accounts"            element={<Guard moduleKey={GL_ACCESS_MODULES} resource="chartOfAccounts"><ChartOfAccounts /></Guard>} />
+            <Route path="/sale/chart-of-accounts/:accountId/activity" element={<Guard moduleKey="propertySale" resource="chartOfAccounts"><LedgerAccountActivity /></Guard>} />
 
             {/* ── System setup ──────────────────────────────────────────── */}
             <Route path="/system-setup"          element={<SuperAdminRoute><Navigate to="/system-setup/overview" replace /></SuperAdminRoute>} />
@@ -701,106 +721,103 @@ function App() {
             <Route path="/add-user/:id"          element={<SuperAdminRoute><AddUserPage /></SuperAdminRoute>} />
 
             {/* ── Company Users (Tools > Users) ─────────────────────── */}
-            <Route path="/users"             element={<ProtectedRoute><CompanyUsers /></ProtectedRoute>} />
-            <Route path="/users/new"         element={<ProtectedRoute><AddUserPage /></ProtectedRoute>} />
-            <Route path="/users/:id/edit"    element={<ProtectedRoute><AddUserPage /></ProtectedRoute>} />
+            <Route path="/users"          element={<Guard resource="users"><CompanyUsers /></Guard>} />
+            <Route path="/users/new"      element={<Guard resource="users" action="create"><AddUserPage /></Guard>} />
+            <Route path="/users/:id/edit" element={<Guard resource="users" action="update"><AddUserPage /></Guard>} />
 
             {/* ── Landlords ─────────────────────────────────────────────── */}
-            <Route path="/landlords"                    element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="landlords" moduleKey="propertyManagement"><Landlords /></PermissionRoute></CompanyModeRoute>} />
-            <Route path="/landlords/new"                element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="landlords" action="create" moduleKey="propertyManagement"><AddLandlord /></PermissionRoute></CompanyModeRoute>} />
-            <Route path="/landlord-payments"            element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="landlordPayments" action="view" moduleKey="accounts"><LandlordPayments /></PermissionRoute></CompanyModeRoute>} />
-            <Route path="/landlord-payment-history"     element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="landlordPayments" action="view" moduleKey="accounts"><LandlordPaymentHistory /></PermissionRoute></CompanyModeRoute>} />
-            <Route path="/financial/landlord-statement" element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="statements" moduleKey="propertyManagement"><LandlordCommissionsStatement /></PermissionRoute></CompanyModeRoute>} />
-            <Route path="/invoices/landlord"            element={<ProtectedRoute><Navigate to="/landlord/statements" replace /></ProtectedRoute>} />
-            <Route path="/landlord/processed-statements"element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="processedStatements" moduleKey="accounts"><ProcessedStatements /></PermissionRoute></CompanyModeRoute>} />
-            <Route path="/landlord/statements"          element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="statements" moduleKey="propertyManagement"><LandlordCommissionsStatement /></PermissionRoute></CompanyModeRoute>} />
-            <Route path="/landlords/standing-orders"    element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="standingOrders" action="view" moduleKey="accounts"><LandlordStandingOrders /></PermissionRoute></CompanyModeRoute>} />
-            <Route path="/landlords/advancement"        element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="landlordAdvancements" action="view" moduleKey="accounts"><LandlordAdvancements /></PermissionRoute></CompanyModeRoute>} />
+            <Route path="/landlords"                    element={<Guard companyMode={{ allowLandlord: false }} resource="landlords" moduleKey="propertyManagement"><Landlords /></Guard>} />
+            <Route path="/landlords/new"                element={<Guard companyMode={{ allowLandlord: false }} resource="landlords" action="create" moduleKey="propertyManagement"><AddLandlord /></Guard>} />
+            <Route path="/landlord-payments"            element={<Guard companyMode={{ allowLandlord: false }} resource="landlordPayments" moduleKey="accounts"><LandlordPayments /></Guard>} />
+            <Route path="/landlord-payment-history"     element={<Guard companyMode={{ allowLandlord: false }} resource="landlordPayments" moduleKey="accounts"><LandlordPaymentHistory /></Guard>} />
+            <Route path="/financial/landlord-statement" element={<Guard companyMode={{ allowLandlord: false }} resource="statements" moduleKey="propertyManagement"><LandlordCommissionsStatement /></Guard>} />
+            <Route path="/invoices/landlord"            element={<Navigate to="/landlord/statements" replace />} />
+            <Route path="/landlord/processed-statements"element={<Guard companyMode={{ allowLandlord: false }} resource="processedStatements" moduleKey="accounts"><ProcessedStatements /></Guard>} />
+            <Route path="/landlord/statements"          element={<Guard companyMode={{ allowLandlord: false }} resource="statements" moduleKey="propertyManagement"><LandlordCommissionsStatement /></Guard>} />
+            <Route path="/landlords/standing-orders"    element={<Guard companyMode={{ allowLandlord: false }} resource="standingOrders" moduleKey="accounts"><LandlordStandingOrders /></Guard>} />
+            <Route path="/landlords/advancement"        element={<Guard companyMode={{ allowLandlord: false }} resource="landlordAdvancements" moduleKey="accounts"><LandlordAdvancements /></Guard>} />
 
             {/* ── Properties & Units ────────────────────────────────────── */}
-            <Route path="/properties"                    element={<PermissionRoute resource="properties" moduleKey="propertyManagement"><Properties /></PermissionRoute>} />
-            <Route path="/properties/new"                element={<PermissionRoute resource="properties" action="create" moduleKey="propertyManagement"><AddProperty /></PermissionRoute>} />
-            <Route path="/properties/:id"                element={<ProtectedRoute><PropertyDetail /></ProtectedRoute>} />
-            <Route path="/properties/edit/:id"           element={<PermissionRoute resource="properties" action="update" moduleKey="propertyManagement"><EditProperty /></PermissionRoute>} />
-            <Route path="/properties/commission-settings"element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="commissions" action="view" moduleKey="propertyManagement"><PropertyCommissionSettings /></PermissionRoute></CompanyModeRoute>} />
-            <Route path="/properties/commissions-list"   element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="commissions" action="view" moduleKey="propertyManagement"><CommissionsList /></PermissionRoute></CompanyModeRoute>} />
-            <Route path="/property-expenses"             element={<PermissionRoute resource="propertyExpenses" moduleKey="propertyManagement"><PropertyExpenses /></PermissionRoute>} />
-            <Route path="/units"                         element={<PermissionRoute resource="units" moduleKey="propertyManagement"><Units /></PermissionRoute>} />
-            <Route path="/units/new"                     element={<PermissionRoute resource="units" action="create" moduleKey="propertyManagement"><AddUnit /></PermissionRoute>} />
-            <Route path="/units/:id"                     element={<PermissionRoute resource="units" action="update" moduleKey="propertyManagement"><AddUnit /></PermissionRoute>} />
-            <Route path="/units/space-types"             element={<PermissionRoute resource="units" moduleKey="propertyManagement"><UnitTypesPage /></PermissionRoute>} />
+            <Route path="/properties"                     element={<Guard resource="properties" moduleKey="propertyManagement"><Properties /></Guard>} />
+            <Route path="/properties/new"                 element={<Guard resource="properties" action="create" moduleKey="propertyManagement"><AddProperty /></Guard>} />
+            <Route path="/properties/:id"                 element={<Guard resource="properties" moduleKey="propertyManagement"><PropertyDetail /></Guard>} />
+            <Route path="/properties/edit/:id"            element={<Guard resource="properties" action="update" moduleKey="propertyManagement"><EditProperty /></Guard>} />
+            <Route path="/properties/commission-settings" element={<Guard companyMode={{ allowLandlord: false }} resource="commissions" moduleKey="propertyManagement"><PropertyCommissionSettings /></Guard>} />
+            <Route path="/properties/commissions-list"    element={<Guard companyMode={{ allowLandlord: false }} resource="commissions" moduleKey="propertyManagement"><CommissionsList /></Guard>} />
+            <Route path="/property-expenses"              element={<Guard resource="propertyExpenses" moduleKey="propertyManagement"><PropertyExpenses /></Guard>} />
+            <Route path="/units"                          element={<Guard resource="units" moduleKey="propertyManagement"><Units /></Guard>} />
+            <Route path="/units/new"                      element={<Guard resource="units" action="create" moduleKey="propertyManagement"><AddUnit /></Guard>} />
+            <Route path="/units/:id"                      element={<Guard resource="units" action="update" moduleKey="propertyManagement"><AddUnit /></Guard>} />
+            <Route path="/units/space-types"              element={<Guard resource="units" moduleKey="propertyManagement"><UnitTypesPage /></Guard>} />
 
             {/* ── Tenants ───────────────────────────────────────────────── */}
-            <Route path="/agreements"              element={<PermissionRoute resource="tenants" moduleKey="propertyManagement"><TenantAgreements /></PermissionRoute>} />
-            <Route path="/tenants"                 element={<PermissionRoute resource="tenants" moduleKey="propertyManagement"><Tenants /></PermissionRoute>} />
-            <Route path="/tenants/terminated"      element={<PermissionRoute resource="tenants" moduleKey="propertyManagement"><TerminatedTenants /></PermissionRoute>} />
-            <Route path="/tenant/new"              element={<PermissionRoute resource="tenants" action="create" moduleKey="propertyManagement"><AddTenant /></PermissionRoute>} />
-            <Route path="/tenant/:id/statement"    element={<ProtectedRoute><TenantStatement /></ProtectedRoute>} />
-            <Route path="/tenant/:id/edit"         element={<PermissionRoute resource="tenants" action="update" moduleKey="propertyManagement"><AddTenant /></PermissionRoute>} />
-            <Route path="/tenants/deposits"        element={<PermissionRoute resource="tenants" moduleKey="propertyManagement"><TenantDeposits /></PermissionRoute>} />
-            <Route path="/tenants/take-on-balances"element={<PermissionRoute resource="tenants" moduleKey="propertyManagement"><TakeOnBalances /></PermissionRoute>} />
-            <Route path="/tenants/financing"       element={<ProtectedRoute><Navigate to="/tenants/take-on-balances" replace /></ProtectedRoute>} />
-            <Route path="/tenants/journals"        element={<ProtectedRoute><Navigate to="/financial/journals" replace /></ProtectedRoute>} />
-            <Route path="/invoices/rental"         element={<PermissionRoute resource="tenantInvoices" moduleKey="propertyManagement"><RentalInvoices /></PermissionRoute>} />
-            <Route path="/invoices/new"            element={<PermissionRoute resource="tenantInvoices" moduleKey="propertyManagement"><RentalInvoices initialOpenSingleBooking /></PermissionRoute>} />
-            <Route path="/invoices/rental/:id"     element={<ProtectedRoute><RentalInvoices /></ProtectedRoute>} />
-            <Route path="/invoices/notes"          element={<PermissionRoute resource="tenantInvoices" moduleKey="propertyManagement"><InvoiceNotes /></PermissionRoute>} />
-            <Route path="/invoices/vat"            element={<PermissionRoute resource="tenantInvoices" moduleKey="propertyManagement"><RentalInvoiceVATReport /></PermissionRoute>} />
-            <Route path="/invoices/withholding-vat"element={<ProtectedRoute><Navigate to="/reports/tax-reports" replace /></ProtectedRoute>} />
-            <Route path="/invoices/withholding-tax"element={<ProtectedRoute><Navigate to="/reports/tax-reports" replace /></ProtectedRoute>} />
-            <Route path="/receipts"                element={<PermissionRoute resource="receipts" moduleKey="propertyManagement"><Receipts /></PermissionRoute>} />
-            <Route path="/receipts/new"            element={<PermissionRoute resource="receipts" action="create" moduleKey="propertyManagement"><AddReceipt /></PermissionRoute>} />
-            <Route path="/receipts/prepayments"    element={<PermissionRoute resource="receipts" moduleKey="propertyManagement"><TenantPrepayments /></PermissionRoute>} />
-            <Route path="/receipts/mpesa-import"   element={<PermissionRoute resource="receipts" moduleKey="propertyManagement"><MpesaBatchImport /></PermissionRoute>} />
-            <Route path="/receipts/instant"        element={<PermissionRoute resource="receipts" moduleKey="propertyManagement"><InstantReceipts /></PermissionRoute>} />
-            <Route path="/receipts/landlord"       element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="receipts" moduleKey="propertyManagement"><LandlordReceipts /></PermissionRoute></CompanyModeRoute>} />
-            <Route path="/receipts/:id"            element={<ProtectedRoute><Receipts /></ProtectedRoute>} />
+            <Route path="/agreements"           element={<Guard resource="tenants" moduleKey="propertyManagement"><TenantAgreements /></Guard>} />
+            <Route path="/tenants"              element={<Guard resource="tenants" moduleKey="propertyManagement"><Tenants /></Guard>} />
+            <Route path="/tenants/terminated"   element={<Guard resource="tenants" moduleKey="propertyManagement"><TerminatedTenants /></Guard>} />
+            <Route path="/tenant/new"           element={<Guard resource="tenants" action="create" moduleKey="propertyManagement"><AddTenant /></Guard>} />
+            <Route path="/tenant/:id/statement" element={<Guard resource="tenants" moduleKey="propertyManagement"><TenantStatement /></Guard>} />
+            <Route path="/tenant/:id/edit"      element={<Guard resource="tenants" action="update" moduleKey="propertyManagement"><AddTenant /></Guard>} />
+            <Route path="/tenants/deposits"         element={<Guard resource="deposits" moduleKey="propertyManagement"><TenantDeposits /></Guard>} />
+            <Route path="/tenants/take-on-balances" element={<Guard resource="takeOnBalances" moduleKey="propertyManagement"><TakeOnBalances /></Guard>} />
+            <Route path="/tenants/financing"        element={<Navigate to="/tenants/take-on-balances" replace />} />
+            <Route path="/tenants/journals"         element={<Navigate to="/financial/journals" replace />} />
+            <Route path="/invoices/rental"          element={<Guard resource="tenantInvoices" moduleKey="propertyManagement"><RentalInvoices /></Guard>} />
+            <Route path="/invoices/new"             element={<Guard resource="tenantInvoices" moduleKey="propertyManagement"><RentalInvoices initialOpenSingleBooking /></Guard>} />
+            <Route path="/invoices/rental/:id"      element={<Guard resource="tenantInvoices" moduleKey="propertyManagement"><RentalInvoices /></Guard>} />
+            <Route path="/invoices/notes"           element={<Guard resource="tenantInvoices" moduleKey="propertyManagement"><InvoiceNotes /></Guard>} />
+            <Route path="/invoices/vat"             element={<Guard resource="tenantInvoices" moduleKey="propertyManagement"><RentalInvoiceVATReport /></Guard>} />
+            <Route path="/invoices/withholding-vat" element={<Navigate to="/reports/tax-reports" replace />} />
+            <Route path="/invoices/withholding-tax" element={<Navigate to="/reports/tax-reports" replace />} />
+            <Route path="/receipts"                 element={<Guard resource="receipts" moduleKey="propertyManagement"><Receipts /></Guard>} />
+            <Route path="/receipts/new"             element={<Guard resource="receipts" action="create" moduleKey="propertyManagement"><AddReceipt /></Guard>} />
+            <Route path="/receipts/prepayments"     element={<Guard resource="prepayments" moduleKey="propertyManagement"><TenantPrepayments /></Guard>} />
+            <Route path="/receipts/mpesa-import"    element={<Guard resource="receipts" action="import" moduleKey="propertyManagement"><MpesaBatchImport /></Guard>} />
+            <Route path="/receipts/instant"         element={<Guard resource="receipts" moduleKey="propertyManagement"><InstantReceipts /></Guard>} />
+            <Route path="/receipts/landlord"        element={<Guard companyMode={{ allowLandlord: false }} resource="landlordReceipts" moduleKey="accounts"><LandlordReceipts /></Guard>} />
+            <Route path="/receipts/:id"             element={<Guard resource="receipts" moduleKey="propertyManagement"><Receipts /></Guard>} />
 
             {/* ── Financial ─────────────────────────────────────────────── */}
-            <Route path="/financial/payment-vouchers"              element={<PermissionRoute resource="paymentVouchers" moduleKey="accounts"><PaymentVouchers /></PermissionRoute>} />
-            <Route path="/financial/petty-cash"                    element={<PermissionRoute resource="paymentVouchers" moduleKey="accounts"><PettyCash /></PermissionRoute>} />
-            <Route path="/financial/service-providers"             element={<PermissionRoute resource="expenses" moduleKey="accounts"><ServiceProviders /></PermissionRoute>} />
-            <Route path="/expenses/requisition"                    element={<ProtectedRoute><ExpenseRequisition /></ProtectedRoute>} />
-            <Route path="/financial/journals"                      element={<PermissionRoute resource="journals" moduleKey={GL_ACCESS_MODULES}><JournalEntries /></PermissionRoute>} />
-            <Route path="/financial/chart-of-accounts"             element={<PermissionRoute resource="chartOfAccounts" moduleKey={GL_ACCESS_MODULES}><ChartOfAccounts /></PermissionRoute>} />
-            <Route path="/financial/chart-of-accounts/:accountId/activity" element={<ProtectedRoute><LedgerAccountActivity /></ProtectedRoute>} />
-            <Route path="/carwash/chart-of-accounts/:accountId/activity"  element={<CompanyModuleRoute moduleKey="carwash"><ProtectedRoute><LedgerAccountActivity /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/hr/chart-of-accounts/:accountId/activity"       element={<CompanyModuleRoute moduleKey="hr"><ProtectedRoute><LedgerAccountActivity /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/sale/chart-of-accounts/:accountId/activity"     element={<CompanyModuleRoute moduleKey="propertySale"><ProtectedRoute><LedgerAccountActivity /></ProtectedRoute></CompanyModuleRoute>} />
-            <Route path="/financial/ledger-entries"                element={<ProtectedRoute><Navigate to="/financial/chart-of-accounts" replace /></ProtectedRoute>} />
-            <Route path="/expenses/payment-vouchers"               element={<ProtectedRoute><PaymentVouchers /></ProtectedRoute>} />
+            <Route path="/financial/payment-vouchers"              element={<Guard resource="paymentVouchers" moduleKey="accounts"><PaymentVouchers /></Guard>} />
+            <Route path="/financial/petty-cash"                    element={<Guard resource="pettyCash" moduleKey="accounts"><PettyCash /></Guard>} />
+            <Route path="/financial/service-providers"             element={<Guard resource="expenses" moduleKey="accounts"><ServiceProviders /></Guard>} />
+            <Route path="/expenses/requisition"                    element={<Guard resource="expenses" moduleKey="accounts"><ExpenseRequisition /></Guard>} />
+            <Route path="/expenses/payment-vouchers"               element={<Guard resource="paymentVouchers" moduleKey="accounts"><PaymentVouchers /></Guard>} />
+            <Route path="/financial/journals"                      element={<Guard resource="journals" moduleKey={GL_ACCESS_MODULES}><JournalEntries /></Guard>} />
+            <Route path="/financial/chart-of-accounts"             element={<Guard resource="chartOfAccounts" moduleKey={GL_ACCESS_MODULES}><ChartOfAccounts /></Guard>} />
+            <Route path="/financial/chart-of-accounts/:accountId/activity" element={<Guard resource="chartOfAccounts" moduleKey={GL_ACCESS_MODULES}><LedgerAccountActivity /></Guard>} />
+            <Route path="/financial/ledger-entries"                element={<Navigate to="/financial/chart-of-accounts" replace />} />
 
             {/* ── Operations ────────────────────────────────────────────── */}
-            <Route path="/vacants"             element={<PermissionRoute resource="units" moduleKey="propertyManagement"><Vacants /></PermissionRoute>} />
-            <Route path="/maintenances"        element={<PermissionRoute resource="maintenances" moduleKey="propertyManagement"><Maintenances /></PermissionRoute>} />
-            <Route path="/inspections"         element={<PermissionRoute resource="inspections" moduleKey="propertyManagement"><Inspections /></PermissionRoute>} />
-            <Route path="/meter-readings"      element={<PermissionRoute resource="meterReadings" moduleKey="propertyManagement"><MeterReadings /></PermissionRoute>} />
-            <Route path="/invoices/late-penalties" element={<PermissionRoute resource="latePenalties" moduleKey="propertyManagement"><LatePenalties /></PermissionRoute>} />
-            <Route path="/tools/import-export" element={<ProtectedRoute><Navigate to="/reports/export" replace /></ProtectedRoute>} />
-            <Route path="/tools/backup"        element={<ProtectedRoute><Navigate to="/settings" replace /></ProtectedRoute>} />
+            <Route path="/vacants"                element={<Guard resource="units" moduleKey="propertyManagement"><Vacants /></Guard>} />
+            <Route path="/maintenances"           element={<Guard resource="maintenances" moduleKey="propertyManagement"><Maintenances /></Guard>} />
+            <Route path="/inspections"            element={<Guard resource="inspections" moduleKey="propertyManagement"><Inspections /></Guard>} />
+            <Route path="/meter-readings"         element={<Guard resource="meterReadings" moduleKey="propertyManagement"><MeterReadings /></Guard>} />
+            <Route path="/invoices/late-penalties"element={<Guard resource="latePenalties" moduleKey="propertyManagement"><LatePenalties /></Guard>} />
+            <Route path="/tools/import-export"    element={<Navigate to="/reports/export" replace />} />
+            <Route path="/tools/backup"           element={<Navigate to="/settings" replace />} />
 
             {/* ── Reports ───────────────────────────────────────────────── */}
-            <Route path="/reports/rental-collection"      element={<ProtectedRoute><RentalCollectionReport /></ProtectedRoute>} />
-            <Route path="/reports/export"                 element={<ProtectedRoute><RentalCollectionReport /></ProtectedRoute>} />
-            <Route path="/reports/property-income-summary"element={<ProtectedRoute><PropertyIncomeSummaryReport /></ProtectedRoute>} />
-            <Route path="/reports/mri-tax-summary"        element={<ProtectedRoute><MRITaxSummaryReport /></ProtectedRoute>} />
-            <Route path="/reports/paid-balance"           element={<ProtectedRoute><PaidBalanceReport /></ProtectedRoute>} />
-            <Route path="/reports/aged-analysis"          element={<ProtectedRoute><AgedAnalysisReport /></ProtectedRoute>} />
-            <Route path="/reports/rental-aged-analysis"   element={<ProtectedRoute><RentalAgedAnalysisReport /></ProtectedRoute>} />
-            <Route path="/reports/commissions"            element={<CompanyModeRoute allowLandlordMode={false}><PermissionRoute resource="commissionReports" action="view" moduleKey="propertyManagement"><CommissionReports /></PermissionRoute></CompanyModeRoute>} />
-            <Route path="/reports/trial-balance"          element={<PermissionRoute resource="financialReports" moduleKey="accounts"><TrialBalanceReport /></PermissionRoute>} />
-            <Route path="/reports/income-statement"       element={<PermissionRoute resource="financialReports" moduleKey="accounts"><IncomeStatementReport /></PermissionRoute>} />
-            <Route path="/reports/balance-sheet"          element={<PermissionRoute resource="financialReports" moduleKey="accounts"><BalanceSheetReport /></PermissionRoute>} />
-            <Route path="/reports/tax-reports"            element={<PermissionRoute resource="financialReports" moduleKey="accounts"><TaxReports /></PermissionRoute>} />
+            <Route path="/reports/rental-collection"       element={<Guard resource="pmReports" moduleKey="propertyManagement"><RentalCollectionReport /></Guard>} />
+            <Route path="/reports/export"                  element={<Guard resource="pmReports" moduleKey="propertyManagement"><RentalCollectionReport /></Guard>} />
+            <Route path="/reports/property-income-summary" element={<Guard resource="pmReports" moduleKey="propertyManagement"><PropertyIncomeSummaryReport /></Guard>} />
+            <Route path="/reports/mri-tax-summary"         element={<Guard resource="pmReports" moduleKey="propertyManagement"><MRITaxSummaryReport /></Guard>} />
+            <Route path="/reports/paid-balance"            element={<Guard resource="pmReports" moduleKey="propertyManagement"><PaidBalanceReport /></Guard>} />
+            <Route path="/reports/aged-analysis"           element={<Guard resource="agedAnalysis" moduleKey="propertyManagement"><AgedAnalysisReport /></Guard>} />
+            <Route path="/reports/rental-aged-analysis"    element={<Guard resource="agedAnalysis" moduleKey="propertyManagement"><RentalAgedAnalysisReport /></Guard>} />
+            <Route path="/reports/commissions"             element={<Guard companyMode={{ allowLandlord: false }} resource="commissionReports" moduleKey="propertyManagement"><CommissionReports /></Guard>} />
+            <Route path="/reports/trial-balance"           element={<Guard resource="financialReports" moduleKey="accounts"><TrialBalanceReport /></Guard>} />
+            <Route path="/reports/income-statement"        element={<Guard resource="financialReports" moduleKey="accounts"><IncomeStatementReport /></Guard>} />
+            <Route path="/reports/balance-sheet"           element={<Guard resource="financialReports" moduleKey="accounts"><BalanceSheetReport /></Guard>} />
+            <Route path="/reports/tax-reports"             element={<Guard resource="financialReports" moduleKey="accounts"><TaxReports /></Guard>} />
 
             {/* ── Company & settings ────────────────────────────────────── */}
-            <Route path="/company-setup" element={<PermissionRoute resource="companySettings" action="update"><CompanySetupPage /></PermissionRoute>} />
-            <Route path="/settings"      element={<PermissionRoute resource="companySettings" action="view"><CompanySettings /></PermissionRoute>} />
+            <Route path="/company-setup" element={<Guard resource="companySettings" action="update"><CompanySetupPage /></Guard>} />
+            <Route path="/settings"      element={<Guard resource="companySettings"><CompanySettings /></Guard>} />
 
             {/* ── Help ──────────────────────────────────────────────────── */}
-            <Route path="/help/documentation" element={<ProtectedRoute><SupportDocumentation /></ProtectedRoute>} />
-            <Route path="/help/support"       element={<ProtectedRoute><SupportDocumentation /></ProtectedRoute>} />
-            <Route path="/help/about"         element={<ProtectedRoute><AboutMilik /></ProtectedRoute>} />
+            <Route path="/help/documentation" element={<Guard><SupportDocumentation /></Guard>} />
+            <Route path="/help/support"       element={<Guard><SupportDocumentation /></Guard>} />
+            <Route path="/help/about"         element={<Guard><AboutMilik /></Guard>} />
 
             {/* ── ESS Portal ───────────────────────────────────────────── */}
             <Route path="/ess/login" element={<ESSLogin />} />

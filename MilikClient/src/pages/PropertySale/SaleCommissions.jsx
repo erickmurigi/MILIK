@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
-import { FaCheck, FaMoneyBillWave } from "react-icons/fa";
+import { FaCheck, FaMoneyBillWave, FaPrint } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
 import { fmtKES, saleApi, todayISO } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
@@ -29,6 +29,7 @@ const SaleCommissions = () => {
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [backendStats, setBackendStats] = useState(null);
   const [showPayout, setShowPayout] = useState(null);
   const [payoutForm, setPayoutForm] = useState(EMPTY_PAYOUT);
   const [saving, setSaving] = useState(false);
@@ -39,9 +40,9 @@ const SaleCommissions = () => {
     try {
       const params = { business: biz, limit: LIMIT, page, ...(statusFilter && { status: statusFilter }) };
       const res = await saleApi.listCommissions(params);
-      const items = Array.isArray(res) ? res : (res?.commissions ?? []);
-      setCommissions(items);
-      setTotal(res?.total ?? items.length);
+      setCommissions(res?.commissions ?? []);
+      setTotal(res?.total ?? 0);
+      if (res?.stats) setBackendStats(res.stats);
     } catch {
       toast.error("Failed to load commissions");
     } finally {
@@ -89,16 +90,72 @@ const SaleCommissions = () => {
     }
   };
 
-  const { pending, approved, totalDue, totalPaid } = useMemo(() => {
-    let p = 0, a = 0, due = 0, paid = 0;
-    for (const c of commissions) {
-      const amt = Number(c.commissionAmount || 0);
-      if (c.status === "pending") { p++; due += amt; }
-      else if (c.status === "approved") { a++; due += amt; }
-      else if (c.status === "paid") paid += amt;
-    }
-    return { pending: p, approved: a, totalDue: due, totalPaid: paid };
-  }, [commissions]);
+  const printCommission = useCallback((c) => {
+    const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+    const fmtAmt = (n) => Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const co = currentCompany?.name || "";
+    const rate = `${c.commissionRate}${c.commissionType === "percentage" ? "%" : " KES (flat)"}`;
+    const statusClass = c.status === "paid" ? "paid" : c.status === "approved" ? "approved" : "pending";
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Commission ${esc(c.commissionNumber)}</title>
+<style>
+@page{size:A5;margin:14mm}
+*{box-sizing:border-box}
+body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:0;padding:0;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+.c{text-align:center}.h1{font-size:18px;font-weight:bold;margin:0 0 2px}.sub{font-size:11px;color:#555;margin:0}
+hr{border:none;margin:8px 0}.s{border-top:1px solid #ccc}.d{border-top:1px dashed #ccc}
+.title{font-size:13px;font-weight:bold;text-align:center;text-transform:uppercase;letter-spacing:1px;margin:6px 0}
+.row{display:flex;justify-content:space-between;align-items:center;margin:5px 0;gap:8px}
+.lbl{font-weight:bold;color:#555;flex-shrink:0}.val{text-align:right}
+.badge{display:inline-block;padding:3px 10px;font-size:11px;font-weight:bold;border-radius:3px}
+.paid{background:#d1fae5;color:#065f46}.approved{background:#dbeafe;color:#1e40af}.pending{background:#fef3c7;color:#92400e}
+.amount-box{background:#f0fdf4;border:1px solid #a7f3d0;border-radius:4px;padding:10px 14px;margin:10px 0;text-align:center}
+.amount-box .amt{font-size:22px;font-weight:bold;color:#027333}
+.amount-box .lbl2{font-size:10px;color:#555;margin-bottom:2px}
+.sig{display:flex;gap:20px;margin-top:20px}
+.sig-box{flex:1;border-top:1px solid #555;padding-top:4px;text-align:center;font-size:10px;color:#555}
+.ft{text-align:center;font-size:10px;color:#888;margin-top:12px}
+</style></head><body>
+<div class="c"><div class="h1">${esc(co)}</div></div>
+<hr class="s"/><div class="title">Commission Voucher</div><hr class="s"/>
+<div class="row"><span class="lbl">Commission No.:</span><span class="val"><strong>${esc(c.commissionNumber)}</strong></span></div>
+<div class="row"><span class="lbl">Date Issued:</span><span class="val">${fmtDate(c.createdAt)}</span></div>
+<hr class="d"/>
+<div class="row"><span class="lbl">Agent:</span><span class="val">${esc(c.agent?.fullName || "—")}</span></div>
+<div class="row"><span class="lbl">Deal No.:</span><span class="val">${esc(c.deal?.dealNumber || "—")}</span></div>
+<div class="row"><span class="lbl">Property:</span><span class="val">${esc(c.deal?.listing?.title || c.deal?.listing?.listingNumber || "—")}</span></div>
+<div class="row"><span class="lbl">Commission Rate:</span><span class="val">${esc(rate)}</span></div>
+<div class="amount-box">
+  <div class="lbl2">Commission Amount</div>
+  <div class="amt">KES ${fmtAmt(c.commissionAmount)}</div>
+</div>
+<hr class="d"/>
+<div class="row"><span class="lbl">Status:</span><span class="val"><span class="badge ${statusClass}">${(c.status || "").toUpperCase()}</span></span></div>
+${c.payoutDate ? `<div class="row"><span class="lbl">Payout Date:</span><span class="val">${fmtDate(c.payoutDate)}</span></div>` : ""}
+${c.payoutMethod ? `<div class="row"><span class="lbl">Payout Method:</span><span class="val">${esc(c.payoutMethod.replace("_", " ").toUpperCase())}</span></div>` : ""}
+${c.payoutReference ? `<div class="row"><span class="lbl">Reference:</span><span class="val">${esc(c.payoutReference)}</span></div>` : ""}
+<div class="sig">
+  <div class="sig-box">Agent Signature</div>
+  <div class="sig-box">Authorized By</div>
+</div>
+<div class="ft">Generated on ${new Date().toLocaleString("en-KE")} &mdash; ${esc(co)}</div>
+</body></html>`;
+
+    const w = window.open("", "_blank", "width=600,height=800");
+    if (!w) return;
+    w.document.write(html);
+    w.document.close();
+    w.onload = () => { w.focus(); w.print(); };
+  }, [currentCompany]);
+
+  const { pending, approved, totalDue, totalPaid } = useMemo(() => ({
+    pending:  backendStats?.pending?.count  ?? 0,
+    approved: backendStats?.approved?.count ?? 0,
+    totalDue: (backendStats?.pending?.amount ?? 0) + (backendStats?.approved?.amount ?? 0),
+    totalPaid: backendStats?.paid?.amount   ?? 0,
+  }), [backendStats]);
 
   const totalPages = Math.ceil(total / LIMIT) || 1;
 
@@ -207,6 +264,13 @@ const SaleCommissions = () => {
                         {c.status === "paid" && c.payoutReference && (
                           <span className="text-[10px] text-slate-400">Ref: {c.payoutReference}</span>
                         )}
+                        <button
+                          onClick={() => printCommission(c)}
+                          title="Print commission voucher"
+                          className="flex items-center gap-1 rounded px-2 py-1 text-[10px] font-bold text-slate-500 hover:bg-slate-100"
+                        >
+                          <FaPrint /> Print
+                        </button>
                       </div>
                     </td>
                   </tr>

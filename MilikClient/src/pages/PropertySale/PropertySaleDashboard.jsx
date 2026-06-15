@@ -3,41 +3,51 @@ import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import {
   FaArrowRight, FaBuilding, FaChartLine, FaFileAlt,
-  FaHandshake, FaMoneyBillWave, FaTag, FaUserTie, FaUsers,
+  FaHandshake, FaMoneyBillWave, FaTag, FaUserFriends,
+  FaUserTie, FaUsers, FaClipboard, FaExclamationTriangle,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
 import { saleApi, fmtKES } from "../../services/propertySaleApi";
 
 const DEAL_STATUS_CLS = {
-  active: "bg-blue-100 text-blue-700 border-blue-200",
-  closed: "bg-emerald-100 text-emerald-700 border-emerald-200",
+  active:    "bg-blue-100 text-blue-700 border-blue-200",
+  closed:    "bg-emerald-100 text-emerald-700 border-emerald-200",
   cancelled: "bg-rose-100 text-rose-700 border-rose-200",
 };
-
 const LISTING_STATUS_CLS = {
-  available: "bg-emerald-100 text-emerald-700 border-emerald-200",
-  reserved: "bg-amber-100 text-amber-700 border-amber-200",
-  under_contract: "bg-blue-100 text-blue-700 border-blue-200",
-  sold: "bg-slate-800 text-white border-slate-700",
-  withdrawn: "bg-rose-100 text-rose-700 border-rose-200",
+  available:     "bg-emerald-100 text-emerald-700 border-emerald-200",
+  reserved:      "bg-amber-100 text-amber-700 border-amber-200",
+  under_contract:"bg-blue-100 text-blue-700 border-blue-200",
+  sold:          "bg-slate-800 text-white border-slate-700",
+  withdrawn:     "bg-rose-100 text-rose-700 border-rose-200",
 };
-
+const LEAD_FUNNEL = [
+  { key: "new",          label: "New" },
+  { key: "contacted",    label: "Contacted" },
+  { key: "qualified",    label: "Qualified" },
+  { key: "siteVisited",  label: "Site Visited" },
+  { key: "proposalSent", label: "Proposal Sent" },
+  { key: "negotiating",  label: "Negotiating" },
+  { key: "converted",    label: "Converted" },
+];
 const LINKS = [
-  { label: "Sale Listings", to: "/sale/listings", Icon: FaBuilding },
-  { label: "Buyers", to: "/sale/buyers", Icon: FaUsers },
-  { label: "Agents", to: "/sale/agents", Icon: FaUserTie },
-  { label: "Offers", to: "/sale/offers", Icon: FaTag },
-  { label: "Deals", to: "/sale/deals", Icon: FaHandshake },
-  { label: "Payments", to: "/sale/payments", Icon: FaMoneyBillWave },
-  { label: "Commissions", to: "/sale/commissions", Icon: FaChartLine },
-  { label: "Reports", to: "/sale/reports", Icon: FaFileAlt },
+  { label: "Sale Listings",    to: "/sale/listings",       Icon: FaBuilding },
+  { label: "Buyers",           to: "/sale/buyers",         Icon: FaUsers },
+  { label: "Agents",           to: "/sale/agents",         Icon: FaUserTie },
+  { label: "Offers",           to: "/sale/offers",         Icon: FaTag },
+  { label: "Deals",            to: "/sale/deals",          Icon: FaHandshake },
+  { label: "Payments",         to: "/sale/payments",       Icon: FaMoneyBillWave },
+  { label: "Commissions",      to: "/sale/commissions",    Icon: FaChartLine },
+  { label: "Reports",          to: "/sale/reports",        Icon: FaFileAlt },
+  { label: "Leads Pipeline",   to: "/sale/crm/leads",      Icon: FaUserFriends },
+  { label: "Activity Log",     to: "/sale/crm/activities", Icon: FaClipboard },
 ];
 
 const PropertySaleDashboard = () => {
-  const navigate = useNavigate();
+  const navigate       = useNavigate();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
-  const [stats, setStats] = useState(null);
+  const [stats,   setStats]   = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -51,22 +61,23 @@ const PropertySaleDashboard = () => {
   }, [currentCompany?._id]);
 
   const s = stats || {};
+  const leads = s.leads || {};
 
   const kpi = [
-    { label: "Available Listings", value: loading ? "—" : (s.listings?.available ?? 0), sub: "Ready to sell", cls: "bg-[#027333] text-white" },
-    { label: "Active Deals", value: loading ? "—" : (s.deals?.active ?? 0), sub: loading ? "" : fmtKES(s.deals?.activeValue ?? 0), cls: "bg-blue-600 text-white" },
-    { label: "Total Collected", value: loading ? "—" : fmtKES(s.payments?.totalCollected ?? 0), sub: `${s.payments?.count ?? 0} payment(s)`, cls: "bg-slate-900 text-white" },
-    { label: "Commissions Due", value: loading ? "—" : fmtKES((s.commissions?.pending ?? 0) + (s.commissions?.approved ?? 0)), sub: "Pending payout", cls: "bg-rose-600 text-white" },
+    { label: "Available Listings",  value: loading ? "—" : (s.listings?.available ?? 0),              sub: "Ready to sell",    cls: "bg-[#027333] text-white" },
+    { label: "Active Deals",        value: loading ? "—" : (s.deals?.active ?? 0),                    sub: loading ? "" : fmtKES(s.deals?.activeValue ?? 0), cls: "bg-blue-600 text-white" },
+    { label: "Total Collected",     value: loading ? "—" : fmtKES(s.payments?.totalCollected ?? 0),   sub: `${s.payments?.count ?? 0} payment(s)`,           cls: "bg-slate-900 text-white" },
+    { label: "Commissions Due",     value: loading ? "—" : fmtKES((s.commissions?.pending ?? 0) + (s.commissions?.approved ?? 0)), sub: "Pending payout", cls: "bg-rose-600 text-white" },
   ];
 
   const pipeline = [
-    { label: "Available", count: loading ? "—" : (s.listings?.available ?? 0), sub: "Listings ready", cls: "bg-[#027333] text-white" },
-    { label: "Reserved", count: loading ? "—" : (s.listings?.reserved ?? 0), sub: "Offers placed", cls: "bg-amber-500 text-white" },
-    { label: "Under Contract", count: loading ? "—" : (s.deals?.active ?? 0), sub: loading ? "" : fmtKES(s.deals?.activeValue ?? 0), cls: "bg-blue-600 text-white" },
-    { label: "Closed", count: loading ? "—" : (s.deals?.closed ?? 0), sub: loading ? "" : fmtKES(s.deals?.closedValue ?? 0), cls: "bg-slate-800 text-white" },
+    { label: "Available",      count: loading ? "—" : (s.listings?.available ?? 0),  sub: "Listings ready",                        cls: "bg-[#027333] text-white" },
+    { label: "Reserved",       count: loading ? "—" : (s.listings?.reserved ?? 0),   sub: "Offers placed",                         cls: "bg-amber-500 text-white" },
+    { label: "Under Contract", count: loading ? "—" : (s.deals?.active ?? 0),        sub: loading ? "" : fmtKES(s.deals?.activeValue ?? 0), cls: "bg-blue-600 text-white" },
+    { label: "Closed",         count: loading ? "—" : (s.deals?.closed ?? 0),        sub: loading ? "" : fmtKES(s.deals?.closedValue ?? 0), cls: "bg-slate-800 text-white" },
   ];
 
-  const recentDeals = s.recentDeals || [];
+  const recentDeals    = s.recentDeals    || [];
   const recentListings = s.recentListings || [];
 
   return (
@@ -93,9 +104,7 @@ const PropertySaleDashboard = () => {
                 <div className={`flex flex-1 flex-col rounded-lg px-3 py-2 ${stage.cls}`}>
                   <div className="text-[9px] font-black uppercase tracking-wider opacity-75">{stage.label}</div>
                   <div className="mt-0.5 text-xl font-black leading-none">{stage.count}</div>
-                  {stage.sub && (
-                    <div className="mt-0.5 truncate text-[9px] font-semibold opacity-60">{stage.sub}</div>
-                  )}
+                  {stage.sub && <div className="mt-0.5 truncate text-[9px] font-semibold opacity-60">{stage.sub}</div>}
                 </div>
                 {i < pipeline.length - 1 && (
                   <div className="flex shrink-0 items-center">
@@ -105,6 +114,62 @@ const PropertySaleDashboard = () => {
               </React.Fragment>
             ))}
           </div>
+        </div>
+
+        {/* CRM Leads Section */}
+        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400 flex items-center gap-1.5">
+              <FaUserFriends className="text-indigo-400" size={11} /> CRM — Leads Pipeline
+            </div>
+            <div className="flex items-center gap-3">
+              {!loading && leads.overdue > 0 && (
+                <button onClick={() => navigate("/sale/crm/leads")} className="flex items-center gap-1 text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full hover:bg-rose-100">
+                  <FaExclamationTriangle size={9} /> {leads.overdue} overdue
+                </button>
+              )}
+              <button onClick={() => navigate("/sale/crm/leads")} className="text-[9px] font-bold text-indigo-600 opacity-70 hover:opacity-100">
+                View all →
+              </button>
+            </div>
+          </div>
+          <div className="flex items-stretch gap-1">
+            {LEAD_FUNNEL.map((stage, i) => {
+              const count = loading ? "—" : (leads[stage.key] ?? 0);
+              const isConverted = stage.key === "converted";
+              return (
+                <React.Fragment key={stage.key}>
+                  <button
+                    onClick={() => navigate("/sale/crm/leads")}
+                    className={`flex flex-1 flex-col rounded-lg px-2 py-1.5 text-left transition-all hover:scale-[1.02] ${
+                      isConverted
+                        ? "bg-emerald-600 text-white"
+                        : count > 0
+                        ? "bg-indigo-50 border border-indigo-200 text-indigo-900"
+                        : "bg-slate-50 border border-slate-200 text-slate-400"
+                    }`}
+                  >
+                    <div className={`text-[8px] font-black uppercase tracking-wide leading-tight ${isConverted ? "opacity-80" : "opacity-70"}`}>{stage.label}</div>
+                    <div className="mt-0.5 text-base font-black leading-none">{count}</div>
+                  </button>
+                  {i < LEAD_FUNNEL.length - 1 && (
+                    <div className="flex shrink-0 items-center">
+                      <FaArrowRight className="text-[9px] text-slate-200" />
+                    </div>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </div>
+          {!loading && (
+            <div className="mt-2 flex items-center gap-3 text-[10px] text-slate-500">
+              <span>Active leads: <strong className="text-slate-700">{leads.active ?? 0}</strong></span>
+              <span className="text-slate-300">·</span>
+              <span>Total: <strong className="text-slate-700">{leads.total ?? 0}</strong></span>
+              <span className="text-slate-300">·</span>
+              <span>Lost: <strong className="text-slate-700">{leads.lost ?? 0}</strong></span>
+            </div>
+          )}
         </div>
 
         {/* Two-column: Quick Nav + Recent Deals */}
@@ -133,10 +198,7 @@ const PropertySaleDashboard = () => {
           <div className="lg:col-span-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center justify-between bg-[#027333] px-3 py-2.5 text-white">
               <span className="text-[9px] font-black uppercase tracking-[0.2em]">Recent Deals</span>
-              <button
-                onClick={() => navigate("/sale/deals")}
-                className="text-[9px] font-bold opacity-70 hover:opacity-100"
-              >View all →</button>
+              <button onClick={() => navigate("/sale/deals")} className="text-[9px] font-bold opacity-70 hover:opacity-100">View all →</button>
             </div>
             {loading ? (
               <div className="px-3 py-8 text-center text-xs text-slate-400">Loading...</div>
@@ -162,23 +224,15 @@ const PropertySaleDashboard = () => {
                       ? Math.min(100, Math.round(((deal.totalPaid || 0) / deal.agreedPrice) * 100))
                       : 0;
                     return (
-                      <tr
-                        key={deal._id}
-                        onClick={() => navigate("/sale/deals")}
-                        className="cursor-pointer border-t border-slate-100 transition hover:bg-emerald-50/40"
-                      >
+                      <tr key={deal._id} onClick={() => navigate("/sale/deals")}
+                        className="cursor-pointer border-t border-slate-100 transition hover:bg-emerald-50/40">
                         <td className="px-3 py-2 font-black text-slate-900">{deal.dealNumber}</td>
-                        <td className="max-w-[110px] truncate px-3 py-2 text-slate-700">
-                          {deal.listing?.title || deal.listing?.listingNumber || "—"}
-                        </td>
+                        <td className="max-w-[110px] truncate px-3 py-2 text-slate-700">{deal.listing?.title || deal.listing?.listingNumber || "—"}</td>
                         <td className="px-3 py-2 text-slate-700">{deal.buyer?.fullName || "—"}</td>
                         <td className="px-3 py-2 text-right">
                           <div className="font-black text-slate-900">{fmtKES(deal.agreedPrice)}</div>
                           <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-slate-100">
-                            <div
-                              className="h-full rounded-full bg-emerald-500"
-                              style={{ width: `${pct}%` }}
-                            />
+                            <div className="h-full rounded-full bg-emerald-500" style={{ width: `${pct}%` }} />
                           </div>
                         </td>
                         <td className="px-3 py-2">
@@ -200,10 +254,7 @@ const PropertySaleDashboard = () => {
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center justify-between bg-slate-800 px-3 py-2.5 text-white">
               <span className="text-[9px] font-black uppercase tracking-[0.2em]">New Listings</span>
-              <button
-                onClick={() => navigate("/sale/listings")}
-                className="text-[9px] font-bold opacity-70 hover:opacity-100"
-              >View all →</button>
+              <button onClick={() => navigate("/sale/listings")} className="text-[9px] font-bold opacity-70 hover:opacity-100">View all →</button>
             </div>
             <table className="min-w-full text-xs">
               <thead className="bg-slate-50">
@@ -218,18 +269,13 @@ const PropertySaleDashboard = () => {
               </thead>
               <tbody>
                 {recentListings.map((listing) => (
-                  <tr
-                    key={listing._id}
-                    onClick={() => navigate("/sale/listings")}
-                    className="cursor-pointer border-t border-slate-100 transition hover:bg-slate-50"
-                  >
+                  <tr key={listing._id} onClick={() => navigate("/sale/listings")}
+                    className="cursor-pointer border-t border-slate-100 transition hover:bg-slate-50">
                     <td className="px-3 py-2 font-black text-slate-900">{listing.listingNumber}</td>
                     <td className="px-3 py-2 text-slate-700">{listing.title}</td>
                     <td className="px-3 py-2 capitalize text-slate-500">{listing.propertyType}</td>
                     <td className="px-3 py-2 text-right font-black text-slate-900">{fmtKES(listing.askingPrice)}</td>
-                    <td className="px-3 py-2 text-slate-700">
-                      {listing.assignedAgent?.fullName || <span className="italic text-slate-400">Unassigned</span>}
-                    </td>
+                    <td className="px-3 py-2 text-slate-700">{listing.assignedAgent?.fullName || <span className="italic text-slate-400">Unassigned</span>}</td>
                     <td className="px-3 py-2">
                       <span className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black ${LISTING_STATUS_CLS[listing.status] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
                         {(listing.status || "").replace(/_/g, " ")}
@@ -246,10 +292,10 @@ const PropertySaleDashboard = () => {
         {!loading && (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {[
-              { label: "Properties Sold", value: s.listings?.sold ?? 0, cls: "bg-slate-800 text-white" },
-              { label: "Reserved", value: s.listings?.reserved ?? 0, cls: "bg-amber-50 border border-amber-200 text-amber-900" },
-              { label: "Under Contract", value: s.listings?.underContract ?? 0, cls: "bg-blue-50 border border-blue-200 text-blue-900" },
-              { label: "Deals Closed", value: s.deals?.closed ?? 0, cls: "bg-emerald-50 border border-emerald-200 text-emerald-900" },
+              { label: "Properties Sold",  value: s.listings?.sold ?? 0,          cls: "bg-slate-800 text-white" },
+              { label: "Reserved",         value: s.listings?.reserved ?? 0,       cls: "bg-amber-50 border border-amber-200 text-amber-900" },
+              { label: "Under Contract",   value: s.listings?.underContract ?? 0,  cls: "bg-blue-50 border border-blue-200 text-blue-900" },
+              { label: "Deals Closed",     value: s.deals?.closed ?? 0,            cls: "bg-emerald-50 border border-emerald-200 text-emerald-900" },
             ].map((c) => (
               <div key={c.label} className={`rounded-lg px-3 py-2 ${c.cls}`}>
                 <div className="text-[9px] font-black uppercase tracking-wider opacity-70">{c.label}</div>
@@ -258,6 +304,7 @@ const PropertySaleDashboard = () => {
             ))}
           </div>
         )}
+
       </div>
     </PropertySaleShell>
   );

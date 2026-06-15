@@ -1,5 +1,7 @@
 import { createError } from "../../../utils/error.js";
 import SaleBuyer from "../models/SaleBuyer.js";
+import SaleDeal from "../models/SaleDeal.js";
+import SaleOffer from "../models/SaleOffer.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 
 export const listBuyers = async (req, res, next) => {
@@ -75,6 +77,15 @@ export const deleteBuyer = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const buyer = await SaleBuyer.findOne({ _id: req.params.id, business });
     if (!buyer) return next(createError(404, "Buyer not found"));
+
+    const [deals, offers] = await Promise.all([
+      SaleDeal.countDocuments({ business, buyer: buyer._id }),
+      SaleOffer.countDocuments({ business, buyer: buyer._id }),
+    ]);
+    if (deals > 0 || offers > 0) {
+      return next(createError(400, `Cannot delete buyer with existing records (${deals} deals, ${offers} offers)`));
+    }
+
     await buyer.deleteOne();
     res.status(200).json({ message: "Buyer deleted" });
   } catch (err) {
