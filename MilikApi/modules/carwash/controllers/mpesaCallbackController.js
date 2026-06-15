@@ -228,6 +228,7 @@ export const handleTransactionStatusResult = async (req, res) => {
     const phoneRaw = debitPartyName.split(" - ")[0].trim();
     const phone = normalizeMsisdn(phoneRaw);
     if (!phone) return;
+    const resolvedName = debitPartyName.split(" - ").slice(1).join(" - ").trim() || null;
 
     // Find the notification for this transaction
     const notif = await CarWashMpesaNotification.findOne({ transactionCode: transId });
@@ -245,14 +246,12 @@ export const handleTransactionStatusResult = async (req, res) => {
     const job = await CarWashJob.findOne({ _id: notif.matchedJob, business: notif.business });
     if (!job) return;
 
-    // Update job phone
-    await CarWashJob.updateOne({ _id: job._id, business: notif.business }, { $set: { phone } });
-
-    // Update customer phone
-    CarWashCustomer.updateOne(
-      { business: notif.business, plates: normalizePlate(job.plateNumber) },
-      { $set: { phone } }
-    ).catch(() => {});
+    await CarWashJob.updateOne(
+      { _id: job._id, business: notif.business },
+      { $set: { phone, ...(resolvedName && { customerName: resolvedName }) } }
+    );
+    autoEnrollPlate({ business: notif.business, plate: job.plateNumber, customerName: job.customerName, phone, payerName: resolvedName })
+      .catch(() => {});
 
     // Send SMS only if the confirmation callback had no valid phone (to avoid double-SMS)
     if (!hadPhone) {
@@ -368,8 +367,9 @@ export const handleStkCallback = async (req, res) => {
 
     if (phone) {
       await CarWashJob.updateOne({ _id: job._id, business: businessId }, { $set: { phone } });
-      CarWashCustomer.updateOne({ business: businessId, plates: normalizePlate(job.plateNumber) }, { $set: { phone } }).catch(() => {});
     }
+    autoEnrollPlate({ business: businessId, plate: job.plateNumber, customerName: job.customerName, phone: phone || null })
+      .catch(() => {});
 
     const updatedJob = await refreshJobPaymentStatus(businessId, job._id);
     await postCarWashPaymentLedger({ businessId, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: null });
@@ -565,17 +565,12 @@ export const confirmCarWashCallback = async (req, res) => {
     if (normalizedMsisdn) jobUpdates.phone = normalizedMsisdn;
     // Store masked MSISDN on job so SMS icon shows even without a real phone
     if (!normalizedMsisdn && msisdn) jobUpdates.maskedMsisdn = msisdn;
+    // M-Pesa sender name is authoritative — update job so displays reflect real name
+    if (senderName) jobUpdates.customerName = senderName;
     if (Object.keys(jobUpdates).length) {
       await CarWashJob.updateOne({ _id: job._id, business: businessId }, { $set: jobUpdates });
     }
-    if (normalizedMsisdn) {
-      CarWashCustomer.updateOne(
-        { business: businessId, plates: normalizePlate(job.plateNumber) },
-        { $set: { phone: normalizedMsisdn } }
-      ).catch(() => {});
-    }
-
-    await autoEnrollPlate({ business: businessId, plate: job.plateNumber, customerName: job.customerName, phone: normalizedMsisdn, maskedMsisdn: !normalizedMsisdn && msisdn ? msisdn : null })
+    await autoEnrollPlate({ business: businessId, plate: job.plateNumber, customerName: job.customerName, phone: normalizedMsisdn, maskedMsisdn: !normalizedMsisdn && msisdn ? msisdn : null, payerName: senderName })
       .catch((err) => console.error('[CW M-Pesa] autoEnroll failed:', err?.message));
 
     const updatedJob = await refreshJobPaymentStatus(businessId, job._id);

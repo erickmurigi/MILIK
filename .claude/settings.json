@@ -70,7 +70,8 @@
       "Bash(xargs grep -l \"PropertySale\\\\|/sale\")",
       "Bash(grep -E \"\\\\.\\(jsx|js\\)$\")",
       "Bash(grep -E \"\\\\.js$\")",
-      "Bash(xargs grep -l \"window.open.*print\\\\|window.print\")"
+      "Bash(xargs grep -l \"window.open.*print\\\\|window.print\")",
+      "Bash(powershell -Command 'Get-ChildItem -Recurse -Include '\\\\''*.js'\\\\'','\\\\''*.jsx'\\\\'' | Select-String -Pattern '\\\\''[^\\\\x00-\\\\x7F]'\\\\'' | Select-Object -First 50 | ForEach-Object { $_.Filename + '\\\\'':'\\\\'' + $_.LineNumber + '\\\\'':'\\\\'' + $_.Line }')"
     ]
   }
 }

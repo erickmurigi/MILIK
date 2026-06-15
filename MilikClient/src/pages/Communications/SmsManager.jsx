@@ -33,6 +33,21 @@ const fmtDateTime = (v) => {
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 };
+const TEMPLATE_LABELS = {
+  carwash_job_manual:        "Job SMS",
+  carwash_loyalty_manual:    "Loyalty SMS",
+  carwash_loyalty_stamp:     "Stamp",
+  carwash_loyalty_reward:    "Reward",
+  carwash_payment:           "Payment",
+  carwash_job_ready:         "Job Ready",
+  test_hashed_sms:           "Test",
+  adhoc:                     "Ad-hoc",
+  adhoc_masked:              "Ad-hoc",
+  tenant_notice_sms:         "Tenant Notice",
+  invoice_reminder:          "Invoice",
+};
+const fmtTemplate = (key) => TEMPLATE_LABELS[key] || (key ? key.replace(/_/g, " ") : "—");
+
 const fmtRel = (v) => {
   if (!v) return "";
   const d = new Date(v); if (Number.isNaN(d.getTime())) return "";
@@ -390,12 +405,13 @@ const SmsManager = () => {
                           <p className="line-clamp-1 text-slate-700">{log.body || log.message || "—"}</p>
                         </td>
                         <td className="px-4 py-2.5">
-                          <span className="border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">{log.templateName || log.type || "—"}</span>
+                          <span className="border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">{fmtTemplate(log.templateKey || log.templateName || log.type)}</span>
                         </td>
                         <td className="px-4 py-2.5 text-center"><StatusChip status={log.status} /></td>
                         <td className="px-4 py-2.5 text-right">
                           <div className="font-semibold text-slate-700">{fmtRel(log.sentAt || log.createdAt)}</div>
                           <div className="text-[10px] text-slate-400">{fmtDateTime(log.sentAt || log.createdAt)}</div>
+                          {log.costLabel && <div className="mt-0.5 text-[10px] font-semibold text-slate-500">{log.costLabel}</div>}
                         </td>
                       </tr>
                       {isExpanded && (

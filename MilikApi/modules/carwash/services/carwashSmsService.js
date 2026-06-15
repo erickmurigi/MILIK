@@ -11,7 +11,7 @@ export const CW_SMS_TEMPLATE_DEFAULTS = [
     name: "Payment Confirmed",
     description: "Sent automatically when a payment is received for a job.",
     enabled: true,
-    messageBody: "Hi {{customerName}}! KES {{amount}} received for {{plate}}. {{balanceLine}} Thank you!",
+    messageBody: "Hi {{customerName}}, KES {{amount}} received for {{plate}}. {{balanceLine}} Thank you.",
     placeholders: [
       { token: "{{customerName}}", hint: "Customer name" },
       { token: "{{plate}}",        hint: "Vehicle plate number" },
@@ -24,7 +24,7 @@ export const CW_SMS_TEMPLATE_DEFAULTS = [
     name: "Loyalty Stamp Earned",
     description: "Sent automatically each time a loyalty stamp is added.",
     enabled: true,
-    messageBody: "Hi {{customerName}}! Stamp {{currentStamps}}/{{stampsRequired}} earned for {{plate}}. {{remaining}} more {{washesWord}} to your reward! 🚗",
+    messageBody: "Hi {{customerName}}, stamp {{currentStamps}}/{{stampsRequired}} earned for {{plate}}. {{remaining}} more {{washesWord}} to your reward. Thank you.",
     placeholders: [
       { token: "{{customerName}}",  hint: "Customer name" },
       { token: "{{plate}}",         hint: "Vehicle plate number" },
@@ -39,7 +39,7 @@ export const CW_SMS_TEMPLATE_DEFAULTS = [
     name: "Reward Earned",
     description: "Sent automatically when a customer completes a stamp card and earns a reward.",
     enabled: true,
-    messageBody: "Hi {{customerName}}! 🎉 You've earned {{rewardDesc}} for {{plate}}. Redeem on your next visit. Thank you!",
+    messageBody: "Hi {{customerName}}, you have earned {{rewardDesc}} for {{plate}}. Redeem on your next visit. Thank you.",
     placeholders: [
       { token: "{{customerName}}", hint: "Customer name" },
       { token: "{{plate}}",        hint: "Vehicle plate number" },
@@ -51,7 +51,7 @@ export const CW_SMS_TEMPLATE_DEFAULTS = [
     name: "Reward Redeemed",
     description: "Sent when a loyalty reward is used at the cashier (controlled by the loyalty program smsOnReward flag).",
     enabled: true,
-    messageBody: "Hi {{customerName}}! Your loyalty reward has been redeemed for {{plate}}. Thank you for your continued support! 🚗✨",
+    messageBody: "Hi {{customerName}}, your loyalty reward has been redeemed for {{plate}}. Thank you for your continued support.",
     placeholders: [
       { token: "{{customerName}}", hint: "Customer name" },
       { token: "{{plate}}",        hint: "Vehicle plate number" },

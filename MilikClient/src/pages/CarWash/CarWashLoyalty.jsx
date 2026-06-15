@@ -327,13 +327,13 @@ const CarWashLoyalty = () => {
     const templates = [];
     if (card?.currentStamps > 0) {
       const rem = req - card.currentStamps;
-      templates.push({ label: "Stamp Update", color: "blue", body: `Hi ${name}! You've earned stamp ${card.currentStamps}/${req} for ${plates}. ${rem} more wash${rem !== 1 ? "es" : ""} to go for your reward! 🚗` });
+      templates.push({ label: "Stamp Update", color: "blue", body: `Hi ${name}, stamp ${card.currentStamps}/${req} earned for ${plates}. ${rem} more wash${rem !== 1 ? "es" : ""} to earn your reward. Thank you.` });
     }
     if ((card?.pendingRewards ?? 0) > 0) {
-      templates.push({ label: "Reward Ready", color: "amber", body: `Hi ${name}! 🎉 You've earned ${reward} for ${plates}. Redeem it on your next visit. Thank you for your loyalty!` });
+      templates.push({ label: "Reward Ready", color: "amber", body: `Hi ${name}, you have earned ${reward} for ${plates}. Redeem on your next visit. Thank you.` });
     }
-    templates.push({ label: "Welcome", color: "green", body: `Hi ${name}! Welcome to our loyalty program. Collect ${req} stamps to earn ${reward}. Thank you for choosing us! 🚗` });
-    templates.push({ label: "Reminder", color: "violet", body: `Hi ${name}! 👋 You have ${card?.currentStamps ?? 0}/${req} stamps. Keep washing with us to earn ${reward}!` });
+    templates.push({ label: "Welcome", color: "green", body: `Hi ${name}, welcome to our loyalty program. Collect ${req} stamps to earn ${reward}. Thank you for choosing us.` });
+    templates.push({ label: "Reminder", color: "violet", body: `Hi ${name}, you have ${card?.currentStamps ?? 0}/${req} stamps. Visit us again to earn ${reward}.` });
     return templates;
   };
 
@@ -345,11 +345,11 @@ const CarWashLoyalty = () => {
     const reward = rewardDesc(program);
     if (type === "stamp" && card) {
       const rem = stampsRequired - card.currentStamps;
-      setSmsBody(`Hi ${name}! You've earned stamp ${card.currentStamps}/${stampsRequired} for ${plates}. ${rem} more wash${rem !== 1 ? "es" : ""} to go for your reward! 🚗`);
+      setSmsBody(`Hi ${name}, stamp ${card.currentStamps}/${stampsRequired} earned for ${plates}. ${rem} more wash${rem !== 1 ? "es" : ""} to earn your reward. Thank you.`);
     } else if (type === "reward" && card) {
-      setSmsBody(`Hi ${name}! 🎉 You've earned ${reward} for ${plates}. Redeem it on your next visit. Thank you for your loyalty!`);
+      setSmsBody(`Hi ${name}, you have earned ${reward} for ${plates}. Redeem on your next visit. Thank you.`);
     } else {
-      setSmsBody(`Hi ${name}, your car wash loyalty card has ${card?.currentStamps ?? 0}/${stampsRequired} stamps. Thank you for being a loyal customer!`);
+      setSmsBody(`Hi ${name}, your loyalty card has ${card?.currentStamps ?? 0}/${stampsRequired} stamps. Thank you for your continued support.`);
     }
   };
 
@@ -357,7 +357,8 @@ const CarWashLoyalty = () => {
     if (!smsTarget) return;
     setSmsSending(true);
     try {
-      await carWashApi.sendCustomerSms(smsTarget._id, { phone, body });
+      // phone is null in masked-MSISDN mode — backend falls back to customer.maskedMsisdn
+      await carWashApi.sendCustomerSms(smsTarget._id, { ...(phone ? { phone } : {}), body });
       toast.success("SMS sent");
       setSmsTarget(null);
     } catch (err) {
@@ -459,7 +460,7 @@ const CarWashLoyalty = () => {
                   const pendingRewards = card?.pendingRewards ?? 0;
                   const isExpanded = expandedId === c._id;
                   const hasReward = pendingRewards > 0;
-                  const hasPhone = Boolean(c.phone);
+                  const hasContact = Boolean(c.phone || c.maskedMsisdn);
 
                   return (
                     <React.Fragment key={c._id}>
@@ -472,7 +473,9 @@ const CarWashLoyalty = () => {
                           <div className="font-extrabold text-slate-900">{c.name}</div>
                           {c.phone
                             ? <div className="mt-0.5 text-[11px] text-slate-500">{c.phone}</div>
-                            : <div className="mt-0.5 text-[10px] italic text-slate-400">No phone — will update from M-Pesa</div>
+                            : c.maskedMsisdn
+                            ? <div className="mt-0.5 text-[10px] font-semibold text-emerald-600">M-Pesa · SMS ready</div>
+                            : <div className="mt-0.5 text-[10px] italic text-slate-400">No phone yet</div>
                           }
                         </td>
 
@@ -513,7 +516,7 @@ const CarWashLoyalty = () => {
                         {/* Actions */}
                         <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                           <div className="inline-flex items-center gap-1">
-                            {hasPhone && card && card.currentStamps > 0 && (
+                            {hasContact && card && card.currentStamps > 0 && (
                               <button
                                 onClick={() => openSmsModal(c, "stamp")}
                                 className="inline-flex items-center gap-1 border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-700 hover:bg-blue-100"
@@ -522,7 +525,7 @@ const CarWashLoyalty = () => {
                                 <FaSms /> Stamp
                               </button>
                             )}
-                            {hasPhone && hasReward && (
+                            {hasContact && hasReward && (
                               <button
                                 onClick={() => openSmsModal(c, "reward")}
                                 className="inline-flex items-center gap-1 border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 hover:bg-amber-100"
@@ -531,11 +534,11 @@ const CarWashLoyalty = () => {
                                 <FaSms /> Reward
                               </button>
                             )}
-                            {hasPhone && (
+                            {hasContact && (
                               <button
                                 onClick={() => openSmsModal(c)}
                                 className="p-1 text-slate-400 hover:text-emerald-700"
-                                title={`Send SMS to ${c.phone}`}
+                                title={c.phone ? `Send SMS to ${c.phone}` : "Send SMS via M-Pesa masked number"}
                               >
                                 <FaSms />
                               </button>
@@ -623,7 +626,7 @@ const CarWashLoyalty = () => {
 
       {smsTarget && (
         <CwSmsModal
-          target={{ _id: smsTarget._id, name: smsTarget.name, phone: smsTarget.phone }}
+          target={{ _id: smsTarget._id, name: smsTarget.name, phone: smsTarget.phone, maskedMsisdn: smsTarget.maskedMsisdn }}
           defaultBody={smsBody}
           templates={buildTemplates(smsTarget)}
           context={(smsTarget.plates || []).join(", ") || "Loyalty Customer"}

@@ -468,12 +468,13 @@ export const awardLoyaltyStamp = async ({ business, job, overridePhone = null, m
 // Creates or updates the CarWashCustomer record for a plate.
 // Called at job creation AND as a safety net before stamp awarding.
 // Never throws — failure must not block any calling flow.
-export const ensureCarWashCustomer = async ({ business, plate, customerName, phone, maskedMsisdn = null }) => {
+export const ensureCarWashCustomer = async ({ business, plate, customerName, phone, maskedMsisdn = null, payerName = null }) => {
   try {
     const normalizedPlate = String(plate || '').trim().toUpperCase();
     if (!normalizedPlate) return null;
     const cleanPhone = String(phone || '').trim() || null;
     const cleanMasked = String(maskedMsisdn || '').trim() || null;
+    const cleanPayerName = String(payerName || '').trim() || null;
 
     // Plate is the sole identity key — every unique plate is its own customer record.
     // Phone is stored as metadata only and is never used for lookup or merging.
@@ -483,7 +484,7 @@ export const ensureCarWashCustomer = async ({ business, plate, customerName, pho
       try {
         const doc = {
           business,
-          name: String(customerName || normalizedPlate).trim() || normalizedPlate,
+          name: cleanPayerName || String(customerName || normalizedPlate).trim() || normalizedPlate,
           plates: [normalizedPlate],
           notes: 'Auto-enrolled at first wash',
         };
@@ -499,10 +500,11 @@ export const ensureCarWashCustomer = async ({ business, plate, customerName, pho
       }
     }
 
-    // Keep phone and maskedMsisdn up to date if the customer record doesn't have them yet
+    // Keep fields up to date — payer name from M-Pesa always wins (latest payer name sticks)
     const updates = {};
     if (!customer.phone && cleanPhone) updates.phone = cleanPhone;
     if (cleanMasked && customer.maskedMsisdn !== cleanMasked) updates.maskedMsisdn = cleanMasked;
+    if (cleanPayerName && customer.name !== cleanPayerName) updates.name = cleanPayerName;
     if (Object.keys(updates).length) {
       await CarWashCustomer.updateOne({ _id: customer._id }, { $set: updates });
       Object.assign(customer, updates);
@@ -517,10 +519,10 @@ export const ensureCarWashCustomer = async ({ business, plate, customerName, pho
 
 // ─── Auto-enroll plate at job creation ───────────────────────────────────────
 // Called from jobsController.createJob. Never throws — failure must not block job creation.
-export const autoEnrollPlate = async ({ business, plate, customerName, phone, maskedMsisdn = null }) => {
+export const autoEnrollPlate = async ({ business, plate, customerName, phone, maskedMsisdn = null, payerName = null }) => {
   try {
     // Customer creation is always guaranteed via ensureCarWashCustomer
-    const customer = await ensureCarWashCustomer({ business, plate, customerName, phone, maskedMsisdn });
+    const customer = await ensureCarWashCustomer({ business, plate, customerName, phone, maskedMsisdn, payerName });
     if (!customer) return null;
 
     // Loyalty card creation is optional — only if a program is active
@@ -663,10 +665,16 @@ export const sendCustomerSms = async (req, res, next) => {
     const customer = await CarWashCustomer.findOne({ _id: req.params.id, business }).lean();
     if (!customer) throw createError(404, "Car Wash customer not found");
     const phone = String(req.body.phone || customer.phone || "").trim();
-    if (!phone) throw createError(400, "No phone number available for this customer");
+    const masked = String(customer.maskedMsisdn || "").trim();
     const body = String(req.body.body || "").trim();
     if (!body) throw createError(400, "Message body is required");
-    await sendAdHocSms({ businessId: business, phone, body, templateKey: "carwash_loyalty_manual" });
+    if (phone) {
+      await sendAdHocSms({ businessId: business, phone, body, templateKey: "carwash_loyalty_manual" });
+    } else if (masked) {
+      await sendAdHocSmsToMasked({ businessId: business, maskedNumber: masked, body, templateKey: "carwash_loyalty_manual", recipientName: customer.name || "Customer" });
+    } else {
+      throw createError(400, "No phone number available for this customer");
+    }
     res.json({ success: true, message: "SMS sent" });
   } catch (err) {
     next(err);

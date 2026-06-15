@@ -1283,6 +1283,7 @@ export const sendAdHocSms = async ({ businessId, phone, body, templateKey = 'adh
       status: result?.messageId ? 'sent' : 'failed',
       providerMessageId: result?.messageId || '',
       providerStatus: result?.status || '',
+      costLabel: result?.cost || '',
       provider: profile?.provider || 'generic',
       sentAt: new Date(),
     }).catch(() => {});
@@ -1331,6 +1332,7 @@ export const sendAdHocSmsToMasked = async ({ businessId, maskedNumber, body, tem
       status: 'sent',
       providerMessageId: result?.messageId || '',
       providerStatus: result?.status || '',
+      costLabel: result?.cost || '',
       provider: 'africas_talking',
       sentAt: new Date(),
     }).catch(() => {});

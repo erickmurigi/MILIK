@@ -150,6 +150,11 @@ const getStaffDisplay = (job) => {
   return `${list[0]?.name || "?"} +${list.length - 1}`;
 };
 
+const PhoneDisplay = ({ phone, maskedMsisdn }) =>
+  phone ? phone
+  : maskedMsisdn ? <span className="font-semibold text-emerald-600">M-Pesa · SMS ready</span>
+  : <span className="italic text-slate-400">via M-Pesa on payment</span>;
+
 const MobileJobCard = React.memo(({
   job, expanded, selected, jobPaymentsEntry,
   canUpdateJob, canRecordPayment,
@@ -221,7 +226,7 @@ const MobileJobCard = React.memo(({
       {expanded && (
         <div className="mt-2 space-y-1 rounded border border-slate-200 bg-[#F8FBF9] p-2 text-[11px] text-slate-600">
           <div><span className="font-extrabold uppercase text-slate-500">Time:</span> {job.createdAt ? new Date(job.createdAt).toLocaleString("en-KE") : "-"}</div>
-          <div><span className="font-extrabold uppercase text-slate-500">Phone:</span>{" "}{job.phone || <span className="italic text-slate-400">via M-Pesa on payment</span>}</div>
+          <div><span className="font-extrabold uppercase text-slate-500">Phone:</span>{" "}<PhoneDisplay phone={job.phone} maskedMsisdn={job.maskedMsisdn} /></div>
           {job.notes && <div><span className="font-extrabold uppercase text-slate-500">Notes:</span> {job.notes}</div>}
           <div>
             <span className="font-extrabold uppercase text-slate-500">Payments:</span>
@@ -375,7 +380,7 @@ const DesktopJobRow = React.memo(({
               <div><span className="font-extrabold uppercase text-slate-500">Time:</span> {job.createdAt ? new Date(job.createdAt).toLocaleString("en-KE") : "-"}</div>
               <div>
                 <span className="font-extrabold uppercase text-slate-500">Phone:</span>{" "}
-                {job.phone ? job.phone : <span className="text-slate-400 italic">via M-Pesa on payment</span>}
+                <PhoneDisplay phone={job.phone} maskedMsisdn={job.maskedMsisdn} />
               </div>
               {job.jobType === "carpet" ? (
                 <div><span className="font-extrabold uppercase text-slate-500">Ready By:</span> {job.expectedReadyAt ? new Date(job.expectedReadyAt).toLocaleDateString("en-KE") : "-"}</div>
