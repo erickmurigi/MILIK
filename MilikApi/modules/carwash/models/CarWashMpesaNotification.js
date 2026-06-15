@@ -29,6 +29,11 @@ const carWashMpesaNotificationSchema = new mongoose.Schema(
     resultDesc: { type: String, trim: true, default: "" },
     notes:      { type: String, trim: true, default: "" },
 
+    // Reversal tracking
+    isReversed:   { type: Boolean, default: false },
+    reversalRef:  { type: String, trim: true, default: "" }, // Safaricom reversal transaction code or manual note
+    reversalDate: { type: Date, default: null },
+
     // Full raw Safaricom payload — kept for audit / debugging
     rawPayload: { type: mongoose.Schema.Types.Mixed, default: null },
   },

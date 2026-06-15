@@ -44,30 +44,39 @@ const Modal = ({ title, children, footer, onClose }) => (
   </div>
 );
 
-// ─── Stamp progress bar ────────────────────────────────────────────────────────
+// ─── Compact stamp dots — mirrors CarWashLoyalty StampDots ────────────────────
 const StampBar = ({ card, program }) => {
-  if (!card) return <span className="text-slate-300 text-xs">—</span>;
+  if (!card) return <span className="text-slate-300 text-[10px]">—</span>;
   const required = program?.stampsRequired || card?.program?.stampsRequired || 10;
   const current = card.currentStamps || 0;
-  const pct = Math.min(100, Math.round((current / required) * 100));
   const pending = card.pendingRewards || 0;
-  return (
-    <div className="flex items-center gap-2">
-      <div className="relative h-1.5 w-16 flex-shrink-0 overflow-hidden rounded-full bg-slate-200">
-        <div className="h-full rounded-full bg-amber-400 transition-all duration-300" style={{ width: `${pct}%` }} />
+  if (required > 12) {
+    const pct = Math.min(100, Math.round((current / required) * 100));
+    return (
+      <div className="flex items-center gap-1.5">
+        <div className="relative h-1.5 w-14 flex-shrink-0 overflow-hidden rounded-full bg-slate-200">
+          <div className="h-full rounded-full bg-amber-400 transition-all" style={{ width: `${pct}%` }} />
+        </div>
+        <span className="text-[9px] font-bold tabular-nums text-slate-500">{current}/{required}</span>
+        {pending > 0 && <span className="rounded-full bg-amber-100 px-1 py-0.5 text-[8px] font-bold text-amber-700 border border-amber-200">{pending}×</span>}
       </div>
-      <span className="text-[10px] font-semibold tabular-nums text-slate-500">{current}/{required}</span>
-      {pending > 0 && (
-        <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-700 border border-amber-200">
-          {pending}×
-        </span>
-      )}
+    );
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-0.5">
+      {Array.from({ length: required }, (_, i) => (
+        <div key={i} className={`flex h-3 w-3 items-center justify-center rounded-full border-[1.5px] transition-all ${i < current ? "border-amber-500 bg-amber-500" : "border-slate-200 bg-white"}`}>
+          {i < current && <div className="h-1 w-1 rounded-full bg-white" />}
+        </div>
+      ))}
+      <span className="ml-0.5 text-[9px] font-bold tabular-nums text-slate-500">{current}/{required}</span>
+      {pending > 0 && <span className="ml-0.5 rounded-full bg-amber-100 px-1 py-0.5 text-[8px] font-bold text-amber-700 border border-amber-200">{pending}×</span>}
     </div>
   );
 };
 
 // ─── Expanded detail row ───────────────────────────────────────────────────────
-const CustomerDetail = ({ customer, colSpan = 10 }) => {
+const CustomerDetail = ({ customer, program, colSpan = 10 }) => {
   const card = customer.loyaltyCard;
   const acc = customer.creditAccount;
   return (
@@ -110,7 +119,7 @@ const CustomerDetail = ({ customer, colSpan = 10 }) => {
             <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-2">Loyalty & Account</p>
             {card ? (
               <div className="mb-2 space-y-1">
-                <StampBar card={card} />
+                <StampBar card={card} program={program} />
                 <p className="text-[10px] text-slate-500">
                   {card.totalStampsEarned || 0} stamps earned · {card.totalRewardsEarned || 0} rewards
                 </p>
@@ -207,6 +216,7 @@ export default function CarWashCustomers() {
     return Array.isArray(raw) ? raw : (raw?.data ?? []);
   }, [customersData]);
   const total = Array.isArray(customersData) ? customersData.length : (customersData?.total ?? customers.length);
+  const loyaltyProgram = Array.isArray(customersData) ? null : (customersData?.loyaltyProgram ?? null);
 
   const { data: cashbooksRaw } = useQuery({
     queryKey: ["cw-customer-cashbooks"],
@@ -522,7 +532,7 @@ export default function CarWashCustomers() {
                   <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-500">
                     <span className="flex items-center gap-1"><FaCarSide size={9} className="text-slate-400" />{c.totalJobs || 0} visits</span>
                     {c.lastVisit && <span className="flex items-center gap-1"><FaClock size={9} />{fmtDate(c.lastVisit)}</span>}
-                    {card && <StampBar card={card} />}
+                    {card && <StampBar card={card} program={loyaltyProgram} />}
                     {acc && (
                       <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-semibold ${acctTypePill[acc.accountType] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
                         <FaIdCard size={8} />{acc.accountType}
@@ -681,7 +691,7 @@ export default function CarWashCustomers() {
 
                         {/* Loyalty */}
                         <td className="hidden xl:table-cell px-4 py-2">
-                          <StampBar card={card} />
+                          <StampBar card={card} program={loyaltyProgram} />
                         </td>
 
                         {/* Account */}
@@ -708,7 +718,7 @@ export default function CarWashCustomers() {
                         </td>
                       </tr>
 
-                      {isExpanded && <CustomerDetail customer={c} colSpan={10} />}
+                      {isExpanded && <CustomerDetail customer={c} program={loyaltyProgram} colSpan={10} />}
                     </React.Fragment>
                   );
                 })}

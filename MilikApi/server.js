@@ -754,31 +754,31 @@ async function startServer() {
       const today    = new Date(Date.UTC(nowEAT.getUTCFullYear(), nowEAT.getUTCMonth(), nowEAT.getUTCDate()));
 
       for (const biz of businesses) {
-        const last = await CarWashStaffSaving.findOne(
+        const first = await CarWashStaffSaving.findOne(
           { business: biz._id, type: 'daily' },
           { savingsDate: 1 },
-          { sort: { savingsDate: -1 } }
+          { sort: { savingsDate: 1 } }
         ).lean();
 
-        if (!last?.savingsDate) {
-          // No history yet — post today immediately so savings start on first run
-          // regardless of whether the 23:59 cron has ever fired.
+        if (!first?.savingsDate) {
+          // No history yet — post today immediately
           const result = await processDailySavings(String(biz._id), today);
           console.log(`[CW Savings Catchup] ${today.toISOString().slice(0,10)} (first ever) biz …${String(biz._id).slice(-6)}: posted=${result.posted}`);
           if (result.posted > 0) totalBackfilled += result.posted;
           continue;
         }
 
-        const lastDate = new Date(last.savingsDate);
-        console.log(`[CW Savings Catchup] biz …${String(biz._id).slice(-6)}: lastSavingsDate=${lastDate.toISOString().slice(0,10)} today=${today.toISOString().slice(0,10)}`);
-
-        const cur = new Date(lastDate);
-        cur.setUTCDate(cur.getUTCDate() + 1); // start from the day after the last posted date
+        // Walk from first→today; unique index skips already-posted dates,
+        // filling any gaps caused by manual clicks that jumped ahead in the calendar.
+        const cur = new Date(first.savingsDate);
+        console.log(`[CW Savings Catchup] biz …${String(biz._id).slice(-6)}: filling ${cur.toISOString().slice(0,10)} → ${today.toISOString().slice(0,10)}`);
 
         while (cur <= today) {
           const result = await processDailySavings(String(biz._id), new Date(cur));
-          console.log(`[CW Savings Catchup] ${cur.toISOString().slice(0, 10)}: posted=${result.posted} skipped=${result.skipped}`);
-          if (result.posted > 0) totalBackfilled += result.posted;
+          if (result.posted > 0) {
+            console.log(`[CW Savings Catchup] ${cur.toISOString().slice(0, 10)}: posted=${result.posted}`);
+            totalBackfilled += result.posted;
+          }
           cur.setUTCDate(cur.getUTCDate() + 1);
         }
       }

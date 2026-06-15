@@ -12,33 +12,31 @@ import useCarWashPermission from "../../hooks/useCarWashPermission";
 const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 
-// ─── Visual stamp dots ────────────────────────────────────────────────────────
+// ─── Compact stamp dots (≤12 individual circles, >12 progress bar) ────────────
 const StampDots = ({ current, required }) => {
   const safe = Math.max(1, required);
   if (safe > 12) {
     const pct = Math.min((current / safe) * 100, 100);
     return (
       <div className="flex items-center gap-2">
-        <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
-          <div className="h-2 rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+          <div className="h-1.5 rounded-full bg-amber-400 transition-all" style={{ width: `${pct}%` }} />
         </div>
-        <span className="tabular-nums text-xs font-black text-slate-700">{current}/{safe}</span>
+        <span className="tabular-nums text-[11px] font-black text-slate-700">{current}/{safe}</span>
       </div>
     );
   }
   return (
-    <div className="flex flex-wrap items-center gap-1">
+    <div className="flex flex-wrap items-center gap-0.5">
       {Array.from({ length: safe }, (_, i) => (
         <div
           key={i}
-          className={`flex h-5 w-5 items-center justify-center rounded-full border-2 transition-all ${
-            i < current
-              ? "border-emerald-500 bg-emerald-500 shadow-sm"
-              : "border-slate-200 bg-white"
+          className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 transition-all ${
+            i < current ? "border-amber-500 bg-amber-500" : "border-slate-200 bg-white"
           }`}
           title={i < current ? `Stamp ${i + 1}` : "Not yet earned"}
         >
-          {i < current && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
+          {i < current && <div className="h-1 w-1 rounded-full bg-white" />}
         </div>
       ))}
       <span className="ml-0.5 text-[11px] font-extrabold text-slate-500">{current}/{safe}</span>
@@ -438,10 +436,10 @@ const CarWashLoyalty = () => {
             <table className="w-full min-w-[680px] text-xs">
               <thead>
                 <tr className="bg-[#0B3B2E] text-white">
-                  <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.15em]">Customer</th>
-                  <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.15em]">Plates</th>
-                  <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.15em]">Stamp Progress</th>
-                  <th className="px-4 py-2.5 text-right text-[10px] font-black uppercase tracking-[0.15em]">Actions</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.15em]">Customer</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.15em]">Plates</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.15em]">Stamps</th>
+                  <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-[0.15em]">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -469,10 +467,10 @@ const CarWashLoyalty = () => {
                         onClick={() => toggleExpand(c)}
                       >
                         {/* Customer */}
-                        <td className="px-4 py-3">
-                          <div className="font-extrabold text-slate-900">{c.name}</div>
+                        <td className="px-3 py-2">
+                          <div className="font-extrabold text-slate-900 leading-tight">{c.name}</div>
                           {c.phone
-                            ? <div className="mt-0.5 text-[11px] text-slate-500">{c.phone}</div>
+                            ? <div className="mt-0.5 text-[10px] text-slate-500">{c.phone}</div>
                             : c.maskedMsisdn
                             ? <div className="mt-0.5 text-[10px] font-semibold text-emerald-600">M-Pesa · SMS ready</div>
                             : <div className="mt-0.5 text-[10px] italic text-slate-400">No phone yet</div>
@@ -480,41 +478,38 @@ const CarWashLoyalty = () => {
                         </td>
 
                         {/* Plates */}
-                        <td className="px-4 py-3">
+                        <td className="px-3 py-2">
                           <div className="flex flex-wrap gap-1">
                             {(c.plates || []).map(p => (
-                              <span key={p} className="inline-flex items-center gap-1 border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-700">
-                                <FaCar className="text-[9px] text-emerald-600" />{p}
+                              <span key={p} className="inline-flex items-center gap-1 border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold font-mono text-slate-700">
+                                <FaCar className="text-[8px] text-emerald-600" />{p}
                               </span>
                             ))}
-                            {!c.plates?.length && <span className="text-[11px] text-slate-400">—</span>}
+                            {!c.plates?.length && <span className="text-[10px] text-slate-400">—</span>}
                           </div>
                         </td>
 
                         {/* Stamps */}
-                        <td className="px-4 py-3">
+                        <td className="px-3 py-2">
                           {card ? (
-                            <div className="space-y-1.5">
+                            <div className="space-y-1">
                               <StampDots current={card.currentStamps} required={stampsRequired} />
-                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                                <span>{card.totalStampsEarned} total stamp{card.totalStampsEarned !== 1 ? "s" : ""}</span>
+                              <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-400">
+                                <span>{card.totalStampsEarned} earned</span>
                                 {hasReward && (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-700">
-                                    <FaGift className="text-[8px]" /> {pendingRewards} reward{pendingRewards !== 1 ? "s" : ""} ready!
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-black text-amber-700 border border-amber-200">
+                                    <FaGift className="text-[7px]" /> {pendingRewards}× ready
                                   </span>
-                                )}
-                                {card.lastStampAt && (
-                                  <span className="text-slate-400">Last: {new Date(card.lastStampAt).toLocaleDateString("en-KE")}</span>
                                 )}
                               </div>
                             </div>
                           ) : (
-                            <span className="text-[11px] italic text-slate-400">No card yet</span>
+                            <span className="text-[10px] italic text-slate-400">No card yet</span>
                           )}
                         </td>
 
                         {/* Actions */}
-                        <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                        <td className="px-3 py-2 text-right" onClick={e => e.stopPropagation()}>
                           <div className="inline-flex items-center gap-1">
                             {hasContact && card && card.currentStamps > 0 && (
                               <button

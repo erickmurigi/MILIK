@@ -146,9 +146,11 @@ const CarWashStaffSavings = () => {
     setProcessing(true);
     try {
       const r = await carWashApi.processDailySavings();
-      toast.success(`Daily savings: ${r?.posted ?? 0} posted, ${r?.skipped ?? 0} already done`);
-      loadBalances();
-      if (selectedStaff) loadRecords(selectedStaff.staffId, detailFrom, detailTo, detailPage);
+      await loadBalances();
+      if (selectedStaff) await loadRecords(selectedStaff.staffId, detailFrom, detailTo, detailPage);
+      toast.success(r?.posted > 0
+        ? `Caught up ${r.posted} missing day${r.posted !== 1 ? "s" : ""} of savings`
+        : `All savings are up to date (${r?.skipped ?? 0} already posted)`);
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to process daily savings");
     } finally {

@@ -148,13 +148,16 @@ export const listCustomersEnriched = async (req, res, next) => {
       // Handled in post-processing below — filter flag stored for later
     }
 
-    const [customers, total] = await Promise.all([
+    const [customers, total, loyaltyProgram] = await Promise.all([
       CarWashCustomer.find(filter)
         .sort({ updatedAt: -1 })
         .skip((pageNum - 1) * limitNum)
         .limit(limitNum)
         .lean(),
       CarWashCustomer.countDocuments(filter),
+      CarWashLoyaltyProgram.findOne({ business, isActive: true })
+        .select('stampsRequired rewardType rewardValue isActive')
+        .lean(),
     ]);
 
     if (!customers.length) {
@@ -245,7 +248,7 @@ export const listCustomersEnriched = async (req, res, next) => {
       };
     });
 
-    res.json({ success: true, data: enriched, total, page: pageNum, limit: limitNum });
+    res.json({ success: true, data: enriched, total, page: pageNum, limit: limitNum, loyaltyProgram: loyaltyProgram || null });
   } catch (err) {
     next(err);
   }
@@ -365,14 +368,15 @@ export const lookupPlate = async (req, res, next) => {
 export const awardLoyaltyStamp = async ({ business, job, overridePhone = null, maskedMsisdn = null }) => {
   if (!job?.plateNumber) return null;
 
-  const plate = String(job.plateNumber).trim().toUpperCase();
+  const plate = normalizePlate(job.plateNumber);
 
   // 1. Always ensure customer exists — independent of loyalty program
   const customer = await ensureCarWashCustomer({
     business,
     plate,
     customerName: job.customerName,
-    phone: job.phone,
+    phone: overridePhone || job.phone,
+    maskedMsisdn: maskedMsisdn || null,
   });
   if (!customer) return null;
 
@@ -503,11 +507,17 @@ export const ensureCarWashCustomer = async ({ business, plate, customerName, pho
       }
     }
 
-    // Keep fields up to date — payer name from M-Pesa always wins (latest payer name sticks)
+    // Keep fields up to date — only fill blanks, never overwrite data the user provided
     const updates = {};
-    if (!customer.phone && cleanPhone) updates.phone = cleanPhone;
-    if (cleanMasked && customer.maskedMsisdn !== cleanMasked) updates.maskedMsisdn = cleanMasked;
-    if (cleanPayerName && customer.name !== cleanPayerName) updates.name = cleanPayerName;
+    if (!customer.phone && cleanPhone) {
+      updates.phone = cleanPhone;
+      // Real phone discovered — masked MSISDN is no longer the contact method
+      if (customer.maskedMsisdn) updates.maskedMsisdn = "";
+    } else if (cleanMasked && !customer.phone && customer.maskedMsisdn !== cleanMasked) {
+      updates.maskedMsisdn = cleanMasked;
+    }
+    // Only fill in name from payer if no name exists yet (M-Pesa names are unreliable for overwriting)
+    if (!customer.name && cleanPayerName) updates.name = cleanPayerName;
     if (Object.keys(updates).length) {
       await CarWashCustomer.updateOne({ _id: customer._id }, { $set: updates });
       Object.assign(customer, updates);
@@ -553,7 +563,7 @@ export const redeemReward = async (req, res, next) => {
     if (!job) return next(createError(404, 'Car Wash job not found'));
     if (job.status === 'cancelled') return next(createError(400, 'Cannot redeem a reward on a cancelled job'));
 
-    const plate = String(job.plateNumber || '').trim().toUpperCase();
+    const plate = normalizePlate(job.plateNumber);
     if (!plate) return next(createError(400, 'Job has no plate number'));
 
     const customer = await CarWashCustomer.findOne({ business, plates: buildPlateRegex(plate) }).lean();

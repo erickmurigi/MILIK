@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   FaCheckCircle, FaExclamationTriangle, FaMobileAlt, FaRedoAlt,
-  FaSearch, FaTimesCircle, FaCopy, FaLink, FaTimes, FaCarAlt,
+  FaSearch, FaTimesCircle, FaCopy, FaLink, FaTimes, FaCarAlt, FaUndo,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
@@ -17,6 +17,12 @@ const STATUS_META = {
   rejected:  { label: "Rejected",  bg: "bg-red-50",      border: "border-red-200",     text: "text-red-700",    dot: "bg-red-400",    icon: FaTimesCircle },
   error:     { label: "Error",     bg: "bg-slate-50",    border: "border-slate-200",   text: "text-slate-500",  dot: "bg-slate-400",  icon: FaExclamationTriangle },
 };
+
+const ReversedBadge = () => (
+  <span className="inline-flex items-center gap-1 border border-red-300 bg-red-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-red-600">
+    <FaUndo size={7} /> Reversed
+  </span>
+);
 
 const StatusBadge = ({ status }) => {
   const m = STATUS_META[status] || STATUS_META.error;
@@ -147,7 +153,7 @@ function AssignModal({ notif, onClose, onAssigned }) {
                     <StatusBadge status={j.paymentStatus === "paid" ? "matched" : j.paymentStatus === "partial" ? "unmatched" : "unmatched"} />
                   </div>
                   <div className="text-[10px] text-slate-500 mt-0.5">
-                    {j.customerName || "—"} · Ksh {formatMoney(j.price)} · {fmtDate(j.createdAt)}
+                    {j.customerName || "—"} · Ksh {formatMoney(Math.max(0, (j.price || 0) - (j.discountAmount || 0)))} · {fmtDate(j.createdAt)}
                   </div>
                 </div>
                 {isPaid && <span className="text-[9px] font-bold uppercase text-slate-400">Fully Paid</span>}
@@ -160,7 +166,7 @@ function AssignModal({ notif, onClose, onAssigned }) {
         <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3">
           {selected ? (
             <div className="text-[11px] text-slate-600">
-              Assigning <strong>Ksh {formatMoney(Math.min(notif.amount, selected.price))}</strong> to{" "}
+              Assigning <strong>Ksh {formatMoney(Math.min(notif.amount, Math.max(0, (selected.price || 0) - (selected.discountAmount || 0))))}</strong> to{" "}
               <strong className="text-[#0B3B2E]">{selected.plateNumber} · {selected.jobNumber}</strong>
             </div>
           ) : (
@@ -232,7 +238,7 @@ export default function CarWashMpesaNotifications() {
     setNotifications((prev) =>
       prev.map((n) => (n._id === updated._id ? { ...n, ...updated } : n))
     );
-    setSummary([]); // force reload on next render to refresh counts
+    setSummary([]);
     load();
   };
 
@@ -339,11 +345,17 @@ export default function CarWashMpesaNotifications() {
             )}
             {notifications.map((n) => {
               const canAssign = canRecord && (n.status === "unmatched" || n.status === "error");
+              const rowBg = n.isReversed ? "bg-red-50/40" : (STATUS_META[n.status]?.bg || "");
               return (
                 <React.Fragment key={n._id}>
-                  <tr className={`border-b border-slate-100 hover:bg-slate-50 ${STATUS_META[n.status]?.bg || ""}`}>
+                  <tr className={`border-b border-slate-100 hover:bg-slate-50 ${rowBg}`}>
                     <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{fmtDate(n.createdAt)}</td>
-                    <td className="px-3 py-2"><StatusBadge status={n.status} /></td>
+                    <td className="px-3 py-2">
+                      <div className="flex flex-col gap-0.5">
+                        <StatusBadge status={n.status} />
+                        {n.isReversed && <ReversedBadge />}
+                      </div>
+                    </td>
                     <td className="px-3 py-2">
                       <div className="font-extrabold text-slate-900 tracking-wider">{n.plate || "—"}</div>
                       {n.billRefNumber && n.billRefNumber !== n.plate && (
@@ -368,8 +380,9 @@ export default function CarWashMpesaNotifications() {
                     <td className="px-3 py-2">
                       {n.matchedJob ? (
                         <div>
-                          <p className="font-bold text-[#0B3B2E]">{n.matchedJob.jobNumber}</p>
+                          <p className={`font-bold ${n.isReversed ? "text-slate-400 line-through" : "text-[#0B3B2E]"}`}>{n.matchedJob.jobNumber}</p>
                           <p className="text-[10px] text-slate-500">{n.matchedJob.customerName || n.matchedJob.plateNumber}</p>
+                          {n.isReversed && <p className="text-[9px] text-red-500 font-semibold">Payment reversed</p>}
                         </div>
                       ) : (
                         <span className="text-[10px] text-slate-400 italic">{n.resultDesc || "—"}</span>

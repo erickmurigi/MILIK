@@ -12,7 +12,7 @@ import CarWashBranch from "../models/CarWashBranch.js";
 import CarWashMpesaNotification from "../models/CarWashMpesaNotification.js";
 import { getRawMpesaPaybillConfigs, getPrimaryMpesaPaybillConfig, getRawSmsProfiles, getPrimarySmsProfile } from "../../../utils/companyModules.js";
 import { accrueCommissionForJob, markJobCommissionsPayable } from "../services/commissionService.js";
-import { postCarWashPaymentLedger } from "../services/carwashAccountingService.js";
+import { postCarWashPaymentLedger, reverseCarWashPaymentLedger } from "../services/carwashAccountingService.js";
 import { autoEnrollPlate, awardLoyaltyStamp, sendPaymentConfirmationSms } from "./loyaltyController.js";
 import { sendAdHocSmsToMasked } from "../../../services/communicationService.js";
 import { normalizePlate, buildPlateRegex } from "../utils/plateUtils.js";
@@ -724,11 +724,11 @@ export const reassignMpesaNotification = async (req, res, next) => {
     }).catch(() => {});
 
     if (updatedJob) {
-      await accrueCommissionForJob({ req, job: updatedJob });
+      accrueCommissionForJob({ req, job: updatedJob }).catch(() => {});
       const reassignRemaining = round2(Math.max(0, outstanding - paidAmount));
       await sendPaymentConfirmationSms({ business, job: updatedJob, amount: paidAmount, remaining: reassignRemaining, overridePhone: normalizedMsisdn, maskedMsisdn });
       if (updatedJob.paymentStatus === "paid") {
-        await markJobCommissionsPayable({ business, jobId: updatedJob._id });
+        markJobCommissionsPayable({ business, jobId: updatedJob._id }).catch(() => {});
       }
       if (["paid", "partial"].includes(updatedJob.paymentStatus)) {
         await awardLoyaltyStamp({ business, job: updatedJob, overridePhone: normalizedMsisdn, maskedMsisdn });

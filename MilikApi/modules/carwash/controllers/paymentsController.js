@@ -228,7 +228,13 @@ export const deletePayment = async (req, res, next) => {
       );
     }
     await revokeStampForJob({ business, jobId: jobBeforeDelete._id, plate: jobBeforeDelete.plateNumber });
+    const deletedPaymentId = payment._id;
     await payment.deleteOne();
+    // If this payment was linked to an M-Pesa notification, return it to unmatched
+    CarWashMpesaNotification.findOneAndUpdate(
+      { business, matchedPayment: deletedPaymentId },
+      { $set: { status: "unmatched", matchedPayment: null, isReversed: true, reversalDate: new Date(), resultDesc: "Payment reversed" } }
+    ).catch(() => {});
     const { job } = await refreshJobPaymentStatus(business, payment.job);
     await handleJobPaymentStatusAfterPaymentChange({ business, job });
     res.status(200).json({ success: true, job, message: "Car Wash payment deleted" });
