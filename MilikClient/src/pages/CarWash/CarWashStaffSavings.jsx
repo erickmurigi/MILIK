@@ -92,6 +92,10 @@ const CarWashStaffSavings = () => {
   const loadBalances = useCallback(async () => {
     setBalancesLoading(true);
     try {
+      // Write phase: catch-up any missed days. Separate HTTP request from the
+      // read below so MongoDB replica lag cannot cause the aggregation to miss
+      // records that were just inserted in the same request.
+      await carWashApi.processDailySavings().catch(() => {});
       const res = await carWashApi.listSavingsBalances();
       setBalances(res?.balances || []);
     } catch { /* balances reload is best-effort */ }

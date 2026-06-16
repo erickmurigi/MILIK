@@ -590,39 +590,10 @@ const eatToday = () => {
   return new Date(Date.UTC(nowEAT.getUTCFullYear(), nowEAT.getUTCMonth(), nowEAT.getUTCDate()));
 };
 
-const backfillSavings = async (business, businessOid) => {
-  const today = eatToday();
-
-  // Start from the FIRST savings date ever (not the last).
-  // Walking from first→today and letting the unique index skip already-posted dates
-  // fills any gaps regardless of whether manual clicks jumped ahead in the calendar.
-  const first = await CarWashStaffSaving.findOne(
-    { business: businessOid, type: "daily" },
-    { savingsDate: 1 },
-    { sort: { savingsDate: 1 } }
-  ).lean();
-
-  if (!first?.savingsDate) {
-    await processDailySavings(String(business), today);
-    return;
-  }
-
-  const cur = new Date(first.savingsDate);
-  while (cur <= today) {
-    await processDailySavings(String(business), new Date(cur));
-    cur.setUTCDate(cur.getUTCDate() + 1);
-  }
-};
-
 export const listSavingsBalances = async (req, res, next) => {
   try {
     const business    = resolveActiveBusinessId(req);
     const businessOid = toObjectId(business);
-
-    // Auto-catch-up any days missed since last posting (cron may have been offline)
-    await backfillSavings(business, businessOid).catch((e) =>
-      console.error("[CW Savings] Auto-backfill error:", e?.message)
-    );
 
     const rows = await CarWashStaffSaving.aggregate([
       { $match: { business: businessOid, isReversed: { $ne: true } } },
