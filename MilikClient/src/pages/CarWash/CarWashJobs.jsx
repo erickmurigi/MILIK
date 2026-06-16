@@ -196,6 +196,24 @@ const MobileJobCard = React.memo(({
             <option key={s} value={s}>{getJobStatusLabel(s, job.jobType)}</option>
           ))}
         </select>
+        {job.status === "waiting" && (
+          <button
+            type="button"
+            onClick={() => onUpdateStatus(job, "washing")}
+            className="h-7 whitespace-nowrap border border-blue-300 bg-blue-50 px-2.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100"
+          >
+            → Wash
+          </button>
+        )}
+        {job.status === "washing" && (
+          <button
+            type="button"
+            onClick={() => onUpdateStatus(job, "done")}
+            className="h-7 whitespace-nowrap border border-emerald-300 bg-emerald-50 px-2.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100"
+          >
+            → Done
+          </button>
+        )}
         {canUpdateJob && (
           <button type="button" onClick={() => onNavigateEdit(job._id)} disabled={job.status === "cancelled"} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-40">
             <FaEdit className="text-[9px]" /> Edit
@@ -292,19 +310,41 @@ const DesktopJobRow = React.memo(({
         <td className="px-2 py-1 text-slate-700">{getStaffDisplay(job)}</td>
         {isConsolidated && <td className="px-2 py-1 text-slate-600">{job.branch?.name || <span className="text-slate-400">—</span>}</td>}
         <td className="px-2 py-1">
-          <select
-            className="h-6 border border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-700"
-            value={job.status}
-            onChange={(event) => onUpdateStatus(job, event.target.value)}
-          >
-            {statuses
-              .filter((status) => status !== "paid" || job.paymentStatus === "paid")
-              .map((status) => (
-                <option key={status} value={status}>
-                  {getJobStatusLabel(status, job.jobType)}
-                </option>
-              ))}
-          </select>
+          <div className="flex items-center gap-1">
+            <select
+              className="h-6 max-w-[76px] border border-slate-300 bg-white px-1 text-[11px] font-bold text-slate-700"
+              value={job.status}
+              onChange={(event) => onUpdateStatus(job, event.target.value)}
+            >
+              {statuses
+                .filter((status) => status !== "paid" || job.paymentStatus === "paid")
+                .map((status) => (
+                  <option key={status} value={status}>
+                    {getJobStatusLabel(status, job.jobType)}
+                  </option>
+                ))}
+            </select>
+            {job.status === "waiting" && (
+              <button
+                type="button"
+                title="Move to Washing"
+                onClick={() => onUpdateStatus(job, "washing")}
+                className="h-6 whitespace-nowrap border border-blue-300 bg-blue-50 px-2 text-[10px] font-bold text-blue-700 hover:bg-blue-100"
+              >
+                → Wash
+              </button>
+            )}
+            {job.status === "washing" && (
+              <button
+                type="button"
+                title="Mark as Done"
+                onClick={() => onUpdateStatus(job, "done")}
+                className="h-6 whitespace-nowrap border border-emerald-300 bg-emerald-50 px-2 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100"
+              >
+                → Done
+              </button>
+            )}
+          </div>
         </td>
         <td className="px-2 py-1">
           <span className={`inline-flex border px-2 py-0.5 text-[11px] font-bold uppercase ${paymentBadgeClass[job.paymentStatus] || paymentBadgeClass.unpaid}`}>

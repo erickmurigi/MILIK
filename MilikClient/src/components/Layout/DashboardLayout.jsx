@@ -84,6 +84,7 @@ const MENU_PERMISSION_MAP = {
   inspections: { resource: "inspections", action: "view", moduleKey: "propertyManagement" },
   "carwash-dashboard": { resource: "carwash-dashboard", action: "view", moduleKey: "carwash" },
   "carwash-jobs": { resource: "carwash-jobs", action: "view", moduleKey: "carwash" },
+  "carwash-washboard": { resource: "carwash-jobs", action: "view", moduleKey: "carwash" },
   "carwash-services": { resource: "carwash-services", action: "view", moduleKey: "carwash" },
   "carwash-payments": { resource: "carwash-payments", action: "view", moduleKey: "carwash" },
   "carwash-deposits": { resource: "carwash-deposits", action: "view", moduleKey: "carwash" },
@@ -678,6 +679,7 @@ const TopToolbar = ({
         "property-workspace": "/dashboard",
         "carwash-dashboard": "/carwash/dashboard",
         "carwash-jobs": "/carwash/jobs",
+        "carwash-washboard": "/carwash/washboard",
         "carwash-services": "/carwash/services",
         "carwash-payments": "/carwash/payments",
         "carwash-mpesa-notifications": "/carwash/mpesa-notifications",
@@ -1192,6 +1194,7 @@ const TopToolbar = ({
           submenu: [
             { id: "carwash-dashboard", label: "Dashboard",   icon: FaChartBar },
             { id: "carwash-jobs",      label: "Jobs",        icon: FaCar },
+            { id: "carwash-washboard", label: "Washboard",   icon: FaList },
           ],
         },
         {

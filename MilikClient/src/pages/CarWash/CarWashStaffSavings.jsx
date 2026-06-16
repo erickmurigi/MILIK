@@ -92,12 +92,10 @@ const CarWashStaffSavings = () => {
   const loadBalances = useCallback(async () => {
     setBalancesLoading(true);
     try {
-      // Write phase: catch-up any missed days. Separate HTTP request from the
-      // read below so MongoDB replica lag cannot cause the aggregation to miss
-      // records that were just inserted in the same request.
-      await carWashApi.processDailySavings().catch(() => {});
-      const res = await carWashApi.listSavingsBalances();
-      setBalances(res?.balances || []);
+      // Single request: write any missed days then read balances in the same
+      // server-side call. Eliminates the replica-lag race between two requests.
+      const r = await carWashApi.processDailySavings();
+      setBalances(r?.balances || []);
     } catch { /* balances reload is best-effort */ }
     finally { setBalancesLoading(false); }
   }, []);
@@ -150,7 +148,7 @@ const CarWashStaffSavings = () => {
     setProcessing(true);
     try {
       const r = await carWashApi.processDailySavings();
-      await loadBalances();
+      setBalances(r?.balances || []);
       if (selectedStaff) await loadRecords(selectedStaff.staffId, detailFrom, detailTo, detailPage);
       toast.success(r?.posted > 0
         ? `Caught up ${r.posted} missing day${r.posted !== 1 ? "s" : ""} of savings`

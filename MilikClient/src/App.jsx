@@ -150,6 +150,7 @@ const AboutMilik           = lazy(() => import("./pages/Help/AboutMilik"));
 // Car Wash module
 const CarWashDashboard      = lazy(() => import("./pages/CarWash/CarWashDashboard"));
 const CarWashJobs           = lazy(() => import("./pages/CarWash/CarWashJobs"));
+const CarWashWashboard      = lazy(() => import("./pages/CarWash/CarWashWashboard"));
 const CarWashAddJob         = lazy(() => import("./pages/CarWash/CarWashAddJob"));
 const CarWashAccounts       = lazy(() => import("./pages/CarWash/CarWashAccounts"));
 const CarWashCustomers      = lazy(() => import("./pages/CarWash/CarWashCustomers"));
@@ -173,6 +174,7 @@ const CarWashFinancials     = lazy(() => import("./pages/CarWash/CarWashFinancia
 const CarWashBranches       = lazy(() => import("./pages/CarWash/CarWashBranches"));
 const CarWashSettings            = lazy(() => import("./pages/CarWash/CarWashSettings"));
 const CarWashMpesaNotifications  = lazy(() => import("./pages/CarWash/CarWashMpesaNotifications"));
+const CarWashQueueDisplay        = lazy(() => import("./pages/CarWash/CarWashQueueDisplay"));
 
 // Inventory & POS module
 const InventoryDashboard    = lazy(() => import("./pages/Inventory/InventoryDashboard"));
@@ -566,6 +568,9 @@ function App() {
         <AppDocumentTitleGuard />
         <Suspense fallback={<PageLoader />}>
           <Routes>
+            {/* ── Public display screens (no auth) ─────────────────────── */}
+            <Route path="/display/carwash/:businessId" element={<CarWashQueueDisplay />} />
+
             {/* ── Public ────────────────────────────────────────────────── */}
             <Route path="/" element={<PublicEntryRoute />} />
             <Route path="/home" element={<Navigate to="/" replace />} />
@@ -614,6 +619,7 @@ function App() {
             {/* Dashboard falls back to /carwash/jobs so users without dashboard access don't get ejected from the module */}
             <Route path="/carwash/dashboard"                  element={<Guard moduleKey="carwash" resource="carwash-dashboard" fallback="/carwash/jobs"><CarWashDashboard /></Guard>} />
             <Route path="/carwash/jobs"                       element={<Guard moduleKey="carwash" resource="carwash-jobs"><CarWashJobs /></Guard>} />
+            <Route path="/carwash/washboard"                  element={<Guard moduleKey="carwash" resource="carwash-jobs"><CarWashWashboard /></Guard>} />
             <Route path="/carwash/jobs/new"                   element={<Guard moduleKey="carwash" resource="carwash-jobs" action="create"><CarWashAddJob /></Guard>} />
             <Route path="/carwash/jobs/:id/edit"              element={<Guard moduleKey="carwash" resource="carwash-jobs" action="update"><CarWashAddJob /></Guard>} />
             <Route path="/carwash/customers"                  element={<Guard moduleKey="carwash" resource="carwash-loyalty"><CarWashCustomers /></Guard>} />

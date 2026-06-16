@@ -82,6 +82,7 @@ import carWashPayCallbackRoutes from "./modules/carwash/routes/mpesaPublicCallba
 import carWashBranchRoutes from "./modules/carwash/routes/branches.js";
 import carWashCreditAccountRoutes from "./modules/carwash/routes/creditAccounts.js";
 import carWashSettingsRoutes from "./modules/carwash/routes/settings.js";
+import carWashDisplayRoutes from "./modules/carwash/routes/display.js";
 import { processDueBilling } from "./modules/carwash/controllers/creditAccountsController.js";
 import hrDepartmentRoutes from "./modules/hr/routes/departments.js";
 import hrDesignationRoutes from "./modules/hr/routes/designations.js";
@@ -576,6 +577,7 @@ app.use("/api/carwash/pay", carWashPayCallbackRoutes);
 app.use("/api/carwash/branches", carWashBranchRoutes);
 app.use("/api/carwash/accounts", carWashCreditAccountRoutes);
 app.use("/api/carwash/settings", carWashSettingsRoutes);
+app.use("/api/carwash/display", carWashDisplayRoutes);
 app.use("/api/hr/departments", hrDepartmentRoutes);
 app.use("/api/hr/designations", hrDesignationRoutes);
 app.use("/api/hr/employees", hrEmployeeRoutes);

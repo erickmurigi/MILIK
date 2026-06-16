@@ -524,11 +524,38 @@ export const processDailySavingsManual = async (req, res, next) => {
       }
     }
 
+    // Read balances in the same request immediately after all writes complete.
+    // This guarantees the aggregation sees every record just inserted — no
+    // separate HTTP round-trip that could race with MongoDB replication.
+    const rows = await CarWashStaffSaving.aggregate([
+      { $match: { business: businessOid, isReversed: { $ne: true } } },
+      { $group: {
+        _id:       "$staff",
+        daily:     { $sum: { $cond: [{ $eq: ["$type", "daily"] },        "$amount", 0] } },
+        disbursed: { $sum: { $cond: [{ $eq: ["$type", "disbursement"] }, "$amount", 0] } },
+      }},
+      { $addFields: { balance: { $max: [0, { $subtract: ["$daily", "$disbursed"] }] } } },
+      { $sort: { balance: -1, _id: 1 } },
+    ]);
+
+    const staffIds  = rows.map((r) => r._id).filter(Boolean);
+    const staffDocs = await CarWashStaff.find({ _id: { $in: staffIds } }).select("name").lean();
+    const staffMap  = new Map(staffDocs.map((s) => [String(s._id), s.name]));
+
+    const balances = rows.map((r) => ({
+      staffId:   r._id,
+      staffName: staffMap.get(String(r._id)) || "Unknown",
+      daily:     r.daily,
+      disbursed: r.disbursed,
+      balance:   r.balance,
+    }));
+
     res.json({
       success: true,
-      posted:  totalPosted,
-      skipped: totalSkipped,
-      message: `Daily savings: ${totalPosted} posted, ${totalSkipped} already done`,
+      posted:   totalPosted,
+      skipped:  totalSkipped,
+      message:  `Daily savings: ${totalPosted} posted, ${totalSkipped} already done`,
+      balances,
     });
   } catch (error) {
     next(error);

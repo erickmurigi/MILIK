@@ -1,11 +1,19 @@
 import React, { useEffect, useState } from "react";
-import { FaCodeBranch } from "react-icons/fa";
+import { FaCodeBranch, FaTv } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { carWashApi, getActiveBranchId, normalizeListPayload } from "../../services/carWashApi";
 
 const CarWashShell = ({ title, action, children, showToolbar = true }) => {
   const [branchName, setBranchName] = useState("");
   const assignedBranchId = getActiveBranchId();
+
+  const openQueueDisplay = () => {
+    // Use the same ID that all carwash API calls use — not currentCompany._id,
+    // which may be the super-admin's own company rather than the active client company.
+    const activeId = localStorage.getItem("milik_active_company_id");
+    if (!activeId) return;
+    window.open(`/display/carwash/${activeId}`, "_blank", "noopener,noreferrer");
+  };
 
   useEffect(() => {
     if (!assignedBranchId) return;
@@ -34,6 +42,14 @@ const CarWashShell = ({ title, action, children, showToolbar = true }) => {
                   {assignedBranchId ? (branchName || "Loading…") : "All Branches"}
                 </span>
               </div>
+              <button
+                type="button"
+                onClick={openQueueDisplay}
+                title="Open customer queue display screen"
+                className="inline-flex h-7 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+              >
+                <FaTv size={10} /> Queue Display
+              </button>
               {action}
             </div>
           </div>
