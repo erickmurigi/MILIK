@@ -16,7 +16,7 @@ export const CW_SMS_TEMPLATE_DEFAULTS = [
       { token: "{{customerName}}", hint: "Customer name" },
       { token: "{{plate}}",        hint: "Vehicle plate number" },
       { token: "{{amount}}",       hint: "Amount just received (formatted)" },
-      { token: "{{balanceLine}}",  hint: "\"Fully paid.\" or \"Balance: KES X.\"" },
+      { token: "{{balanceLine}}",  hint: "\"Balance: KES X.\" when unpaid, empty when fully paid" },
     ],
   },
   {
@@ -100,10 +100,13 @@ export const CW_SMS_TEMPLATE_DEFAULTS = [
 
 // ─── Variable substitution ─────────────────────────────────────────────────────
 
-const applyVars = (template, vars = {}) =>
-  template.replace(/\{\{(\w+)\}\}/g, (_, key) =>
+const applyVars = (template, vars = {}) => {
+  const result = template.replace(/\{\{(\w+)\}\}/g, (_, key) =>
     Object.prototype.hasOwnProperty.call(vars, key) ? String(vars[key] ?? "") : `{{${key}}}`
   );
+  // Collapse runs of spaces left when an optional token (e.g. balanceLine) resolves to ''
+  return result.replace(/ {2,}/g, " ").trim();
+};
 
 // ─── Settings cache ───────────────────────────────────────────────────────────
 // Avoids a Company query on every payment/stamp SMS. TTL is 5 minutes; call

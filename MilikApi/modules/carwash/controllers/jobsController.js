@@ -13,7 +13,7 @@ import { autoEnrollPlate, awardLoyaltyStamp } from "./loyaltyController.js";
 import { normalizePlate } from "../utils/plateUtils.js";
 import { sendAdHocSms, sendAdHocSmsToMasked } from "../../../services/communicationService.js";
 
-const JOB_STATUSES = new Set(["waiting", "washing", "ready", "done", "paid", "cancelled"]);
+const JOB_STATUSES = new Set(["waiting", "washing", "ready", "done", "cancelled"]);
 const JOB_TYPES = new Set(["vehicle", "carpet", "balance_bf"]);
 
 const generateJobNumber = async (business) => {
@@ -132,12 +132,8 @@ const getPaidAmount = async (business, jobId) => {
 const applyPaymentStatus = (job, paidAmount) => {
   const price = netJobPrice(job);
   job.paymentStatus = paidAmount <= 0 ? "unpaid" : paidAmount < price ? "partial" : "paid";
-  if (job.paymentStatus === "paid" && job.status !== "cancelled") {
-    job.status = "paid";
-  } else if (job.status === "paid") {
-    job.status = "done";
-  } else if (job.paymentStatus === "partial" && job.status === "ready") {
-    // Partial payment on a physically-complete job — move to done so it clears from the ready column
+  // Rollback only: legacy-paid jobs whose payment is reversed revert to done
+  if (job.status === "paid" && job.paymentStatus !== "paid") {
     job.status = "done";
   }
 };
@@ -400,10 +396,8 @@ export const createJob = async (req, res, next) => {
             updatedBy: userId,
           });
           const newPaymentStatus = autoApply >= netPrice - 0.009 ? "paid" : "partial";
-          const newStatus = newPaymentStatus === "paid" && job.status !== "cancelled" ? "paid" : job.status;
-          await CarWashJob.updateOne({ _id: job._id }, { paymentStatus: newPaymentStatus, status: newStatus });
+          await CarWashJob.updateOne({ _id: job._id }, { paymentStatus: newPaymentStatus });
           job.paymentStatus = newPaymentStatus;
-          job.status = newStatus;
         }
       } catch (err) {
         console.error("[CW Job] Prepaid auto-deduct failed:", err?.message);
@@ -513,7 +507,7 @@ export const updateJob = async (req, res, next) => {
     applyPaymentStatus(existing, paidAmount);
 
     await existing.save();
-    if (existing.status === "paid") {
+    if (existing.paymentStatus === "paid") {
       await accrueCommissionForJob({ req, job: existing });
       try {
         await awardLoyaltyStamp({ business, job: existing });

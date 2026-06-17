@@ -75,7 +75,10 @@
       "Bash(xargs grep -l \"reassignMpesaNotification\")",
       "Bash(grep -E '$regex|$in|findOne|find')",
       "Skill(code-review)",
-      "Skill(code-review:*)"
+      "Skill(code-review:*)",
+      "Bash(git merge *)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
     ]
   }
 }

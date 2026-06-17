@@ -57,12 +57,8 @@ const refreshJobPaymentStatus = async (business, jobId) => {
   const paidAmount = Number(totals?.[0]?.paid || 0);
   const price = netJobPrice(job);
   job.paymentStatus = paidAmount <= 0 ? "unpaid" : paidAmount < price ? "partial" : "paid";
-  if (job.paymentStatus === "paid" && job.status !== "cancelled") {
-    job.status = "paid";
-  } else if (job.paymentStatus === "partial" && job.status === "ready") {
-    // Partial cash payment on a physically-complete job — move to done
-    job.status = "done";
-  } else if (job.status === "paid" && job.paymentStatus !== "paid") {
+  // Rollback only: legacy-paid jobs whose payment is reversed revert to done
+  if (job.status === "paid" && job.paymentStatus !== "paid") {
     job.status = "done";
   }
   await job.save();
@@ -161,15 +157,14 @@ export const recordPayment = async (req, res, next) => {
     });
     const { job: updatedJob, paidAmount: totalEffectivePaid } = await refreshJobPaymentStatus(business, job._id);
 
-    // Persist M-Pesa payer phone to the job + loyalty customer (enables SMS button + loyalty lookup)
+    // Persist M-Pesa payer phone to the job + loyalty customer (enables SMS button + loyalty lookup).
+    // A new payer always overwrites the previous phone — cash payments leave the existing number intact.
     if (receivedFromPhone) {
-      if (!updatedJob.phone) {
-        await CarWashJob.updateOne({ _id: updatedJob._id, business }, { $set: { phone: receivedFromPhone } });
-        updatedJob.phone = receivedFromPhone;
-      }
+      await CarWashJob.updateOne({ _id: updatedJob._id, business }, { $set: { phone: receivedFromPhone } });
+      updatedJob.phone = receivedFromPhone;
       if (updatedJob.plateNumber) {
         await CarWashCustomer.updateOne(
-          { business, plates: updatedJob.plateNumber, $or: [{ phone: null }, { phone: "" }] },
+          { business, plates: updatedJob.plateNumber },
           { $set: { phone: receivedFromPhone } }
         ).catch(() => {});
       }
@@ -192,7 +187,10 @@ export const recordPayment = async (req, res, next) => {
           console.error("[CW Payment] Stamp failed job=%s: %s", updatedJob.jobNumber, err?.message || err);
         }
       }
-      await sendPaymentConfirmationSms({ business, job: updatedJob, amount, overridePhone: receivedFromPhone, loyaltySmsBody });
+      // Cash payments: fall back to any phone already on the job (from a prior M-Pesa payment),
+      // including hashed/masked MSISDNs from Africa's Talking hashed-number routing.
+      const cashMasked = !receivedFromPhone ? (updatedJob.maskedMsisdn || null) : null;
+      await sendPaymentConfirmationSms({ business, job: updatedJob, amount, overridePhone: receivedFromPhone || null, maskedMsisdn: cashMasked, loyaltySmsBody });
     })().catch((err) => console.error("[CW Payment] SMS failed job=%s: %s", updatedJob.jobNumber, err?.message || err));
     await postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbookAccount, job: updatedJob, userId });
     res.status(201).json({ success: true, data: payment, payment, job: updatedJob, message: "Car Wash payment recorded" });
@@ -235,7 +233,7 @@ export const deletePayment = async (req, res, next) => {
     // marked it done. If another payment remains (still partial), the customer earned
     // the stamp. If the job is "done", the car was serviced — stamp stands.
     const jobWillBeUnpaid = paidAfterDelete <= 0;
-    if (jobWillBeUnpaid && jobBeforeDelete.status !== "done") {
+    if (jobWillBeUnpaid && !["done", "paid"].includes(jobBeforeDelete.status)) {
       await revokeStampForJob({ business, jobId: jobBeforeDelete._id, plate: jobBeforeDelete.plateNumber });
     }
     const deletedPaymentId = payment._id;

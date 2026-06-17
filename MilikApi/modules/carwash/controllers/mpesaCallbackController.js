@@ -109,12 +109,8 @@ const refreshJobPaymentStatus = async (business, jobId) => {
   const paidAmount = Number(totals?.[0]?.amount || 0);
   const price = netJobPrice(job);
   job.paymentStatus = paidAmount <= 0 ? "unpaid" : paidAmount < price ? "partial" : "paid";
-  if (job.paymentStatus === "paid" && job.status !== "cancelled") {
-    job.status = "paid";
-  } else if (job.paymentStatus === "partial" && job.status === "ready") {
-    // Partial payment on a physically-complete job — move to done
-    job.status = "done";
-  } else if (job.status === "paid" && job.paymentStatus !== "paid") {
+  // Rollback only: legacy-paid jobs whose payment is reversed revert to done
+  if (job.status === "paid" && job.paymentStatus !== "paid") {
     job.status = "done";
   }
   await job.save();
@@ -640,8 +636,8 @@ export const confirmCarWashCallback = async (req, res) => {
     if (normalizedMsisdn) jobUpdates.phone = normalizedMsisdn;
     // Store masked MSISDN on job so SMS icon shows even without a real phone
     if (!normalizedMsisdn && msisdn) jobUpdates.maskedMsisdn = msisdn;
-    // M-Pesa sender name fills in customer name only if the job has none yet
-    if (senderName && !job.customerName) jobUpdates.customerName = senderName;
+    // M-Pesa sender name (Safaricom-verified) always overrides job customerName
+    if (senderName) jobUpdates.customerName = senderName;
     if (Object.keys(jobUpdates).length) {
       await CarWashJob.updateOne({ _id: job._id, business: businessId }, { $set: jobUpdates });
     }

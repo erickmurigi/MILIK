@@ -194,7 +194,7 @@ const MobileJobCard = React.memo(({
           value={job.status}
           onChange={(e) => onUpdateStatus(job, e.target.value)}
         >
-          {statuses.filter((s) => job.status === "paid" ? s === "paid" : s !== "paid" || job.paymentStatus === "paid").map((s) => (
+          {statuses.filter((s) => job.status === "paid" ? s === "paid" : s !== "paid").map((s) => (
             <option key={s} value={s}>{getJobStatusLabel(s, job.jobType)}</option>
           ))}
         </select>
