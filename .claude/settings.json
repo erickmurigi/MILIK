@@ -73,7 +73,9 @@
       "Bash(xargs grep -l \"window.open.*print\\\\|window.print\")",
       "Bash(powershell -Command 'Get-ChildItem -Recurse -Include '\\\\''*.js'\\\\'','\\\\''*.jsx'\\\\'' | Select-String -Pattern '\\\\''[^\\\\x00-\\\\x7F]'\\\\'' | Select-Object -First 50 | ForEach-Object { $_.Filename + '\\\\'':'\\\\'' + $_.LineNumber + '\\\\'':'\\\\'' + $_.Line }')",
       "Bash(xargs grep -l \"reassignMpesaNotification\")",
-      "Bash(grep -E '$regex|$in|findOne|find')"
+      "Bash(grep -E '$regex|$in|findOne|find')",
+      "Skill(code-review)",
+      "Skill(code-review:*)"
     ]
   }
 }

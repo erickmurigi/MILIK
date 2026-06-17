@@ -365,7 +365,7 @@ export const lookupPlate = async (req, res, next) => {
 
 // ─── Stamp awarding (called internally from payments flow) ────────────────────
 
-export const awardLoyaltyStamp = async ({ business, job, overridePhone = null, maskedMsisdn = null }) => {
+export const awardLoyaltyStamp = async ({ business, job, overridePhone = null, maskedMsisdn = null, suppressSms = false, payerName = null }) => {
   if (!job?.plateNumber) return null;
 
   const plate = normalizePlate(job.plateNumber);
@@ -377,6 +377,7 @@ export const awardLoyaltyStamp = async ({ business, job, overridePhone = null, m
     customerName: job.customerName,
     phone: overridePhone || job.phone,
     maskedMsisdn: maskedMsisdn || null,
+    payerName: payerName || null,
   });
   if (!customer) return null;
 
@@ -432,25 +433,27 @@ export const awardLoyaltyStamp = async ({ business, job, overridePhone = null, m
 
   await card.save();
 
-  // 7. SMS — always automatic, no smsOn* flag gates
+  // 7. SMS
   const smsPhone = overridePhone || customer.phone;
   const effectiveMasked = maskedMsisdn || customer.maskedMsisdn || null;
-  const customerName = customer.name || 'Valued Customer';
+  const customerName = payerName || customer.name || 'Valued Customer';
 
-  if (smsPhone || effectiveMasked) {
-    let smsBody;
-    let templateKey;
+  let stampSmsBody = null;
+  let templateKey  = null;
+
+  // Resolve body when suppressSms (caller will combine with payment SMS) or when sending standalone
+  if (suppressSms || smsPhone || effectiveMasked) {
     if (rewardTriggered) {
       const rewardDesc = program.rewardType === 'free_wash'
         ? 'a FREE wash'
         : program.rewardType === 'discount_percent'
           ? `${program.rewardValue}% off your next wash`
           : `KES ${program.rewardValue} off your next wash`;
-      smsBody     = await resolveCarWashSmsBody(business, 'carwash_reward_ready', { customerName, plate, rewardDesc });
-      templateKey = 'carwash_reward_ready';
+      stampSmsBody = await resolveCarWashSmsBody(business, 'carwash_reward_ready', { customerName, plate, rewardDesc });
+      templateKey  = 'carwash_reward_ready';
     } else {
       const remaining = program.stampsRequired - card.currentStamps;
-      smsBody     = await resolveCarWashSmsBody(business, 'carwash_stamp_earned', {
+      stampSmsBody = await resolveCarWashSmsBody(business, 'carwash_stamp_earned', {
         customerName, plate,
         currentStamps:  card.currentStamps,
         stampsRequired: program.stampsRequired,
@@ -460,14 +463,16 @@ export const awardLoyaltyStamp = async ({ business, job, overridePhone = null, m
       templateKey = 'carwash_stamp_earned';
     }
 
-    if (smsPhone) {
-      sendLoyaltySms(business, smsPhone, smsBody, templateKey);
-    } else if (effectiveMasked) {
-      sendAdHocSmsToMasked({ businessId: business, maskedNumber: effectiveMasked, body: smsBody, templateKey, recipientName: customerName }).catch(() => {});
+    if (!suppressSms && stampSmsBody) {
+      if (smsPhone) {
+        sendLoyaltySms(business, smsPhone, stampSmsBody, templateKey);
+      } else if (effectiveMasked) {
+        sendAdHocSmsToMasked({ businessId: business, maskedNumber: effectiveMasked, body: stampSmsBody, templateKey, recipientName: customerName }).catch(() => {});
+      }
     }
   }
 
-  return { card, rewardTriggered, program };
+  return { card, rewardTriggered, program, smsBody: stampSmsBody };
 };
 
 // ─── Customer upsert — completely independent of loyalty ─────────────────────
@@ -516,8 +521,10 @@ export const ensureCarWashCustomer = async ({ business, plate, customerName, pho
     } else if (cleanMasked && !customer.phone && customer.maskedMsisdn !== cleanMasked) {
       updates.maskedMsisdn = cleanMasked;
     }
-    // Only fill in name from payer if no name exists yet (M-Pesa names are unreliable for overwriting)
-    if (!customer.name && cleanPayerName) updates.name = cleanPayerName;
+    // Replace name if: (a) none set yet, or (b) current name is just the plate number (auto-enrolled placeholder)
+    const nameIsPlate = customer.name &&
+      (customer.plates || []).some((p) => String(p).trim().toUpperCase() === customer.name.trim().toUpperCase());
+    if (cleanPayerName && (!customer.name || nameIsPlate)) updates.name = cleanPayerName;
     if (Object.keys(updates).length) {
       await CarWashCustomer.updateOne({ _id: customer._id }, { $set: updates });
       Object.assign(customer, updates);
@@ -659,7 +666,7 @@ export const redeemReward = async (req, res, next) => {
 
 // ─── Payment confirmation SMS (called from payments flow) ─────────────────────
 
-export const sendPaymentConfirmationSms = async ({ business, job, amount, remaining = null, overridePhone = null, maskedMsisdn = null }) => {
+export const sendPaymentConfirmationSms = async ({ business, job, amount, remaining = null, overridePhone = null, maskedMsisdn = null, loyaltySmsBody = null, payerName = null }) => {
   if (!job?.plateNumber) return;
   try {
     const plate = String(job.plateNumber).trim().toUpperCase();
@@ -669,7 +676,7 @@ export const sendPaymentConfirmationSms = async ({ business, job, amount, remain
       || String(job.phone || '').trim()
       || (await CarWashCustomer.findOne({ business, plates: plate }).select('phone').lean())?.phone;
 
-    const customerName = job.customerName || 'Valued Customer';
+    const customerName = payerName || job.customerName || 'Valued Customer';
     const outstanding = remaining !== null
       ? remaining
       : round2(Math.max(0, netJobPrice(job) - Number(amount || 0)));
@@ -677,18 +684,42 @@ export const sendPaymentConfirmationSms = async ({ business, job, amount, remain
       ? 'Fully paid.'
       : `Balance: KES ${outstanding.toLocaleString()}.`;
 
-    const body = await resolveCarWashSmsBody(business, 'carwash_payment_confirmed', {
+    const paymentBody = await resolveCarWashSmsBody(business, 'carwash_payment_confirmed', {
       customerName,
       plate,
       amount: Number(amount || 0).toLocaleString(),
       balanceLine,
     });
 
+    const body = [paymentBody, loyaltySmsBody].filter(Boolean).join('\n');
+    if (!body) return;
+
     if (phone) {
       await sendLoyaltySms(business, phone, body, 'carwash_payment_confirmed');
     } else if (maskedMsisdn) {
       // Real phone not yet known — send to hashed MSISDN via AT's masked-number endpoint
       sendAdHocSmsToMasked({ businessId: business, maskedNumber: maskedMsisdn, body, templateKey: 'carwash_payment_confirmed', recipientName: customerName }).catch(() => {});
+    }
+  } catch (_err) {
+    // Never break the main flow
+  }
+};
+
+// ─── Unmatched M-Pesa payment acknowledgement SMS ────────────────────────────
+// Called when an M-Pesa payment arrives but no open job is found for the plate.
+
+export const sendUnmatchedPaymentSms = async ({ business, businessName, senderName, amount, phone = null, maskedMsisdn = null }) => {
+  try {
+    const body = await resolveCarWashSmsBody(business, 'carwash_payment_unmatched', {
+      payerName:    senderName || 'Valued Customer',
+      amount:       Number(amount || 0).toLocaleString(),
+      businessName: businessName || 'Car Wash',
+    });
+    if (!body) return;
+    if (phone) {
+      await sendAdHocSms({ businessId: business, phone, body, templateKey: 'carwash_payment_unmatched' });
+    } else if (maskedMsisdn) {
+      sendAdHocSmsToMasked({ businessId: business, maskedNumber: maskedMsisdn, body, templateKey: 'carwash_payment_unmatched', recipientName: senderName || '' }).catch(() => {});
     }
   } catch (_err) {
     // Never break the main flow

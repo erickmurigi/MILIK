@@ -1,7 +1,4 @@
 import React, { useEffect, useState } from "react";
-import { useDispatch } from "react-redux";
-import { useNavigate } from "react-router-dom";
-import { toast } from "react-toastify";
 import {
   FaArrowLeft,
   FaArrowRight,
@@ -16,11 +13,8 @@ import {
   FaUsers,
   FaWarehouse,
 } from "react-icons/fa";
-import { loginSuccess } from "../redux/authSlice";
-import { getCompanySuccess } from "../redux/companiesRedux";
 
 const API_BASE = String(import.meta.env.VITE_API_URL || "/api").replace(/\/$/, "");
-const DEMO_EXPIRED_MESSAGE = "Your demo period has ended. Contact MILIK for activation.";
 
 const MODULES = [
   {
@@ -86,16 +80,13 @@ const inputClass =
 const initialForm = { name: "", email: "", phone: "", company: "" };
 
 const FreeTrialModal = ({ isOpen, onClose }) => {
-  const dispatch = useDispatch();
-  const navigate = useNavigate();
-
   const [step, setStep] = useState(1);
   const [selectedModules, setSelectedModules] = useState(new Set());
   const [form, setForm] = useState(initialForm);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
-  const [demoExpiredMessage, setDemoExpiredMessage] = useState("");
+  const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -105,7 +96,7 @@ const FreeTrialModal = ({ isOpen, onClose }) => {
     setLoading(false);
     setError("");
     setFieldErrors({});
-    setDemoExpiredMessage("");
+    setSubmitted(false);
   }, [isOpen]);
 
   useEffect(() => {
@@ -174,29 +165,7 @@ const FreeTrialModal = ({ isOpen, onClose }) => {
         throw new Error(data?.message || "Unable to complete your request right now.");
       }
 
-      if (data.demoAvailable && data.token && data.user) {
-        dispatch(loginSuccess({ token: data.token, user: data.user }));
-        if (data.user?.company?._id) {
-          dispatch(getCompanySuccess(data.user.company));
-          localStorage.setItem("milik_active_company_id", data.user.company._id);
-        }
-        toast.success(
-          data.resumedDemo
-            ? "Welcome back. Resuming your remaining demo time."
-            : "Welcome to Milik. Your workspace is ready."
-        );
-        onClose?.();
-        navigate(data.redirectTo || "/dashboard");
-        return;
-      }
-
-      if (data?.demoExpired) {
-        setDemoExpiredMessage(data?.message || DEMO_EXPIRED_MESSAGE);
-        return;
-      }
-
-      toast.success("Request received. We'll be in touch shortly.");
-      onClose?.();
+      setSubmitted(true);
     } catch (err) {
       setError(err?.message || "Network error. Please try again.");
     } finally {
@@ -281,7 +250,7 @@ const FreeTrialModal = ({ isOpen, onClose }) => {
                       : `${selectedList.length} modules selected`}
                   </h2>
                   <p className="mt-4 text-sm leading-7 text-white/85">
-                    Your demo workspace will be ready the moment you submit. An access link is also sent to your email so you can return later.
+                    Share your details and our team will reach out personally to walk you through the system and get you set up.
                   </p>
                   <div className="mt-6 space-y-2">
                     {selectedList.map((m) => (
@@ -322,35 +291,8 @@ const FreeTrialModal = ({ isOpen, onClose }) => {
               <div className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-extrabold transition-colors ${step >= 2 ? "bg-[#0B3B2E] text-white" : "bg-slate-200 text-slate-500"}`}>2</div>
             </div>
 
-            {/* ── Expired state ── */}
-            {demoExpiredMessage ? (
-              <div className="rounded-[28px] border border-amber-200 bg-amber-50 p-6 text-sm text-amber-950 shadow-sm">
-                <div className="flex items-start gap-3">
-                  <FaClock className="mt-0.5 flex-shrink-0 text-amber-600" />
-                  <div>
-                    <p className="text-base font-bold">Demo access ended</p>
-                    <p className="mt-2 leading-6">{demoExpiredMessage}</p>
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      <a
-                        href="mailto:miliksystem@gmail.com?subject=Milik%20Activation%20Request"
-                        className="inline-flex items-center gap-2 rounded-full bg-[#0B3B2E] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#0A3127]"
-                      >
-                        Contact MILIK <FaArrowRight />
-                      </a>
-                      <button
-                        type="button"
-                        onClick={() => { if (!loading) onClose?.(); }}
-                        className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-white px-5 py-2.5 text-sm font-bold text-amber-900 transition hover:bg-amber-100"
-                      >
-                        Close
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-            /* ── Step 1: Module picker ── */
-            ) : step === 1 ? (
+            {/* ── Step 1: Module picker ── */}
+            {step === 1 ? (
               <>
                 <div className="mb-5">
                   <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Step 1 of 2</p>
@@ -404,6 +346,24 @@ const FreeTrialModal = ({ isOpen, onClose }) => {
               </>
 
             /* ── Step 2: Short form ── */
+            ) : submitted ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-[#0B3B2E]/10 text-[#0B3B2E]">
+                  <FaCheckCircle className="text-3xl" />
+                </div>
+                <p className="mt-5 text-xs font-extrabold uppercase tracking-[0.24em] text-[#FF8C00]">Request received</p>
+                <h3 className="mt-2 text-2xl font-extrabold text-slate-900">We'll be in touch!</h3>
+                <p className="mt-3 text-sm leading-7 text-slate-500">
+                  Thank you for your interest in Milik. Our team will review your request and reach out via email or phone shortly.
+                </p>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-[#0B3B2E] px-6 py-3 text-sm font-bold text-white shadow-md transition hover:bg-[#0A3127]"
+                >
+                  Close
+                </button>
+              </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-5">
                 <button
@@ -416,8 +376,8 @@ const FreeTrialModal = ({ isOpen, onClose }) => {
 
                 <div>
                   <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Step 2 of 2</p>
-                  <h3 className="mt-2 text-2xl font-extrabold text-slate-900">Just a few details to open your workspace.</h3>
-                  <p className="mt-1.5 text-sm leading-6 text-slate-500">Takes less than a minute. Your demo workspace opens immediately.</p>
+                  <h3 className="mt-2 text-2xl font-extrabold text-slate-900">Just a few details and we'll be in touch.</h3>
+                  <p className="mt-1.5 text-sm leading-6 text-slate-500">Takes less than a minute. We'll reach out via email or phone.</p>
                 </div>
 
                 <div className="rounded-[26px] border border-slate-200 bg-white/90 p-5 shadow-sm space-y-4">
@@ -489,13 +449,13 @@ const FreeTrialModal = ({ isOpen, onClose }) => {
                   disabled={loading}
                   className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#0B3B2E] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-[#0B3B2E]/20 transition hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {loading ? "Opening your workspace..." : "Open demo workspace"}
+                  {loading ? "Sending your request..." : "Request access"}
                   {!loading && <FaArrowRight />}
                 </button>
 
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3 text-xs font-medium text-slate-500">
                   <span className="inline-flex items-center gap-2"><FaLock /> Your details stay private.</span>
-                  <span>Workspace ready in seconds.</span>
+                  <span>We'll respond within 24 hours.</span>
                 </div>
               </form>
             )}

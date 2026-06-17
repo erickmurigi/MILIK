@@ -295,6 +295,17 @@ export const createJob = async (req, res, next) => {
       resolvedCreditAccount = acc._id;
     }
 
+    // Auto-detect prepaid wallet by plate — staff don't need to know the account exists
+    if (!resolvedCreditAccount && plateNumber && jobType === "vehicle") {
+      const autoAcc = await CarWashCreditAccount.findOne({
+        business,
+        plates: plateNumber,
+        status: "active",
+        accountType: "prepaid",
+      }).select("_id").lean();
+      if (autoAcc) resolvedCreditAccount = autoAcc._id;
+    }
+
     const manualJobNumber = String(req.body.jobNumber || "").trim();
     const jobBase = {
       business,

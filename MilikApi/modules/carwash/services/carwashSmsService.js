@@ -71,6 +71,31 @@ export const CW_SMS_TEMPLATE_DEFAULTS = [
       { token: "{{statementNumber}}", hint: "Statement reference number" },
     ],
   },
+  {
+    key: "carwash_payment_unmatched",
+    name: "Unmatched Payment Acknowledgement",
+    description: "Sent when an M-Pesa payment arrives but no open job is found for the plate/reference.",
+    enabled: true,
+    messageBody: "Hi {{payerName}}, KES {{amount}} received at {{businessName}}. Your payment has been noted and will be applied to your job. Thank you.",
+    placeholders: [
+      { token: "{{payerName}}",     hint: "Payer's M-Pesa name" },
+      { token: "{{amount}}",        hint: "Amount received (formatted)" },
+      { token: "{{businessName}}", hint: "Car wash business name" },
+    ],
+  },
+  {
+    key: "carwash_topup_confirmed",
+    name: "Prepaid Wallet Top-Up Confirmation",
+    description: "Sent when an M-Pesa payment is automatically credited to a prepaid wallet (no open job found but plate matched a prepaid account).",
+    enabled: true,
+    messageBody: "Hi {{payerName}}, KES {{amount}} has been added to your {{businessName}} prepaid wallet. New balance: KES {{balance}}. Thank you!",
+    placeholders: [
+      { token: "{{payerName}}",    hint: "Payer's M-Pesa name" },
+      { token: "{{amount}}",       hint: "Amount topped up (formatted)" },
+      { token: "{{balance}}",      hint: "New wallet balance after top-up (formatted)" },
+      { token: "{{businessName}}", hint: "Car wash business name" },
+    ],
+  },
 ];
 
 // ─── Variable substitution ─────────────────────────────────────────────────────

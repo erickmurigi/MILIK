@@ -10,11 +10,14 @@ import CarWashJob from "../models/CarWashJob.js";
 import CarWashPayment from "../models/CarWashPayment.js";
 import CarWashBranch from "../models/CarWashBranch.js";
 import CarWashMpesaNotification from "../models/CarWashMpesaNotification.js";
+import CarWashCreditAccount from "../models/CarWashCreditAccount.js";
+import CarWashAccountTopup from "../models/CarWashAccountTopup.js";
 import { getRawMpesaPaybillConfigs, getPrimaryMpesaPaybillConfig, getRawSmsProfiles, getPrimarySmsProfile } from "../../../utils/companyModules.js";
 import { accrueCommissionForJob, markJobCommissionsPayable } from "../services/commissionService.js";
-import { postCarWashPaymentLedger, reverseCarWashPaymentLedger } from "../services/carwashAccountingService.js";
-import { autoEnrollPlate, awardLoyaltyStamp, sendPaymentConfirmationSms } from "./loyaltyController.js";
-import { sendAdHocSmsToMasked } from "../../../services/communicationService.js";
+import { postCarWashPaymentLedger, reverseCarWashPaymentLedger, postCarWashTopupLedger } from "../services/carwashAccountingService.js";
+import { autoEnrollPlate, awardLoyaltyStamp, sendPaymentConfirmationSms, sendUnmatchedPaymentSms } from "./loyaltyController.js";
+import { sendAdHocSms, sendAdHocSmsToMasked } from "../../../services/communicationService.js";
+import { resolveCarWashSmsBody } from "../services/carwashSmsService.js";
 import { normalizePlate, buildPlateRegex } from "../utils/plateUtils.js";
 
 const normalizeText = (v = "") => String(v || "").trim();
@@ -248,13 +251,19 @@ export const handleTransactionStatusResult = async (req, res) => {
         ]);
         const totalPaid = Number(totals?.[0]?.amount || 0);
         const remaining = round2(Math.max(0, netJobPrice(job) - totalPaid));
+        const pendingStampBody = notif.pendingStampSmsBody || null;
         await sendPaymentConfirmationSms({
           business: notif.business,
           job: { ...job.toObject(), phone },
           amount: payment.amount,
           remaining,
           overridePhone: phone,
+          payerName: resolvedName,
+          loyaltySmsBody: pendingStampBody,
         });
+        if (pendingStampBody) {
+          CarWashMpesaNotification.updateOne({ _id: notif._id }, { $unset: { pendingStampSmsBody: 1 } }).catch(() => {});
+        }
       }
     }
 
@@ -331,7 +340,7 @@ export const handleStkCallback = async (req, res) => {
       return;
     }
 
-    const payAmount = round2(Math.min(paidAmount, outstanding));
+    const payAmount = round2(paidAmount);
     const payment = await CarWashPayment.create({
       business: businessId,
       job: job._id,
@@ -359,12 +368,18 @@ export const handleStkCallback = async (req, res) => {
     if (updatedJob) {
       await accrueCommissionForJob({ req: null, job: updatedJob });
       const remaining = round2(Math.max(0, outstanding - payAmount));
-      await sendPaymentConfirmationSms({ business: businessId, job: updatedJob, amount: payAmount, remaining, overridePhone: phone });
+      let loyaltySmsBody = null;
+      if (["paid", "partial"].includes(updatedJob.paymentStatus)) {
+        try {
+          const stampResult = await awardLoyaltyStamp({ business: businessId, job: updatedJob, overridePhone: phone, suppressSms: true });
+          loyaltySmsBody = stampResult?.smsBody || null;
+        } catch (err) {
+          console.error("[STK] Stamp failed job=%s: %s", updatedJob.jobNumber, err?.message || err);
+        }
+      }
+      await sendPaymentConfirmationSms({ business: businessId, job: updatedJob, amount: payAmount, remaining, overridePhone: phone, loyaltySmsBody });
       if (updatedJob.paymentStatus === "paid") {
         await markJobCommissionsPayable({ business: businessId, jobId: updatedJob._id });
-      }
-      if (["paid", "partial"].includes(updatedJob.paymentStatus)) {
-        await awardLoyaltyStamp({ business: businessId, job: updatedJob, overridePhone: phone });
       }
     }
     console.log(`[STK] Recorded receipt=${receiptNumber} job=${job.jobNumber} amount=${payAmount}`);
@@ -484,7 +499,65 @@ export const confirmCarWashCallback = async (req, res) => {
       .lean();
 
     if (!job) {
+      // If the plate belongs to an active prepaid account, auto-top-up the wallet
+      const prepaidAcc = plate ? await CarWashCreditAccount.findOne({
+        business: businessId,
+        plates: plate,
+        status: "active",
+        accountType: "prepaid",
+      }) : null;
+
+      if (prepaidAcc) {
+        prepaidAcc.accountCredit = Math.round(((prepaidAcc.accountCredit || 0) + amount + Number.EPSILON) * 100) / 100;
+        await prepaidAcc.save();
+
+        const cashbookId = config?.defaultCashbookAccountId;
+        const cashbook = cashbookId && mongoose.Types.ObjectId.isValid(String(cashbookId))
+          ? await ChartOfAccount.findOne({ _id: cashbookId, business: businessId, type: "asset", isPosting: true }).lean()
+          : null;
+
+        const topup = await CarWashAccountTopup.create({
+          business: businessId,
+          account: prepaidAcc._id,
+          amount,
+          method: "mpesa",
+          reference: transactionCode || "",
+          cashbookAccount: cashbook?._id || null,
+          paymentDate: transDate,
+          notes: `Auto top-up via M-Pesa C2B (${senderName || "Unknown payer"})`,
+        });
+
+        if (cashbook) {
+          postCarWashTopupLedger({ businessId, topup, cashbookAccountId: cashbook._id, userId: null }).catch(() => {});
+        }
+
+        await saveNotif({ status: "matched", resultCode: 0, resultDesc: `Auto top-up to prepaid account ${prepaidAcc.accountNumber}` });
+
+        // Send top-up confirmation SMS
+        (async () => {
+          try {
+            const newBalance = prepaidAcc.accountCredit;
+            const body = await resolveCarWashSmsBody(businessId, "carwash_topup_confirmed", {
+              payerName:    senderName || "Valued Customer",
+              amount:       Number(amount).toLocaleString(),
+              balance:      Number(newBalance).toLocaleString(),
+              businessName: company.name || "Car Wash",
+            });
+            if (body) {
+              if (normalizedMsisdn) {
+                await sendAdHocSms({ businessId, phone: normalizedMsisdn, body, templateKey: "carwash_topup_confirmed" });
+              } else if (maskedMsisdn) {
+                sendAdHocSmsToMasked({ businessId, maskedNumber: maskedMsisdn, body, templateKey: "carwash_topup_confirmed", recipientName: senderName || "" }).catch(() => {});
+              }
+            }
+          } catch (_err) {}
+        })();
+
+        return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted – prepaid wallet topped up" });
+      }
+
       await saveNotif({ status: "unmatched", resultCode: 0, resultDesc: `No open job found for plate ${plate}` });
+      sendUnmatchedPaymentSms({ business: businessId, businessName: company.name, senderName, amount, phone: normalizedMsisdn, maskedMsisdn }).catch(() => {});
       return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted – no open job found for plate" });
     }
 
@@ -510,7 +583,7 @@ export const confirmCarWashCallback = async (req, res) => {
       return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted – job already fully paid" });
     }
 
-    const paidAmount = round2(Math.min(amount, outstanding));
+    const paidAmount = round2(amount);
     let payment;
     try {
       payment = await CarWashPayment.create({
@@ -559,15 +632,36 @@ export const confirmCarWashCallback = async (req, res) => {
 
     const updatedJob = await refreshJobPaymentStatus(businessId, job._id);
     await postCarWashPaymentLedger({ businessId, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: null });
+
+    // Route M-Pesa overpayment to the customer's credit/prepaid account if any
+    const overpayment = round2(paidAmount - outstanding);
+    if (overpayment > 0.009 && plate) {
+      CarWashCreditAccount.findOneAndUpdate(
+        { business: businessId, plates: plate, status: "active" },
+        { $inc: { accountCredit: overpayment } }
+      ).catch(() => {});
+    }
+
     if (updatedJob) {
       await accrueCommissionForJob({ req: null, job: updatedJob });
       const remainingBalance = round2(Math.max(0, outstanding - paidAmount));
-      await sendPaymentConfirmationSms({ business: businessId, job: updatedJob, amount: paidAmount, remaining: remainingBalance, overridePhone: normalizedMsisdn, maskedMsisdn: !normalizedMsisdn && msisdn && !tsqWillFire ? msisdn : null });
+      const mpesaMasked1 = !normalizedMsisdn && msisdn && !tsqWillFire ? msisdn : null;
+      let loyaltySmsBody = null;
+      if (["paid", "partial"].includes(updatedJob.paymentStatus)) {
+        try {
+          const stampResult = await awardLoyaltyStamp({ business: businessId, job: updatedJob, overridePhone: normalizedMsisdn, maskedMsisdn: mpesaMasked1, suppressSms: true, payerName: senderName });
+          loyaltySmsBody = stampResult?.smsBody || null;
+        } catch (err) {
+          console.error("[C2B] Stamp failed job=%s: %s", updatedJob.jobNumber, err?.message || err);
+        }
+      }
+      await sendPaymentConfirmationSms({ business: businessId, job: updatedJob, amount: paidAmount, remaining: remainingBalance, overridePhone: normalizedMsisdn, maskedMsisdn: mpesaMasked1, loyaltySmsBody, payerName: senderName });
+      // When TSQ defers delivery, stash the stamp body so the TSQ handler can include it
+      if (tsqWillFire && loyaltySmsBody && savedNotif?._id) {
+        CarWashMpesaNotification.findByIdAndUpdate(savedNotif._id, { $set: { pendingStampSmsBody: loyaltySmsBody } }).catch(() => {});
+      }
       if (updatedJob.paymentStatus === "paid") {
         await markJobCommissionsPayable({ business: businessId, jobId: updatedJob._id });
-      }
-      if (["paid", "partial"].includes(updatedJob.paymentStatus)) {
-        await awardLoyaltyStamp({ business: businessId, job: updatedJob, overridePhone: normalizedMsisdn, maskedMsisdn: !normalizedMsisdn && msisdn && !tsqWillFire ? msisdn : null });
       }
     }
 
@@ -669,7 +763,7 @@ export const reassignMpesaNotification = async (req, res, next) => {
       return res.status(409).json({ success: false, message: "This job is already fully paid" });
     }
 
-    const paidAmount = round2(Math.min(notif.amount, outstanding));
+    const paidAmount = round2(notif.amount);
     const branch = job.branch || notif.branch || null;
     const normalizedMsisdn = notif.msisdn || null;
     // Masked MSISDN: stored on new notifications; fall back to rawPayload for older records
@@ -726,12 +820,18 @@ export const reassignMpesaNotification = async (req, res, next) => {
     if (updatedJob) {
       accrueCommissionForJob({ req, job: updatedJob }).catch(() => {});
       const reassignRemaining = round2(Math.max(0, outstanding - paidAmount));
-      await sendPaymentConfirmationSms({ business, job: updatedJob, amount: paidAmount, remaining: reassignRemaining, overridePhone: normalizedMsisdn, maskedMsisdn });
+      let loyaltySmsBody = null;
+      if (["paid", "partial"].includes(updatedJob.paymentStatus)) {
+        try {
+          const stampResult = await awardLoyaltyStamp({ business, job: updatedJob, overridePhone: normalizedMsisdn, maskedMsisdn, suppressSms: true, payerName: notif.senderName || null });
+          loyaltySmsBody = stampResult?.smsBody || null;
+        } catch (err) {
+          console.error("[CW Reassign] Stamp failed job=%s: %s", updatedJob.jobNumber || job._id, err?.message || err);
+        }
+      }
+      await sendPaymentConfirmationSms({ business, job: updatedJob, amount: paidAmount, remaining: reassignRemaining, overridePhone: normalizedMsisdn, maskedMsisdn, loyaltySmsBody, payerName: notif.senderName || null });
       if (updatedJob.paymentStatus === "paid") {
         markJobCommissionsPayable({ business, jobId: updatedJob._id }).catch(() => {});
-      }
-      if (["paid", "partial"].includes(updatedJob.paymentStatus)) {
-        await awardLoyaltyStamp({ business, job: updatedJob, overridePhone: normalizedMsisdn, maskedMsisdn });
       }
     }
 

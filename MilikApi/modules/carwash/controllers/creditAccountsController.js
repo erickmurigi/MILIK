@@ -320,6 +320,22 @@ export const recordAccountPayment = async (req, res, next) => {
     }
 
     // ── FIFO allocation ──────────────────────────────────────────────────────
+    // Link any plate-matched jobs that are missing the creditAccount ref — this
+    // prevents a permanent phantom debt where the balance includes jobs that can
+    // never be settled because recordAccountPayment only queries by creditAccount.
+    if ((account.plates || []).length) {
+      await CarWashJob.updateMany(
+        {
+          business,
+          plateNumber: { $in: account.plates },
+          creditAccount: null,
+          status: { $nin: ["cancelled"] },
+          paymentStatus: { $in: ["unpaid", "partial"] },
+        },
+        { $set: { creditAccount: account._id } }
+      );
+    }
+
     const unpaidJobs = await CarWashJob.find({
       business,
       creditAccount: account._id,

@@ -34,6 +34,9 @@ const carWashMpesaNotificationSchema = new mongoose.Schema(
     reversalRef:  { type: String, trim: true, default: "" }, // Safaricom reversal transaction code or manual note
     reversalDate: { type: Date, default: null },
 
+    // Stamp SMS body deferred until TSQ resolves the real phone
+    pendingStampSmsBody: { type: String, default: null },
+
     // Full raw Safaricom payload — kept for audit / debugging
     rawPayload: { type: mongoose.Schema.Types.Mixed, default: null },
   },

@@ -811,6 +811,26 @@ async function startServer() {
       console.error("[CW Savings Cron] Failed to schedule:", cronErr?.message || cronErr);
     }
 
+    // ── Monthly billing cron ────────────────────────────────────────────────
+    // Runs at 08:00 EAT daily. Generates and SMS-sends statements for any
+    // monthly account whose billingDay matches today. Idempotent — skips if a
+    // statement for the current month already exists for that account.
+    try {
+      const cron = await import("node-cron");
+      cron.default.schedule("0 8 * * *", async () => {
+        console.log("[CW Billing Cron] Running auto-billing check for", new Date().toISOString().slice(0, 10));
+        try {
+          const results = await processDueBilling(null);
+          if (results.length) console.log(`[CW Billing Cron] Generated ${results.length} statement(s)`);
+        } catch (err) {
+          console.error("[CW Billing Cron] Error:", err?.message || err);
+        }
+      }, { timezone: "Africa/Nairobi" });
+      console.log("[CW Billing Cron] Scheduled — daily at 08:00 EAT");
+    } catch (cronErr) {
+      console.error("[CW Billing Cron] Failed to schedule:", cronErr?.message || cronErr);
+    }
+
     server.listen(PORT, () => {
       console.log(`Backend server is running on port ${PORT}`);
       console.log(`Trust proxy setting: ${JSON.stringify(app.get("trust proxy"))}`);

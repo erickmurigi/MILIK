@@ -317,6 +317,7 @@ const CarWashAccounts = () => {
   const [stmtLoading, setStmtLoading] = useState({});
   const [filterStatus, setFilterStatus] = useState("active");
   const [filterType, setFilterType] = useState("");
+  const [editTarget, setEditTarget] = useState(null);
 
   const { data: accountsData, isLoading: loading, error, refetch: refetchAccounts } = useQuery({
     queryKey: ["cw-credit-accounts", businessId, filterStatus, filterType],
@@ -381,6 +382,13 @@ const CarWashAccounts = () => {
     setPayTarget(null);
     queryClient.invalidateQueries({ queryKey: ["cw-credit-accounts"] });
     if (expandedId === targetId) loadStatements(targetId);
+  };
+
+  const handleEdit = async (form) => {
+    await carWashApi.updateCreditAccount(editTarget._id, form);
+    toast.success("Account updated");
+    setEditTarget(null);
+    queryClient.invalidateQueries({ queryKey: ["cw-credit-accounts"] });
   };
 
   const handleTopup = async (form) => {
@@ -464,6 +472,7 @@ const CarWashAccounts = () => {
                 <option value="">All Types</option>
                 <option value="credit">Credit</option>
                 <option value="monthly">Monthly</option>
+                <option value="prepaid">Prepaid</option>
               </select>
               <button onClick={() => refetchAccounts()} className="flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50"><FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /></button>
               {canManage && (
@@ -593,6 +602,11 @@ const CarWashAccounts = () => {
                               <FaFileInvoice /> Statement
                             </button>
                           )}
+                          {canManage && (
+                            <button onClick={() => setEditTarget(acc)} className="inline-flex items-center gap-1 border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50">
+                              Edit
+                            </button>
+                          )}
                           <button
                             onClick={() => {
                               toggleExpand(acc);
@@ -627,7 +641,7 @@ const CarWashAccounts = () => {
                                   </div>
                                 </div>
                                 <div className="mt-3 text-[11px] font-black uppercase tracking-wide text-slate-500">Recent Jobs</div>
-                                <div className="mt-1"><AccountJobsList accId={acc._id} /></div>
+                                <div className="mt-1"><AccountJobsList accId={acc._id} accountType={acc.accountType} /></div>
                               </div>
                               <div>
                                 <div className="mb-2 flex items-center justify-between">
@@ -675,7 +689,7 @@ const CarWashAccounts = () => {
                             <div className="grid gap-4 md:grid-cols-2">
                               <div>
                                 <div className="mb-2 text-[11px] font-black uppercase tracking-wide text-slate-500">Unpaid Jobs</div>
-                                <AccountJobsList accId={acc._id} />
+                                <AccountJobsList accId={acc._id} accountType={acc.accountType} />
                               </div>
                               <div>
                                 <div className="mb-2 flex items-center justify-between">
@@ -744,21 +758,128 @@ const CarWashAccounts = () => {
           sending={smsSending}
         />
       )}
+
+      {editTarget && (
+        <EditAccountModal account={editTarget} onSave={handleEdit} onClose={() => setEditTarget(null)} />
+      )}
     </CarWashShell>
   );
 };
 
+// ─── Edit account modal ───────────────────────────────────────────────────────
+const EditAccountModal = ({ account, onSave, onClose }) => {
+  const [form, setForm] = useState({
+    creditLimit: String(account.creditLimit || ""),
+    billingCycle: account.billingCycle || "monthly",
+    billingDay: String(account.billingDay || "1"),
+    status: account.status || "active",
+    notes: account.notes || "",
+    plates: (account.plates || []).join(", "),
+  });
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await onSave({
+        creditLimit: Number(form.creditLimit || 0),
+        billingCycle: form.billingCycle,
+        billingDay: Number(form.billingDay || 1),
+        status: form.status,
+        notes: form.notes,
+        plates: form.plates.split(",").map((p) => p.trim()).filter(Boolean),
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const lc = "mb-1 block text-[11px] font-extrabold uppercase tracking-widest text-slate-500";
+  const ic = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
+
+  return (
+    <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/50 px-4">
+      <div className="w-full max-w-lg border border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-center justify-between bg-[#0B3B2E] px-4 py-3 text-white">
+          <div>
+            <h2 className="text-sm font-extrabold uppercase tracking-wide">Edit Account</h2>
+            <p className="mt-0.5 text-xs text-emerald-100">{account.accountNumber} · {account.customer?.name}</p>
+          </div>
+          <button onClick={onClose}><FaTimes /></button>
+        </div>
+        <div className="space-y-3 p-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lc}>Status</label>
+              <select className={ic} value={form.status} onChange={(e) => set("status", e.target.value)}>
+                <option value="active">Active</option>
+                <option value="suspended">Suspended</option>
+                <option value="closed">Closed</option>
+              </select>
+            </div>
+            {account.accountType !== "prepaid" && (
+              <div>
+                <label className={lc}>Credit Limit (KES)</label>
+                <input className={ic} type="number" min="0" value={form.creditLimit} onChange={(e) => set("creditLimit", e.target.value)} placeholder="0 = no limit" />
+              </div>
+            )}
+          </div>
+          {account.accountType === "monthly" && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={lc}>Billing Cycle</label>
+                <select className={ic} value={form.billingCycle} onChange={(e) => set("billingCycle", e.target.value)}>
+                  <option value="monthly">Monthly</option>
+                  <option value="weekly">Weekly</option>
+                </select>
+              </div>
+              <div>
+                <label className={lc}>Billing Day (1–28)</label>
+                <input className={ic} type="number" min="1" max="28" value={form.billingDay} onChange={(e) => set("billingDay", e.target.value)} />
+              </div>
+            </div>
+          )}
+          <div>
+            <label className={lc}>Plates (comma-separated)</label>
+            <input className={ic} value={form.plates} onChange={(e) => set("plates", e.target.value)} placeholder="KCA123A, KCB456B" />
+          </div>
+          <div>
+            <label className={lc}>Notes</label>
+            <textarea className="w-full border border-slate-300 px-2 py-2 text-sm text-slate-800 focus:outline-none" rows={2} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <button onClick={onClose} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
+          <button onClick={handleSave} disabled={saving} className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50">
+            {saving ? "Saving…" : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── Lazy job list for expanded row ──────────────────────────────────────────
-const AccountJobsList = ({ accId }) => {
+const AccountJobsList = ({ accId, accountType }) => {
   const [jobs, setJobs] = useState(null);
   useEffect(() => {
     carWashApi.getCreditAccount(accId)
-      .then((d) => setJobs((d?.jobs || []).filter((j) => j.paymentStatus !== "paid")))
+      .then((d) => {
+        const all = d?.jobs || [];
+        // Prepaid accounts: show all jobs (all auto-pay immediately — filtering to unpaid makes it always empty)
+        // Credit/monthly accounts: show only unpaid/partial jobs
+        setJobs(accountType === "prepaid" ? all : all.filter((j) => j.paymentStatus !== "paid"));
+      })
       .catch(() => setJobs([]));
-  }, [accId]);
+  }, [accId, accountType]);
 
   if (!jobs) return <div className="text-[11px] text-slate-400">Loading…</div>;
-  if (!jobs.length) return <div className="text-[11px] text-emerald-600 font-semibold">All jobs paid ✓</div>;
+  if (!jobs.length) return (
+    <div className="text-[11px] text-emerald-600 font-semibold">
+      {accountType === "prepaid" ? "No jobs yet" : "All jobs paid ✓"}
+    </div>
+  );
 
   return (
     <div className="space-y-1 max-h-48 overflow-y-auto">
@@ -769,8 +890,12 @@ const AccountJobsList = ({ accId }) => {
             <div className="text-[10px] text-slate-500">{j.plateNumber} · {j.serviceName} · {fmtDate(j.jobDate || j.createdAt)}</div>
           </div>
           <div className="text-right">
-            <div className="font-black text-red-600 text-[11px]">{formatMoney(j.outstanding)}</div>
-            <div className={`text-[10px] font-bold ${j.paymentStatus === "partial" ? "text-amber-600" : "text-slate-500"}`}>{j.paymentStatus}</div>
+            {accountType === "prepaid" ? (
+              <div className="font-black text-emerald-700 text-[11px]">{formatMoney(j.paidAmount || 0)}</div>
+            ) : (
+              <div className="font-black text-red-600 text-[11px]">{formatMoney(j.outstanding)}</div>
+            )}
+            <div className={`text-[10px] font-bold ${j.paymentStatus === "paid" ? "text-emerald-600" : j.paymentStatus === "partial" ? "text-amber-600" : "text-slate-500"}`}>{j.paymentStatus}</div>
           </div>
         </div>
       ))}

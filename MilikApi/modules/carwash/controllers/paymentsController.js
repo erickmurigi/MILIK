@@ -183,13 +183,20 @@ export const recordPayment = async (req, res, next) => {
     if (updatedJob.paymentStatus === "paid") {
       await markJobCommissionsPayable({ business, jobId: updatedJob._id });
     }
-    if (["paid", "partial"].includes(updatedJob.paymentStatus)) {
-      awardLoyaltyStamp({ business, job: updatedJob, overridePhone: receivedFromPhone || null })
-        .catch((err) => console.error("[CW Loyalty] Stamp (payment) failed job=%s: %s", updatedJob.jobNumber, err?.message || err));
-    }
-
-    // Payment confirmation SMS fires on every payment — partial or full.
-    sendPaymentConfirmationSms({ business, job: updatedJob, amount, overridePhone: receivedFromPhone });
+    // Award stamp (suppress its own SMS) then send one combined payment+loyalty message.
+    // Both run fire-and-forget so the HTTP response is not delayed.
+    (async () => {
+      let loyaltySmsBody = null;
+      if (["paid", "partial"].includes(updatedJob.paymentStatus)) {
+        try {
+          const stampResult = await awardLoyaltyStamp({ business, job: updatedJob, overridePhone: receivedFromPhone || null, suppressSms: true });
+          loyaltySmsBody = stampResult?.smsBody || null;
+        } catch (err) {
+          console.error("[CW Payment] Stamp failed job=%s: %s", updatedJob.jobNumber, err?.message || err);
+        }
+      }
+      await sendPaymentConfirmationSms({ business, job: updatedJob, amount, overridePhone: receivedFromPhone, loyaltySmsBody });
+    })().catch((err) => console.error("[CW Payment] SMS failed job=%s: %s", updatedJob.jobNumber, err?.message || err));
     await postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbookAccount, job: updatedJob, userId });
     res.status(201).json({ success: true, data: payment, payment, job: updatedJob, message: "Car Wash payment recorded" });
   } catch (error) {
