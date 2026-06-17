@@ -163,7 +163,7 @@ export const accrueCommissionForJob = async ({ req = null, job, paidLineSet = nu
       rule: firstLine.rule || null,
       jobNumber: job.jobNumber || "",
       serviceName: lineBreakdown.length === 1 ? firstLine.serviceName : `${firstLine.serviceName} +${lineBreakdown.length - 1} more`,
-      baseAmount: round2(lines.reduce((s, l) => s + Number(l.price || 0), 0)),
+      baseAmount: round2((paidLineSet !== null ? lines.filter(l => paidLineSet.has(l.serviceName || l.service)) : lines).reduce((s, l) => s + Number(l.price || 0), 0)),
       commissionType: firstLine.commissionType,
       commissionRate: firstLine.commissionRate,
       commissionAmount: totalAmount,
@@ -211,17 +211,28 @@ export const accrueCommissionForJob = async ({ req = null, job, paidLineSet = nu
       }
       results.push(existing);
     } else {
-      const commission = await CarWashStaffCommission.create({
-        business: job.business,
-        branch: job.branch || null,
-        job: job._id,
-        staff: staffId,
-        ...newFields,
-        status: job.paymentStatus === "paid" ? "payable" : "earned",
-        earnedAt: new Date(),
-        payableAt: job.paymentStatus === "paid" ? new Date() : null,
-        createdBy: actorUserId,
-      });
+      let commission;
+      try {
+        commission = await CarWashStaffCommission.create({
+          business: job.business,
+          branch: job.branch || null,
+          job: job._id,
+          staff: staffId,
+          ...newFields,
+          status: job.paymentStatus === "paid" ? "payable" : "earned",
+          earnedAt: new Date(),
+          payableAt: job.paymentStatus === "paid" ? new Date() : null,
+          createdBy: actorUserId,
+        });
+      } catch (err) {
+        if (err?.code === 11000) {
+          // Another concurrent request already created this commission — fetch and return it
+          commission = await CarWashStaffCommission.findOne({ business: job.business, job: job._id, staff: staffId }).lean();
+          if (!commission) throw err; // unexpected
+          return commission;
+        }
+        throw err;
+      }
       await postCarWashCommissionAccrual({ req, commission }).catch((err) =>
         console.error("[CW Commission] Accrual post failed commission=%s: %s", commission._id, err?.message || err)
       );

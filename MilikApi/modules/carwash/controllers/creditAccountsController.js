@@ -234,7 +234,7 @@ export const getAccount = async (req, res, next) => {
     const jobsWithBalance = recentJobs.map((j) => ({
       ...j,
       paidAmount: paidMap.get(String(j._id)) || 0,
-      outstanding: round2(j.price - (paidMap.get(String(j._id)) || 0)),
+      outstanding: round2(Math.max(0, j.price - (j.discountAmount || 0) - (paidMap.get(String(j._id)) || 0))),
     }));
 
     res.json({ success: true, data: { ...account, currentBalance: balance, jobs: jobsWithBalance } });
@@ -359,7 +359,7 @@ export const recordAccountPayment = async (req, res, next) => {
     for (const job of unpaidJobs) {
       if (remaining <= 0.009) break;
       const alreadyPaid = paidMap.get(String(job._id)) || 0;
-      const outstanding = round2(job.price - alreadyPaid);
+      const outstanding = round2(Math.max(0, (job.price - (job.discountAmount || 0)) - alreadyPaid));
       if (outstanding <= 0.009) continue;
 
       const apply = round2(Math.min(outstanding, remaining));
@@ -505,7 +505,7 @@ export const generateStatement = async (req, res, next) => {
           { $group: { _id: null, paid: { $sum: "$amount" } } },
         ]))[0]?.paid || 0
       : 0;
-    const openingBalance = round2(priorJobs.reduce((s, j) => s + j.price, 0) - priorPaid);
+    const openingBalance = round2(priorJobs.reduce((s, j) => s + Math.max(0, j.price - (j.discountAmount || 0)), 0) - priorPaid);
 
     const statementNumber = await generateStatementNumber(business, periodStart);
     const statement = await CarWashAccountStatement.create({
@@ -731,10 +731,11 @@ export const recordAccountTopup = async (req, res, next) => {
       business, account: account._id, amount, method, reference, cashbookAccount, paymentDate, notes, createdBy: userId,
     });
 
-    // Credit the account balance
-    account.accountCredit = round2((account.accountCredit || 0) + amount);
-    account.updatedBy = userId;
-    await account.save();
+    // Credit the account balance atomically to prevent concurrent topup races
+    await CarWashCreditAccount.findByIdAndUpdate(
+      account._id,
+      { $inc: { accountCredit: amount } }
+    );
 
     // Post Dr Cashbook / Cr Revenue — revenue recognised at point of cash receipt
     await postCarWashTopupLedger({ businessId: business, topup, cashbookAccountId: cashbookAccount, userId });
@@ -742,7 +743,7 @@ export const recordAccountTopup = async (req, res, next) => {
     res.status(201).json({
       success: true,
       message: `Prepaid top-up of KES ${amount.toLocaleString()} recorded`,
-      data: { topup, accountCredit: account.accountCredit },
+      data: { topup, accountCredit: round2((account.accountCredit || 0) + amount) },
     });
   } catch (err) {
     next(err);
@@ -777,9 +778,10 @@ export const voidTopupDirect = async (req, res, next) => {
     await reverseCarWashTopupLedger({ businessId: business, topupId: topup._id, reason: reason || "Top-up voided", req });
     const account = await CarWashCreditAccount.findOne({ _id: topup.account, business });
     if (account) {
-      account.accountCredit = Math.max(0, round2((account.accountCredit || 0) - topup.amount));
-      account.updatedBy = userId;
-      await account.save();
+      await CarWashCreditAccount.findByIdAndUpdate(
+        account._id,
+        { $inc: { accountCredit: -topup.amount } }
+      );
     }
     topup.isVoided   = true;
     topup.voidedAt   = new Date();
@@ -803,12 +805,13 @@ export const voidTopup = async (req, res, next) => {
     // Reverse ledger entries
     await reverseCarWashTopupLedger({ businessId: business, topupId: topup._id, reason: reason || "Top-up voided", req });
 
-    // Reduce the account credit by the voided amount
+    // Reduce the account credit atomically by the voided amount
     const account = await CarWashCreditAccount.findOne({ _id: req.params.id, business });
     if (account) {
-      account.accountCredit = Math.max(0, round2((account.accountCredit || 0) - topup.amount));
-      account.updatedBy = userId;
-      await account.save();
+      await CarWashCreditAccount.findByIdAndUpdate(
+        account._id,
+        { $inc: { accountCredit: -topup.amount } }
+      );
     }
 
     topup.isVoided  = true;

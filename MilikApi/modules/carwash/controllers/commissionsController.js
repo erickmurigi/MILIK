@@ -167,6 +167,17 @@ export const createCommissionPayout = async (req, res, next) => {
     if (!commissions.length) return next(createError(400, "No payable commissions were found for this staff member"));
     if (commissions.length !== ids.length) return next(createError(400, "Some selected commissions are not payable for this staff member"));
 
+    // Atomically flip status to "in_payout" to prevent concurrent double-payout
+    const commissionIds = commissions.map(c => c._id);
+    const flipped = await CarWashStaffCommission.updateMany(
+      { _id: { $in: commissionIds }, business, staff, status: "payable" },
+      { $set: { status: "in_payout" } }
+    );
+    if (flipped.modifiedCount !== commissionIds.length) {
+      // A concurrent payout already claimed some commissions
+      return next(createError(409, "Another payout is being processed for this staff member — please try again in a moment."));
+    }
+
     const commissionAmount = round2(commissions.reduce((sum, item) => sum + Number(item.commissionAmount || 0), 0));
     if (commissionAmount <= 0) return next(createError(400, "Selected commissions have no payable amount"));
 
@@ -248,6 +259,13 @@ export const createCommissionPayout = async (req, res, next) => {
         : "Commission payout recorded",
     });
   } catch (error) {
+    // Revert the status flip so commissions remain payable after a failure
+    if (typeof commissionIds !== "undefined" && commissionIds?.length) {
+      await CarWashStaffCommission.updateMany(
+        { _id: { $in: commissionIds }, status: "in_payout" },
+        { $set: { status: "payable" } }
+      ).catch(() => {}); // best-effort revert
+    }
     next(error);
   }
 };
@@ -612,10 +630,10 @@ export const resetSavings = async (req, res, next) => {
 };
 
 // ─── Savings balance summary (all staff, one aggregation) ─────────────────────
-const eatToday = () => {
+function eatToday() {
   const nowEAT = new Date(Date.now() + 3 * 60 * 60 * 1000);
   return new Date(Date.UTC(nowEAT.getUTCFullYear(), nowEAT.getUTCMonth(), nowEAT.getUTCDate()));
-};
+}
 
 export const listSavingsBalances = async (req, res, next) => {
   try {
