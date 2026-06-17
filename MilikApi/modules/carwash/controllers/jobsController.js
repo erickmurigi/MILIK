@@ -201,15 +201,12 @@ export const listJobs = async (req, res, next) => {
     const page = Math.max(Number(req.query.page || 1), 1);
     const skip = (page - 1) * limit;
 
+    let jobsQuery = CarWashJob.find(filter)
+      .populate("service", "name category vehicleType defaultPrice")
+      .populate("assignedStaff", "name phone role");
+    if (!branchId) jobsQuery = jobsQuery.populate("branch", "name");
     const [jobs, total] = await Promise.all([
-      CarWashJob.find(filter)
-        .populate("service", "name category vehicleType defaultPrice")
-        .populate("assignedStaff", "name phone role")
-        .populate(branchId ? null : "branch", "name")
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
+      jobsQuery.sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
       CarWashJob.countDocuments(filter),
     ]);
     const pagination = { page, limit, total, pages: Math.max(Math.ceil(total / limit), 1) };
@@ -555,7 +552,8 @@ export const updateJobStatus = async (req, res, next) => {
 
     const updateFilter = { _id: req.params.id, business };
     if (status === "paid") updateFilter.paymentStatus = "paid";
-    else if (status !== "cancelled") updateFilter.paymentStatus = { $ne: "paid" };
+    else if (status === "cancelled") updateFilter.paymentStatus = "unpaid";
+    else updateFilter.paymentStatus = { $ne: "paid" };
 
     const job = await CarWashJob.findOneAndUpdate(
       updateFilter,
@@ -567,6 +565,11 @@ export const updateJobStatus = async (req, res, next) => {
       const exists = await CarWashJob.exists({ _id: req.params.id, business });
       if (!exists) return next(createError(404, "Car Wash job not found"));
       if (status === "paid") return next(createError(400, "Record payment before marking a Car Wash job as paid"));
+      if (status === "cancelled") {
+        const hasPayment = await CarWashPayment.exists({ business, job: req.params.id });
+        if (hasPayment) return next(createError(400, "Cannot cancel a job that has payments — reverse the payments first."));
+        return next(createError(404, "Car wash job not found"));
+      }
       return next(createError(400, "A fully paid Car Wash job cannot be moved back to an active status"));
     }
 
