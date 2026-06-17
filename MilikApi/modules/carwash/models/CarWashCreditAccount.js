@@ -8,7 +8,7 @@ const carWashCreditAccountSchema = new mongoose.Schema(
   {
     business:      { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true, index: true },
     branch:        { type: mongoose.Schema.Types.ObjectId, ref: "CarWashBranch", default: null },
-    accountNumber: { type: String, trim: true, required: true },
+    accountNumber: { type: String, trim: true, required: true, minlength: 1 },
     customer:      { type: mongoose.Schema.Types.ObjectId, ref: "CarWashCustomer", required: true },
     plates:        { type: [{ type: String, trim: true, uppercase: true }], default: [] },
     accountType:   { type: String, enum: ACCOUNT_TYPES, required: true, default: "credit" },

@@ -27,7 +27,16 @@ const carWashStaffCommissionSchema = new mongoose.Schema(
     serviceName: { type: String, trim: true, default: "" },
     baseAmount: { type: Number, required: true, min: 0, default: 0 },
     commissionType: { type: String, enum: ["fixed", "percentage"], required: true, default: "fixed" },
-    commissionRate: { type: Number, required: true, min: 0, default: 0 },
+    commissionRate: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0,
+      validate: {
+        validator(v) { return this.commissionType !== 'percentage' || v <= 100; },
+        message: 'Percentage commission rate cannot exceed 100',
+      },
+    },
     commissionAmount: { type: Number, required: true, min: 0, default: 0 },
     lineBreakdown: { type: [lineBreakdownSchema], default: [] },
     status: { type: String, enum: COMMISSION_STATUSES, default: "earned", index: true },
@@ -46,6 +55,7 @@ const carWashStaffCommissionSchema = new mongoose.Schema(
 );
 
 carWashStaffCommissionSchema.index({ business: 1, job: 1, staff: 1 }, { unique: true });
+carWashStaffCommissionSchema.index({ business: 1, job: 1 });
 carWashStaffCommissionSchema.index({ business: 1, status: 1, earnedAt: -1 });
 carWashStaffCommissionSchema.index({ business: 1, staff: 1, status: 1 });
 carWashStaffCommissionSchema.index({ business: 1, branch: 1, earnedAt: -1 });

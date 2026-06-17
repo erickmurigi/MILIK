@@ -18,7 +18,7 @@ const carWashPaymentSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    amount: { type: Number, required: true, min: 0 },
+    amount: { type: Number, required: true, min: 0.01 },
     discountAmount: { type: Number, min: 0, default: 0 },
     method: { type: String, enum: PAYMENT_METHODS, required: true, default: "cash" },
     cashbookAccount: { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null, index: true },

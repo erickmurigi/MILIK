@@ -28,7 +28,7 @@ const carWashJobSchema = new mongoose.Schema(
     },
     branch: { type: mongoose.Schema.Types.ObjectId, ref: "CarWashBranch", default: null, index: true },
     jobType: { type: String, enum: JOB_TYPES, default: "vehicle", index: true },
-    jobNumber: { type: String, required: true, trim: true },
+    jobNumber: { type: String, required: true, trim: true, minlength: 1 },
     customerName: { type: String, trim: true, default: "" },
     phone: { type: String, trim: true, default: "" },
     maskedMsisdn: { type: String, trim: true, default: null },

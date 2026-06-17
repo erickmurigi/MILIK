@@ -1,5 +1,5 @@
 import express from 'express';
-import { requireCompanyPermission } from '../../../controllers/verifyToken.js';
+import { verifyUser, requireCompanyModule, requireCompanyPermission } from '../../../controllers/verifyToken.js';
 import {
   getLoyaltyProgram,
   upsertLoyaltyProgram,
@@ -17,6 +17,8 @@ import {
 import { validateParamId } from '../middleware/validateObjectId.js';
 
 const router = express.Router();
+
+router.use(verifyUser, requireCompanyModule("carwash"));
 
 // Loyalty program config
 router.get('/program', requireCompanyPermission('carwash-loyalty', 'view', 'carwash'), getLoyaltyProgram);

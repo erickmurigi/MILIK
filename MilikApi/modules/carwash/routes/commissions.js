@@ -32,7 +32,7 @@ router.get("/savings",          requireCompanyPermission("carwash-commissions", 
 router.get("/savings/balances", requireCompanyPermission("carwash-commissions", "view", "carwash"), listSavingsBalances);
 router.post("/savings/payouts",           requireCompanyPermission("carwash-commissions", "pay", "carwash"), createSavingsPayout);
 router.post("/savings/payouts/:id/reverse", requireCompanyPermission("carwash-commissions", "pay", "carwash"), reverseSavingsPayout);
-router.post("/savings/process", requireCompanyPermission("carwash-commissions", "view",   "carwash"), processDailySavingsManual);
+router.post("/savings/process", requireCompanyPermission("carwash-commissions", "manage", "carwash"), processDailySavingsManual);
 router.delete("/savings/reset", requireCompanyPermission("carwash-commissions", "manage", "carwash"), resetSavings);
 router.get("/staff/:staffId/wallet", requireCompanyPermission("carwash-commissions", "view", "carwash"), getStaffWallet);
 

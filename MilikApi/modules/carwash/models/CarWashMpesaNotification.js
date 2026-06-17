@@ -10,7 +10,7 @@ const carWashMpesaNotificationSchema = new mongoose.Schema(
     transactionCode: { type: String, trim: true, default: "" },
     billRefNumber:   { type: String, trim: true, default: "" }, // raw account reference
     plate:           { type: String, trim: true, default: "" }, // normalized plate
-    amount:          { type: Number, default: 0 },
+    amount:          { type: Number, required: true, default: 0, min: 0 },
     msisdn:          { type: String, trim: true, default: "" }, // normalised 07xx
     maskedMsisdn:    { type: String, trim: true, default: "" }, // raw Safaricom-hashed MSISDN when real phone is unavailable
     senderName:      { type: String, trim: true, default: "" }, // FirstName + MiddleName + LastName from Safaricom
@@ -55,5 +55,6 @@ carWashMpesaNotificationSchema.index(
   { transactionCode: 1 },
   { unique: true, partialFilterExpression: { transactionCode: { $gt: "" }, status: "matched" } }
 );
+carWashMpesaNotificationSchema.index({ transactionCode: 1, status: 1 });
 
 export default mongoose.model("CarWashMpesaNotification", carWashMpesaNotificationSchema);

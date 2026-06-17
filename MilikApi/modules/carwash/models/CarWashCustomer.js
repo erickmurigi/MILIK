@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 const carWashCustomerSchema = new mongoose.Schema(
   {
     business: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
-    name: { type: String, required: true, trim: true },
+    name: { type: String, required: true, trim: true, minlength: 1 },
     phone: { type: String, trim: true, default: null },
     maskedMsisdn: { type: String, trim: true, default: null },
     plates: {

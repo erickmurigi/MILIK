@@ -25,7 +25,7 @@ const carWashServiceSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-carWashServiceSchema.index({ business: 1, name: 1 });
+carWashServiceSchema.index({ business: 1, name: 1 }, { unique: true });
 carWashServiceSchema.index({ business: 1, active: 1 });
 
 export default mongoose.model("CarWashService", carWashServiceSchema);

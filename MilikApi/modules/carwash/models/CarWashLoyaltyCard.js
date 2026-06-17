@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 
 const stampEntrySchema = new mongoose.Schema(
   {
-    job:           { type: mongoose.Schema.Types.ObjectId, ref: 'CarWashJob' },
+    job:           { type: mongoose.Schema.Types.ObjectId, ref: 'CarWashJob', required: true },
     jobNumber:     { type: String, default: '' },
     plate:         { type: String, default: '' },   // which vehicle was washed
     awardedAt:     { type: Date, default: Date.now },
