@@ -5,7 +5,7 @@ import CarWashJob from "../models/CarWashJob.js";
 import CarWashPayment from "../models/CarWashPayment.js";
 import CarWashCustomer from "../models/CarWashCustomer.js";
 import { currentUserId, escapeRegex, netJobPrice, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
-import { accrueCommissionForJob, buildPaidLineSet, handleJobPaymentStatusAfterPaymentChange, markJobCommissionsPayable } from "../services/commissionService.js";
+import { accrueCommissionForJob, handleJobPaymentStatusAfterPaymentChange, markJobCommissionsPayable } from "../services/commissionService.js";
 import { awardLoyaltyStamp, revokeStampForJob, sendPaymentConfirmationSms } from "./loyaltyController.js";
 import axios from "axios";
 import Company from "../../../models/Company.js";
@@ -58,7 +58,8 @@ const refreshJobPaymentStatus = async (business, jobId) => {
   job.paymentStatus = paidAmount <= 0 ? "unpaid" : paidAmount < price ? "partial" : "paid";
   if (job.paymentStatus === "paid" && job.status !== "cancelled") {
     job.status = "paid";
-  } else if (job.paymentStatus === "partial" && !["cancelled", "paid", "done"].includes(job.status)) {
+  } else if (job.paymentStatus === "partial" && job.status === "ready") {
+    // Partial cash payment on a physically-complete job — move to done
     job.status = "done";
   } else if (job.status === "paid" && job.paymentStatus !== "paid") {
     job.status = "done";
@@ -170,15 +171,7 @@ export const recordPayment = async (req, res, next) => {
       }
     }
 
-    const serviceLines = Array.isArray(updatedJob.serviceLines) && updatedJob.serviceLines.length
-      ? updatedJob.serviceLines
-      : [{ serviceName: updatedJob.serviceName || "", price: Number(updatedJob.price || 0) }];
-    const totalCovered = round2(totalEffectivePaid + Number(updatedJob.discountAmount || 0));
-    const paidLineSet = updatedJob.paymentStatus === "paid"
-      ? null
-      : buildPaidLineSet(serviceLines, totalCovered);
-
-    await accrueCommissionForJob({ req, job: updatedJob, paidLineSet });
+    await accrueCommissionForJob({ req, job: updatedJob });
 
     if (updatedJob.paymentStatus === "paid") {
       await markJobCommissionsPayable({ business, jobId: updatedJob._id });
@@ -218,7 +211,7 @@ export const deletePayment = async (req, res, next) => {
     ]);
     const effectiveThisPayment = round2(Number(payment.amount || 0) + Number(payment.discountAmount || 0));
     const paidAfterDelete = round2(Number(totals?.[0]?.paid || 0) - effectiveThisPayment);
-    const willRemainPaid = paidAfterDelete >= Number(jobBeforeDelete.price || 0);
+    const willRemainPaid = paidAfterDelete >= netJobPrice(jobBeforeDelete);
     if (!willRemainPaid) {
       await handleJobPaymentStatusAfterPaymentChange({
         business,

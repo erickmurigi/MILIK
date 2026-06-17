@@ -22,16 +22,17 @@ export const getQueueDisplay = async (req, res, next) => {
     }
 
     const todayStart = todayStartEAT();
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    // Collected jobs (done/paid) only show in COLLECTED column for 3 min client-side;
+    // fetch up to 5 min so there's headroom for the 20 s poll cycle.
+    const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000);
 
     const jobs = await CarWashJob.find({
       business: businessId,
-      status: { $in: ["waiting", "washing", "done", "paid"] },
+      status: { $in: ["waiting", "washing", "ready", "done", "paid"] },
       createdAt: { $gte: todayStart },
-      // Fade out paid jobs after 1 hour so they don't clutter the screen
       $or: [
-        { status: { $ne: "paid" } },
-        { updatedAt: { $gte: oneHourAgo } },
+        { status: { $in: ["waiting", "washing", "ready"] } },
+        { updatedAt: { $gte: fiveMinsAgo } },
       ],
     })
       .select("plateNumber itemDescription status serviceName serviceLines createdAt updatedAt jobType")

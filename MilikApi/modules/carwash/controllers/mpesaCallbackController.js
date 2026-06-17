@@ -109,7 +109,8 @@ const refreshJobPaymentStatus = async (business, jobId) => {
   job.paymentStatus = paidAmount <= 0 ? "unpaid" : paidAmount < price ? "partial" : "paid";
   if (job.paymentStatus === "paid" && job.status !== "cancelled") {
     job.status = "paid";
-  } else if (job.paymentStatus === "partial" && !["cancelled", "paid", "done"].includes(job.status)) {
+  } else if (job.paymentStatus === "partial" && job.status === "ready") {
+    // Partial payment on a physically-complete job — move to done
     job.status = "done";
   } else if (job.status === "paid" && job.paymentStatus !== "paid") {
     job.status = "done";
@@ -480,13 +481,18 @@ export const confirmCarWashCallback = async (req, res) => {
       return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted – insufficient data" });
     }
 
+    // Reject blank transaction codes — the unique index only protects non-empty references,
+    // so a blank code would bypass duplicate detection and could double-create payments.
+    if (!transactionCode) {
+      await saveNotif({ status: "unmatched", resultCode: 0, resultDesc: "Accepted – no transaction code" });
+      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted – no transaction code" });
+    }
+
     // Duplicate check — same transaction code already processed
-    if (transactionCode) {
-      const dup = await CarWashMpesaNotification.findOne({ transactionCode, status: "matched" }).lean();
-      if (dup) {
-        await saveNotif({ status: "duplicate", resultCode: 0, resultDesc: "Duplicate transaction" });
-        return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted – duplicate" });
-      }
+    const dup = await CarWashMpesaNotification.findOne({ transactionCode, status: "matched" }).lean();
+    if (dup) {
+      await saveNotif({ status: "duplicate", resultCode: 0, resultDesc: "Duplicate transaction" });
+      return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted – duplicate" });
     }
 
     const job = await CarWashJob.findOne({
@@ -640,10 +646,12 @@ export const confirmCarWashCallback = async (req, res) => {
     if (overpayment > 0.009 && plate) {
       (async () => {
         try {
-          const overpayAcc = await CarWashCreditAccount.findOne({ business: businessId, plates: plate, status: "active" });
+          const overpayAcc = await CarWashCreditAccount.findOneAndUpdate(
+            { business: businessId, plates: plate, status: "active" },
+            { $inc: { accountCredit: overpayment } },
+            { new: true }
+          );
           if (!overpayAcc) return;
-          overpayAcc.accountCredit = Math.round(((overpayAcc.accountCredit || 0) + overpayment + Number.EPSILON) * 100) / 100;
-          await overpayAcc.save();
           const topupDoc = await CarWashAccountTopup.create({
             business: businessId,
             account: overpayAcc._id,
@@ -655,7 +663,9 @@ export const confirmCarWashCallback = async (req, res) => {
             notes: `Overpayment credited from M-Pesa C2B (${senderName || "Unknown"})`,
           });
           postCarWashTopupLedger({ businessId, topup: topupDoc, cashbookAccountId: cashbook._id, userId: null }).catch(() => {});
-        } catch (_) {}
+        } catch (e) {
+          console.error("[C2B] Overpayment credit failed plate=%s amount=%s: %s", plate, overpayment, e?.message);
+        }
       })();
     }
 

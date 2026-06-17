@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const JOB_STATUSES = ["waiting", "washing", "done", "paid", "cancelled"];
+const JOB_STATUSES = ["waiting", "washing", "ready", "done", "paid", "cancelled"];
 const PAYMENT_STATUSES = ["unpaid", "partial", "paid"];
 const JOB_TYPES = ["vehicle", "carpet", "balance_bf"];
 

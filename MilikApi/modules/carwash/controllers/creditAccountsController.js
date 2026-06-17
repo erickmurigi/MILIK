@@ -11,6 +11,7 @@ import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId, re
 import { sendAdHocSms } from "../../../services/communicationService.js";
 import { postCarWashTopupLedger, reverseCarWashTopupLedger } from "../services/carwashAccountingService.js";
 import { resolveCarWashSmsBody } from "../services/carwashSmsService.js";
+import { accrueCommissionForJob, markJobCommissionsPayable } from "../services/commissionService.js";
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
@@ -383,6 +384,13 @@ export const recordAccountPayment = async (req, res, next) => {
       const newPaymentStatus = newPaid >= job.price - 0.009 ? "paid" : "partial";
       const newJobStatus = newPaymentStatus === "paid" && job.status !== "cancelled" ? "paid" : job.status;
       await CarWashJob.updateOne({ _id: job._id }, { paymentStatus: newPaymentStatus, status: newJobStatus, updatedBy: userId });
+
+      if (newJobStatus === "paid") {
+        const jobForCommission = { ...job.toObject(), status: "paid", paymentStatus: "paid" };
+        accrueCommissionForJob({ req: null, job: jobForCommission })
+          .then(() => markJobCommissionsPayable({ business, jobId: job._id }))
+          .catch((e) => console.error("[CW Account] Commission accrual failed job=%s: %s", job.jobNumber, e?.message));
+      }
 
       allocations.push({ jobId: job._id, jobNumber: job.jobNumber, plateNumber: job.plateNumber, applied: apply });
     }

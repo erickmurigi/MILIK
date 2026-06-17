@@ -13,7 +13,7 @@ import { autoEnrollPlate, awardLoyaltyStamp } from "./loyaltyController.js";
 import { normalizePlate } from "../utils/plateUtils.js";
 import { sendAdHocSms, sendAdHocSmsToMasked } from "../../../services/communicationService.js";
 
-const JOB_STATUSES = new Set(["waiting", "washing", "done", "paid", "cancelled"]);
+const JOB_STATUSES = new Set(["waiting", "washing", "ready", "done", "paid", "cancelled"]);
 const JOB_TYPES = new Set(["vehicle", "carpet", "balance_bf"]);
 
 const generateJobNumber = async (business) => {
@@ -135,6 +135,9 @@ const applyPaymentStatus = (job, paidAmount) => {
   if (job.paymentStatus === "paid" && job.status !== "cancelled") {
     job.status = "paid";
   } else if (job.status === "paid") {
+    job.status = "done";
+  } else if (job.paymentStatus === "partial" && job.status === "ready") {
+    // Partial payment on a physically-complete job — move to done so it clears from the ready column
     job.status = "done";
   }
 };
@@ -353,8 +356,12 @@ export const createJob = async (req, res, next) => {
         console.error("[CW Job] autoEnroll failed job=%s plate=%s: %s", job.jobNumber, job.plateNumber, err?.message || err);
       }
 
-      // Award stamp for completed vehicle jobs only — balance_bf is historical debt, not a new wash.
-      if (job.jobType === "vehicle" && ["done", "paid"].includes(job.status)) {
+      // Award stamp for completed vehicle jobs — balance_bf is historical debt, not a new wash.
+      // For done status: only credit account jobs earn the stamp here (cash/M-Pesa stamp fires on payment).
+      const shouldStampOnCreate =
+        job.jobType === "vehicle" &&
+        (job.status === "paid" || (job.status === "done" && job.creditAccount));
+      if (shouldStampOnCreate) {
         try {
           await awardLoyaltyStamp({ business, job });
         } catch (err) {
@@ -509,21 +516,24 @@ export const updateJob = async (req, res, next) => {
     applyPaymentStatus(existing, paidAmount);
 
     await existing.save();
-    if (existing.status === "cancelled") {
-      await cancelJobCommissions({ req, business, jobId: existing._id });
-    } else if (!["done", "paid"].includes(existing.status)) {
-      await cancelJobCommissions({
-        req,
-        business,
-        jobId: existing._id,
-        reason: "Cancelled because the Car Wash job was moved out of the completed workflow.",
-      });
-    } else {
+    if (existing.status === "paid") {
       await accrueCommissionForJob({ req, job: existing });
       try {
         await awardLoyaltyStamp({ business, job: existing });
       } catch (err) {
         console.error("[CW Loyalty] Stamp award failed job=%s: %s", existing.jobNumber, err?.message || err);
+      }
+    } else {
+      const cancelReason = existing.status === "cancelled"
+        ? "Car Wash job was cancelled."
+        : "Job not yet paid.";
+      await cancelJobCommissions({ req, business, jobId: existing._id, reason: cancelReason });
+      if (existing.status === "done" && existing.creditAccount) {
+        try {
+          await awardLoyaltyStamp({ business, job: existing });
+        } catch (err) {
+          console.error("[CW Loyalty] Stamp award failed job=%s: %s", existing.jobNumber, err?.message || err);
+        }
       }
     }
     res.status(200).json({ success: true, data: existing, job: existing, message: "Car Wash job updated" });
@@ -560,18 +570,19 @@ export const updateJobStatus = async (req, res, next) => {
       return next(createError(400, "A fully paid Car Wash job cannot be moved back to an active status"));
     }
 
-    if (status === "cancelled") {
-      await cancelJobCommissions({ req, business, jobId: job._id });
-    } else if (!["done", "paid"].includes(status)) {
-      await cancelJobCommissions({
-        req,
-        business,
-        jobId: job._id,
-        reason: "Cancelled because the Car Wash job was moved out of the completed workflow.",
-      });
-    } else {
+    if (status === "paid") {
       await accrueCommissionForJob({ req, job });
-      if (status === "done" || status === "paid") {
+      try {
+        await awardLoyaltyStamp({ business, job });
+      } catch (err) {
+        console.error("[CW Loyalty] Stamp award failed job=%s: %s", job.jobNumber, err?.message || err);
+      }
+    } else {
+      const cancelReason = status === "cancelled"
+        ? "Car Wash job was cancelled."
+        : "Job not yet paid.";
+      await cancelJobCommissions({ req, business, jobId: job._id, reason: cancelReason });
+      if (status === "done" && job.creditAccount) {
         try {
           await awardLoyaltyStamp({ business, job });
         } catch (err) {
@@ -609,11 +620,20 @@ export const deleteJobsBulk = async (req, res, next) => {
     const safeIds = [];
     const skipped = [];
 
-    const paymentCounts = await CarWashPayment.aggregate([
-      { $match: { business: new mongoose.Types.ObjectId(String(business)), job: { $in: jobs.map((j) => j._id) } } },
-      { $group: { _id: "$job", count: { $sum: 1 } } },
+    const jobObjectIds = jobs.map((j) => j._id);
+    const businessOid = new mongoose.Types.ObjectId(String(business));
+    const [paymentCounts, commissionCounts] = await Promise.all([
+      CarWashPayment.aggregate([
+        { $match: { business: businessOid, job: { $in: jobObjectIds } } },
+        { $group: { _id: "$job", count: { $sum: 1 } } },
+      ]),
+      CarWashStaffCommission.aggregate([
+        { $match: { business: businessOid, job: { $in: jobObjectIds }, status: { $in: ["earned", "payable", "paid"] } } },
+        { $group: { _id: "$job", count: { $sum: 1 } } },
+      ]),
     ]);
     const paymentsMap = new Map(paymentCounts.map((r) => [String(r._id), r.count]));
+    const commissionsMap = new Map(commissionCounts.map((r) => [String(r._id), r.count]));
 
     for (const job of jobs) {
       if (!job) { skipped.push({ id: "", reason: "Car Wash job not found" }); continue; }
@@ -621,6 +641,8 @@ export const deleteJobsBulk = async (req, res, next) => {
         skipped.push({ id: String(job._id), jobNumber: job.jobNumber, reason: "Only unpaid Car Wash jobs can be deleted" });
       } else if ((paymentsMap.get(String(job._id)) || 0) > 0) {
         skipped.push({ id: String(job._id), jobNumber: job.jobNumber, reason: "Cannot delete a Car Wash job that has payments" });
+      } else if ((commissionsMap.get(String(job._id)) || 0) > 0) {
+        skipped.push({ id: String(job._id), jobNumber: job.jobNumber, reason: "Reverse all commissions for this job before deleting" });
       } else {
         safeIds.push(job._id);
       }

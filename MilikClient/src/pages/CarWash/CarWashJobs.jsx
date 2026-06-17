@@ -68,13 +68,14 @@ const getMonthBounds = () => {
   };
 };
 
-const statuses = ["waiting", "washing", "done", "paid", "cancelled"];
+const statuses = ["waiting", "washing", "ready", "done", "paid", "cancelled"];
 const paymentMethods = ["cash", "mpesa", "bank", "card", "other"];
 const DEFAULT_PAGE_SIZE = 25;
 
 const statusLabels = {
   waiting: "Waiting",
   washing: "Washing",
+  ready: "Ready",
   done: "Done",
   paid: "Paid",
   cancelled: "Cancelled",
@@ -83,7 +84,8 @@ const statusLabels = {
 const getJobStatusLabel = (status, jobType) => {
   if (jobType === "carpet") {
     if (status === "washing") return "Processing";
-    if (status === "done") return "Ready";
+    if (status === "ready") return "Ready";
+    if (status === "done") return "Collected";
   }
   return statusLabels[status] || status;
 };
@@ -192,7 +194,7 @@ const MobileJobCard = React.memo(({
           value={job.status}
           onChange={(e) => onUpdateStatus(job, e.target.value)}
         >
-          {statuses.filter((s) => s !== "paid" || job.paymentStatus === "paid").map((s) => (
+          {statuses.filter((s) => job.status === "paid" ? s === "paid" : s !== "paid" || job.paymentStatus === "paid").map((s) => (
             <option key={s} value={s}>{getJobStatusLabel(s, job.jobType)}</option>
           ))}
         </select>
@@ -208,8 +210,17 @@ const MobileJobCard = React.memo(({
         {job.status === "washing" && (
           <button
             type="button"
-            onClick={() => onUpdateStatus(job, "done")}
+            onClick={() => onUpdateStatus(job, "ready")}
             className="h-7 whitespace-nowrap border border-emerald-300 bg-emerald-50 px-2.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100"
+          >
+            → Ready
+          </button>
+        )}
+        {job.status === "ready" && (
+          <button
+            type="button"
+            onClick={() => onUpdateStatus(job, "done")}
+            className="h-7 whitespace-nowrap border border-teal-300 bg-teal-50 px-2.5 text-[11px] font-bold text-teal-700 hover:bg-teal-100"
           >
             → Done
           </button>
@@ -224,7 +235,7 @@ const MobileJobCard = React.memo(({
             Pay
           </button>
         )}
-        {(job.phone || job.maskedMsisdn) && job.status === "done" && job.paymentStatus !== "paid" && (
+        {(job.phone || job.maskedMsisdn) && job.status === "ready" && job.paymentStatus !== "paid" && (
           <button type="button" onClick={() => onOpenSms(job, "ready")} className="inline-flex items-center gap-1 border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
             <FaSms /> Ready
           </button>
@@ -317,7 +328,7 @@ const DesktopJobRow = React.memo(({
               onChange={(event) => onUpdateStatus(job, event.target.value)}
             >
               {statuses
-                .filter((status) => status !== "paid" || job.paymentStatus === "paid")
+                .filter((status) => job.status === "paid" ? status === "paid" : status !== "paid" || job.paymentStatus === "paid")
                 .map((status) => (
                   <option key={status} value={status}>
                     {getJobStatusLabel(status, job.jobType)}
@@ -337,9 +348,19 @@ const DesktopJobRow = React.memo(({
             {job.status === "washing" && (
               <button
                 type="button"
-                title="Mark as Done"
-                onClick={() => onUpdateStatus(job, "done")}
+                title="Mark as Ready"
+                onClick={() => onUpdateStatus(job, "ready")}
                 className="h-6 whitespace-nowrap border border-emerald-300 bg-emerald-50 px-2 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100"
+              >
+                → Ready
+              </button>
+            )}
+            {job.status === "ready" && (
+              <button
+                type="button"
+                title="Mark as Done (Collected)"
+                onClick={() => onUpdateStatus(job, "done")}
+                className="h-6 whitespace-nowrap border border-teal-300 bg-teal-50 px-2 text-[10px] font-bold text-teal-700 hover:bg-teal-100"
               >
                 → Done
               </button>
@@ -382,12 +403,12 @@ const DesktopJobRow = React.memo(({
                 Pay
               </button>
             )}
-            {(job.phone || job.maskedMsisdn) && job.status === "done" && job.paymentStatus !== "paid" && (
+            {(job.phone || job.maskedMsisdn) && job.status === "ready" && job.paymentStatus !== "paid" && (
               <button
                 type="button"
                 onClick={() => onOpenSms(job, "ready")}
                 className="inline-flex items-center gap-1 border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100"
-                title="Notify customer — job ready"
+                title="Notify customer — job ready for collection"
               >
                 <FaSms /> Ready
               </button>

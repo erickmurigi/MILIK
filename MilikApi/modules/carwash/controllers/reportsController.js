@@ -230,7 +230,7 @@ const buildRangeSummary = async (business, start, end, type, branchId = null) =>
   const pendingExpenses = pendingExpenseRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
   const pendingExpenseCount = pendingExpenseRows.reduce((sum, row) => sum + Number(row.count || 0), 0);
   const paymentCount = paymentRows.reduce((sum, row) => sum + Number(row.count || 0), 0);
-  const openJobs = Number(statusCounts.waiting || 0) + Number(statusCounts.washing || 0) + Number(statusCounts.done || 0);
+  const openJobs = Number(statusCounts.waiting || 0) + Number(statusCounts.washing || 0) + Number(statusCounts.ready || 0) + Number(statusCounts.done || 0);
 
   return {
     period: {

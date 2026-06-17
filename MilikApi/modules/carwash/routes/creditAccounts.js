@@ -47,10 +47,11 @@ router.post("/setup/seed-accounts", async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// Admin/cron route — trigger auto-billing check for all due monthly accounts
+// Admin/cron route — trigger auto-billing check for due monthly accounts on this business
 router.post("/admin/process-billing", async (req, res, next) => {
   try {
-    const results = await processDueBilling(null);
+    const business = resolveActiveBusinessId(req);
+    const results = await processDueBilling(business);
     res.json({ success: true, processed: results.length, data: results });
   } catch (err) { next(err); }
 });

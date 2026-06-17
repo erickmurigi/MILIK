@@ -77,7 +77,7 @@ export const buildPaidLineSet = (serviceLines, totalPaid) => {
 };
 
 export const accrueCommissionForJob = async ({ req = null, job, paidLineSet = null }) => {
-  if (!job || !["done", "paid"].includes(String(job.status || "").toLowerCase())) return null;
+  if (!job || String(job.status || "").toLowerCase() !== "paid") return null;
 
   const rawStaff = Array.isArray(job.assignedStaff) ? job.assignedStaff : (job.assignedStaff ? [job.assignedStaff] : []);
   const jobStaffIds = rawStaff
