@@ -1,5 +1,6 @@
 import axios from "axios";
 import { clearClientSessionStorage } from "./sessionCleanup";
+import { markSessionActivity } from "./sessionTimeout";
 
 const STORAGE_KEY = import.meta.env.VITE_STORAGE_KEY || "MilikPropertyManagement2026";
 const DEMO_EXPIRED_NOTICE_KEY = "milik_demo_expired_notice";
@@ -84,6 +85,12 @@ adminRequests.interceptors.request.use(
     // Let axios set Content-Type automatically for FormData (multipart/form-data with boundary)
     if (config.data instanceof FormData) {
       delete config.headers["Content-Type"];
+    }
+
+    // Extend session on user-initiated requests. Skips GETs (background polls shouldn't
+    // keep an abandoned session alive).
+    if (token && String(config.method || '').toUpperCase() !== 'GET') {
+      markSessionActivity();
     }
 
     return config;

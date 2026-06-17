@@ -1,5 +1,5 @@
 export const SESSION_LAST_ACTIVITY_KEY = "milik_last_activity_at";
-export const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000;
+export const INACTIVITY_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
 
 export const getLastActivityAt = () => {
   try {
