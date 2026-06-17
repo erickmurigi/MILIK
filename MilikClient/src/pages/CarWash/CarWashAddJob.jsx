@@ -21,6 +21,8 @@ const PlateLookupWidget = ({ plate, onPlateChange, onCustomerFound, onRewardData
   const [looking, setLooking] = useState(false);
   const timerRef = useRef(null);
 
+  useEffect(() => () => clearTimeout(timerRef.current), []);
+
   const lookup = useCallback(async (value) => {
     const p = value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
     if (p.length < 3) { setLookupResult(null); onRewardData?.(null); return; }
@@ -613,12 +615,20 @@ const CarWashAddJob = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (jobType === "vehicle" && !plateNumber?.trim()) {
+      toast.error("Plate number is required");
+      return;
+    }
     if (!serviceLines.some((l) => l.serviceName?.trim())) {
       toast.error("Add at least one service line with a name");
       return;
     }
     if (totalPrice <= 0) {
       toast.error("Total price must be greater than zero");
+      return;
+    }
+    if (discountNum > totalPrice) {
+      toast.error("Discount cannot exceed total price");
       return;
     }
     setSaving(true);
