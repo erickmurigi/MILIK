@@ -17,7 +17,7 @@ const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
 const sendLoyaltySms = async (business, phone, body, templateKey) => {
   if (!phone || !body) return;
-  sendAdHocSms({ businessId: business, phone, body, templateKey }).catch(() => {});
+  sendAdHocSms({ businessId: business, phone, body, templateKey }).catch((err) => console.error('[CW Loyalty SMS] business=%s phone=%s: %s', business, phone, err?.message || err));
 };
 
 // ─── Loyalty program ──────────────────────────────────────────────────────────
@@ -576,11 +576,22 @@ export const redeemReward = async (req, res, next) => {
     const customer = await CarWashCustomer.findOne({ business, plates: buildPlateRegex(plate) }).lean();
     if (!customer) return next(createError(404, 'No loyalty customer found for this plate'));
 
-    const card = await CarWashLoyaltyCard.findOne({ business, customer: customer._id });
+    let card = await CarWashLoyaltyCard.findOne({ business, customer: customer._id });
     if (!card) return next(createError(404, 'No loyalty card found for this customer'));
-    if (card.pendingRewards <= 0) return next(createError(400, 'No pending rewards to redeem'));
 
     const program = await CarWashLoyaltyProgram.findById(card.program).lean();
+
+    // Atomically claim one pending reward — if none available, bail out
+    const claimedCard = await CarWashLoyaltyCard.findOneAndUpdate(
+      { _id: card._id, pendingRewards: { $gt: 0 } },
+      { $inc: { pendingRewards: -1 } },
+      { new: true }
+    );
+    if (!claimedCard) {
+      return next ? next(createError(400, "No pending rewards available")) : null;
+    }
+    // Update local reference
+    card.pendingRewards = claimedCard.pendingRewards;
 
     // Compute and apply the discount to the job based on reward type
     let discountAmount = 0;
@@ -611,7 +622,7 @@ export const redeemReward = async (req, res, next) => {
         discountAmount,
         rewardType: program?.rewardType,
         req,
-      }).catch(() => {});
+      }).catch((err) => console.error('[CW Loyalty] Discount ledger failed job=%s: %s', job?.jobNumber, err?.message || err));
     }
 
     // Award commission on gross price — the attendant did the work regardless of who covered the cost.
@@ -623,8 +634,7 @@ export const redeemReward = async (req, res, next) => {
         .catch((err) => console.error('[CW Loyalty] Commission accrual after reward failed job=%s: %s', job.jobNumber, err?.message || err));
     }
 
-    // Record redemption on card
-    card.pendingRewards -= 1;
+    // Record redemption on card (pendingRewards already atomically decremented above)
     card.totalRewardsRedeemed += 1;
     card.lastRedemptionAt = new Date();
     card.stampHistory.push({
@@ -779,16 +789,24 @@ export const revokeStampForJob = async ({ business, jobId, plate }) => {
 
     const program = await CarWashLoyaltyProgram.findById(card.program).lean();
     const stampsRequired = Number(program?.stampsRequired || 10);
+    const stampExpiryDays = Number(program?.stampExpiryDays || 0);
 
     // Replay non-redemption stamps to recompute counters
     let currentStamps = 0;
     let rewardsEarned = 0;
     let totalStamps = 0;
     let lastStampAt = null;
+    let prevStampAt = null;
 
     for (const entry of card.stampHistory) {
       if (entry.wasRedemption) continue;
+      // Reset counter if gap since last stamp exceeds expiry
+      if (prevStampAt && stampExpiryDays > 0) {
+        const daysSince = (new Date(entry.awardedAt) - new Date(prevStampAt)) / 86_400_000;
+        if (daysSince > stampExpiryDays) currentStamps = 0;
+      }
       totalStamps++;
+      prevStampAt = entry.awardedAt || prevStampAt;
       lastStampAt = entry.awardedAt || lastStampAt;
       currentStamps++;
       if (currentStamps >= stampsRequired) {
