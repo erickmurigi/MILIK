@@ -19,6 +19,8 @@ import { autoEnrollPlate, awardLoyaltyStamp, sendPaymentConfirmationSms, sendUnm
 import { sendAdHocSms, sendAdHocSmsToMasked } from "../../../services/communicationService.js";
 import { resolveCarWashSmsBody } from "../services/carwashSmsService.js";
 import { normalizePlate, buildPlateRegex } from "../utils/plateUtils.js";
+import { resolveActiveBusinessId, parseDateRange } from "../services/businessScope.js";
+import { createError } from "../../../utils/error.js";
 
 const normalizeText = (v = "") => String(v || "").trim();
 const normalizeUpper = (v = "") => normalizeText(v).toUpperCase();
@@ -30,14 +32,14 @@ const parseMpesaDate = (raw = "") => {
   const text = normalizeText(raw);
   if (!text) return new Date();
   if (/^\d{14}$/.test(text)) {
-    const dt = new Date(
-      Number(text.slice(0, 4)),
-      Number(text.slice(4, 6)) - 1,
-      Number(text.slice(6, 8)),
-      Number(text.slice(8, 10)),
-      Number(text.slice(10, 12)),
-      Number(text.slice(12, 14))
-    );
+    const year  = Number(text.slice(0, 4));
+    const month = Number(text.slice(4, 6));
+    const day   = Number(text.slice(6, 8));
+    const hour  = Number(text.slice(8, 10));
+    const min   = Number(text.slice(10, 12));
+    const sec   = Number(text.slice(12, 14));
+    // TransTime is EAT (UTC+3) — convert to UTC by subtracting 3 hours
+    const dt = new Date(Date.UTC(year, month - 1, day, hour - 3, min, sec));
     return Number.isNaN(dt.getTime()) ? new Date() : dt;
   }
   const parsed = new Date(text);
@@ -317,6 +319,11 @@ export const handleStkCallback = async (req, res) => {
     const job = await CarWashJob.findOne({ _id: notif.matchedJob, business: businessId });
     if (!job) return;
 
+    if (job.status === "cancelled") {
+      console.warn("[STK] Payment received for cancelled job=%s", job.jobNumber);
+      return; // STK caller already got 200 ack above
+    }
+
     const company = await Company.findById(businessId).select("paymentIntegration").lean();
     const config = getPrimaryMpesaPaybillConfig(getRawMpesaPaybillConfigs(company?.paymentIntegration));
     const cashbookId = config?.defaultCashbookAccountId;
@@ -433,7 +440,8 @@ export const validateCarWashCallback = async (req, res) => {
     }
 
     return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
-  } catch {
+  } catch (err) {
+    console.error("[CW Validation] Unexpected error: %s", err?.message || err);
     // On any error always accept — Safaricom requires a response and we can't
     // block a payment due to a server fault. Confirmation handler will handle edge cases.
     return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
@@ -514,8 +522,10 @@ export const confirmCarWashCallback = async (req, res) => {
       }) : null;
 
       if (prepaidAcc) {
-        prepaidAcc.accountCredit = Math.round(((prepaidAcc.accountCredit || 0) + amount + Number.EPSILON) * 100) / 100;
-        await prepaidAcc.save();
+        await CarWashCreditAccount.updateOne(
+          { _id: prepaidAcc._id },
+          { $inc: { accountCredit: amount } }
+        );
 
         const cashbookId = config?.defaultCashbookAccountId;
         const cashbook = cashbookId && mongoose.Types.ObjectId.isValid(String(cashbookId))
@@ -542,7 +552,7 @@ export const confirmCarWashCallback = async (req, res) => {
         // Send top-up confirmation SMS
         (async () => {
           try {
-            const newBalance = prepaidAcc.accountCredit;
+            const newBalance = round2((prepaidAcc.accountCredit || 0) + amount);
             const body = await resolveCarWashSmsBody(businessId, "carwash_topup_confirmed", {
               payerName:    senderName || "Valued Customer",
               amount:       Number(amount).toLocaleString(),
@@ -630,8 +640,8 @@ export const confirmCarWashCallback = async (req, res) => {
     if (normalizedMsisdn) jobUpdates.phone = normalizedMsisdn;
     // Store masked MSISDN on job so SMS icon shows even without a real phone
     if (!normalizedMsisdn && msisdn) jobUpdates.maskedMsisdn = msisdn;
-    // M-Pesa sender name is authoritative — update job so displays reflect real name
-    if (senderName) jobUpdates.customerName = senderName;
+    // M-Pesa sender name fills in customer name only if the job has none yet
+    if (senderName && !job.customerName) jobUpdates.customerName = senderName;
     if (Object.keys(jobUpdates).length) {
       await CarWashJob.updateOne({ _id: job._id, business: businessId }, { $set: jobUpdates });
     }
@@ -703,7 +713,6 @@ export const confirmCarWashCallback = async (req, res) => {
 // ─── List notifications (authenticated) ──────────────────────────────────────
 export const listMpesaNotifications = async (req, res, next) => {
   try {
-    const { resolveActiveBusinessId, parseDateRange } = await import("../services/businessScope.js");
     const business = resolveActiveBusinessId(req);
 
     const filter = { business };
@@ -750,7 +759,10 @@ export const listMpesaNotifications = async (req, res, next) => {
 // ─── Reassign / correct a wrong-account notification ─────────────────────────
 export const reassignMpesaNotification = async (req, res, next) => {
   try {
-    const { resolveActiveBusinessId } = await import("../services/businessScope.js");
+    if (!req.user?.adminAccess && !req.user?.isSystemAdmin && req.user?.role !== "manager") {
+      return next(createError(403, "Manager or admin access required to reassign M-Pesa notifications"));
+    }
+
     const business = resolveActiveBusinessId(req);
     const { id } = req.params;
     const { jobId } = req.body;
@@ -876,7 +888,6 @@ export const reassignMpesaNotification = async (req, res, next) => {
 // ─── Register C2B validation/confirmation URLs with Safaricom ─────────────────
 export const registerCarWashPaybillUrls = async (req, res, next) => {
   try {
-    const { resolveActiveBusinessId } = await import("../services/businessScope.js");
     const business = resolveActiveBusinessId(req);
     const company  = await Company.findById(business).lean();
 
