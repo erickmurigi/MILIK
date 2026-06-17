@@ -107,7 +107,7 @@ const PlateLookupWidget = ({ plate, onPlateChange, onCustomerFound, onRewardData
 };
 
 // ─── Credit account banner ─────────────────────────────────────────────────────
-const CreditAccountBanner = ({ plate, onAccountDetected }) => {
+const CreditAccountBanner = ({ plate, jobTotal, onAccountDetected }) => {
   const [account, setAccount] = useState(null);
   const prevPlate = useRef("");
 
@@ -124,24 +124,56 @@ const CreditAccountBanner = ({ plate, onAccountDetected }) => {
   }, [plate]); // eslint-disable-line
 
   if (!account) return null;
-  const balance = Number(account.currentBalance || 0);
+
+  const isPrepaid = account.accountType === "prepaid";
+  const walletBalance = Number(account.accountCredit || 0);
+  const outstandingDebt = Number(account.currentBalance || 0);
   const overLimit = account.overLimit;
+  const sufficient = isPrepaid ? walletBalance >= (jobTotal || 0) : true;
+
+  const typeBadge = isPrepaid
+    ? "bg-teal-100 text-teal-700"
+    : account.accountType === "monthly"
+      ? "bg-violet-100 text-violet-700"
+      : "bg-blue-100 text-blue-700";
+
+  const borderBg = isPrepaid
+    ? sufficient
+      ? "border-teal-300 bg-teal-50 text-teal-800"
+      : "border-amber-300 bg-amber-50 text-amber-800"
+    : overLimit
+      ? "border-amber-300 bg-amber-50 text-amber-800"
+      : "border-emerald-300 bg-emerald-50 text-emerald-800";
+
   return (
-    <div className={`mt-1.5 flex items-start gap-2 border px-3 py-2 text-xs ${overLimit ? "border-amber-300 bg-amber-50 text-amber-800" : "border-emerald-300 bg-emerald-50 text-emerald-800"}`}>
-      {overLimit && <FaExclamationTriangle className="mt-0.5 flex-shrink-0 text-amber-500" />}
+    <div className={`mt-1.5 flex items-start gap-2 border px-3 py-2 text-xs ${borderBg}`}>
+      {((!sufficient && isPrepaid) || overLimit) && <FaExclamationTriangle className="mt-0.5 flex-shrink-0 text-amber-500" />}
       <div>
         <div className="font-black">{account.accountNumber} · {account.customer?.name}</div>
         <div className="mt-0.5">
-          Balance: <strong>{formatMoney(balance)}</strong>
-          {account.creditLimit > 0 && <> / Limit: <strong>{formatMoney(account.creditLimit)}</strong></>}
-          <span className={`ml-2 rounded px-1.5 py-0 text-[10px] font-black uppercase ${account.accountType === "monthly" ? "bg-violet-100 text-violet-700" : "bg-blue-100 text-blue-700"}`}>
+          {isPrepaid ? (
+            <>Wallet: <strong>{formatMoney(walletBalance)}</strong></>
+          ) : (
+            <>
+              Outstanding: <strong>{formatMoney(outstandingDebt)}</strong>
+              {account.creditLimit > 0 && <> / Limit: <strong>{formatMoney(account.creditLimit)}</strong></>}
+            </>
+          )}
+          <span className={`ml-2 rounded px-1.5 py-0 text-[10px] font-black uppercase ${typeBadge}`}>
             {account.accountType}
           </span>
         </div>
-        {overLimit
-          ? <div className="mt-0.5 font-bold text-amber-700">⚠ Credit limit exceeded — proceed with caution</div>
-          : <div className="mt-0.5 text-emerald-700">This job will be charged to the credit account.</div>
-        }
+        {isPrepaid ? (
+          sufficient
+            ? <div className="mt-0.5 text-teal-700">{formatMoney(jobTotal || 0)} will be auto-deducted from wallet on save.</div>
+            : <div className="mt-0.5 font-bold text-amber-700">
+                Insufficient wallet balance — collect {formatMoney(Math.max(0, (jobTotal || 0) - walletBalance))} from customer.
+              </div>
+        ) : overLimit ? (
+          <div className="mt-0.5 font-bold text-amber-700">⚠ Credit limit exceeded — proceed with caution</div>
+        ) : (
+          <div className="mt-0.5 text-emerald-700">This job will be charged to the credit account.</div>
+        )}
       </div>
     </div>
   );
@@ -725,6 +757,7 @@ const CarWashAddJob = () => {
                   />
                   <CreditAccountBanner
                     plate={plateNumber}
+                    jobTotal={totalPrice}
                     onAccountDetected={(acc) => setCreditAccount(acc || null)}
                   />
                   {!isEditMode && loyaltyCard?.pendingRewards > 0 && loyaltyCard?.program && (

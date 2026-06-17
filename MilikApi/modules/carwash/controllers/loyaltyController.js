@@ -161,7 +161,7 @@ export const listCustomersEnriched = async (req, res, next) => {
     ]);
 
     if (!customers.length) {
-      return res.json({ success: true, data: [], total: 0, page: pageNum, limit: limitNum });
+      return res.json({ success: true, data: [], total: 0, page: pageNum, limit: limitNum, loyaltyProgram: loyaltyProgram || null });
     }
 
     const allPlates = [...new Set(customers.flatMap((c) => c.plates || []))];
