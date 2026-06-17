@@ -10,6 +10,7 @@ import { awardLoyaltyStamp, revokeStampForJob, sendPaymentConfirmationSms } from
 import axios from "axios";
 import Company from "../../../models/Company.js";
 import CarWashMpesaNotification from "../models/CarWashMpesaNotification.js";
+import CarWashCreditAccount from "../models/CarWashCreditAccount.js";
 import { getRawMpesaPaybillConfigs, getPrimaryMpesaPaybillConfig } from "../../../utils/companyModules.js";
 import { sendAdHocSms } from "../../../services/communicationService.js";
 import { postCarWashPaymentLedger, reverseCarWashPaymentLedger } from "../services/carwashAccountingService.js";
@@ -139,6 +140,9 @@ export const recordPayment = async (req, res, next) => {
       ? String(req.body.receivedFromPhone).trim() || null
       : null;
 
+    const rawPaymentDate = req.body.paymentDate ? new Date(req.body.paymentDate) : new Date();
+    if (isNaN(rawPaymentDate.getTime())) return next(createError(400, "Invalid payment date"));
+
     const userId = currentUserId(req);
     const payment = await CarWashPayment.create({
       business,
@@ -150,7 +154,7 @@ export const recordPayment = async (req, res, next) => {
       cashbookAccount,
       reference: String(req.body.reference || "").trim(),
       receivedFromPhone,
-      paymentDate: req.body.paymentDate ? new Date(req.body.paymentDate) : new Date(),
+      paymentDate: rawPaymentDate,
       receivedBy: userId,
       createdBy: userId,
       updatedBy: userId,
@@ -319,6 +323,29 @@ export const initiateStkPush = async (req, res, next) => {
       return next(createError(400, "M-Pesa credentials not configured for this business. Set them up in Setup → M-Pesa."));
     }
 
+    // STK idempotency guard: prevent duplicate prompts for the same job within 60 s
+    const recentPending = await CarWashMpesaNotification.findOne({
+      business,
+      matchedJob: job._id,
+      status: "stk_pending",
+      createdAt: { $gte: new Date(Date.now() - 60_000) },
+    }).lean();
+    if (recentPending) {
+      return res.status(409).json({ success: false, message: "An M-Pesa prompt was already sent — please wait for the customer to respond before retrying." });
+    }
+
+    // Validate requested amount does not exceed outstanding balance
+    const paidRows = await CarWashPayment.aggregate([
+      { $match: { business: new mongoose.Types.ObjectId(String(business)), job: job._id } },
+      { $group: { _id: "$job", paid: { $sum: { $add: ["$amount", { $ifNull: ["$discountAmount", 0] }] } } } },
+    ]);
+    const alreadyPaid = Number(paidRows?.[0]?.paid || 0);
+    const stkAmount = Math.ceil(Number(amount));
+    const outstandingForStkCheck = round2(Math.max(0, netJobPrice(job) - alreadyPaid));
+    if (stkAmount > outstandingForStkCheck + 0.009) {
+      return next(createError(400, `Amount KES ${stkAmount} exceeds outstanding balance of KES ${outstandingForStkCheck}`));
+    }
+
     const baseURL = process.env.MPESA_ENVIRONMENT === "production"
       ? "https://api.safaricom.co.ke"
       : "https://sandbox.safaricom.co.ke";
@@ -341,7 +368,7 @@ export const initiateStkPush = async (req, res, next) => {
         Password: password,
         Timestamp: timestamp,
         TransactionType: "CustomerPayBillOnline",
-        Amount: Math.ceil(Number(amount)),
+        Amount: stkAmount,
         PartyA: normalised,
         PartyB: config.shortCode,
         PhoneNumber: normalised,
@@ -358,7 +385,7 @@ export const initiateStkPush = async (req, res, next) => {
       shortCode: String(config.shortCode),
       transactionCode: result.CheckoutRequestID || "",
       plate: String(job.plateNumber || "").toUpperCase().replace(/[^A-Z0-9]/g, ""),
-      amount: Math.ceil(Number(amount)),
+      amount: stkAmount,
       msisdn: "0" + normalised.slice(3),
       matchedJob: job._id,
       status: "stk_pending",

@@ -8,6 +8,7 @@
 
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import FinancialLedgerEntry from "../../../models/FinancialLedgerEntry.js";
+import CarWashStaffCommission from "../models/CarWashStaffCommission.js";
 import { postEntry, postReversal } from "../../../services/ledgerPostingService.js";
 import { aggregateChartOfAccountBalances } from "../../../services/chartAccountAggregationService.js";
 import { resolveAuditActorUserId } from "../../../utils/systemActor.js";
@@ -346,6 +347,18 @@ export const postCarWashCommissionAccrual = async ({ req, commission }) => {
  */
 export const postCarWashCommissionPayout = async ({ req, payout, cashbookAccount }) => {
   const businessId = payout.business;
+
+  const existingCount = await FinancialLedgerEntry.countDocuments({
+    business: payout.business,
+    sourceTransactionType: "carwash_commission_payout",
+    sourceTransactionId: String(payout._id),
+    status: { $ne: "reversed" },
+  });
+  if (existingCount > 0) {
+    console.warn("[CW Accounting] Commission payout %s already posted — skipping.", payout._id);
+    return;
+  }
+
   const actorUserId = await resolveAuditActorUserId({ req, businessId });
   const payableAccount = await resolveCarWashAccount(businessId, "2160");
 
@@ -409,6 +422,18 @@ export const postCarWashCommissionPayoutWithSavings = async ({
   req, payout, cashbookAccount, commissionAmount, netCash, savingsHeld,
 }) => {
   const businessId = payout.business;
+
+  const existingCount = await FinancialLedgerEntry.countDocuments({
+    business: payout.business,
+    sourceTransactionType: "carwash_commission_payout",
+    sourceTransactionId: String(payout._id),
+    status: { $ne: "reversed" },
+  });
+  if (existingCount > 0) {
+    console.warn("[CW Accounting] Commission payout %s already posted — skipping.", payout._id);
+    return;
+  }
+
   const actorUserId = await resolveAuditActorUserId({ req, businessId });
   const [payableAccount, savingsAccount] = await Promise.all([
     resolveCarWashAccount(businessId, "2160"),
@@ -656,7 +681,6 @@ export const cancelCarWashCommissionList = async ({ req, businessId, commissions
   }
 
   if (bulkOps.length) {
-    const { default: CarWashStaffCommission } = await import("../models/CarWashStaffCommission.js");
     await CarWashStaffCommission.bulkWrite(bulkOps);
   }
   if (accountIds.size) await aggregateChartOfAccountBalances(businessId, [...accountIds]);
