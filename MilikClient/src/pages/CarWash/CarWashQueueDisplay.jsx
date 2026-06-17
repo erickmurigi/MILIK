@@ -64,7 +64,7 @@ const JobCard = ({ job, position, dimmed }) => {
         className={`font-black leading-none tracking-widest ${plateColor}`}
         style={{ fontSize: "clamp(1.4rem, 3vw, 2.6rem)" }}
       >
-        {job.plate}
+        {job.plateNumber || job.plate || "—"}
       </div>
 
       {job.service && (
@@ -89,9 +89,11 @@ const CarWashQueueDisplay = () => {
   // collected: Map<jobId, { job, expireAt }>
   const collectedRef = useRef(new Map());
   const [collected, setCollected] = useState([]);
+  const [fetchError, setFetchError] = useState(false);
   const prevJobsRef  = useRef(new Map()); // jobId → status from last poll
   const timerRef     = useRef(null);
   const pruneRef     = useRef(null);
+  const failCountRef = useRef(0);
 
   // Clock — tick every second
   useEffect(() => {
@@ -118,9 +120,9 @@ const CarWashQueueDisplay = () => {
     return () => clearInterval(pruneRef.current);
   }, []);
 
-  const fetchQueue = async () => {
+  const fetchQueue = async (signal) => {
     try {
-      const res  = await fetch(`/api/carwash/display/${businessId}/queue`);
+      const res  = await fetch(`/api/carwash/display/${businessId}/queue`, { signal });
       if (!res.ok) return;
       const json = await res.json();
       if (!json.success) return;
@@ -151,7 +153,13 @@ const CarWashQueueDisplay = () => {
       setCollected([...collectedRef.current.values()].map((e) => e.job));
       setData(json);
       setLastOk(new Date());
-    } catch { /* keep last data on network error */ }
+      failCountRef.current = 0;
+      setFetchError(false);
+    } catch (err) {
+      if (err.name === "AbortError") return; // expected on cleanup
+      failCountRef.current += 1;
+      if (failCountRef.current >= 3) setFetchError(true);
+    }
   };
 
   // Clear stale cross-business state when the route changes
@@ -159,12 +167,20 @@ const CarWashQueueDisplay = () => {
     collectedRef.current.clear();
     prevJobsRef.current.clear();
     setCollected([]);
+    failCountRef.current = 0;
+    setFetchError(false);
   }, [businessId]);
 
   useEffect(() => {
-    fetchQueue();
-    timerRef.current = setInterval(fetchQueue, POLL_INTERVAL);
-    return () => clearInterval(timerRef.current);
+    const controller = new AbortController();
+    const { signal } = controller;
+
+    fetchQueue(signal);
+    timerRef.current = setInterval(() => fetchQueue(signal), POLL_INTERVAL);
+    return () => {
+      controller.abort();
+      clearInterval(timerRef.current);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId]);
 
@@ -201,6 +217,11 @@ const CarWashQueueDisplay = () => {
           {lastOk && (
             <p className="mt-0.5 text-xs text-white/20">
               Updated {elapsed(lastOk.toISOString())}
+            </p>
+          )}
+          {fetchError && (
+            <p className="mt-0.5 text-xs font-bold text-red-400 animate-pulse">
+              Connection lost — retrying…
             </p>
           )}
         </div>

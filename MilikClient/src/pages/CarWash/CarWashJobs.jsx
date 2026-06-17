@@ -664,6 +664,7 @@ const CarWashJobs = () => {
   const [jobPhotos, setJobPhotos]     = useState({});    // { [jobId]: string[] }
   const [cameraJobId, setCameraJobId] = useState(null);  // jobId that has camera open
   const [stkPushing, setStkPushing] = useState(false);
+  const [submittingPayment, setSubmittingPayment] = useState(false);
   // job-level payments: { [jobId]: { loading: bool, list: [] } }
   const [jobPayments, setJobPayments] = useState({});
 
@@ -703,6 +704,7 @@ const CarWashJobs = () => {
   const cashbookDefaultsRef = useRef(cashbookDefaults);
   useEffect(() => { cashbookDefaultsRef.current = cashbookDefaults; }, [cashbookDefaults]);
   const loadJobsRef = useRef(null);
+  const updatingJobsRef = useRef(new Set());
 
   const loadJobs = useCallback(async () => {
     setLoading(true);
@@ -811,21 +813,26 @@ const CarWashJobs = () => {
 
   const recordPayment = async (event) => {
     event.preventDefault();
+    if (submittingPayment) return;
     if (paymentForm.method === "mpesa" && !paymentForm.reference?.trim()) {
       toast.error("M-Pesa transaction code is required");
       return;
     }
+    setSubmittingPayment(true);
     try {
       await carWashApi.recordPayment({
         ...paymentForm,
         amount: Number(paymentForm.amount || 0),
         discountAmount: Number(paymentForm.discountAmount || 0),
       });
+      setJobPayments((prev) => { const n = { ...prev }; delete n[paymentForm.job]; return n; });
       closePaymentModal();
       await loadJobsRef.current?.();
       toast.success("Payment recorded");
     } catch (error) {
       toast.error(error?.response?.data?.message || "Unable to record payment");
+    } finally {
+      setSubmittingPayment(false);
     }
   };
 
@@ -852,6 +859,8 @@ const CarWashJobs = () => {
   };
 
   const updateStatus = useCallback(async (job, status) => {
+    if (updatingJobsRef.current.has(job._id)) return;
+    updatingJobsRef.current.add(job._id);
     const previous = job.status;
     setJobs((prev) => prev.map((j) => (j._id === job._id ? { ...j, status } : j)));
     try {
@@ -859,6 +868,8 @@ const CarWashJobs = () => {
     } catch (error) {
       setJobs((prev) => prev.map((j) => (j._id === job._id ? { ...j, status: previous } : j)));
       toast.error(error?.response?.data?.message || "Unable to update job status");
+    } finally {
+      updatingJobsRef.current.delete(job._id);
     }
   }, []);
 
@@ -1011,9 +1022,9 @@ ${discount > 0 ? `<tr class="dis"><td>Discount</td><td class="amt">- ${fmtAmt(di
 
     const w = window.open("", "_blank", "width=600,height=800");
     if (!w) return;
+    w.onload = () => { w.focus(); w.print(); };
     w.document.write(html);
     w.document.close();
-    w.onload = () => { w.focus(); w.print(); };
   }, [currentCompany, settingsAndBranch]);
 
   const onSetPhotos = useCallback((jobId, photos) => {
@@ -1332,8 +1343,8 @@ ${discount > 0 ? `<tr class="dis"><td>Discount</td><td class="amt">- ${fmtAmt(di
                 Cancel
               </button>
               {canRecordPayment && (
-                <button type="submit" form="carwash-payment-form" className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127]">
-                  Record Payment
+                <button type="submit" form="carwash-payment-form" disabled={submittingPayment} className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60">
+                  {submittingPayment ? "Saving…" : "Record Payment"}
                 </button>
               )}
             </>

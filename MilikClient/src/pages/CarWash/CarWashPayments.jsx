@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
@@ -33,6 +33,7 @@ const CarWashPayments = () => {
   const [smsTarget, setSmsTarget] = useState(null);
   const [smsBody, setSmsBody] = useState("");
   const [smsSending, setSmsSending] = useState(false);
+  const reconcilingRef = useRef(new Set());
 
   const { data: paymentsData, isLoading: loading, error, refetch } = useQuery({
     queryKey: ["cw-payments", appliedFilters, page, pageSize],
@@ -54,7 +55,7 @@ const CarWashPayments = () => {
   useEffect(() => { if (error) toast.error("Failed to load payments"); }, [error]);
   useEffect(() => { setExpandedIds([]); }, [paymentsData]);
 
-  const rows = normalizeListPayload(paymentsData, "payments");
+  const rows = useMemo(() => normalizeListPayload(paymentsData, "payments"), [paymentsData]);
   const pagination = paymentsData?.pagination || { page, limit: pageSize, total: rows.length, pages: 1 };
   const cashbooks = cashbooksRaw ?? [];
 
@@ -100,6 +101,7 @@ const CarWashPayments = () => {
 
   const sendSms = async (phone, body) => {
     if (!smsTarget) return;
+    if (!phone) { toast.error("No phone number available for this payment"); return; }
     setSmsSending(true);
     try {
       await carWashApi.sendPaymentSms(smsTarget._id, { phone, body });
@@ -129,13 +131,18 @@ const CarWashPayments = () => {
   };
 
   const updateReconciliation = async (row, status) => {
+    const paymentId = row._id;
+    if (reconcilingRef.current.has(paymentId)) return;
+    reconcilingRef.current.add(paymentId);
     const note = status === "flagged" ? window.prompt("Reason for flagging this payment?", row.reconciliationNote || "") || "" : row.reconciliationNote || "";
     try {
-      await carWashApi.updatePaymentReconciliation(row._id, { reconciliationStatus: status, reconciliationNote: note });
+      await carWashApi.updatePaymentReconciliation(paymentId, { reconciliationStatus: status, reconciliationNote: note });
       await queryClient.invalidateQueries({ queryKey: ["cw-payments"] });
       toast.success("Payment reconciliation updated");
     } catch (error) {
       toast.error(error?.response?.data?.message || "Unable to update reconciliation");
+    } finally {
+      reconcilingRef.current.delete(paymentId);
     }
   };
 

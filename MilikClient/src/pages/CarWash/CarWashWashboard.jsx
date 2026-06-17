@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import toast from "react-hot-toast";
+import { toast } from "react-toastify";
 import { FaRedoAlt } from "react-icons/fa";
 import { carWashApi, normalizeListPayload } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
@@ -72,15 +72,24 @@ const CarWashWashboard = () => {
   const [jobs,    setJobs]    = useState([]);
   const [loading, setLoading] = useState(true);
   const [,        setTick]    = useState(0); // drives elapsed time re-renders every minute
-  const timerRef = useRef(null);
-  const tickRef  = useRef(null);
+  const timerRef     = useRef(null);
+  const tickRef      = useRef(null);
+  const advancingRef = useRef(new Set());
+  const failCountRef = useRef(0);
 
   const load = useCallback(async () => {
     try {
       const payload = await carWashApi.listJobs({ dateFrom: today(), dateTo: today(), limit: 200 });
       const list = normalizeListPayload(payload, "jobs");
       setJobs(list.filter((j) => ["waiting", "washing", "done"].includes(j.status)));
-    } catch { /* keep last data on error */ }
+      if (failCountRef.current >= 3) toast.dismiss("washboard-offline");
+      failCountRef.current = 0;
+    } catch {
+      failCountRef.current += 1;
+      if (failCountRef.current >= 3) {
+        toast.warn("Connection lost — showing cached data. Retrying...", { toastId: "washboard-offline", autoClose: false });
+      }
+    }
     finally { setLoading(false); }
   }, []);
 
@@ -92,14 +101,19 @@ const CarWashWashboard = () => {
   }, [load]);
 
   const advance = useCallback(async (job, nextStatus) => {
-    const prev = job.status;
+    if (advancingRef.current.has(job._id)) return;
+    advancingRef.current.add(job._id);
+    const prevStatus    = job.status;
+    const prevUpdatedAt = job.updatedAt;
     // also update updatedAt optimistically so elapsed time reflects the new state immediately
     setJobs((all) => all.map((j) => (j._id === job._id ? { ...j, status: nextStatus, updatedAt: new Date().toISOString() } : j)));
     try {
       await carWashApi.updateJobStatus(job._id, nextStatus);
     } catch (err) {
-      setJobs((all) => all.map((j) => (j._id === job._id ? { ...j, status: prev } : j)));
+      setJobs((all) => all.map((j) => (j._id === job._id ? { ...j, status: prevStatus, updatedAt: prevUpdatedAt } : j)));
       toast.error(err?.response?.data?.message || "Status update failed");
+    } finally {
+      advancingRef.current.delete(job._id);
     }
   }, []);
 
