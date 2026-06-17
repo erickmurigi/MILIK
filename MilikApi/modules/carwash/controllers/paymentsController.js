@@ -227,7 +227,13 @@ export const deletePayment = async (req, res, next) => {
         { $inc: { accountCredit: round2(Number(payment.amount || 0)) } }
       );
     }
-    await revokeStampForJob({ business, jobId: jobBeforeDelete._id, plate: jobBeforeDelete.plateNumber });
+    // Only revoke the stamp when the job becomes fully unpaid AND staff never manually
+    // marked it done. If another payment remains (still partial), the customer earned
+    // the stamp. If the job is "done", the car was serviced — stamp stands.
+    const jobWillBeUnpaid = paidAfterDelete <= 0;
+    if (jobWillBeUnpaid && jobBeforeDelete.status !== "done") {
+      await revokeStampForJob({ business, jobId: jobBeforeDelete._id, plate: jobBeforeDelete.plateNumber });
+    }
     const deletedPaymentId = payment._id;
     await payment.deleteOne();
     // If this payment was linked to an M-Pesa notification, return it to unmatched

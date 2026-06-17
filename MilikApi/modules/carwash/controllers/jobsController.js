@@ -528,7 +528,7 @@ export const updateJob = async (req, res, next) => {
         ? "Car Wash job was cancelled."
         : "Job not yet paid.";
       await cancelJobCommissions({ req, business, jobId: existing._id, reason: cancelReason });
-      if (existing.status === "done" && existing.creditAccount) {
+      if (existing.status === "done") {
         try {
           await awardLoyaltyStamp({ business, job: existing });
         } catch (err) {
@@ -582,7 +582,7 @@ export const updateJobStatus = async (req, res, next) => {
         ? "Car Wash job was cancelled."
         : "Job not yet paid.";
       await cancelJobCommissions({ req, business, jobId: job._id, reason: cancelReason });
-      if (status === "done" && job.creditAccount) {
+      if (status === "done") {
         try {
           await awardLoyaltyStamp({ business, job });
         } catch (err) {
