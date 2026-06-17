@@ -584,13 +584,15 @@ export const confirmCarWashCallback = async (req, res) => {
     }
 
     const paidAmount = round2(amount);
+    // Cap the recorded payment at the outstanding amount — excess is routed separately
+    const appliedAmount = round2(Math.min(paidAmount, outstanding));
     let payment;
     try {
       payment = await CarWashPayment.create({
         business: businessId,
         branch: branchId,
         job: job._id,
-        amount: paidAmount,
+        amount: appliedAmount,
         method: "mpesa",
         cashbookAccount: cashbook._id,
         reference: transactionCode || "",
@@ -636,15 +638,30 @@ export const confirmCarWashCallback = async (req, res) => {
     // Route M-Pesa overpayment to the customer's credit/prepaid account if any
     const overpayment = round2(paidAmount - outstanding);
     if (overpayment > 0.009 && plate) {
-      CarWashCreditAccount.findOneAndUpdate(
-        { business: businessId, plates: plate, status: "active" },
-        { $inc: { accountCredit: overpayment } }
-      ).catch(() => {});
+      (async () => {
+        try {
+          const overpayAcc = await CarWashCreditAccount.findOne({ business: businessId, plates: plate, status: "active" });
+          if (!overpayAcc) return;
+          overpayAcc.accountCredit = Math.round(((overpayAcc.accountCredit || 0) + overpayment + Number.EPSILON) * 100) / 100;
+          await overpayAcc.save();
+          const topupDoc = await CarWashAccountTopup.create({
+            business: businessId,
+            account: overpayAcc._id,
+            amount: overpayment,
+            method: "mpesa",
+            reference: transactionCode || "",
+            cashbookAccount: cashbook._id,
+            paymentDate: transDate,
+            notes: `Overpayment credited from M-Pesa C2B (${senderName || "Unknown"})`,
+          });
+          postCarWashTopupLedger({ businessId, topup: topupDoc, cashbookAccountId: cashbook._id, userId: null }).catch(() => {});
+        } catch (_) {}
+      })();
     }
 
     if (updatedJob) {
       await accrueCommissionForJob({ req: null, job: updatedJob });
-      const remainingBalance = round2(Math.max(0, outstanding - paidAmount));
+      const remainingBalance = round2(Math.max(0, outstanding - appliedAmount));
       const mpesaMasked1 = !normalizedMsisdn && msisdn && !tsqWillFire ? msisdn : null;
       let loyaltySmsBody = null;
       if (["paid", "partial"].includes(updatedJob.paymentStatus)) {

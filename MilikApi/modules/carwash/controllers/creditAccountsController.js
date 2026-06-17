@@ -68,7 +68,7 @@ const computeAccountBalance = async (business, accountId) => {
   ]);
 
   const totalInvoiced = uniqueJobs.reduce((sum, j) => sum + Math.max(0, Number(j.price || 0) - Number(j.discountAmount || 0)), 0);
-  return round2(totalInvoiced - Number(totals[0]?.paid || 0));
+  return round2(Math.max(0, totalInvoiced - Number(totals[0]?.paid || 0)));
 };
 
 // Batch variant — computes balances for all accounts in 2 queries instead of 3N.
@@ -129,7 +129,7 @@ const computeAllBalances = async (business, accounts) => {
       invoiced += Math.max(0, Number(j?.price || 0) - Number(j?.discountAmount || 0));
       paid     += paidByJob.get(jid) || 0;
     }
-    result[accIdStr] = round2(invoiced - paid);
+    result[accIdStr] = round2(Math.max(0, invoiced - paid));
   }
   return result;
 };
