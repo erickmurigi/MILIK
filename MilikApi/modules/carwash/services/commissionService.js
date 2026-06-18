@@ -77,7 +77,11 @@ export const buildPaidLineSet = (serviceLines, totalPaid) => {
 };
 
 export const accrueCommissionForJob = async ({ req = null, job, paidLineSet = null }) => {
-  if (!job || String(job.status || "").toLowerCase() !== "paid") return null;
+  // Accept legacy status="paid" OR modern paymentStatus="partial"/"paid".
+  // "unpaid" means no payment has been recorded — nothing to accrue against.
+  const jobStatus     = String(job?.status       || "").toLowerCase();
+  const paymentStatus = String(job?.paymentStatus || "").toLowerCase();
+  if (!job || (jobStatus !== "paid" && paymentStatus === "unpaid")) return null;
 
   const rawStaff = Array.isArray(job.assignedStaff) ? job.assignedStaff : (job.assignedStaff ? [job.assignedStaff] : []);
   const jobStaffIds = rawStaff

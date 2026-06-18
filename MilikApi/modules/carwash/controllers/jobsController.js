@@ -9,7 +9,7 @@ import CarWashCreditAccount from "../models/CarWashCreditAccount.js";
 import CarWashAccountStatement from "../models/CarWashAccountStatement.js";
 import CarWashStaffCommission from "../models/CarWashStaffCommission.js";
 import { currentUserId, escapeRegex, netJobPrice, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
-import { accrueCommissionForJob, cancelJobCommissions } from "../services/commissionService.js";
+import { accrueCommissionForJob, cancelJobCommissions, markJobCommissionsPayable } from "../services/commissionService.js";
 import { carpetUpload, fileUrlFromName, deletePhotoFile } from "../middleware/carpetUpload.js";
 import { autoEnrollPlate, awardLoyaltyStamp } from "./loyaltyController.js";
 import { normalizePlate } from "../utils/plateUtils.js";
@@ -416,6 +416,13 @@ export const createJob = async (req, res, next) => {
           const newPaymentStatus = autoApply >= netPrice - 0.009 ? "paid" : "partial";
           await CarWashJob.updateOne({ _id: job._id }, { paymentStatus: newPaymentStatus });
           job.paymentStatus = newPaymentStatus;
+          // Accrue commission now that a payment exists
+          accrueCommissionForJob({ req, job }).catch((err) =>
+            console.error("[CW Job] Commission accrual failed (prepaid):", err?.message)
+          );
+          if (newPaymentStatus === "paid") {
+            markJobCommissionsPayable({ business, jobId: job._id }).catch(() => {});
+          }
         }
       } catch (err) {
         console.error("[CW Job] Prepaid auto-deduct failed:", err?.message);
@@ -539,14 +546,26 @@ export const updateJob = async (req, res, next) => {
     applyPaymentStatus(existing, paidAmount);
 
     await existing.save();
-    if (existing.paymentStatus === "paid") {
+    if (existing.paymentStatus === "paid" || existing.paymentStatus === "partial") {
+      // Re-evaluate commissions with updated service lines/prices.
+      // "paid" → payable, "partial" → earned. accrueCommissionForJob handles both.
       await accrueCommissionForJob({ req, job: existing });
-      try {
-        await awardLoyaltyStamp({ business, job: existing });
-      } catch (err) {
-        console.error("[CW Loyalty] Stamp award failed job=%s: %s", existing.jobNumber, err?.message || err);
+      if (existing.paymentStatus === "paid") {
+        try {
+          await awardLoyaltyStamp({ business, job: existing });
+        } catch (err) {
+          console.error("[CW Loyalty] Stamp award failed job=%s: %s", existing.jobNumber, err?.message || err);
+        }
+      }
+      if (existing.status === "done") {
+        try {
+          await awardLoyaltyStamp({ business, job: existing });
+        } catch (err) {
+          console.error("[CW Loyalty] Stamp award failed job=%s: %s", existing.jobNumber, err?.message || err);
+        }
       }
     } else {
+      // Unpaid or cancelled — cancel any pending commissions
       const cancelReason = existing.status === "cancelled"
         ? "Car Wash job was cancelled."
         : "Job not yet paid.";
@@ -607,18 +626,9 @@ export const updateJobStatus = async (req, res, next) => {
 
     const effectiveStatus = job.status;
 
-    if (effectiveStatus === "paid") {
-      await accrueCommissionForJob({ req, job });
-      try {
-        await awardLoyaltyStamp({ business, job });
-      } catch (err) {
-        console.error("[CW Loyalty] Stamp award failed job=%s: %s", job.jobNumber, err?.message || err);
-      }
+    if (effectiveStatus === "cancelled") {
+      await cancelJobCommissions({ req, business, jobId: job._id, reason: "Car Wash job was cancelled." });
     } else {
-      const cancelReason = effectiveStatus === "cancelled"
-        ? "Car Wash job was cancelled."
-        : "Job not yet paid.";
-      await cancelJobCommissions({ req, business, jobId: job._id, reason: cancelReason });
       if (effectiveStatus === "done") {
         try {
           await awardLoyaltyStamp({ business, job });
