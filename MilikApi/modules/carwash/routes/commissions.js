@@ -16,6 +16,7 @@ import {
   reverseSavingsPayout,
   upsertCommissionRule,
 } from "../controllers/commissionsController.js";
+import { createDamage, deleteDamage, listDamages, listDamagesBalances, waiveDamage } from "../controllers/damagesController.js";
 
 const router = express.Router();
 
@@ -35,5 +36,10 @@ router.post("/savings/payouts/:id/reverse", requireCompanyPermission("carwash-co
 router.post("/savings/process", requireCompanyPermission("carwash-commissions", "manage", "carwash"), processDailySavingsManual);
 router.delete("/savings/reset", requireCompanyPermission("carwash-commissions", "manage", "carwash"), resetSavings);
 router.get("/staff/:staffId/wallet", requireCompanyPermission("carwash-commissions", "view", "carwash"), getStaffWallet);
+router.get("/damages",          requireCompanyPermission("carwash-commissions", "view",   "carwash"), listDamages);
+router.get("/damages/balances", requireCompanyPermission("carwash-commissions", "view",   "carwash"), listDamagesBalances);
+router.post("/damages",         requireCompanyPermission("carwash-commissions", "manage", "carwash"), createDamage);
+router.post("/damages/:id/waive",  requireCompanyPermission("carwash-commissions", "manage", "carwash"), waiveDamage);
+router.delete("/damages/:id",   requireCompanyPermission("carwash-commissions", "manage", "carwash"), deleteDamage);
 
 export default router;

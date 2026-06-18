@@ -23,6 +23,7 @@ const CW_ACCOUNT_TEMPLATES = {
   "5313": { name: "Car Wash Loyalty Discount",            type: "expense",   group: "expenses",    subGroup: "Car Wash Expenses" },
   "2160": { name: "Car Wash Staff Commissions Payable",   type: "liability", group: "liabilities", subGroup: "Car Wash Liabilities" },
   "2161": { name: "Car Wash Staff Savings Payable",       type: "liability", group: "liabilities", subGroup: "Car Wash Liabilities" },
+  "4401": { name: "Car Wash Staff Damage Recovery",       type: "income",    group: "income",      subGroup: "Car Wash Income" },
 };
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
@@ -419,7 +420,7 @@ export const postCarWashCommissionPayout = async ({ req, payout, cashbookAccount
  * savingsHeld      = amount moved to 2161 (Staff Savings Payable)
  */
 export const postCarWashCommissionPayoutWithSavings = async ({
-  req, payout, cashbookAccount, commissionAmount, netCash, savingsHeld,
+  req, payout, cashbookAccount, commissionAmount, netCash, savingsHeld, damagesHeld = 0,
 }) => {
   const businessId = payout.business;
 
@@ -435,9 +436,10 @@ export const postCarWashCommissionPayoutWithSavings = async ({
   }
 
   const actorUserId = await resolveAuditActorUserId({ req, businessId });
-  const [payableAccount, savingsAccount] = await Promise.all([
+  const [payableAccount, savingsAccount, damageRecoveryAccount] = await Promise.all([
     resolveCarWashAccount(businessId, "2160"),
     resolveCarWashAccount(businessId, "2161"),
+    resolveCarWashAccount(businessId, "4401"),
   ]);
 
   if (!payableAccount?._id || !cashbookAccount?._id || !savingsAccount?._id) {
@@ -507,10 +509,28 @@ export const postCarWashCommissionPayoutWithSavings = async ({
     entryIds.push(savingsLeg._id);
   }
 
+  // Cr 4401 — damages recovered from payout
+  if (round2(damagesHeld) > 0 && damageRecoveryAccount?._id) {
+    const damageLeg = await postEntry({
+      ...base,
+      accountId: damageRecoveryAccount._id,
+      amount: round2(damagesHeld),
+      direction: "credit",
+      notes: `CW staff damage recovery withheld from payout ${payout.payoutNumber}`,
+      metadata: {
+        postingRole: "carwash_damage_recovery",
+        staff: String(payout.staff),
+        offsetOfEntryId: String(debitLeg._id),
+      },
+    });
+    entryIds.push(damageLeg._id);
+  }
+
   const accountsToAggregate = [
     String(payableAccount._id),
     String(cashbookAccount._id),
     String(savingsAccount._id),
+    ...(damageRecoveryAccount?._id ? [String(damageRecoveryAccount._id)] : []),
   ];
   await aggregateChartOfAccountBalances(businessId, accountsToAggregate);
   payout.ledgerEntries = entryIds;

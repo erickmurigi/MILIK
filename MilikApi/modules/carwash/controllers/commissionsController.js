@@ -10,6 +10,8 @@ import { generatePayoutNumber } from "../services/commissionService.js";
 import { postCarWashCommissionPayout, postCarWashCommissionPayoutWithSavings, resolvePayoutCashbook, reverseCarWashCommissionAccrual, reverseCarWashPayoutLedgerEntries } from "../services/carwashAccountingService.js";
 import { holdSavingsForPayout, getStaffSavingsBalance, disburseSavings, processDailySavings } from "../services/savingsService.js";
 import CarWashStaffSaving from "../models/CarWashStaffSaving.js";
+import { holdDamagesForPayout, releaseDamagesForPayout, getStaffDamagesSummary } from "../services/damagesService.js";
+import CarWashStaffDamage from "../models/CarWashStaffDamage.js";
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 const ruleTypes = new Set(["fixed", "percentage"]);
@@ -221,16 +223,27 @@ export const createCommissionPayout = async (req, res, next) => {
       commissionPayoutId: payout._id,
       commissionAmount,
     });
-    const netCash = round2(commissionAmount - savingsHeld);
 
-    // Persist savings breakdown on the payout record
-    if (savingsHeld > 0) {
-      payout.savingsHeld = savingsHeld;
-      payout.netCash     = netCash;
+    // Hold pending damage deductions (capped so staff cannot go below zero)
+    const damagesHeld = await holdDamagesForPayout({
+      businessId: business,
+      staffId: staff,
+      commissionPayoutId: payout._id,
+      commissionAmount,
+      alreadyDeducted: savingsHeld,
+    });
+
+    const netCash = round2(commissionAmount - savingsHeld - damagesHeld);
+
+    // Persist breakdown on the payout record
+    if (savingsHeld > 0 || damagesHeld > 0) {
+      payout.savingsHeld  = savingsHeld;
+      payout.damagesHeld  = damagesHeld;
+      payout.netCash      = netCash;
       await payout.save();
-      await postCarWashCommissionPayoutWithSavings({ req, payout, cashbookAccount, commissionAmount, netCash, savingsHeld });
+      await postCarWashCommissionPayoutWithSavings({ req, payout, cashbookAccount, commissionAmount, netCash, savingsHeld, damagesHeld });
     } else {
-      payout.netCash = commissionAmount; // no savings = full amount is cash
+      payout.netCash = commissionAmount;
       await payout.save();
       await postCarWashCommissionPayout({ req, payout, cashbookAccount });
     }
@@ -248,14 +261,19 @@ export const createCommissionPayout = async (req, res, next) => {
       }
     );
 
+    const messageParts = [];
+    if (savingsHeld > 0) messageParts.push(`Ksh ${savingsHeld.toLocaleString()} held to savings`);
+    if (damagesHeld > 0) messageParts.push(`Ksh ${damagesHeld.toLocaleString()} recovered for damages`);
+
     res.status(201).json({
       success: true,
-      data: { ...payout.toObject(), savingsHeld, netCash },
+      data: { ...payout.toObject(), savingsHeld, damagesHeld, netCash },
       payout,
       savingsHeld,
+      damagesHeld,
       netCash,
-      message: savingsHeld > 0
-        ? `Commission payout recorded — Ksh ${savingsHeld.toLocaleString()} held to savings`
+      message: messageParts.length
+        ? `Commission payout recorded — ${messageParts.join(", ")}`
         : "Commission payout recorded",
     });
   } catch (error) {
@@ -320,7 +338,7 @@ export const getStaffWallet = async (req, res, next) => {
     const businessOid = new mongoose.Types.ObjectId(String(business));
     const staffOid    = new mongoose.Types.ObjectId(String(staffId));
 
-    const [commissionSummary, savings, recentSavings, recentPayouts] = await Promise.all([
+    const [commissionSummary, savings, damages, recentSavings, recentPayouts] = await Promise.all([
       CarWashStaffCommission.aggregate([
         { $match: { business: businessOid, staff: staffOid } },
         { $group: {
@@ -330,6 +348,7 @@ export const getStaffWallet = async (req, res, next) => {
         }},
       ]),
       getStaffSavingsBalance(business, staffId),
+      getStaffDamagesSummary(business, staffId),
       CarWashStaffSaving.find({ business: businessOid, staff: staffOid })
         .sort({ date: -1 })
         .limit(30)
@@ -353,6 +372,7 @@ export const getStaffWallet = async (req, res, next) => {
         staff,
         commissions,
         savings,
+        damages,
         recentSavings,
         recentPayouts,
       },
@@ -427,8 +447,7 @@ export const reverseCommissionPayout = async (req, res, next) => {
       );
     }
 
-    // 3. Release savings holds — unlink daily records from this payout so they
-    //    remain available for future payouts (do NOT delete; they still accrued)
+    // 3. Release savings holds
     if (payout.savingsHeld > 0) {
       await CarWashStaffSaving.updateMany(
         { business, commissionPayout: payout._id, type: "daily" },
@@ -436,7 +455,12 @@ export const reverseCommissionPayout = async (req, res, next) => {
       );
     }
 
-    // 4. Mark payout as reversed
+    // 4. Release damage holds — damages return to "pending" for next payout
+    if (payout.damagesHeld > 0) {
+      await releaseDamagesForPayout(business, payout._id);
+    }
+
+    // 5. Mark payout as reversed
     payout.isReversed    = true;
     payout.reversedAt    = new Date();
     payout.reversedBy    = userId;

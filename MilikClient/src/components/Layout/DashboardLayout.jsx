@@ -98,6 +98,7 @@ const MENU_PERMISSION_MAP = {
   "carwash-commission-payouts": { resource: "carwash-commissions", action: "view", moduleKey: "carwash" },
   "carwash-commission-rules":   { resource: "carwash-commissions", action: "view", moduleKey: "carwash" },
   "carwash-staff-savings":      { resource: "carwash-commissions", action: "view", moduleKey: "carwash" },
+  "carwash-staff-damages":      { resource: "carwash-commissions", action: "view", moduleKey: "carwash" },
   "carwash-all-customers":        { resource: "carwash-loyalty",   action: "view", moduleKey: "carwash" },
   "carwash-loyalty":              { resource: "carwash-loyalty",   action: "view", moduleKey: "carwash" },
   "carwash-accounts":             { resource: "carwash-payments",  action: "view", moduleKey: "carwash" },
@@ -694,6 +695,7 @@ const TopToolbar = ({
         "carwash-commission-payouts": "/carwash/commissions/payouts",
         "carwash-commission-rules":   "/carwash/commissions/rules",
         "carwash-staff-savings":      "/carwash/commissions/savings",
+        "carwash-staff-damages":      "/carwash/commissions/damages",
         "carwash-all-customers": "/carwash/customers",
         "carwash-loyalty": "/carwash/loyalty",
         "carwash-accounts": "/carwash/accounts",
@@ -1237,6 +1239,7 @@ const TopToolbar = ({
             { id: "carwash-commission-payouts", label: "Payouts",           icon: FaMoneyBillWave },
             { id: "carwash-commission-rules",   label: "Rules",             icon: FaCog },
             { id: "carwash-staff-savings",      label: "Staff Savings",     icon: FaCoins },
+            { id: "carwash-staff-damages",      label: "Staff Damages",     icon: FaExclamationTriangle },
           ],
         },
         {

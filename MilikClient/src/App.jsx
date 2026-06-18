@@ -169,6 +169,7 @@ const CarWashCommissions         = lazy(() => import("./pages/CarWash/CarWashCom
 const CarWashCommissionPayouts   = lazy(() => import("./pages/CarWash/CarWashCommissionPayouts"));
 const CarWashCommissionRules     = lazy(() => import("./pages/CarWash/CarWashCommissionRules"));
 const CarWashStaffSavings        = lazy(() => import("./pages/CarWash/CarWashStaffSavings"));
+const CarWashStaffDamages        = lazy(() => import("./pages/CarWash/CarWashStaffDamages"));
 const CarWashLoyalty             = lazy(() => import("./pages/CarWash/CarWashLoyalty"));
 const CarWashFinancials     = lazy(() => import("./pages/CarWash/CarWashFinancials"));
 const CarWashBranches       = lazy(() => import("./pages/CarWash/CarWashBranches"));
@@ -642,6 +643,7 @@ function App() {
             <Route path="/carwash/commissions/payouts"        element={<Guard moduleKey="carwash" resource="carwash-commissions"><CarWashCommissionPayouts /></Guard>} />
             <Route path="/carwash/commissions/rules"          element={<Guard moduleKey="carwash" resource="carwash-commissions"><CarWashCommissionRules /></Guard>} />
             <Route path="/carwash/commissions/savings"        element={<Guard moduleKey="carwash" resource="carwash-commissions"><CarWashStaffSavings /></Guard>} />
+            <Route path="/carwash/commissions/damages"        element={<Guard moduleKey="carwash" resource="carwash-commissions"><CarWashStaffDamages /></Guard>} />
             <Route path="/carwash/loyalty"                    element={<Guard moduleKey="carwash" resource="carwash-loyalty"><CarWashLoyalty /></Guard>} />
             <Route path="/carwash/branches"                   element={<Guard moduleKey="carwash" resource="carwash-branches"><CarWashBranches /></Guard>} />
             <Route path="/carwash/settings"                   element={<Guard moduleKey="carwash" resource="carwash-settings"><CarWashSettings /></Guard>} />
