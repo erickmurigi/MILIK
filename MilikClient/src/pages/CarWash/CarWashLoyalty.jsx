@@ -642,7 +642,7 @@ const CarWashLoyalty = () => {
           </div>
 
         </div>
-        </div>{/* end scrollable */}
+        </div>
 
         {/* Pagination bar — always visible */}
         <div className="flex-shrink-0 flex min-h-9 items-center justify-between border-t border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
@@ -676,7 +676,7 @@ const CarWashLoyalty = () => {
             </button>
           </div>
         </div>
-        </div>{/* end flex col */}
+        </div>
       )}
 
       {smsTarget && (
