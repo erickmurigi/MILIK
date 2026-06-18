@@ -78,7 +78,8 @@
       "Skill(code-review:*)",
       "Bash(git merge *)",
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(git push *)"
     ]
   }
 }
