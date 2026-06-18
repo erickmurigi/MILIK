@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   FaCar, FaCarSide, FaClock, FaCommentDots, FaEdit,
   FaExclamationTriangle, FaIdCard, FaMobileAlt, FaMoneyBillWave,
-  FaPhone, FaRedoAlt, FaSearch, FaTimes, FaUser,
+  FaPhone, FaPrint, FaRedoAlt, FaSearch, FaTimes, FaUser,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
@@ -45,7 +45,7 @@ const Modal = ({ title, children, footer, onClose }) => (
 );
 
 // ─── Compact stamp dots — mirrors CarWashLoyalty StampDots ────────────────────
-const StampBar = ({ card, program }) => {
+const StampBar = React.memo(({ card, program }) => {
   if (!card) return <span className="text-slate-300 text-[10px]">—</span>;
   const required = program?.stampsRequired || card?.program?.stampsRequired || 10;
   const current = card.currentStamps || 0;
@@ -73,94 +73,185 @@ const StampBar = ({ card, program }) => {
       {pending > 0 && <span className="ml-0.5 rounded-full bg-amber-100 px-1 py-0.5 text-[8px] font-bold text-amber-700 border border-amber-200">{pending}×</span>}
     </div>
   );
+});
+
+// ─── Print statement in a new window ──────────────────────────────────────────
+const printStatement = (customer, jobs, totals) => {
+  const fmtKES = (v) => `KES ${Number(v || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtD   = (v) => v ? new Date(v).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+  const rows = jobs.map((j) => `
+    <tr>
+      <td>${fmtD(j.date)}</td>
+      <td>${j.jobNumber}</td>
+      <td><b>${j.plateNumber}</b></td>
+      <td>${j.serviceName}</td>
+      <td class="num">${fmtKES(j.charge)}</td>
+      <td class="num">${fmtKES(j.paid)}</td>
+      <td class="num ${j.balance > 0 ? "red" : "grn"}">${fmtKES(j.balance)}</td>
+    </tr>`).join("");
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Customer Statement · ${customer.name}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;padding:24px}
+    h1{font-size:15px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#0B3B2E}
+    .sub{font-size:10px;color:#666;margin-top:2px}
+    .meta{display:flex;gap:32px;margin:16px 0 12px;border-top:2px solid #0B3B2E;padding-top:10px}
+    .meta-item label{display:block;font-size:9px;font-weight:700;text-transform:uppercase;color:#999;letter-spacing:.5px}
+    .meta-item span{font-size:11px;font-weight:600;color:#1a1a1a}
+    table{width:100%;border-collapse:collapse;margin-top:8px}
+    thead tr{background:#0B3B2E;color:#fff}
+    th{padding:6px 8px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+    th.num,td.num{text-align:right}
+    td{padding:5px 8px;border-bottom:1px solid #f0f0f0;font-size:10px}
+    tr:nth-child(even) td{background:#f8faf9}
+    .red{color:#dc2626;font-weight:700}
+    .grn{color:#16a34a;font-weight:600}
+    tfoot td{border-top:2px solid #0B3B2E;font-weight:700;padding:6px 8px;font-size:11px;background:#f4f7f5}
+    .footer{margin-top:24px;font-size:9px;color:#aaa;text-align:center}
+    @media print{body{padding:12px}}
+  </style></head><body>
+  <h1>Customer Statement</h1>
+  <div class="sub">${customer.name}${customer.phone ? " · " + customer.phone : ""}${(customer.plates||[]).length ? " · Plates: " + customer.plates.join(", ") : ""}</div>
+  <div class="meta">
+    <div class="meta-item"><label>Generated</label><span>${new Date().toLocaleDateString("en-KE",{day:"2-digit",month:"short",year:"numeric"})}</span></div>
+    <div class="meta-item"><label>Total Invoiced</label><span>${fmtKES(totals.invoiced)}</span></div>
+    <div class="meta-item"><label>Total Paid</label><span style="color:#16a34a">${fmtKES(totals.paid)}</span></div>
+    <div class="meta-item"><label>Outstanding</label><span style="color:${totals.outstanding>0?"#dc2626":"#16a34a"}">${fmtKES(totals.outstanding)}</span></div>
+  </div>
+  <table>
+    <thead><tr><th>Date</th><th>Job #</th><th>Plate</th><th>Service</th><th class="num">Charge</th><th class="num">Paid</th><th class="num">Balance</th></tr></thead>
+    <tbody>${rows || "<tr><td colspan='7' style='text-align:center;color:#999;padding:16px'>No jobs on record</td></tr>"}</tbody>
+    <tfoot><tr><td colspan="4">TOTALS</td><td class="num">${fmtKES(totals.invoiced)}</td><td class="num">${fmtKES(totals.paid)}</td><td class="num ${totals.outstanding>0?"red":"grn"}">${fmtKES(totals.outstanding)}</td></tr></tfoot>
+  </table>
+  <div class="footer">This is a computer-generated statement · ${window.location.hostname}</div>
+  <script>window.onload=()=>window.print()</script>
+  </body></html>`;
+
+  const win = window.open("", "_blank", "width=800,height=700");
+  if (win) { win.document.write(html); win.document.close(); }
 };
 
+const STMT_TH = "px-3 py-1.5 text-left text-[9px] font-bold uppercase tracking-widest text-white/80";
+const STMT_TD = "px-3 py-1.5 text-[11px] text-slate-700";
+
 // ─── Expanded detail row ───────────────────────────────────────────────────────
-const CustomerDetail = ({ customer, program, colSpan = 10 }) => {
-  const card = customer.loyaltyCard;
-  const acc = customer.creditAccount;
+const FMT_DATE_OPTS = { day: "2-digit", month: "short", year: "numeric" };
+const CustomerDetail = React.memo(({ customer, program, colSpan = 10 }) => {
+  const { data: stmtData, isLoading: loading, isError } = useQuery({
+    queryKey: ["cw-customer-stmt", String(customer._id)],
+    queryFn: () => carWashApi.getCustomerStatement(customer._id),
+    staleTime: 60_000,
+  });
+
+  const card   = customer.loyaltyCard;
+  const acc    = customer.creditAccount;
+  const totals = stmtData?.totals || { invoiced: 0, paid: 0, outstanding: 0 };
+
+  const jobs = useMemo(() =>
+    (stmtData?.jobs || []).map((j) => ({
+      ...j,
+      dateFmt: j.date ? new Date(j.date).toLocaleDateString("en-KE", FMT_DATE_OPTS) : "—",
+    })),
+  [stmtData]);
+
   return (
     <tr>
-      <td colSpan={colSpan} className="bg-[#F4F7F5]/60 px-4 py-3 border-b border-slate-200">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 text-xs">
-          {/* Contact & plates */}
-          <div>
-            <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-2">Contact & Plates</p>
-            <div className="flex items-center gap-1.5 mb-2">
-              <FaPhone size={9} className="text-slate-400 flex-shrink-0" />
-              <span className="text-slate-700">{customer.phone || "No phone on record"}</span>
-            </div>
-            <div className="flex flex-wrap gap-1">
+      <td colSpan={colSpan} className="bg-[#F4F7F5]/60 border-b border-slate-200 px-4 py-3">
+
+        {/* Header bar */}
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex flex-wrap items-center gap-3 text-[11px]">
+            <span className="flex items-center gap-1 text-slate-500"><FaPhone size={9} className="text-slate-300" />{customer.phone || "No phone"}</span>
+            <span className="flex flex-wrap gap-1">
               {(customer.plates || []).map((p) => (
-                <span key={p} className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-mono font-bold text-slate-700">
-                  {p}
-                </span>
+                <span key={p} className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-mono font-bold text-slate-700">{p}</span>
               ))}
-            </div>
-          </div>
-          {/* Financial summary */}
-          <div>
-            <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-2">Financials</p>
-            <div className="space-y-1.5">
-              {[
-                { label: "Total Invoiced", val: fmt(customer.totalInvoiced), cls: "text-slate-700" },
-                { label: "Total Paid", val: fmt(customer.totalPaid), cls: "text-emerald-700 font-semibold" },
-                { label: "Outstanding", val: fmt(customer.outstanding), cls: customer.outstanding > 0 ? "text-red-600 font-bold" : "text-slate-400" },
-              ].map(({ label, val, cls }) => (
-                <div key={label} className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-500">{label}</span>
-                  <span className={`tabular-nums ${cls}`}>{val}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          {/* Loyalty & credit */}
-          <div>
-            <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-2">Loyalty & Account</p>
-            {card ? (
-              <div className="mb-2 space-y-1">
-                <StampBar card={card} program={program} />
-                <p className="text-[10px] text-slate-500">
-                  {card.totalStampsEarned || 0} stamps earned · {card.totalRewardsEarned || 0} rewards
-                </p>
-              </div>
-            ) : (
-              <p className="text-[10px] text-slate-400 mb-2">Not enrolled in loyalty</p>
-            )}
-            {acc ? (
-              <span className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-semibold ${acctTypePill[acc.accountType] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
-                <FaIdCard size={9} /> {acc.accountNumber} · {acc.accountType}
+            </span>
+            {card && <StampBar card={card} program={program} />}
+            {acc && (
+              <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-semibold ${acctTypePill[acc.accountType] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
+                <FaIdCard size={8} />{acc.accountNumber} · {acc.accountType}
               </span>
-            ) : (
-              <p className="text-[10px] text-slate-400">No credit account</p>
             )}
           </div>
+          <button
+            onClick={() => printStatement(customer, jobs, totals)}
+            disabled={loading || !jobs.length}
+            className="flex items-center gap-1.5 border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+          >
+            <FaPrint size={9} /> Print
+          </button>
         </div>
+
+        {/* Statement table */}
+        {loading ? (
+          <div className="py-4 text-center text-[11px] text-slate-400">Loading statement…</div>
+        ) : isError ? (
+          <div className="py-4 text-center text-[11px] text-red-400">Failed to load statement</div>
+        ) : !jobs.length ? (
+          <div className="py-4 text-center text-[11px] text-slate-400">No job history on record</div>
+        ) : (
+          <div className="overflow-x-auto rounded border border-slate-200">
+            <table className="w-full min-w-[520px] border-collapse text-xs">
+              <thead>
+                <tr className="bg-[#0B3B2E]">
+                  <th className={STMT_TH}>Date</th>
+                  <th className={STMT_TH}>Job #</th>
+                  <th className={STMT_TH}>Plate</th>
+                  <th className={STMT_TH}>Service</th>
+                  <th className={`${STMT_TH} text-right`}>Charge</th>
+                  <th className={`${STMT_TH} text-right`}>Paid</th>
+                  <th className={`${STMT_TH} text-right`}>Balance</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {jobs.map((j, i) => (
+                  <tr key={String(j._id)} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/60"}>
+                    <td className={STMT_TD}>{j.dateFmt}</td>
+                    <td className={`${STMT_TD} font-mono text-[10px] text-slate-500`}>{j.jobNumber}</td>
+                    <td className={STMT_TD}><span className="rounded border border-slate-200 bg-white px-1.5 py-0.5 font-mono font-bold text-slate-700 text-[10px]">{j.plateNumber}</span></td>
+                    <td className={`${STMT_TD} max-w-[160px] truncate`}>{j.serviceName}</td>
+                    <td className={`${STMT_TD} text-right tabular-nums`}>{fmt(j.charge)}</td>
+                    <td className={`${STMT_TD} text-right tabular-nums text-emerald-700`}>{j.paid > 0 ? fmt(j.paid) : <span className="text-slate-300">—</span>}</td>
+                    <td className={`${STMT_TD} text-right tabular-nums font-bold ${j.balance > 0.005 ? "text-red-600" : "text-slate-400"}`}>{fmt(j.balance)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-slate-100 border-t-2 border-slate-300">
+                  <td colSpan={4} className="px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-widest text-slate-500">Totals</td>
+                  <td className="px-3 py-1.5 text-right text-[11px] font-bold tabular-nums text-slate-700">{fmt(totals.invoiced)}</td>
+                  <td className="px-3 py-1.5 text-right text-[11px] font-bold tabular-nums text-emerald-700">{fmt(totals.paid)}</td>
+                  <td className={`px-3 py-1.5 text-right text-[11px] font-extrabold tabular-nums ${totals.outstanding > 0.005 ? "text-red-600" : "text-slate-400"}`}>{fmt(totals.outstanding)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
       </td>
     </tr>
   );
-};
+});
 
 // ─── Row action icon button ────────────────────────────────────────────────────
-const ActionBtn = ({ icon: Icon, title, onClick, color = "slate" }) => {
-  const colors = {
-    slate:  "border-slate-200 text-slate-500 hover:border-slate-400 hover:text-slate-700 hover:bg-slate-50",
-    green:  "border-slate-200 text-slate-500 hover:border-[#0B3B2E] hover:text-[#0B3B2E] hover:bg-[#F1F6F3]",
-    amber:  "border-slate-200 text-slate-500 hover:border-amber-400 hover:text-amber-700 hover:bg-amber-50",
-    blue:   "border-slate-200 text-slate-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50",
-    red:    "border-red-200 text-red-400 hover:border-red-400 hover:text-red-700 hover:bg-red-50",
-  };
-  return (
-    <button
-      type="button"
-      title={title}
-      onClick={onClick}
-      className={`h-6 w-6 flex-shrink-0 flex items-center justify-center rounded border text-[10px] transition-colors ${colors[color] || colors.slate}`}
-    >
-      <Icon size={10} />
-    </button>
-  );
+const ACTN_COLORS = {
+  slate: "border-slate-200 text-slate-500 hover:border-slate-400 hover:text-slate-700 hover:bg-slate-50",
+  green: "border-slate-200 text-slate-500 hover:border-[#0B3B2E] hover:text-[#0B3B2E] hover:bg-[#F1F6F3]",
+  amber: "border-slate-200 text-slate-500 hover:border-amber-400 hover:text-amber-700 hover:bg-amber-50",
+  blue:  "border-slate-200 text-slate-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50",
+  red:   "border-red-200 text-red-400 hover:border-red-400 hover:text-red-700 hover:bg-red-50",
 };
+const ActionBtn = React.memo(({ icon: Icon, title, onClick, color = "slate" }) => (
+  <button
+    type="button"
+    title={title}
+    onClick={onClick}
+    className={`h-6 w-6 flex-shrink-0 flex items-center justify-center rounded border text-[10px] transition-colors ${ACTN_COLORS[color] || ACTN_COLORS.slate}`}
+  >
+    <Icon size={10} />
+  </button>
+));
 
 // ─── Main component ────────────────────────────────────────────────────────────
 export default function CarWashCustomers() {
@@ -240,10 +331,12 @@ export default function CarWashCustomers() {
   }, [customers, filterOutstanding]);
 
   const summaryStats = useMemo(() => {
-    const withOutstanding = displayed.filter((c) => c.outstanding > 0.01).length;
-    const totalOutstanding = displayed.reduce((s, c) => s + (c.outstanding || 0), 0);
-    const withCredit = displayed.filter((c) => c.creditAccount).length;
-    const withLoyalty = displayed.filter((c) => c.loyaltyCard).length;
+    let withOutstanding = 0, totalOutstanding = 0, withCredit = 0, withLoyalty = 0;
+    for (const c of displayed) {
+      if (c.outstanding > 0.01) { withOutstanding++; totalOutstanding += c.outstanding; }
+      if (c.creditAccount) withCredit++;
+      if (c.loyaltyCard)   withLoyalty++;
+    }
     return { withOutstanding, totalOutstanding, withCredit, withLoyalty };
   }, [displayed]);
 
@@ -307,22 +400,26 @@ export default function CarWashCustomers() {
     }
   };
 
-  const openEdit = (e, c) => {
+  const openEdit = useCallback((e, c) => {
     e.stopPropagation();
     setEditTarget(c);
     setEditForm({ name: c.name || "", phone: c.phone || "" });
-  };
+  }, []);
 
-  const openSms = (e, c) => {
+  const openSms = useCallback((e, c) => {
     e.stopPropagation();
     setSmsTarget(c);
-  };
+  }, []);
 
-  const viewJobs = (e, c) => {
+  const viewJobs = useCallback((e, c) => {
     e.stopPropagation();
     const plate = (c.plates || [])[0] || "";
     navigate(plate ? `/carwash/jobs?plate=${encodeURIComponent(plate)}` : "/carwash/jobs");
-  };
+  }, [navigate]);
+
+  const toggleExpand = useCallback((id) => {
+    setExpandedId((prev) => prev === id ? null : id);
+  }, []);
 
   const openSettle = async (e, c) => {
     e.stopPropagation();
@@ -507,7 +604,7 @@ export default function CarWashCustomers() {
                   {/* Row top: name + outstanding */}
                   <div
                     className="flex items-start justify-between gap-2 cursor-pointer"
-                    onClick={() => setExpandedId(isExpanded ? null : String(c._id))}
+                    onClick={() => toggleExpand(String(c._id))}
                   >
                     <div className="min-w-0">
                       <p className="text-sm font-bold text-slate-800 truncate">{c.name || <span className="text-slate-400 italic">Unnamed</span>}</p>
@@ -622,7 +719,7 @@ export default function CarWashCustomers() {
                     <React.Fragment key={String(c._id)}>
                       <tr
                         className={`${rowBg} transition-colors hover:bg-emerald-50/30 cursor-pointer group`}
-                        onClick={() => setExpandedId(isExpanded ? null : String(c._id))}
+                        onClick={() => toggleExpand(String(c._id))}
                       >
                         {/* Expand */}
                         <td className={`px-3 py-2 ${hasOutstanding ? "border-l-[3px] border-red-400" : "border-l-[3px] border-transparent"}`}>

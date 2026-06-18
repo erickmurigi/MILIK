@@ -14,6 +14,7 @@ import {
   processDueBilling,
   recordAccountPayment,
   recordAccountTopup,
+  sendStatementEmail,
   sendStatementSms,
   updateAccount,
   voidTopup,
@@ -37,6 +38,7 @@ router.post("/:id/statements",                    generateStatement);
 router.get("/:id/statements",                     listStatements);
 router.get("/:id/statements/:statementId",        getStatement);
 router.post("/:id/statements/:statementId/sms",   sendStatementSms);
+router.post("/:id/statements/:statementId/email", sendStatementEmail);
 
 // Force-seed all car wash system chart of accounts for this business
 router.post("/setup/seed-accounts", async (req, res, next) => {

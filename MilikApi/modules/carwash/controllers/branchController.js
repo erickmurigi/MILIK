@@ -2,7 +2,9 @@ import mongoose from "mongoose";
 import { createError } from "../../../utils/error.js";
 import CarWashBranch from "../models/CarWashBranch.js";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
+import Company from "../../../models/Company.js";
 import { currentUserId, parseBoolean, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
+import { getRawMpesaPaybillConfigs } from "../../../utils/companyModules.js";
 
 const METHODS = ["cash", "mpesa", "bank", "card", "other"];
 const BRANCH_TYPES = ["vehicle", "carpet", "both"];
@@ -17,11 +19,27 @@ const sanitizeBranchPayload = (body = {}) => ({
   location: String(body.location || "").trim().toUpperCase(),
   address: String(body.address || "").trim().toUpperCase(),
   phone: String(body.phone || "").trim(),
-  mpesaShortCode: String(body.mpesaShortCode || "").trim(),
+  mpesaShortCode: String(body.mpesaShortCode || "").trim() || null,
   branchType: BRANCH_TYPES.includes(body.branchType) ? body.branchType : "both",
   active: parseBoolean(body.active, true),
   isDefault: parseBoolean(body.isDefault, false),
 });
+
+const validateBranchShortCode = async (business, shortCode, excludeBranchId = null) => {
+  if (!shortCode) return null;
+
+  const query = { business, mpesaShortCode: shortCode };
+  if (excludeBranchId) query._id = { $ne: excludeBranchId };
+  const conflict = await CarWashBranch.findOne(query).select("_id name").lean();
+  if (conflict) return `Shortcode ${shortCode} is already assigned to branch "${conflict.name}"`;
+
+  const company = await Company.findById(business).select("paymentIntegration").lean();
+  const configs = getRawMpesaPaybillConfigs(company?.paymentIntegration || {});
+  const registered = configs.some((c) => String(c?.shortCode || "").trim() === shortCode);
+  if (!registered) return `Shortcode ${shortCode} is not in this company's M-Pesa paybill configurations. Add it under Setup → M-Pesa first.`;
+
+  return null;
+};
 
 const resolveBranchCashbooks = async (business, raw = {}, next) => {
   const result = {};
@@ -101,6 +119,9 @@ export const createBranch = async (req, res, next) => {
       : {};
     if (defaultCashbooks === null) return;
 
+    const shortCodeError = await validateBranchShortCode(business, payload.mpesaShortCode);
+    if (shortCodeError) return next(createError(400, shortCodeError));
+
     if (payload.isDefault) {
       await CarWashBranch.updateMany({ business, isDefault: true }, { isDefault: false });
     }
@@ -129,6 +150,9 @@ export const updateBranch = async (req, res, next) => {
       ? await resolveBranchCashbooks(business, req.body.defaultCashbooks, next)
       : {};
     if (defaultCashbooks === null) return;
+
+    const shortCodeError = await validateBranchShortCode(business, payload.mpesaShortCode, req.params.id);
+    if (shortCodeError) return next(createError(400, shortCodeError));
 
     if (payload.isDefault) {
       await CarWashBranch.updateMany({ business, isDefault: true, _id: { $ne: req.params.id } }, { isDefault: false });

@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  FaCheckCircle, FaExclamationTriangle, FaMobileAlt, FaRedoAlt,
+  FaCheckCircle, FaCodeBranch, FaExclamationTriangle, FaMobileAlt, FaRedoAlt,
   FaSearch, FaTimesCircle, FaCopy, FaLink, FaTimes, FaCarAlt, FaUndo,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -36,6 +36,191 @@ const StatusBadge = ({ status }) => {
 
 const fmtDate = (v) =>
   v ? new Date(v).toLocaleString("en-KE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
+
+// ─── Allocate Modal — memoized row ───────────────────────────────────────────
+const JobAllocRow = React.memo(({ job, value, available, onSet, onFill }) => (
+  <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-2.5 hover:bg-slate-50">
+    <div className="min-w-0 flex-1">
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-extrabold tracking-wider text-slate-900">{job.plateNumber}</span>
+        <span className="font-mono text-[10px] text-slate-400">{job.jobNumber}</span>
+      </div>
+      <div className="mt-0.5 text-[10px] text-slate-500">
+        {job.customerName || "—"} · {job.serviceName || "—"} · {fmtDate(job.createdAt)}
+      </div>
+    </div>
+    <div className="flex-shrink-0 text-right">
+      <div className="text-[10px] text-slate-400">Outstanding</div>
+      <div className="text-xs font-bold text-red-600">{formatMoney(job.outstanding)}</div>
+    </div>
+    <div className="flex flex-shrink-0 items-center gap-1">
+      <input
+        type="number" min="0" step="1" max={job.outstanding}
+        value={value}
+        onChange={(e) => onSet(String(job._id), e.target.value)}
+        className="h-8 w-24 border border-slate-300 px-2 text-right text-xs focus:border-[#0B3B2E] focus:outline-none"
+        placeholder="0"
+      />
+      <button
+        type="button"
+        onClick={() => onFill(String(job._id), job.outstanding)}
+        className="h-8 border border-slate-200 bg-slate-50 px-2 text-[10px] font-bold text-slate-500 hover:bg-slate-100"
+        title="Fill outstanding"
+      >
+        Fill
+      </button>
+    </div>
+  </div>
+));
+
+// ─── Allocate Modal ───────────────────────────────────────────────────────────
+function AllocateModal({ notif, onClose, onAllocated }) {
+  const [jobs, setJobs]               = useState([]);
+  const [loadingJobs, setLoadingJobs] = useState(true);
+  const [plateSearch, setPlateSearch] = useState("");
+  const [allocations, setAllocations] = useState({});
+  const [saving, setSaving]           = useState(false);
+
+  const available = Number(notif.amount) - Number(notif.allocatedAmount || 0);
+
+  useEffect(() => {
+    carWashApi.listUnpaidJobs()
+      .then((d) => setJobs(Array.isArray(d) ? d : []))
+      .catch(() => toast.error("Failed to load unpaid jobs"))
+      .finally(() => setLoadingJobs(false));
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = plateSearch.trim().toUpperCase();
+    if (!q) return jobs;
+    return jobs.filter((j) =>
+      j.plateNumber?.toUpperCase().includes(q) ||
+      j.jobNumber?.includes(q) ||
+      j.customerName?.toUpperCase().includes(q)
+    );
+  }, [jobs, plateSearch]);
+
+  // Stable setters — functional updates so rows don't need leftover in deps
+  const onSet = useCallback((id, val) => setAllocations((p) => ({ ...p, [id]: val })), []);
+  const onFill = useCallback((id, outstanding) => {
+    setAllocations((p) => {
+      const otherTotal = Object.entries(p).reduce((s, [k, v]) => k !== id ? s + (Number(v) || 0) : s, 0);
+      const leftover   = available - otherTotal;
+      return { ...p, [id]: String(Math.min(outstanding, Math.max(0, leftover))) };
+    });
+  }, [available]);
+
+  const totalAllocating = useMemo(
+    () => Object.values(allocations).reduce((s, v) => s + (Number(v) || 0), 0),
+    [allocations]
+  );
+  const leftover = available - totalAllocating;
+  const isOver   = totalAllocating > available + 0.01;
+
+  const handleConfirm = useCallback(async () => {
+    const allocs = Object.entries(allocations)
+      .map(([jobId, amount]) => ({ jobId, amount: Number(amount) }))
+      .filter((a) => a.amount > 0);
+    if (!allocs.length) return toast.warning("Add at least one amount");
+    if (isOver) return toast.warning("Total exceeds available amount");
+    setSaving(true);
+    try {
+      const res = await carWashApi.allocateMpesaPayment(notif._id, { allocations: allocs });
+      toast.success(res?.message || "Payment allocated");
+      onAllocated(res?.notification || res?.data?.notification);
+      onClose();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Allocation failed");
+    } finally {
+      setSaving(false);
+    }
+  }, [allocations, isOver, notif._id, onAllocated, onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="flex w-full max-w-2xl flex-col border border-slate-200 bg-white shadow-xl" style={{ maxHeight: "90vh" }}>
+        {/* Header */}
+        <div className="flex flex-shrink-0 items-center justify-between bg-[#0B3B2E] px-4 py-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-white">Allocate Payment</p>
+            <p className="text-[11px] text-emerald-200">
+              Ksh {formatMoney(notif.amount)} · {notif.senderName || "Unknown"} · <span className="font-mono">{notif.transactionCode || "—"}</span>
+            </p>
+          </div>
+          <button onClick={onClose} className="text-white/70 hover:text-white"><FaTimes size={14} /></button>
+        </div>
+
+        {/* Amount strip */}
+        <div className="flex flex-shrink-0 items-center gap-6 border-b border-slate-200 bg-slate-50 px-4 py-2">
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Available</div>
+            <div className="text-sm font-black text-emerald-700">{formatMoney(available)}</div>
+          </div>
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Allocating</div>
+            <div className={`text-sm font-black ${isOver ? "text-red-600" : "text-slate-900"}`}>{formatMoney(totalAllocating)}</div>
+          </div>
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Leftover</div>
+            <div className={`text-sm font-black ${leftover < 0 ? "text-red-600" : "text-slate-400"}`}>{formatMoney(Math.abs(leftover))}</div>
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="flex-shrink-0 border-b border-slate-200 px-4 py-2">
+          <input
+            className="h-8 w-full border border-slate-300 px-3 text-xs font-semibold uppercase placeholder:normal-case focus:border-[#0B3B2E] focus:outline-none"
+            placeholder="Search by plate, job #, or customer…"
+            value={plateSearch}
+            onChange={(e) => setPlateSearch(e.target.value)}
+            autoComplete="new-password"
+          />
+        </div>
+
+        {/* Job list */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {loadingJobs ? (
+            <p className="px-4 py-8 text-center text-xs text-slate-400">Loading unpaid jobs…</p>
+          ) : filtered.length === 0 ? (
+            <p className="px-4 py-8 text-center text-xs text-slate-400">
+              {plateSearch ? "No jobs match your search" : "No unpaid jobs found in the last 6 months"}
+            </p>
+          ) : filtered.map((j) => (
+            <JobAllocRow
+              key={j._id}
+              job={j}
+              value={allocations[String(j._id)] ?? ""}
+              available={available}
+              onSet={onSet}
+              onFill={onFill}
+            />
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div className="flex flex-shrink-0 items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3">
+          {isOver ? (
+            <span className="text-xs font-bold text-red-600">Total exceeds available by {formatMoney(Math.abs(leftover))}</span>
+          ) : (
+            <span className="text-[11px] text-slate-500">
+              {Object.values(allocations).filter((v) => Number(v) > 0).length} job(s) · {formatMoney(totalAllocating)} allocating
+            </span>
+          )}
+          <div className="flex gap-2">
+            <button onClick={onClose} className="inline-flex h-8 items-center px-3 text-xs font-bold text-slate-600 hover:text-slate-900">Cancel</button>
+            <button
+              onClick={handleConfirm}
+              disabled={saving || isOver || totalAllocating <= 0}
+              className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50"
+            >
+              <FaCodeBranch size={9} /> {saving ? "Allocating…" : "Confirm Allocation"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Assign Modal ─────────────────────────────────────────────────────────────
 function AssignModal({ notif, onClose, onAssigned }) {
@@ -198,8 +383,9 @@ export default function CarWashMpesaNotifications() {
   const [summary, setSummary] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, limit: PAGE_SIZE, total: 0, pages: 1 });
   const [loading, setLoading] = useState(false);
-  const [expanded, setExpanded] = useState(null);
+  const [expanded, setExpanded]         = useState(null);
   const [assignTarget, setAssignTarget] = useState(null);
+  const [allocateTarget, setAllocateTarget] = useState(null);
 
   const [filters, setFilters] = useState({ status: "", plate: "", dateFrom: todayISO(), dateTo: todayISO() });
   const [applied, setApplied] = useState({ status: "", plate: "", dateFrom: todayISO(), dateTo: todayISO() });
@@ -234,13 +420,16 @@ export default function CarWashMpesaNotifications() {
     setFilters(d); setApplied(d); setPage(1);
   };
 
-  const handleAssigned = (updated) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n._id === updated._id ? { ...n, ...updated } : n))
-    );
+  const handleAssigned = useCallback((updated) => {
+    setNotifications((prev) => prev.map((n) => (n._id === updated._id ? { ...n, ...updated } : n)));
     setSummary([]);
     load();
-  };
+  }, [load]);
+
+  const handleAllocated = useCallback((updated) => {
+    if (updated) setNotifications((prev) => prev.map((n) => (n._id === updated._id ? { ...n, ...updated } : n)));
+    load();
+  }, [load]);
 
   const summaryMap = Object.fromEntries(summary.map(s => [s._id, s]));
   const totalMatched   = summaryMap.matched?.count   || 0;
@@ -257,6 +446,13 @@ export default function CarWashMpesaNotifications() {
         </button>
       }
     >
+      {allocateTarget && (
+        <AllocateModal
+          notif={allocateTarget}
+          onClose={() => setAllocateTarget(null)}
+          onAllocated={handleAllocated}
+        />
+      )}
       {assignTarget && (
         <AssignModal
           notif={assignTarget}
@@ -390,6 +586,19 @@ export default function CarWashMpesaNotifications() {
                     </td>
                     <td className="px-2 py-2 text-center">
                       <div className="flex items-center justify-center gap-1.5">
+                        {canRecord && !n.isReversed && n.amount > 0 && (
+                          n.status === "unmatched" || n.status === "error" ||
+                          (n.allocatedAmount > 0 && n.allocatedAmount < n.amount)
+                        ) && (
+                          <button
+                            type="button"
+                            onClick={() => setAllocateTarget(n)}
+                            className="inline-flex items-center gap-1 border border-violet-300 bg-violet-50 px-2 py-1 text-[10px] font-bold text-violet-700 hover:bg-violet-100"
+                            title="Allocate payment across jobs"
+                          >
+                            <FaCodeBranch size={9} /> Allocate
+                          </button>
+                        )}
                         {canAssign && (
                           <button
                             type="button"

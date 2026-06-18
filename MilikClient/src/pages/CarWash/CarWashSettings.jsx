@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   FaCheckCircle, FaMoneyBillWave, FaPiggyBank,
   FaRedoAlt, FaSms, FaToggleOff, FaToggleOn,
-  FaChevronDown, FaChevronUp, FaExclamationCircle, FaInfoCircle,
+  FaChevronDown, FaChevronUp, FaExclamationCircle, FaInfoCircle, FaTv, FaTag,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, normalizeListPayload } from "../../services/carWashApi";
@@ -31,8 +31,11 @@ const SectionHeader = ({ icon: Icon, title, subtitle }) => (
 export default function CarWashSettings() {
   const [cashbooks, setCashbooks]           = useState([]);
   const [defaults, setDefaults]             = useState(emptyDefaults);
-  const [savingsEnabled, setSavingsEnabled] = useState(true);
-  const [savingsAmount, setSavingsAmount]   = useState(100);
+  const [savingsEnabled, setSavingsEnabled]       = useState(true);
+  const [savingsAmount, setSavingsAmount]         = useState(100);
+  const [queueDisplayName, setQueueDisplayName]   = useState("");
+  const [discountMinJobPrice, setDiscountMinJobPrice] = useState("");
+  const [discountMaxPercent,  setDiscountMaxPercent]  = useState("");
   const [smsTemplates, setSmsTemplates]     = useState([]);
   const [expandedSms, setExpandedSms]     = useState(null);
   const [loading, setLoading]             = useState(false);
@@ -53,6 +56,9 @@ export default function CarWashSettings() {
       setSavingsEnabled(settingsRes?.savingsEnabled !== false);
       setSavingsAmount(Number(settingsRes?.savingsDeductionPerJob ?? 100));
       setSmsTemplates(Array.isArray(settingsRes?.smsTemplates) ? settingsRes.smsTemplates : []);
+      setQueueDisplayName(settingsRes?.queueDisplayName || "");
+      setDiscountMinJobPrice(String(settingsRes?.discountMinJobPrice ?? 0));
+      setDiscountMaxPercent(String(settingsRes?.discountMaxPercent  ?? 0));
       setDirty(false);
     } catch {
       toast.error("Failed to load settings");
@@ -75,6 +81,9 @@ export default function CarWashSettings() {
         savingsEnabled,
         savingsDeductionPerJob: Number(savingsAmount),
         smsTemplates: smsTemplates.map(({ key, enabled, messageBody }) => ({ key, enabled, messageBody })),
+        queueDisplayName,
+        discountMinJobPrice: Number(discountMinJobPrice) || 0,
+        discountMaxPercent:  Number(discountMaxPercent)  || 0,
       });
       toast.success("Settings saved");
       setDirty(false);
@@ -130,6 +139,73 @@ export default function CarWashSettings() {
 
           {/* ── LEFT COLUMN ─────────────────────────────────────────────── */}
           <div className="lg:w-[40%] lg:flex-shrink-0 lg:overflow-y-auto divide-y divide-slate-200 border-b lg:border-b-0">
+
+            {/* Queue Display */}
+            <div className="bg-white">
+              <SectionHeader
+                icon={FaTv}
+                title="Queue Display"
+                subtitle="Name shown on the customer-facing TV screen. Leave blank to use the company name."
+              />
+              <div className="p-5">
+                <label className={labelCls}>Display name (max 60 chars)</label>
+                <input
+                  className={inputCls}
+                  value={queueDisplayName}
+                  onChange={(e) => { setQueueDisplayName(e.target.value.slice(0, 60)); setDirty(true); }}
+                  placeholder="e.g. ABC CAR WASH"
+                  disabled={!canManage}
+                  maxLength={60}
+                />
+                <p className="mt-1.5 text-[10px] text-slate-400">
+                  {queueDisplayName.length}/60 · Shown as the heading on the queue display screen.
+                </p>
+              </div>
+            </div>
+
+            {/* Discount Policy */}
+            <div className="bg-white">
+              <SectionHeader
+                icon={FaTag}
+                title="Discount Policy"
+                subtitle="Controls when and how much discount staff can apply on a job."
+              />
+              <div className="p-5 space-y-4">
+                <div>
+                  <label className={labelCls}>Minimum job price for discount (KES)</label>
+                  <input
+                    className={inputCls}
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={discountMinJobPrice}
+                    onChange={(e) => { setDiscountMinJobPrice(e.target.value); setDirty(true); }}
+                    placeholder="0"
+                    disabled={!canManage}
+                  />
+                  <p className="mt-1.5 text-[10px] text-slate-400">
+                    Discount checkbox only activates when job price exceeds this amount. Set to 0 to always allow.
+                  </p>
+                </div>
+                <div>
+                  <label className={labelCls}>Maximum discount allowed (%)</label>
+                  <input
+                    className={inputCls}
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={discountMaxPercent}
+                    onChange={(e) => { setDiscountMaxPercent(e.target.value); setDirty(true); }}
+                    placeholder="0"
+                    disabled={!canManage}
+                  />
+                  <p className="mt-1.5 text-[10px] text-slate-400">
+                    Auto-filled when the discount checkbox is ticked. Staff can reduce it but not exceed this cap. Set to 0 for no cap.
+                  </p>
+                </div>
+              </div>
+            </div>
 
             {/* Default Cashbooks */}
             <div className="bg-white">

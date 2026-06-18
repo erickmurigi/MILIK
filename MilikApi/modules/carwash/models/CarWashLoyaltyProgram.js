@@ -8,10 +8,12 @@ const carWashLoyaltyProgramSchema = new mongoose.Schema(
     stampsRequired: { type: Number, required: true, min: 2, default: 10 },
     rewardType: {
       type: String,
-      enum: ['free_wash', 'discount_percent', 'discount_fixed'],
+      enum: ['free_wash', 'discount_percent', 'discount_fixed', 'free_service'],
       default: 'free_wash',
     },
     rewardValue: { type: Number, min: 0, default: 0 },
+    // For rewardType = "free_service": the specific service given free
+    rewardServiceId: { type: mongoose.Schema.Types.ObjectId, ref: 'CarWashService', default: null },
     // Empty array = all services qualify; populated = only listed services qualify
     applicableServices: [{ type: mongoose.Schema.Types.ObjectId, ref: 'CarWashService' }],
     // 0 = stamps never expire

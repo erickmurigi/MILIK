@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import {
-  FaArrowLeft, FaCar, FaCamera, FaExclamationTriangle, FaGift, FaMinus, FaPlus, FaSave,
+  FaArrowLeft, FaCar, FaCamera, FaExclamationTriangle, FaGift, FaMinus, FaPlus, FaRedoAlt, FaSave,
   FaTimesCircle, FaUser, FaExpand, FaUserCheck,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -396,14 +396,16 @@ const CarWashAddJob = () => {
   const [loyaltyCard, setLoyaltyCard] = useState(null);
   const [applyReward, setApplyReward] = useState(false);
   const [discountAmount, setDiscountAmount] = useState("");
+  const [discountEnabled, setDiscountEnabled] = useState(false);
+  const [discountSettings, setDiscountSettings] = useState({ minPrice: 0, maxPct: 0 });
   const [notes, setNotes] = useState("");
   const [jobNumber, setJobNumber] = useState("");
   const [photos, setPhotos] = useState([]);
   // When redirected from new-carpet-job save, open photos immediately
   const openPhotosOnLoad = Boolean(location.state?.openPhotos);
 
-  const [services, setServices]     = useState([]);
-  const [staff, setStaff]           = useState([]);
+  const [services, setServices]   = useState([]);
+  const [staff, setStaff]         = useState([]);
   const [branchType, setBranchType] = useState("both");
   const [saving, setSaving]         = useState(false);
   const [loadingJob, setLoadingJob] = useState(false);
@@ -423,6 +425,7 @@ const CarWashAddJob = () => {
     if (draft.expectedReadyAt)  setExpectedReadyAt(draft.expectedReadyAt);
     if (draft.serviceLines?.length) setServiceLines(draft.serviceLines);
     if (draft.discountAmount)   setDiscountAmount(draft.discountAmount);
+    if (draft.discountEnabled)  setDiscountEnabled(draft.discountEnabled);
     if (draft.notes)            setNotes(draft.notes);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -430,16 +433,36 @@ const CarWashAddJob = () => {
   useEffect(() => {
     if (isEditMode) return;
     const t = setTimeout(() => {
-      writeDraft({ jobType, plateNumber, customerName, phone, itemDescription, expectedReadyAt, serviceLines, discountAmount, notes });
+      writeDraft({ jobType, plateNumber, customerName, phone, itemDescription, expectedReadyAt, serviceLines, discountAmount, discountEnabled, notes });
     }, 400);
     return () => clearTimeout(t);
-  }, [isEditMode, jobType, plateNumber, customerName, phone, itemDescription, expectedReadyAt, serviceLines, discountAmount, notes]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isEditMode, jobType, plateNumber, customerName, phone, itemDescription, expectedReadyAt, serviceLines, discountAmount, discountEnabled, notes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const totalPrice = useMemo(
     () => serviceLines.reduce((sum, l) => sum + (Number(l.price) || 0), 0),
     [serviceLines]
   );
   const discountNum = Math.max(0, Number(discountAmount) || 0);
+
+  const { minPrice: discountMinPrice, maxPct: discountMaxPct } = discountSettings;
+  const round2 = (n) => Math.round(n * 100) / 100;
+  const discountEligible = discountMinPrice === 0 || totalPrice > discountMinPrice;
+  const discountMaxAllowed = discountMaxPct > 0 ? round2(totalPrice * discountMaxPct / 100) : totalPrice;
+
+  // Clear discount if settings load and job is no longer eligible
+  useEffect(() => {
+    if (discountEnabled && discountMinPrice > 0 && totalPrice <= discountMinPrice) {
+      setDiscountEnabled(false);
+      setDiscountAmount("");
+    }
+  }, [discountSettings]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Clamp discount amount when total price changes (e.g. service line edited)
+  useEffect(() => {
+    if (!discountEnabled || totalPrice <= 0) return;
+    const max = discountMaxPct > 0 ? round2(totalPrice * discountMaxPct / 100) : totalPrice;
+    if (discountNum > max) setDiscountAmount(String(max));
+  }, [totalPrice]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Preview discount amount for the loyalty reward (computed from program, not state)
   const rewardProgram = loyaltyCard?.program;
@@ -457,13 +480,18 @@ const CarWashAddJob = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        const [svcPayload, staffPayload, branchData] = await Promise.all([
+        const [svcPayload, staffPayload, branchData, settingsData] = await Promise.all([
           carWashApi.listServices({ active: true }),
           carWashApi.listStaff({ active: true }),
           carWashApi.getActiveBranch().catch(() => null),
+          carWashApi.getCarWashSettings().catch(() => null),
         ]);
         setServices(normalizeListPayload(svcPayload, "services"));
         setStaff(normalizeListPayload(staffPayload, "staff"));
+        setDiscountSettings({
+          minPrice: Number(settingsData?.discountMinJobPrice ?? 0),
+          maxPct:   Number(settingsData?.discountMaxPercent  ?? 0),
+        });
 
         const bt = branchData?.branchType || "both";
         setBranchType(bt);
@@ -497,6 +525,7 @@ const CarWashAddJob = () => {
         setNotes(job.notes || "");
         setJobNumber(job.jobNumber || "");
         setDiscountAmount(job.discountAmount > 0 ? String(job.discountAmount) : "");
+        setDiscountEnabled(job.discountAmount > 0);
         setPhotos(Array.isArray(job.photos) ? job.photos : []);
 
         const lines =
@@ -505,10 +534,11 @@ const CarWashAddJob = () => {
                 service: String(l.service?._id || l.service || ""),
                 serviceName: l.serviceName || "",
                 vehicleType: l.vehicleType || "",
-                price: String(l.price ?? ""),
+                price: l.isRewardLine ? "0" : String(l.price ?? ""),
                 lineStaff: Array.isArray(l.lineStaff)
                   ? l.lineStaff.map(s => String(s?._id || s)).filter(Boolean)
                   : (l.lineStaff ? [String(l.lineStaff?._id || l.lineStaff)] : []),
+                isRewardLine: Boolean(l.isRewardLine),
                 measurements: { shape: "rect", length: "", width: "", diameter: "" },
               }))
             : [
@@ -613,6 +643,22 @@ const CarWashAddJob = () => {
     return [...map.values()];
   }, [serviceLines, staff]);
 
+  const handleReset = useCallback(() => {
+    setPlateNumber("");
+    setCustomerName("");
+    setPhone("");
+    setItemDescription("");
+    setExpectedReadyAt("");
+    setServiceLines([emptyLine()]);
+    setCreditAccount(null);
+    setLoyaltyCard(null);
+    setApplyReward(false);
+    setDiscountAmount("");
+    setDiscountEnabled(false);
+    setNotes("");
+    clearDraft();
+  }, [clearDraft]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (jobType === "vehicle" && !plateNumber?.trim()) {
@@ -623,7 +669,8 @@ const CarWashAddJob = () => {
       toast.error("Add at least one service line with a name");
       return;
     }
-    if (totalPrice <= 0) {
+    const hasRewardLine = serviceLines.some((l) => l.isRewardLine);
+    if (totalPrice <= 0 && !hasRewardLine) {
       toast.error("Total price must be greater than zero");
       return;
     }
@@ -645,8 +692,9 @@ const CarWashAddJob = () => {
           service: l.service || undefined,
           serviceName: l.serviceName,
           vehicleType: l.vehicleType,
-          price: Number(l.price) || 0,
+          price: l.isRewardLine ? 0 : (Number(l.price) || 0),
           lineStaff: Array.isArray(l.lineStaff) ? l.lineStaff : [],
+          isRewardLine: Boolean(l.isRewardLine),
         })),
       discountAmount: discountNum,
       creditAccount: creditAccount?._id || null,
@@ -760,6 +808,7 @@ const CarWashAddJob = () => {
                       }
                     }}
                     onRewardData={(card) => {
+                      if (!card) setServiceLines((prev) => prev.filter((l) => !l.isRewardLine));
                       setLoyaltyCard(card);
                       setApplyReward(false);
                     }}
@@ -770,35 +819,60 @@ const CarWashAddJob = () => {
                     jobTotal={totalPrice}
                     onAccountDetected={(acc) => setCreditAccount(acc || null)}
                   />
-                  {!isEditMode && loyaltyCard?.pendingRewards > 0 && loyaltyCard?.program && (
-                    <div className={`mt-1.5 border px-3 py-2.5 text-xs ${applyReward ? "border-amber-400 bg-amber-50" : "border-amber-200 bg-amber-50"}`}>
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          <FaGift className="shrink-0 text-amber-600" />
-                          <div>
-                            <div className="font-black text-amber-800">
-                              {loyaltyCard.pendingRewards} loyalty reward{loyaltyCard.pendingRewards !== 1 ? "s" : ""} available
-                            </div>
-                            <div className="mt-0.5 text-amber-700">
-                              {loyaltyCard.program.rewardType === "free_wash" && "Free wash"}
-                              {loyaltyCard.program.rewardType === "discount_percent" && `${loyaltyCard.program.rewardValue}% off`}
-                              {loyaltyCard.program.rewardType === "discount_fixed" && `KES ${loyaltyCard.program.rewardValue} off`}
-                              {totalPrice > 0 && applyReward && (
-                                <span className="ml-1.5 font-black text-emerald-700">→ saves {formatMoney(rewardPreviewDiscount)}</span>
-                              )}
+                  {!isEditMode && loyaltyCard?.pendingRewards > 0 && loyaltyCard?.program && (() => {
+                    const prog = loyaltyCard.program;
+                    const isFreeService = prog.rewardType === "free_service";
+                    const rewardSvc = loyaltyCard.rewardService;
+                    const rewardLabel = isFreeService
+                      ? (rewardSvc ? `Free ${rewardSvc.name}` : "Free service (not configured)")
+                      : prog.rewardType === "free_wash" ? "Free wash"
+                      : prog.rewardType === "discount_percent" ? `${prog.rewardValue}% off`
+                      : `KES ${prog.rewardValue} off`;
+                    const canApply = !isFreeService || Boolean(rewardSvc);
+                    return (
+                      <div className={`mt-1.5 border px-3 py-2.5 text-xs ${applyReward ? "border-amber-400 bg-amber-50" : "border-amber-200 bg-amber-50"}`}>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            <FaGift className="shrink-0 text-amber-600" />
+                            <div>
+                              <div className="font-black text-amber-800">
+                                {loyaltyCard.pendingRewards} loyalty reward{loyaltyCard.pendingRewards !== 1 ? "s" : ""} available
+                              </div>
+                              <div className="mt-0.5 text-amber-700">
+                                {rewardLabel}
+                                {!isFreeService && totalPrice > 0 && applyReward && (
+                                  <span className="ml-1.5 font-black text-emerald-700">→ saves {formatMoney(rewardPreviewDiscount)}</span>
+                                )}
+                                {isFreeService && applyReward && (
+                                  <span className="ml-1.5 font-black text-emerald-700">✓ Added as free line</span>
+                                )}
+                              </div>
                             </div>
                           </div>
+                          <button
+                            type="button"
+                            disabled={!canApply}
+                            onClick={() => {
+                              if (isFreeService && rewardSvc) {
+                                if (!applyReward) {
+                                  setServiceLines((prev) => [
+                                    { service: String(rewardSvc._id), serviceName: rewardSvc.name, vehicleType: "", price: 0, lineStaff: [], isRewardLine: true },
+                                    ...prev.filter((l) => !l.isRewardLine),
+                                  ]);
+                                } else {
+                                  setServiceLines((prev) => prev.filter((l) => !l.isRewardLine));
+                                }
+                              }
+                              setApplyReward((v) => !v);
+                            }}
+                            className={`shrink-0 rounded px-3 py-1.5 text-[11px] font-black uppercase tracking-wide transition-colors disabled:opacity-40 ${applyReward ? "bg-amber-500 text-white hover:bg-amber-600" : "bg-white border border-amber-400 text-amber-700 hover:bg-amber-100"}`}
+                          >
+                            {applyReward ? "✓ Applying" : "Apply Reward"}
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setApplyReward((v) => !v)}
-                          className={`shrink-0 rounded px-3 py-1.5 text-[11px] font-black uppercase tracking-wide transition-colors ${applyReward ? "bg-amber-500 text-white hover:bg-amber-600" : "bg-white border border-amber-400 text-amber-700 hover:bg-amber-100"}`}
-                        >
-                          {applyReward ? "✓ Applying" : "Apply Reward"}
-                        </button>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </>
               ) : (
                 <>
@@ -863,15 +937,19 @@ const CarWashAddJob = () => {
                   const svc = services.find((s) => s._id === line.service);
                   const hasTiers = svc?.pricingTiers?.length > 0;
                   const isPerSqft = svc?.pricingType === "per_sqft";
+                  const isReward = Boolean(line.isRewardLine);
                   return (
-                    <div key={index} className="p-3 space-y-2">
+                    <div key={index} className={`p-3 space-y-2 ${isReward ? "bg-amber-50" : ""}`}>
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] font-extrabold uppercase tracking-wide text-slate-400">Line {index + 1}</span>
-                        <button type="button" onClick={() => removeLine(index)} disabled={serviceLines.length === 1} className="p-1 text-red-400 hover:text-red-600 disabled:opacity-30"><FaMinus className="text-[10px]" /></button>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-extrabold uppercase tracking-wide text-slate-400">Line {index + 1}</span>
+                          {isReward && <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black text-amber-700"><FaGift className="text-[8px]" /> FREE · Reward</span>}
+                        </div>
+                        <button type="button" onClick={() => removeLine(index)} disabled={serviceLines.length === 1 || isReward} className="p-1 text-red-400 hover:text-red-600 disabled:opacity-30"><FaMinus className="text-[10px]" /></button>
                       </div>
                       <div>
                         <label className={labelClass}>Service</label>
-                        <select className="h-9 w-full border border-slate-300 px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none" value={line.service} onChange={(e) => handleLineServiceChange(index, e.target.value)}>
+                        <select disabled={isReward} className={`h-9 w-full border px-2 text-xs focus:outline-none ${isReward ? "border-amber-200 bg-amber-50 text-amber-800" : "border-slate-300 text-slate-800 focus:border-[#0B3B2E]"}`} value={line.service} onChange={(e) => handleLineServiceChange(index, e.target.value)}>
                           <option value="">Select or type below</option>
                           {services.filter((s2) => !s2.jobType || s2.jobType === "both" || s2.jobType === jobType).map((s2) => (
                             <option key={s2._id} value={s2._id}>{s2.name}</option>
@@ -880,7 +958,7 @@ const CarWashAddJob = () => {
                       </div>
                       <div>
                         <label className={labelClass}>Name *</label>
-                        <input className="h-9 w-full border border-slate-300 px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none" value={line.serviceName} onChange={(e) => updateLine(index, "serviceName", e.target.value)} placeholder="Service name" required />
+                        <input readOnly={isReward} className={`h-9 w-full border px-2 text-xs focus:outline-none ${isReward ? "border-amber-200 bg-amber-50 font-bold text-amber-800" : "border-slate-300 text-slate-800 focus:border-[#0B3B2E]"}`} value={line.serviceName} onChange={(e) => updateLine(index, "serviceName", e.target.value)} placeholder="Service name" required />
                       </div>
                       {jobType === "vehicle" && (
                         <div>
@@ -900,10 +978,14 @@ const CarWashAddJob = () => {
                       )}
                       <div>
                         <label className={labelClass}>Price (KES) *</label>
-                        <input className="h-9 w-full border border-slate-300 px-2 text-right text-xs font-bold text-slate-900 focus:border-[#0B3B2E] focus:outline-none" type="number" min="0" step="1" value={line.price} onChange={(e) => updateLine(index, "price", e.target.value)} required />
+                        {isReward ? (
+                          <div className="flex h-9 items-center border border-amber-200 bg-amber-50 px-2 text-xs font-black text-amber-700">FREE (KES 0)</div>
+                        ) : (
+                          <input className="h-9 w-full border border-slate-300 px-2 text-right text-xs font-bold text-slate-900 focus:border-[#0B3B2E] focus:outline-none" type="number" min="0" step="1" value={line.price} onChange={(e) => updateLine(index, "price", e.target.value)} required />
+                        )}
                       </div>
                       <div>
-                        <label className={labelClass}>Attendants</label>
+                        <label className={labelClass}>Attendants {isReward && <span className="ml-1 font-normal normal-case text-amber-600">(no commission on free line)</span>}</label>
                         <div className="flex flex-wrap gap-1">
                           {staff.map((s) => {
                             const selected = Array.isArray(line.lineStaff) && line.lineStaff.includes(s._id);
@@ -915,7 +997,7 @@ const CarWashAddJob = () => {
                             );
                           })}
                         </div>
-                        {(!Array.isArray(line.lineStaff) || line.lineStaff.length === 0) && (
+                        {(!Array.isArray(line.lineStaff) || line.lineStaff.length === 0) && !isReward && (
                           <p className="mt-1 text-[10px] text-amber-600 font-semibold">No attendant — no commission</p>
                         )}
                       </div>
@@ -969,26 +1051,37 @@ const CarWashAddJob = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {serviceLines.map((line, index) => (
+                    {serviceLines.map((line, index) => {
+                      const isReward = Boolean(line.isRewardLine);
+                      return (
                       <React.Fragment key={index}>
-                      <tr className="border-b border-slate-100">
+                      <tr className={`border-b border-slate-100 ${isReward ? "bg-amber-50/60" : ""}`}>
                         <td className="px-3 py-1.5">
-                          <select
-                            className="h-8 w-full border border-slate-300 px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
-                            value={line.service}
-                            onChange={(e) => handleLineServiceChange(index, e.target.value)}
-                          >
-                            <option value="">Select or type below</option>
-                            {services
-                              .filter((svc) => !svc.jobType || svc.jobType === "both" || svc.jobType === jobType)
-                              .map((svc) => (
-                                <option key={svc._id} value={svc._id}>{svc.name}</option>
-                              ))}
-                          </select>
+                          {isReward ? (
+                            <div className="flex h-8 items-center gap-1.5 px-1">
+                              <FaGift className="text-amber-500" size={10} />
+                              <span className="text-[10px] font-black text-amber-700">{line.serviceName}</span>
+                              <span className="ml-auto rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-black text-amber-600">FREE</span>
+                            </div>
+                          ) : (
+                            <select
+                              className="h-8 w-full border border-slate-300 px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
+                              value={line.service}
+                              onChange={(e) => handleLineServiceChange(index, e.target.value)}
+                            >
+                              <option value="">Select or type below</option>
+                              {services
+                                .filter((svc) => !svc.jobType || svc.jobType === "both" || svc.jobType === jobType)
+                                .map((svc) => (
+                                  <option key={svc._id} value={svc._id}>{svc.name}</option>
+                                ))}
+                            </select>
+                          )}
                         </td>
                         <td className="px-3 py-1.5">
                           <input
-                            className="h-8 w-full border border-slate-300 px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
+                            readOnly={isReward}
+                            className={`h-8 w-full border px-2 text-xs focus:outline-none ${isReward ? "border-amber-200 bg-amber-50 font-bold text-amber-800" : "border-slate-300 text-slate-800 focus:border-[#0B3B2E]"}`}
                             value={line.serviceName}
                             onChange={(e) => updateLine(index, "serviceName", e.target.value)}
                             placeholder="Service name"
@@ -1030,49 +1123,57 @@ const CarWashAddJob = () => {
                           </td>
                         )}
                         <td className="px-3 py-1.5">
-                          <input
-                            className="h-8 w-full border border-slate-300 px-2 text-right text-xs font-bold text-slate-900 focus:border-[#0B3B2E] focus:outline-none"
-                            type="number"
-                            min="0"
-                            step="1"
-                            value={line.price}
-                            onChange={(e) => updateLine(index, "price", e.target.value)}
-                            required
-                          />
+                          {isReward ? (
+                            <div className="flex h-8 items-center justify-end px-2 text-xs font-black text-amber-700">FREE</div>
+                          ) : (
+                            <input
+                              className="h-8 w-full border border-slate-300 px-2 text-right text-xs font-bold text-slate-900 focus:border-[#0B3B2E] focus:outline-none"
+                              type="number" min="0" step="1"
+                              value={line.price}
+                              onChange={(e) => updateLine(index, "price", e.target.value)}
+                              required
+                            />
+                          )}
                         </td>
                         <td className="px-3 py-2">
-                          <div className="flex flex-wrap gap-1">
-                            {staff.map((s) => {
-                              const selected = Array.isArray(line.lineStaff) && line.lineStaff.includes(s._id);
-                              return (
-                                <button
-                                  key={s._id}
-                                  type="button"
-                                  onClick={() => toggleLineStaff(index, s._id)}
-                                  title={s.role || s.name}
-                                  className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold border transition-all ${
-                                    selected
-                                      ? "bg-[#0B3B2E] text-white border-[#0B3B2E] shadow-sm"
-                                      : "bg-white text-slate-500 border-slate-200 hover:border-[#0B3B2E] hover:text-[#0B3B2E]"
-                                  }`}
-                                >
-                                  {selected && <span className="text-[8px]">✓</span>}
-                                  {s.name.split(" ")[0]}
-                                </button>
-                              );
-                            })}
-                          </div>
-                          {(!Array.isArray(line.lineStaff) || line.lineStaff.length === 0) && (
-                            <p className="mt-1 text-[10px] text-amber-600 font-semibold">No attendant — no commission</p>
+                          {isReward ? (
+                            <p className="text-[10px] font-semibold text-amber-600">No commission on free reward line</p>
+                          ) : (
+                            <>
+                              <div className="flex flex-wrap gap-1">
+                                {staff.map((s) => {
+                                  const selected = Array.isArray(line.lineStaff) && line.lineStaff.includes(s._id);
+                                  return (
+                                    <button
+                                      key={s._id}
+                                      type="button"
+                                      onClick={() => toggleLineStaff(index, s._id)}
+                                      title={s.role || s.name}
+                                      className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold border transition-all ${
+                                        selected
+                                          ? "bg-[#0B3B2E] text-white border-[#0B3B2E] shadow-sm"
+                                          : "bg-white text-slate-500 border-slate-200 hover:border-[#0B3B2E] hover:text-[#0B3B2E]"
+                                      }`}
+                                    >
+                                      {selected && <span className="text-[8px]">✓</span>}
+                                      {s.name.split(" ")[0]}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              {(!Array.isArray(line.lineStaff) || line.lineStaff.length === 0) && (
+                                <p className="mt-1 text-[10px] text-amber-600 font-semibold">No attendant — no commission</p>
+                              )}
+                            </>
                           )}
                         </td>
                         <td className="px-2 py-1.5 text-center">
                           <button
                             type="button"
                             onClick={() => removeLine(index)}
-                            disabled={serviceLines.length === 1}
+                            disabled={serviceLines.length === 1 || isReward}
                             className="p-1 text-red-400 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30"
-                            title="Remove line"
+                            title={isReward ? "Reward line — remove via Apply Reward toggle" : "Remove line"}
                           >
                             <FaMinus className="text-[10px]" />
                           </button>
@@ -1152,7 +1253,8 @@ const CarWashAddJob = () => {
                       })()}
 
                       </React.Fragment>
-                    ))}
+                    );
+                    })}
                   </tbody>
                   <tfoot className="border-t-2 border-slate-200 bg-[#EDF5F1]">
                     <tr>
@@ -1250,28 +1352,62 @@ const CarWashAddJob = () => {
                 )}
                 <div className="flex items-center justify-between border-t border-slate-200 pt-2 text-sm">
                   <span className="font-extrabold uppercase tracking-wide text-slate-700">Total</span>
-                  <span className={`font-black ${(discountNum > 0 || applyReward) ? "text-sm text-slate-400 line-through" : "text-lg text-[#0B3B2E]"}`}>
+                  <span className={`font-black ${(discountNum > 0 || (applyReward && rewardPreviewDiscount > 0)) ? "text-sm text-slate-400 line-through" : "text-lg text-[#0B3B2E]"}`}>
                     {formatMoney(totalPrice)}
                   </span>
                 </div>
-                {applyReward && rewardPreviewDiscount > 0 ? (
+                {applyReward && (rewardPreviewDiscount > 0 || loyaltyCard?.program?.rewardType === "free_service") ? (
                   <div className="flex items-center justify-between rounded bg-amber-50 px-2 py-1.5 text-xs">
                     <span className="flex items-center gap-1 font-bold text-amber-700"><FaGift size={9} /> Loyalty reward</span>
-                    <span className="font-black text-emerald-700">− {formatMoney(rewardPreviewDiscount)}</span>
+                    {loyaltyCard?.program?.rewardType === "free_service"
+                      ? <span className="font-black text-emerald-700">Free {loyaltyCard.rewardService?.name || "service"}</span>
+                      : <span className="font-black text-emerald-700">− {formatMoney(rewardPreviewDiscount)}</span>
+                    }
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2">
-                    <label className="text-[10px] font-bold uppercase tracking-wide text-rose-600 whitespace-nowrap">Discount (KES)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max={totalPrice}
-                      step="1"
-                      value={discountAmount}
-                      onChange={(e) => setDiscountAmount(e.target.value)}
-                      placeholder="0"
-                      className="w-full border border-slate-200 px-2 py-1 text-right text-xs font-bold focus:border-rose-400 focus:outline-none"
-                    />
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <input
+                        id="discount-chk"
+                        type="checkbox"
+                        className="h-3.5 w-3.5 accent-rose-600"
+                        checked={discountEnabled}
+                        disabled={!discountEligible || totalPrice <= 0}
+                        onChange={(e) => {
+                          const on = e.target.checked;
+                          setDiscountEnabled(on);
+                          if (on && discountMaxPct > 0) {
+                            setDiscountAmount(String(round2(totalPrice * discountMaxPct / 100)));
+                          } else if (!on) {
+                            setDiscountAmount("");
+                          }
+                        }}
+                      />
+                      <label htmlFor="discount-chk" className="text-[10px] font-bold uppercase tracking-wide text-rose-600 select-none cursor-pointer">
+                        Apply Discount
+                        {!discountEligible && discountMinPrice > 0 && (
+                          <span className="ml-1 font-normal normal-case text-slate-400">(jobs above KES {discountMinPrice} only)</span>
+                        )}
+                        {discountMaxPct > 0 && discountEligible && (
+                          <span className="ml-1 font-normal normal-case text-slate-400">max {discountMaxPct}%</span>
+                        )}
+                      </label>
+                    </div>
+                    {discountEnabled && (
+                      <input
+                        type="number"
+                        min="0"
+                        max={discountMaxAllowed}
+                        step="1"
+                        value={discountAmount}
+                        onChange={(e) => {
+                          const v = Math.min(Number(e.target.value) || 0, discountMaxAllowed);
+                          setDiscountAmount(String(v));
+                        }}
+                        placeholder="0"
+                        className="w-full border border-rose-200 px-2 py-1 text-right text-xs font-bold focus:border-rose-400 focus:outline-none"
+                      />
+                    )}
                   </div>
                 )}
                 {(applyReward ? rewardPreviewDiscount > 0 : discountNum > 0) && (
@@ -1289,6 +1425,18 @@ const CarWashAddJob = () => {
                 )}
               </div>
             </div>
+
+            {/* Reset button — new job only */}
+            {!isEditMode && (
+              <button
+                type="button"
+                onClick={handleReset}
+                disabled={saving}
+                className="flex w-full items-center justify-center gap-2 py-2 text-xs font-bold uppercase tracking-wide text-slate-500 border border-slate-200 bg-white hover:bg-slate-50 hover:text-slate-700 disabled:opacity-50"
+              >
+                <FaRedoAlt size={10} /> Reset Fields
+              </button>
+            )}
 
             {/* Save button */}
             {(isEditMode ? canUpdate : canCreate) && (

@@ -1442,3 +1442,18 @@ export const sendTestSms = async ({ businessId, phone, message, profileId = '' }
     provider: selectedProfile.provider || '',
   };
 };
+
+export const sendAdHocEmail = async ({ businessId, to, subject, html, text } = {}) => {
+  if (!to || !subject || (!html && !text)) return null;
+  try {
+    const company = await ensureCompany(businessId);
+    const profiles = getRawEmailProfiles(company.communication || {});
+    const profile  = getPrimaryEmailProfile(profiles, company.communication?.defaultEmailProfileId || null);
+    if (!profile?.enabled) throw new Error("No active email profile configured");
+    await dispatchEmail({ profile, to, subject, html, text });
+    return { success: true };
+  } catch (err) {
+    console.error("[Email] sendAdHocEmail failed to=%s subject=%s: %s", to, subject, err?.message || err);
+    throw err;
+  }
+};

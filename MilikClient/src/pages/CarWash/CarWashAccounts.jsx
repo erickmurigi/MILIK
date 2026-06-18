@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import {
   FaCalendarAlt, FaCheckCircle, FaChevronDown, FaChevronRight,
-  FaFileInvoice, FaMoneyBillWave, FaPlus, FaRedoAlt, FaSms,
+  FaEnvelope, FaFileInvoice, FaMoneyBillWave, FaPlus, FaPrint, FaRedoAlt, FaSms,
   FaTimes, FaUndo, FaUser, FaExclamationTriangle, FaWallet, FaHistory,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -19,6 +19,54 @@ const fmt = formatMoney;
 const fmtDate = (v) => v ? new Date(v).toLocaleDateString("en-KE") : "—";
 const fmtMonth = (v) => v ? new Date(v).toLocaleString("en-KE", { month: "long", year: "numeric" }) : "—";
 
+const printCreditStatement = (acc, s) => {
+  const fa  = (n) => `KES ${Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2 })}`;
+  const fd  = (d) => new Date(d).toLocaleDateString("en-KE");
+  const per = fmtMonth(s.periodStart);
+  const who = acc.contactPerson || acc.customer?.name || "Customer";
+  const rows = (s.jobs || []).map((j) => `
+    <tr>
+      <td>${fd(j.jobDate)}</td><td>${j.jobNumber || "—"}</td><td>${j.plateNumber || "—"}</td>
+      <td>${j.serviceName || "—"}</td>
+      <td class="r">${fa(j.price)}</td><td class="r">${fa(j.paidAmount)}</td>
+      <td class="r" style="color:${j.outstanding > 0 ? "#dc2626" : "#16a34a"}">${fa(j.outstanding)}</td>
+    </tr>`).join("");
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${s.statementNumber}</title>
+    <style>
+      body{font-family:Arial,sans-serif;color:#1e293b;max-width:760px;margin:0 auto;padding:24px;font-size:13px}
+      .hdr{background:#0B3B2E;color:#fff;padding:16px 20px}
+      .hdr h2{margin:0;font-size:17px} .hdr p{margin:4px 0 0;opacity:.75;font-size:12px}
+      .bdy{border:1px solid #e2e8f0;border-top:none;padding:20px}
+      table{width:100%;border-collapse:collapse;margin-top:12px}
+      th{background:#f1f5f9;padding:7px 8px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+      td{padding:6px 8px;border-bottom:1px solid #e2e8f0} .r{text-align:right}
+      .tot td{font-weight:bold;background:#f8fafc}
+      .due td{background:#0B3B2E;color:#fff;font-weight:bold;font-size:14px}
+      @media print{button{display:none}}
+    </style></head><body>
+    <div class="hdr"><h2>Car Wash Account Statement</h2><p>${per} · Ref: ${s.statementNumber}</p></div>
+    <div class="bdy">
+      <p><strong>To:</strong> ${who}</p>
+      <p><strong>Account:</strong> ${acc.accountNumber || ""}</p>
+      <p><strong>Period:</strong> ${per}</p>
+      <table>
+        <thead><tr><th>Date</th><th>Job #</th><th>Plate</th><th>Service</th><th class="r">Amount</th><th class="r">Paid</th><th class="r">Balance</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot>
+          <tr class="tot"><td colspan="4">Opening Balance</td><td colspan="3" class="r">${fa(s.openingBalance)}</td></tr>
+          <tr class="tot"><td colspan="4">Total Invoiced</td><td colspan="3" class="r">${fa(s.totalInvoiced)}</td></tr>
+          <tr class="tot"><td colspan="4">Total Paid</td><td colspan="3" class="r">${fa(s.totalPaid)}</td></tr>
+          <tr class="due"><td colspan="4">Amount Due</td><td colspan="3" class="r">${fa(s.totalOutstanding)}</td></tr>
+        </tfoot>
+      </table>
+      <p style="margin-top:16px;font-size:11px;color:#64748b">This is an automatically generated statement. Please contact us if you have any queries.</p>
+    </div>
+    <script>window.onload=()=>window.print();</script>
+  </body></html>`;
+  const w = window.open("", "_blank");
+  if (w) { w.document.write(html); w.document.close(); }
+};
+
 const statusPill = {
   active:    "bg-emerald-100 text-emerald-700 border-emerald-200",
   suspended: "bg-amber-100 text-amber-700 border-amber-200",
@@ -33,37 +81,77 @@ const stmtPill = {
 };
 
 const paymentMethods = ["cash", "mpesa", "bank", "card", "other"];
+const PLATE_RE = /^[A-Z]{2,3}\d{3}[A-Z]$/i;
 
 // ─── Create/edit account modal ────────────────────────────────────────────────
 const AccountModal = ({ customers, onSave, onClose }) => {
+  const [query, setQuery]                   = useState("");
+  const [dropdownOpen, setDropdownOpen]     = useState(false);
+  const [selectedCustomer, setSelected]     = useState(null);
+  const [isNew, setIsNew]                   = useState(false);
+  const [newPhone, setNewPhone]             = useState("");
   const [form, setForm] = useState({
-    customerId: "", accountType: "credit", creditLimit: "", billingCycle: "monthly",
-    billingDay: "1", notes: "", plates: "",
+    accountType: "credit", contactPerson: "", billingEmail: "",
+    creditLimit: "", billingCycle: "monthly", billingDay: "1", notes: "", plates: "",
   });
   const [saving, setSaving] = useState(false);
+  const comboRef = useRef(null);
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
 
+  useEffect(() => {
+    const handler = (e) => {
+      if (comboRef.current && !comboRef.current.contains(e.target)) setDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return customers.slice(0, 20);
+    return customers.filter((c) =>
+      c.name?.toLowerCase().includes(q) ||
+      c.phone?.includes(q) ||
+      (c.plates || []).some((p) => p.toLowerCase().includes(q))
+    ).slice(0, 15);
+  }, [customers, query]);
+
+  const pickCustomer = (c) => { setSelected(c); setQuery(c.name); setDropdownOpen(false); setIsNew(false); };
+  const pickNew      = () => { setSelected(null); setIsNew(true); setDropdownOpen(false); };
+  const clearPick    = () => { setSelected(null); setIsNew(false); setQuery(""); setNewPhone(""); };
+
   const handleSave = async () => {
-    if (!form.customerId) return toast.warning("Select a customer");
+    if (!selectedCustomer && !isNew) return toast.warning("Select or create a customer");
+    if (isNew && !query.trim()) return toast.warning("Enter a customer name");
     setSaving(true);
     try {
-      const payload = {
-        customerId: form.customerId,
+      let customerId = selectedCustomer?._id;
+      if (isNew) {
+        const created = await carWashApi.registerLoyaltyCustomer({
+          name: query.trim(),
+          ...(newPhone.trim() && { phone: newPhone.trim() }),
+        });
+        customerId = created?._id;
+        if (!customerId) throw new Error("Failed to create customer");
+      }
+      await onSave({
+        customerId,
         accountType: form.accountType,
+        contactPerson: form.contactPerson.trim(),
+        billingEmail: form.billingEmail.trim().toLowerCase(),
         creditLimit: Number(form.creditLimit || 0),
         billingCycle: form.billingCycle,
         billingDay: Number(form.billingDay || 1),
         notes: form.notes,
         plates: form.plates.split(",").map((p) => p.trim()).filter(Boolean),
-      };
-      await onSave(payload);
+      });
     } finally {
       setSaving(false);
     }
   };
 
-  const labelCls = "mb-1 block text-[11px] font-extrabold uppercase tracking-widest text-slate-500";
-  const inputCls = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
+  const lc = "mb-1 block text-[11px] font-extrabold uppercase tracking-widest text-slate-500";
+  const ic = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 
   return (
     <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/50 px-4">
@@ -73,19 +161,73 @@ const AccountModal = ({ customers, onSave, onClose }) => {
           <button onClick={onClose}><FaTimes /></button>
         </div>
         <div className="space-y-3 p-4">
+
+          {/* ── Customer combobox ── */}
           <div>
-            <label className={labelCls}>Customer *</label>
-            <select className={inputCls} value={form.customerId} onChange={(e) => set("customerId", e.target.value)}>
-              <option value="">Select customer</option>
-              {customers.map((c) => (
-                <option key={c._id} value={c._id}>{c.name} {c.phone ? `· ${c.phone}` : ""}</option>
-              ))}
-            </select>
+            <label className={lc}>Customer *</label>
+            {selectedCustomer ? (
+              <div className="flex items-center gap-2 border border-emerald-300 bg-emerald-50 px-3 h-9">
+                <FaUser size={9} className="text-emerald-600 flex-shrink-0" />
+                <span className="flex-1 text-sm font-semibold text-emerald-800 truncate">{selectedCustomer.name}</span>
+                {selectedCustomer.phone && <span className="text-[10px] text-emerald-600 flex-shrink-0">{selectedCustomer.phone}</span>}
+                <button type="button" onClick={clearPick} className="text-emerald-400 hover:text-red-500 flex-shrink-0"><FaTimes size={10} /></button>
+              </div>
+            ) : isNew ? (
+              <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-700">New customer: <span className="normal-case">{query}</span></p>
+                  <button type="button" onClick={clearPick} className="text-[10px] text-slate-400 hover:text-slate-600">← Back</button>
+                </div>
+                <input className={ic} type="tel" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="Phone (optional, e.g. 0712345678)" />
+              </div>
+            ) : (
+              <div ref={comboRef} className="relative">
+                <input
+                  className={ic}
+                  value={query}
+                  onChange={(e) => { setQuery(e.target.value); setDropdownOpen(true); }}
+                  onFocus={() => setDropdownOpen(true)}
+                  placeholder="Search name, phone, or plate…"
+                  autoComplete="new-password"
+                />
+                {dropdownOpen && (
+                  <div className="absolute left-0 right-0 top-full z-50 max-h-52 overflow-y-auto border border-slate-200 bg-white shadow-xl">
+                    {filtered.length === 0 && !query.trim() ? (
+                      <p className="px-3 py-2 text-[11px] text-slate-400">Start typing to search customers…</p>
+                    ) : filtered.length === 0 ? null : (
+                      filtered.map((c) => (
+                        <button key={c._id} type="button" onMouseDown={() => pickCustomer(c)}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 border-b border-slate-50 last:border-0">
+                          <FaUser size={9} className="text-slate-300 flex-shrink-0" />
+                          <div className="min-w-0">
+                            <div className="text-sm font-semibold text-slate-800 truncate">{c.name}</div>
+                            {(c.phone || (c.plates || []).length > 0) && (
+                              <div className="text-[10px] text-slate-400 truncate">
+                                {[c.phone, ...(c.plates || [])].filter(Boolean).join(" · ")}
+                              </div>
+                            )}
+                          </div>
+                        </button>
+                      ))
+                    )}
+                    {query.trim() && (
+                      <button type="button" onMouseDown={pickNew}
+                        className="flex w-full items-center gap-2 border-t border-slate-200 bg-emerald-50 px-3 py-2 text-left hover:bg-emerald-100">
+                        <FaPlus size={9} className="text-emerald-600 flex-shrink-0" />
+                        <span className="text-sm text-emerald-700">Create new: <b>{query.trim()}</b></span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
+
+          {/* ── Account type + limit ── */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={labelCls}>Account Type *</label>
-              <select className={inputCls} value={form.accountType} onChange={(e) => set("accountType", e.target.value)}>
+              <label className={lc}>Account Type *</label>
+              <select className={ic} value={form.accountType} onChange={(e) => set("accountType", e.target.value)}>
                 <option value="credit">Credit (Pay-later)</option>
                 <option value="monthly">Monthly Billing</option>
                 <option value="prepaid">Prepaid (Wallet)</option>
@@ -93,8 +235,8 @@ const AccountModal = ({ customers, onSave, onClose }) => {
             </div>
             {form.accountType !== "prepaid" && (
               <div>
-                <label className={labelCls}>Credit Limit (KES)</label>
-                <input className={inputCls} type="number" min="0" value={form.creditLimit} onChange={(e) => set("creditLimit", e.target.value)} placeholder="0 = no limit" />
+                <label className={lc}>Credit Limit (KES)</label>
+                <input className={ic} type="number" min="0" value={form.creditLimit} onChange={(e) => set("creditLimit", e.target.value)} placeholder="0 = no limit" />
               </div>
             )}
           </div>
@@ -107,32 +249,42 @@ const AccountModal = ({ customers, onSave, onClose }) => {
           {form.accountType === "monthly" && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={labelCls}>Billing Cycle</label>
-                <select className={inputCls} value={form.billingCycle} onChange={(e) => set("billingCycle", e.target.value)}>
+                <label className={lc}>Billing Cycle</label>
+                <select className={ic} value={form.billingCycle} onChange={(e) => set("billingCycle", e.target.value)}>
                   <option value="monthly">Monthly</option>
                   <option value="weekly">Weekly</option>
                 </select>
               </div>
               <div>
-                <label className={labelCls}>Billing Day (1–28)</label>
-                <input className={inputCls} type="number" min="1" max="28" value={form.billingDay} onChange={(e) => set("billingDay", e.target.value)} />
+                <label className={lc}>Billing Day (1–28)</label>
+                <input className={ic} type="number" min="1" max="28" value={form.billingDay} onChange={(e) => set("billingDay", e.target.value)} />
               </div>
             </div>
           )}
-          <div>
-            <label className={labelCls}>Extra Plates (comma-separated)</label>
-            <input className={inputCls} value={form.plates} onChange={(e) => set("plates", e.target.value)} placeholder="KCA123A, KCB456B" />
-            <p className="mt-0.5 text-[10px] text-slate-400">Customer's existing plates are included automatically</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lc}>Contact Person</label>
+              <input className={ic} value={form.contactPerson} onChange={(e) => set("contactPerson", e.target.value)} placeholder="e.g. John Kamau (Fleet Mgr)" />
+            </div>
+            <div>
+              <label className={lc}>Billing Email</label>
+              <input className={ic} type="email" value={form.billingEmail} onChange={(e) => set("billingEmail", e.target.value)} placeholder="accounts@company.com" />
+            </div>
           </div>
           <div>
-            <label className={labelCls}>Notes</label>
+            <label className={lc}>Plates (comma-separated)</label>
+            <input className={ic} value={form.plates} onChange={(e) => set("plates", e.target.value)} placeholder="KCA123A, KCB456B, KCC789C" />
+            <p className="mt-0.5 text-[10px] text-slate-400">Jobs for these plates auto-link to this account</p>
+          </div>
+          <div>
+            <label className={lc}>Notes</label>
             <textarea className="w-full border border-slate-300 px-2 py-2 text-sm text-slate-800 focus:outline-none" rows={2} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
           </div>
         </div>
         <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
           <button onClick={onClose} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
           <button onClick={handleSave} disabled={saving} className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50">
-            {saving ? "Saving…" : "Create Account"}
+            {saving ? "Saving…" : isNew ? "Create Customer & Account" : "Create Account"}
           </button>
         </div>
       </div>
@@ -314,6 +466,7 @@ const CarWashAccounts = () => {
   const [smsTarget, setSmsTarget] = useState(null);
   const [smsBody, setSmsBody] = useState("");
   const [smsSending, setSmsSending] = useState(false);
+  const [emailSending, setEmailSending] = useState(null); // statementId being emailed
   const [stmtLoading, setStmtLoading] = useState({});
   const [filterStatus, setFilterStatus] = useState("active");
   const [filterType, setFilterType] = useState("");
@@ -335,7 +488,7 @@ const CarWashAccounts = () => {
   const { data: refData } = useQuery({
     queryKey: ["cw-accounts-ref", businessId],
     queryFn: () => Promise.all([
-      carWashApi.listLoyaltyCustomers({}).catch(() => []),
+      carWashApi.listLoyaltyCustomers({ limit: 500 }).catch(() => []),
       carWashApi.listChartOfAccounts({ type: "asset" }).catch(() => []),
     ]).then(([c, cb]) => ({
       customers: Array.isArray(c) ? c : [],
@@ -347,72 +500,65 @@ const CarWashAccounts = () => {
 
   useEffect(() => { if (error) toast.error("Failed to load credit accounts"); }, [error]);
 
-  const accounts = Array.isArray(accountsData) ? accountsData : [];
-  const customers = refData?.customers ?? [];
-  const cashbooks = refData?.cashbooks ?? [];
+  const accounts  = useMemo(() => Array.isArray(accountsData) ? accountsData : [], [accountsData]);
+  const customers = useMemo(() => (refData?.customers ?? []).filter((c) => c.name && !PLATE_RE.test(c.name.trim())), [refData]);
+  const cashbooks = useMemo(() => refData?.cashbooks ?? [], [refData]);
 
-  const toggleExpand = async (acc) => {
-    if (expandedId === acc._id) { setExpandedId(null); return; }
-    setExpandedId(acc._id);
-  };
+  const toggleExpand = useCallback((acc) => {
+    setExpandedId((prev) => (prev === acc._id ? null : acc._id));
+  }, []);
 
-  const loadStatements = async (accId) => {
+  const loadStatements = useCallback(async (accId) => {
     setStmtLoading((p) => ({ ...p, [accId]: true }));
     try {
       const data = await carWashApi.listStatements(accId);
       setExpandedStatements((p) => ({ ...p, [accId]: Array.isArray(data) ? data : [] }));
     } catch { toast.error("Failed to load statements"); }
     finally { setStmtLoading((p) => ({ ...p, [accId]: false })); }
-  };
+  }, []);
 
-  const handleCreate = async (payload) => {
-    await carWashApi.createCreditAccount(payload);
-    toast.success("Credit account created");
-    setShowCreate(false);
-    queryClient.invalidateQueries({ queryKey: ["cw-credit-accounts"] });
-  };
-
-  const handlePayment = async (form) => {
-    const res = await carWashApi.recordAccountPayment(payTarget._id, {
-      ...form,
-      amount: Number(form.amount),
-    });
-    toast.success(res?.message || "Payment applied");
-    const targetId = payTarget._id;
-    setPayTarget(null);
-    queryClient.invalidateQueries({ queryKey: ["cw-credit-accounts"] });
-    if (expandedId === targetId) loadStatements(targetId);
-  };
-
-  const handleEdit = async (form) => {
-    await carWashApi.updateCreditAccount(editTarget._id, form);
-    toast.success("Account updated");
-    setEditTarget(null);
-    queryClient.invalidateQueries({ queryKey: ["cw-credit-accounts"] });
-  };
-
-  const handleTopup = async (form) => {
-    const res = await carWashApi.recordAccountTopup(topupTarget._id, {
-      ...form,
-      amount: Number(form.amount),
-    });
-    toast.success(res?.message || "Wallet topped up");
-    const targetId = topupTarget._id;
-    setTopupTarget(null);
-    queryClient.invalidateQueries({ queryKey: ["cw-credit-accounts"] });
-    if (expandedId === targetId) loadTopups(targetId);
-  };
-
-  const loadTopups = async (accId) => {
+  const loadTopups = useCallback(async (accId) => {
     setTopupsLoading((p) => ({ ...p, [accId]: true }));
     try {
       const data = await carWashApi.listAccountTopups(accId);
       setExpandedTopups((p) => ({ ...p, [accId]: Array.isArray(data) ? data : [] }));
     } catch { toast.error("Failed to load top-up history"); }
     finally { setTopupsLoading((p) => ({ ...p, [accId]: false })); }
-  };
+  }, []);
 
-  const handleGenerateStatement = async (acc) => {
+  const handleCreate = useCallback(async (payload) => {
+    await carWashApi.createCreditAccount(payload);
+    toast.success("Credit account created");
+    setShowCreate(false);
+    queryClient.invalidateQueries({ queryKey: ["cw-credit-accounts"] });
+  }, [queryClient]);
+
+  const handlePayment = useCallback(async (form) => {
+    const res = await carWashApi.recordAccountPayment(payTarget._id, { ...form, amount: Number(form.amount) });
+    toast.success(res?.message || "Payment applied");
+    const targetId = payTarget._id;
+    setPayTarget(null);
+    queryClient.invalidateQueries({ queryKey: ["cw-credit-accounts"] });
+    if (expandedId === targetId) loadStatements(targetId);
+  }, [payTarget, expandedId, queryClient, loadStatements]);
+
+  const handleEdit = useCallback(async (form) => {
+    await carWashApi.updateCreditAccount(editTarget._id, form);
+    toast.success("Account updated");
+    setEditTarget(null);
+    queryClient.invalidateQueries({ queryKey: ["cw-credit-accounts"] });
+  }, [editTarget, queryClient]);
+
+  const handleTopup = useCallback(async (form) => {
+    const res = await carWashApi.recordAccountTopup(topupTarget._id, { ...form, amount: Number(form.amount) });
+    toast.success(res?.message || "Wallet topped up");
+    const targetId = topupTarget._id;
+    setTopupTarget(null);
+    queryClient.invalidateQueries({ queryKey: ["cw-credit-accounts"] });
+    if (expandedId === targetId) loadTopups(targetId);
+  }, [topupTarget, expandedId, queryClient, loadTopups]);
+
+  const handleGenerateStatement = useCallback(async (acc) => {
     try {
       const res = await carWashApi.generateStatement(acc._id, {});
       toast.success(`Statement ${res?.statementNumber || ""} generated`);
@@ -421,15 +567,14 @@ const CarWashAccounts = () => {
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to generate statement");
     }
-  };
+  }, [queryClient, loadStatements]);
 
-  const openStatementSms = (acc, stmt) => {
+  const openStatementSms = useCallback((acc, stmt) => {
     setSmsTarget({ _id: stmt._id, _accId: acc._id, name: acc.customer?.name, phone: acc.customer?.phone });
-    const period = fmtMonth(stmt.periodStart);
-    setSmsBody(`Hi ${acc.customer?.name || "Customer"}, your car wash statement for ${period} is KES ${Number(stmt.totalOutstanding || 0).toLocaleString()} for ${stmt.totalJobs} wash(es). Ref: ${stmt.statementNumber}. Thank you!`);
-  };
+    setSmsBody(`Hi ${acc.customer?.name || "Customer"}, your car wash statement for ${fmtMonth(stmt.periodStart)} is KES ${Number(stmt.totalOutstanding || 0).toLocaleString()} for ${stmt.totalJobs} wash(es). Ref: ${stmt.statementNumber}. Thank you!`);
+  }, []);
 
-  const sendStatementSms = async (phone, body) => {
+  const sendStatementSms = useCallback(async (phone, body) => {
     if (!smsTarget) return;
     setSmsSending(true);
     try {
@@ -440,7 +585,20 @@ const CarWashAccounts = () => {
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to send SMS");
     } finally { setSmsSending(false); }
-  };
+  }, [smsTarget, loadStatements]);
+
+  const sendStatementEmail = useCallback(async (acc, stmt) => {
+    const email = acc.billingEmail || "";
+    if (!email) return toast.warning("No billing email on this account. Add one via Edit.");
+    setEmailSending(stmt._id);
+    try {
+      const res = await carWashApi.sendStatementEmail(acc._id, stmt._id, { email });
+      toast.success(res?.message || "Statement emailed");
+      loadStatements(acc._id);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to send email");
+    } finally { setEmailSending(null); }
+  }, [loadStatements]);
 
   // Summary stats
   const stats = useMemo(() => {
@@ -597,7 +755,7 @@ const CarWashAccounts = () => {
                               <FaMoneyBillWave /> Pay
                             </button>
                           )}
-                          {acc.accountType === "monthly" && acc.status === "active" && (
+                          {acc.accountType !== "prepaid" && acc.status === "active" && (
                             <button onClick={() => handleGenerateStatement(acc)} className="inline-flex items-center gap-1 border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-700 hover:bg-violet-100">
                               <FaFileInvoice /> Statement
                             </button>
@@ -694,7 +852,7 @@ const CarWashAccounts = () => {
                               <div>
                                 <div className="mb-2 flex items-center justify-between">
                                   <span className="text-[11px] font-black uppercase tracking-wide text-slate-500">Statements</span>
-                                  {acc.accountType === "monthly" && (
+                                  {acc.accountType !== "prepaid" && (
                                     <button onClick={() => handleGenerateStatement(acc)} className="text-[10px] font-bold text-violet-700 hover:underline">
                                       + Generate
                                     </button>
@@ -713,9 +871,22 @@ const CarWashAccounts = () => {
                                     <div className="flex items-center gap-2">
                                       <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${stmtPill[s.status] || stmtPill.draft}`}>{s.status}</span>
                                       <span className="font-black text-slate-900 text-[11px]">{fmt(s.totalOutstanding)}</span>
+                                      <button onClick={() => printCreditStatement(acc, s)} title="Print / View" className="text-[10px] text-slate-400 hover:text-slate-700">
+                                        <FaPrint />
+                                      </button>
                                       {acc.customer?.phone && s.status !== "paid" && (
-                                        <button onClick={() => openStatementSms(acc, s)} className="text-[10px] text-emerald-700 hover:underline">
+                                        <button onClick={() => openStatementSms(acc, s)} title="Send SMS" className="text-[10px] text-emerald-700 hover:text-emerald-900">
                                           <FaSms />
+                                        </button>
+                                      )}
+                                      {s.status !== "paid" && (
+                                        <button
+                                          onClick={() => sendStatementEmail(acc, s)}
+                                          disabled={emailSending === s._id}
+                                          title={acc.billingEmail ? `Email to ${acc.billingEmail}` : "No billing email — add one via Edit"}
+                                          className={`text-[10px] ${acc.billingEmail ? "text-blue-600 hover:text-blue-800" : "text-slate-300 cursor-not-allowed"}`}
+                                        >
+                                          {emailSending === s._id ? "…" : <FaEnvelope />}
                                         </button>
                                       )}
                                     </div>
@@ -769,6 +940,8 @@ const CarWashAccounts = () => {
 // ─── Edit account modal ───────────────────────────────────────────────────────
 const EditAccountModal = ({ account, onSave, onClose }) => {
   const [form, setForm] = useState({
+    contactPerson: account.contactPerson || "",
+    billingEmail: account.billingEmail || "",
     creditLimit: String(account.creditLimit || ""),
     billingCycle: account.billingCycle || "monthly",
     billingDay: String(account.billingDay || "1"),
@@ -783,6 +956,8 @@ const EditAccountModal = ({ account, onSave, onClose }) => {
     setSaving(true);
     try {
       await onSave({
+        contactPerson: form.contactPerson.trim(),
+        billingEmail: form.billingEmail.trim().toLowerCase(),
         creditLimit: Number(form.creditLimit || 0),
         billingCycle: form.billingCycle,
         billingDay: Number(form.billingDay || 1),
@@ -840,9 +1015,20 @@ const EditAccountModal = ({ account, onSave, onClose }) => {
               </div>
             </div>
           )}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lc}>Contact Person</label>
+              <input className={ic} value={form.contactPerson} onChange={(e) => set("contactPerson", e.target.value)} placeholder="e.g. John Kamau" />
+            </div>
+            <div>
+              <label className={lc}>Billing Email</label>
+              <input className={ic} type="email" value={form.billingEmail} onChange={(e) => set("billingEmail", e.target.value)} placeholder="accounts@company.com" />
+            </div>
+          </div>
           <div>
             <label className={lc}>Plates (comma-separated)</label>
             <input className={ic} value={form.plates} onChange={(e) => set("plates", e.target.value)} placeholder="KCA123A, KCB456B" />
+            <p className="mt-0.5 text-[10px] text-slate-400">Jobs for these plates auto-link to this account</p>
           </div>
           <div>
             <label className={lc}>Notes</label>

@@ -16,24 +16,17 @@ export const getQueueDisplay = async (req, res, next) => {
       return res.status(404).json({ error: "Not found" });
     }
 
-    const company = await Company.findById(businessId).select("companyName modules").lean();
+    const company = await Company.findById(businessId).select("companyName modules carwashSettings").lean();
     if (!company?.modules?.carwash) {
       return res.status(404).json({ error: "Not found" });
     }
 
     const todayStart = todayStartEAT();
-    // Collected jobs (done/paid) only show in COLLECTED column for 3 min client-side;
-    // fetch up to 5 min so there's headroom for the 20 s poll cycle.
-    const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000);
 
     const jobs = await CarWashJob.find({
       business: businessId,
-      status: { $in: ["waiting", "washing", "ready", "done", "paid"] },
+      status: { $in: ["waiting", "washing", "drying", "ready"] },
       createdAt: { $gte: todayStart },
-      $or: [
-        { status: { $in: ["waiting", "washing", "ready"] } },
-        { updatedAt: { $gte: fiveMinsAgo } },
-      ],
     })
       .select("plateNumber itemDescription status serviceName serviceLines createdAt updatedAt jobType")
       .sort({ createdAt: 1 })
@@ -53,7 +46,7 @@ export const getQueueDisplay = async (req, res, next) => {
 
     res.json({
       success:  true,
-      business: { name: company.companyName },
+      business: { name: company.carwashSettings?.queueDisplayName?.trim() || company.companyName },
       jobs:     mapped,
     });
   } catch (error) {

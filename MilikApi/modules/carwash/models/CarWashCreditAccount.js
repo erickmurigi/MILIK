@@ -10,11 +10,13 @@ const carWashCreditAccountSchema = new mongoose.Schema(
     branch:        { type: mongoose.Schema.Types.ObjectId, ref: "CarWashBranch", default: null },
     accountNumber: { type: String, trim: true, required: true, minlength: 1 },
     customer:      { type: mongoose.Schema.Types.ObjectId, ref: "CarWashCustomer", required: true },
-    plates:        { type: [{ type: String, trim: true, uppercase: true }], default: [] },
-    accountType:   { type: String, enum: ACCOUNT_TYPES, required: true, default: "credit" },
-    creditLimit:   { type: Number, default: 0, min: 0 },  // 0 = no enforced limit
-    billingCycle:  { type: String, enum: BILLING_CYCLES, default: "monthly" },
-    billingDay:    { type: Number, default: 1, min: 1, max: 28 },
+    plates:         { type: [{ type: String, trim: true, uppercase: true }], default: [] },
+    accountType:    { type: String, enum: ACCOUNT_TYPES, required: true, default: "credit" },
+    contactPerson:  { type: String, trim: true, default: "" },
+    billingEmail:   { type: String, trim: true, lowercase: true, default: "" },
+    creditLimit:    { type: Number, default: 0, min: 0 },
+    billingCycle:   { type: String, enum: BILLING_CYCLES, default: "monthly" },
+    billingDay:     { type: Number, default: 1, min: 1, max: 28 },
     status:        { type: String, enum: ACCOUNT_STATUSES, default: "active", index: true },
 
     // Cached running balance — always recomputed on payment but cached for fast reads.

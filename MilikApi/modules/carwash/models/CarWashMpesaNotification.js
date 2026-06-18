@@ -16,6 +16,9 @@ const carWashMpesaNotificationSchema = new mongoose.Schema(
     senderName:      { type: String, trim: true, default: "" }, // FirstName + MiddleName + LastName from Safaricom
     transactionDate: { type: Date, default: null },
 
+    // How much of this notification's amount has been allocated to payments
+    allocatedAmount: { type: Number, default: 0, min: 0 },
+
     // Processing result
     status: {
       type: String,

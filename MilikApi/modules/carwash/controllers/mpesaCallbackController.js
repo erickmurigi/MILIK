@@ -19,7 +19,7 @@ import { autoEnrollPlate, awardLoyaltyStamp, sendPaymentConfirmationSms, sendUnm
 import { sendAdHocSms, sendAdHocSmsToMasked } from "../../../services/communicationService.js";
 import { resolveCarWashSmsBody } from "../services/carwashSmsService.js";
 import { normalizePlate, buildPlateRegex } from "../utils/plateUtils.js";
-import { resolveActiveBusinessId, parseDateRange } from "../services/businessScope.js";
+import { resolveActiveBusinessId, resolveActiveBranchId, parseDateRange } from "../services/businessScope.js";
 import { createError } from "../../../utils/error.js";
 
 const normalizeText = (v = "") => String(v || "").trim();
@@ -710,8 +710,10 @@ export const confirmCarWashCallback = async (req, res) => {
 export const listMpesaNotifications = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
+    const branchId = resolveActiveBranchId(req);
 
     const filter = { business };
+    if (branchId) filter.branch = new mongoose.Types.ObjectId(String(branchId));
     if (req.query.status) filter.status = req.query.status;
     if (req.query.plate) {
       const p = normalizePlate(req.query.plate);
@@ -741,10 +743,19 @@ export const listMpesaNotifications = async (req, res, next) => {
       CarWashMpesaNotification.countDocuments(filter),
     ]);
 
+    const summaryMatch = { business: new mongoose.Types.ObjectId(String(business)) };
+    if (branchId) summaryMatch.branch = new mongoose.Types.ObjectId(String(branchId));
     const summary = await CarWashMpesaNotification.aggregate([
-      { $match: { business: new mongoose.Types.ObjectId(String(business)) } },
+      { $match: summaryMatch },
       { $group: { _id: "$status", count: { $sum: 1 }, totalAmount: { $sum: "$amount" } } },
     ]);
+
+    // Backcompat: old matched notifications predate allocatedAmount — populate from matchedPayment
+    for (const n of notifications) {
+      if (n.status === "matched" && !n.allocatedAmount && n.matchedPayment?.amount) {
+        n.allocatedAmount = round2(n.matchedPayment.amount);
+      }
+    }
 
     res.json({ success: true, data: { notifications, pagination: { page, limit, total, pages: Math.max(Math.ceil(total / limit), 1) }, summary } });
   } catch (error) {
@@ -878,6 +889,152 @@ export const reassignMpesaNotification = async (req, res, next) => {
     res.json({ success: true, data: { notification: populated } });
   } catch (error) {
     next(error);
+  }
+};
+
+// ─── List unpaid jobs (for allocation modal) ──────────────────────────────────
+export const listUnpaidJobs = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const since = new Date();
+    since.setMonth(since.getMonth() - 6);
+
+    const jobs = await CarWashJob.find({ business, status: { $nin: ["cancelled"] }, createdAt: { $gte: since } })
+      .select("jobNumber plateNumber customerName serviceName price discountAmount createdAt creditAccount")
+      .sort({ createdAt: -1 })
+      .limit(500)
+      .lean();
+
+    if (!jobs.length) return res.json({ success: true, data: [] });
+
+    const jobIds = jobs.map((j) => j._id);
+    const payTotals = await CarWashPayment.aggregate([
+      { $match: { business: new mongoose.Types.ObjectId(String(business)), job: { $in: jobIds } } },
+      { $group: { _id: "$job", paid: { $sum: "$amount" } } },
+    ]);
+    const paidMap = new Map(payTotals.map((p) => [String(p._id), round2(p.paid)]));
+
+    const unpaid = [];
+    for (const j of jobs) {
+      const net         = round2(Math.max(0, Number(j.price || 0) - Number(j.discountAmount || 0)));
+      const paid        = paidMap.get(String(j._id)) || 0;
+      const outstanding = round2(net - paid);
+      if (outstanding > 0) unpaid.push({ ...j, net, paid, outstanding });
+    }
+
+    res.json({ success: true, data: unpaid });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── Allocate one M-Pesa notification across multiple jobs ───────────────────
+export const allocateNotification = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const notif = await CarWashMpesaNotification.findOne({ _id: req.params.id, business });
+    if (!notif) return next(createError(404, "Notification not found"));
+    if (notif.isReversed) return next(createError(409, "Cannot allocate a reversed notification"));
+
+    const allocations = Array.isArray(req.body.allocations) ? req.body.allocations : [];
+    if (!allocations.length) return next(createError(400, "No allocations provided"));
+
+    const alreadyAllocated = round2(notif.allocatedAmount || 0);
+    const remaining        = round2(notif.amount - alreadyAllocated);
+    const totalNew         = round2(allocations.reduce((s, a) => s + Number(a.amount || 0), 0));
+    if (totalNew <= 0)          return next(createError(400, "Total allocation must be greater than 0"));
+    if (totalNew > remaining + 0.01) return next(createError(400, `Total (${totalNew}) exceeds remaining amount (${remaining})`));
+
+    const company   = await Company.findById(business).lean();
+    const configs   = getRawMpesaPaybillConfigs(company?.paymentIntegration || {});
+    const config    = configs.find((c) => normalizeText(c?.shortCode) === normalizeText(notif.shortCode)) || getPrimaryMpesaPaybillConfig(configs);
+    const cashbookId = config?.defaultCashbookAccountId;
+    if (!cashbookId) return next(createError(422, "Cashbook not configured on M-Pesa paybill settings"));
+    const cashbook = await ChartOfAccount.findOne({ _id: cashbookId, business, type: "asset", isPosting: true }).lean();
+    if (!cashbook) return next(createError(422, "Cashbook account not found"));
+
+    const normalizedMsisdn = notif.msisdn || null;
+    const rawMasked   = normalizeText(notif.maskedMsisdn || notif.rawPayload?.MSISDN || "");
+    const maskedMsisdn = !normalizedMsisdn && rawMasked.length > 15 ? rawMasked : null;
+
+    const results = [];
+    for (const alloc of allocations) {
+      const amount = round2(Number(alloc.amount || 0));
+      if (amount <= 0) continue;
+
+      const job = await CarWashJob.findOne({ _id: alloc.jobId, business, status: { $nin: ["cancelled"] } }).lean();
+      if (!job) continue;
+
+      const pt   = await CarWashPayment.aggregate([{ $match: { business: job.business, job: job._id } }, { $group: { _id: null, paid: { $sum: "$amount" } } }]);
+      const jobOutstanding = round2(Math.max(netJobPrice(job) - (pt?.[0]?.paid || 0), 0));
+      if (jobOutstanding <= 0) continue;
+
+      const payAmount = round2(Math.min(amount, jobOutstanding));
+      const payment = await CarWashPayment.create({
+        business,
+        branch:            job.branch || notif.branch || null,
+        job:               job._id,
+        amount:            payAmount,
+        method:            "mpesa",
+        cashbookAccount:   cashbook._id,
+        reference:         notif.transactionCode || "",
+        receivedFromPhone: normalizedMsisdn,
+        paymentDate:       notif.transactionDate || notif.createdAt,
+        notes: `Allocated from M-Pesa notification (ref: ${notif.transactionCode || notif.billRefNumber})`,
+      });
+
+      const updatedJob = await refreshJobPaymentStatus(business, job._id);
+      postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: req.user?._id || null }).catch(() => {});
+
+      if (updatedJob) {
+        accrueCommissionForJob({ req, job: updatedJob }).catch(() => {});
+        const jobContactUpdates = {};
+        if (normalizedMsisdn) jobContactUpdates.phone = normalizedMsisdn;
+        else if (maskedMsisdn) jobContactUpdates.maskedMsisdn = maskedMsisdn;
+        if (Object.keys(jobContactUpdates).length) {
+          CarWashJob.updateOne({ _id: job._id, business }, { $set: jobContactUpdates }).catch(() => {});
+        }
+        autoEnrollPlate({ business, plate: normalizePlate(job.plateNumber), customerName: job.customerName, phone: normalizedMsisdn, maskedMsisdn, payerName: notif.senderName || null }).catch(() => {});
+        const allocRemaining = round2(Math.max(0, jobOutstanding - payAmount));
+        let loyaltySmsBody = null;
+        if (["paid", "partial"].includes(updatedJob.paymentStatus)) {
+          try {
+            const stampResult = await awardLoyaltyStamp({ business, job: updatedJob, overridePhone: normalizedMsisdn, maskedMsisdn, suppressSms: true, payerName: notif.senderName || null });
+            loyaltySmsBody = stampResult?.smsBody || null;
+          } catch (err) {
+            console.error("[CW Allocate] Stamp failed job=%s: %s", updatedJob.jobNumber || job._id, err?.message || err);
+          }
+        }
+        await sendPaymentConfirmationSms({ business, job: updatedJob, amount: payAmount, remaining: allocRemaining, overridePhone: normalizedMsisdn, maskedMsisdn, loyaltySmsBody, payerName: notif.senderName || null });
+        if (updatedJob.paymentStatus === "paid") {
+          markJobCommissionsPayable({ business, jobId: updatedJob._id }).catch(() => {});
+        }
+      }
+      results.push({ jobId: job._id, jobNumber: job.jobNumber, plateNumber: job.plateNumber, amount: payAmount });
+    }
+
+    if (!results.length) return next(createError(400, "No valid allocations could be processed"));
+
+    const newAllocated = round2(alreadyAllocated + results.reduce((s, r) => s + r.amount, 0));
+    notif.allocatedAmount = newAllocated;
+    if (newAllocated >= notif.amount - 0.01) {
+      notif.status = "matched";
+      if (!notif.matchedJob && results.length === 1) notif.matchedJob = results[0].jobId;
+    }
+    notif.notes = (notif.notes ? notif.notes + " | " : "") + `Allocated to ${results.length} job(s) via multi-allocation`;
+    await notif.save();
+
+    const populated = await CarWashMpesaNotification.findById(notif._id)
+      .populate("matchedJob",     "jobNumber plateNumber customerName status paymentStatus price")
+      .populate("matchedPayment", "amount reference paymentDate")
+      .lean();
+    if (populated && !populated.allocatedAmount && populated.matchedPayment?.amount) {
+      populated.allocatedAmount = round2(populated.matchedPayment.amount);
+    }
+
+    res.json({ success: true, data: { notification: populated, allocated: results }, message: `Allocated to ${results.length} job(s)` });
+  } catch (err) {
+    next(err);
   }
 };
 

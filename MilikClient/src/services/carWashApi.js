@@ -57,6 +57,8 @@ export const carWashApi = {
   initiateStkPush: async (payload) => unwrap(await adminRequests.post("/carwash/payments/stk-push", payload)),
   listMpesaNotifications: async (params = {}) => unwrap(await adminRequests.get("/carwash/mpesa/notifications", { params: bp(params) })),
   reassignMpesaNotification: async (id, jobId) => unwrap(await adminRequests.patch(`/carwash/mpesa/notifications/${id}/reassign`, { jobId })),
+  listUnpaidJobs: async () => unwrap(await adminRequests.get("/carwash/mpesa/unpaid-jobs")),
+  allocateMpesaPayment: async (id, payload) => unwrap(await adminRequests.post(`/carwash/mpesa/notifications/${id}/allocate`, payload)),
   registerMpesaUrls: async (shortCode) => unwrap(await adminRequests.post("/carwash/mpesa/register-urls", { shortCode })),
   updatePaymentReconciliation: async (id, payload) => unwrap(await adminRequests.patch(`/carwash/payments/${id}/reconciliation`, payload)),
   listDeposits: async (params = {}) => unwrap(await adminRequests.get("/carwash/deposits", { params: bp(params) })),
@@ -122,6 +124,7 @@ export const carWashApi = {
     return unwrap(await adminRequests.post(`/carwash/jobs/${jobId}/photos`, fd, { headers: { "Content-Type": "multipart/form-data" } }));
   },
   deleteJobPhoto: async (jobId, url) => unwrap(await adminRequests.delete(`/carwash/jobs/${jobId}/photos`, { params: { url } })),
+  getCustomerStatement: async (customerId) => unwrap(await adminRequests.get(`/carwash/loyalty/customers/${customerId}/statement`)),
   sendCustomerSms: async (customerId, payload) => unwrap(await adminRequests.post(`/carwash/loyalty/customers/${customerId}/sms`, payload)),
   sendPaymentSms: async (paymentId, payload) => unwrap(await adminRequests.post(`/carwash/payments/${paymentId}/sms`, payload)),
 
@@ -141,6 +144,7 @@ export const carWashApi = {
   listStatements: async (id, params = {}) => unwrap(await adminRequests.get(`/carwash/accounts/${id}/statements`, { params })),
   getStatement: async (id, statementId) => unwrap(await adminRequests.get(`/carwash/accounts/${id}/statements/${statementId}`)),
   sendStatementSms: async (id, statementId, payload) => unwrap(await adminRequests.post(`/carwash/accounts/${id}/statements/${statementId}/sms`, payload)),
+  sendStatementEmail: async (id, statementId, payload) => unwrap(await adminRequests.post(`/carwash/accounts/${id}/statements/${statementId}/email`, payload)),
 };
 
 export const todayISO = () => new Date().toISOString().slice(0, 10);

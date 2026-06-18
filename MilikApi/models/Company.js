@@ -577,6 +577,9 @@ const companySchema = new mongoose.Schema(
         card:  { type: mongoose.Schema.Types.ObjectId, ref: 'ChartOfAccount', default: null },
         other: { type: mongoose.Schema.Types.ObjectId, ref: 'ChartOfAccount', default: null },
       },
+      queueDisplayName:       { type: String,  default: '', trim: true, maxlength: 60 },
+      discountMinJobPrice:    { type: Number,  default: 0, min: 0 },
+      discountMaxPercent:     { type: Number,  default: 0, min: 0, max: 100 },
       savingsEnabled:         { type: Boolean, default: true },
       savingsDeductionPerJob: { type: Number,  default: 100, min: 0 },
       smsTemplates: [

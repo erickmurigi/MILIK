@@ -52,14 +52,22 @@ const ProgramPanel = ({ program, onSaved }) => {
     stampsRequired: 10,
     rewardType: "free_wash",
     rewardValue: 0,
+    rewardServiceId: "",
     stampExpiryDays: 0,
     smsOnStamp: true,
     smsOnReward: true,
     smsOnPayment: false,
   });
+  const [services, setServices] = useState([]);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const canManage = useCarWashPermission("carwash-loyalty", "manage");
+
+  useEffect(() => {
+    carWashApi.listServices({ active: true })
+      .then((d) => setServices(Array.isArray(d) ? d : d?.services ?? []))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (program) {
@@ -69,6 +77,7 @@ const ProgramPanel = ({ program, onSaved }) => {
         stampsRequired: program.stampsRequired ?? 10,
         rewardType: program.rewardType || "free_wash",
         rewardValue: program.rewardValue ?? 0,
+        rewardServiceId: program.rewardServiceId ? String(program.rewardServiceId?._id || program.rewardServiceId) : "",
         stampExpiryDays: program.stampExpiryDays ?? 0,
         smsOnStamp: program.smsOnStamp !== false,
         smsOnReward: program.smsOnReward !== false,
@@ -116,12 +125,31 @@ const ProgramPanel = ({ program, onSaved }) => {
         <div>
           <label className={labelClass}>Reward type</label>
           <select className={inputClass} value={form.rewardType} onChange={e => set("rewardType", e.target.value)}>
-            <option value="free_wash">Free wash</option>
+            <option value="free_service">Free specific service</option>
+            <option value="free_wash">Free wash (entire job)</option>
             <option value="discount_percent">Discount (%)</option>
             <option value="discount_fixed">Discount (fixed KES)</option>
           </select>
         </div>
-        {form.rewardType !== "free_wash" && (
+        {form.rewardType === "free_service" && (
+          <div>
+            <label className={labelClass}>Free reward service</label>
+            <select
+              className={inputClass}
+              value={form.rewardServiceId}
+              onChange={e => set("rewardServiceId", e.target.value)}
+            >
+              <option value="">— Select service —</option>
+              {services.map(s => (
+                <option key={s._id} value={s._id}>{s.name}</option>
+              ))}
+            </select>
+            {!form.rewardServiceId && (
+              <p className="mt-1 text-[10px] font-semibold text-amber-600">Select the service customers get free when redeeming their reward</p>
+            )}
+          </div>
+        )}
+        {(form.rewardType === "discount_percent" || form.rewardType === "discount_fixed") && (
           <div>
             <label className={labelClass}>{form.rewardType === "discount_percent" ? "Discount %" : "Discount KES"}</label>
             <input className={inputClass} type="number" min={0} value={form.rewardValue} onChange={e => set("rewardValue", Number(e.target.value))} />
@@ -214,6 +242,7 @@ const CarWashLoyalty = () => {
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [loading, setLoading] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
@@ -227,7 +256,6 @@ const CarWashLoyalty = () => {
   const [smsBody, setSmsBody] = useState("");
   const [smsSending, setSmsSending] = useState(false);
   const searchRef = useRef(null);
-  const PAGE_SIZE = 30;
 
   const loadProgram = useCallback(async () => {
     try { setProgram(await carWashApi.getLoyaltyProgram()); } catch (_) {}
@@ -236,7 +264,7 @@ const CarWashLoyalty = () => {
   const loadCustomers = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await carWashApi.listLoyaltyCustomers({ search: appliedSearch || undefined, page, limit: PAGE_SIZE });
+      const res = await carWashApi.listLoyaltyCustomers({ search: appliedSearch || undefined, page, limit: pageSize });
       setCustomers(Array.isArray(res) ? res : res?.data ?? []);
       setTotal(res?.total ?? (Array.isArray(res) ? res.length : 0));
     } catch (_) {
@@ -244,11 +272,12 @@ const CarWashLoyalty = () => {
     } finally {
       setLoading(false);
     }
-  }, [appliedSearch, page]);
+  }, [appliedSearch, page, pageSize]);
 
   useEffect(() => { loadProgram(); }, [loadProgram]);
   useEffect(() => { loadCustomers(); }, [loadCustomers]);
 
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const applySearch = () => { setAppliedSearch(search); setPage(1); };
 
   const openAdd = () => {
@@ -307,10 +336,10 @@ const CarWashLoyalty = () => {
   };
 
   const stampsRequired = program?.stampsRequired ?? 10;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const rewardDesc = (prog) => {
     if (!prog) return "a reward";
+    if (prog.rewardType === "free_service") return "a free service";
     if (prog.rewardType === "free_wash") return "a free wash";
     if (prog.rewardType === "discount_percent") return `${prog.rewardValue}% off`;
     return `KES ${prog.rewardValue} off`;
@@ -394,8 +423,12 @@ const CarWashLoyalty = () => {
       }
     >
       {tab === "program" ? (
-        <ProgramPanel program={program} onSaved={p => setProgram(p)} />
+        <div className="flex-1 min-h-0 overflow-y-auto p-2">
+          <ProgramPanel program={program} onSaved={p => setProgram(p)} />
+        </div>
       ) : (
+        <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
+        <div className="flex-1 min-h-0 overflow-y-auto p-2">
         <div className="space-y-3">
           {/* Program chip */}
           {program && (
@@ -608,15 +641,42 @@ const CarWashLoyalty = () => {
             </table>
           </div>
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-end gap-1 text-xs">
-              <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="border border-slate-300 bg-white px-3 py-1 font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40">Prev</button>
-              <span className="border border-slate-300 bg-white px-3 py-1 font-black text-slate-700">{page} / {totalPages}</span>
-              <button disabled={page === totalPages} onClick={() => setPage(p => p + 1)} className="border border-slate-300 bg-white px-3 py-1 font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40">Next</button>
-            </div>
-          )}
         </div>
+        </div>{/* end scrollable */}
+
+        {/* Pagination bar — always visible */}
+        <div className="flex-shrink-0 flex min-h-9 items-center justify-between border-t border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
+          <div className="flex items-center gap-1.5">
+            <span className="font-semibold text-slate-500 normal-case">Per page:</span>
+            <select
+              value={pageSize}
+              onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}
+              className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition normal-case"
+            >
+              {[25, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPage(p => Math.max(p - 1, 1))}
+              disabled={page <= 1 || loading}
+              className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              Previous
+            </button>
+            <span>Page {page} of {totalPages}</span>
+            <button
+              type="button"
+              onClick={() => setPage(p => Math.min(p + 1, totalPages))}
+              disabled={page >= totalPages || loading}
+              className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+        </div>{/* end flex col */}
       )}
 
       {smsTarget && (

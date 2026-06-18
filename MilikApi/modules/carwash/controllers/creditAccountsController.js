@@ -8,7 +8,7 @@ import CarWashCustomer from "../models/CarWashCustomer.js";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import { createError } from "../../../utils/error.js";
 import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
-import { sendAdHocSms } from "../../../services/communicationService.js";
+import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationService.js";
 import { postCarWashTopupLedger, reverseCarWashTopupLedger } from "../services/carwashAccountingService.js";
 import { resolveCarWashSmsBody } from "../services/carwashSmsService.js";
 import { accrueCommissionForJob, markJobCommissionsPayable } from "../services/commissionService.js";
@@ -168,7 +168,7 @@ export const createAccount = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
 
-    const { customerId, accountType, creditLimit, billingCycle, billingDay, notes, plates } = req.body;
+    const { customerId, accountType, contactPerson, billingEmail, creditLimit, billingCycle, billingDay, notes, plates } = req.body;
     if (!customerId) return next(createError(400, "Customer is required"));
     if (!accountType || !["credit", "monthly", "prepaid"].includes(accountType)) {
       return next(createError(400, "accountType must be 'credit', 'monthly', or 'prepaid'"));
@@ -191,6 +191,8 @@ export const createAccount = async (req, res, next) => {
       customer: customer._id,
       plates: allPlates,
       accountType,
+      contactPerson: String(contactPerson || "").trim(),
+      billingEmail:  String(billingEmail  || "").trim().toLowerCase(),
       creditLimit: Math.max(0, Number(creditLimit || 0)),
       billingCycle: billingCycle || "monthly",
       billingDay: Math.min(28, Math.max(1, Number(billingDay || 1))),
@@ -250,10 +252,12 @@ export const updateAccount = async (req, res, next) => {
     const account = await CarWashCreditAccount.findOne({ _id: req.params.id, business });
     if (!account) return next(createError(404, "Credit account not found"));
 
-    const { creditLimit, billingCycle, billingDay, status, notes, plates } = req.body;
-    if (creditLimit !== undefined) account.creditLimit = Math.max(0, Number(creditLimit));
-    if (billingCycle !== undefined) account.billingCycle = billingCycle;
-    if (billingDay !== undefined) account.billingDay = Math.min(28, Math.max(1, Number(billingDay)));
+    const { creditLimit, billingCycle, billingDay, status, notes, plates, contactPerson, billingEmail } = req.body;
+    if (contactPerson !== undefined) account.contactPerson = String(contactPerson).trim();
+    if (billingEmail  !== undefined) account.billingEmail  = String(billingEmail).trim().toLowerCase();
+    if (creditLimit   !== undefined) account.creditLimit   = Math.max(0, Number(creditLimit));
+    if (billingCycle  !== undefined) account.billingCycle  = billingCycle;
+    if (billingDay    !== undefined) account.billingDay    = Math.min(28, Math.max(1, Number(billingDay)));
     if (status !== undefined && ["active", "suspended", "closed"].includes(status)) account.status = status;
     if (notes !== undefined) account.notes = String(notes).trim();
     if (Array.isArray(plates)) {
@@ -445,14 +449,29 @@ export const generateStatement = async (req, res, next) => {
       .populate("customer", "name phone").lean();
     if (!account) return next(createError(404, "Credit account not found"));
 
-    // Default to the current calendar month if no period provided
-    const now = new Date();
+    const now         = new Date();
+    const isCreditType = account.accountType === "credit";
+
+    // Credit accounts cover all jobs from account opening; monthly defaults to current calendar month
     const periodStart = req.body.periodStart
       ? new Date(req.body.periodStart)
-      : new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      : isCreditType
+        ? new Date(account.createdAt || 0)
+        : new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
     const periodEnd = req.body.periodEnd
       ? new Date(req.body.periodEnd)
       : new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    // Prevent duplicate monthly statements for the same calendar month
+    if (!isCreditType && !req.body.periodStart) {
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      const existing   = await CarWashAccountStatement.findOne({
+        business, account: account._id,
+        periodStart: { $gte: monthStart, $lt: monthEnd },
+      }).lean();
+      if (existing) return next(createError(409, `Statement ${existing.statementNumber} already exists for this month`));
+    }
 
     // Fetch all non-cancelled jobs in the period
     const jobs = await CarWashJob.find({
@@ -474,15 +493,16 @@ export const generateStatement = async (req, res, next) => {
     const paidMap = new Map(paymentTotals.map((p) => [String(p._id), p.paid]));
 
     const jobLines = jobs.map((j) => {
-      const paid = paidMap.get(String(j._id)) || 0;
+      const net  = round2(Number(j.price || 0) - Number(j.discountAmount || 0));
+      const paid = round2(paidMap.get(String(j._id)) || 0);
       return {
         job: j._id,
         jobNumber: j.jobNumber,
         plateNumber: j.plateNumber,
         serviceName: j.serviceName,
-        price: j.price,
-        paidAmount: round2(paid),
-        outstanding: round2(j.price - paid),
+        price: net,
+        paidAmount: paid,
+        outstanding: round2(net - paid),
         jobDate: j.createdAt,
       };
     });
@@ -507,7 +527,7 @@ export const generateStatement = async (req, res, next) => {
       : 0;
     const openingBalance = round2(priorJobs.reduce((s, j) => s + Math.max(0, j.price - (j.discountAmount || 0)), 0) - priorPaid);
 
-    const statementNumber = await generateStatementNumber(business, periodStart);
+    const statementNumber = await generateStatementNumber(business, isCreditType ? now : periodStart);
     const statement = await CarWashAccountStatement.create({
       business,
       account: account._id,
@@ -594,6 +614,95 @@ export const sendStatementSms = async (req, res, next) => {
 
     await CarWashAccountStatement.updateOne({ _id: statement._id }, { status: "sent", sentAt: new Date() });
     res.json({ success: true, message: "Statement SMS sent" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── Send statement email ─────────────────────────────────────────────────────
+
+export const sendStatementEmail = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const statement = await CarWashAccountStatement.findOne({ _id: req.params.statementId, business })
+      .populate({ path: "account", populate: { path: "customer", select: "name phone" } })
+      .lean();
+    if (!statement) return next(createError(404, "Statement not found"));
+
+    const account  = statement.account;
+    const customer = account?.customer;
+    const to = String(req.body.email || account?.billingEmail || "").trim().toLowerCase();
+    if (!to) return next(createError(400, "No billing email on this account. Add one in account settings or provide it in the request."));
+
+    const period          = new Date(statement.periodStart).toLocaleString("en-KE", { month: "long", year: "numeric" });
+    const contactName     = account?.contactPerson || customer?.name || "Customer";
+    const fmtAmt          = (n) => `KES ${Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2 })}`;
+
+    const jobRows = (statement.jobs || []).map((j) => `
+      <tr>
+        <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">${new Date(j.jobDate).toLocaleDateString("en-KE")}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">${j.plateNumber || "—"}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">${j.serviceName || "—"}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right">${fmtAmt(j.price)}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right">${fmtAmt(j.paidAmount)}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:bold;color:${j.outstanding > 0 ? "#dc2626" : "#16a34a"}">${fmtAmt(j.outstanding)}</td>
+      </tr>`).join("");
+
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,sans-serif;color:#1e293b;max-width:700px;margin:0 auto;padding:24px">
+      <div style="background:#0B3B2E;color:#fff;padding:20px 24px;border-radius:4px 4px 0 0">
+        <h2 style="margin:0;font-size:18px">Car Wash Account Statement</h2>
+        <p style="margin:4px 0 0;opacity:.75;font-size:13px">${period} · Ref: ${statement.statementNumber}</p>
+      </div>
+      <div style="border:1px solid #e2e8f0;border-top:none;padding:20px 24px">
+        <p style="margin:0 0 4px"><strong>To:</strong> ${contactName}</p>
+        <p style="margin:0 0 4px"><strong>Account:</strong> ${account?.accountNumber || ""}</p>
+        <p style="margin:0 0 16px"><strong>Period:</strong> ${period}</p>
+
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr style="background:#f1f5f9">
+              <th style="padding:8px;text-align:left">Date</th>
+              <th style="padding:8px;text-align:left">Plate</th>
+              <th style="padding:8px;text-align:left">Service</th>
+              <th style="padding:8px;text-align:right">Amount</th>
+              <th style="padding:8px;text-align:right">Paid</th>
+              <th style="padding:8px;text-align:right">Balance</th>
+            </tr>
+          </thead>
+          <tbody>${jobRows}</tbody>
+          <tfoot>
+            <tr style="background:#f8fafc">
+              <td colspan="3" style="padding:8px;font-weight:bold">Opening Balance</td>
+              <td colspan="3" style="padding:8px;text-align:right">${fmtAmt(statement.openingBalance)}</td>
+            </tr>
+            <tr style="background:#f8fafc">
+              <td colspan="3" style="padding:8px;font-weight:bold">Total Invoiced</td>
+              <td colspan="3" style="padding:8px;text-align:right">${fmtAmt(statement.totalInvoiced)}</td>
+            </tr>
+            <tr style="background:#f8fafc">
+              <td colspan="3" style="padding:8px;font-weight:bold">Total Paid</td>
+              <td colspan="3" style="padding:8px;text-align:right">${fmtAmt(statement.totalPaid)}</td>
+            </tr>
+            <tr style="background:#0B3B2E;color:#fff">
+              <td colspan="3" style="padding:10px 8px;font-weight:bold;font-size:14px">Amount Due</td>
+              <td colspan="3" style="padding:10px 8px;text-align:right;font-weight:bold;font-size:14px">${fmtAmt(statement.totalOutstanding)}</td>
+            </tr>
+          </tfoot>
+        </table>
+        <p style="margin:20px 0 0;font-size:12px;color:#64748b">This is an automatically generated statement. Please contact us if you have any queries.</p>
+      </div>
+    </body></html>`;
+
+    await sendAdHocEmail({
+      businessId: business,
+      to,
+      subject: `Car Wash Statement — ${period} (${statement.statementNumber})`,
+      html,
+      text: `Hi ${contactName},\n\nYour car wash statement for ${period}:\nInvoiced: ${fmtAmt(statement.totalInvoiced)}\nPaid: ${fmtAmt(statement.totalPaid)}\nAmount Due: ${fmtAmt(statement.totalOutstanding)}\nRef: ${statement.statementNumber}\n\nThank you.`,
+    });
+
+    await CarWashAccountStatement.updateOne({ _id: statement._id }, { status: "sent", sentAt: new Date() });
+    res.json({ success: true, message: `Statement emailed to ${to}` });
   } catch (err) {
     next(err);
   }

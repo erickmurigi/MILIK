@@ -3,6 +3,7 @@ import CarWashCustomer from '../models/CarWashCustomer.js';
 import CarWashLoyaltyProgram from '../models/CarWashLoyaltyProgram.js';
 import CarWashLoyaltyCard from '../models/CarWashLoyaltyCard.js';
 import CarWashJob from '../models/CarWashJob.js';
+import CarWashService from '../models/CarWashService.js';
 import CarWashPayment from '../models/CarWashPayment.js';
 import CarWashCreditAccount from '../models/CarWashCreditAccount.js';
 import { accrueCommissionForJob, markJobCommissionsPayable } from '../services/commissionService.js';
@@ -39,7 +40,7 @@ export const upsertLoyaltyProgram = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
     const {
-      name, isActive, stampsRequired, rewardType, rewardValue,
+      name, isActive, stampsRequired, rewardType, rewardValue, rewardServiceId,
       applicableServices, stampExpiryDays, smsOnStamp, smsOnReward, smsOnPayment,
     } = req.body;
 
@@ -52,9 +53,11 @@ export const upsertLoyaltyProgram = async (req, res, next) => {
       name: String(name || 'Loyalty Program').trim() || 'Loyalty Program',
       isActive: isActive !== undefined ? Boolean(isActive) : true,
       stampsRequired: stampsNum,
-      rewardType: ['free_wash', 'discount_percent', 'discount_fixed'].includes(rewardType)
+      rewardType: ['free_wash', 'discount_percent', 'discount_fixed', 'free_service'].includes(rewardType)
         ? rewardType : 'free_wash',
       rewardValue: Number(rewardValue || 0),
+      rewardServiceId: rewardType === 'free_service' && mongoose.Types.ObjectId.isValid(String(rewardServiceId || ''))
+        ? rewardServiceId : null,
       applicableServices: Array.isArray(applicableServices)
         ? applicableServices.filter(id => mongoose.Types.ObjectId.isValid(String(id)))
         : [],
@@ -345,16 +348,22 @@ export const lookupPlate = async (req, res, next) => {
     const customer = await CarWashCustomer.findOne({ business, plates: buildPlateRegex(plate) }).lean();
     const card = customer
       ? await CarWashLoyaltyCard.findOne({ business, customer: customer._id })
-          .populate('program', 'name stampsRequired rewardType rewardValue isActive')
+          .populate('program', 'name stampsRequired rewardType rewardValue rewardServiceId isActive')
           .lean()
       : null;
+
+    let rewardService = null;
+    if (card?.program?.rewardType === 'free_service' && card.program.rewardServiceId) {
+      const svc = await CarWashService.findById(card.program.rewardServiceId).select('name defaultPrice').lean();
+      if (svc) rewardService = { _id: svc._id, name: svc.name, defaultPrice: svc.defaultPrice || 0 };
+    }
 
     res.json({
       success: true,
       data: {
         plate,
         customer: customer || null,
-        loyaltyCard: card || null,
+        loyaltyCard: card ? { ...card, rewardService } : null,
         registered: Boolean(customer),
       },
     });
@@ -393,6 +402,9 @@ export const awardLoyaltyStamp = async ({ business, job, overridePhone = null, m
     { $setOnInsert: { business, customer: customer._id, program: program._id } },
     { upsert: true, new: true }
   );
+
+  // Redemption visits never earn a stamp — stamps restart on the next fresh visit
+  if (job.rewardRedemption) return null;
 
   // Idempotency guard — a stamp for this exact job was already awarded (e.g. Done then Paid)
   const jobIdStr = String(job._id);
@@ -978,6 +990,63 @@ export const migrateToPerCustomerCards = async (req, res, next) => {
       message: `Migration complete: ${merged} customer${merged !== 1 ? 's' : ''} merged, ${skipped} already had a single card.`,
       merged,
       skipped,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getCustomerStatement = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const customer = await CarWashCustomer.findOne({ _id: req.params.id, business }).lean();
+    if (!customer) return next(createError(404, "Customer not found"));
+
+    const plates = (customer.plates || []).map(normalizePlate).filter(Boolean);
+    if (!plates.length) {
+      return res.json({ success: true, data: { customer, jobs: [], totals: { invoiced: 0, paid: 0, outstanding: 0 } } });
+    }
+
+    const jobs = await CarWashJob.find({
+      business,
+      plateNumber: { $in: plates },
+      status: { $ne: "cancelled" },
+    })
+      .sort({ createdAt: 1 })
+      .select("jobNumber plateNumber serviceName serviceLines price discountAmount createdAt")
+      .lean();
+
+    const jobIds = jobs.map((j) => j._id);
+    const payTotals = jobIds.length
+      ? await CarWashPayment.aggregate([
+          { $match: { job: { $in: jobIds } } },
+          { $group: { _id: "$job", paid: { $sum: "$amount" } } },
+        ])
+      : [];
+    const paidByJob = new Map(payTotals.map((p) => [String(p._id), round2(Number(p.paid || 0))]));
+
+    let runningBalance = 0;
+    let totalInvoiced = 0;
+    let totalPaid = 0;
+
+    const rows = jobs.map((j) => {
+      const charge = round2(Number(j.price || 0) - Number(j.discountAmount || 0));
+      const paid   = paidByJob.get(String(j._id)) || 0;
+      runningBalance = round2(runningBalance + charge - paid);
+      totalInvoiced  = round2(totalInvoiced + charge);
+      totalPaid      = round2(totalPaid + paid);
+
+      const sl = j.serviceLines || [];
+      const serviceName = sl.length
+        ? sl[0].serviceName + (sl.length > 1 ? ` +${sl.length - 1}` : "")
+        : (j.serviceName || "—");
+
+      return { _id: j._id, jobNumber: j.jobNumber, plateNumber: j.plateNumber, serviceName, charge, paid, balance: runningBalance, date: j.createdAt };
+    });
+
+    res.json({
+      success: true,
+      data: { customer, jobs: rows, totals: { invoiced: totalInvoiced, paid: totalPaid, outstanding: runningBalance } },
     });
   } catch (err) {
     next(err);

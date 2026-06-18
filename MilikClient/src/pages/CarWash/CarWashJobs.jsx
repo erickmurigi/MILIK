@@ -68,17 +68,18 @@ const getMonthBounds = () => {
   };
 };
 
-const statuses = ["waiting", "washing", "ready", "done", "paid", "cancelled"];
+const statuses = ["waiting", "washing", "drying", "ready", "done", "paid", "cancelled"];
 const paymentMethods = ["cash", "mpesa", "bank", "card", "other"];
 const DEFAULT_PAGE_SIZE = 25;
 
 const statusLabels = {
-  waiting: "Waiting",
-  washing: "Washing",
-  ready: "Ready",
-  done: "Done",
-  paid: "Paid",
-  cancelled: "Cancelled",
+  waiting:  "Waiting",
+  washing:  "Washing",
+  drying:   "Drying/Detailing",
+  ready:    "Ready",
+  done:     "Done",
+  paid:     "Paid",
+  cancelled:"Cancelled",
 };
 
 const getJobStatusLabel = (status, jobType) => {
@@ -208,6 +209,15 @@ const MobileJobCard = React.memo(({
           </button>
         )}
         {job.status === "washing" && (
+          <button
+            type="button"
+            onClick={() => onUpdateStatus(job, "drying")}
+            className="h-7 whitespace-nowrap border border-purple-300 bg-purple-50 px-2.5 text-[11px] font-bold text-purple-700 hover:bg-purple-100"
+          >
+            → Dry
+          </button>
+        )}
+        {job.status === "drying" && (
           <button
             type="button"
             onClick={() => onUpdateStatus(job, "ready")}
@@ -346,6 +356,16 @@ const DesktopJobRow = React.memo(({
               </button>
             )}
             {job.status === "washing" && (
+              <button
+                type="button"
+                title="Move to Drying/Detailing"
+                onClick={() => onUpdateStatus(job, "drying")}
+                className="h-6 whitespace-nowrap border border-purple-300 bg-purple-50 px-2 text-[10px] font-bold text-purple-700 hover:bg-purple-100"
+              >
+                → Dry
+              </button>
+            )}
+            {job.status === "drying" && (
               <button
                 type="button"
                 title="Mark as Ready"
@@ -678,7 +698,7 @@ const CarWashJobs = () => {
     for (const job of jobs) {
       if (job.paymentStatus !== "paid") unpaid++;
       if (job.paymentStatus === "unpaid" && job.status !== "paid") safeIds.push(job._id);
-      if (job.status === "washing") washing++;
+      if (job.status === "washing" || job.status === "drying") washing++;
       if (job.status === "done") done++;
     }
     return { jobStats: { unpaid, washing, done }, safeVisibleJobIds: safeIds };
@@ -693,6 +713,14 @@ const CarWashJobs = () => {
     const net = Math.max(0, Number(selectedPaymentJob?.price || 0) - Number(selectedPaymentJob?.discountAmount || 0));
     return Math.max(0, net - paymentJobPaidSoFar);
   }, [selectedPaymentJob, paymentJobPaidSoFar]);
+
+  const writeOffHeadroom = useMemo(() => {
+    const maxPct = Number(settingsAndBranch?.settings?.discountMaxPercent ?? 0);
+    if (!maxPct || !selectedPaymentJob) return null;
+    const cap        = Math.round(Number(selectedPaymentJob.price || 0) * maxPct / 100 * 100) / 100;
+    const jobDiscount = Number(selectedPaymentJob.discountAmount || 0);
+    return Math.max(0, cap - jobDiscount);
+  }, [settingsAndBranch, selectedPaymentJob]);
 
   // Refs let stable useCallback closures always read latest state without being re-created
   const jobsRef = useRef(jobs);
@@ -1448,15 +1476,24 @@ ${discount > 0 ? `<tr class="dis"><td>Discount</td><td class="amt">- ${fmtAmt(di
             <div>
               <label className={labelClass}>
                 Discount
-                <span className="ml-1 font-normal normal-case text-slate-400">(write-off, optional)</span>
+                {writeOffHeadroom !== null ? (
+                  writeOffHeadroom === 0
+                    ? <span className="ml-1 font-normal normal-case text-rose-400">(no headroom — job discount at cap)</span>
+                    : <span className="ml-1 font-normal normal-case text-slate-400">(write-off, max KES {writeOffHeadroom})</span>
+                ) : (
+                  <span className="ml-1 font-normal normal-case text-slate-400">(write-off, optional)</span>
+                )}
               </label>
               <input
                 className={inputClass}
                 type="number"
                 min="0"
+                max={writeOffHeadroom !== null ? writeOffHeadroom : undefined}
+                disabled={writeOffHeadroom === 0}
                 value={paymentForm.discountAmount}
                 onChange={(event) => {
-                  const disc = event.target.value;
+                  const raw  = Number(event.target.value || 0);
+                  const disc = writeOffHeadroom !== null ? String(Math.min(raw, writeOffHeadroom)) : event.target.value;
                   setPaymentForm((prev) => {
                     const netDue = Math.max(0, outstandingForModal - Number(disc || 0));
                     return { ...prev, discountAmount: disc, amount: String(netDue) };

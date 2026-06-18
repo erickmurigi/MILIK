@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const JOB_STATUSES = ["waiting", "washing", "ready", "done", "paid", "cancelled"];
+const JOB_STATUSES = ["waiting", "washing", "drying", "ready", "done", "paid", "cancelled"];
 const PAYMENT_STATUSES = ["unpaid", "partial", "paid"];
 const JOB_TYPES = ["vehicle", "carpet", "balance_bf"];
 
@@ -13,7 +13,8 @@ const serviceLineSchema = new mongoose.Schema(
     // Optional: specific staff assigned to this line only.
     // If set, only this staff earns commission for the line (no splitting).
     // If null, all job-level assignedStaff share the commission equally.
-    lineStaff:  [{ type: mongoose.Schema.Types.ObjectId, ref: "CarWashStaff" }],
+    lineStaff:   [{ type: mongoose.Schema.Types.ObjectId, ref: "CarWashStaff" }],
+    isRewardLine: { type: Boolean, default: false },
   },
   { _id: false }
 );
@@ -52,6 +53,7 @@ const carWashJobSchema = new mongoose.Schema(
     assignedStaff: [{ type: mongoose.Schema.Types.ObjectId, ref: "CarWashStaff" }],
 
     paymentStatus: { type: String, enum: PAYMENT_STATUSES, default: "unpaid", index: true },
+    rewardRedemption: { type: Boolean, default: false },
     creditAccount: { type: mongoose.Schema.Types.ObjectId, ref: "CarWashCreditAccount", default: null, index: true },
     notes: { type: String, trim: true, default: "" },
     // Carpet job photos — stored as relative URL paths e.g. /uploads/carwash/carpets/uuid.jpg

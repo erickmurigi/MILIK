@@ -1,10 +1,12 @@
 import { createError } from "../../../utils/error.js";
 import mongoose from "mongoose";
+import Company from "../../../models/Company.js";
 import CarWashJob from "../models/CarWashJob.js";
 import CarWashPayment from "../models/CarWashPayment.js";
 import CarWashService from "../models/CarWashService.js";
 import CarWashStaff from "../models/CarWashStaff.js";
 import CarWashCreditAccount from "../models/CarWashCreditAccount.js";
+import CarWashAccountStatement from "../models/CarWashAccountStatement.js";
 import CarWashStaffCommission from "../models/CarWashStaffCommission.js";
 import { currentUserId, escapeRegex, netJobPrice, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { accrueCommissionForJob, cancelJobCommissions } from "../services/commissionService.js";
@@ -13,7 +15,7 @@ import { autoEnrollPlate, awardLoyaltyStamp } from "./loyaltyController.js";
 import { normalizePlate } from "../utils/plateUtils.js";
 import { sendAdHocSms, sendAdHocSmsToMasked } from "../../../services/communicationService.js";
 
-const JOB_STATUSES = new Set(["waiting", "washing", "ready", "done", "cancelled"]);
+const JOB_STATUSES = new Set(["waiting", "washing", "drying", "ready", "done", "cancelled"]);
 const JOB_TYPES = new Set(["vehicle", "carpet", "balance_bf"]);
 
 const generateJobNumber = async (business) => {
@@ -56,7 +58,7 @@ const resolveServiceLines = async (business, rawLines) => {
       serviceId = svc._id;
       serviceName = serviceName || String(svc.name || "").trim();
       vehicleType = vehicleType || String(svc.vehicleType || "").trim();
-      if (!Number.isFinite(price) || price <= 0) price = Number(svc.defaultPrice ?? 0);
+      if (!raw.isRewardLine && (!Number.isFinite(price) || price <= 0)) price = Number(svc.defaultPrice ?? 0);
     }
 
     if (!serviceName) throw createError(400, "Each service line must have a service name");
@@ -65,7 +67,7 @@ const resolveServiceLines = async (business, rawLines) => {
     const lineStaff = Array.isArray(raw.lineStaff)
       ? raw.lineStaff.map(s => String(s)).filter(id => mongoose.Types.ObjectId.isValid(id))
       : (raw.lineStaff && mongoose.Types.ObjectId.isValid(String(raw.lineStaff)) ? [String(raw.lineStaff)] : []);
-    lines.push({ service: serviceId, serviceName, vehicleType, price, lineStaff });
+    lines.push({ service: serviceId, serviceName, vehicleType, price, lineStaff, isRewardLine: Boolean(raw.isRewardLine) });
   }
   return lines;
 };
@@ -261,13 +263,28 @@ export const createJob = async (req, res, next) => {
       rootVehicleType = snapshot.vehicleType;
     }
 
-    if (totalPrice <= 0 && !req.body._allowZeroPrice) {
+    const hasRewardLine = serviceLines.some((l) => l.isRewardLine);
+    if (totalPrice <= 0 && !req.body._allowZeroPrice && !hasRewardLine) {
       return next(createError(400, "Total job price must be greater than zero"));
     }
 
     const discountAmount = round2(Math.max(0, Number(req.body.discountAmount || 0)));
     if (discountAmount > totalPrice) {
       return next(createError(400, "Discount cannot exceed the total job price"));
+    }
+    if (discountAmount > 0) {
+      const biz = await Company.findById(business).select("carwashSettings").lean();
+      const minPrice = Number(biz?.carwashSettings?.discountMinJobPrice ?? 0);
+      const maxPct   = Number(biz?.carwashSettings?.discountMaxPercent  ?? 0);
+      if (minPrice > 0 && totalPrice <= minPrice) {
+        return next(createError(400, `Discounts are only allowed on jobs above KES ${minPrice}`));
+      }
+      if (maxPct > 0) {
+        const cap = round2(totalPrice * maxPct / 100);
+        if (discountAmount > cap + 0.009) {
+          return next(createError(400, `Discount cannot exceed ${maxPct}% (KES ${cap})`));
+        }
+      }
     }
 
     // Derive assignedStaff from service lines' per-line staff. Falls back to
@@ -291,14 +308,14 @@ export const createJob = async (req, res, next) => {
       resolvedCreditAccount = acc._id;
     }
 
-    // Auto-detect prepaid wallet by plate — staff don't need to know the account exists
+    // Auto-detect account by plate — covers prepaid, credit, and monthly accounts.
+    // Prepaid is prioritised so the wallet auto-deduction below still fires first.
     if (!resolvedCreditAccount && plateNumber && jobType === "vehicle") {
       const autoAcc = await CarWashCreditAccount.findOne({
         business,
         plates: plateNumber,
         status: "active",
-        accountType: "prepaid",
-      }).select("_id").lean();
+      }).sort({ accountType: -1 }).select("_id accountType").lean(); // prepaid > monthly > credit alphabetically desc
       if (autoAcc) resolvedCreditAccount = autoAcc._id;
     }
 
@@ -319,6 +336,7 @@ export const createJob = async (req, res, next) => {
       // Multi-line
       serviceLines,
       price: totalPrice,
+      rewardRedemption: hasRewardLine,
       discountAmount,
       status: JOB_STATUSES.has(String(req.body.status || "").toLowerCase()) ? String(req.body.status).toLowerCase() : "waiting",
       assignedStaff,
@@ -484,6 +502,20 @@ export const updateJob = async (req, res, next) => {
     if (updatedDiscount > totalPrice) {
       return next(createError(400, "Discount cannot exceed the total job price"));
     }
+    if (updatedDiscount > 0) {
+      const biz = await Company.findById(business).select("carwashSettings").lean();
+      const minPrice = Number(biz?.carwashSettings?.discountMinJobPrice ?? 0);
+      const maxPct   = Number(biz?.carwashSettings?.discountMaxPercent  ?? 0);
+      if (minPrice > 0 && totalPrice <= minPrice) {
+        return next(createError(400, `Discounts are only allowed on jobs above KES ${minPrice}`));
+      }
+      if (maxPct > 0) {
+        const cap = round2(totalPrice * maxPct / 100);
+        if (updatedDiscount > cap + 0.009) {
+          return next(createError(400, `Discount cannot exceed ${maxPct}% (KES ${cap})`));
+        }
+      }
+    }
 
     existing.service = rootService;
     existing.serviceName = rootServiceName;
@@ -547,7 +579,7 @@ export const updateJobStatus = async (req, res, next) => {
     const updateFilter = { _id: req.params.id, business };
     if (status === "paid") updateFilter.paymentStatus = "paid";
     else if (status === "cancelled") updateFilter.paymentStatus = "unpaid";
-    else updateFilter.paymentStatus = { $ne: "paid" };
+    else updateFilter.$nor = [{ status: "done", paymentStatus: "paid" }];
 
     const job = await CarWashJob.findOneAndUpdate(
       updateFilter,
@@ -564,10 +596,18 @@ export const updateJobStatus = async (req, res, next) => {
         if (hasPayment) return next(createError(400, "Cannot cancel a job that has payments — reverse the payments first."));
         return next(createError(404, "Car wash job not found"));
       }
-      return next(createError(400, "A fully paid Car Wash job cannot be moved back to an active status"));
+      return next(createError(400, "This job is done and fully paid — its status cannot be changed."));
     }
 
-    if (status === "paid") {
+    // Pre-paid job advanced to ready → auto-mark done so it leaves washboard/queue display
+    if (status === "ready" && job.paymentStatus === "paid") {
+      job.status = "done";
+      await CarWashJob.updateOne({ _id: job._id }, { status: "done" });
+    }
+
+    const effectiveStatus = job.status;
+
+    if (effectiveStatus === "paid") {
       await accrueCommissionForJob({ req, job });
       try {
         await awardLoyaltyStamp({ business, job });
@@ -575,11 +615,11 @@ export const updateJobStatus = async (req, res, next) => {
         console.error("[CW Loyalty] Stamp award failed job=%s: %s", job.jobNumber, err?.message || err);
       }
     } else {
-      const cancelReason = status === "cancelled"
+      const cancelReason = effectiveStatus === "cancelled"
         ? "Car Wash job was cancelled."
         : "Job not yet paid.";
       await cancelJobCommissions({ req, business, jobId: job._id, reason: cancelReason });
-      if (status === "done") {
+      if (effectiveStatus === "done") {
         try {
           await awardLoyaltyStamp({ business, job });
         } catch (err) {
@@ -601,6 +641,41 @@ export const deleteJob = async (req, res, next) => {
     const blocker = await getJobDeleteBlocker(business, job);
     if (blocker) return next(createError(400, blocker));
     await CarWashJob.deleteOne({ _id: job._id, business });
+
+    // Clean up any statements that embedded this job's line
+    if (job.creditAccount) {
+      const r2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
+      const affected = await CarWashAccountStatement.find(
+        { business, account: job.creditAccount, "jobs.job": job._id },
+        { _id: 1, jobs: 1, openingBalance: 1, status: 1 }
+      ).lean();
+      if (affected.length) {
+        const toDelete = [], toUpdate = [];
+        for (const stmt of affected) {
+          const remaining = (stmt.jobs || []).filter((jl) => String(jl.job) !== String(job._id));
+          if (!remaining.length) {
+            toDelete.push(stmt._id);
+          } else {
+            let inv = 0, paid = 0;
+            for (const l of remaining) { inv += l.price || 0; paid += l.paidAmount || 0; }
+            const totalInvoiced = r2(inv), totalPaid = r2(paid), totalOutstanding = r2(inv - paid);
+            toUpdate.push({ id: stmt._id, remaining, totalInvoiced, totalPaid, totalOutstanding, openingBalance: stmt.openingBalance, status: stmt.status });
+          }
+        }
+        await Promise.all([
+          toDelete.length && CarWashAccountStatement.deleteMany({ _id: { $in: toDelete } }),
+          ...toUpdate.map(({ id, remaining, totalInvoiced, totalPaid, totalOutstanding, openingBalance, status }) =>
+            CarWashAccountStatement.updateOne({ _id: id }, {
+              jobs: remaining, totalJobs: remaining.length,
+              totalInvoiced, totalPaid, totalOutstanding,
+              closingBalance: r2((openingBalance || 0) + totalOutstanding),
+              status: totalOutstanding <= 0 ? "paid" : status,
+            })
+          ),
+        ].filter(Boolean));
+      }
+    }
+
     res.status(200).json({ success: true, message: "Car Wash job deleted" });
   } catch (error) {
     next(error);

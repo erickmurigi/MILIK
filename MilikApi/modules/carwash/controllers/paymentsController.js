@@ -12,6 +12,7 @@ import Company from "../../../models/Company.js";
 import CarWashMpesaNotification from "../models/CarWashMpesaNotification.js";
 import CarWashCreditAccount from "../models/CarWashCreditAccount.js";
 import { getRawMpesaPaybillConfigs, getPrimaryMpesaPaybillConfig } from "../../../utils/companyModules.js";
+import CarWashBranch from "../models/CarWashBranch.js";
 import { sendAdHocSms } from "../../../services/communicationService.js";
 import { postCarWashPaymentLedger, reverseCarWashPaymentLedger } from "../services/carwashAccountingService.js";
 
@@ -57,6 +58,10 @@ const refreshJobPaymentStatus = async (business, jobId) => {
   const paidAmount = Number(totals?.[0]?.paid || 0);
   const price = netJobPrice(job);
   job.paymentStatus = paidAmount <= 0 ? "unpaid" : paidAmount < price ? "partial" : "paid";
+  // When a ready job becomes fully paid, auto-advance to done so it leaves the washboard/queue display
+  if (job.paymentStatus === "paid" && job.status === "ready") {
+    job.status = "done";
+  }
   // Rollback only: legacy-paid jobs whose payment is reversed revert to done
   if (job.status === "paid" && job.paymentStatus !== "paid") {
     job.status = "done";
@@ -115,6 +120,18 @@ export const recordPayment = async (req, res, next) => {
     const amount = Number(req.body.amount || 0);
     if (!Number.isFinite(amount) || amount <= 0) return next(createError(400, "Payment amount must be greater than zero"));
     const discountAmount = Math.max(0, Number(req.body.discountAmount || 0));
+    if (discountAmount > 0) {
+      const biz    = await Company.findById(business).select("carwashSettings").lean();
+      const maxPct = Number(biz?.carwashSettings?.discountMaxPercent ?? 0);
+      if (maxPct > 0) {
+        const jobDiscount = Number(job.discountAmount || 0);
+        const cap         = round2(Number(job.price || 0) * maxPct / 100);
+        const headroom    = round2(Math.max(0, cap - jobDiscount));
+        if (discountAmount > headroom + 0.009) {
+          return next(createError(400, `Write-off cannot exceed KES ${headroom} — job already has a KES ${jobDiscount} discount applied (${maxPct}% cap)`));
+        }
+      }
+    }
     const effectiveAmount = round2(amount + discountAmount);
 
     const paidRows = await CarWashPayment.aggregate([
@@ -316,7 +333,17 @@ export const initiateStkPush = async (req, res, next) => {
     if (!job) return next(createError(404, "Job not found"));
 
     const company = await Company.findById(business).select("paymentIntegration").lean();
-    const config = getPrimaryMpesaPaybillConfig(getRawMpesaPaybillConfigs(company?.paymentIntegration));
+    const configs = getRawMpesaPaybillConfigs(company?.paymentIntegration);
+    let config = getPrimaryMpesaPaybillConfig(configs);
+    // Use the branch's own paybill when available
+    if (job.branch) {
+      const branchDoc = await CarWashBranch.findById(job.branch).select("mpesaShortCode").lean();
+      const branchCode = String(branchDoc?.mpesaShortCode || "").trim();
+      if (branchCode) {
+        const branchConfig = configs.find((c) => String(c?.shortCode || "").trim() === branchCode);
+        if (branchConfig) config = branchConfig;
+      }
+    }
     if (!config?.consumerKey || !config?.consumerSecret || !config?.shortCode || !config?.passkey) {
       return next(createError(400, "M-Pesa credentials not configured for this business. Set them up in Setup → M-Pesa."));
     }

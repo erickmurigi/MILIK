@@ -12,7 +12,7 @@ const carWashBranchSchema = new mongoose.Schema(
     location: { type: String, trim: true, default: "" },
     address: { type: String, trim: true, default: "" },
     phone: { type: String, trim: true, default: "" },
-    mpesaShortCode: { type: String, trim: true, default: "" },
+    mpesaShortCode: { type: String, trim: true, default: null },
     branchType: { type: String, enum: ["vehicle", "carpet", "both"], default: "both" },
     defaultCashbooks: {
       cash:  { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
@@ -31,5 +31,10 @@ const carWashBranchSchema = new mongoose.Schema(
 
 carWashBranchSchema.index({ business: 1, name: 1 }, { unique: true });
 carWashBranchSchema.index({ business: 1, active: 1 });
+// Prevent two branches in the same business from sharing a paybill shortcode
+carWashBranchSchema.index(
+  { business: 1, mpesaShortCode: 1 },
+  { unique: true, partialFilterExpression: { mpesaShortCode: { $type: "string", $gt: "" } } }
+);
 
 export default mongoose.model("CarWashBranch", carWashBranchSchema);

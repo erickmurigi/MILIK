@@ -10,6 +10,7 @@ import {
   lookupPlate,
   redeemReward,
   getCustomerCard,
+  getCustomerStatement,
   sendCustomerSms,
   backfillCustomersAndStamps,
   migrateToPerCustomerCards,
@@ -33,6 +34,7 @@ router.get('/customers/enriched', requireCompanyPermission('carwash-loyalty', 'v
 router.post('/customers', requireCompanyPermission('carwash-loyalty', 'manage', 'carwash'), registerCustomer);
 router.put('/customers/:id', validateParamId(), requireCompanyPermission('carwash-loyalty', 'manage', 'carwash'), updateCustomer);
 router.get('/customers/:customerId/card', validateParamId('customerId'), requireCompanyPermission('carwash-loyalty', 'view', 'carwash'), getCustomerCard);
+router.get('/customers/:id/statement', validateParamId(), requireCompanyPermission('carwash-loyalty', 'view', 'carwash'), getCustomerStatement);
 router.post('/customers/:id/sms', validateParamId(), requireCompanyPermission('carwash-loyalty', 'view', 'carwash'), sendCustomerSms);
 
 // Redeem a reward on a specific job

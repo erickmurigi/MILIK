@@ -50,8 +50,11 @@ export const getCarWashSettings = async (req, res, next) => {
     const savingsDeductionPerJob = Number(company?.carwashSettings?.savingsDeductionPerJob ?? 100);
     const savingsEnabled = company?.carwashSettings?.savingsEnabled !== false;
     const smsTemplates = mergeSmsTemplates(company?.carwashSettings?.smsTemplates);
+    const queueDisplayName    = String(company?.carwashSettings?.queueDisplayName    || "").trim();
+    const discountMinJobPrice = Number(company?.carwashSettings?.discountMinJobPrice ?? 0);
+    const discountMaxPercent  = Number(company?.carwashSettings?.discountMaxPercent  ?? 0);
 
-    res.json({ success: true, data: { defaultCashbooks, savingsEnabled, savingsDeductionPerJob, smsTemplates } });
+    res.json({ success: true, data: { defaultCashbooks, savingsEnabled, savingsDeductionPerJob, smsTemplates, queueDisplayName, discountMinJobPrice, discountMaxPercent } });
   } catch (err) {
     next(err);
   }
@@ -60,7 +63,7 @@ export const getCarWashSettings = async (req, res, next) => {
 export const updateCarWashSettings = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const { defaultCashbooks = {}, savingsEnabled, savingsDeductionPerJob, smsTemplates } = req.body;
+    const { defaultCashbooks = {}, savingsEnabled, savingsDeductionPerJob, smsTemplates, queueDisplayName, discountMinJobPrice, discountMaxPercent } = req.body;
 
     const update = {};
 
@@ -103,6 +106,22 @@ export const updateCarWashSettings = async (req, res, next) => {
           messageBody: String(t.messageBody ?? "").trim(),
         }));
       update["carwashSettings.smsTemplates"] = cleaned;
+    }
+
+    if (queueDisplayName !== undefined) {
+      update["carwashSettings.queueDisplayName"] = String(queueDisplayName).trim().slice(0, 60);
+    }
+
+    if (discountMinJobPrice !== undefined) {
+      const v = Number(discountMinJobPrice);
+      if (!Number.isFinite(v) || v < 0) return next({ status: 400, message: "Minimum job price must be zero or more" });
+      update["carwashSettings.discountMinJobPrice"] = Math.round(v * 100) / 100;
+    }
+
+    if (discountMaxPercent !== undefined) {
+      const v = Number(discountMaxPercent);
+      if (!Number.isFinite(v) || v < 0 || v > 100) return next({ status: 400, message: "Max discount must be between 0 and 100%" });
+      update["carwashSettings.discountMaxPercent"] = Math.round(v * 100) / 100;
     }
 
     await Company.updateOne({ _id: business }, { $set: update });
