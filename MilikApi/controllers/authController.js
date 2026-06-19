@@ -73,6 +73,22 @@ const buildSystemAdminUserPayload = (activeCompany = null) => {
   };
 };
 
+// Only keep `true` entries — missing keys are treated as false by the permission checker,
+// so stripping falsy values cuts the JWT size by ~90% for typical users.
+const compactPermissions = (perms) => {
+  if (!perms || typeof perms !== "object") return {};
+  const out = {};
+  for (const [resource, actions] of Object.entries(perms)) {
+    if (actions && typeof actions === "object") {
+      const granted = Object.fromEntries(Object.entries(actions).filter(([, v]) => v === true));
+      if (Object.keys(granted).length) out[resource] = granted;
+    } else if (actions === true) {
+      out[resource] = true;
+    }
+  }
+  return out;
+};
+
 const createAuthToken = (user) => {
   const toId = (value) => (value?._id || value ? String(value?._id || value) : null);
   const accessibleCompanies = Array.isArray(user?.accessibleCompanies)
@@ -84,7 +100,7 @@ const createAuthToken = (user) => {
         .map((item) => ({
           company: toId(item.company),
           moduleAccess: item?.moduleAccess && typeof item.moduleAccess === "object" ? item.moduleAccess : {},
-          permissions: item?.permissions && typeof item.permissions === "object" ? item.permissions : {},
+          permissions: compactPermissions(item?.permissions),
           rights: Array.isArray(item?.rights) ? item.rights : [],
           carwashBranch: toId(item?.carwashBranch) || null,
         }))
@@ -104,7 +120,7 @@ const createAuthToken = (user) => {
       setupAccess: !!user.setupAccess,
       companySetupAccess: !!user.companySetupAccess,
       moduleAccess: user?.moduleAccess || {},
-      permissions: user?.permissions || {},
+      permissions: compactPermissions(user?.permissions),
       isSystemAdmin: !!user.isSystemAdmin,
       mustChangePassword: !!user.mustChangePassword,
     },
