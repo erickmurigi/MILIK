@@ -18,7 +18,7 @@ import { carWashApi, formatMoney, normalizeListPayload } from "../../services/ca
 import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 
-// Backend returns: { staffId, staffName, daily, disbursed, balance }
+// Backend returns: { staffId, staffName, daily, held, disbursed, balance, lastDate }
 const ic  = "h-7 border border-slate-300 bg-white px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const icc = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const lc  = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
@@ -30,8 +30,7 @@ const localISO = (d) => {
   const dd = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${dd}`;
 };
-const monthStart = () => { const n = new Date(); return localISO(new Date(n.getFullYear(), n.getMonth(), 1)); };
-const todayISO  = () => localISO(new Date());
+const todayISO = () => localISO(new Date());
 
 const typePill = (type) =>
   type === "disbursement"
@@ -49,15 +48,15 @@ const CarWashStaffSavings = () => {
   const [balances,        setBalances]        = useState([]);
   const [balancesLoading, setBalancesLoading] = useState(false);
 
-  // ── Detail panel — selectedStaff shape: { staffId, staffName, balance } ────
+  // ── Detail panel — selectedStaff shape: { staffId, staffName, balance, ... } ─
   const [selectedStaff,  setSelectedStaff]  = useState(null);
   const [records,        setRecords]        = useState([]);
   const [recordsTotal,   setRecordsTotal]   = useState(0);
   const [recordsLoading, setRecordsLoading] = useState(false);
-  const [detailFrom,     setDetailFrom]     = useState(monthStart());
+  const [detailFrom,     setDetailFrom]     = useState("");        // empty = all time
   const [detailTo,       setDetailTo]       = useState(todayISO());
   const [detailPage,     setDetailPage]     = useState(1);
-  const detailRef  = useRef(null);
+  const detailRef   = useRef(null);
   const prevStaffId = useRef(null);
 
   // ── Reference data (cached) ──────────────────────────────────────────────────
@@ -84,26 +83,44 @@ const CarWashStaffSavings = () => {
   const [dForm,         setDForm]         = useState({ amount: "", cashbookAccount: "", notes: "" });
   const [disbursing,    setDisbursing]    = useState(false);
 
+  // ── Reverse payout confirmation ──────────────────────────────────────────────
+  const [reverseTarget, setReverseTarget] = useState(null);
+  const [reverseNotes,  setReverseNotes]  = useState("");
+  const [reversing,     setReversing]     = useState(false);
+
+  // ── Reset confirmation ───────────────────────────────────────────────────────
+  const [resetConfirm, setResetConfirm] = useState(false);
+  const [resetting,    setResetting]    = useState(false);
+
   // ── Actions ─────────────────────────────────────────────────────────────────
   const [processing, setProcessing] = useState(false);
-  const [resetting,  setResetting]  = useState(false);
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+  // Sync selectedStaff with the latest balances array so the detail header stays accurate.
+  const syncSelected = useCallback((newBalances) => {
+    setSelectedStaff(prev => {
+      if (!prev || !newBalances?.length) return prev;
+      const updated = newBalances.find(b => String(b.staffId) === String(prev.staffId));
+      return updated ?? prev;
+    });
+  }, []);
 
   // ── Data loaders ────────────────────────────────────────────────────────────
   const loadBalances = useCallback(async () => {
     setBalancesLoading(true);
     try {
-      // Single request: write any missed days then read balances in the same
-      // server-side call. Eliminates the replica-lag race between two requests.
       const r = await carWashApi.processDailySavings();
-      setBalances(r?.balances || []);
-    } catch { /* balances reload is best-effort */ }
+      const newBals = r?.balances || [];
+      setBalances(newBals);
+      syncSelected(newBals);
+    } catch { /* best-effort */ }
     finally { setBalancesLoading(false); }
-  }, []);
+  }, [syncSelected]);
 
   const loadRecords = useCallback(async (staffId, from, to, page) => {
     setRecordsLoading(true);
     try {
-      const res = await carWashApi.listSavings({ staff: staffId, dateFrom: from, dateTo: to, page, limit: DETAIL_LIMIT });
+      const res = await carWashApi.listSavings({ staff: staffId, dateFrom: from || undefined, dateTo: to, page, limit: DETAIL_LIMIT });
       setRecords(normalizeListPayload(res, "records"));
       setRecordsTotal(res?.pagination?.total ?? 0);
     } catch {
@@ -148,11 +165,13 @@ const CarWashStaffSavings = () => {
     setProcessing(true);
     try {
       const r = await carWashApi.processDailySavings();
-      setBalances(r?.balances || []);
+      const newBals = r?.balances || [];
+      setBalances(newBals);
+      syncSelected(newBals);
       if (selectedStaff) await loadRecords(selectedStaff.staffId, detailFrom, detailTo, detailPage);
       toast.success(r?.posted > 0
-        ? `Caught up ${r.posted} missing day${r.posted !== 1 ? "s" : ""} of savings`
-        : `All savings are up to date (${r?.skipped ?? 0} already posted)`);
+        ? `Saved ${r.posted} missing day${r.posted !== 1 ? "s" : ""} across all staff`
+        : `All savings are up to date — ${r?.skipped ?? 0} record${(r?.skipped ?? 0) !== 1 ? "s" : ""} confirmed`);
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to process daily savings");
     } finally {
@@ -160,8 +179,8 @@ const CarWashStaffSavings = () => {
     }
   };
 
-  const handleReset = async () => {
-    if (!window.confirm("Delete ALL savings records for this business? This cannot be undone.")) return;
+  const confirmReset = async () => {
+    setResetConfirm(false);
     setResetting(true);
     try {
       const r = await carWashApi.resetSavings();
@@ -191,8 +210,8 @@ const CarWashStaffSavings = () => {
     setPrinting(true);
     try {
       const [savingsRes, payoutsRes] = await Promise.all([
-        carWashApi.listSavings({ staff: selectedStaff.staffId, dateFrom: detailFrom, dateTo: detailTo, limit: 200, page: 1 }),
-        carWashApi.listCommissionPayouts({ staff: selectedStaff.staffId, dateFrom: detailFrom, dateTo: detailTo, limit: 200 }),
+        carWashApi.listSavings({ staff: selectedStaff.staffId, dateFrom: detailFrom || undefined, dateTo: detailTo, limit: 200, page: 1 }),
+        carWashApi.listCommissionPayouts({ staff: selectedStaff.staffId, dateFrom: detailFrom || undefined, dateTo: detailTo, limit: 200 }),
       ]);
 
       const savings  = normalizeListPayload(savingsRes,  "records");
@@ -200,7 +219,7 @@ const CarWashStaffSavings = () => {
       const business = currentCompany?.name || currentCompany?.companyName || "Milik Car Wash";
       const fmt = (v) => `KES ${Number(v || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       const fmtD = (v) => v ? new Date(v).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
-      const period = `${fmtD(detailFrom)} – ${fmtD(detailTo)}`;
+      const period = detailFrom ? `${fmtD(detailFrom)} – ${fmtD(detailTo)}` : `Up to ${fmtD(detailTo)}`;
 
       const totalDeducted   = savings.filter((r) => r.type !== "disbursement").reduce((s, r) => s + Number(r.amount || 0), 0);
       const totalDisbursed  = savings.filter((r) => r.type === "disbursement").reduce((s, r) => s + Number(r.amount || 0), 0);
@@ -209,7 +228,7 @@ const CarWashStaffSavings = () => {
       const savingsRows = savings.map((r) => `
         <tr>
           <td>${fmtD(r.savingsDate || r.date)}</td>
-          <td><span class="pill ${r.type === 'disbursement' ? 'pill-green' : 'pill-amber'}">${r.type.toUpperCase()}</span></td>
+          <td><span class="pill ${r.type === 'disbursement' ? 'pill-green' : 'pill-amber'}">${r.isReversed ? 'REVERSED' : r.type.toUpperCase()}</span></td>
           <td class="amount ${r.type === 'disbursement' ? 'neg' : 'pos'}">${r.type === 'disbursement' ? '−' : '+'}${fmt(r.amount)}</td>
           <td>${r.savingsPayoutNumber || r.notes || '—'}</td>
           <td>${fmtD(r.date)}</td>
@@ -270,7 +289,7 @@ const CarWashStaffSavings = () => {
             <div class="val">${fmt(totalDeducted)}</div>
           </div>
           <div class="card">
-            <div class="label">Total Disbursed (Period)</div>
+            <div class="label">Paid Out (Period)</div>
             <div class="val">${fmt(totalDisbursed)}</div>
           </div>
           <div class="card">
@@ -314,7 +333,7 @@ const CarWashStaffSavings = () => {
     setDisbursing(true);
     try {
       await carWashApi.createSavingsPayout({
-        staff:           disburseStaff.staffId,   // backend reads req.body.staff
+        staff:           disburseStaff.staffId,
         cashbookAccount: dForm.cashbookAccount,
         amount:          Number(dForm.amount),
         notes:           dForm.notes,
@@ -329,6 +348,23 @@ const CarWashStaffSavings = () => {
       toast.error(err?.response?.data?.message || "Disbursement failed");
     } finally {
       setDisbursing(false);
+    }
+  };
+
+  const confirmReverse = async () => {
+    if (!reverseTarget) return;
+    setReversing(true);
+    try {
+      await carWashApi.reverseSavingsPayout(reverseTarget._id, reverseNotes);
+      toast.success("Savings payout reversed");
+      setReverseTarget(null);
+      setReverseNotes("");
+      loadBalances();
+      loadRecords(selectedStaff.staffId, detailFrom, detailTo, detailPage);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Reversal failed");
+    } finally {
+      setReversing(false);
     }
   };
 
@@ -377,43 +413,59 @@ const CarWashStaffSavings = () => {
           )}
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-xs">
+            <table className="w-full min-w-[760px] text-xs">
               <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                 <tr>
                   <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Staff</th>
                   <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Total Saved</th>
-                  <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Disbursed</th>
+                  <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Deducted from Payouts</th>
+                  <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Pending Deduction</th>
+                  <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Paid Out to Staff</th>
                   <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Balance</th>
                   <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {balancesLoading ? (
-                  <tr><td colSpan={5} className="px-3 py-10 text-center text-xs font-semibold text-slate-500">Loading…</td></tr>
+                  <tr><td colSpan={7} className="px-3 py-10 text-center text-xs font-semibold text-slate-500">Loading…</td></tr>
                 ) : balances.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-3 py-10 text-center text-xs font-semibold text-slate-500">
+                    <td colSpan={7} className="px-3 py-10 text-center text-xs font-semibold text-slate-500">
                       No savings data yet. Click <strong>Process Today</strong> to begin.
                     </td>
                   </tr>
                 ) : balances.map((b) => {
-                  const isOpen = selectedStaff?.staffId === b.staffId;
+                  const isOpen  = selectedStaff?.staffId === b.staffId;
+                  const pending = Math.max(0, (b.daily || 0) - (b.held || 0));
                   return (
                     <tr
                       key={b.staffId}
                       className={`border-b border-slate-200 transition-colors ${isOpen ? "bg-[#EDF5F1]" : "hover:bg-slate-50"}`}
                     >
-                      <td className="px-2 py-1 font-extrabold text-slate-900">{b.staffName}</td>
-                      <td className="px-2 py-1 text-right font-semibold tabular-nums text-[#C8511A]">
+                      <td className="px-2 py-1.5">
+                        <p className="font-extrabold text-slate-900">{b.staffName}</p>
+                        {b.lastDate && (
+                          <p className="text-[10px] text-slate-400">Last: {fmtDate(b.lastDate)}</p>
+                        )}
+                      </td>
+                      <td className="px-2 py-1.5 text-right font-semibold tabular-nums text-[#C8511A]">
                         {formatMoney(b.daily)}
                       </td>
-                      <td className="px-2 py-1 text-right font-semibold tabular-nums text-emerald-600">
-                        {formatMoney(b.disbursed)}
+                      <td className="px-2 py-1.5 text-right font-semibold tabular-nums text-slate-700">
+                        {formatMoney(b.held || 0)}
                       </td>
-                      <td className="px-2 py-1 text-right font-extrabold tabular-nums text-slate-900">
+                      <td className="px-2 py-1.5 text-right tabular-nums">
+                        {pending > 0
+                          ? <span className="font-bold text-amber-700">{formatMoney(pending)}</span>
+                          : <span className="text-slate-400">—</span>}
+                      </td>
+                      <td className="px-2 py-1.5 text-right font-semibold tabular-nums text-emerald-600">
+                        {b.disbursed > 0 ? formatMoney(b.disbursed) : <span className="text-slate-400">—</span>}
+                      </td>
+                      <td className="px-2 py-1.5 text-right font-extrabold tabular-nums text-slate-900">
                         {formatMoney(b.balance)}
                       </td>
-                      <td className="px-2 py-1 text-right">
+                      <td className="px-2 py-1.5 text-right">
                         <div className="inline-flex items-center gap-1.5">
                           {b.balance > 0 && canPay && (
                             <button
@@ -449,7 +501,7 @@ const CarWashStaffSavings = () => {
           <div className="flex items-center justify-end border-t border-slate-100 bg-slate-50 px-4 py-1.5">
             <button
               type="button"
-              onClick={handleReset}
+              onClick={() => setResetConfirm(true)}
               disabled={resetting}
               className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-400 hover:text-red-500 disabled:opacity-50"
             >
@@ -500,6 +552,7 @@ const CarWashStaffSavings = () => {
                 type="date"
                 className={ic}
                 value={detailFrom}
+                placeholder="All time"
                 onChange={(e) => handleDetailDateChange("from", e.target.value)}
               />
               <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">To</span>
@@ -509,6 +562,15 @@ const CarWashStaffSavings = () => {
                 value={detailTo}
                 onChange={(e) => handleDetailDateChange("to", e.target.value)}
               />
+              {detailFrom && (
+                <button
+                  type="button"
+                  onClick={() => { setDetailFrom(""); setDetailPage(1); }}
+                  className="text-[10px] font-semibold text-slate-400 hover:text-[#0B3B2E]"
+                >
+                  Clear filter
+                </button>
+              )}
               <span className="ml-1 text-[10px] text-slate-400">
                 {recordsTotal} record{recordsTotal !== 1 ? "s" : ""}
               </span>
@@ -522,7 +584,7 @@ const CarWashStaffSavings = () => {
                     <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Savings Date</th>
                     <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Type</th>
                     <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Amount</th>
-                    <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Reference / Notes</th>
+                    <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Status / Notes</th>
                     <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Recorded On</th>
                     {canPay && <th className="px-2 py-1.5 text-center font-bold uppercase tracking-wide">Action</th>}
                   </tr>
@@ -531,7 +593,9 @@ const CarWashStaffSavings = () => {
                   {recordsLoading ? (
                     <tr><td colSpan={canPay ? 6 : 5} className="px-3 py-10 text-center text-xs font-semibold text-slate-500">Loading…</td></tr>
                   ) : records.length === 0 ? (
-                    <tr><td colSpan={canPay ? 6 : 5} className="px-3 py-10 text-center text-xs font-semibold text-slate-500">No records in this date range.</td></tr>
+                    <tr><td colSpan={canPay ? 6 : 5} className="px-3 py-10 text-center text-xs font-semibold text-slate-500">
+                      No records{detailFrom ? " in this date range" : ""}.
+                    </td></tr>
                   ) : records.map((r) => (
                     <tr key={r._id} className={`border-b border-slate-200 hover:bg-slate-50 ${r.isReversed ? "opacity-50" : ""}`}>
                       <td className="px-2 py-1 font-semibold text-slate-800">
@@ -545,8 +609,12 @@ const CarWashStaffSavings = () => {
                       <td className={`px-2 py-1 text-right font-extrabold tabular-nums ${r.isReversed ? "text-slate-400 line-through" : r.type === "disbursement" ? "text-emerald-600" : "text-[#C8511A]"}`}>
                         {r.type === "disbursement" ? "−" : "+"}{formatMoney(r.amount)}
                       </td>
-                      <td className="max-w-xs truncate px-2 py-1 text-slate-600">
-                        {r.savingsPayoutNumber || r.notes || "—"}
+                      <td className="max-w-xs px-2 py-1 text-slate-600">
+                        {r.type === "daily" && r.commissionPayout
+                          ? <span className="text-emerald-700 font-semibold">✓ Deducted from payout</span>
+                          : r.type === "daily"
+                          ? <span className="text-amber-600 font-semibold">⏳ Pending deduction</span>
+                          : <span className="truncate">{r.savingsPayoutNumber || r.notes || "—"}</span>}
                       </td>
                       <td className="px-2 py-1 text-slate-400">{fmtDate(r.date)}</td>
                       {canPay && (
@@ -554,18 +622,7 @@ const CarWashStaffSavings = () => {
                           {r.type === "disbursement" && !r.isReversed ? (
                             <button
                               type="button"
-                              onClick={async () => {
-                                const reason = window.prompt(`Reason for reversing savings payout of ${formatMoney(r.amount)}?`, "");
-                                if (reason === null) return;
-                                try {
-                                  await carWashApi.reverseSavingsPayout(r._id, reason);
-                                  toast.success("Savings payout reversed");
-                                  loadBalances();
-                                  loadRecords(selectedStaff.staffId, detailFrom, detailTo, detailPage);
-                                } catch (err) {
-                                  toast.error(err?.response?.data?.message || "Reversal failed");
-                                }
-                              }}
+                              onClick={() => { setReverseTarget(r); setReverseNotes(""); }}
                               className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-600 hover:bg-rose-100"
                               title="Reverse this savings payout"
                             >
@@ -633,7 +690,7 @@ const CarWashStaffSavings = () => {
               </div>
 
               <div>
-                <label className={lc}>Amount to Disburse (KES) *</label>
+                <label className={lc}>Amount to Pay Out (KES) *</label>
                 <input
                   type="number" min={1} max={disburseStaff.balance} step="any" required
                   className={icc}
@@ -681,10 +738,97 @@ const CarWashStaffSavings = () => {
                 type="submit" disabled={disbursing}
                 className="h-8 bg-[#0B3B2E] px-5 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50"
               >
-                {disbursing ? "Processing…" : `Disburse ${dForm.amount ? formatMoney(Number(dForm.amount)) : ""}`}
+                {disbursing ? "Processing…" : `Pay Out ${dForm.amount ? formatMoney(Number(dForm.amount)) : ""}`}
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* ── Reverse Payout Confirmation ────────────────────────────────────────── */}
+      {reverseTarget && (
+        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/50 px-4 backdrop-blur-[2px]">
+          <div className="w-full max-w-sm border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-3 bg-[#0B3B2E] px-4 py-3 text-white">
+              <div>
+                <h2 className="text-sm font-extrabold uppercase tracking-wide">Reverse Savings Payout</h2>
+                <p className="mt-0.5 text-xs text-emerald-100">{formatMoney(reverseTarget.amount)}</p>
+              </div>
+              <button type="button" onClick={() => setReverseTarget(null)} className="p-1 text-white/70 hover:bg-white/10">
+                <FaTimes size={12} />
+              </button>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-slate-600">
+                This will reverse the savings payout of <strong>{formatMoney(reverseTarget.amount)}</strong>
+                {reverseTarget.savingsPayoutNumber ? ` (${reverseTarget.savingsPayoutNumber})` : ""} and unwind the accounting entries.
+              </p>
+              <div>
+                <label className={lc}>Reason (optional)</label>
+                <input
+                  type="text"
+                  className={icc}
+                  placeholder="Reason for reversal…"
+                  value={reverseNotes}
+                  onChange={(e) => setReverseNotes(e.target.value)}
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+              <button
+                type="button"
+                onClick={() => setReverseTarget(null)}
+                className="h-8 border border-slate-300 px-4 text-xs font-bold text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmReverse}
+                disabled={reversing}
+                className="h-8 bg-rose-600 px-4 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                {reversing ? "Reversing…" : "Confirm Reverse"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Reset Confirmation ─────────────────────────────────────────────────── */}
+      {resetConfirm && (
+        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/50 px-4 backdrop-blur-[2px]">
+          <div className="w-full max-w-sm border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-3 bg-red-700 px-4 py-3 text-white">
+              <h2 className="text-sm font-extrabold uppercase tracking-wide">Reset All Savings Data</h2>
+              <button type="button" onClick={() => setResetConfirm(false)} className="p-1 text-white/70 hover:bg-white/10">
+                <FaTimes size={12} />
+              </button>
+            </div>
+            <div className="p-4">
+              <p className="text-xs text-slate-700">
+                This will permanently delete <strong>ALL savings records</strong> for this business, including daily records and disbursements. This action <strong>cannot be undone</strong>.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+              <button
+                type="button"
+                onClick={() => setResetConfirm(false)}
+                className="h-8 border border-slate-300 px-4 text-xs font-bold text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmReset}
+                disabled={resetting}
+                className="h-8 bg-red-600 px-4 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {resetting ? "Deleting…" : "Yes, Delete All"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </CarWashShell>

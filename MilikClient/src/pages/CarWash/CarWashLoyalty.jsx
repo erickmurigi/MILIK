@@ -141,7 +141,7 @@ const ProgramPanel = ({ program, onSaved }) => {
             >
               <option value="">— Select service —</option>
               {services.map(s => (
-                <option key={s._id} value={s._id}>{s.name}</option>
+                <option key={s._id} value={s._id}>{s.category ? `${s.category} — ${s.name}` : s.name}</option>
               ))}
             </select>
             {!form.rewardServiceId && (

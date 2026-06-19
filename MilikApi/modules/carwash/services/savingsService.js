@@ -97,8 +97,24 @@ export const processDailySavings = async (businessId, date = new Date()) => {
       });
       posted++;
     } catch (err) {
-      // E11000 = unique constraint — already posted for this date
-      if (err.code === 11000) { skipped++; continue; }
+      if (err.code === 11000) {
+        // If the blocking record is reversed, restore it so savings accumulate correctly
+        const blocked = await CarWashStaffSaving.findOne(
+          { business: businessId, staff: member._id, type: "daily", savingsDate },
+          { _id: 1, isReversed: 1 }
+        ).lean();
+        if (blocked?.isReversed) {
+          await CarWashStaffSaving.updateOne(
+            { _id: blocked._id },
+            { $set: { isReversed: false, reversedAt: null, reversedBy: null,
+                      amount, notes: `Daily savings — ${savingsDate.toISOString().slice(0, 10)}` } }
+          );
+          posted++;
+        } else {
+          skipped++;
+        }
+        continue;
+      }
       errors.push({ staff: String(member._id), error: err?.message || String(err) });
     }
   }

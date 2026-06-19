@@ -7,6 +7,7 @@ import { carWashApi, formatMoney, normalizeListPayload } from "../../services/ca
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import CarWashShell from "./CarWashShell";
 
+const fmtSvc = (svc, fallback = "—") => svc ? (svc.category ? `${svc.category} — ${svc.name}` : svc.name) : fallback;
 const statuses     = ["earned", "payable", "paid", "cancelled"];
 const statusLabels = { earned: "Earned", payable: "Payable", paid: "Paid", cancelled: "Cancelled" };
 const PAGE_SIZE    = 30;
@@ -189,7 +190,7 @@ const CarWashCommissions = () => {
                   <tr key={row._id} className={`border-b border-slate-100 ${isCancelled ? "opacity-50" : "hover:bg-slate-50"}`}>
                     <td className={`px-3 py-2 font-extrabold text-slate-900 ${isCancelled ? "line-through" : ""}`}>{row.staff?.name || "—"}</td>
                     <td className="px-3 py-2 font-mono text-[11px] text-[#0B3B2E]">{row.jobNumber || row.job?.jobNumber || "—"}</td>
-                    <td className="px-3 py-2 text-slate-700">{row.serviceName || row.service?.name || "—"}</td>
+                    <td className="px-3 py-2 text-slate-700">{fmtSvc(row.service, row.serviceName || "—")}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{formatMoney(row.baseAmount)}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-slate-500">
                       {row.commissionType === "percentage" ? `${row.commissionRate}%` : formatMoney(row.commissionRate)}
@@ -278,7 +279,7 @@ const CarWashCommissions = () => {
                 </div>
                 <div className="flex justify-between text-[11px]">
                   <span className="text-slate-500">Service</span>
-                  <span className="text-slate-700">{reverseTarget.serviceName || reverseTarget.service?.name || "—"}</span>
+                  <span className="text-slate-700">{fmtSvc(reverseTarget.service, reverseTarget.serviceName || "—")}</span>
                 </div>
                 <div className="flex justify-between text-[11px]">
                   <span className="text-slate-500">Commission</span>

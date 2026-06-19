@@ -10,6 +10,8 @@ import useCarWashPermission from "../../hooks/useCarWashPermission";
 
 const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
+const fmtSvc  = (svc, fallback = "—") => svc ? (svc.category ? `${svc.category} — ${svc.name}` : svc.name) : fallback;
+const fmtDate = (v) => v ? new Date(v).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 const ic         = "h-7 border border-slate-300 bg-white px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const methods    = ["cash", "mpesa", "bank", "card", "other"];
 const PAGE_SIZE  = 30;
@@ -60,7 +62,9 @@ const CarWashCommissionPayouts = () => {
   const [applied, setApplied]           = useState(emptyFilters);
   const [showModal, setShowModal]       = useState(false);
   const [refError, setRefError]         = useState(false);
-  const [pendingSavings, setPendingSavings] = useState(0);
+  const [pendingSavings, setPendingSavings]       = useState(0);
+  const [pendingDamages, setPendingDamages]       = useState(0);
+  const [pendingDamagesList, setPendingDamagesList] = useState([]);
   const [reverseTarget, setReverseTarget]   = useState(null);
   const [reversalNotes, setReversalNotes]   = useState("");
   const [isReversing, setIsReversing]       = useState(false);
@@ -135,6 +139,8 @@ const CarWashCommissionPayouts = () => {
     const firstStaff = rows[0]?.staff?._id || "";
     setPayableComms(rows);
     setPendingSavings(0);
+    setPendingDamages(0);
+    setPendingDamagesList([]);
     setForm({
       staff: firstStaff,
       commissionIds: rows.filter((c) => String(c.staff?._id || c.staff) === String(firstStaff)).map((c) => c._id),
@@ -144,23 +150,33 @@ const CarWashCommissionPayouts = () => {
       reference: "",
       notes: "",
     });
-    if (firstStaff) {
-      carWashApi.getStaffWallet(firstStaff)
-        .then((w) => setPendingSavings(Number(w?.savings?.pendingToHold || 0)))
-        .catch(() => {});
-    }
     setShowModal(true);
+    if (firstStaff) fetchStaffDeductions(firstStaff);
   };
 
-  const setPayoutStaff = async (staffId) => {
-    const rows = payableComms.filter((c) => String(c.staff?._id || c.staff) === String(staffId));
-    setForm((p) => ({ ...p, staff: staffId, commissionIds: rows.map((c) => c._id) }));
-    setPendingSavings(0); // reset before fetch so stale value never shows
+  const fetchStaffDeductions = async (staffId) => {
+    setPendingSavings(0);
+    setPendingDamages(0);
+    setPendingDamagesList([]);
     if (!staffId) return;
     try {
-      const wallet = await carWashApi.getStaffWallet(staffId);
+      const [wallet, dmgRes] = await Promise.all([
+        carWashApi.getStaffWallet(staffId),
+        carWashApi.listDamages({ staff: staffId, status: "pending", limit: 50 }),
+      ]);
       setPendingSavings(Number(wallet?.savings?.pendingToHold || 0));
-    } catch { /* best-effort */ }
+      const dmgList = normalizeListPayload(dmgRes, "damages");
+      setPendingDamagesList(dmgList);
+      setPendingDamages(dmgList.reduce((s, d) => s + Number(d.amount || 0), 0));
+    } catch (err) {
+      console.error("[Payout] wallet/damages fetch failed:", err?.message);
+    }
+  };
+
+  const setPayoutStaff = (staffId) => {
+    const rows = payableComms.filter((c) => String(c.staff?._id || c.staff) === String(staffId));
+    setForm((p) => ({ ...p, staff: staffId, commissionIds: rows.map((c) => c._id) }));
+    fetchStaffDeductions(staffId);
   };
 
   const toggleComm = (id) => setForm((p) => ({
@@ -203,7 +219,8 @@ const CarWashCommissionPayouts = () => {
   };
 
   const savingsDeduction = Math.min(pendingSavings, selectedTotal);
-  const netCash          = Math.max(0, selectedTotal - savingsDeduction);
+  const damagesDeduction = Math.min(pendingDamages, Math.max(0, selectedTotal - savingsDeduction));
+  const netCash          = Math.max(0, selectedTotal - savingsDeduction - damagesDeduction);
 
   const pageTotal = useMemo(() => payouts.reduce((s, p) => s + Number(p.amount || 0), 0), [payouts]);
 
@@ -493,14 +510,44 @@ const CarWashCommissionPayouts = () => {
                       {savingsDeduction > 0 ? `− ${formatMoney(savingsDeduction)}` : "—"}
                     </span>
                   </div>
+                  <div className="border-t border-red-100 bg-red-50/40">
+                    <div className="flex items-center justify-between px-3 py-2">
+                      <span className="flex items-center gap-1.5 font-semibold text-red-700">
+                        <FaBan size={9} />
+                        Damages deduction
+                        {damagesDeduction < pendingDamages && pendingDamages > 0 && (
+                          <span className="rounded border border-red-200 bg-red-50 px-1 py-0.5 text-[9px] font-bold">capped</span>
+                        )}
+                      </span>
+                      <span className={`font-bold tabular-nums ${damagesDeduction > 0 ? "text-red-700" : "text-slate-300"}`}>
+                        {damagesDeduction > 0 ? `− ${formatMoney(damagesDeduction)}` : "—"}
+                      </span>
+                    </div>
+                    {pendingDamagesList.length > 0 && (
+                      <div className="mx-3 mb-2 divide-y divide-red-100 rounded border border-red-200 bg-white text-[11px]">
+                        {pendingDamagesList.map((d) => (
+                          <div key={d._id} className="flex items-start justify-between gap-2 px-2.5 py-1.5">
+                            <div className="min-w-0">
+                              <span className="font-bold text-slate-800">{d.description || "—"}</span>
+                              {d.job?.jobNumber && (
+                                <span className="ml-1.5 font-mono text-[10px] text-slate-400">· {d.job.jobNumber}</span>
+                              )}
+                              <div className="text-[10px] text-slate-400">{fmtDate(d.damageDate || d.createdAt)}</div>
+                            </div>
+                            <span className="flex-shrink-0 font-extrabold text-red-600">− {formatMoney(d.amount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <div className="flex items-center justify-between bg-slate-50 px-3 py-2.5">
                     <span className="font-extrabold text-slate-800">Net cash to staff</span>
                     <span className="text-base font-black tabular-nums text-emerald-700">{formatMoney(netCash)}</span>
                   </div>
                 </div>
-                {pendingSavings === 0 && (
+                {pendingSavings === 0 && pendingDamages === 0 && (
                   <p className="border-t border-slate-100 bg-slate-50 px-3 py-1.5 text-[10px] italic text-slate-400">
-                    No pending savings deductions for this staff member.
+                    No pending savings or damage deductions for this staff member.
                   </p>
                 )}
               </div>
@@ -516,7 +563,7 @@ const CarWashCommissionPayouts = () => {
                       <span className="min-w-0">
                         <span className="font-mono font-bold text-[#0B3B2E]">{c.job?.jobNumber || c.jobNumber || "—"}</span>
                         <span className="text-slate-400"> · </span>
-                        <span className="text-slate-700">{c.service?.name || c.serviceName || "—"}</span>
+                        <span className="text-slate-700">{fmtSvc(c.service, c.serviceName || "—")}</span>
                         {(c.job?.plateNumber || c.job?.customerName) && (
                           <span className="ml-1 text-slate-400">· {c.job?.plateNumber || c.job?.customerName}</span>
                         )}

@@ -1158,7 +1158,7 @@ ${discount > 0 ? `<tr class="dis"><td>Discount</td><td class="amt">- ${fmtAmt(di
         <select className="h-7 w-[110px] grow border border-[#B7C9C0] bg-[#F1F6F3] px-1.5 text-xs font-semibold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
           value={filters.service} onChange={(e) => setFilterValue("service", e.target.value)}>
           <option value="">All Services</option>
-          {services.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
+          {services.map((s) => <option key={s._id} value={s._id}>{s.category ? `${s.category} — ${s.name}` : s.name}</option>)}
         </select>
         <select className="h-7 w-[100px] grow border border-[#B7C9C0] bg-[#F1F6F3] px-1.5 text-xs font-semibold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
           value={filters.staff} onChange={(e) => setFilterValue("staff", e.target.value)}>

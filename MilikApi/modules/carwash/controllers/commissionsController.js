@@ -573,8 +573,10 @@ export const processDailySavingsManual = async (req, res, next) => {
       { $match: { business: businessOid, isReversed: { $ne: true } } },
       { $group: {
         _id:       "$staff",
-        daily:     { $sum: { $cond: [{ $eq: ["$type", "daily"] },        "$amount", 0] } },
+        daily:     { $sum: { $cond: [{ $eq: ["$type", "daily"] }, "$amount", 0] } },
+        held:      { $sum: { $cond: [{ $and: [{ $eq: ["$type", "daily"] }, { $ne: ["$commissionPayout", null] }] }, "$amount", 0] } },
         disbursed: { $sum: { $cond: [{ $eq: ["$type", "disbursement"] }, "$amount", 0] } },
+        lastDate:  { $max: "$savingsDate" },
       }},
       { $addFields: { balance: { $max: [0, { $subtract: ["$daily", "$disbursed"] }] } } },
       { $sort: { balance: -1, _id: 1 } },
@@ -588,8 +590,10 @@ export const processDailySavingsManual = async (req, res, next) => {
       staffId:   r._id,
       staffName: staffMap.get(String(r._id)) || "Unknown",
       daily:     r.daily,
+      held:      r.held || 0,
       disbursed: r.disbursed,
       balance:   r.balance,
+      lastDate:  r.lastDate || null,
     }));
 
     res.json({
@@ -668,8 +672,10 @@ export const listSavingsBalances = async (req, res, next) => {
       { $match: { business: businessOid, isReversed: { $ne: true } } },
       { $group: {
         _id:       "$staff",
-        daily:     { $sum: { $cond: [{ $eq: ["$type", "daily"] },        "$amount", 0] } },
+        daily:     { $sum: { $cond: [{ $eq: ["$type", "daily"] }, "$amount", 0] } },
+        held:      { $sum: { $cond: [{ $and: [{ $eq: ["$type", "daily"] }, { $ne: ["$commissionPayout", null] }] }, "$amount", 0] } },
         disbursed: { $sum: { $cond: [{ $eq: ["$type", "disbursement"] }, "$amount", 0] } },
+        lastDate:  { $max: "$savingsDate" },
       }},
       { $addFields: { balance: { $max: [0, { $subtract: ["$daily", "$disbursed"] }] } } },
       { $sort: { balance: -1, _id: 1 } },
@@ -684,8 +690,10 @@ export const listSavingsBalances = async (req, res, next) => {
       staffId:   r._id,
       staffName: staffMap.get(String(r._id)) || "Unknown",
       daily:     r.daily,
+      held:      r.held || 0,
       disbursed: r.disbursed,
       balance:   r.balance,
+      lastDate:  r.lastDate || null,
     }));
 
     res.json({ success: true, data: { balances }, balances });

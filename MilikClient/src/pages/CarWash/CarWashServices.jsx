@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { clearDraft, readDraft, writeDraft } from "../../hooks/useFormDraft";
-import { FaChevronDown, FaChevronRight, FaEdit, FaMinus, FaPlus, FaRedoAlt, FaSearch, FaTimes } from "react-icons/fa";
+import { FaChevronDown, FaChevronRight, FaCopy, FaEdit, FaMinus, FaPlus, FaRedoAlt, FaSearch, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, VEHICLE_TYPES } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 
 const emptyForm = { name: "", category: "", jobType: "both", pricingType: "flat", defaultPrice: "", pricingTiers: [], active: true };
+const normalizeForm = (f) => ({ ...emptyForm, ...f, pricingTiers: Array.isArray(f?.pricingTiers) ? f.pricingTiers : [] });
 const inputClass  = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelClass  = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 const selectClass = "h-9 w-full border border-slate-300 bg-white px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
@@ -38,6 +39,7 @@ const CarWashServices = () => {
   const [pageSize, setPageSize]       = useState(DEFAULT_PAGE_SIZE);
   const [showModal, setShowModal]     = useState(false);
   const [categoryMode, setCategoryMode] = useState("select");
+  const addAnotherRef = React.useRef(false);
   const canManage = useCarWashPermission("carwash-services", "manage");
 
   const servicesQueryKey = ["cw-services", appliedFilters, page, pageSize];
@@ -91,10 +93,10 @@ const CarWashServices = () => {
     setShowModal(false); setEditingId(""); setForm(emptyForm); setCategoryMode("select");
   };
 
-  const openCreate = () => {
-    const draft = readDraft("cw-service-create");
+  const openCreate = (prefill = null) => {
+    const draft = !prefill && readDraft("cw-service-create");
     setEditingId("");
-    setForm(draft?.form ?? emptyForm);
+    setForm(normalizeForm(draft?.form ?? prefill ?? emptyForm));
     setCategoryMode(draft?.categoryMode ?? "select");
     setShowModal(true);
   };
@@ -114,9 +116,23 @@ const CarWashServices = () => {
       active: row.active !== false,
     };
     const catExists = categories.includes((draft?.form ?? fromRow).category || "");
-    setForm(draft?.form ?? fromRow);
+    setForm(normalizeForm(draft?.form ?? fromRow));
     setCategoryMode(draft?.categoryMode ?? ((row.category && !catExists) ? "new" : "select"));
     setShowModal(true);
+  };
+
+  const openDuplicate = (row) => {
+    openCreate({
+      name:         `${row.name || ""} (Copy)`,
+      category:     row.category || "",
+      jobType:      row.jobType || "both",
+      pricingType:  row.pricingType || "flat",
+      defaultPrice: String(row.defaultPrice ?? ""),
+      pricingTiers: Array.isArray(row.pricingTiers)
+        ? row.pricingTiers.map((t) => ({ vehicleType: t.vehicleType, price: String(t.price) }))
+        : [],
+      active: true,
+    });
   };
 
   // ── Pricing tier helpers ──────────────────────────────────────────────────
@@ -133,6 +149,8 @@ const CarWashServices = () => {
     }));
 
   const submit = async (e) => {
+    const addAnother = addAnotherRef.current;
+    addAnotherRef.current = false;
     e.preventDefault();
     const hasDuplicateTiers = form.pricingTiers.some(
       (t, i) => t.vehicleType && form.pricingTiers.findIndex((x, j) => j !== i && x.vehicleType === t.vehicleType) !== -1
@@ -140,21 +158,36 @@ const CarWashServices = () => {
     if (hasDuplicateTiers) { toast.error("Each vehicle type can only appear once in the pricing table"); return; }
 
     const payload = {
-      ...form,
+      name:         String(form.name || "").trim(),
+      category:     String(form.category || "").trim(),
+      jobType:      String(form.jobType || "both"),
+      pricingType:  String(form.pricingType || "flat"),
       defaultPrice: Number(form.defaultPrice || 0),
-      pricingTiers: form.pricingTiers
+      active:       Boolean(form.active),
+      pricingTiers: (form.pricingTiers || [])
         .filter((t) => t.vehicleType && t.price !== "")
-        .map((t) => ({ vehicleType: t.vehicleType, price: Number(t.price) })),
+        .map((t) => ({ vehicleType: String(t.vehicleType), price: Number(t.price) })),
     };
     try {
       if (editingId) await carWashApi.updateService(editingId, payload);
       else await carWashApi.createService(payload);
-      closeModal();
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["cw-services"] }),
         queryClient.invalidateQueries({ queryKey: ["cw-service-categories"] }),
       ]);
-      toast.success("Service saved");
+      if (addAnother && !editingId) {
+        // Keep category + jobType + pricingType + tiers — clear only name & prices so staff can quickly enter the next variant
+        const keepCategory = form.category;
+        const keepCategoryMode = categoryMode;
+        clearDraft("cw-service-create");
+        setEditingId("");
+        setForm({ ...emptyForm, category: keepCategory, jobType: form.jobType, pricingType: form.pricingType, pricingTiers: form.pricingTiers.map((t) => ({ vehicleType: t.vehicleType, price: "" })) });
+        setCategoryMode(keepCategoryMode);
+        toast.success("Service saved — add the next one");
+      } else {
+        closeModal();
+        toast.success("Service saved");
+      }
     } catch (err) {
       toast.error(err?.response?.data?.message || "Unable to save service");
     }
@@ -244,6 +277,11 @@ const CarWashServices = () => {
                     </button>
                   )}
                   {canManage && (
+                    <button type="button" onClick={() => openDuplicate(row)} title="Duplicate this service" className="inline-flex items-center gap-1 border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-500 hover:bg-slate-50">
+                      <FaCopy size={9} /> Duplicate
+                    </button>
+                  )}
+                  {canManage && (
                     <button type="button" onClick={() => openEdit(row)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-1 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
                       <FaEdit /> Edit
                     </button>
@@ -321,9 +359,14 @@ const CarWashServices = () => {
                       </td>
                       <td className="px-2 py-1 text-right">
                         {canManage && (
-                          <button type="button" onClick={() => openEdit(row)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                            <FaEdit /> Edit
-                          </button>
+                          <div className="inline-flex items-center gap-1">
+                            <button type="button" onClick={() => openDuplicate(row)} title="Duplicate" className="inline-flex items-center gap-1 border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-bold text-slate-500 hover:bg-slate-50">
+                              <FaCopy size={9} /> Duplicate
+                            </button>
+                            <button type="button" onClick={() => openEdit(row)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                              <FaEdit /> Edit
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -402,7 +445,26 @@ const CarWashServices = () => {
           footer={
             <>
               <button type="button" onClick={closeModal} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
-              {canManage && <button type="submit" form="carwash-service-form" className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127]">Save Service</button>}
+              {canManage && !editingId && (
+                <button
+                  type="submit"
+                  form="carwash-service-form"
+                  onClick={() => { addAnotherRef.current = true; }}
+                  className="border border-[#0B3B2E] bg-white px-4 py-2 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+                >
+                  Save &amp; Add Another
+                </button>
+              )}
+              {canManage && (
+                <button
+                  type="submit"
+                  form="carwash-service-form"
+                  onClick={() => { addAnotherRef.current = false; }}
+                  className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127]"
+                >
+                  {editingId ? "Update Service" : "Save Service"}
+                </button>
+              )}
             </>
           }
         >

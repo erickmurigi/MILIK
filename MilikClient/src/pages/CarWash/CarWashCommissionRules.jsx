@@ -8,6 +8,7 @@ import useCarWashPermission from "../../hooks/useCarWashPermission";
 
 const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
+const fmtSvc = (svc, fallback = "—") => svc ? (svc.category ? `${svc.category} — ${svc.name}` : svc.name) : fallback;
 const emptyRule = { name: "", service: "", staff: "", commissionType: "fixed", rate: "", priority: 0, active: true, notes: "" };
 
 const Modal = ({ title, subtitle, children, footer, onClose }) => (
@@ -127,7 +128,7 @@ const CarWashCommissionRules = () => {
             {rules.length ? rules.map((rule) => (
               <tr key={rule._id} className={`border-b border-slate-200 hover:bg-slate-50 ${rule.active === false ? "opacity-50" : ""}`}>
                 <td className="px-3 py-2 font-extrabold text-slate-900">{rule.name}</td>
-                <td className="px-3 py-2 text-slate-700">{rule.service?.name || <span className="italic text-slate-400">All services</span>}</td>
+                <td className="px-3 py-2 text-slate-700">{rule.service ? fmtSvc(rule.service) : <span className="italic text-slate-400">All services</span>}</td>
                 <td className="px-3 py-2 text-slate-700">{rule.staff?.name || <span className="italic text-slate-400">All staff</span>}</td>
                 <td className="px-3 py-2 capitalize text-slate-700">{rule.commissionType}</td>
                 <td className="px-3 py-2 text-right font-black text-slate-900">
@@ -200,7 +201,7 @@ const CarWashCommissionRules = () => {
               <label className={labelClass}>Applies to Service</label>
               <select className={inputClass} value={form.service} onChange={(e) => setForm((p) => ({ ...p, service: e.target.value }))}>
                 <option value="">All services</option>
-                {services.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
+                {services.map((s) => <option key={s._id} value={s._id}>{s.category ? `${s.category} — ${s.name}` : s.name}</option>)}
               </select>
             </div>
             <div>

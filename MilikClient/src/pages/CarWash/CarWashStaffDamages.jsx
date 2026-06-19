@@ -53,6 +53,10 @@ export default function CarWashStaffDamages() {
   const [waiveNotes,  setWaiveNotes]  = useState("");
   const [waiving,     setWaiving]     = useState(false);
 
+  // Delete confirmation
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting,     setDeleting]     = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -114,15 +118,19 @@ export default function CarWashStaffDamages() {
     }
   };
 
-  const handleDelete = async (d) => {
-    if (!window.confirm(`Delete damage of ${formatMoney(d.amount)} for ${d.staff?.name || "staff"}?`)) return;
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      await carWashApi.deleteDamage(d._id);
+      await carWashApi.deleteDamage(deleteTarget._id);
       toast.success("Damage deleted");
+      setDeleteTarget(null);
       load();
       loadBalances();
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to delete");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -246,7 +254,7 @@ export default function CarWashStaffDamages() {
                             <FaUndo className="text-[9px]" /> Waive
                           </button>
                           <button
-                            onClick={() => handleDelete(d)}
+                            onClick={() => setDeleteTarget(d)}
                             title="Delete record"
                             className="border border-red-200 bg-red-50 px-2 py-0.5 text-red-600 hover:bg-red-100"
                           >
@@ -335,6 +343,33 @@ export default function CarWashStaffDamages() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+              <h2 className="text-sm font-black uppercase tracking-wide">Delete Damage Record</h2>
+              <button onClick={() => setDeleteTarget(null)} className="p-1 text-white/70 hover:text-white"><FaTimes /></button>
+            </div>
+            <div className="px-4 py-5">
+              <p className="text-sm text-slate-700">
+                Delete the <span className="font-bold text-red-600">{formatMoney(deleteTarget.amount)}</span> damage record for{" "}
+                <span className="font-bold">{deleteTarget.staff?.name || "this staff member"}</span>?
+              </p>
+              <p className="mt-1 text-[11px] text-slate-500">This action cannot be undone.</p>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-100 px-4 py-3">
+              <button onClick={() => setDeleteTarget(null)} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                Cancel
+              </button>
+              <button onClick={confirmDelete} disabled={deleting} className="bg-red-600 px-4 py-2 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50">
+                {deleting ? "Deleting…" : "Delete"}
+              </button>
+            </div>
           </div>
         </div>
       )}

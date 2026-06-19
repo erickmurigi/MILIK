@@ -1073,7 +1073,7 @@ const CarWashAddJob = () => {
                               {services
                                 .filter((svc) => !svc.jobType || svc.jobType === "both" || svc.jobType === jobType)
                                 .map((svc) => (
-                                  <option key={svc._id} value={svc._id}>{svc.name}</option>
+                                  <option key={svc._id} value={svc._id}>{svc.category ? `${svc.category} — ${svc.name}` : svc.name}</option>
                                 ))}
                             </select>
                           )}
