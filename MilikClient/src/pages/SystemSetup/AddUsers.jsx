@@ -27,6 +27,7 @@ import {
   normalizePermissionMap,
   setPermissionGroupValue,
 } from '../../utils/accessMatrix';
+import { MODULE_ROLE_PRESETS, applyModuleRole, detectModuleRole } from '../../utils/moduleRolePresets';
 
 const PROFILE_OPTIONS = ['Administrator', 'Manager', 'Accountant', 'Agent', 'Viewer'];
 
@@ -776,6 +777,63 @@ export default function AddUserPage() {
                               </p>
                             </div>
                           )}
+
+                          {/* Module role presets — one block per enabled module */}
+                          {Object.entries(MODULE_ROLE_PRESETS)
+                            .filter(([moduleKey]) => {
+                              const accessKey = MODULE_KEY_MAP[moduleKey] ?? moduleKey;
+                              return (
+                                enabledModuleKeys.includes(moduleKey) &&
+                                assignment.moduleAccess?.[accessKey] !== 'Not allowed'
+                              );
+                            })
+                            .map(([moduleKey, preset]) => {
+                              const currentRole = detectModuleRole(assignment.permissions, moduleKey);
+                              return (
+                                <div key={moduleKey} className={`mt-3 rounded-lg border p-2.5 ${preset.blockCls}`}>
+                                  <div className={`mb-2 text-[10px] font-extrabold uppercase tracking-[0.14em] ${preset.titleCls}`}>
+                                    {preset.label}
+                                  </div>
+                                  <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                                    {Object.entries(preset.roles).map(([key, role]) => {
+                                      const active = currentRole === key;
+                                      return (
+                                        <button
+                                          key={key}
+                                          type="button"
+                                          onClick={() =>
+                                            updateAssignment(assignment.company, (current) => ({
+                                              ...current,
+                                              permissions: applyModuleRole(current.permissions, moduleKey, key),
+                                            }))
+                                          }
+                                          className={`rounded border px-2.5 py-2 text-left transition-colors ${
+                                            active ? preset.activeCls : preset.inactiveCls
+                                          }`}
+                                        >
+                                          <p className="text-[11px] font-extrabold">{role.label}</p>
+                                          <p className={`mt-0.5 text-[10px] leading-tight ${active ? preset.activeDescCls : 'text-slate-400'}`}>
+                                            {role.description}
+                                          </p>
+                                        </button>
+                                      );
+                                    })}
+                                    {currentRole === 'custom' && (
+                                      <div className="rounded border border-slate-300 bg-slate-100 px-2.5 py-2">
+                                        <p className="text-[11px] font-extrabold text-slate-600">Custom</p>
+                                        <p className="mt-0.5 text-[10px] leading-tight text-slate-400">
+                                          Permissions set manually below
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <p className={`mt-2 text-[10px] ${preset.hintCls}`}>
+                                    Selecting a role overwrites the {preset.label.replace(' Role', '')} section of granular permissions below.
+                                  </p>
+                                </div>
+                              );
+                            })
+                          }
                         </div>
 
                         {/* Granular action permissions */}
