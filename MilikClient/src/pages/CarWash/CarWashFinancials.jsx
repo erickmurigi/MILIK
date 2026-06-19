@@ -48,7 +48,7 @@ const REVERSAL_LABELS = {
 };
 
 const REVERSIBLE_TYPES = new Set(Object.keys(REVERSAL_LABELS));
-const PAGE_SIZE = 30;
+const PAGE_SIZE = 50;
 
 const entryTypeLabel = (e) => {
   if (e.category === "REVERSAL") return "Reversal";
@@ -274,7 +274,7 @@ export default function CarWashFinancials() {
 
   return (
     <CarWashShell title="Financials" action={headerAction}>
-      <div className="flex min-h-0 flex-col gap-3 overflow-y-auto">
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
 
         {/* ── KPI strip ─────────────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -420,20 +420,18 @@ export default function CarWashFinancials() {
               </table>
             </div>
           )}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/80 px-3 py-2">
-              <span className="text-[11px] text-slate-500">
-                {filteredEntries.length === 0 ? "No entries" : `${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, filteredEntries.length)} of ${filteredEntries.length} entries`}
-              </span>
-              <div className="flex items-center gap-1">
-                <button disabled={page <= 1} onClick={() => setPage(1)} className="h-6 w-6 rounded border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-30">«</button>
-                <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="h-6 w-6 rounded border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-30">‹</button>
-                <span className="px-2 text-[11px] font-bold text-slate-600">{page} / {totalPages}</span>
-                <button disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} className="h-6 w-6 rounded border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-30">›</button>
-                <button disabled={page >= totalPages} onClick={() => setPage(totalPages)} className="h-6 w-6 rounded border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-30">»</button>
-              </div>
+          <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/80 px-3 py-2">
+            <span className="text-[11px] text-slate-500">
+              {filteredEntries.length === 0 ? "No entries" : `${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, filteredEntries.length)} of ${filteredEntries.length} entries`}
+            </span>
+            <div className="flex items-center gap-1">
+              <button disabled={page <= 1} onClick={() => setPage(1)} className="h-6 w-6 rounded border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-30">«</button>
+              <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="h-6 w-6 rounded border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-30">‹</button>
+              <span className="px-2 text-[11px] font-bold text-slate-600">{page} / {totalPages}</span>
+              <button disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} className="h-6 w-6 rounded border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-30">›</button>
+              <button disabled={page >= totalPages} onClick={() => setPage(totalPages)} className="h-6 w-6 rounded border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-30">»</button>
             </div>
-          )}
+          </div>
         </div>
 
       </div>

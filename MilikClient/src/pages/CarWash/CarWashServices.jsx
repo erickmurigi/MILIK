@@ -79,17 +79,16 @@ const CarWashServices = () => {
     [form.pricingTiers]
   );
 
-  // Auto-save service form draft while modal is open
+  // Auto-save draft only during create — editing always loads fresh from DB
   useEffect(() => {
-    if (!showModal || !form.name) return;
-    const key = editingId ? `cw-service-edit-${editingId}` : "cw-service-create";
-    const t = setTimeout(() => writeDraft(key, { form, categoryMode }), 400);
+    if (!showModal || editingId || !form.name) return;
+    const t = setTimeout(() => writeDraft("cw-service-create", { form, categoryMode }), 400);
     return () => clearTimeout(t);
   }, [form, categoryMode, showModal, editingId]);
 
   const closeModal = () => {
-    const key = editingId ? `cw-service-edit-${editingId}` : "cw-service-create";
-    clearDraft(key);
+    clearDraft("cw-service-create");
+    if (editingId) clearDraft(`cw-service-edit-${editingId}`);
     setShowModal(false); setEditingId(""); setForm(emptyForm); setCategoryMode("select");
   };
 
@@ -102,7 +101,6 @@ const CarWashServices = () => {
   };
 
   const openEdit = (row) => {
-    const draft = readDraft(`cw-service-edit-${row._id}`);
     setEditingId(row._id);
     const fromRow = {
       name:         row.name || "",
@@ -115,9 +113,9 @@ const CarWashServices = () => {
         : [],
       active: row.active !== false,
     };
-    const catExists = categories.includes((draft?.form ?? fromRow).category || "");
-    setForm(normalizeForm(draft?.form ?? fromRow));
-    setCategoryMode(draft?.categoryMode ?? ((row.category && !catExists) ? "new" : "select"));
+    const catExists = categories.includes(fromRow.category || "");
+    setForm(normalizeForm(fromRow));
+    setCategoryMode((row.category && !catExists) ? "new" : "select");
     setShowModal(true);
   };
 

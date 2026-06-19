@@ -104,6 +104,7 @@ export const accrueCommissionForJob = async ({ req = null, job, paidLineSet = nu
 
   for (const line of lines) {
     if (paidLineSet !== null && !paidLineSet.has(line.serviceName)) continue;
+    if (line.isRewardLine) continue; // free reward redemption — no commission owed
 
     // lineStaff is an array of staff assigned to this specific line.
     // If populated → only those staff earn commission (split among them).
