@@ -6,6 +6,7 @@ import { currentUserId, escapeRegex, parseBoolean, resolveActiveBusinessId } fro
 const sanitizeServicePayload = (body = {}) => ({
   name:         String(body.name || "").trim().toUpperCase(),
   category:     String(body.category || "").trim().toUpperCase(),
+  jobType:      ["vehicle", "carpet", "both"].includes(body.jobType) ? body.jobType : "both",
   pricingType:  body.pricingType === "per_sqft" ? "per_sqft" : "flat",
   defaultPrice: Number(body.defaultPrice || 0),
   active:       parseBoolean(body.active, true),

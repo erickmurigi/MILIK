@@ -109,7 +109,9 @@ const CarWashServices = () => {
       pricingType:  row.pricingType || "flat",
       defaultPrice: row.defaultPrice ?? "",
       pricingTiers: Array.isArray(row.pricingTiers)
-        ? row.pricingTiers.map((t) => ({ vehicleType: t.vehicleType, price: String(t.price) }))
+        ? row.pricingTiers
+            .filter((t) => t.vehicleType && String(t.vehicleType).trim())
+            .map((t) => ({ vehicleType: t.vehicleType, price: String(t.price) }))
         : [],
       active: row.active !== false,
     };
