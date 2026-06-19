@@ -16,7 +16,7 @@ const sanitizePricingTiers = (tiers) => {
   if (!Array.isArray(tiers)) return [];
   return tiers
     .filter((t) => t?.vehicleType && String(t.vehicleType).trim() && Number.isFinite(Number(t.price)) && Number(t.price) >= 0)
-    .map((t) => ({ vehicleType: String(t.vehicleType).trim().toUpperCase(), price: Number(t.price) }));
+    .map((t) => ({ vehicleType: String(t.vehicleType).trim(), price: Number(t.price) }));
 };
 
 export const listServices = async (req, res, next) => {

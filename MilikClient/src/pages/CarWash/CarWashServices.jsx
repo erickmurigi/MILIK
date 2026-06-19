@@ -111,7 +111,11 @@ const CarWashServices = () => {
       pricingTiers: Array.isArray(row.pricingTiers)
         ? row.pricingTiers
             .filter((t) => t.vehicleType && String(t.vehicleType).trim())
-            .map((t) => ({ vehicleType: t.vehicleType, price: String(t.price) }))
+            .map((t) => {
+              const upper = String(t.vehicleType).toUpperCase();
+              const match = VEHICLE_TYPES.find((vt) => vt.toUpperCase() === upper);
+              return { vehicleType: match ?? t.vehicleType, price: String(t.price) };
+            })
         : [],
       active: row.active !== false,
     };
