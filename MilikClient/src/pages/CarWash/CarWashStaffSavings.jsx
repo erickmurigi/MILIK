@@ -421,7 +421,7 @@ const CarWashStaffSavings = () => {
                   <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Deducted from Payouts</th>
                   <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Pending Deduction</th>
                   <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Paid Out to Staff</th>
-                  <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Balance</th>
+                  <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">In Pot (Balance)</th>
                   <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Actions</th>
                 </tr>
               </thead>
@@ -684,9 +684,19 @@ const CarWashStaffSavings = () => {
             </div>
 
             <div className="space-y-4 p-4">
-              <div className="border border-[#B7C9C0] bg-[#EDF5F1] px-3 py-2.5">
-                <p className="text-[10px] font-extrabold uppercase tracking-wider text-[#0B3B2E]/60">Available Balance</p>
-                <p className="mt-0.5 text-2xl font-black text-[#0B3B2E]">{formatMoney(disburseStaff.balance)}</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="border border-[#B7C9C0] bg-[#EDF5F1] px-3 py-2.5">
+                  <p className="text-[10px] font-extrabold uppercase tracking-wider text-[#0B3B2E]/60">In Savings Pot</p>
+                  <p className="mt-0.5 text-2xl font-black text-[#0B3B2E]">{formatMoney(disburseStaff.balance)}</p>
+                </div>
+                {disburseStaff.daily > disburseStaff.balance + (disburseStaff.disbursed || 0) && (
+                  <div className="border border-amber-200 bg-amber-50 px-3 py-2.5">
+                    <p className="text-[10px] font-extrabold uppercase tracking-wider text-amber-700/60">Pending (future payouts)</p>
+                    <p className="mt-0.5 text-2xl font-black text-amber-700">
+                      {formatMoney(Math.max(0, (disburseStaff.daily || 0) - (disburseStaff.held || 0)))}
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div>

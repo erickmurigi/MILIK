@@ -578,7 +578,7 @@ export const processDailySavingsManual = async (req, res, next) => {
         disbursed: { $sum: { $cond: [{ $eq: ["$type", "disbursement"] }, "$amount", 0] } },
         lastDate:  { $max: "$savingsDate" },
       }},
-      { $addFields: { balance: { $max: [0, { $subtract: ["$daily", "$disbursed"] }] } } },
+      { $addFields: { balance: { $max: [0, { $subtract: ["$held", "$disbursed"] }] } } },
       { $sort: { balance: -1, _id: 1 } },
     ]);
 
@@ -677,7 +677,7 @@ export const listSavingsBalances = async (req, res, next) => {
         disbursed: { $sum: { $cond: [{ $eq: ["$type", "disbursement"] }, "$amount", 0] } },
         lastDate:  { $max: "$savingsDate" },
       }},
-      { $addFields: { balance: { $max: [0, { $subtract: ["$daily", "$disbursed"] }] } } },
+      { $addFields: { balance: { $max: [0, { $subtract: ["$held", "$disbursed"] }] } } },
       { $sort: { balance: -1, _id: 1 } },
     ]);
 

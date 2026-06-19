@@ -173,11 +173,12 @@ export const getStaffSavingsBalance = async (businessId, staffId) => {
   const totalHeld      = round2(dailyRows[0]?.totalHeld      || 0);
   const totalDisbursed = round2(disbursementRows[0]?.totalDisbursed || 0);
   const pendingToHold  = round2(totalDaily - totalHeld);
-  // Balance = everything accumulated − what's been paid back to staff
-  // (includes both held-from-payouts and not-yet-held portions)
-  const balance        = round2(totalDaily - totalDisbursed);
+  // balance = what is physically in the savings pot (credited via commission deductions, not yet paid out)
+  // commitment = total accumulated savings obligation (includes pending deductions not yet in the pot)
+  const balance        = round2(Math.max(0, totalHeld - totalDisbursed));
+  const commitment     = round2(Math.max(0, totalDaily - totalDisbursed));
 
-  return { totalDaily, totalHeld, pendingToHold, totalDisbursed, balance };
+  return { totalDaily, totalHeld, pendingToHold, totalDisbursed, balance, commitment };
 };
 
 // ─── Hold savings from a commission payout ───────────────────────────────────
@@ -221,11 +222,15 @@ export const disburseSavings = async ({ req, businessId, staffId, cashbookAccoun
   const disburseAmount = amount != null ? round2(Number(amount)) : balance.balance;
 
   if (!Number.isFinite(disburseAmount) || disburseAmount <= 0) {
-    throw new Error("No savings balance available to disburse");
+    throw new Error("No savings available to disburse — the savings pot is empty");
   }
-  // balance = totalDaily - totalDisbursed (total accumulated minus already paid out)
+  // balance = held - disbursed (what is physically in the savings pot, credited via commission deductions)
   if (disburseAmount > balance.balance + 0.01) {
-    throw new Error(`Cannot disburse more than the accumulated savings balance (Ksh ${balance.balance.toLocaleString()})`);
+    const pending = round2(balance.commitment - balance.balance);
+    throw new Error(
+      `Cannot disburse more than the savings pot balance (Ksh ${balance.balance.toLocaleString()}).` +
+      (pending > 0 ? ` Ksh ${pending.toLocaleString()} more will be available after future commission payouts.` : "")
+    );
   }
 
   const cashbook = await ChartOfAccount.findOne({
