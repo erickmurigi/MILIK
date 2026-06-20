@@ -2,7 +2,8 @@ module.exports = {
   apps: [
     {
       name: "milik-api",
-      script: "server.js",
+      script: "/var/www/MILIK/MilikApi/server.js",
+      cwd: "/var/www/MILIK/MilikApi",
       instances: "max",       // 1 worker per CPU core (4 on your machine)
       exec_mode: "cluster",   // share the port across all workers
       interpreter: "node",
@@ -23,8 +24,8 @@ module.exports = {
       },
 
       // Logging
-      out_file: "./logs/out.log",
-      error_file: "./logs/error.log",
+      out_file: "/var/www/MILIK/MilikApi/logs/out.log",
+      error_file: "/var/www/MILIK/MilikApi/logs/error.log",
       merge_logs: true,
       log_date_format: "YYYY-MM-DD HH:mm:ss Z",
     },
