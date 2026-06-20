@@ -13,7 +13,7 @@ const getRedisClient = () => {
 
   client = new Redis(process.env.REDIS_URL, {
     maxRetriesPerRequest: 1,
-    enableOfflineQueue: false,
+    enableOfflineQueue: true,   // queue commands while connecting — drains in <5ms for local Redis
     lazyConnect: false,
     connectTimeout: 5000,
   });
