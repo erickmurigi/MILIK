@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   FaCheckCircle, FaCodeBranch, FaExclamationTriangle, FaMobileAlt, FaRedoAlt,
   FaSearch, FaTimesCircle, FaCopy, FaLink, FaTimes, FaCarAlt, FaUndo,
-  FaUpload, FaFileAlt, FaToggleOn, FaToggleOff,
+  FaUpload, FaFileAlt, FaToggleOn, FaToggleOff, FaBan,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
@@ -370,6 +370,83 @@ function AssignModal({ notif, onClose, onAssigned }) {
               <FaLink size={10} /> {saving ? "Assigning…" : "Confirm Assignment"}
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Mark Reversed Modal ──────────────────────────────────────────────────────
+function MarkReversedModal({ notif, onClose, onReversed }) {
+  const [reversalRef, setReversalRef] = useState("");
+  const [saving, setSaving]           = useState(false);
+  const hasPayment = Boolean(notif.matchedPayment);
+
+  const handleConfirm = async () => {
+    setSaving(true);
+    try {
+      const res = await carWashApi.markMpesaNotificationReversed(notif._id, { reversalRef: reversalRef.trim() });
+      toast.success("Notification marked as reversed — allocation blocked");
+      onReversed(res?.data || res);
+      onClose();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to mark as reversed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-md border border-slate-200 bg-white shadow-xl">
+        <div className="flex items-center justify-between bg-red-700 px-4 py-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-white">Mark as Reversed</p>
+            <p className="text-[11px] text-red-200">
+              {formatMoney(notif.amount)} · <span className="font-mono">{notif.transactionCode || "—"}</span>
+            </p>
+          </div>
+          <button onClick={onClose} className="text-white/70 hover:text-white"><FaTimes size={14} /></button>
+        </div>
+
+        <div className="space-y-3 p-4">
+          <p className="text-sm text-slate-700">
+            Mark this notification as reversed? Allocation and assignment will be permanently blocked.
+          </p>
+
+          {hasPayment && (
+            <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] text-amber-800">
+              <FaExclamationTriangle className="mr-1.5 inline text-amber-500" size={11} />
+              This notification has a recorded payment. Make sure you have already reversed that payment on the <strong>Jobs page</strong> before marking this as reversed.
+            </div>
+          )}
+
+          <div>
+            <label className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500">
+              M-Pesa Reversal Reference (optional)
+            </label>
+            <input
+              type="text"
+              value={reversalRef}
+              onChange={(e) => setReversalRef(e.target.value)}
+              placeholder="e.g. RI12345678 or leave blank"
+              className="h-9 w-full border border-slate-300 px-3 text-xs text-slate-700 focus:border-red-500 focus:outline-none"
+              autoFocus
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <button onClick={onClose} className="inline-flex h-8 items-center px-3 text-xs font-bold text-slate-600 hover:text-slate-900">
+            Cancel
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={saving}
+            className="inline-flex h-8 items-center gap-1.5 bg-red-600 px-4 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
+          >
+            <FaBan size={10} /> {saving ? "Saving…" : "Mark as Reversed"}
+          </button>
         </div>
       </div>
     </div>
@@ -750,7 +827,8 @@ export default function CarWashMpesaNotifications() {
   const [expanded, setExpanded]         = useState(null);
   const [assignTarget, setAssignTarget] = useState(null);
   const [allocateTarget, setAllocateTarget] = useState(null);
-  const [showUpload, setShowUpload]     = useState(false);
+  const [showUpload, setShowUpload]         = useState(false);
+  const [reverseTarget, setReverseTarget]   = useState(null);
 
   const [filters, setFilters] = useState({ status: "", plate: "", dateFrom: todayISO(), dateTo: todayISO() });
   const [applied, setApplied] = useState({ status: "", plate: "", dateFrom: todayISO(), dateTo: todayISO() });
@@ -823,8 +901,18 @@ export default function CarWashMpesaNotifications() {
     >
       {showUpload && (
         <UploadModal
-          onClose={() => setShowUpload(false)}
-          onUploaded={() => { setShowUpload(false); load(); }}
+          onClose={() => { setShowUpload(false); load(); }}
+          onUploaded={() => load()}
+        />
+      )}
+      {reverseTarget && (
+        <MarkReversedModal
+          notif={reverseTarget}
+          onClose={() => setReverseTarget(null)}
+          onReversed={(updated) => {
+            setNotifications((prev) => prev.map((n) => n._id === updated._id ? { ...n, ...updated } : n));
+            setReverseTarget(null);
+          }}
         />
       )}
       {allocateTarget && (
@@ -921,7 +1009,7 @@ export default function CarWashMpesaNotifications() {
               </tr>
             )}
             {notifications.map((n) => {
-              const canAssign = canRecord && (n.status === "unmatched" || n.status === "error");
+              const canAssign = canRecord && !n.isReversed && (n.status === "unmatched" || n.status === "error");
               const rowBg = n.isReversed ? "bg-red-50/40" : (STATUS_META[n.status]?.bg || "");
               return (
                 <React.Fragment key={n._id}>
@@ -988,6 +1076,16 @@ export default function CarWashMpesaNotifications() {
                             title="Assign to correct job"
                           >
                             <FaLink size={9} /> Assign
+                          </button>
+                        )}
+                        {canEdit && !n.isReversed && n.status !== "matched" && (
+                          <button
+                            type="button"
+                            onClick={() => setReverseTarget(n)}
+                            className="inline-flex items-center gap-1 border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-bold text-red-600 hover:bg-red-100"
+                            title="Mark as reversed — blocks all allocation"
+                          >
+                            <FaBan size={9} /> Reversed
                           </button>
                         )}
                         <button

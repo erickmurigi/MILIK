@@ -1,6 +1,6 @@
 import express from "express";
 import multer from "multer";
-import { confirmCarWashCallback, validateCarWashCallback, listMpesaNotifications, reassignMpesaNotification, listUnpaidJobs, allocateNotification, registerCarWashPaybillUrls, bulkUploadMpesaStatement, devTestHashedSms } from "../controllers/mpesaCallbackController.js";
+import { confirmCarWashCallback, validateCarWashCallback, listMpesaNotifications, reassignMpesaNotification, listUnpaidJobs, allocateNotification, registerCarWashPaybillUrls, bulkUploadMpesaStatement, markNotificationReversed, devTestHashedSms } from "../controllers/mpesaCallbackController.js";
 import { verifyUser, requireCompanyModule, requireCompanyPermission } from "../../../controllers/verifyToken.js";
 
 const router = express.Router();
@@ -59,6 +59,15 @@ router.post(
   requireCompanyModule("carwash"),
   requireCompanyPermission("carwash-settings", "manage", "carwash"),
   registerCarWashPaybillUrls
+);
+
+// Authenticated — mark a notification as reversed (M-Pesa portal reversal)
+router.patch(
+  "/notifications/:id/reverse",
+  verifyUser,
+  requireCompanyModule("carwash"),
+  requireCompanyPermission("carwash-payments", "edit", "carwash"),
+  markNotificationReversed,
 );
 
 // Authenticated — bulk upload M-Pesa statement CSV to reconcile missed payments

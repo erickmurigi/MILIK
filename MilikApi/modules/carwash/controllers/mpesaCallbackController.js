@@ -706,6 +706,28 @@ export const confirmCarWashCallback = async (req, res) => {
   }
 };
 
+// ─── Mark notification as reversed (manual — when reversed from M-Pesa portal) ─
+export const markNotificationReversed = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const notif = await CarWashMpesaNotification.findOne({ _id: req.params.id, business });
+    if (!notif) return next(createError(404, "Notification not found"));
+    if (notif.isReversed) return next(createError(409, "Already marked as reversed"));
+
+    const reversalRef = String(req.body?.reversalRef || "").trim() || "Marked reversed manually";
+
+    notif.isReversed   = true;
+    notif.reversalDate = new Date();
+    notif.reversalRef  = reversalRef;
+    notif.notes        = [notif.notes, `Reversed: ${reversalRef}`].filter(Boolean).join(" | ");
+    await notif.save();
+
+    res.json({ success: true, data: notif, message: "Notification marked as reversed — allocation blocked" });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // ─── List notifications (authenticated) ──────────────────────────────────────
 export const listMpesaNotifications = async (req, res, next) => {
   try {
@@ -780,6 +802,7 @@ export const reassignMpesaNotification = async (req, res, next) => {
 
     const notif = await CarWashMpesaNotification.findOne({ _id: id, business });
     if (!notif) return res.status(404).json({ success: false, message: "Notification not found" });
+    if (notif.isReversed) return res.status(409).json({ success: false, message: "Cannot reassign a reversed notification" });
     if (notif.status === "matched") {
       return res.status(409).json({ success: false, message: "Notification is already matched to a job" });
     }
@@ -809,7 +832,8 @@ export const reassignMpesaNotification = async (req, res, next) => {
       return res.status(409).json({ success: false, message: "This job is already fully paid" });
     }
 
-    const paidAmount = round2(notif.amount);
+    const paidAmount    = round2(notif.amount);
+    const appliedAmount = round2(Math.min(paidAmount, outstanding));
     const branch = job.branch || notif.branch || null;
     const normalizedMsisdn = notif.msisdn || null;
     // Masked MSISDN: stored on new notifications; fall back to rawPayload for older records
@@ -822,7 +846,7 @@ export const reassignMpesaNotification = async (req, res, next) => {
         business,
         branch,
         job: job._id,
-        amount: paidAmount,
+        amount: appliedAmount,
         method: "mpesa",
         cashbookAccount: cashbook._id,
         reference: notif.transactionCode || "",
@@ -847,17 +871,18 @@ export const reassignMpesaNotification = async (req, res, next) => {
     const updatedJob = await refreshJobPaymentStatus(business, job._id);
     await postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: req.user?._id || null });
 
-    // Update job + customer with payer's M-Pesa identity (real phone or masked MSISDN)
+    // Update job + customer with payer's M-Pesa identity (Safaricom-verified)
     const jobContactUpdates = {};
     if (normalizedMsisdn) jobContactUpdates.phone = normalizedMsisdn;
     else if (maskedMsisdn) jobContactUpdates.maskedMsisdn = maskedMsisdn;
+    if (notif.senderName) jobContactUpdates.customerName = notif.senderName;
     if (Object.keys(jobContactUpdates).length) {
       CarWashJob.updateOne({ _id: job._id, business }, { $set: jobContactUpdates }).catch(() => {});
     }
     autoEnrollPlate({
       business,
       plate: normalizePlate(job.plateNumber),
-      customerName: job.customerName,
+      customerName: notif.senderName || job.customerName,
       phone: normalizedMsisdn || null,
       maskedMsisdn: maskedMsisdn || null,
       payerName: notif.senderName || null,
@@ -865,7 +890,7 @@ export const reassignMpesaNotification = async (req, res, next) => {
 
     if (updatedJob) {
       accrueCommissionForJob({ req, job: updatedJob }).catch(() => {});
-      const reassignRemaining = round2(Math.max(0, outstanding - paidAmount));
+      const reassignRemaining = round2(Math.max(0, outstanding - appliedAmount));
       let loyaltySmsBody = null;
       if (["paid", "partial"].includes(updatedJob.paymentStatus)) {
         try {
@@ -875,7 +900,7 @@ export const reassignMpesaNotification = async (req, res, next) => {
           console.error("[CW Reassign] Stamp failed job=%s: %s", updatedJob.jobNumber || job._id, err?.message || err);
         }
       }
-      await sendPaymentConfirmationSms({ business, job: updatedJob, amount: paidAmount, remaining: reassignRemaining, overridePhone: normalizedMsisdn, maskedMsisdn, loyaltySmsBody, payerName: notif.senderName || null });
+      await sendPaymentConfirmationSms({ business, job: updatedJob, amount: appliedAmount, remaining: reassignRemaining, overridePhone: normalizedMsisdn, maskedMsisdn, loyaltySmsBody, payerName: notif.senderName || null });
       if (updatedJob.paymentStatus === "paid") {
         markJobCommissionsPayable({ business, jobId: updatedJob._id }).catch(() => {});
       }
@@ -991,10 +1016,11 @@ export const allocateNotification = async (req, res, next) => {
         const jobContactUpdates = {};
         if (normalizedMsisdn) jobContactUpdates.phone = normalizedMsisdn;
         else if (maskedMsisdn) jobContactUpdates.maskedMsisdn = maskedMsisdn;
+        if (notif.senderName) jobContactUpdates.customerName = notif.senderName;
         if (Object.keys(jobContactUpdates).length) {
           CarWashJob.updateOne({ _id: job._id, business }, { $set: jobContactUpdates }).catch(() => {});
         }
-        autoEnrollPlate({ business, plate: normalizePlate(job.plateNumber), customerName: job.customerName, phone: normalizedMsisdn, maskedMsisdn, payerName: notif.senderName || null }).catch(() => {});
+        autoEnrollPlate({ business, plate: normalizePlate(job.plateNumber), customerName: notif.senderName || job.customerName, phone: normalizedMsisdn, maskedMsisdn, payerName: notif.senderName || null }).catch(() => {});
         const allocRemaining = round2(Math.max(0, jobOutstanding - payAmount));
         let loyaltySmsBody = null;
         if (["paid", "partial"].includes(updatedJob.paymentStatus)) {
@@ -1214,6 +1240,7 @@ export const bulkUploadMpesaStatement = async (req, res, next) => {
     const text = req.file.buffer.toString("utf-8");
     const rows = parseCsvText(text);
     if (rows.length < 2) return next(createError(400, "CSV has no data rows"));
+    if (rows.length > 2001) return next(createError(400, "CSV exceeds the 2 000 row limit — split into smaller files and upload each separately"));
 
     // Detect format
     const rawHeaders  = rows[0];

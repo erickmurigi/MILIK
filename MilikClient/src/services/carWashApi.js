@@ -60,6 +60,7 @@ export const carWashApi = {
   listUnpaidJobs: async () => unwrap(await adminRequests.get("/carwash/mpesa/unpaid-jobs")),
   allocateMpesaPayment: async (id, payload) => unwrap(await adminRequests.post(`/carwash/mpesa/notifications/${id}/allocate`, payload)),
   uploadMpesaStatement: async (formData) => unwrap(await adminRequests.post("/carwash/mpesa/bulk-upload", formData)),
+  markMpesaNotificationReversed: async (id, payload) => unwrap(await adminRequests.patch(`/carwash/mpesa/notifications/${id}/reverse`, payload)),
   registerMpesaUrls: async (shortCode) => unwrap(await adminRequests.post("/carwash/mpesa/register-urls", { shortCode })),
   updatePaymentReconciliation: async (id, payload) => unwrap(await adminRequests.patch(`/carwash/payments/${id}/reconciliation`, payload)),
   listDeposits: async (params = {}) => unwrap(await adminRequests.get("/carwash/deposits", { params: bp(params) })),
