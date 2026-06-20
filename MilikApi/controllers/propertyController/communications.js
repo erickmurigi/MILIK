@@ -151,13 +151,15 @@ export const getSmsLogsController = async (req, res, next) => {
     const businessId = resolveBusinessId(req);
     if (!businessId) return next(createError(400, 'Business is required.'));
 
-    const limit = Math.min(100, Number(req.query?.limit || 30));
-    const channel = String(req.query?.channel || '').trim() || undefined;
+    const limit       = Math.min(Math.max(Number(req.query?.limit || 25), 1), 100);
+    const page        = Math.max(Number(req.query?.page || 1), 1);
+    const channel     = String(req.query?.channel     || '').trim() || undefined;
     const contextType = String(req.query?.contextType || '').trim() || undefined;
-    const status = String(req.query?.status || '').trim() || undefined;
+    const status      = String(req.query?.status      || '').trim() || undefined;
+    const search      = String(req.query?.search      || '').trim() || undefined;
 
-    const logs = await getSmsLogs({ businessId, limit, channel, contextType, status });
-    return res.status(200).json(logs);
+    const result = await getSmsLogs({ businessId, limit, page, channel, contextType, status, search });
+    return res.status(200).json(result);
   } catch (error) {
     return next(error);
   }

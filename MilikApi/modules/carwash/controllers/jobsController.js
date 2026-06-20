@@ -296,7 +296,9 @@ export const createJob = async (req, res, next) => {
     const assignedStaff = await assertStaffArrayBelongsToBusiness(business, staffSource);
 
     const userId = currentUserId(req);
-    const branchId = resolveActiveBranchId(req);
+    const ctxBranch = resolveActiveBranchId(req);
+    const bodyBranch = req.body.branch && mongoose.Types.ObjectId.isValid(String(req.body.branch)) ? String(req.body.branch) : null;
+    const branchId = ctxBranch || bodyBranch;
     const expectedReadyAt = req.body.expectedReadyAt ? new Date(req.body.expectedReadyAt) : null;
 
     // Credit account validation

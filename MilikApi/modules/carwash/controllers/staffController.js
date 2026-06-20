@@ -1,7 +1,13 @@
+import mongoose from "mongoose";
 import { createError } from "../../../utils/error.js";
 import CarWashJob from "../models/CarWashJob.js";
 import CarWashStaff from "../models/CarWashStaff.js";
 import { currentUserId, escapeRegex, parseBoolean, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
+
+const toOidOrNull = (v) => {
+  const s = String(v || "").trim();
+  return s && mongoose.Types.ObjectId.isValid(s) ? new mongoose.Types.ObjectId(s) : null;
+};
 
 const sanitizeStaffPayload = (body = {}) => ({
   name: String(body.name || "").trim().toUpperCase(),
@@ -30,7 +36,7 @@ export const listStaff = async (req, res, next) => {
     const page = Math.max(Number(req.query.page || 1), 1);
     const skip = (page - 1) * limit;
     const [staff, total] = await Promise.all([
-      CarWashStaff.find(filter).sort({ active: -1, name: 1 }).skip(skip).limit(limit).lean(),
+      CarWashStaff.find(filter).populate("branch", "name").sort({ active: -1, name: 1 }).skip(skip).limit(limit).lean(),
       CarWashStaff.countDocuments(filter),
     ]);
     const pagination = { page, limit, total, pages: Math.max(Math.ceil(total / limit), 1) };
@@ -46,8 +52,9 @@ export const createStaff = async (req, res, next) => {
     const payload = sanitizeStaffPayload(req.body);
     if (!payload.name) return next(createError(400, "Staff name is required"));
     const userId = currentUserId(req);
-    const branchId = resolveActiveBranchId(req);
-    const staff = await CarWashStaff.create({ ...payload, business, branch: branchId || null, createdBy: userId, updatedBy: userId });
+    const branchFromBody = toOidOrNull(req.body.branch);
+    const branchId = branchFromBody || resolveActiveBranchId(req) || null;
+    const staff = await CarWashStaff.create({ ...payload, business, branch: branchId, createdBy: userId, updatedBy: userId });
     res.status(201).json({ success: true, data: staff, staff, message: "Car Wash staff member created" });
   } catch (error) {
     next(error);
@@ -59,6 +66,7 @@ export const updateStaff = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const payload = sanitizeStaffPayload(req.body);
     if (!payload.name) return next(createError(400, "Staff name is required"));
+    if ("branch" in req.body) payload.branch = toOidOrNull(req.body.branch);
     const staff = await CarWashStaff.findOneAndUpdate(
       { _id: req.params.id, business },
       { ...payload, updatedBy: currentUserId(req) },

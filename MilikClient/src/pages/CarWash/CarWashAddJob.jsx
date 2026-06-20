@@ -404,8 +404,12 @@ const CarWashAddJob = () => {
   // When redirected from new-carpet-job save, open photos immediately
   const openPhotosOnLoad = Boolean(location.state?.openPhotos);
 
-  const [services, setServices]   = useState([]);
-  const [staff, setStaff]         = useState([]);
+  const [services, setServices]     = useState([]);
+  const [staff, setStaff]           = useState([]);
+  const allStaffRef                 = React.useRef([]);
+  const [branches, setBranches]     = useState([]);
+  const [isAllBranches, setIsAllBranches] = useState(false);
+  const [selectedBranchId, setSelectedBranchId] = useState("");
   const [branchType, setBranchType] = useState("both");
   const [saving, setSaving]         = useState(false);
   const [loadingJob, setLoadingJob] = useState(false);
@@ -480,14 +484,25 @@ const CarWashAddJob = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        const [svcPayload, staffPayload, branchData, settingsData] = await Promise.all([
+        const [svcPayload, staffPayload, branchData, settingsData, branchesPayload] = await Promise.all([
           carWashApi.listServices({ active: true }),
           carWashApi.listStaff({ active: true }),
           carWashApi.getActiveBranch().catch(() => null),
           carWashApi.getCarWashSettings().catch(() => null),
+          carWashApi.listBranches({ limit: 100 }).catch(() => null),
         ]);
         setServices(normalizeListPayload(svcPayload, "services"));
-        setStaff(normalizeListPayload(staffPayload, "staff"));
+        const raw = normalizeListPayload(staffPayload, "staff");
+        allStaffRef.current = raw;
+        setBranches(normalizeListPayload(branchesPayload, "branches"));
+
+        const activeBranchId = branchData?._id ? String(branchData._id) : null;
+        setIsAllBranches(!activeBranchId);
+
+        // Show staff from this branch + unassigned staff (null branch = migrating)
+        setStaff(activeBranchId
+          ? raw.filter((s) => !s.branch || String(s.branch._id || s.branch) === activeBranchId)
+          : raw);
         setDiscountSettings({
           minPrice: Number(settingsData?.discountMinJobPrice ?? 0),
           maxPct:   Number(settingsData?.discountMaxPercent  ?? 0),
@@ -503,6 +518,15 @@ const CarWashAddJob = () => {
     };
     load();
   }, []); // eslint-disable-line
+
+  // Re-filter staff whenever the user picks a branch in "All Branches" mode
+  useEffect(() => {
+    if (!isAllBranches || !allStaffRef.current.length) return;
+    const raw = allStaffRef.current;
+    setStaff(selectedBranchId
+      ? raw.filter((s) => !s.branch || String(s.branch._id || s.branch) === selectedBranchId)
+      : raw);
+  }, [selectedBranchId, isAllBranches]);
 
   // In edit mode — load the existing job and pre-fill the form
   useEffect(() => {
@@ -661,6 +685,10 @@ const CarWashAddJob = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isAllBranches && !isEditMode && !selectedBranchId) {
+      toast.error("Select a branch before saving");
+      return;
+    }
     if (jobType === "vehicle" && !plateNumber?.trim()) {
       toast.error("Plate number is required");
       return;
@@ -699,6 +727,7 @@ const CarWashAddJob = () => {
       discountAmount: discountNum,
       creditAccount: creditAccount?._id || null,
       notes,
+      branch: (isAllBranches && !isEditMode && selectedBranchId) ? selectedBranchId : undefined,
     };
     try {
       if (isEditMode) {
@@ -758,6 +787,29 @@ const CarWashAddJob = () => {
 
           {/* ── Left column ─────────────────────────────────────────────────── */}
           <div className="space-y-3">
+
+            {/* Branch picker — only shown when logged in as All Branches */}
+            {isAllBranches && !isEditMode && (
+              <div className={`border p-3 shadow-sm ${selectedBranchId ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"}`}>
+                <label className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-amber-800">
+                  Branch <span className="text-red-500">*</span> — you are in All Branches view
+                </label>
+                <select
+                  className="h-9 w-full border border-amber-300 bg-white px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
+                  value={selectedBranchId}
+                  onChange={(e) => setSelectedBranchId(e.target.value)}
+                  required
+                >
+                  <option value="">— Select branch for this job —</option>
+                  {branches.map((b) => (
+                    <option key={b._id} value={b._id}>{b.name}</option>
+                  ))}
+                </select>
+                {!selectedBranchId && (
+                  <p className="mt-1 text-[10px] text-amber-700">This job will not be branch-stamped until you select one.</p>
+                )}
+              </div>
+            )}
 
             {/* Job type toggle — hidden when branch is locked to one type */}
             {(isEditMode || branchType === "both") && (

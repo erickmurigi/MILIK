@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   FaCheckCircle, FaMoneyBillWave, FaPiggyBank,
   FaRedoAlt, FaSms, FaToggleOff, FaToggleOn,
-  FaChevronDown, FaChevronUp, FaExclamationCircle, FaInfoCircle, FaTv, FaTag, FaTools,
+  FaChevronDown, FaChevronUp, FaExclamationCircle, FaInfoCircle, FaTv, FaTag, FaTools, FaDatabase,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, normalizeListPayload } from "../../services/carWashApi";
@@ -42,6 +42,7 @@ export default function CarWashSettings() {
   const [expandedSms, setExpandedSms]     = useState(null);
   const [loading, setLoading]             = useState(false);
   const [saving, setSaving]               = useState(false);
+  const [backfilling, setBackfilling]     = useState(false);
   const [dirty, setDirty]                 = useState(false);
   const canManage = useCarWashPermission("carwash-settings", "manage");
 
@@ -350,6 +351,45 @@ export default function CarWashSettings() {
                     </p>
                   </div>
                 )}
+              </div>
+            </div>
+
+            {/* Data Maintenance — remove this section after running once */}
+            <div className="bg-white">
+              <SectionHeader
+                icon={FaDatabase}
+                title="Data Maintenance"
+                subtitle="One-time tools. Remove this section from the codebase after use."
+              />
+              <div className="p-5 space-y-3">
+                <div className="rounded border border-amber-200 bg-amber-50 px-4 py-3">
+                  <p className="text-xs font-bold text-amber-800">Backfill Branch on Historical Records</p>
+                  <p className="mt-1 text-[10px] text-amber-700">
+                    Assigns the current branch to all jobs, payments, expenses, commission payouts, staff damages and deposits that were created before the branch system was set up.
+                    Make sure you are logged in under the correct branch before clicking.
+                  </p>
+                  <button
+                    type="button"
+                    disabled={backfilling}
+                    onClick={async () => {
+                      if (!window.confirm("This will assign the current branch to ALL records that have no branch. Are you sure?")) return;
+                      setBackfilling(true);
+                      try {
+                        const res = await carWashApi.backfillBranches();
+                        const c = res?.counts ?? {};
+                        toast.success(`Done! Jobs: ${c.jobs ?? 0}, Payments: ${c.payments ?? 0}, Expenses: ${c.expenses ?? 0}, Payouts: ${c.commissionPayouts ?? 0}, Damages: ${c.staffDamages ?? 0}, Deposits: ${c.deposits ?? 0}, Commissions: ${c.commissionAccruals ?? 0}, Savings: ${c.staffSavings ?? 0}`);
+                      } catch (e) {
+                        toast.error(e?.response?.data?.message || "Backfill failed");
+                      } finally {
+                        setBackfilling(false);
+                      }
+                    }}
+                    className="mt-3 inline-flex items-center gap-2 border border-amber-400 bg-amber-100 px-4 py-2 text-xs font-bold text-amber-900 hover:bg-amber-200 disabled:opacity-50 transition"
+                  >
+                    <FaDatabase size={11} />
+                    {backfilling ? "Running…" : "Run Backfill Now"}
+                  </button>
+                </div>
               </div>
             </div>
 

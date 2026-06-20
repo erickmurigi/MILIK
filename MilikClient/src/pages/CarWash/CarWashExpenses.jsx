@@ -20,7 +20,7 @@ const emptyItem  = { description: "", amount: "" };
 const emptyForm  = {
   expenseDate: todayISO(), payee: "", category: "Supplies", description: "",
   method: "cash", cashbookAccount: "", reference: "", status: "paid", notes: "",
-  items: [{ ...emptyItem }],
+  items: [{ ...emptyItem }], branch: "",
 };
 
 const ic = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
@@ -68,7 +68,7 @@ const Modal = ({ title, onClose, onSubmit, submitLabel, children }) => (
 );
 
 // ── Expense form body (shared create / edit) ──────────────────────────────────
-const ExpenseForm = ({ form, setForm, cashbooks, categories, isEditing }) => {
+const ExpenseForm = ({ form, setForm, cashbooks, categories, isEditing, branches = [], isConsolidated = false }) => {
   const itemsTotal = form.items.reduce((s, i) => s + (Number(i.amount) || 0), 0);
 
   const addItem    = () => setForm((p) => ({ ...p, items: [...p.items, { ...emptyItem }] }));
@@ -78,6 +78,22 @@ const ExpenseForm = ({ form, setForm, cashbooks, categories, isEditing }) => {
 
   return (
     <div className="space-y-4">
+      {/* Branch picker — only in All Branches view */}
+      {isConsolidated && !isEditing && (
+        <div>
+          <label className={lc}>Branch <span className="text-red-500">*</span></label>
+          <select
+            className={`${ic} ${!form.branch ? "border-amber-400 bg-amber-50" : ""}`}
+            value={form.branch}
+            onChange={(e) => setForm((p) => ({ ...p, branch: e.target.value }))}
+            required
+          >
+            <option value="">— Select branch —</option>
+            {branches.map((b) => <option key={b._id} value={b._id}>{b.name}</option>)}
+          </select>
+        </div>
+      )}
+
       {/* Row 1 */}
       <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
         <div>
@@ -262,6 +278,14 @@ const CarWashExpenses = () => {
   });
   const categories = categoriesRaw ?? DEFAULT_CATEGORIES;
 
+  const { data: branchesRaw } = useQuery({
+    queryKey: ["cw-branches-all"],
+    queryFn: () => carWashApi.listBranches({ limit: 100 }),
+    enabled: isConsolidated,
+    staleTime: 5 * 60_000,
+  });
+  const branches = normalizeListPayload(branchesRaw, "branches");
+
   // ── Data loaders ─────────────────────────────────────────────────────────────
   const load = useCallback(async () => {
     setLoading(true);
@@ -352,6 +376,7 @@ const CarWashExpenses = () => {
   };
 
   const handleSubmit = async () => {
+    if (isConsolidated && !editingRow && !form.branch) { toast.error("Select a branch for this expense"); return; }
     const validItems = form.items.filter((i) => String(i.description).trim() && Number(i.amount) > 0);
     if (validItems.length === 0) { toast.error("Add at least one item with a description and amount"); return; }
     const amount  = validItems.reduce((s, i) => s + Number(i.amount), 0);
@@ -675,7 +700,7 @@ const CarWashExpenses = () => {
           onSubmit={handleSubmit}
           submitLabel={editingRow ? "Save Changes" : "Save Expense"}
         >
-          <ExpenseForm form={form} setForm={setForm} cashbooks={cashbooks} categories={categories} isEditing={!!editingRow} />
+          <ExpenseForm form={form} setForm={setForm} cashbooks={cashbooks} categories={categories} isEditing={!!editingRow} branches={branches} isConsolidated={isConsolidated} />
         </Modal>
       )}
 

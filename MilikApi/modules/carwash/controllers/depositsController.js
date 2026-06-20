@@ -129,7 +129,9 @@ export const createDeposit = async (req, res, next) => {
     if (!cashbookAccount) return next(createError(400, "Cashbook account is required for Car Wash deposits"));
 
     const userId = currentUserId(req);
-    const branchId = resolveActiveBranchId(req);
+    const ctxBranch  = resolveActiveBranchId(req);
+    const bodyBranch = !ctxBranch && req.body.branch && mongoose.Types.ObjectId.isValid(String(req.body.branch)) ? String(req.body.branch) : null;
+    const branchId   = ctxBranch || bodyBranch;
     const manualDepositNumber = String(req.body.depositNumber || "").trim();
     const depositBase = {
       business,

@@ -1821,7 +1821,7 @@ const TopToolbar = ({
           </button>
         </div>
         )}
-        {!isAccountsWorkspace && !isCarWashWorkspace && !isPropertySaleWorkspace && !isHumanResourceWorkspace && (
+        {!isAccountsWorkspace && !isCarWashWorkspace && !isPropertySaleWorkspace && !isHumanResourceWorkspace && !isCommunicationsWorkspace && !isInventoryWorkspace && !isCompanySetupWorkspace && !isSystemAdminWorkspace && (
         <div className="flex items-center space-x-1 px-1.5 py-0 text-[11px]">
           <button
             onClick={() => navigate("/tenant/new")}

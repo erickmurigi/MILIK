@@ -19,7 +19,7 @@ const nextStatuses = {
   cancelled: ["cancelled"],
 };
 const defaultFilters = { date: todayISO(), status: "", destination: "", cashbookAccount: "", reference: "" };
-const emptyForm = { depositDate: todayISO(), amount: "", destination: "bank", cashbookAccount: "", reference: "", notes: "" };
+const emptyForm = { depositDate: todayISO(), amount: "", destination: "bank", cashbookAccount: "", reference: "", notes: "", branch: "" };
 const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 
@@ -79,6 +79,14 @@ const CarWashDeposits = () => {
     staleTime: 5 * 60_000,
   });
 
+  const { data: branchesRaw } = useQuery({
+    queryKey: ["cw-branches-all"],
+    queryFn: () => carWashApi.listBranches({ limit: 100 }),
+    enabled: isConsolidated,
+    staleTime: 5 * 60_000,
+  });
+  const branches = normalizeListPayload(branchesRaw, "branches");
+
   useEffect(() => { if (error) toast.error("Failed to load Car Wash deposits"); }, [error]);
   useEffect(() => { setExpandedIds([]); }, [depositsData]);
 
@@ -130,6 +138,10 @@ const CarWashDeposits = () => {
   const createDeposit = async (event) => {
     event.preventDefault();
     try {
+      if (isConsolidated && !form.branch) {
+        toast.error("Select a branch for this deposit");
+        return;
+      }
       if (!form.cashbookAccount) {
         toast.error("Select the cashbook where this deposit was made");
         return;
@@ -344,6 +356,20 @@ const CarWashDeposits = () => {
           }
         >
           <form id="carwash-deposit-form" onSubmit={createDeposit} className="grid gap-3 md:grid-cols-2">
+            {isConsolidated && (
+              <div className="md:col-span-2">
+                <label className={labelClass}>Branch <span className="text-red-500">*</span></label>
+                <select
+                  className={`${inputClass} ${!form.branch ? "border-amber-400 bg-amber-50" : ""}`}
+                  value={form.branch}
+                  onChange={(e) => setForm((prev) => ({ ...prev, branch: e.target.value }))}
+                  required
+                >
+                  <option value="">— Select branch —</option>
+                  {branches.map((b) => <option key={b._id} value={b._id}>{b.name}</option>)}
+                </select>
+              </div>
+            )}
             <div><label className={labelClass}>Deposit Date *</label><input type="date" className={inputClass} value={form.depositDate} onChange={(event) => setForm((prev) => ({ ...prev, depositDate: event.target.value }))} required /></div>
             <div><label className={labelClass}>Amount *</label><input type="number" min="1" className={inputClass} value={form.amount} onChange={(event) => setForm((prev) => ({ ...prev, amount: event.target.value }))} required autoFocus /></div>
             <div><label className={labelClass}>Destination</label><select className={inputClass} value={form.destination} onChange={(event) => setForm((prev) => ({ ...prev, destination: event.target.value }))}>{destinations.map((destination) => <option key={destination} value={destination}>{destination.toUpperCase()}</option>)}</select></div>

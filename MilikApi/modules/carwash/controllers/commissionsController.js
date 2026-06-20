@@ -187,7 +187,9 @@ export const createCommissionPayout = async (req, res, next) => {
     if (!payoutMethods.has(method)) return next(createError(400, "Invalid payout method"));
     const cashbookAccount = await resolvePayoutCashbook(business, req.body.cashbookAccount);
     const now = req.body.payoutDate ? new Date(req.body.payoutDate) : new Date();
-    const branchId = resolveActiveBranchId(req);
+    const ctxBranch = resolveActiveBranchId(req);
+    const staffDoc = ctxBranch ? null : await CarWashStaff.findOne({ _id: req.body.staff, business }).select("branch").lean();
+    const branchId = ctxBranch || staffDoc?.branch || null;
 
     const manualPayoutNumber = String(req.body.payoutNumber || "").trim();
     const payoutBase = {
@@ -223,6 +225,7 @@ export const createCommissionPayout = async (req, res, next) => {
       commissionPayoutId: payout._id,
       commissionAmount,
       payoutDate:         payoutBase.payoutDate,
+      branch:             branchId || null,
     });
 
     // Hold pending damage deductions (capped so staff cannot go below zero)

@@ -211,7 +211,9 @@ export const createExpense = async (req, res, next) => {
 
     const cashbookAccount = await resolveCashbookAccount(business, req.body.cashbookAccount, status === "paid");
     const userId          = currentUserId(req);
-    const branchId        = resolveActiveBranchId(req);
+    const ctxBranch       = resolveActiveBranchId(req);
+    const bodyBranch      = !ctxBranch && req.body.branch && mongoose.Types.ObjectId.isValid(String(req.body.branch)) ? String(req.body.branch) : null;
+    const branchId        = ctxBranch || bodyBranch;
     const manualNumber    = String(req.body.expenseNumber || "").trim();
 
     const expenseBase = {

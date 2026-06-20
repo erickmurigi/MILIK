@@ -1,8 +1,16 @@
 import mongoose from "mongoose";
 import Company from "../../../models/Company.js";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
-import { resolveActiveBusinessId } from "../services/businessScope.js";
+import { resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { CW_SMS_TEMPLATE_DEFAULTS, invalidateSmsSettingsCache } from "../services/carwashSmsService.js";
+import CarWashJob from "../models/CarWashJob.js";
+import CarWashPayment from "../models/CarWashPayment.js";
+import CarWashExpense from "../models/CarWashExpense.js";
+import CarWashCommissionPayout from "../models/CarWashCommissionPayout.js";
+import CarWashStaffDamage from "../models/CarWashStaffDamage.js";
+import CarWashDeposit from "../models/CarWashDeposit.js";
+import CarWashStaffCommission from "../models/CarWashStaffCommission.js";
+import CarWashStaffSaving from "../models/CarWashStaffSaving.js";
 
 const METHODS = ["cash", "mpesa", "bank", "card", "other"];
 
@@ -153,6 +161,46 @@ export const updateCarWashSettings = async (req, res, next) => {
     await Company.updateOne({ _id: business }, { $set: update });
     invalidateSmsSettingsCache(business);
     res.json({ success: true, message: "Car Wash settings saved" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const backfillBranches = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const branchId = resolveActiveBranchId(req);
+    if (!branchId) return next({ status: 400, message: "No active branch in your session. Switch to a branch first, then try again." });
+
+    const filter = { business, branch: null };
+    const update = { $set: { branch: branchId } };
+
+    const [jobs, payments, expenses, payouts, damages, deposits, commissions, savings] = await Promise.all([
+      CarWashJob.updateMany(filter, update),
+      CarWashPayment.updateMany(filter, update),
+      CarWashExpense.updateMany(filter, update),
+      CarWashCommissionPayout.updateMany(filter, update),
+      CarWashStaffDamage.updateMany(filter, update),
+      CarWashDeposit.updateMany(filter, update),
+      CarWashStaffCommission.updateMany(filter, update),
+      CarWashStaffSaving.updateMany(filter, update),
+    ]);
+
+    const total = [jobs, payments, expenses, payouts, damages, deposits, commissions, savings].reduce((s, r) => s + r.modifiedCount, 0);
+    res.json({
+      success: true,
+      message: `Done — ${total} records assigned to this branch.`,
+      counts: {
+        jobs: jobs.modifiedCount,
+        payments: payments.modifiedCount,
+        expenses: expenses.modifiedCount,
+        commissionPayouts: payouts.modifiedCount,
+        staffDamages: damages.modifiedCount,
+        deposits: deposits.modifiedCount,
+        commissionAccruals: commissions.modifiedCount,
+        staffSavings: savings.modifiedCount,
+      },
+    });
   } catch (err) {
     next(err);
   }

@@ -11,7 +11,7 @@ import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 
 const GRN = "#0B3B2E";
-const emptyForm = { name: "", phone: "", role: "", active: true };
+const emptyForm = { name: "", phone: "", role: "", active: true, branch: "" };
 const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 const DEFAULT_PAGE_SIZE = 25;
@@ -275,6 +275,13 @@ const CarWashStaff = () => {
   const pagination = staffData?.staffPayload?.pagination || { page, limit: pageSize, total: 0, pages: 1 };
   const cashbooks = normalizeListPayload(staffData?.cashbooksPayload, "accounts");
 
+  const { data: branchesData } = useQuery({
+    queryKey: ["cw-branches-all"],
+    queryFn: () => carWashApi.listBranches({ limit: 100 }),
+    staleTime: 5 * 60_000,
+  });
+  const branches = normalizeListPayload(branchesData, "branches");
+
   const rowStats = useMemo(() => {
     let active = 0, inactive = 0;
     rows.forEach((r) => { if (r.active !== false) active++; else inactive++; });
@@ -302,7 +309,7 @@ const CarWashStaff = () => {
   const openEdit = (row) => {
     const draft = readDraft(`cw-staff-edit-${row._id}`);
     setEditingId(row._id);
-    setForm(draft ?? { name: row.name || "", phone: row.phone || "", role: row.role || "", active: row.active !== false });
+    setForm(draft ?? { name: row.name || "", phone: row.phone || "", role: row.role || "", active: row.active !== false, branch: row.branch?._id || row.branch || "" });
     setShowModal(true);
   };
 
@@ -403,6 +410,7 @@ const CarWashStaff = () => {
               <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Name</th>
               <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Phone</th>
               <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Role</th>
+              <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Branch</th>
               <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Status</th>
               <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Action</th>
             </tr>
@@ -428,6 +436,11 @@ const CarWashStaff = () => {
                     </td>
                     <td className="px-2 py-1 text-slate-700">{row.phone || "—"}</td>
                     <td className="px-2 py-1 text-slate-700">{row.role || "—"}</td>
+                    <td className="px-2 py-1">
+                      {row.branch?.name
+                        ? <span className="inline-flex border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700">{row.branch.name}</span>
+                        : <span className="text-[11px] text-slate-400">—</span>}
+                    </td>
                     <td className="px-2 py-1">
                       <span className={`inline-flex border px-2 py-0.5 text-[11px] font-bold uppercase ${row.active === false ? "border-orange-200 bg-orange-50 text-orange-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
                         {row.active === false ? "Inactive" : "Active"}
@@ -502,6 +515,19 @@ const CarWashStaff = () => {
             <div>
               <label className={labelClass}>Role</label>
               <input className={inputClass} value={form.role} onChange={(e) => setForm((p) => ({ ...p, role: e.target.value }))} />
+            </div>
+            <div>
+              <label className={labelClass}>Branch</label>
+              <select
+                className={inputClass}
+                value={form.branch}
+                onChange={(e) => setForm((p) => ({ ...p, branch: e.target.value }))}
+              >
+                <option value="">— No branch assigned —</option>
+                {branches.map((b) => (
+                  <option key={b._id} value={b._id}>{b.name}</option>
+                ))}
+              </select>
             </div>
             <label className="flex items-center gap-2 text-sm font-bold text-slate-700">
               <input type="checkbox" checked={form.active} onChange={(e) => setForm((p) => ({ ...p, active: e.target.checked }))} />

@@ -27,6 +27,7 @@ import CarWashStaff from "../models/CarWashStaff.js";
 import CarWashStaffSaving from "../models/CarWashStaffSaving.js";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import { postCarWashSavingsDisbursement } from "./carwashAccountingService.js";
+import { resolveActiveBranchId } from "./businessScope.js";
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
@@ -76,6 +77,7 @@ export const deductSavingsForPayout = async ({
   commissionPayoutId,
   commissionAmount,
   payoutDate = new Date(),
+  branch = null,
 }) => {
   const dailyRate = await getSavingsDeductionAmount(businessId);
   if (dailyRate <= 0) return 0;
@@ -110,6 +112,7 @@ export const deductSavingsForPayout = async ({
 
   await CarWashStaffSaving.create({
     business:         businessId,
+    branch:           branch || null,
     staff:            staffId,
     type:             "deduction",
     amount,
@@ -117,7 +120,7 @@ export const deductSavingsForPayout = async ({
     daysCount,
     coveredFrom,
     coveredTo:        today,
-    savingsDate:      today,          // for display compat — equals coveredTo
+    savingsDate:      today,
     commissionPayout: commissionPayoutId,
     date:             payoutDate,
     notes: `${daysCount} day${daysCount !== 1 ? "s" : ""} × Ksh ${dailyRate} — withheld from payout`,
@@ -276,8 +279,13 @@ export const disburseSavings = async ({ req, businessId, staffId, cashbookAccoun
   const actorId    = req ? await resolveAuditActorUserId({ req, businessId }).catch(() => null) : null;
   const payoutNumber = await generateSavingsPayoutNumber(businessId);
 
+  const ctxBranch  = req ? resolveActiveBranchId(req) : null;
+  const staffBranch = ctxBranch ? null : (await CarWashStaff.findOne({ _id: staffId, business: businessId }).select("branch").lean())?.branch || null;
+  const disburseBranch = ctxBranch || staffBranch || null;
+
   const record = await CarWashStaffSaving.create({
     business:            businessId,
+    branch:              disburseBranch,
     staff:               staffId,
     type:                "disbursement",
     amount:              disburseAmount,

@@ -1357,16 +1357,36 @@ export const sendAdHocSmsToMasked = async ({ businessId, maskedNumber, body, tem
   }
 };
 
-export const getSmsLogs = async ({ businessId, limit = 30, channel, contextType, status } = {}) => {
-  const filter = { business: businessId };
-  if (channel) filter.channel = channel;
-  if (contextType) filter.contextType = contextType;
-  if (status) filter.status = status;
+export const getSmsLogs = async ({ businessId, limit = 25, page = 1, channel, contextType, status, search } = {}) => {
+  const safeLimit = Math.min(Math.max(Number(limit || 25), 1), 100);
+  const safePage  = Math.max(Number(page || 1), 1);
+  const skip      = (safePage - 1) * safeLimit;
 
-  return SmsLog.find(filter)
-    .sort({ sentAt: -1, createdAt: -1 })
-    .limit(Math.min(100, Number(limit || 30)))
-    .lean();
+  const baseFilter = { business: businessId };
+  if (channel)     baseFilter.channel     = channel;
+  if (contextType) baseFilter.contextType = contextType;
+
+  const filter = { ...baseFilter };
+  if (status) filter.status = status;
+  if (search) {
+    const re = new RegExp(String(search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    filter.$or = [{ to: re }, { recipientName: re }, { body: re }, { templateKey: re }];
+  }
+
+  const [logs, total, sentCount, failedCount, pendingCount, allCount] = await Promise.all([
+    SmsLog.find(filter).sort({ sentAt: -1, createdAt: -1 }).skip(skip).limit(safeLimit).lean(),
+    SmsLog.countDocuments(filter),
+    SmsLog.countDocuments({ ...baseFilter, status: 'sent' }),
+    SmsLog.countDocuments({ ...baseFilter, status: 'failed' }),
+    SmsLog.countDocuments({ ...baseFilter, status: 'pending' }),
+    SmsLog.countDocuments(baseFilter),
+  ]);
+
+  return {
+    logs,
+    pagination: { page: safePage, limit: safeLimit, total, pages: Math.max(Math.ceil(total / safeLimit), 1) },
+    counts: { all: allCount, sent: sentCount, failed: failedCount, pending: pendingCount },
+  };
 };
 
 export const sendTestSms = async ({ businessId, phone, message, profileId = '' } = {}) => {
