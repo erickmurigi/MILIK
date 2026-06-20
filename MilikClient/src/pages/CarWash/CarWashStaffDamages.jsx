@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { FaExclamationTriangle, FaPlus, FaRedoAlt, FaTimes, FaTrash, FaUndo } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload } from "../../services/carWashApi";
@@ -25,133 +26,117 @@ const statusLabel = (status) =>
 
 const emptyForm = () => ({ staff: "", amount: "", description: "", damageDate: todayISO(), notes: "" });
 
+const PAGE_SIZE = 50;
+
 export default function CarWashStaffDamages() {
+  const queryClient = useQueryClient();
   const canManage = useCarWashPermission("carwash-commissions", "manage");
 
-  const [damages, setDamages]     = useState([]);
-  const [total, setTotal]         = useState(0);
-  const [page, setPage]           = useState(1);
-  const [loading, setLoading]     = useState(false);
-  const pageSize = 50;
-
-  const [staffList, setStaffList] = useState([]);
-  const [balances, setBalances]   = useState([]);
-
-  // Filters
+  const [page,         setPage]         = useState(1);
   const [filterStaff,  setFilterStaff]  = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
-  const [dateFrom, setDateFrom]         = useState("");
-  const [dateTo,   setDateTo]           = useState("");
+  const [dateFrom,     setDateFrom]     = useState("");
+  const [dateTo,       setDateTo]       = useState("");
 
-  // Add form
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm]         = useState(emptyForm());
-  const [saving, setSaving]     = useState(false);
-
-  // Waive modal
-  const [waiveTarget, setWaiveTarget] = useState(null);
-  const [waiveNotes,  setWaiveNotes]  = useState("");
-  const [waiving,     setWaiving]     = useState(false);
-
-  // Delete confirmation
+  const [showForm,     setShowForm]     = useState(false);
+  const [form,         setForm]         = useState(emptyForm());
+  const [waiveTarget,  setWaiveTarget]  = useState(null);
+  const [waiveNotes,   setWaiveNotes]   = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [deleting,     setDeleting]     = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = { page, limit: pageSize };
-      if (filterStaff)  params.staff  = filterStaff;
+  // ── Queries ───────────────────────────────────────────────────────────────
+
+  const damagesQueryKey = ["cw-damages", page, filterStaff, filterStatus, dateFrom, dateTo];
+
+  const { data: damagesData, isLoading: loading } = useQuery({
+    queryKey: damagesQueryKey,
+    queryFn: () => {
+      const params = { page, limit: PAGE_SIZE };
+      if (filterStaff)          params.staff    = filterStaff;
       if (filterStatus !== "all") params.status = filterStatus;
-      if (dateFrom) params.dateFrom = dateFrom;
-      if (dateTo)   params.dateTo   = dateTo;
-      const res = await carWashApi.listDamages(params);
-      setDamages(normalizeListPayload(res, "damages"));
-      setTotal(res?.total ?? 0);
-    } catch {
-      toast.error("Failed to load damages");
-    } finally {
-      setLoading(false);
-    }
-  }, [page, filterStaff, filterStatus, dateFrom, dateTo]);
+      if (dateFrom)             params.dateFrom = dateFrom;
+      if (dateTo)               params.dateTo   = dateTo;
+      return carWashApi.listDamages(params);
+    },
+    placeholderData: (prev) => prev,
+    staleTime: 30_000,
+  });
+  const damages = normalizeListPayload(damagesData, "damages");
+  const total   = damagesData?.total ?? 0;
 
-  const loadBalances = useCallback(async () => {
-    try {
-      const res = await carWashApi.listDamagesBalances();
-      setBalances(normalizeListPayload(res, "balances"));
-    } catch { /* silent */ }
-  }, []);
+  const { data: staffData } = useQuery({
+    queryKey: ["cw-staff-active"],
+    queryFn: () => carWashApi.listStaff({ active: true }),
+    staleTime: 5 * 60_000,
+  });
+  const staffList = normalizeListPayload(staffData, "staff");
 
-  useEffect(() => {
-    carWashApi.listStaff({ active: true })
-      .then((r) => setStaffList(normalizeListPayload(r, "staff")))
-      .catch(() => {});
-    loadBalances();
-  }, [loadBalances]);
+  const { data: balancesData } = useQuery({
+    queryKey: ["cw-damage-balances"],
+    queryFn: () => carWashApi.listDamagesBalances(),
+    staleTime: 30_000,
+  });
+  const balances = normalizeListPayload(balancesData, "balances");
 
-  useEffect(() => { load(); }, [load]);
+  // ── Shared invalidation ───────────────────────────────────────────────────
 
-  const handleAdd = async (e) => {
+  const invalidate = () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: ["cw-damages"] }),
+    queryClient.invalidateQueries({ queryKey: ["cw-damage-balances"] }),
+  ]);
+
+  // ── Mutations ─────────────────────────────────────────────────────────────
+
+  const addMutation = useMutation({
+    mutationFn: (payload) => carWashApi.createDamage(payload),
+    onSuccess: () => {
+      toast.success("Damage record added");
+      setForm(emptyForm());
+      setShowForm(false);
+      invalidate();
+    },
+    onError: (err) => toast.error(err?.response?.data?.message || "Failed to add damage"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => carWashApi.deleteDamage(id),
+    onSuccess: () => {
+      toast.success("Damage deleted");
+      setDeleteTarget(null);
+      invalidate();
+    },
+    onError: (err) => toast.error(err?.response?.data?.message || "Failed to delete"),
+  });
+
+  const waiveMutation = useMutation({
+    mutationFn: ({ id, notes }) => carWashApi.waiveDamage(id, notes),
+    onSuccess: () => {
+      toast.success("Damage waived — will not be deducted");
+      setWaiveTarget(null);
+      setWaiveNotes("");
+      invalidate();
+    },
+    onError: (err) => toast.error(err?.response?.data?.message || "Failed to waive"),
+  });
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
+
+  const handleAdd = (e) => {
     e.preventDefault();
     if (!form.staff) return toast.error("Select a staff member");
     const amount = Number(form.amount);
     if (!amount || amount <= 0) return toast.error("Enter a valid amount");
     if (!form.description.trim()) return toast.error("Description is required");
-    setSaving(true);
-    try {
-      await carWashApi.createDamage({
-        staff:       form.staff,
-        amount,
-        description: form.description.trim(),
-        damageDate:  form.damageDate,
-        notes:       form.notes.trim(),
-      });
-      toast.success("Damage record added");
-      setForm(emptyForm());
-      setShowForm(false);
-      load();
-      loadBalances();
-    } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to add damage");
-    } finally {
-      setSaving(false);
-    }
+    addMutation.mutate({
+      staff:       form.staff,
+      amount,
+      description: form.description.trim(),
+      damageDate:  form.damageDate,
+      notes:       form.notes.trim(),
+    });
   };
 
-  const confirmDelete = async () => {
-    if (!deleteTarget) return;
-    setDeleting(true);
-    try {
-      await carWashApi.deleteDamage(deleteTarget._id);
-      toast.success("Damage deleted");
-      setDeleteTarget(null);
-      load();
-      loadBalances();
-    } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to delete");
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  const handleWaive = async () => {
-    if (!waiveTarget) return;
-    setWaiving(true);
-    try {
-      await carWashApi.waiveDamage(waiveTarget._id, waiveNotes);
-      toast.success("Damage waived — will not be deducted");
-      setWaiveTarget(null);
-      setWaiveNotes("");
-      load();
-      loadBalances();
-    } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to waive");
-    } finally {
-      setWaiving(false);
-    }
-  };
-
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <CarWashShell
@@ -203,7 +188,11 @@ export default function CarWashStaffDamages() {
             className="h-8 border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none" />
           <input type="date" value={dateTo}   onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
             className="h-8 border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none" />
-          <button onClick={load} className="h-8 border border-slate-300 bg-white px-2 text-slate-500 hover:bg-slate-100" title="Refresh">
+          <button
+            onClick={() => queryClient.invalidateQueries({ queryKey: ["cw-damages"] })}
+            className="h-8 border border-slate-300 bg-white px-2 text-slate-500 hover:bg-slate-100"
+            title="Refresh"
+          >
             <FaRedoAlt className="text-[11px]" />
           </button>
           <span className="ml-auto text-[11px] font-semibold text-slate-500">{total} record{total !== 1 ? "s" : ""}</span>
@@ -337,9 +326,9 @@ export default function CarWashStaffDamages() {
                   className="border border-slate-300 px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">
                   Cancel
                 </button>
-                <button type="submit" disabled={saving}
+                <button type="submit" disabled={addMutation.isPending}
                   className="bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0A3127] disabled:opacity-60">
-                  {saving ? "Saving…" : "Save Damage"}
+                  {addMutation.isPending ? "Saving…" : "Save Damage"}
                 </button>
               </div>
             </form>
@@ -366,8 +355,12 @@ export default function CarWashStaffDamages() {
               <button onClick={() => setDeleteTarget(null)} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
                 Cancel
               </button>
-              <button onClick={confirmDelete} disabled={deleting} className="bg-red-600 px-4 py-2 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50">
-                {deleting ? "Deleting…" : "Delete"}
+              <button
+                onClick={() => deleteMutation.mutate(deleteTarget._id)}
+                disabled={deleteMutation.isPending}
+                className="bg-red-600 px-4 py-2 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleteMutation.isPending ? "Deleting…" : "Delete"}
               </button>
             </div>
           </div>
@@ -397,9 +390,12 @@ export default function CarWashStaffDamages() {
                   className="border border-slate-300 px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">
                   Cancel
                 </button>
-                <button onClick={handleWaive} disabled={waiving}
-                  className="bg-slate-700 px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-slate-800 disabled:opacity-60">
-                  {waiving ? "Waiving…" : "Waive — Write Off"}
+                <button
+                  onClick={() => waiveMutation.mutate({ id: waiveTarget._id, notes: waiveNotes })}
+                  disabled={waiveMutation.isPending}
+                  className="bg-slate-700 px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-slate-800 disabled:opacity-60"
+                >
+                  {waiveMutation.isPending ? "Waiving…" : "Waive — Write Off"}
                 </button>
               </div>
             </div>

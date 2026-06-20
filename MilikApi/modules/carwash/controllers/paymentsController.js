@@ -186,20 +186,21 @@ export const recordPayment = async (req, res, next) => {
     });
     const { job: updatedJob, paidAmount: totalEffectivePaid } = await refreshJobPaymentStatus(business, job._id);
 
-    // Persist M-Pesa payer phone to the job + loyalty customer (enables SMS button + loyalty lookup).
-    // A new payer always overwrites the previous phone — cash payments leave the existing number intact.
-    if (receivedFromPhone) {
-      await CarWashJob.updateOne({ _id: updatedJob._id, business }, { $set: { phone: receivedFromPhone } });
-      updatedJob.phone = receivedFromPhone;
-      if (updatedJob.plateNumber) {
-        await CarWashCustomer.updateOne(
-          { business, plates: updatedJob.plateNumber },
-          { $set: { phone: receivedFromPhone } }
-        ).catch(() => {});
-      }
-    }
+    // Persist M-Pesa payer phone in-memory now (needed by accrual + SMS below).
+    // The DB writes and commission accrual are independent — run in parallel.
+    if (receivedFromPhone) updatedJob.phone = receivedFromPhone;
 
-    await accrueCommissionForJob({ req, job: updatedJob });
+    await Promise.all([
+      receivedFromPhone
+        ? Promise.all([
+            CarWashJob.updateOne({ _id: updatedJob._id, business }, { $set: { phone: receivedFromPhone } }),
+            updatedJob.plateNumber
+              ? CarWashCustomer.updateOne({ business, plates: updatedJob.plateNumber }, { $set: { phone: receivedFromPhone } }).catch(() => {})
+              : Promise.resolve(),
+          ])
+        : Promise.resolve(),
+      accrueCommissionForJob({ req, job: updatedJob }),
+    ]);
 
     if (updatedJob.paymentStatus === "paid") {
       await markJobCommissionsPayable({ business, jobId: updatedJob._id });
@@ -271,13 +272,16 @@ export const deletePayment = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const payment = await CarWashPayment.findOne({ _id: req.params.id, business });
     if (!payment) return next(createError(404, "Car Wash payment not found"));
-    const jobBeforeDelete = await CarWashJob.findOne({ _id: payment.job, business }).lean();
-    if (!jobBeforeDelete) return next(createError(404, "Car Wash job not found"));
 
-    const totals = await CarWashPayment.aggregate([
-      { $match: { business: jobBeforeDelete.business, job: jobBeforeDelete._id } },
-      ...effectivePaidAggregation,
+    // job fetch and payment totals aggregate are independent once we have the payment
+    const [jobBeforeDelete, totals] = await Promise.all([
+      CarWashJob.findOne({ _id: payment.job, business }).lean(),
+      CarWashPayment.aggregate([
+        { $match: { business: payment.business, job: payment.job } },
+        ...effectivePaidAggregation,
+      ]),
     ]);
+    if (!jobBeforeDelete) return next(createError(404, "Car Wash job not found"));
     const effectiveThisPayment = round2(Number(payment.amount || 0) + Number(payment.discountAmount || 0));
     const paidAfterDelete = round2(Number(totals?.[0]?.paid || 0) - effectiveThisPayment);
     const willRemainPaid = paidAfterDelete >= netJobPrice(jobBeforeDelete);

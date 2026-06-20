@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   FaCheckCircle, FaCodeBranch, FaExclamationTriangle, FaMobileAlt, FaRedoAlt,
   FaSearch, FaTimesCircle, FaCopy, FaLink, FaTimes, FaCarAlt, FaUndo,
+  FaUpload, FaFileAlt, FaToggleOn, FaToggleOff,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
@@ -375,9 +376,372 @@ function AssignModal({ notif, onClose, onAssigned }) {
   );
 }
 
+// ─── CSV client-side parser (preview only) ────────────────────────────────────
+const parseClientCsv = (text) => {
+  const rows = [];
+  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const cells = [];
+    let cur = "";
+    let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
+        else { inQ = !inQ; }
+      } else if (ch === "," && !inQ) {
+        cells.push(cur.trim()); cur = "";
+      } else {
+        cur += ch;
+      }
+    }
+    cells.push(cur.trim());
+    rows.push(cells);
+  }
+  return rows;
+};
+
+const normH = (h) => String(h || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+const detectCsvFormat = (headers) => {
+  const nh = headers.map(normH);
+  if (nh.includes("receiptno") || nh.includes("paidin") || nh.includes("amountpaidin")) return "portal";
+  if (nh.includes("transid") || nh.includes("billrefnumber")) return "daraja";
+  return null;
+};
+
+const RESULT_META = {
+  matched:   { label: "Matched",   bg: "bg-emerald-50 border-emerald-200 text-emerald-700" },
+  duplicate: { label: "Duplicate", bg: "bg-blue-50 border-blue-200 text-blue-700" },
+  unmatched: { label: "Unmatched", bg: "bg-amber-50 border-amber-200 text-amber-700" },
+  skipped:   { label: "Skipped",   bg: "bg-slate-50 border-slate-200 text-slate-500" },
+  error:     { label: "Error",     bg: "bg-red-50 border-red-200 text-red-700" },
+};
+
+// ─── Upload Modal ─────────────────────────────────────────────────────────────
+function UploadModal({ onClose, onUploaded }) {
+  const fileInputRef              = useRef(null);
+  const [file, setFile]           = useState(null);
+  const [preview, setPreview]     = useState(null); // { headers, rows, total, format }
+  const [sendSms, setSendSms]     = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [results, setResults]     = useState(null); // { summary, results[] }
+  const [dragOver, setDragOver]   = useState(false);
+
+  const loadFile = (f) => {
+    if (!f) return;
+    const ext = f.name.split(".").pop().toLowerCase();
+    if (ext !== "csv") { toast.error("Only CSV files are supported"); return; }
+    setFile(f);
+    setResults(null);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target.result;
+      const rows = parseClientCsv(text);
+      if (rows.length < 2) { toast.error("File appears empty"); return; }
+      const format = detectCsvFormat(rows[0]);
+      if (!format) {
+        toast.error("Unrecognised format. Expected M-Pesa Business Portal or Daraja C2B export.");
+        setFile(null);
+        return;
+      }
+      setPreview({ headers: rows[0], rows: rows.slice(1, 51), total: rows.length - 1, format });
+    };
+    reader.readAsText(f);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault(); setDragOver(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f) loadFile(f);
+  };
+
+  const handleProcess = async () => {
+    if (!file) return;
+    setProcessing(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("sendSms", String(sendSms));
+      const res = await carWashApi.uploadMpesaStatement(fd);
+      setResults(res);
+      if (res?.summary?.matched > 0) onUploaded?.();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Upload failed");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const { summary, results: rows } = results || {};
+
+  // Preview columns per format
+  const previewCols = preview?.format === "portal"
+    ? [
+        { label: "Receipt No.",    key: "receiptno" },
+        { label: "Date",           key: "completiontime" },
+        { label: "Reference",      key: "details" },
+        { label: "Amount (Paid In)", key: "paidin" },
+        { label: "Status",         key: "transactionstatus" },
+      ]
+    : [
+        { label: "TransID",        key: "transid" },
+        { label: "Date",           key: "transtime" },
+        { label: "BillRefNumber",  key: "billrefnumber" },
+        { label: "Amount",         key: "transamount" },
+        { label: "MSISDN",         key: "msisdn" },
+      ];
+
+  const headerIdxMap = preview
+    ? Object.fromEntries(preview.headers.map((h, i) => [normH(h), i]))
+    : {};
+  const getCell = (cells, key) => {
+    const i = headerIdxMap[key] ?? -1;
+    return i >= 0 ? (cells[i] || "—") : "—";
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="flex w-full max-w-3xl flex-col border border-slate-200 bg-white shadow-xl" style={{ maxHeight: "90vh" }}>
+
+        {/* Header */}
+        <div className="flex flex-shrink-0 items-center justify-between bg-[#0B3B2E] px-4 py-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-white">Upload M-Pesa Statement</p>
+            <p className="text-[11px] text-emerald-200">
+              Import a CSV from M-Pesa Business Portal or Daraja to reconcile missed payments
+            </p>
+          </div>
+          <button onClick={onClose} className="text-white/70 hover:text-white"><FaTimes size={14} /></button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 space-y-4">
+
+          {/* ── Step 1: file pick ── */}
+          {!preview && !results && (
+            <>
+              <div
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded border-2 border-dashed py-12 transition-colors ${
+                  dragOver ? "border-[#0B3B2E] bg-[#EDF5F1]" : "border-slate-300 hover:border-slate-400"
+                }`}
+              >
+                <FaFileAlt size={32} className="text-slate-300" />
+                <div className="text-center">
+                  <p className="text-sm font-bold text-slate-600">Drop CSV here, or click to browse</p>
+                  <p className="mt-1 text-[11px] text-slate-400">Supports M-Pesa Business Portal export and Daraja C2B format</p>
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="hidden"
+                  onChange={(e) => loadFile(e.target.files?.[0])}
+                />
+              </div>
+
+              {/* Format guide */}
+              <div className="rounded border border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-600">
+                <p className="mb-1.5 font-black uppercase tracking-wide text-slate-500">Supported CSV Formats</p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div>
+                    <p className="font-bold text-slate-700">M-Pesa Business Portal</p>
+                    <p className="text-slate-500">Headers: Receipt No., Completion Time, Details, Transaction Status, Paid In</p>
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-700">Safaricom Daraja C2B</p>
+                    <p className="text-slate-500">Headers: TransID, TransTime, TransAmount, BillRefNumber, MSISDN</p>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ── Step 2: preview ── */}
+          {preview && !results && (
+            <>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold text-slate-800">{file.name}</p>
+                  <p className="text-[11px] text-slate-500">
+                    {preview.total} row{preview.total !== 1 ? "s" : ""} · Format:{" "}
+                    <span className="font-bold text-[#0B3B2E]">
+                      {preview.format === "portal" ? "M-Pesa Business Portal" : "Safaricom Daraja C2B"}
+                    </span>
+                  </p>
+                </div>
+                <button
+                  onClick={() => { setFile(null); setPreview(null); }}
+                  className="text-[11px] font-bold text-slate-400 hover:text-red-500"
+                >
+                  Change file
+                </button>
+              </div>
+
+              {/* Preview table */}
+              <div className="overflow-x-auto rounded border border-slate-200">
+                <table className="w-full min-w-[500px] text-xs">
+                  <thead className="bg-[#0B3B2E] text-white">
+                    <tr>
+                      <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide text-[10px]">#</th>
+                      {previewCols.map((c) => (
+                        <th key={c.key} className="px-3 py-1.5 text-left font-bold uppercase tracking-wide text-[10px]">{c.label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {preview.rows.map((cells, i) => (
+                      <tr key={i} className="hover:bg-slate-50">
+                        <td className="px-2 py-1.5 text-slate-400 font-mono text-[10px]">{i + 2}</td>
+                        {previewCols.map((c) => (
+                          <td key={c.key} className="px-3 py-1.5 text-slate-700 max-w-[160px] truncate" title={getCell(cells, c.key)}>
+                            {getCell(cells, c.key)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {preview.total > 50 && (
+                  <p className="border-t border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] text-slate-500">
+                    Showing first 50 of {preview.total} rows — all rows will be processed
+                  </p>
+                )}
+              </div>
+
+              {/* SMS toggle */}
+              <button
+                type="button"
+                onClick={() => setSendSms((v) => !v)}
+                className="flex items-center gap-2.5 rounded border border-slate-200 bg-slate-50 px-3 py-2.5 text-left hover:bg-slate-100"
+              >
+                {sendSms
+                  ? <FaToggleOn size={22} className="flex-shrink-0 text-[#0B3B2E]" />
+                  : <FaToggleOff size={22} className="flex-shrink-0 text-slate-400" />}
+                <div>
+                  <p className="text-xs font-bold text-slate-700">
+                    {sendSms ? "SMS enabled — customers will be notified" : "SMS disabled — silent reconciliation"}
+                  </p>
+                  <p className="text-[10px] text-slate-500">
+                    Turn on for same-day uploads. Leave off for back-dated statement reconciliation.
+                  </p>
+                </div>
+              </button>
+            </>
+          )}
+
+          {/* ── Step 3: results ── */}
+          {results && (
+            <>
+              {/* Summary strip */}
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 sm:gap-1.5">
+                {[
+                  { label: "Matched",   value: summary.matched,   sub: `Ksh ${formatMoney(summary.totalMatched)}`, cls: "bg-emerald-50 border-emerald-300 text-emerald-700" },
+                  { label: "Duplicate", value: summary.duplicate, sub: "already done",     cls: "bg-blue-50 border-blue-200 text-blue-700" },
+                  { label: "Unmatched", value: summary.unmatched, sub: "no open job",      cls: "bg-amber-50 border-amber-200 text-amber-700" },
+                  { label: "Skipped",   value: summary.skipped,   sub: "zero / no code",   cls: "bg-slate-50 border-slate-200 text-slate-500" },
+                  { label: "Errors",    value: summary.error,     sub: "parse failures",   cls: "bg-red-50 border-red-200 text-red-600" },
+                ].map(({ label, value, sub, cls }) => (
+                  <div key={label} className={`border rounded px-3 py-2 text-center ${cls}`}>
+                    <p className="text-xl font-black leading-none">{value}</p>
+                    <p className="mt-0.5 text-[9px] font-black uppercase tracking-wide opacity-70">{label}</p>
+                    <p className="text-[9px] opacity-60">{sub}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Per-row results */}
+              <div className="overflow-x-auto rounded border border-slate-200">
+                <table className="w-full min-w-[600px] text-xs">
+                  <thead className="bg-slate-100">
+                    <tr>
+                      <th className="px-2 py-1.5 text-left text-[10px] font-black uppercase tracking-wide text-slate-500">Row</th>
+                      <th className="px-3 py-1.5 text-left text-[10px] font-black uppercase tracking-wide text-slate-500">Status</th>
+                      <th className="px-3 py-1.5 text-left text-[10px] font-black uppercase tracking-wide text-slate-500">Transaction Code</th>
+                      <th className="px-3 py-1.5 text-left text-[10px] font-black uppercase tracking-wide text-slate-500">Plate</th>
+                      <th className="px-3 py-1.5 text-right text-[10px] font-black uppercase tracking-wide text-slate-500">Amount</th>
+                      <th className="px-3 py-1.5 text-left text-[10px] font-black uppercase tracking-wide text-slate-500">Job / Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {rows.map((r) => {
+                      const meta = RESULT_META[r.status] || RESULT_META.error;
+                      return (
+                        <tr key={r.row} className="hover:bg-slate-50">
+                          <td className="px-2 py-1.5 font-mono text-[10px] text-slate-400">{r.row}</td>
+                          <td className="px-3 py-1.5">
+                            <span className={`inline-flex items-center rounded border px-2 py-0.5 text-[9px] font-black uppercase ${meta.bg}`}>
+                              {meta.label}
+                            </span>
+                          </td>
+                          <td className="px-3 py-1.5 font-mono text-slate-700">{r.transactionCode || "—"}</td>
+                          <td className="px-3 py-1.5 font-extrabold tracking-wider text-slate-800">{r.plate || "—"}</td>
+                          <td className="px-3 py-1.5 text-right font-bold text-slate-700">
+                            {r.amount > 0 ? formatMoney(r.amount) : "—"}
+                          </td>
+                          <td className="px-3 py-1.5 text-slate-500">
+                            {r.jobNumber
+                              ? <span className="font-bold text-[#0B3B2E]">{r.jobNumber}{r.customerName ? ` · ${r.customerName}` : ""}</span>
+                              : <span className="italic text-slate-400">{r.reason || "—"}</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex flex-shrink-0 items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3">
+          {results ? (
+            <span className="text-[11px] text-slate-500">
+              {summary.matched} payment{summary.matched !== 1 ? "s" : ""} recorded · Ksh {formatMoney(summary.totalMatched)}
+            </span>
+          ) : preview ? (
+            <span className="text-[11px] text-slate-500">{preview.total} rows will be processed</span>
+          ) : (
+            <span className="text-[11px] text-slate-400">Select a CSV file to begin</span>
+          )}
+          <div className="flex gap-2">
+            {results ? (
+              <button onClick={onClose} className="inline-flex h-8 items-center px-4 text-xs font-bold text-slate-600 hover:text-slate-900">
+                Close
+              </button>
+            ) : (
+              <>
+                <button onClick={onClose} className="inline-flex h-8 items-center px-3 text-xs font-bold text-slate-600 hover:text-slate-900">
+                  Cancel
+                </button>
+                {preview && (
+                  <button
+                    onClick={handleProcess}
+                    disabled={processing}
+                    className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50"
+                  >
+                    <FaUpload size={10} />
+                    {processing ? `Processing…` : `Process ${preview.total} row${preview.total !== 1 ? "s" : ""}`}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function CarWashMpesaNotifications() {
   const canRecord = useCarWashPermission("carwash-payments", "record");
+  const canEdit   = useCarWashPermission("carwash-payments", "edit");
 
   const [notifications, setNotifications] = useState([]);
   const [summary, setSummary] = useState([]);
@@ -386,6 +750,7 @@ export default function CarWashMpesaNotifications() {
   const [expanded, setExpanded]         = useState(null);
   const [assignTarget, setAssignTarget] = useState(null);
   const [allocateTarget, setAllocateTarget] = useState(null);
+  const [showUpload, setShowUpload]     = useState(false);
 
   const [filters, setFilters] = useState({ status: "", plate: "", dateFrom: todayISO(), dateTo: todayISO() });
   const [applied, setApplied] = useState({ status: "", plate: "", dateFrom: todayISO(), dateTo: todayISO() });
@@ -441,11 +806,27 @@ export default function CarWashMpesaNotifications() {
     <CarWashShell
       title="M-Pesa Notifications"
       action={
-        <button onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-          <FaRedoAlt className={loading ? "animate-spin" : ""} size={11} /> Refresh
-        </button>
+        <>
+          {canEdit && (
+            <button
+              onClick={() => setShowUpload(true)}
+              className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+            >
+              <FaUpload size={10} /> Upload CSV
+            </button>
+          )}
+          <button onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+            <FaRedoAlt className={loading ? "animate-spin" : ""} size={11} /> Refresh
+          </button>
+        </>
       }
     >
+      {showUpload && (
+        <UploadModal
+          onClose={() => setShowUpload(false)}
+          onUploaded={() => { setShowUpload(false); load(); }}
+        />
+      )}
       {allocateTarget && (
         <AllocateModal
           notif={allocateTarget}

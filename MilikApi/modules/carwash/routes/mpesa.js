@@ -1,8 +1,20 @@
 import express from "express";
-import { confirmCarWashCallback, validateCarWashCallback, listMpesaNotifications, reassignMpesaNotification, listUnpaidJobs, allocateNotification, registerCarWashPaybillUrls, devTestHashedSms } from "../controllers/mpesaCallbackController.js";
+import multer from "multer";
+import { confirmCarWashCallback, validateCarWashCallback, listMpesaNotifications, reassignMpesaNotification, listUnpaidJobs, allocateNotification, registerCarWashPaybillUrls, bulkUploadMpesaStatement, devTestHashedSms } from "../controllers/mpesaCallbackController.js";
 import { verifyUser, requireCompanyModule, requireCompanyPermission } from "../../../controllers/verifyToken.js";
 
 const router = express.Router();
+
+const csvUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  fileFilter: (_, file, cb) => {
+    const ok = file.mimetype === "text/csv"
+      || file.mimetype === "application/vnd.ms-excel"
+      || file.originalname.toLowerCase().endsWith(".csv");
+    cb(ok ? null : new Error("Only CSV files are accepted"), ok);
+  },
+});
 
 // Authenticated — admin views notification log
 router.get(
@@ -47,6 +59,16 @@ router.post(
   requireCompanyModule("carwash"),
   requireCompanyPermission("carwash-settings", "manage", "carwash"),
   registerCarWashPaybillUrls
+);
+
+// Authenticated — bulk upload M-Pesa statement CSV to reconcile missed payments
+router.post(
+  "/bulk-upload",
+  verifyUser,
+  requireCompanyModule("carwash"),
+  requireCompanyPermission("carwash-payments", "edit", "carwash"),
+  csvUpload.single("file"),
+  bulkUploadMpesaStatement,
 );
 
 // Dev only — test masked SMS without a real payment (blocked in production)

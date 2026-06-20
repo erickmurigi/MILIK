@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   FaBan, FaCar, FaCheckCircle, FaClock, FaHandHoldingUsd,
   FaMoneyBillWave, FaPhone, FaPlus, FaRedoAlt, FaSoap,
@@ -76,13 +77,10 @@ const jobStatusBadge = (status) => {
 const DASH_DATE_KEY = "cw_dash_date";
 
 const CarWashDashboard = () => {
-  const navigate     = useNavigate();
-  const dateInputRef = useRef(null);
-  const [summary, setSummary]   = useState(null);
-  const [jobs, setJobs]         = useState([]);
-  const [payments, setPayments] = useState([]);
-  const [date, setDate]         = useState(() => sessionStorage.getItem(DASH_DATE_KEY) || todayISO());
-  const [loading, setLoading]   = useState(false);
+  const navigate      = useNavigate();
+  const queryClient   = useQueryClient();
+  const dateInputRef  = useRef(null);
+  const [date, setDate] = useState(() => sessionStorage.getItem(DASH_DATE_KEY) || todayISO());
 
   const today = todayISO();
 
@@ -105,27 +103,27 @@ const CarWashDashboard = () => {
     setDate(todayISO());
   };
 
-  const loadDashboard = useCallback(async () => {
-    setLoading(true);
-    try {
+  const { data: dashData, isFetching: loading } = useQuery({
+    queryKey: ["cw-dashboard", date],
+    queryFn: async () => {
       const [sumRes, jobsRes, payRes] = await Promise.all([
         carWashApi.getDailySummary(date),
         carWashApi.listJobs({ date, limit: 30 }),
         carWashApi.listPayments({ date, limit: 10 }),
       ]);
-      setSummary(sumRes || null);
-      setJobs(normalizeListPayload(jobsRes, "jobs"));
-      setPayments(normalizeListPayload(payRes, "payments"));
-    } catch {
-      setSummary(null);
-      setJobs([]);
-      setPayments([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [date]);
+      return {
+        summary:  sumRes || null,
+        jobs:     normalizeListPayload(jobsRes, "jobs"),
+        payments: normalizeListPayload(payRes, "payments"),
+      };
+    },
+    placeholderData: (prev) => prev,
+    staleTime: 60_000,
+  });
 
-  useEffect(() => { loadDashboard(); }, [loadDashboard]);
+  const summary  = dashData?.summary  || null;
+  const jobs     = dashData?.jobs     || [];
+  const payments = dashData?.payments || [];
 
   const counts        = summary?.statusCounts    || {};
   const byMethod      = summary?.revenueByMethod || {};
@@ -192,7 +190,7 @@ const CarWashDashboard = () => {
           )}
           <button
             type="button"
-            onClick={loadDashboard}
+            onClick={() => queryClient.invalidateQueries({ queryKey: ["cw-dashboard", date] })}
             className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
           >
             <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh

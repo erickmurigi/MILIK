@@ -550,14 +550,10 @@ export const updateJob = async (req, res, next) => {
       // Re-evaluate commissions with updated service lines/prices.
       // "paid" → payable, "partial" → earned. accrueCommissionForJob handles both.
       await accrueCommissionForJob({ req, job: existing });
-      if (existing.paymentStatus === "paid") {
-        try {
-          await awardLoyaltyStamp({ business, job: existing });
-        } catch (err) {
-          console.error("[CW Loyalty] Stamp award failed job=%s: %s", existing.jobNumber, err?.message || err);
-        }
-      }
-      if (existing.status === "done") {
+      // Award stamp when paid OR when done (manual completion without payment).
+      // awardLoyaltyStamp has a per-job idempotency guard, but we merge the two
+      // conditions here to avoid the redundant DB call when paymentStatus===paid AND status===done.
+      if (existing.paymentStatus === "paid" || existing.status === "done") {
         try {
           await awardLoyaltyStamp({ business, job: existing });
         } catch (err) {

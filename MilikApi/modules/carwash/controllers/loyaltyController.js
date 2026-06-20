@@ -541,14 +541,25 @@ export const awardLoyaltyStamp = async ({ business, job, overridePhone = null, m
       templateKey  = 'carwash_reward_ready';
     } else {
       const remaining = program.stampsRequired - card.currentStamps;
-      stampSmsBody = await resolveCarWashSmsBody(business, 'carwash_stamp_earned', {
+      const stampVars = {
         customerName, plate,
         currentStamps:  card.currentStamps,
         stampsRequired: program.stampsRequired,
         remaining,
         washesWord: remaining !== 1 ? 'washes' : 'wash',
-      });
-      templateKey = 'carwash_stamp_earned';
+      };
+      if (!suppressSms) {
+        // Standalone send (job marked done manually, no payment SMS providing context).
+        // Use the dedicated standalone template so the operator can craft a self-contained
+        // message with plate + name. Falls back to carwash_stamp_earned if disabled/unconfigured.
+        stampSmsBody = await resolveCarWashSmsBody(business, 'carwash_stamp_earned_standalone', stampVars)
+          || await resolveCarWashSmsBody(business, 'carwash_stamp_earned', stampVars);
+        templateKey = 'carwash_stamp_earned_standalone';
+      } else {
+        // Combined with payment SMS — short version is fine, plate already in payment message
+        stampSmsBody = await resolveCarWashSmsBody(business, 'carwash_stamp_earned', stampVars);
+        templateKey  = 'carwash_stamp_earned';
+      }
     }
 
     if (!suppressSms && stampSmsBody) {

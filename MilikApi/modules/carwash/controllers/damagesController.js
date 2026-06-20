@@ -3,7 +3,6 @@ import { createError } from "../../../utils/error.js";
 import CarWashStaffDamage from "../models/CarWashStaffDamage.js";
 import CarWashStaff from "../models/CarWashStaff.js";
 import { currentUserId, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
-import { getStaffDamagesSummary } from "../services/damagesService.js";
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
@@ -137,15 +136,32 @@ export const listDamagesBalances = async (req, res, next) => {
     const staffFilter = { business, active: { $ne: false } };
     if (branchId) staffFilter.branch = branchId;
 
-    const allStaff = await CarWashStaff.find(staffFilter).select("_id name role").lean();
-    const summaries = await Promise.all(
-      allStaff.map(async (s) => {
-        const summary = await getStaffDamagesSummary(business, String(s._id));
-        return { staff: s, ...summary };
-      })
-    );
+    const businessOid = new mongoose.Types.ObjectId(String(business));
 
-    const withPending = summaries.filter((s) => s.pendingAmount > 0);
+    const [allStaff, damageRows] = await Promise.all([
+      CarWashStaff.find(staffFilter).select("_id name role").lean(),
+      CarWashStaffDamage.aggregate([
+        { $match: { business: businessOid, ...(branchId ? { branch: new mongoose.Types.ObjectId(String(branchId)) } : {}) } },
+        { $group: { _id: { staff: "$staff", status: "$status" }, total: { $sum: "$amount" } } },
+      ]),
+    ]);
+
+    // Build staffId → { pendingAmount, totalDeducted, totalWaived } from the single aggregate
+    const byStaff = new Map();
+    for (const row of damageRows) {
+      const key = String(row._id.staff);
+      if (!byStaff.has(key)) byStaff.set(key, { pendingAmount: 0, totalDeducted: 0, totalWaived: 0 });
+      const entry = byStaff.get(key);
+      const rounded = Math.round((Number(row.total || 0) + Number.EPSILON) * 100) / 100;
+      if (row._id.status === "pending")  entry.pendingAmount = rounded;
+      if (row._id.status === "deducted") entry.totalDeducted = rounded;
+      if (row._id.status === "waived")   entry.totalWaived   = rounded;
+    }
+
+    const withPending = allStaff
+      .map((s) => ({ staff: s, ...(byStaff.get(String(s._id)) || { pendingAmount: 0, totalDeducted: 0, totalWaived: 0 }) }))
+      .filter((s) => s.pendingAmount > 0);
+
     res.json({ success: true, data: withPending, balances: withPending });
   } catch (error) {
     next(error);

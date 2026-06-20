@@ -35,6 +35,21 @@ export const CW_SMS_TEMPLATE_DEFAULTS = [
     ],
   },
   {
+    key: "carwash_stamp_earned_standalone",
+    name: "Loyalty Stamp Earned (Job Completed – No Payment)",
+    description: "Sent when a job is manually marked done without recording a payment. Unlike the combined payment+stamp message, this fires alone — so it must include full context (plate, name, progress).",
+    enabled: true,
+    messageBody: "Hi {{customerName}}, stamp earned for {{plate}}. {{currentStamps}}/{{stampsRequired}} — {{remaining}} more {{washesWord}} to your reward. Thank you.",
+    placeholders: [
+      { token: "{{customerName}}",  hint: "Customer name" },
+      { token: "{{plate}}",         hint: "Vehicle plate number" },
+      { token: "{{currentStamps}}", hint: "Stamps earned so far on current card" },
+      { token: "{{stampsRequired}}",hint: "Total stamps needed for a reward" },
+      { token: "{{remaining}}",     hint: "Stamps still needed" },
+      { token: "{{washesWord}}",    hint: "\"wash\" or \"washes\" (auto-pluralised)" },
+    ],
+  },
+  {
     key: "carwash_reward_ready",
     name: "Reward Earned",
     description: "Sent automatically when a customer completes a stamp card and earns a reward.",

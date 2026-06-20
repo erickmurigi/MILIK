@@ -1124,6 +1124,293 @@ export const registerCarWashPaybillUrls = async (req, res, next) => {
   }
 };
 
+// ─── CSV helpers ──────────────────────────────────────────────────────────────
+
+const normalizeHeader = (h) => String(h || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+const parseCsvText = (text) => {
+  const rows = [];
+  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const cells = [];
+    let cur = "";
+    let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
+        else { inQ = !inQ; }
+      } else if (ch === "," && !inQ) {
+        cells.push(cur.trim()); cur = "";
+      } else {
+        cur += ch;
+      }
+    }
+    cells.push(cur.trim());
+    rows.push(cells);
+  }
+  return rows;
+};
+
+// M-Pesa portal dates: "20/06/2026 14:23:00" in EAT (UTC+3)
+const parseMpesaPortalDate = (raw = "") => {
+  const m = String(raw).trim().match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):?(\d{2})?$/);
+  if (m) {
+    const [, dd, mm, yyyy, hh, min, ss = "00"] = m;
+    const dt = new Date(Date.UTC(+yyyy, +mm - 1, +dd, +hh - 3, +min, +ss));
+    return Number.isNaN(dt.getTime()) ? new Date() : dt;
+  }
+  const p = new Date(raw);
+  return Number.isNaN(p.getTime()) ? new Date() : p;
+};
+
+const extractCsvRow = (rawHeaders, cells, fmt) => {
+  const normHeaders = rawHeaders.map(normalizeHeader);
+  const gc = (key) => {
+    const i = normHeaders.indexOf(key);
+    return i >= 0 ? (cells[i] || "").trim() : "";
+  };
+
+  if (fmt === "portal") {
+    const txnStatus = gc("transactionstatus");
+    if (txnStatus && !["completed", "success"].includes(txnStatus.toLowerCase())) {
+      return { skip: true, reason: `Skipped — status: ${txnStatus}` };
+    }
+    const transactionCode = gc("receiptno");
+    const amount          = round2(Number((gc("paidin") || gc("amountpaidin") || "0").replace(/,/g, "")));
+    const billRefNumber   = gc("details") || gc("accountreference");
+    const date            = parseMpesaPortalDate(gc("completiontime"));
+    const msisdn          = normalizeMsisdn(gc("phonenumber") || gc("msisdn") || "") || "";
+    const senderName      = gc("sendername") || gc("initiatorname") || "";
+    return { transactionCode, amount, billRefNumber, date, msisdn, senderName };
+  }
+
+  if (fmt === "daraja") {
+    const transactionCode = gc("transid");
+    const amount          = round2(Number((gc("transamount") || "0").replace(/,/g, "")));
+    const billRefNumber   = gc("billrefnumber") || gc("accountreference");
+    const date            = parseMpesaDate(gc("transtime"));
+    const msisdn          = normalizeMsisdn(gc("msisdn") || "") || "";
+    const firstName       = gc("firstname");
+    const middleName      = gc("middlename");
+    const lastName        = gc("lastname");
+    const senderName      = [firstName, middleName, lastName].filter(Boolean).join(" ");
+    return { transactionCode, amount, billRefNumber, date, msisdn, senderName };
+  }
+
+  return { skip: true, reason: "Unknown format" };
+};
+
+// ─── Bulk upload M-Pesa statement CSV ─────────────────────────────────────────
+export const bulkUploadMpesaStatement = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const branchId = resolveActiveBranchId(req);
+    const sendSms  = req.body?.sendSms === "true" || req.body?.sendSms === true;
+
+    if (!req.file) return next(createError(400, "No CSV file uploaded"));
+
+    const text = req.file.buffer.toString("utf-8");
+    const rows = parseCsvText(text);
+    if (rows.length < 2) return next(createError(400, "CSV has no data rows"));
+
+    // Detect format
+    const rawHeaders  = rows[0];
+    const normHeaders = rawHeaders.map(normalizeHeader);
+    let fmt = null;
+    if (normHeaders.includes("receiptno") || normHeaders.includes("paidin") || normHeaders.includes("amountpaidin")) fmt = "portal";
+    else if (normHeaders.includes("transid") || normHeaders.includes("billrefnumber")) fmt = "daraja";
+    if (!fmt) return next(createError(400, "Unrecognised CSV format. Expected M-Pesa Business Portal or Daraja C2B export."));
+
+    // Resolve cashbook
+    const company    = await Company.findById(business).lean();
+    const configs    = getRawMpesaPaybillConfigs(company?.paymentIntegration || {});
+    const config     = getPrimaryMpesaPaybillConfig(configs);
+    const cashbookId = config?.defaultCashbookAccountId;
+    const cashbook   = cashbookId && mongoose.Types.ObjectId.isValid(String(cashbookId))
+      ? await ChartOfAccount.findOne({ _id: cashbookId, business, type: "asset", isPosting: true }).lean()
+      : null;
+    if (!cashbook) return next(createError(422, "M-Pesa cashbook not configured — check Settings → Payments → M-Pesa Paybill"));
+
+    const results = [];
+    let matched = 0, duplicate = 0, unmatched = 0, skipped = 0, errorCount = 0, totalMatched = 0;
+
+    for (let idx = 0; idx < rows.length - 1; idx++) {
+      const cells  = rows[idx + 1];
+      if (cells.every((c) => !c)) continue;
+
+      const rowNum = idx + 2; // 1-indexed, offset by header row
+      let extracted;
+      try {
+        extracted = extractCsvRow(rawHeaders, cells, fmt);
+      } catch (e) {
+        results.push({ row: rowNum, status: "error", reason: `Parse error: ${e.message}` });
+        errorCount++;
+        continue;
+      }
+
+      if (extracted.skip) {
+        results.push({ row: rowNum, status: "skipped", reason: extracted.reason });
+        skipped++;
+        continue;
+      }
+
+      const { transactionCode, amount, billRefNumber, date, msisdn, senderName } = extracted;
+      const plate = normalizePlate(billRefNumber);
+
+      if (!transactionCode) {
+        results.push({ row: rowNum, status: "skipped", reason: "No transaction code", billRefNumber, amount });
+        skipped++;
+        continue;
+      }
+      if (!amount || amount <= 0) {
+        results.push({ row: rowNum, status: "skipped", reason: "Amount is zero or invalid", transactionCode, billRefNumber });
+        skipped++;
+        continue;
+      }
+      if (!plate) {
+        results.push({ row: rowNum, status: "unmatched", reason: "No valid plate in account reference", transactionCode, billRefNumber: billRefNumber || "—", amount });
+        unmatched++;
+        continue;
+      }
+
+      // Duplicate guard — notification already matched
+      const existingNotif = await CarWashMpesaNotification.findOne({ transactionCode, status: "matched" }).lean();
+      if (existingNotif) {
+        results.push({ row: rowNum, status: "duplicate", reason: "Already processed", transactionCode, plate, amount });
+        duplicate++;
+        continue;
+      }
+
+      // Duplicate guard — payment already recorded with this reference
+      const existingPayment = await CarWashPayment.findOne({ business, method: "mpesa", reference: transactionCode }).lean();
+      if (existingPayment) {
+        results.push({ row: rowNum, status: "duplicate", reason: "Payment already recorded", transactionCode, plate, amount });
+        duplicate++;
+        continue;
+      }
+
+      // Find most-recent open job for this plate
+      const job = await CarWashJob.findOne({
+        business,
+        plateNumber: buildPlateRegex(plate),
+        status: { $nin: ["cancelled"] },
+        paymentStatus: { $in: ["unpaid", "partial"] },
+      }).sort({ createdAt: -1 }).lean();
+
+      if (!job) {
+        await CarWashMpesaNotification.create({
+          business, branch: branchId || null,
+          transactionCode, billRefNumber, plate, amount,
+          msisdn: msisdn || "", senderName: senderName || "",
+          transactionDate: date, status: "unmatched",
+          resultDesc: `No open job for plate ${plate}`,
+          notes: "Uploaded via CSV statement",
+          rawPayload: { source: "manual_upload", format: fmt, row: rowNum },
+        }).catch(() => {});
+        results.push({ row: rowNum, status: "unmatched", reason: `No open job for plate ${plate}`, transactionCode, plate, amount });
+        unmatched++;
+        continue;
+      }
+
+      // Cap payment at outstanding
+      const totals = await CarWashPayment.aggregate([
+        { $match: { business: job.business, job: job._id } },
+        { $group: { _id: null, amount: { $sum: "$amount" } } },
+      ]);
+      const alreadyPaid   = round2(totals?.[0]?.amount || 0);
+      const outstanding   = round2(Math.max(netJobPrice(job) - alreadyPaid, 0));
+      if (outstanding <= 0) {
+        results.push({ row: rowNum, status: "duplicate", reason: "Job already fully paid", transactionCode, plate, amount, jobNumber: job.jobNumber });
+        duplicate++;
+        continue;
+      }
+      const appliedAmount = round2(Math.min(amount, outstanding));
+
+      let payment;
+      try {
+        payment = await CarWashPayment.create({
+          business, branch: branchId || null,
+          job: job._id, amount: appliedAmount,
+          method: "mpesa", cashbookAccount: cashbook._id,
+          reference: transactionCode,
+          receivedFromPhone: msisdn || null,
+          paymentDate: date,
+          notes: "Recorded via CSV statement upload",
+        });
+      } catch (payErr) {
+        if (payErr.code === 11000) {
+          results.push({ row: rowNum, status: "duplicate", reason: "Duplicate receipt", transactionCode, plate, amount });
+          duplicate++;
+          continue;
+        }
+        throw payErr;
+      }
+
+      // Save matched notification
+      await CarWashMpesaNotification.create({
+        business, branch: branchId || null,
+        transactionCode, billRefNumber, plate, amount: appliedAmount,
+        msisdn: msisdn || "", senderName: senderName || "",
+        transactionDate: date, status: "matched",
+        matchedJob: job._id, matchedPayment: payment._id,
+        allocatedAmount: appliedAmount,
+        resultCode: 0, resultDesc: "Matched via CSV upload",
+        notes: "Uploaded via CSV statement",
+        rawPayload: { source: "manual_upload", format: fmt, row: rowNum },
+      }).catch(() => {});
+
+      // Update job contact info if we have it
+      const jobUpdates = {};
+      if (msisdn) jobUpdates.phone = msisdn;
+      if (senderName) jobUpdates.customerName = senderName;
+      if (Object.keys(jobUpdates).length) {
+        CarWashJob.updateOne({ _id: job._id, business }, { $set: jobUpdates }).catch(() => {});
+      }
+      if (msisdn || senderName) {
+        autoEnrollPlate({ business, plate, customerName: job.customerName, phone: msisdn || null, payerName: senderName || null }).catch(() => {});
+      }
+
+      const updatedJob = await refreshJobPaymentStatus(business, job._id);
+      postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: req.user?._id || null }).catch(() => {});
+
+      if (updatedJob) {
+        accrueCommissionForJob({ req, job: updatedJob }).catch(() => {});
+        if (sendSms) {
+          const remaining = round2(Math.max(0, outstanding - appliedAmount));
+          let loyaltySmsBody = null;
+          if (["paid", "partial"].includes(updatedJob.paymentStatus)) {
+            try {
+              const stampResult = await awardLoyaltyStamp({ business, job: updatedJob, overridePhone: msisdn || null, suppressSms: true });
+              loyaltySmsBody = stampResult?.smsBody || null;
+            } catch (err) {
+              console.error("[CSV Upload] Stamp failed job=%s: %s", updatedJob.jobNumber, err?.message || err);
+            }
+          }
+          sendPaymentConfirmationSms({ business, job: updatedJob, amount: appliedAmount, remaining, overridePhone: msisdn || null, loyaltySmsBody }).catch(() => {});
+        }
+        if (updatedJob.paymentStatus === "paid") {
+          markJobCommissionsPayable({ business, jobId: updatedJob._id }).catch(() => {});
+        }
+      }
+
+      matched++;
+      totalMatched = round2(totalMatched + appliedAmount);
+      results.push({ row: rowNum, status: "matched", transactionCode, plate, amount: appliedAmount, jobNumber: job.jobNumber, customerName: job.customerName || "" });
+    }
+
+    res.json({
+      success: true,
+      summary: { total: results.length, matched, duplicate, unmatched, skipped, error: errorCount, totalMatched },
+      results,
+    });
+  } catch (err) {
+    console.error("[CSV Upload] Error:", err?.message || err);
+    next(err);
+  }
+};
+
 // ─── Dev-only: test masked/hashed number SMS without a real payment ───────────
 // Blocked in production. Finds the first company with AT enabled automatically.
 export const devTestHashedSms = async (req, res, next) => {
