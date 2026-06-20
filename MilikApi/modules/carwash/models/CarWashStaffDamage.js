@@ -12,12 +12,28 @@ const carWashStaffDamageSchema = new Schema(
     damageDate:  { type: Date,         default: Date.now, index: true },
     // Optional link to the job the damage occurred on
     job:       { type: Types.ObjectId, ref: "CarWashJob",            default: null },
-    // "pending"  — not yet deducted from any payout
-    // "deducted" — held from a commission payout
+    // "pending"  — not yet fully recovered (amountRecovered may be > 0 for partial recovery)
+    // "deducted" — fully recovered through one or more commission payouts
     // "waived"   — manager wrote it off; will never be deducted
     status:    { type: String, enum: ["pending", "deducted", "waived"], default: "pending", index: true },
-    // Set when status becomes "deducted"
+    // Set when status becomes "deducted" (the payout that completed recovery)
     commissionPayout: { type: Types.ObjectId, ref: "CarWashCommissionPayout", default: null, index: true },
+
+    // Installment recovery settings
+    // "full"    — deduct the entire remaining balance at next payout
+    // "percent" — deduct deductionValue% of the original amount per payout
+    // "fixed"   — deduct a fixed Ksh amount per payout
+    deductionMode:  { type: String, enum: ["full", "percent", "fixed"], default: "full" },
+    deductionValue: { type: Number, default: null },  // % (1–100) or Ksh amount
+
+    // Tracks recovery across multiple payouts
+    amountRecovered: { type: Number, default: 0, min: 0 },
+    recoveryLog: [{
+      commissionPayout: { type: Types.ObjectId, ref: "CarWashCommissionPayout" },
+      amount:           { type: Number },
+      date:             { type: Date, default: Date.now },
+    }],
+
     notes:     { type: String, trim: true, default: "" },
     recordedBy: { type: Types.ObjectId, ref: "User", default: null },
     waivedBy:   { type: Types.ObjectId, ref: "User", default: null },

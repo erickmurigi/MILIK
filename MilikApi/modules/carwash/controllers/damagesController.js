@@ -3,6 +3,7 @@ import { createError } from "../../../utils/error.js";
 import CarWashStaffDamage from "../models/CarWashStaffDamage.js";
 import CarWashStaff from "../models/CarWashStaff.js";
 import { currentUserId, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
+import { computeDamageInstallment } from "../services/damagesService.js";
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
@@ -71,6 +72,20 @@ export const createDamage = async (req, res, next) => {
     const jobId = req.body.job && mongoose.Types.ObjectId.isValid(String(req.body.job))
       ? req.body.job : null;
 
+    // Installment deduction settings
+    const VALID_MODES = ["full", "percent", "fixed"];
+    const deductionMode = VALID_MODES.includes(req.body.deductionMode) ? req.body.deductionMode : "full";
+    let deductionValue = null;
+    if (deductionMode === "percent") {
+      const pct = Number(req.body.deductionValue);
+      if (!Number.isFinite(pct) || pct <= 0 || pct > 100) return next(createError(400, "Percent deduction must be 1–100"));
+      deductionValue = round2(pct);
+    } else if (deductionMode === "fixed") {
+      const fixed = round2(Number(req.body.deductionValue));
+      if (!Number.isFinite(fixed) || fixed <= 0) return next(createError(400, "Fixed deduction amount must be greater than zero"));
+      deductionValue = fixed;
+    }
+
     const damage = await CarWashStaffDamage.create({
       business,
       branch:      branchId || null,
@@ -81,6 +96,8 @@ export const createDamage = async (req, res, next) => {
       job:         jobId,
       notes:       String(req.body.notes || "").trim(),
       recordedBy:  userId,
+      deductionMode,
+      deductionValue,
     });
 
     const populated = await CarWashStaffDamage.findById(damage._id)
@@ -136,30 +153,34 @@ export const listDamagesBalances = async (req, res, next) => {
     const staffFilter = { business, active: { $ne: false } };
     if (branchId) staffFilter.branch = branchId;
 
-    const businessOid = new mongoose.Types.ObjectId(String(business));
+    const dmgFilter = { business };
+    if (branchId) dmgFilter.branch = new mongoose.Types.ObjectId(String(branchId));
 
-    const [allStaff, damageRows] = await Promise.all([
+    const [allStaff, allDamages] = await Promise.all([
       CarWashStaff.find(staffFilter).select("_id name role").lean(),
-      CarWashStaffDamage.aggregate([
-        { $match: { business: businessOid, ...(branchId ? { branch: new mongoose.Types.ObjectId(String(branchId)) } : {}) } },
-        { $group: { _id: { staff: "$staff", status: "$status" }, total: { $sum: "$amount" } } },
-      ]),
+      CarWashStaffDamage.find(dmgFilter).lean(),
     ]);
 
-    // Build staffId → { pendingAmount, totalDeducted, totalWaived } from the single aggregate
+    // Group damages by staff — compute installments for pending ones
     const byStaff = new Map();
-    for (const row of damageRows) {
-      const key = String(row._id.staff);
-      if (!byStaff.has(key)) byStaff.set(key, { pendingAmount: 0, totalDeducted: 0, totalWaived: 0 });
+    for (const d of allDamages) {
+      const key = String(d.staff);
+      if (!byStaff.has(key)) byStaff.set(key, { pendingAmount: 0, pendingInstallment: 0, totalDeducted: 0, totalWaived: 0 });
       const entry = byStaff.get(key);
-      const rounded = Math.round((Number(row.total || 0) + Number.EPSILON) * 100) / 100;
-      if (row._id.status === "pending")  entry.pendingAmount = rounded;
-      if (row._id.status === "deducted") entry.totalDeducted = rounded;
-      if (row._id.status === "waived")   entry.totalWaived   = rounded;
+      if (d.status === "waived") {
+        entry.totalWaived = round2(entry.totalWaived + d.amount);
+      } else if (d.status === "deducted") {
+        entry.totalDeducted = round2(entry.totalDeducted + d.amount);
+      } else {
+        const remaining = round2(d.amount - (d.amountRecovered || 0));
+        entry.pendingAmount = round2(entry.pendingAmount + remaining);
+        entry.pendingInstallment = round2(entry.pendingInstallment + computeDamageInstallment(d));
+      }
     }
 
+    const empty = { pendingAmount: 0, pendingInstallment: 0, totalDeducted: 0, totalWaived: 0 };
     const withPending = allStaff
-      .map((s) => ({ staff: s, ...(byStaff.get(String(s._id)) || { pendingAmount: 0, totalDeducted: 0, totalWaived: 0 }) }))
+      .map((s) => ({ staff: s, ...(byStaff.get(String(s._id)) || empty) }))
       .filter((s) => s.pendingAmount > 0);
 
     res.json({ success: true, data: withPending, balances: withPending });

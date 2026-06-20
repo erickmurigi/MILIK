@@ -53,8 +53,11 @@ export const getCarWashSettings = async (req, res, next) => {
     const queueDisplayName    = String(company?.carwashSettings?.queueDisplayName    || "").trim();
     const discountMinJobPrice = Number(company?.carwashSettings?.discountMinJobPrice ?? 0);
     const discountMaxPercent  = Number(company?.carwashSettings?.discountMaxPercent  ?? 0);
+    const damageDeductionMode  = company?.carwashSettings?.damageDeductionMode  || "full";
+    const damageDeductionValue = company?.carwashSettings?.damageDeductionValue != null
+      ? Number(company.carwashSettings.damageDeductionValue) : null;
 
-    res.json({ success: true, data: { defaultCashbooks, savingsEnabled, savingsDeductionPerJob, smsTemplates, queueDisplayName, discountMinJobPrice, discountMaxPercent } });
+    res.json({ success: true, data: { defaultCashbooks, savingsEnabled, savingsDeductionPerJob, smsTemplates, queueDisplayName, discountMinJobPrice, discountMaxPercent, damageDeductionMode, damageDeductionValue } });
   } catch (err) {
     next(err);
   }
@@ -63,7 +66,7 @@ export const getCarWashSettings = async (req, res, next) => {
 export const updateCarWashSettings = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const { defaultCashbooks = {}, savingsEnabled, savingsDeductionPerJob, smsTemplates, queueDisplayName, discountMinJobPrice, discountMaxPercent } = req.body;
+    const { defaultCashbooks = {}, savingsEnabled, savingsDeductionPerJob, smsTemplates, queueDisplayName, discountMinJobPrice, discountMaxPercent, damageDeductionMode, damageDeductionValue } = req.body;
 
     const update = {};
 
@@ -122,6 +125,29 @@ export const updateCarWashSettings = async (req, res, next) => {
       const v = Number(discountMaxPercent);
       if (!Number.isFinite(v) || v < 0 || v > 100) return next({ status: 400, message: "Max discount must be between 0 and 100%" });
       update["carwashSettings.discountMaxPercent"] = Math.round(v * 100) / 100;
+    }
+
+    const VALID_DMG_MODES = ["full", "percent", "fixed"];
+    if (damageDeductionMode !== undefined) {
+      if (!VALID_DMG_MODES.includes(damageDeductionMode)) {
+        return next({ status: 400, message: "Invalid damage deduction mode" });
+      }
+      update["carwashSettings.damageDeductionMode"] = damageDeductionMode;
+      if (damageDeductionMode === "percent") {
+        const pct = Number(damageDeductionValue);
+        if (!Number.isFinite(pct) || pct <= 0 || pct > 100) {
+          return next({ status: 400, message: "Damage percent deduction must be 1–100" });
+        }
+        update["carwashSettings.damageDeductionValue"] = Math.round(pct * 100) / 100;
+      } else if (damageDeductionMode === "fixed") {
+        const fixed = Number(damageDeductionValue);
+        if (!Number.isFinite(fixed) || fixed <= 0) {
+          return next({ status: 400, message: "Damage fixed deduction must be greater than zero" });
+        }
+        update["carwashSettings.damageDeductionValue"] = Math.round(fixed * 100) / 100;
+      } else {
+        update["carwashSettings.damageDeductionValue"] = null;
+      }
     }
 
     await Company.updateOne({ _id: business }, { $set: update });

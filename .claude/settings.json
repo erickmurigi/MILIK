@@ -80,7 +80,11 @@
       "Bash(git add *)",
       "Bash(git commit *)",
       "Bash(git push *)",
-      "Bash(xargs grep -l \"FinancialLedgerEntry\")"
+      "Bash(xargs grep -l \"FinancialLedgerEntry\")",
+      "Bash(pm2 --version)",
+      "Bash(npm --version)",
+      "Bash(wmic cpu *)",
+      "PowerShell(\\(Get-WmiObject Win32_Processor\\).NumberOfCores)"
     ]
   }
 }

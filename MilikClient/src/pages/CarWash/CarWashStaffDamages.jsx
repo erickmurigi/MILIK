@@ -15,6 +15,7 @@ const localISO = (d) => {
   return `${y}-${m}-${dd}`;
 };
 const todayISO = () => localISO(new Date());
+const r2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
 const statusPill = (status) => {
   if (status === "deducted") return "border-emerald-200 bg-emerald-50 text-emerald-700";
@@ -24,7 +25,31 @@ const statusPill = (status) => {
 const statusLabel = (status) =>
   status === "deducted" ? "Deducted" : status === "waived" ? "Waived" : "Pending";
 
-const emptyForm = () => ({ staff: "", amount: "", description: "", damageDate: todayISO(), notes: "" });
+const modeLabel = (mode) =>
+  mode === "percent" ? "Installment %" : mode === "fixed" ? "Fixed Ksh" : "Full";
+
+// Mirror of the backend computeDamageInstallment — used for UI preview
+const computeInstallment = (d) => {
+  const remaining = r2(d.amount - (d.amountRecovered || 0));
+  if (remaining <= 0) return 0;
+  let inst;
+  switch (d.deductionMode) {
+    case "percent": inst = r2(d.amount * (Number(d.deductionValue) || 100) / 100); break;
+    case "fixed":   inst = r2(Number(d.deductionValue) || remaining); break;
+    default:        inst = remaining;
+  }
+  return r2(Math.min(inst, remaining));
+};
+
+const emptyForm = (settings) => ({
+  staff:          "",
+  amount:         "",
+  description:    "",
+  damageDate:     todayISO(),
+  notes:          "",
+  deductionMode:  settings?.damageDeductionMode  || "full",
+  deductionValue: settings?.damageDeductionValue != null ? String(settings.damageDeductionValue) : "",
+});
 
 const PAGE_SIZE = 50;
 
@@ -39,12 +64,18 @@ export default function CarWashStaffDamages() {
   const [dateTo,       setDateTo]       = useState("");
 
   const [showForm,     setShowForm]     = useState(false);
-  const [form,         setForm]         = useState(emptyForm());
+  const [form,         setForm]         = useState(emptyForm(null));
   const [waiveTarget,  setWaiveTarget]  = useState(null);
   const [waiveNotes,   setWaiveNotes]   = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
 
   // ── Queries ───────────────────────────────────────────────────────────────
+
+  const { data: settingsData } = useQuery({
+    queryKey: ["cw-settings"],
+    queryFn: () => carWashApi.getCarWashSettings(),
+    staleTime: 5 * 60_000,
+  });
 
   const damagesQueryKey = ["cw-damages", page, filterStaff, filterStatus, dateFrom, dateTo];
 
@@ -52,10 +83,10 @@ export default function CarWashStaffDamages() {
     queryKey: damagesQueryKey,
     queryFn: () => {
       const params = { page, limit: PAGE_SIZE };
-      if (filterStaff)          params.staff    = filterStaff;
-      if (filterStatus !== "all") params.status = filterStatus;
-      if (dateFrom)             params.dateFrom = dateFrom;
-      if (dateTo)               params.dateTo   = dateTo;
+      if (filterStaff)            params.staff    = filterStaff;
+      if (filterStatus !== "all") params.status   = filterStatus;
+      if (dateFrom)               params.dateFrom = dateFrom;
+      if (dateTo)                 params.dateTo   = dateTo;
       return carWashApi.listDamages(params);
     },
     placeholderData: (prev) => prev,
@@ -91,7 +122,7 @@ export default function CarWashStaffDamages() {
     mutationFn: (payload) => carWashApi.createDamage(payload),
     onSuccess: () => {
       toast.success("Damage record added");
-      setForm(emptyForm());
+      setForm(emptyForm(settingsData));
       setShowForm(false);
       invalidate();
     },
@@ -121,18 +152,33 @@ export default function CarWashStaffDamages() {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
+  const openForm = () => {
+    setForm(emptyForm(settingsData));
+    setShowForm(true);
+  };
+
   const handleAdd = (e) => {
     e.preventDefault();
     if (!form.staff) return toast.error("Select a staff member");
     const amount = Number(form.amount);
     if (!amount || amount <= 0) return toast.error("Enter a valid amount");
     if (!form.description.trim()) return toast.error("Description is required");
+    if (form.deductionMode === "percent") {
+      const pct = Number(form.deductionValue);
+      if (!pct || pct <= 0 || pct > 100) return toast.error("Enter a valid percentage (1–100)");
+    }
+    if (form.deductionMode === "fixed") {
+      const fixed = Number(form.deductionValue);
+      if (!fixed || fixed <= 0) return toast.error("Enter a valid fixed deduction amount");
+    }
     addMutation.mutate({
-      staff:       form.staff,
+      staff:          form.staff,
       amount,
-      description: form.description.trim(),
-      damageDate:  form.damageDate,
-      notes:       form.notes.trim(),
+      description:    form.description.trim(),
+      damageDate:     form.damageDate,
+      notes:          form.notes.trim(),
+      deductionMode:  form.deductionMode,
+      deductionValue: form.deductionMode !== "full" ? Number(form.deductionValue) : undefined,
     });
   };
 
@@ -144,7 +190,7 @@ export default function CarWashStaffDamages() {
       action={
         canManage && (
           <button
-            onClick={() => setShowForm(true)}
+            onClick={openForm}
             className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0A3127]"
           >
             <FaPlus className="text-[10px]" /> Record Damage
@@ -157,15 +203,21 @@ export default function CarWashStaffDamages() {
         {/* Pending balances summary */}
         {balances.length > 0 && (
           <div className="flex-shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-2.5">
-            <p className="mb-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-amber-700">Pending — will deduct from next payout</p>
+            <p className="mb-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-amber-700">Next payout deductions</p>
             <div className="flex flex-wrap gap-3">
-              {balances.map((b) => (
-                <div key={String(b.staff._id)} className="inline-flex items-center gap-1.5 rounded border border-amber-200 bg-white px-2.5 py-1 text-xs">
-                  <FaExclamationTriangle className="text-[9px] text-red-500" />
-                  <span className="font-bold text-slate-700">{b.staff.name}</span>
-                  <span className="font-black text-red-600">−{formatMoney(b.pendingAmount)}</span>
-                </div>
-              ))}
+              {balances.map((b) => {
+                const isInstallment = r2(b.pendingInstallment) < r2(b.pendingAmount);
+                return (
+                  <div key={String(b.staff._id)} className="inline-flex items-center gap-1.5 rounded border border-amber-200 bg-white px-2.5 py-1 text-xs">
+                    <FaExclamationTriangle className="text-[9px] text-red-500" />
+                    <span className="font-bold text-slate-700">{b.staff.name}</span>
+                    <span className="font-black text-red-600">−{formatMoney(b.pendingInstallment ?? b.pendingAmount)}</span>
+                    {isInstallment && (
+                      <span className="text-[10px] text-slate-400">(of {formatMoney(b.pendingAmount)} total)</span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -205,55 +257,93 @@ export default function CarWashStaffDamages() {
           ) : damages.length === 0 ? (
             <div className="py-12 text-center text-xs text-slate-400">No damage records found</div>
           ) : (
-            <table className="w-full min-w-[700px] text-xs">
+            <table className="w-full min-w-[820px] text-xs">
               <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                 <tr>
                   <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.15em]">Date</th>
                   <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.15em]">Staff</th>
                   <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.15em]">Description</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.15em]">Job</th>
                   <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-[0.15em]">Amount</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.15em]">Recovery</th>
                   <th className="px-3 py-2 text-center text-[10px] font-black uppercase tracking-[0.15em]">Status</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.15em]">Payout</th>
                   <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-[0.15em]">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {damages.map((d) => (
-                  <tr key={d._id} className="hover:bg-slate-50">
-                    <td className="px-3 py-2 text-slate-600">{fmtDate(d.damageDate)}</td>
-                    <td className="px-3 py-2 font-bold text-slate-800">{d.staff?.name || "—"}</td>
-                    <td className="px-3 py-2 text-slate-700 max-w-[200px] truncate" title={d.description}>{d.description}</td>
-                    <td className="px-3 py-2 text-slate-500">{d.job?.jobNumber || "—"}</td>
-                    <td className="px-3 py-2 text-right font-black text-red-600">{formatMoney(d.amount)}</td>
-                    <td className="px-3 py-2 text-center">
-                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-black ${statusPill(d.status)}`}>
-                        {statusLabel(d.status)}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-slate-500">{d.commissionPayout?.payoutNumber || "—"}</td>
-                    <td className="px-3 py-2 text-right">
-                      {canManage && d.status === "pending" && (
-                        <div className="inline-flex items-center gap-1">
-                          <button
-                            onClick={() => { setWaiveTarget(d); setWaiveNotes(""); }}
-                            title="Waive — write off this damage"
-                            className="inline-flex items-center gap-1 border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600 hover:bg-slate-100"
-                          >
-                            <FaUndo className="text-[9px]" /> Waive
-                          </button>
-                          <button
-                            onClick={() => setDeleteTarget(d)}
-                            title="Delete record"
-                            className="border border-red-200 bg-red-50 px-2 py-0.5 text-red-600 hover:bg-red-100"
-                          >
-                            <FaTrash className="text-[9px]" />
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {damages.map((d) => {
+                  const recovered  = r2(d.amountRecovered || 0);
+                  const remaining  = r2(d.amount - recovered);
+                  const pct        = d.amount > 0 ? Math.min(100, Math.round((recovered / d.amount) * 100)) : 0;
+                  const installment = computeInstallment(d);
+                  const isInstallment = d.deductionMode && d.deductionMode !== "full";
+                  return (
+                    <tr key={d._id} className="hover:bg-slate-50">
+                      <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{fmtDate(d.damageDate)}</td>
+                      <td className="px-3 py-2 font-bold text-slate-800 whitespace-nowrap">{d.staff?.name || "—"}</td>
+                      <td className="px-3 py-2 text-slate-700 max-w-[180px] truncate" title={d.description}>{d.description}</td>
+                      <td className="px-3 py-2 text-right font-black text-red-600 whitespace-nowrap">{formatMoney(d.amount)}</td>
+                      <td className="px-3 py-2 min-w-[150px]">
+                        {d.status === "waived" ? (
+                          <span className="text-slate-400">Written off</span>
+                        ) : d.status === "deducted" ? (
+                          <div className="flex items-center gap-1.5">
+                            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-emerald-100">
+                              <div className="h-full bg-emerald-500" style={{ width: "100%" }} />
+                            </div>
+                            <span className="text-[10px] font-bold text-emerald-600">100%</span>
+                          </div>
+                        ) : (
+                          <div className="space-y-0.5">
+                            {recovered > 0 ? (
+                              <>
+                                <div className="flex items-center gap-1.5">
+                                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                                    <div className="h-full bg-amber-400" style={{ width: `${pct}%` }} />
+                                  </div>
+                                  <span className="text-[10px] text-slate-500">{pct}%</span>
+                                </div>
+                                <div className="text-[10px] text-slate-500">
+                                  {formatMoney(recovered)} paid · {formatMoney(remaining)} left
+                                </div>
+                              </>
+                            ) : null}
+                            <div className="text-[10px] font-semibold text-red-600">
+                              Next: −{formatMoney(installment)}
+                              {isInstallment && (
+                                <span className="ml-1 font-normal text-slate-400">({modeLabel(d.deductionMode)}{d.deductionMode === "percent" ? ` ${d.deductionValue}%` : ""})</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-black ${statusPill(d.status)}`}>
+                          {statusLabel(d.status)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {canManage && d.status === "pending" && (
+                          <div className="inline-flex items-center gap-1">
+                            <button
+                              onClick={() => { setWaiveTarget(d); setWaiveNotes(""); }}
+                              title="Waive — write off this damage"
+                              className="inline-flex items-center gap-1 border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600 hover:bg-slate-100"
+                            >
+                              <FaUndo className="text-[9px]" /> Waive
+                            </button>
+                            <button
+                              onClick={() => setDeleteTarget(d)}
+                              title="Delete record"
+                              className="border border-red-200 bg-red-50 px-2 py-0.5 text-red-600 hover:bg-red-100"
+                            >
+                              <FaTrash className="text-[9px]" />
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -311,6 +401,49 @@ export default function CarWashStaffDamages() {
                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                   className={icc} placeholder="e.g. Scratched customer's bumper" required />
               </div>
+
+              {/* Recovery mode */}
+              <div>
+                <label className={lc}>Recovery mode</label>
+                <select
+                  className={icc}
+                  value={form.deductionMode}
+                  onChange={(e) => setForm((f) => ({ ...f, deductionMode: e.target.value, deductionValue: "" }))}
+                >
+                  <option value="full">Full — deduct entire balance at next payout</option>
+                  <option value="percent">Installment % — fixed % of damage per payout</option>
+                  <option value="fixed">Fixed amount — fixed Ksh per payout</option>
+                </select>
+              </div>
+              {form.deductionMode === "percent" && (
+                <div>
+                  <label className={lc}>Deduction rate (%)</label>
+                  <input type="number" min="1" max="100" step="1"
+                    value={form.deductionValue}
+                    onChange={(e) => setForm((f) => ({ ...f, deductionValue: e.target.value }))}
+                    className={icc} placeholder="e.g. 10" required />
+                  {form.amount && form.deductionValue && (
+                    <p className="mt-1 text-[10px] text-slate-500">
+                      Each payout: −{formatMoney(Math.min(Number(form.amount) * Number(form.deductionValue) / 100, Number(form.amount)))} until fully recovered
+                    </p>
+                  )}
+                </div>
+              )}
+              {form.deductionMode === "fixed" && (
+                <div>
+                  <label className={lc}>Fixed deduction per payout (KES)</label>
+                  <input type="number" min="1" step="1"
+                    value={form.deductionValue}
+                    onChange={(e) => setForm((f) => ({ ...f, deductionValue: e.target.value }))}
+                    className={icc} placeholder="e.g. 50" required />
+                  {form.amount && form.deductionValue && Number(form.deductionValue) > 0 && (
+                    <p className="mt-1 text-[10px] text-slate-500">
+                      ~{Math.ceil(Number(form.amount) / Number(form.deductionValue))} payout{Math.ceil(Number(form.amount) / Number(form.deductionValue)) !== 1 ? "s" : ""} to fully recover
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div>
                 <label className={lc}>Notes (optional)</label>
                 <input type="text" value={form.notes}
@@ -319,7 +452,9 @@ export default function CarWashStaffDamages() {
               </div>
               <div className="rounded bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-700">
                 <FaExclamationTriangle className="mr-1 inline text-[9px]" />
-                This amount will be automatically deducted from the staff member's next commission payout.
+                {form.deductionMode === "full"
+                  ? "The full amount will be deducted from the staff member's next commission payout."
+                  : "Deductions will be taken in instalments from each commission payout until fully recovered."}
               </div>
               <div className="flex justify-end gap-2 pt-1">
                 <button type="button" onClick={() => setShowForm(false)}
@@ -379,6 +514,11 @@ export default function CarWashStaffDamages() {
               <p className="text-sm text-slate-700">
                 Waive <strong>{formatMoney(waiveTarget.amount)}</strong> damage for <strong>{waiveTarget.staff?.name}</strong>?
               </p>
+              {(waiveTarget.amountRecovered || 0) > 0 && (
+                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-1.5">
+                  {formatMoney(waiveTarget.amountRecovered)} has already been recovered. Waiving will write off the remaining {formatMoney(r2(waiveTarget.amount - waiveTarget.amountRecovered))}.
+                </p>
+              )}
               <p className="text-xs text-slate-500">{waiveTarget.description}</p>
               <div>
                 <label className={lc}>Reason (optional)</label>

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   FaCheckCircle, FaMoneyBillWave, FaPiggyBank,
   FaRedoAlt, FaSms, FaToggleOff, FaToggleOn,
-  FaChevronDown, FaChevronUp, FaExclamationCircle, FaInfoCircle, FaTv, FaTag,
+  FaChevronDown, FaChevronUp, FaExclamationCircle, FaInfoCircle, FaTv, FaTag, FaTools,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, normalizeListPayload } from "../../services/carWashApi";
@@ -36,6 +36,8 @@ export default function CarWashSettings() {
   const [queueDisplayName, setQueueDisplayName]   = useState("");
   const [discountMinJobPrice, setDiscountMinJobPrice] = useState("");
   const [discountMaxPercent,  setDiscountMaxPercent]  = useState("");
+  const [dmgDeductionMode,  setDmgDeductionMode]  = useState("full");
+  const [dmgDeductionValue, setDmgDeductionValue] = useState("");
   const [smsTemplates, setSmsTemplates]     = useState([]);
   const [expandedSms, setExpandedSms]     = useState(null);
   const [loading, setLoading]             = useState(false);
@@ -59,6 +61,8 @@ export default function CarWashSettings() {
       setQueueDisplayName(settingsRes?.queueDisplayName || "");
       setDiscountMinJobPrice(String(settingsRes?.discountMinJobPrice ?? 0));
       setDiscountMaxPercent(String(settingsRes?.discountMaxPercent  ?? 0));
+      setDmgDeductionMode(settingsRes?.damageDeductionMode || "full");
+      setDmgDeductionValue(settingsRes?.damageDeductionValue != null ? String(settingsRes.damageDeductionValue) : "");
       setDirty(false);
     } catch {
       toast.error("Failed to load settings");
@@ -84,6 +88,8 @@ export default function CarWashSettings() {
         queueDisplayName,
         discountMinJobPrice: Number(discountMinJobPrice) || 0,
         discountMaxPercent:  Number(discountMaxPercent)  || 0,
+        damageDeductionMode:  dmgDeductionMode,
+        damageDeductionValue: dmgDeductionMode !== "full" ? Number(dmgDeductionValue) || null : null,
       });
       toast.success("Settings saved");
       setDirty(false);
@@ -233,6 +239,72 @@ export default function CarWashSettings() {
                       </div>
                     ))}
                   </div>
+                )}
+              </div>
+            </div>
+
+            {/* Damage Recovery */}
+            <div className="bg-white">
+              <SectionHeader
+                icon={FaTools}
+                title="Damage Recovery"
+                subtitle="Default installment mode for recovering staff damages through commission payouts. Can be overridden per damage record."
+              />
+              <div className="p-5 space-y-4">
+                <div>
+                  <label className={labelCls}>Default recovery mode</label>
+                  <select
+                    className={inputCls}
+                    value={dmgDeductionMode}
+                    onChange={(e) => { setDmgDeductionMode(e.target.value); setDmgDeductionValue(""); setDirty(true); }}
+                    disabled={!canManage}
+                  >
+                    <option value="full">Full — deduct entire remaining balance at next payout</option>
+                    <option value="percent">Installment % — deduct a percentage of original damage each payout</option>
+                    <option value="fixed">Fixed amount — deduct a fixed Ksh amount each payout</option>
+                  </select>
+                </div>
+                {dmgDeductionMode === "percent" && (
+                  <div>
+                    <label className={labelCls}>Default deduction rate (%)</label>
+                    <input
+                      className={inputCls}
+                      type="number"
+                      min="1"
+                      max="100"
+                      step="1"
+                      value={dmgDeductionValue}
+                      onChange={(e) => { setDmgDeductionValue(e.target.value); setDirty(true); }}
+                      placeholder="e.g. 10"
+                      disabled={!canManage}
+                    />
+                    <p className="mt-1.5 text-[10px] text-slate-400">
+                      e.g. 10% of a Ksh 700 damage = Ksh 70 deducted per payout until fully recovered.
+                    </p>
+                  </div>
+                )}
+                {dmgDeductionMode === "fixed" && (
+                  <div>
+                    <label className={labelCls}>Default deduction amount (Ksh)</label>
+                    <input
+                      className={inputCls}
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={dmgDeductionValue}
+                      onChange={(e) => { setDmgDeductionValue(e.target.value); setDirty(true); }}
+                      placeholder="e.g. 50"
+                      disabled={!canManage}
+                    />
+                    <p className="mt-1.5 text-[10px] text-slate-400">
+                      Deducted per payout regardless of damage size. Final instalment auto-reduces to the remaining balance.
+                    </p>
+                  </div>
+                )}
+                {dmgDeductionMode === "full" && (
+                  <p className="text-[10px] text-slate-400">
+                    The entire outstanding balance of each damage is deducted at the next commission payout. This is the default behaviour.
+                  </p>
                 )}
               </div>
             </div>

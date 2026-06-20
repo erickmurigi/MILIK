@@ -16,6 +16,20 @@ const ic         = "h-7 border border-slate-300 bg-white px-2 text-xs text-slate
 const methods    = ["cash", "mpesa", "bank", "card", "other"];
 const PAGE_SIZE  = 30;
 
+// Mirror of backend computeDamageInstallment — used for payout modal preview
+const r2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
+const computeDmgInstallment = (d) => {
+  const remaining = r2(d.amount - (d.amountRecovered || 0));
+  if (remaining <= 0) return 0;
+  let inst;
+  switch (d.deductionMode) {
+    case "percent": inst = r2(d.amount * (Number(d.deductionValue) || 100) / 100); break;
+    case "fixed":   inst = r2(Number(d.deductionValue) || remaining); break;
+    default:        inst = remaining;
+  }
+  return r2(Math.min(inst, remaining));
+};
+
 const getMonthBounds = () => {
   const now   = new Date();
   const first = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -167,7 +181,7 @@ const CarWashCommissionPayouts = () => {
       setPendingSavings(Number(wallet?.savings?.pending || 0));
       const dmgList = normalizeListPayload(dmgRes, "damages");
       setPendingDamagesList(dmgList);
-      setPendingDamages(dmgList.reduce((s, d) => s + Number(d.amount || 0), 0));
+      setPendingDamages(dmgList.reduce((s, d) => r2(s + computeDmgInstallment(d)), 0));
     } catch (err) {
       console.error("[Payout] wallet/damages fetch failed:", err?.message);
     }
@@ -525,18 +539,26 @@ const CarWashCommissionPayouts = () => {
                     </div>
                     {pendingDamagesList.length > 0 && (
                       <div className="mx-3 mb-2 divide-y divide-red-100 rounded border border-red-200 bg-white text-[11px]">
-                        {pendingDamagesList.map((d) => (
-                          <div key={d._id} className="flex items-start justify-between gap-2 px-2.5 py-1.5">
-                            <div className="min-w-0">
-                              <span className="font-bold text-slate-800">{d.description || "—"}</span>
-                              {d.job?.jobNumber && (
-                                <span className="ml-1.5 font-mono text-[10px] text-slate-400">· {d.job.jobNumber}</span>
-                              )}
-                              <div className="text-[10px] text-slate-400">{fmtDate(d.damageDate || d.createdAt)}</div>
+                        {pendingDamagesList.map((d) => {
+                          const installment = computeDmgInstallment(d);
+                          const remaining   = r2(d.amount - (d.amountRecovered || 0));
+                          const isInstallment = installment < remaining - 0.005;
+                          return (
+                            <div key={d._id} className="flex items-start justify-between gap-2 px-2.5 py-1.5">
+                              <div className="min-w-0">
+                                <span className="font-bold text-slate-800">{d.description || "—"}</span>
+                                {d.job?.jobNumber && (
+                                  <span className="ml-1.5 font-mono text-[10px] text-slate-400">· {d.job.jobNumber}</span>
+                                )}
+                                <div className="text-[10px] text-slate-400">{fmtDate(d.damageDate || d.createdAt)}</div>
+                                {isInstallment && (
+                                  <div className="text-[10px] text-slate-400">{formatMoney(remaining)} balance · instalment</div>
+                                )}
+                              </div>
+                              <span className="flex-shrink-0 font-extrabold text-red-600">− {formatMoney(installment)}</span>
                             </div>
-                            <span className="flex-shrink-0 font-extrabold text-red-600">− {formatMoney(d.amount)}</span>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
