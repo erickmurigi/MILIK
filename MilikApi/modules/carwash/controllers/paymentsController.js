@@ -4,6 +4,7 @@ import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import CarWashJob from "../models/CarWashJob.js";
 import CarWashPayment from "../models/CarWashPayment.js";
 import CarWashCustomer from "../models/CarWashCustomer.js";
+import CarWashCustomerCredit from "../models/CarWashCustomerCredit.js";
 import { currentUserId, escapeRegex, netJobPrice, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { accrueCommissionForJob, handleJobPaymentStatusAfterPaymentChange, markJobCommissionsPayable } from "../services/commissionService.js";
 import { awardLoyaltyStamp, revokeStampForJob, sendPaymentConfirmationSms } from "./loyaltyController.js";
@@ -15,8 +16,10 @@ import { getRawMpesaPaybillConfigs, getPrimaryMpesaPaybillConfig } from "../../.
 import CarWashBranch from "../models/CarWashBranch.js";
 import { sendAdHocSms } from "../../../services/communicationService.js";
 import { postCarWashPaymentLedger, reverseCarWashPaymentLedger } from "../services/carwashAccountingService.js";
+import { resolveCarWashSmsBody } from "../services/carwashSmsService.js";
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
+const AMOUNT_TOLERANCE = 0.01; // KES 0.01 tolerance for all amount comparisons
 const PAYMENT_METHODS = new Set(["cash", "mpesa", "bank", "card", "other"]);
 const RECONCILIATION_STATUSES = new Set(["pending", "reconciled", "flagged"]);
 
@@ -127,7 +130,7 @@ export const recordPayment = async (req, res, next) => {
         const jobDiscount = Number(job.discountAmount || 0);
         const cap         = round2(Number(job.price || 0) * maxPct / 100);
         const headroom    = round2(Math.max(0, cap - jobDiscount));
-        if (discountAmount > headroom + 0.009) {
+        if (discountAmount > headroom + AMOUNT_TOLERANCE) {
           return next(createError(400, `Write-off cannot exceed KES ${headroom} — job already has a KES ${jobDiscount} discount applied (${maxPct}% cap)`));
         }
       }
@@ -141,10 +144,19 @@ export const recordPayment = async (req, res, next) => {
     const alreadyPaid = Number(paidRows?.[0]?.paid || 0);
     const outstanding = Math.max(netJobPrice(job) - alreadyPaid, 0);
     if (outstanding <= 0) return next(createError(400, "Car Wash job is already fully paid"));
-    if (effectiveAmount > outstanding + 0.01) return next(createError(400, "Payment + discount exceeds the outstanding Car Wash job balance"));
+    // Credit amount = excess paid above what is owed (overpayment)
+    const creditAmount = effectiveAmount > outstanding + AMOUNT_TOLERANCE ? round2(effectiveAmount - outstanding) : 0;
 
     const method = String(req.body.method || "cash").trim().toLowerCase();
     if (!PAYMENT_METHODS.has(method)) return next(createError(400, "Invalid Car Wash payment method"));
+
+    // Idempotency: reject duplicate M-Pesa transaction codes
+    const mpesaRef = method === "mpesa" ? String(req.body.reference || "").trim() : "";
+    if (mpesaRef) {
+      const existing = await CarWashPayment.findOne({ business, method: "mpesa", reference: mpesaRef }).lean();
+      if (existing) return next(createError(409, `M-Pesa code ${mpesaRef} has already been recorded`));
+    }
+
     const cashbookAccount = await resolveCashbookAccount(business, req.body.cashbookAccount);
 
     // For M-Pesa manual entries the staff can record the payer's number.
@@ -209,8 +221,46 @@ export const recordPayment = async (req, res, next) => {
       const cashMasked = !receivedFromPhone ? (updatedJob.maskedMsisdn || null) : null;
       await sendPaymentConfirmationSms({ business, job: updatedJob, amount, overridePhone: receivedFromPhone || null, maskedMsisdn: cashMasked, loyaltySmsBody });
     })().catch((err) => console.error("[CW Payment] SMS failed job=%s: %s", updatedJob.jobNumber, err?.message || err));
-    await postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbookAccount, job: updatedJob, userId });
-    res.status(201).json({ success: true, data: payment, payment, job: updatedJob, message: "Car Wash payment recorded" });
+    await postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbookAccount, job: updatedJob, userId, creditAmount });
+
+    // If customer overpaid, create the credit document synchronously so ledger + document stay in sync.
+    // SMS notification is still fire-and-forget (it cannot block the payment response).
+    let creditDoc = null;
+    if (creditAmount > 0 && job.plateNumber) {
+      try {
+        const customer = await CarWashCustomer.findOne({ business, plates: job.plateNumber }).lean();
+        creditDoc = await CarWashCustomerCredit.create({
+          business,
+          customer: customer?._id || null,
+          plates: customer?.plates || [job.plateNumber],
+          amount: creditAmount,
+          status: 'active',
+          sourceJob: job._id,
+          sourcePayment: payment._id,
+          notes: `Overpayment on Job #${updatedJob.jobNumber || ""}`,
+          createdBy: userId,
+          updatedBy: userId,
+        });
+        // SMS is fire-and-forget; failure here must not roll back the payment
+        const smsPhone = receivedFromPhone || job.phone || customer?.phone || null;
+        if (smsPhone) {
+          resolveCarWashSmsBody(business, 'carwash_credit_created', {
+            customerName: customer?.name || job.customerName || 'Valued Customer',
+            plate: job.plateNumber,
+            creditAmount: creditAmount.toLocaleString('en-KE', { minimumFractionDigits: 2 }),
+          }).then((body) => {
+            if (body) sendAdHocSms({ businessId: business, phone: smsPhone, body, templateKey: 'carwash_credit_created' }).catch(() => {});
+          }).catch(() => {});
+        }
+      } catch (err) {
+        // Credit doc creation failed — ledger entry exists but no credit doc.
+        // Log with enough detail to allow manual reconciliation.
+        console.error('[CW Credit] RECONCILIATION NEEDED — ledger entry posted but credit doc creation failed. job=%s creditAmount=%s error=%s',
+          updatedJob.jobNumber, creditAmount, err?.message || err);
+      }
+    }
+
+    res.status(201).json({ success: true, data: payment, payment, job: updatedJob, creditCreated: !!creditDoc, creditAmount, message: "Car Wash payment recorded" });
   } catch (error) {
     next(error);
   }
@@ -367,7 +417,7 @@ export const initiateStkPush = async (req, res, next) => {
     const alreadyPaid = Number(paidRows?.[0]?.paid || 0);
     const stkAmount = Math.ceil(Number(amount));
     const outstandingForStkCheck = round2(Math.max(0, netJobPrice(job) - alreadyPaid));
-    if (stkAmount > outstandingForStkCheck + 0.009) {
+    if (stkAmount > outstandingForStkCheck + AMOUNT_TOLERANCE) {
       return next(createError(400, `Amount KES ${stkAmount} exceeds outstanding balance of KES ${outstandingForStkCheck}`));
     }
 

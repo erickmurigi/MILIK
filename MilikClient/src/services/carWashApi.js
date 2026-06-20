@@ -133,6 +133,15 @@ export const carWashApi = {
   sendCustomerSms: async (customerId, payload) => unwrap(await adminRequests.post(`/carwash/loyalty/customers/${customerId}/sms`, payload)),
   sendPaymentSms: async (paymentId, payload) => unwrap(await adminRequests.post(`/carwash/payments/${paymentId}/sms`, payload)),
 
+  // ─── Customer credits (overpayment / prepayment balances) ───────────────
+  getCreditByPlate: async (plate) => unwrap(await adminRequests.get(`/carwash/credits/plate/${encodeURIComponent(plate)}`)),
+  listCustomerCredits: async (params = {}) => unwrap(await adminRequests.get('/carwash/credits', { params })),
+  applyCredit: async (id, jobId) => unwrap(await adminRequests.post(`/carwash/credits/${id}/apply`, { jobId })),
+  writeOffCredit: async (id) => unwrap(await adminRequests.post(`/carwash/credits/${id}/write-off`)),
+  writeOffCredits: async (ids) => unwrap(await adminRequests.post('/carwash/credits/write-off', { ids })),
+  undoWriteOff: async (id) => unwrap(await adminRequests.post(`/carwash/credits/${id}/undo-write-off`)),
+  refundCredit: async (id, payload) => unwrap(await adminRequests.post(`/carwash/credits/${id}/refund`, payload)),
+
   // ─── Credit accounts ─────────────────────────────────────────────────────
   seedAccounts: async () => unwrap(await adminRequests.post("/carwash/accounts/setup/seed-accounts")),
   listCreditAccounts: async (params = {}) => unwrap(await adminRequests.get("/carwash/accounts", { params })),

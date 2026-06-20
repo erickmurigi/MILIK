@@ -84,6 +84,18 @@ export const CW_SMS_TEMPLATE_DEFAULTS = [
     ],
   },
   {
+    key: "carwash_credit_created",
+    name: "Customer Credit Created",
+    description: "Sent when a customer overpays and a credit balance is added to their account.",
+    enabled: true,
+    messageBody: "Hi {{customerName}}, KES {{creditAmount}} credit has been added to your account for {{plate}}. It will be applied on your next visit or you can request a refund. Thank you.",
+    placeholders: [
+      { token: "{{customerName}}",  hint: "Customer name" },
+      { token: "{{plate}}",         hint: "Vehicle plate number" },
+      { token: "{{creditAmount}}",  hint: "Credit amount (formatted)" },
+    ],
+  },
+  {
     key: "carwash_topup_confirmed",
     name: "Prepaid Wallet Top-Up Confirmation",
     description: "Sent when an M-Pesa payment is automatically credited to a prepaid wallet (no open job found but plate matched a prepaid account).",

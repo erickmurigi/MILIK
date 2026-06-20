@@ -24,6 +24,8 @@ const CW_ACCOUNT_TEMPLATES = {
   "2160": { name: "Car Wash Staff Commissions Payable",   type: "liability", group: "liabilities", subGroup: "Car Wash Liabilities" },
   "2161": { name: "Car Wash Staff Savings Payable",       type: "liability", group: "liabilities", subGroup: "Car Wash Liabilities" },
   "4401": { name: "Car Wash Staff Damage Recovery",       type: "income",    group: "income",      subGroup: "Car Wash Income" },
+  "2162": { name: "Car Wash Customer Credit Deposits",    type: "liability", group: "liabilities", subGroup: "Car Wash Liabilities" },
+  "4402": { name: "Car Wash Unclaimed Customer Credits",  type: "income",    group: "income",      subGroup: "Car Wash Income" },
 };
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
@@ -156,7 +158,8 @@ export const reverseCarWashTopupLedger = async ({ businessId, topupId, reason, r
  * amount = cash actually received (excludes any discount write-off).
  * Never throws — logs on failure so the caller is never blocked.
  */
-export const postCarWashPaymentLedger = async ({ businessId, payment, cashbookAccountId, job, userId }) => {
+// creditAmount — optional excess paid above the job price; split into liability instead of revenue
+export const postCarWashPaymentLedger = async ({ businessId, payment, cashbookAccountId, job, userId, creditAmount = 0 }) => {
   if (!cashbookAccountId) return;
   const amount = round2(Number(payment.amount || 0));
   if (amount <= 0) return;
@@ -171,8 +174,13 @@ export const postCarWashPaymentLedger = async ({ businessId, payment, cashbookAc
     });
     if (existingCount > 0) return;
 
-    const revenueAccount = await resolveCarWashAccount(businessId, "4400");
-    // Resolve a valid actor — userId may be null for M-Pesa callbacks (no authenticated user)
+    const credit = round2(Math.max(0, Number(creditAmount || 0)));
+    const revenueAmount = round2(amount - credit);
+
+    const accountsToResolve = [resolveCarWashAccount(businessId, "4400")];
+    if (credit > 0) accountsToResolve.push(resolveCarWashAccount(businessId, "2162"));
+    const [revenueAccount, creditLiabilityAccount] = await Promise.all(accountsToResolve);
+
     const actorId = userId && mongoose.Types.ObjectId.isValid(String(userId))
       ? userId
       : await resolveAuditActorUserId({ req: null, businessId });
@@ -185,7 +193,6 @@ export const postCarWashPaymentLedger = async ({ businessId, payment, cashbookAc
       statementPeriodStart: start,
       statementPeriodEnd: end,
       category: "CARWASH_PAYMENT",
-      amount,
       payer: job?.customerName || "customer",
       receiver: "n/a",
       createdBy: actorId,
@@ -193,19 +200,25 @@ export const postCarWashPaymentLedger = async ({ businessId, payment, cashbookAc
       allowUnscoped: true,
     };
 
-    await postEntry({
-      ...base,
-      accountId: cashbookAccountId,
-      direction: "debit",
-      notes: `CW payment received – Job #${job?.jobNumber || ""} (${payment.method || ""})`,
-    });
-    await postEntry({
-      ...base,
-      accountId: revenueAccount._id,
-      direction: "credit",
-      notes: `CW service income – Job #${job?.jobNumber || ""}`,
-    });
-    await aggregateChartOfAccountBalances(businessId, [String(cashbookAccountId), String(revenueAccount._id)]);
+    // Dr Cashbook — full cash received
+    await postEntry({ ...base, accountId: cashbookAccountId, amount, direction: "debit",
+      notes: `CW payment received – Job #${job?.jobNumber || ""} (${payment.method || ""})` });
+
+    // Cr Revenue — earned portion only
+    if (revenueAmount > 0) {
+      await postEntry({ ...base, accountId: revenueAccount._id, amount: revenueAmount, direction: "credit",
+        notes: `CW service income – Job #${job?.jobNumber || ""}` });
+    }
+
+    // Cr Customer Credit Liability — excess held for customer
+    if (credit > 0 && creditLiabilityAccount) {
+      await postEntry({ ...base, accountId: creditLiabilityAccount._id, amount: credit, direction: "credit",
+        notes: `CW customer credit created – Job #${job?.jobNumber || ""}` });
+    }
+
+    const touchedIds = [String(cashbookAccountId), String(revenueAccount._id)];
+    if (creditLiabilityAccount) touchedIds.push(String(creditLiabilityAccount._id));
+    await aggregateChartOfAccountBalances(businessId, touchedIds);
   } catch (err) {
     console.error("[CW Accounting] Payment ledger error job=%s: %s", job?.jobNumber || payment._id, err?.message || err);
   }
@@ -1150,3 +1163,135 @@ const cwExpenseCategoryCode = (category = "") => {
 
 export const resolveExpenseAccountForCategory = (businessId, category = "") =>
   resolveCarWashAccount(businessId, cwExpenseCategoryCode(category));
+
+// ─── Customer credit applied to a job: Dr Liability (2162) / Cr Revenue (4400) ─
+export const postCarWashCreditAppliedLedger = async ({ businessId, credit, appliedToJob, userId }) => {
+  const amount = round2(Number(credit.amount || 0));
+  if (amount <= 0) return;
+  // Dr 2162 (Customer Credit Liability) / Cr 4400 (Service Revenue)
+  // Recognises revenue at the point the customer uses their credit balance.
+  const [creditLiabilityAccount, revenueAccount] = await Promise.all([
+    resolveCarWashAccount(businessId, "2162"),
+    resolveCarWashAccount(businessId, "4400"),
+  ]);
+  const actorId = userId && mongoose.Types.ObjectId.isValid(String(userId))
+    ? userId : await resolveAuditActorUserId({ req: null, businessId });
+  const { start, end } = dayRange(new Date());
+  const base = {
+    business: businessId,
+    sourceTransactionType: "carwash_credit_applied",
+    sourceTransactionId: String(credit._id),
+    transactionDate: new Date(),
+    statementPeriodStart: start,
+    statementPeriodEnd: end,
+    category: "CARWASH_CREDIT_APPLIED",
+    amount,
+    payer: "customer_credit",
+    receiver: "n/a",
+    createdBy: actorId,
+    approvedBy: actorId,
+    allowUnscoped: true,
+  };
+  await postEntry({ ...base, accountId: creditLiabilityAccount._id, direction: "debit",
+    notes: `CW customer credit applied – Job #${appliedToJob?.jobNumber || ""}` });
+  await postEntry({ ...base, accountId: revenueAccount._id, direction: "credit",
+    notes: `CW service income (credit applied) – Job #${appliedToJob?.jobNumber || ""}` });
+  await aggregateChartOfAccountBalances(businessId, [String(creditLiabilityAccount._id), String(revenueAccount._id)]);
+};
+
+// ─── Credit cash refund: Dr Liability (2162) / Cr Cashbook ──────────────────
+export const postCarWashCreditRefundLedger = async ({ businessId, credit, cashbookAccountId, userId }) => {
+  const amount = round2(Number(credit.amount || 0));
+  if (amount <= 0) return;
+  // Dr 2162 (Customer Credit Liability) — liability extinguished
+  // Cr Cashbook                         — cash physically paid out to customer
+  const [creditLiabilityAccount, cashbookAccount] = await Promise.all([
+    resolveCarWashAccount(businessId, "2162"),
+    ChartOfAccount.findById(cashbookAccountId).lean(),
+  ]);
+  if (!cashbookAccount) throw new Error(`Cashbook account ${cashbookAccountId} not found`);
+  const actorId = userId && mongoose.Types.ObjectId.isValid(String(userId))
+    ? userId : await resolveAuditActorUserId({ req: null, businessId });
+  const { start, end } = dayRange(new Date());
+  const base = {
+    business: businessId,
+    sourceTransactionType: "carwash_credit_refund",
+    sourceTransactionId: String(credit._id),
+    transactionDate: new Date(),
+    statementPeriodStart: start,
+    statementPeriodEnd: end,
+    category: "CARWASH_CREDIT_REFUND",
+    amount,
+    payer: "n/a",
+    receiver: "customer_refund",
+    createdBy: actorId,
+    approvedBy: actorId,
+    allowUnscoped: true,
+  };
+  await postEntry({ ...base, accountId: creditLiabilityAccount._id, direction: "debit",
+    notes: `CW customer credit refunded – cash payout` });
+  await postEntry({ ...base, accountId: cashbookAccount._id, direction: "credit",
+    notes: `CW customer credit cash refund` });
+  await aggregateChartOfAccountBalances(businessId, [String(creditLiabilityAccount._id), String(cashbookAccount._id)]);
+};
+
+// ─── Credit write-off: Dr Liability (2162) / Cr Unclaimed Income (4402) ────────
+// Throws on failure — callers must NOT update document status if this rejects.
+export const postCarWashCreditWriteOffLedger = async ({ businessId, credit, userId }) => {
+  const amount = round2(Number(credit.amount || 0));
+  if (amount <= 0) return [];
+  const [creditLiabilityAccount, unclaimedIncomeAccount] = await Promise.all([
+    resolveCarWashAccount(businessId, "2162"),
+    resolveCarWashAccount(businessId, "4402"),
+  ]);
+  const actorId = userId && mongoose.Types.ObjectId.isValid(String(userId))
+    ? userId : await resolveAuditActorUserId({ req: null, businessId });
+  const { start, end } = dayRange(new Date());
+  const base = {
+    business: businessId,
+    sourceTransactionType: "carwash_credit_writeoff",
+    sourceTransactionId: String(credit._id),
+    transactionDate: new Date(),
+    statementPeriodStart: start,
+    statementPeriodEnd: end,
+    category: "CARWASH_CREDIT_WRITEOFF",
+    amount,
+    payer: "n/a",
+    receiver: "n/a",
+    createdBy: actorId,
+    approvedBy: actorId,
+    allowUnscoped: true,
+  };
+  const [debitLeg, creditLeg] = await Promise.all([
+    postEntry({ ...base, accountId: creditLiabilityAccount._id, direction: "debit",
+      notes: `CW customer credit written off – unclaimed` }),
+    postEntry({ ...base, accountId: unclaimedIncomeAccount._id, direction: "credit",
+      notes: `CW unclaimed customer credit income` }),
+  ]);
+  await aggregateChartOfAccountBalances(businessId, [String(creditLiabilityAccount._id), String(unclaimedIncomeAccount._id)]);
+  return [debitLeg._id, creditLeg._id];
+};
+
+// ─── Reverse a credit write-off: Dr Unclaimed Income (4402) / Cr Liability (2162) ─
+// Throws on failure — callers must NOT restore document status if this rejects.
+export const reverseCarWashCreditWriteOffLedger = async ({ businessId, credit, req = null }) => {
+  if (!credit.writeOffLedgerEntries?.length) {
+    throw new Error("No write-off ledger entries recorded for this credit — cannot reverse");
+  }
+  const actorId = await resolveAuditActorUserId({ req, businessId });
+  const entries = await FinancialLedgerEntry.find({
+    _id: { $in: credit.writeOffLedgerEntries },
+    business: new mongoose.Types.ObjectId(String(businessId)),
+    status: { $ne: "reversed" },
+  }).lean();
+  if (!entries.length) {
+    throw new Error("Write-off ledger entries already reversed or not found");
+  }
+  const touchedIds = new Set();
+  await Promise.all(entries.map(async (entry) => {
+    const { originalEntry, reversalEntry } = await reverseCwEntry(entry, actorId, `CW credit write-off reversed — customer claimed`);
+    if (originalEntry?.accountId) touchedIds.add(String(originalEntry.accountId));
+    if (reversalEntry?.accountId)  touchedIds.add(String(reversalEntry.accountId));
+  }));
+  if (touchedIds.size) await aggregateChartOfAccountBalances(businessId, [...touchedIds]);
+};

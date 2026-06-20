@@ -670,6 +670,8 @@ const CarWashJobs = () => {
   });
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentJobPaidSoFar, setPaymentJobPaidSoFar] = useState(0);
+  const [plateCredit, setPlateCredit] = useState(null); // { creditBalance, credits, customer }
+  const [applyCredit, setApplyCredit] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [expandedIds, setExpandedIds] = useState([]);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -790,6 +792,8 @@ const CarWashJobs = () => {
     setPaymentForm(emptyPaymentForm);
     setModalUnpaidJobs([]);
     setPaymentJobPaidSoFar(0);
+    setPlateCredit(null);
+    setApplyCredit(false);
   };
 
   // Auto-save payment form draft (non-computed fields only)
@@ -822,11 +826,15 @@ const CarWashJobs = () => {
     });
     setModalUnpaidJobs(jobsRef.current.filter((j) => j.paymentStatus !== "paid"));
     setShowPaymentModal(true);
+    setPlateCredit(null);
+    setApplyCredit(false);
     try {
       const needsPayments = job?._id && !cachedList;
-      const [jobsPayload, pmtsPayload] = await Promise.all([
+      const plate = job?.plateNumber;
+      const [jobsPayload, pmtsPayload, creditPayload] = await Promise.all([
         carWashApi.listJobs({ limit: 100 }),
         needsPayments ? carWashApi.listPayments({ job: job._id, limit: 20 }) : Promise.resolve(null),
+        plate ? carWashApi.getCreditByPlate(plate).catch(() => null) : Promise.resolve(null),
       ]);
       setModalUnpaidJobs(normalizeListPayload(jobsPayload, "jobs").filter((j) => j.paymentStatus !== "paid"));
       if (pmtsPayload && job) {
@@ -835,6 +843,9 @@ const CarWashJobs = () => {
         const precise = Math.max(0, Number(job.price || 0) - Number(job.discountAmount || 0) - paid);
         setPaymentJobPaidSoFar(paid);
         setPaymentForm((prev) => prev.job === job._id ? { ...prev, amount: String(precise) } : prev);
+      }
+      if (creditPayload?.creditBalance > 0.01) {
+        setPlateCredit(creditPayload);
       }
     } catch { /* modal already seeded from page jobs above */ }
   }, []);
@@ -848,11 +859,25 @@ const CarWashJobs = () => {
     }
     setSubmittingPayment(true);
     try {
-      await carWashApi.recordPayment({
+      const res = await carWashApi.recordPayment({
         ...paymentForm,
         amount: Number(paymentForm.amount || 0),
         discountAmount: Number(paymentForm.discountAmount || 0),
       });
+      // Apply ALL active credits if cashier toggled it (customer must have asked)
+      if (applyCredit && plateCredit?.credits?.length) {
+        const results = await Promise.allSettled(
+          plateCredit.credits.map((cr) => carWashApi.applyCredit(cr._id, paymentForm.job))
+        );
+        const failed = results.filter((r) => r.status === "rejected").length;
+        if (failed === results.length) {
+          toast.warn("Payment recorded but credit application failed — apply manually from Credit Balances");
+        } else {
+          toast.success(`Credit applied (${results.length - failed}/${results.length})`);
+        }
+      } else if (res?.creditCreated && res?.creditAmount > 0) {
+        toast.info(`KES ${res.creditAmount.toLocaleString()} credit added to customer account`);
+      }
       setJobPayments((prev) => { const n = { ...prev }; delete n[paymentForm.job]; return n; });
       closePaymentModal();
       await loadJobsRef.current?.();
@@ -1402,6 +1427,30 @@ ${discount > 0 ? `<tr class="dis"><td>Discount</td><td class="amt">- ${fmtAmt(di
                   {formatMoney(outstandingForModal)}
                 </p>
               </div>
+            </div>
+          )}
+
+          {/* Customer credit notice — only shown when the plate has an active credit */}
+          {plateCredit && plateCredit.creditBalance > 0.01 && (
+            <div className="mb-3 rounded border border-emerald-300 bg-emerald-50 px-3 py-2.5 flex items-start gap-2.5 text-xs">
+              <span className="text-emerald-600 mt-0.5 flex-shrink-0">💰</span>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-emerald-800">
+                  {plateCredit.customer?.name || "This customer"} has a credit of {formatMoney(plateCredit.creditBalance)}
+                </p>
+                <p className="text-[10px] text-emerald-700 mt-0.5">
+                  Only apply if the customer asks. The credit will reduce what they owe today.
+                </p>
+              </div>
+              <label className="flex items-center gap-1.5 flex-shrink-0 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={applyCredit}
+                  onChange={(e) => setApplyCredit(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500"
+                />
+                <span className="text-[11px] font-semibold text-emerald-700">Apply credit</span>
+              </label>
             </div>
           )}
           <form id="carwash-payment-form" onSubmit={recordPayment} className="grid gap-3 md:grid-cols-2">

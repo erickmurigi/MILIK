@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   FaCar, FaCarSide, FaClock, FaCommentDots, FaEdit,
   FaExclamationTriangle, FaIdCard, FaMobileAlt, FaMoneyBillWave,
-  FaPhone, FaPrint, FaRedoAlt, FaSearch, FaTimes, FaUser,
+  FaPhone, FaPrint, FaRedoAlt, FaSearch, FaTimes, FaUser, FaPiggyBank,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
@@ -242,12 +242,13 @@ const ACTN_COLORS = {
   blue:  "border-slate-200 text-slate-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50",
   red:   "border-red-200 text-red-400 hover:border-red-400 hover:text-red-700 hover:bg-red-50",
 };
-const ActionBtn = React.memo(({ icon: Icon, title, onClick, color = "slate" }) => (
+const ActionBtn = React.memo(({ icon: Icon, title, onClick, color = "slate", disabled = false }) => (
   <button
     type="button"
     title={title}
     onClick={onClick}
-    className={`h-6 w-6 flex-shrink-0 flex items-center justify-center rounded border text-[10px] transition-colors ${ACTN_COLORS[color] || ACTN_COLORS.slate}`}
+    disabled={disabled}
+    className={`h-6 w-6 flex-shrink-0 flex items-center justify-center rounded border text-[10px] transition-colors ${disabled ? "border-slate-200 bg-slate-100 text-slate-300 cursor-not-allowed" : ACTN_COLORS[color] || ACTN_COLORS.slate}`}
   >
     <Icon size={10} />
   </button>
@@ -264,6 +265,7 @@ export default function CarWashCustomers() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filterOutstanding, setFilterOutstanding] = useState(false);
+  const [filterCredit, setFilterCredit] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const searchRef = useRef(null);
@@ -286,17 +288,16 @@ export default function CarWashCustomers() {
   const [paying, setPaying] = useState(false);
   const [stkPushing, setStkPushing] = useState(false);
 
-  const customerQueryKey = ["cw-customers", page, limit, debouncedSearch];
+  const customerQueryKey = ["cw-customers", page, limit, debouncedSearch, filterOutstanding, filterCredit];
 
   const { data: customersData, isLoading: loading, error } = useQuery({
     queryKey: customerQueryKey,
-    queryFn: async () => {
-      try {
-        return await carWashApi.listCustomersEnriched({ page, limit, search: debouncedSearch });
-      } catch {
-        return carWashApi.listLoyaltyCustomers({ page, limit, search: debouncedSearch });
-      }
-    },
+    queryFn: () => carWashApi.listCustomersEnriched({
+      page, limit,
+      search: debouncedSearch,
+      ...(filterOutstanding && { hasOutstanding: 'true' }),
+      ...(filterCredit && { hasCredit: 'true' }),
+    }),
     placeholderData: (prev) => prev,
     staleTime: 30_000,
   });
@@ -308,6 +309,7 @@ export default function CarWashCustomers() {
   }, [customersData]);
   const total = Array.isArray(customersData) ? customersData.length : (customersData?.total ?? customers.length);
   const loyaltyProgram = Array.isArray(customersData) ? null : (customersData?.loyaltyProgram ?? null);
+  const globalStats = !Array.isArray(customersData) ? (customersData?.globalStats ?? null) : null;
 
   const { data: cashbooksRaw } = useQuery({
     queryKey: ["cw-customer-cashbooks"],
@@ -325,20 +327,29 @@ export default function CarWashCustomers() {
     }, 350);
   };
 
-  const displayed = useMemo(() => {
-    if (!filterOutstanding) return customers;
-    return customers.filter((c) => c.outstanding > 0.01);
-  }, [customers, filterOutstanding]);
+  // Filtering is server-side — displayed is just the returned page
+  const displayed = customers;
 
   const summaryStats = useMemo(() => {
-    let withOutstanding = 0, totalOutstanding = 0, withCredit = 0, withLoyalty = 0;
+    // Page-local counts (for "X on this page have outstanding")
+    let withOutstanding = 0, withCredit = 0, withLoyalty = 0;
+    let pageOutstanding = 0, pageCredit = 0;
     for (const c of displayed) {
-      if (c.outstanding > 0.01) { withOutstanding++; totalOutstanding += c.outstanding; }
-      if (c.creditAccount) withCredit++;
-      if (c.loyaltyCard)   withLoyalty++;
+      if (c.outstanding > 0.01) { withOutstanding++; pageOutstanding += c.outstanding; }
+      if (c.creditBalance > 0.01) { withCredit++; pageCredit += c.creditBalance; }
+      if (c.loyaltyCard) withLoyalty++;
     }
-    return { withOutstanding, totalOutstanding, withCredit, withLoyalty };
-  }, [displayed]);
+    // Prefer server-returned global totals; fall back to page totals while loading
+    return {
+      withOutstanding,
+      totalOutstanding: globalStats?.totalOutstanding ?? pageOutstanding,
+      withCredit,
+      totalCredit:      globalStats?.totalCreditBalance ?? pageCredit,
+      creditCount:      globalStats?.creditCount ?? withCredit,
+      withLoyalty,
+      isGlobal: globalStats != null,
+    };
+  }, [displayed, globalStats]);
 
   const pages = Math.max(Math.ceil(total / limit), 1);
 
@@ -413,8 +424,9 @@ export default function CarWashCustomers() {
 
   const viewJobs = useCallback((e, c) => {
     e.stopPropagation();
-    const plate = (c.plates || [])[0] || "";
-    navigate(plate ? `/carwash/jobs?plate=${encodeURIComponent(plate)}` : "/carwash/jobs");
+    // Use first plate as primary search key; multi-plate jobs still findable via job list search
+    const plate = (c.plates || [])[0] || c.name || "";
+    navigate(plate ? `/carwash/jobs?search=${encodeURIComponent(plate)}` : "/carwash/jobs");
   }, [navigate]);
 
   const toggleExpand = useCallback((id) => {
@@ -426,16 +438,31 @@ export default function CarWashCustomers() {
     setPayTarget(c);
     setPayJobs([]);
     setPayForm({ job: "", amount: "", method: "cash", cashbookAccount: cashbooks[0]?._id || "", paymentDate: todayISO(), reference: "", phone: c.phone || "" });
+    if (!(c.plates || []).length) return; // no plates — nothing to settle
     setPayJobsLoading(true);
     try {
-      const plate = (c.plates || [])[0] || "";
-      const res = await carWashApi.listJobs({ search: plate || c.name, limit: 100 });
-      const all = normalizeListPayload(res, "jobs");
+      // Search by ALL plates so multi-plate customers get complete unpaid job list
+      const plates = (c.plates || []);
+      const searches = await Promise.all(
+        plates.map((plate) => carWashApi.listJobs({ search: plate, limit: 50 }).then((r) => normalizeListPayload(r, "jobs")).catch(() => []))
+      );
+      const seen = new Set();
+      const all = searches.flat().filter((j) => { if (seen.has(j._id)) return false; seen.add(j._id); return true; });
       const unpaid = all.filter((j) => j.paymentStatus !== "paid");
       setPayJobs(unpaid);
       if (unpaid.length === 1) {
         const j = unpaid[0];
-        const outstanding = Math.max(0, Number(j.price || 0) - Number(j.discountAmount || 0));
+        const charged = Math.max(0, Number(j.price || 0) - Number(j.discountAmount || 0));
+        let outstanding = charged;
+        if (j.paymentStatus === "partial") {
+          // Fetch actual payment records to compute the real remaining balance
+          try {
+            const pmtsRes = await carWashApi.listPayments({ job: j._id, limit: 50 });
+            const pmtList = normalizeListPayload(pmtsRes, "payments");
+            const paid = pmtList.reduce((s, p) => s + Number(p.amount || 0) + Number(p.discountAmount || 0), 0);
+            outstanding = Math.max(0, charged - paid);
+          } catch { /* leave outstanding = full charged price */ }
+        }
         setPayForm((f) => ({ ...f, job: j._id, amount: String(outstanding) }));
       }
     } catch (err) {
@@ -505,7 +532,7 @@ export default function CarWashCustomers() {
               {/* Outstanding filter toggle */}
               <button
                 type="button"
-                onClick={() => setFilterOutstanding((v) => !v)}
+                onClick={() => { setFilterOutstanding((v) => !v); setPage(1); }}
                 className={`flex items-center gap-1 h-7 rounded border px-2 text-xs font-semibold transition-colors ${
                   filterOutstanding
                     ? "border-red-200 bg-red-50 text-red-700"
@@ -515,6 +542,20 @@ export default function CarWashCustomers() {
                 <FaExclamationTriangle size={9} />
                 <span className="hidden sm:inline">Outstanding only</span>
                 <span className="sm:hidden">Unpaid</span>
+              </button>
+
+              {/* Credit balance filter toggle */}
+              <button
+                type="button"
+                onClick={() => { setFilterCredit((v) => !v); setPage(1); }}
+                className={`flex items-center gap-1 h-7 rounded border px-2 text-xs font-semibold transition-colors ${
+                  filterCredit
+                    ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+                    : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                <FaPiggyBank size={9} />
+                <span className="hidden sm:inline">With credit</span>
               </button>
 
               {/* Opening Balances */}
@@ -566,14 +607,21 @@ export default function CarWashCustomers() {
           {/* Summary strip */}
           <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
             <span className="font-semibold text-slate-700">{total} customer{total !== 1 ? "s" : ""}</span>
-            {summaryStats.withOutstanding > 0 && (
+            {summaryStats.totalOutstanding > 0.01 && (
               <span className="flex items-center gap-1 text-red-600">
                 <FaExclamationTriangle size={8} />
-                {summaryStats.withOutstanding} with outstanding · <strong>{fmt(summaryStats.totalOutstanding)}</strong>
+                <strong>{fmt(summaryStats.totalOutstanding)}</strong> outstanding{summaryStats.isGlobal ? " (all)" : ""}
               </span>
             )}
-            {summaryStats.withCredit > 0 && (
-              <span className="text-purple-600">{summaryStats.withCredit} credit account{summaryStats.withCredit !== 1 ? "s" : ""}</span>
+            {summaryStats.totalCredit > 0.01 && (
+              <button
+                type="button"
+                onClick={() => navigate("/carwash/customers/credit-balances")}
+                className="flex items-center gap-1 text-emerald-700 hover:underline"
+              >
+                <FaPiggyBank size={8} />
+                <strong>{fmt(summaryStats.totalCredit)}</strong> credit{summaryStats.isGlobal ? " (all)" : ""}
+              </button>
             )}
             {summaryStats.withLoyalty > 0 && (
               <span className="text-amber-600">{summaryStats.withLoyalty} loyalty member{summaryStats.withLoyalty !== 1 ? "s" : ""}</span>
@@ -597,11 +645,13 @@ export default function CarWashCustomers() {
             ) : displayed.map((c) => {
               const isExpanded = expandedId === String(c._id);
               const hasOutstanding = c.outstanding > 0.01;
+              const hasCreditBal = (c.creditBalance || 0) > 0.01;
+              const hasPlates = (c.plates || []).length > 0;
               const card = c.loyaltyCard;
               const acc = c.creditAccount;
               return (
-                <div key={String(c._id)} className={`p-3 space-y-2${hasOutstanding ? " border-l-[3px] border-red-400" : ""}`}>
-                  {/* Row top: name + outstanding */}
+                <div key={String(c._id)} className={`p-3 space-y-2${hasOutstanding ? " border-l-[3px] border-red-400" : hasCreditBal ? " border-l-[3px] border-emerald-400" : ""}`}>
+                  {/* Row top: name + outstanding / credit */}
                   <div
                     className="flex items-start justify-between gap-2 cursor-pointer"
                     onClick={() => toggleExpand(String(c._id))}
@@ -614,6 +664,16 @@ export default function CarWashCustomers() {
                       {hasOutstanding && (
                         <span className="text-xs font-bold text-red-600">{fmt(c.outstanding)}</span>
                       )}
+                      {hasCreditBal && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); navigate("/carwash/customers/credit-balances"); }}
+                          className="inline-flex items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-200"
+                          title="Credit balance — click to manage"
+                        >
+                          <FaPiggyBank size={8} />{fmt(c.creditBalance)}
+                        </button>
+                      )}
                       <span className="text-slate-400 text-[10px]">{isExpanded ? "▾" : "▸"}</span>
                     </div>
                   </div>
@@ -623,6 +683,7 @@ export default function CarWashCustomers() {
                     {(c.plates || []).map((p) => (
                       <span key={p} className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[9px] font-mono font-bold text-slate-700">{p}</span>
                     ))}
+                    {!hasPlates && <span className="text-[9px] italic text-slate-400">No plates</span>}
                   </div>
 
                   {/* Stats row */}
@@ -631,9 +692,14 @@ export default function CarWashCustomers() {
                     {c.lastVisit && <span className="flex items-center gap-1"><FaClock size={9} />{fmtDate(c.lastVisit)}</span>}
                     {card && <StampBar card={card} program={loyaltyProgram} />}
                     {acc && (
-                      <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-semibold ${acctTypePill[acc.accountType] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); navigate("/carwash/customers/credit-accounts"); }}
+                        className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-semibold ${acctTypePill[acc.accountType] || "bg-slate-100 text-slate-600 border-slate-200"} hover:opacity-80`}
+                        title="View credit account"
+                      >
                         <FaIdCard size={8} />{acc.accountType}
-                      </span>
+                      </button>
                     )}
                   </div>
 
@@ -645,6 +711,7 @@ export default function CarWashCustomers() {
                           { label: "Total Invoiced", val: fmt(c.totalInvoiced), cls: "text-slate-700" },
                           { label: "Total Paid", val: fmt(c.totalPaid), cls: "text-emerald-700 font-semibold" },
                           { label: "Outstanding", val: fmt(c.outstanding), cls: c.outstanding > 0 ? "text-red-600 font-bold" : "text-slate-400" },
+                          ...(hasCreditBal ? [{ label: "Credit Balance", val: fmt(c.creditBalance), cls: "text-emerald-700 font-semibold" }] : []),
                         ].map(({ label, val, cls }) => (
                           <div key={label} className="flex items-center justify-between">
                             <span className="text-[10px] text-slate-500">{label}</span>
@@ -657,10 +724,10 @@ export default function CarWashCustomers() {
 
                   {/* Mobile action buttons */}
                   <div className="flex items-center gap-1.5 pt-1">
-                    <ActionBtn icon={FaCar} title="View Jobs" color="green" onClick={(e) => viewJobs(e, c)} />
+                    <ActionBtn icon={FaCar} title="View Jobs" color="green" onClick={(e) => viewJobs(e, c)} disabled={!hasPlates} />
                     {canManage && <ActionBtn icon={FaEdit} title="Edit customer" color="amber" onClick={(e) => openEdit(e, c)} />}
                     {c.phone && <ActionBtn icon={FaCommentDots} title="Send SMS" color="blue" onClick={(e) => openSms(e, c)} />}
-                    {hasOutstanding && canManage && <ActionBtn icon={FaMoneyBillWave} title="Settle outstanding" color="red" onClick={(e) => openSettle(e, c)} />}
+                    {hasOutstanding && canManage && hasPlates && <ActionBtn icon={FaMoneyBillWave} title="Settle outstanding" color="red" onClick={(e) => openSettle(e, c)} />}
                   </div>
                 </div>
               );
@@ -713,6 +780,8 @@ export default function CarWashCustomers() {
                   const isExpanded = expandedId === String(c._id);
                   const rowBg = idx % 2 === 0 ? "bg-white" : "bg-slate-50/60";
                   const hasOutstanding = c.outstanding > 0.01;
+                  const hasCreditBal = (c.creditBalance || 0) > 0.01;
+                  const hasPlates = (c.plates || []).length > 0;
                   const card = c.loyaltyCard;
                   const acc = c.creditAccount;
                   return (
@@ -722,7 +791,7 @@ export default function CarWashCustomers() {
                         onClick={() => toggleExpand(String(c._id))}
                       >
                         {/* Expand */}
-                        <td className={`px-3 py-2 ${hasOutstanding ? "border-l-[3px] border-red-400" : "border-l-[3px] border-transparent"}`}>
+                        <td className={`px-3 py-2 ${hasOutstanding ? "border-l-[3px] border-red-400" : hasCreditBal ? "border-l-[3px] border-emerald-400" : "border-l-[3px] border-transparent"}`}>
                           <span className="text-slate-300 group-hover:text-slate-500 text-[10px] transition-colors">
                             {isExpanded ? "▾" : "▸"}
                           </span>
@@ -777,13 +846,25 @@ export default function CarWashCustomers() {
                           {c.totalPaid > 0 ? fmt(c.totalPaid) : <span className="text-slate-300">—</span>}
                         </td>
 
-                        {/* Outstanding */}
+                        {/* Outstanding / Credit */}
                         <td className="px-4 py-2 text-right tabular-nums text-[11px]">
-                          {hasOutstanding ? (
-                            <span className="font-bold text-red-600">{fmt(c.outstanding)}</span>
-                          ) : (
-                            <span className="text-slate-200">—</span>
-                          )}
+                          <div className="flex flex-col items-end gap-0.5">
+                            {hasOutstanding ? (
+                              <span className="font-bold text-red-600">{fmt(c.outstanding)}</span>
+                            ) : (
+                              <span className="text-slate-200">—</span>
+                            )}
+                            {hasCreditBal && (
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); navigate("/carwash/customers/credit-balances"); }}
+                                className="inline-flex items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700 hover:bg-emerald-200"
+                                title="Credit balance — click to manage"
+                              >
+                                <FaPiggyBank size={7} />{fmt(c.creditBalance)}
+                              </button>
+                            )}
+                          </div>
                         </td>
 
                         {/* Loyalty */}
@@ -792,11 +873,16 @@ export default function CarWashCustomers() {
                         </td>
 
                         {/* Account */}
-                        <td className="hidden xl:table-cell px-4 py-2">
+                        <td className="hidden xl:table-cell px-4 py-2" onClick={(e) => e.stopPropagation()}>
                           {acc ? (
-                            <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-semibold ${acctTypePill[acc.accountType] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
+                            <button
+                              type="button"
+                              onClick={() => navigate("/carwash/customers/credit-accounts")}
+                              className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-semibold ${acctTypePill[acc.accountType] || "bg-slate-100 text-slate-600 border-slate-200"} hover:opacity-80`}
+                              title="View credit account"
+                            >
                               <FaIdCard size={8} />{acc.accountType}
-                            </span>
+                            </button>
                           ) : (
                             <span className="text-slate-200 text-[10px]">—</span>
                           )}
@@ -805,10 +891,10 @@ export default function CarWashCustomers() {
                         {/* Actions */}
                         <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-1">
-                            <ActionBtn icon={FaCar} title="View jobs" color="green" onClick={(e) => viewJobs(e, c)} />
+                            <ActionBtn icon={FaCar} title="View jobs" color="green" onClick={(e) => viewJobs(e, c)} disabled={!hasPlates} />
                             {canManage && <ActionBtn icon={FaEdit} title="Edit customer" color="amber" onClick={(e) => openEdit(e, c)} />}
                             {c.phone && <ActionBtn icon={FaCommentDots} title="Send SMS" color="blue" onClick={(e) => openSms(e, c)} />}
-                            {hasOutstanding && canManage && (
+                            {hasOutstanding && canManage && hasPlates && (
                               <ActionBtn icon={FaMoneyBillWave} title={`Settle ${fmt(c.outstanding)} outstanding`} color="red" onClick={(e) => openSettle(e, c)} />
                             )}
                           </div>

@@ -153,8 +153,9 @@ const CarWashJobs           = lazy(() => import("./pages/CarWash/CarWashJobs"));
 const CarWashWashboard      = lazy(() => import("./pages/CarWash/CarWashWashboard"));
 const CarWashAddJob         = lazy(() => import("./pages/CarWash/CarWashAddJob"));
 const CarWashAccounts       = lazy(() => import("./pages/CarWash/CarWashAccounts"));
-const CarWashCustomers      = lazy(() => import("./pages/CarWash/CarWashCustomers"));
-const CarWashOpeningBalances = lazy(() => import("./pages/CarWash/CarWashOpeningBalances"));
+const CarWashCustomers       = lazy(() => import("./pages/CarWash/CarWashCustomers"));
+const CarWashOpeningBalances  = lazy(() => import("./pages/CarWash/CarWashOpeningBalances"));
+const CarWashCreditBalances   = lazy(() => import("./pages/CarWash/CarWashCreditBalances"));
 const CarWashServices       = lazy(() => import("./pages/CarWash/CarWashServices"));
 const CarWashPayments       = lazy(() => import("./pages/CarWash/CarWashPayments"));
 const CarWashDeposits       = lazy(() => import("./pages/CarWash/CarWashDeposits"));
@@ -623,8 +624,9 @@ function App() {
             <Route path="/carwash/washboard"                  element={<Guard moduleKey="carwash" resource="carwash-jobs"><CarWashWashboard /></Guard>} />
             <Route path="/carwash/jobs/new"                   element={<Guard moduleKey="carwash" resource="carwash-jobs" action="create"><CarWashAddJob /></Guard>} />
             <Route path="/carwash/jobs/:id/edit"              element={<Guard moduleKey="carwash" resource="carwash-jobs" action="update"><CarWashAddJob /></Guard>} />
-            <Route path="/carwash/customers"                  element={<Guard moduleKey="carwash" resource="carwash-loyalty"><CarWashCustomers /></Guard>} />
-            <Route path="/carwash/customers/opening-balances" element={<Guard moduleKey="carwash" resource="carwash-loyalty"><CarWashOpeningBalances /></Guard>} />
+            <Route path="/carwash/customers"                    element={<Guard moduleKey="carwash" resource="carwash-loyalty"><CarWashCustomers /></Guard>} />
+            <Route path="/carwash/customers/opening-balances"  element={<Guard moduleKey="carwash" resource="carwash-loyalty"><CarWashOpeningBalances /></Guard>} />
+            <Route path="/carwash/customers/credit-balances"   element={<Guard moduleKey="carwash" resource="carwash-loyalty"><CarWashCreditBalances /></Guard>} />
             <Route path="/carwash/accounts"                   element={<Guard moduleKey="carwash" resource="carwash-payments"><CarWashAccounts /></Guard>} />
             <Route path="/carwash/services"                   element={<Guard moduleKey="carwash" resource="carwash-services"><CarWashServices /></Guard>} />
             <Route path="/carwash/payments"                   element={<Guard moduleKey="carwash" resource="carwash-payments"><CarWashPayments /></Guard>} />
