@@ -8,6 +8,7 @@ export const WORKSPACE_IDS = {
   SYSTEM_ADMIN:   'system-admin',
   COMPANY_SETUP:  'company-setup',
   COMMUNICATIONS: 'communications',
+  NEUTRAL:        'neutral', // Cross-module pages (My Account, etc.)
 };
 
 export const WORKSPACE_CONFIG = {
@@ -121,6 +122,11 @@ const SYSTEM_ADMIN_ROUTE_MATCHERS = [
 export const getWorkspaceFromRoute = (pathname = '') => {
   if (pathname === '/moduleDashboard' || pathname.startsWith('/moduleDashboard/')) {
     return null;
+  }
+
+  // Cross-module pages — menu is derived from company modules, not the route
+  if (pathname === '/my-account' || pathname.startsWith('/my-account/')) {
+    return WORKSPACE_IDS.NEUTRAL;
   }
 
   if (pathname === '/accounts' || pathname.startsWith('/accounts/')) {

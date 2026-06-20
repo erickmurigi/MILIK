@@ -643,12 +643,26 @@ const TopToolbar = ({
 
   const isSystemAdminWorkspace    = currentWorkspace === WORKSPACE_IDS.SYSTEM_ADMIN;
   const isCompanySetupWorkspace   = currentWorkspace === WORKSPACE_IDS.COMPANY_SETUP;
-  const isAccountsWorkspace       = currentWorkspace === WORKSPACE_IDS.ACCOUNTS;
-  const isCarWashWorkspace        = currentWorkspace === WORKSPACE_IDS.CARWASH;
-  const isInventoryWorkspace      = currentWorkspace === WORKSPACE_IDS.INVENTORY;
-  const isPropertySaleWorkspace   = currentWorkspace === WORKSPACE_IDS.PROPERTY_SALE;
-  const isHumanResourceWorkspace  = currentWorkspace === WORKSPACE_IDS.HUMAN_RESOURCE;
-  const isCommunicationsWorkspace = currentWorkspace === WORKSPACE_IDS.COMMUNICATIONS;
+
+  // For neutral pages (e.g. /my-account), derive menu from the company's enabled modules
+  // so a Car Wash-only company doesn't see the PMS navbar.
+  const effectiveMenuWorkspace = useMemo(() => {
+    if (currentWorkspace !== WORKSPACE_IDS.NEUTRAL) return currentWorkspace;
+    if (hasCompanyModule(activeCompanyContext, 'carwash'))            return WORKSPACE_IDS.CARWASH;
+    if (hasCompanyModule(activeCompanyContext, 'propertyManagement')) return WORKSPACE_IDS.PROPERTY;
+    if (hasCompanyModule(activeCompanyContext, 'inventory'))          return WORKSPACE_IDS.INVENTORY;
+    if (hasCompanyModule(activeCompanyContext, 'propertySale'))       return WORKSPACE_IDS.PROPERTY_SALE;
+    if (hasCompanyModule(activeCompanyContext, 'humanResource'))      return WORKSPACE_IDS.HUMAN_RESOURCE;
+    if (hasCompanyModule(activeCompanyContext, 'accounts'))           return WORKSPACE_IDS.ACCOUNTS;
+    return WORKSPACE_IDS.PROPERTY;
+  }, [currentWorkspace, activeCompanyContext]);
+
+  const isAccountsWorkspace       = effectiveMenuWorkspace === WORKSPACE_IDS.ACCOUNTS;
+  const isCarWashWorkspace        = effectiveMenuWorkspace === WORKSPACE_IDS.CARWASH;
+  const isInventoryWorkspace      = effectiveMenuWorkspace === WORKSPACE_IDS.INVENTORY;
+  const isPropertySaleWorkspace   = effectiveMenuWorkspace === WORKSPACE_IDS.PROPERTY_SALE;
+  const isHumanResourceWorkspace  = effectiveMenuWorkspace === WORKSPACE_IDS.HUMAN_RESOURCE;
+  const isCommunicationsWorkspace = effectiveMenuWorkspace === WORKSPACE_IDS.COMMUNICATIONS;
 
   const routeConfig = useMemo(() => {
     if (isSystemAdminWorkspace) {

@@ -164,7 +164,7 @@ const CarWashCommissionPayouts = () => {
         carWashApi.getStaffWallet(staffId),
         carWashApi.listDamages({ staff: staffId, status: "pending", limit: 50 }),
       ]);
-      setPendingSavings(Number(wallet?.savings?.pendingToHold || 0));
+      setPendingSavings(Number(wallet?.savings?.pending || 0));
       const dmgList = normalizeListPayload(dmgRes, "damages");
       setPendingDamagesList(dmgList);
       setPendingDamages(dmgList.reduce((s, d) => s + Number(d.amount || 0), 0));

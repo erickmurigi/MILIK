@@ -109,8 +109,9 @@ export const carWashApi = {
   waiveDamage: async (id, notes = "") => unwrap(await adminRequests.post(`/carwash/commissions/damages/${id}/waive`, { notes })),
   deleteDamage: async (id) => unwrap(await adminRequests.delete(`/carwash/commissions/damages/${id}`)),
   createSavingsPayout: async (payload) => unwrap(await adminRequests.post("/carwash/commissions/savings/payouts", bb(payload))),
-  processDailySavings: async (date) => unwrap(await adminRequests.post("/carwash/commissions/savings/process", bb(date ? { date } : {}))),
-  resetSavings: async () => unwrap(await adminRequests.delete("/carwash/commissions/savings/reset")),
+  initializeSavings:    async (startDate) => unwrap(await adminRequests.post("/carwash/commissions/savings/initialize", bb(startDate ? { startDate } : {}))),
+  cleanupLegacySavings: async () => unwrap(await adminRequests.delete("/carwash/commissions/savings/legacy")),
+  resetSavings:         async () => unwrap(await adminRequests.delete("/carwash/commissions/savings/reset")),
   getStaffWallet: async (staffId) => unwrap(await adminRequests.get(`/carwash/commissions/staff/${staffId}/wallet`)),
   // Loyalty
   getLoyaltyProgram: async () => unwrap(await adminRequests.get("/carwash/loyalty/program")),

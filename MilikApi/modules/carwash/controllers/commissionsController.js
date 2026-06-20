@@ -8,7 +8,7 @@ import CarWashStaff from "../models/CarWashStaff.js";
 import { currentUserId, escapeRegex, parseBoolean, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { generatePayoutNumber } from "../services/commissionService.js";
 import { postCarWashCommissionPayout, postCarWashCommissionPayoutWithSavings, resolvePayoutCashbook, reverseCarWashCommissionAccrual, reverseCarWashPayoutLedgerEntries } from "../services/carwashAccountingService.js";
-import { holdSavingsForPayout, getStaffSavingsBalance, disburseSavings, processDailySavings } from "../services/savingsService.js";
+import { deductSavingsForPayout, getStaffSavingsBalance, disburseSavings, eatToday, getSavingsDeductionAmount, initializeSavingsForBusiness } from "../services/savingsService.js";
 import CarWashStaffSaving from "../models/CarWashStaffSaving.js";
 import { holdDamagesForPayout, releaseDamagesForPayout, getStaffDamagesSummary } from "../services/damagesService.js";
 import CarWashStaffDamage from "../models/CarWashStaffDamage.js";
@@ -216,12 +216,13 @@ export const createCommissionPayout = async (req, res, next) => {
       }
     }
 
-    // Hold pending savings deductions from this commission payout
-    const savingsHeld = await holdSavingsForPayout({
-      businessId: business,
-      staffId: staff,
+    // Deduct savings for days elapsed since last deduction
+    const savingsHeld = await deductSavingsForPayout({
+      businessId:         business,
+      staffId:            staff,
       commissionPayoutId: payout._id,
       commissionAmount,
+      payoutDate:         payoutBase.payoutDate,
     });
 
     // Hold pending damage deductions (capped so staff cannot go below zero)
@@ -447,11 +448,11 @@ export const reverseCommissionPayout = async (req, res, next) => {
       );
     }
 
-    // 3. Release savings holds
+    // 3. Reverse the savings deduction so the period re-opens for the next payout
     if (payout.savingsHeld > 0) {
       await CarWashStaffSaving.updateMany(
-        { business, commissionPayout: payout._id, type: "daily" },
-        { $set: { commissionPayout: null } }
+        { business, commissionPayout: payout._id, type: "deduction" },
+        { $set: { isReversed: true, reversedAt: new Date(), reversedBy: userId } }
       );
     }
 
@@ -537,76 +538,6 @@ export const createSavingsPayout = async (req, res, next) => {
   }
 };
 
-// ─── Manual savings catch-up — posts all missed days up to today ──────────────
-export const processDailySavingsManual = async (req, res, next) => {
-  try {
-    const business    = resolveActiveBusinessId(req);
-    const businessOid = toObjectId(business);
-
-    const today = eatToday();
-    const first = await CarWashStaffSaving.findOne(
-      { business: businessOid, type: "daily" },
-      { savingsDate: 1 },
-      { sort: { savingsDate: 1 } }
-    ).lean();
-
-    let totalPosted = 0, totalSkipped = 0;
-
-    if (!first?.savingsDate) {
-      const r = await processDailySavings(String(business), today);
-      totalPosted  += r.posted;
-      totalSkipped += r.skipped;
-    } else {
-      const cur = new Date(first.savingsDate);
-      while (cur <= today) {
-        const r = await processDailySavings(String(business), new Date(cur));
-        totalPosted  += r.posted;
-        totalSkipped += r.skipped;
-        cur.setUTCDate(cur.getUTCDate() + 1);
-      }
-    }
-
-    // Read balances in the same request immediately after all writes complete.
-    // This guarantees the aggregation sees every record just inserted — no
-    // separate HTTP round-trip that could race with MongoDB replication.
-    const rows = await CarWashStaffSaving.aggregate([
-      { $match: { business: businessOid, isReversed: { $ne: true } } },
-      { $group: {
-        _id:       "$staff",
-        daily:     { $sum: { $cond: [{ $eq: ["$type", "daily"] }, "$amount", 0] } },
-        held:      { $sum: { $cond: [{ $and: [{ $eq: ["$type", "daily"] }, { $ne: ["$commissionPayout", null] }] }, "$amount", 0] } },
-        disbursed: { $sum: { $cond: [{ $eq: ["$type", "disbursement"] }, "$amount", 0] } },
-        lastDate:  { $max: "$savingsDate" },
-      }},
-      { $addFields: { balance: { $max: [0, { $subtract: ["$held", "$disbursed"] }] } } },
-      { $sort: { balance: -1, _id: 1 } },
-    ]);
-
-    const staffIds  = rows.map((r) => r._id).filter(Boolean);
-    const staffDocs = await CarWashStaff.find({ _id: { $in: staffIds } }).select("name").lean();
-    const staffMap  = new Map(staffDocs.map((s) => [String(s._id), s.name]));
-
-    const balances = rows.map((r) => ({
-      staffId:   r._id,
-      staffName: staffMap.get(String(r._id)) || "Unknown",
-      daily:     r.daily,
-      held:      r.held || 0,
-      disbursed: r.disbursed,
-      balance:   r.balance,
-      lastDate:  r.lastDate || null,
-    }));
-
-    res.json({
-      success: true,
-      posted:   totalPosted,
-      skipped:  totalSkipped,
-      message:  `Daily savings: ${totalPosted} posted, ${totalSkipped} already done`,
-      balances,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
 
 // ─── Savings transaction history ──────────────────────────────────────────────
 export const listSavings = async (req, res, next) => {
@@ -618,7 +549,7 @@ export const listSavings = async (req, res, next) => {
     }
     if (req.query.type) filter.type = String(req.query.type).trim();
     if (req.query.dateFrom || req.query.dateTo) {
-      // daily records use savingsDate (canonical business date); disbursements use date
+      // deduction records use savingsDate (= coveredTo); disbursements use date
       const dateField = req.query.type === "disbursement" ? "date" : "savingsDate";
       filter[dateField] = {};
       if (req.query.dateFrom) { const d = new Date(req.query.dateFrom); d.setUTCHours(0,0,0,0);      filter[dateField].$gte = d; }
@@ -646,6 +577,17 @@ export const listSavings = async (req, res, next) => {
   }
 };
 
+// ─── Delete only legacy "daily" records (from old cron system) ────────────────
+export const cleanupLegacySavings = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const result   = await CarWashStaffSaving.deleteMany({ business: new mongoose.Types.ObjectId(String(business)), type: "daily" });
+    res.json({ success: true, deleted: result.deletedCount, message: `Removed ${result.deletedCount} legacy savings record${result.deletedCount !== 1 ? "s" : ""}` });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // ─── Wipe all savings records for the business (admin reset) ──────────────────
 export const resetSavings = async (req, res, next) => {
   try {
@@ -657,44 +599,74 @@ export const resetSavings = async (req, res, next) => {
   }
 };
 
-// ─── Savings balance summary (all staff, one aggregation) ─────────────────────
-function eatToday() {
-  const nowEAT = new Date(Date.now() + 3 * 60 * 60 * 1000);
-  return new Date(Date.UTC(nowEAT.getUTCFullYear(), nowEAT.getUTCMonth(), nowEAT.getUTCDate()));
-}
+// ─── Initialize savings tracking for all active staff ─────────────────────────
+export const initializeSavings = async (req, res, next) => {
+  try {
+    const business   = resolveActiveBusinessId(req);
+    const startDate  = req.body?.startDate || null;
+    const initialized = await initializeSavingsForBusiness(business, startDate);
+    res.json({
+      success: true,
+      initialized,
+      message: initialized > 0
+        ? `Savings tracking started for ${initialized} staff member${initialized !== 1 ? "s" : ""}`
+        : "All active staff already have savings tracking active",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
+// ─── Savings balance summary (all staff, one aggregation) ─────────────────────
 export const listSavingsBalances = async (req, res, next) => {
   try {
     const business    = resolveActiveBusinessId(req);
     const businessOid = toObjectId(business);
-
-    const rows = await CarWashStaffSaving.aggregate([
-      { $match: { business: businessOid, isReversed: { $ne: true } } },
-      { $group: {
-        _id:       "$staff",
-        daily:     { $sum: { $cond: [{ $eq: ["$type", "daily"] }, "$amount", 0] } },
-        held:      { $sum: { $cond: [{ $and: [{ $eq: ["$type", "daily"] }, { $ne: ["$commissionPayout", null] }] }, "$amount", 0] } },
-        disbursed: { $sum: { $cond: [{ $eq: ["$type", "disbursement"] }, "$amount", 0] } },
-        lastDate:  { $max: "$savingsDate" },
-      }},
-      { $addFields: { balance: { $max: [0, { $subtract: ["$held", "$disbursed"] }] } } },
-      { $sort: { balance: -1, _id: 1 } },
+    const today       = eatToday();
+    const [dailyRate, rows, activeStaff] = await Promise.all([
+      getSavingsDeductionAmount(business),
+      CarWashStaffSaving.aggregate([
+        { $match: { business: businessOid, isReversed: { $ne: true } } },
+        { $group: {
+          _id:          "$staff",
+          deducted:     { $sum: { $cond: [{ $eq: ["$type", "deduction"] }, "$amount", 0] } },
+          disbursed:    { $sum: { $cond: [{ $eq: ["$type", "disbursement"] }, "$amount", 0] } },
+          lastCoveredTo:{ $max: { $cond: [{ $eq: ["$type", "deduction"] }, "$coveredTo", null] } },
+        }},
+      ]),
+      CarWashStaff.find({ business: businessOid, active: { $ne: false } }).select("name").lean(),
     ]);
 
-    // Populate staff names in one query
-    const staffIds  = rows.map((r) => r._id).filter(Boolean);
-    const staffDocs = await CarWashStaff.find({ _id: { $in: staffIds } }).select("name").lean();
-    const staffMap  = new Map(staffDocs.map((s) => [String(s._id), s.name]));
+    const rowMap = new Map(rows.map((r) => [String(r._id), r]));
 
-    const balances = rows.map((r) => ({
-      staffId:   r._id,
-      staffName: staffMap.get(String(r._id)) || "Unknown",
-      daily:     r.daily,
-      held:      r.held || 0,
-      disbursed: r.disbursed,
-      balance:   r.balance,
-      lastDate:  r.lastDate || null,
-    }));
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const balances = activeStaff
+      .map((s) => {
+        const row          = rowMap.get(String(s._id)) || {};
+        const deducted     = round2(row.deducted  || 0);
+        const disbursed    = round2(row.disbursed || 0);
+        const lastCoveredTo = row.lastCoveredTo || null;
+
+        let pending = 0;
+        if (dailyRate > 0 && lastCoveredTo) {
+          const nextDay = new Date(lastCoveredTo);
+          nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+          const daysPending = Math.max(0, Math.round((today - nextDay) / msPerDay) + 1);
+          pending = round2(daysPending * dailyRate);
+        }
+
+        return {
+          staffId:      s._id,
+          staffName:    s.name,
+          deducted,
+          disbursed,
+          pending,
+          balance:      round2(Math.max(0, deducted - disbursed)),
+          totalAccrued: round2(deducted + pending),
+          lastCoveredTo,
+        };
+      })
+      .sort((a, b) => b.balance - a.balance || String(a.staffName).localeCompare(String(b.staffName)));
 
     res.json({ success: true, data: { balances }, balances });
   } catch (error) {

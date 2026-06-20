@@ -1,4 +1,4 @@
-import chartOfAccountsRoutes from "./routes/chartOfAccounts.js";
+﻿import chartOfAccountsRoutes from "./routes/chartOfAccounts.js";
 import { Server } from "socket.io";
 import { setIO } from "./utils/socketManager.js";
 import express from "express";
@@ -740,77 +740,6 @@ async function startServer() {
       if (r.modifiedCount > 0) console.log(`[CW Customer] Unset phone:null on ${r.modifiedCount} customer(s) — partial phone index now correct`);
     } catch (e) {
       console.error('[CW Customer] phone cleanup warning (non-fatal):', e?.message || e);
-    }
-
-    // ── Startup: back-fill any daily savings missed while server was down ───
-    // Safe to run on every restart — the unique index skips already-posted dates.
-    try {
-      const { default: Company }           = await import('./models/Company.js');
-      const { default: CarWashStaffSaving } = await import('./modules/carwash/models/CarWashStaffSaving.js');
-      const { processDailySavings }         = await import('./modules/carwash/services/savingsService.js');
-
-      const businesses = await Company.find({ 'modules.carwash': true }).select('_id').lean();
-      let totalBackfilled = 0;
-
-      // "Today" expressed as UTC midnight, but computed using Africa/Nairobi (UTC+3) wall time
-      // so that restarts between midnight and 3 am EAT still see the correct EAT calendar day.
-      const nowEAT   = new Date(Date.now() + 3 * 60 * 60 * 1000);
-      const today    = new Date(Date.UTC(nowEAT.getUTCFullYear(), nowEAT.getUTCMonth(), nowEAT.getUTCDate()));
-
-      for (const biz of businesses) {
-        const first = await CarWashStaffSaving.findOne(
-          { business: biz._id, type: 'daily' },
-          { savingsDate: 1 },
-          { sort: { savingsDate: 1 } }
-        ).lean();
-
-        if (!first?.savingsDate) {
-          // No history yet — post today immediately
-          const result = await processDailySavings(String(biz._id), today);
-          console.log(`[CW Savings Catchup] ${today.toISOString().slice(0,10)} (first ever) biz …${String(biz._id).slice(-6)}: posted=${result.posted}`);
-          if (result.posted > 0) totalBackfilled += result.posted;
-          continue;
-        }
-
-        // Walk from first→today; unique index skips already-posted dates,
-        // filling any gaps caused by manual clicks that jumped ahead in the calendar.
-        const cur = new Date(first.savingsDate);
-        console.log(`[CW Savings Catchup] biz …${String(biz._id).slice(-6)}: filling ${cur.toISOString().slice(0,10)} → ${today.toISOString().slice(0,10)}`);
-
-        while (cur <= today) {
-          const result = await processDailySavings(String(biz._id), new Date(cur));
-          if (result.posted > 0) {
-            console.log(`[CW Savings Catchup] ${cur.toISOString().slice(0, 10)}: posted=${result.posted}`);
-            totalBackfilled += result.posted;
-          }
-          cur.setUTCDate(cur.getUTCDate() + 1);
-        }
-      }
-
-      console.log(totalBackfilled > 0
-        ? `[CW Savings Catchup] Backfilled ${totalBackfilled} missing records`
-        : '[CW Savings Catchup] No missed days — savings up to date');
-    } catch (catchupErr) {
-      console.error('[CW Savings Catchup] Warning (non-fatal):', catchupErr?.message || catchupErr);
-    }
-
-    // ── Daily staff savings cron ────────────────────────────────────────────
-    // Runs every day at 20:59 EAT (timezone: Africa/Nairobi).
-    // Posts Ksh X standing-order savings for every active Car Wash staff member.
-    try {
-      const cron = await import("node-cron");
-      const { runDailySavingsCron } = await import("./modules/carwash/services/savingsService.js");
-      cron.default.schedule("59 23 * * *", async () => {
-        console.log("[CW Savings Cron] Running daily savings for", new Date().toISOString().slice(0, 10));
-        try {
-          await runDailySavingsCron(new Date());
-        } catch (err) {
-          console.error("[CW Savings Cron] Error:", err?.message || err);
-        }
-      }, { timezone: "Africa/Nairobi" });
-      console.log("[CW Savings Cron] Scheduled — daily at 23:59 EAT");
-    } catch (cronErr) {
-      console.error("[CW Savings Cron] Failed to schedule:", cronErr?.message || cronErr);
     }
 
     // ── Monthly billing cron ────────────────────────────────────────────────

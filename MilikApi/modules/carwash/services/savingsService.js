@@ -1,56 +1,56 @@
 /**
- * Staff Savings Service
+ * Staff Savings Service — compute-on-demand approach.
  *
- * Ksh X per staff member per calendar day — a standing-order deduction.
- * Independent of whether the staff worked, earned commission, or was present.
+ * No cron. No daily records. No "Process Today" button.
  *
  * Flow:
- *   Daily cron (midnight) → processDailySavings(businessId, date)
- *     → one CarWashStaffSaving { type:"daily" } per active staff per day
- *     → unique index prevents double-posting for the same date
+ *   Commission payout → deductSavingsForPayout()
+ *     Computes days since last deduction period × daily rate.
+ *     Caps at commission amount so staff never go negative.
+ *     Creates one CarWashStaffSaving { type: "deduction" } record covering
+ *     the date range since the previous deduction.
  *
- *   Commission payout → holdSavingsForPayout()
- *     → marks unprocessed daily records as "held" in this payout
- *     → reduces cash paid; accounting: Dr 2160 / Cr Cash (net) + Cr 2161 (savings)
+ *   Balance (always accurate, computed from records):
+ *     totalDeducted  = sum of non-reversed deduction records
+ *     totalDisbursed = sum of non-reversed disbursement records
+ *     balance        = totalDeducted − totalDisbursed   (in the savings pot)
+ *     pending        = days since last deduction × rate (next payout will capture this)
  *
  *   Annual disbursement → disburseSavings()
- *     → creates { type:"disbursement" } record
- *     → accounting: Dr 2161 / Cr Cashbook
+ *     Creates { type: "disbursement" } record.
+ *     Accounting: Dr 2161 / Cr Cashbook.
  */
 
 import mongoose from "mongoose";
 import Company from "../../../models/Company.js";
 import CarWashStaff from "../models/CarWashStaff.js";
 import CarWashStaffSaving from "../models/CarWashStaffSaving.js";
-import CarWashCommissionPayout from "../models/CarWashCommissionPayout.js";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import { postCarWashSavingsDisbursement } from "./carwashAccountingService.js";
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
+// UTC midnight for the current EAT calendar day.
+// Adding 3 h to UTC timestamp then reading the UTC date yields the EAT date.
+export const eatToday = () => {
+  const nowEAT = new Date(Date.now() + 3 * 60 * 60 * 1000);
+  return new Date(Date.UTC(nowEAT.getUTCFullYear(), nowEAT.getUTCMonth(), nowEAT.getUTCDate()));
+};
+
 // ─── Settings ─────────────────────────────────────────────────────────────────
 
 export const getSavingsDeductionAmount = async (businessId) => {
   const company = await Company.findById(businessId).select("carwashSettings").lean();
-  // savingsEnabled treated as true when field is absent (backward compat for existing businesses)
   const enabled = company?.carwashSettings?.savingsEnabled !== false;
   if (!enabled) return 0;
   const amt = Number(company?.carwashSettings?.savingsDeductionPerJob ?? 100);
   return Number.isFinite(amt) && amt >= 0 ? round2(amt) : 100;
 };
 
-// Zero-time a date to midnight UTC so every day has a canonical key
-const dayKey = (d = new Date()) => {
-  const dt = d instanceof Date ? d : new Date(d);
-  const out = new Date(dt);
-  out.setUTCHours(0, 0, 0, 0);
-  return out;
-};
-
 // ─── Payout number generator ──────────────────────────────────────────────────
 
 export const generateSavingsPayoutNumber = async (businessId) => {
-  const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const stamp  = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   const prefix = `CWS-${stamp}-`;
   const latest = await CarWashStaffSaving.findOne(
     { business: businessId, savingsPayoutNumber: { $regex: `^${prefix}` } },
@@ -61,175 +61,205 @@ export const generateSavingsPayoutNumber = async (businessId) => {
   return `${prefix}${String(nextNum).padStart(4, "0")}`;
 };
 
-// ─── Daily savings processing ─────────────────────────────────────────────────
+// ─── Deduct savings at commission payout time ─────────────────────────────────
 
 /**
- * Posts one daily savings record per active staff member for `date`.
- * Skips staff that already have a record for that date (idempotent).
- * Returns { posted, skipped, errors }.
+ * Called during commission payout.
+ * Computes the calendar days since the last deduction and withholds dailyRate × days
+ * from the commission (capped at commissionAmount to prevent negative net cash).
+ * Creates one "deduction" record covering the period.
+ * Returns the amount deducted (0 if nothing to deduct).
  */
-export const processDailySavings = async (businessId, date = new Date()) => {
-  const amount = await getSavingsDeductionAmount(businessId);
-  if (amount <= 0) return { posted: 0, skipped: 0, errors: [] };
+export const deductSavingsForPayout = async ({
+  businessId,
+  staffId,
+  commissionPayoutId,
+  commissionAmount,
+  payoutDate = new Date(),
+}) => {
+  const dailyRate = await getSavingsDeductionAmount(businessId);
+  if (dailyRate <= 0) return 0;
 
-  const savingsDate = dayKey(date);
+  const today = eatToday();
 
-  const activeStaff = await CarWashStaff.find({ business: businessId, active: { $ne: false } })
-    .select("_id branch")
-    .lean();
+  // Find the end of the most recent non-reversed deduction period
+  const lastDeduction = await CarWashStaffSaving.findOne(
+    { business: businessId, staff: staffId, type: "deduction", isReversed: { $ne: true } },
+    { coveredTo: 1 },
+    { sort: { coveredTo: -1 } }
+  ).lean();
 
-  if (!activeStaff.length) return { posted: 0, skipped: 0, errors: [] };
-
-  let posted = 0, skipped = 0;
-  const errors = [];
-
-  for (const member of activeStaff) {
-    try {
-      await CarWashStaffSaving.create({
-        business:    businessId,
-        branch:      member.branch || null,
-        staff:       member._id,
-        type:        "daily",
-        amount,
-        savingsDate,
-        date:        savingsDate,
-        notes:       `Daily savings — ${savingsDate.toISOString().slice(0, 10)}`,
-      });
-      posted++;
-    } catch (err) {
-      if (err.code === 11000) {
-        // If the blocking record is reversed, restore it so savings accumulate correctly
-        const blocked = await CarWashStaffSaving.findOne(
-          { business: businessId, staff: member._id, type: "daily", savingsDate },
-          { _id: 1, isReversed: 1 }
-        ).lean();
-        if (blocked?.isReversed) {
-          await CarWashStaffSaving.updateOne(
-            { _id: blocked._id },
-            { $set: { isReversed: false, reversedAt: null, reversedBy: null,
-                      amount, notes: `Daily savings — ${savingsDate.toISOString().slice(0, 10)}` } }
-          );
-          posted++;
-        } else {
-          skipped++;
-        }
-        continue;
-      }
-      errors.push({ staff: String(member._id), error: err?.message || String(err) });
-    }
+  let coveredFrom;
+  if (lastDeduction?.coveredTo) {
+    // Start the day after the last covered day
+    coveredFrom = new Date(lastDeduction.coveredTo);
+    coveredFrom.setUTCDate(coveredFrom.getUTCDate() + 1);
+  } else {
+    // First ever deduction — cover just today
+    coveredFrom = today;
   }
 
-  return { posted, skipped, errors };
-};
+  // Number of calendar days in the period (inclusive both ends)
+  const msPerDay  = 24 * 60 * 60 * 1000;
+  const daysCount = Math.max(0, Math.round((today - coveredFrom) / msPerDay) + 1);
+  if (daysCount <= 0) return 0;
 
-/**
- * Processes daily savings for ALL carwash businesses for a given date.
- * Called by the midnight cron job.
- */
-export const runDailySavingsCron = async (date = new Date()) => {
-  const businesses = await Company.find({ "modules.carwash": true }).select("_id").lean();
-  const results = [];
+  const gross  = round2(daysCount * dailyRate);
+  const amount = round2(Math.min(gross, round2(commissionAmount)));
+  if (amount <= 0) return 0;
 
-  for (const biz of businesses) {
-    try {
-      const result = await processDailySavings(String(biz._id), date);
-      results.push({ businessId: String(biz._id), ...result });
-    } catch (err) {
-      results.push({ businessId: String(biz._id), error: err?.message || String(err) });
-    }
-  }
+  await CarWashStaffSaving.create({
+    business:         businessId,
+    staff:            staffId,
+    type:             "deduction",
+    amount,
+    dailyRate,
+    daysCount,
+    coveredFrom,
+    coveredTo:        today,
+    savingsDate:      today,          // for display compat — equals coveredTo
+    commissionPayout: commissionPayoutId,
+    date:             payoutDate,
+    notes: `${daysCount} day${daysCount !== 1 ? "s" : ""} × Ksh ${dailyRate} — withheld from payout`,
+  });
 
-  console.log(`[CW Savings Cron] ${date.toISOString().slice(0, 10)}: ${results.map((r) => `${r.businessId.slice(-6)}: +${r.posted ?? 0}`).join(", ")}`);
-  return results;
+  return amount;
 };
 
 // ─── Staff savings balance ────────────────────────────────────────────────────
 
 /**
- * Returns savings summary for a staff member:
- *   totalDaily      — sum of all daily standing-order records
- *   totalHeld       — daily records already withheld from a commission payout
- *   pendingToHold   — daily records not yet withheld (deducted from next payout)
- *   totalDisbursed  — amount paid back to staff (annual payouts)
- *   balance         — totalHeld − totalDisbursed (in the pot, ready for annual payout)
+ * Returns:
+ *   totalDeducted  — withheld from payouts so far (in the pot)
+ *   totalDisbursed — paid back to staff
+ *   balance        — totalDeducted − totalDisbursed (physically in the pot)
+ *   pending        — accrued since last deduction, captured at next payout
+ *   totalAccrued   — totalDeducted + pending (grand total including pending)
+ *   lastCoveredTo  — end of the last deduction period (null if none)
  */
 export const getStaffSavingsBalance = async (businessId, staffId) => {
-  const [dailyRows, disbursementRows] = await Promise.all([
+  const dailyRate = await getSavingsDeductionAmount(businessId);
+
+  const [deductionAgg, disbursementAgg] = await Promise.all([
     CarWashStaffSaving.aggregate([
-      { $match: { business: new mongoose.Types.ObjectId(String(businessId)), staff: new mongoose.Types.ObjectId(String(staffId)), type: "daily" } },
-      { $group: {
-          _id: null,
-          totalDaily: { $sum: "$amount" },
-          totalHeld:  { $sum: { $cond: [{ $ne: ["$commissionPayout", null] }, "$amount", 0] } },
-      }},
+      {
+        $match: {
+          business: new mongoose.Types.ObjectId(String(businessId)),
+          staff:    new mongoose.Types.ObjectId(String(staffId)),
+          type:     "deduction",
+          isReversed: { $ne: true },
+        },
+      },
+      { $group: { _id: null, totalDeducted: { $sum: "$amount" }, lastCoveredTo: { $max: "$coveredTo" } } },
     ]),
     CarWashStaffSaving.aggregate([
-      { $match: { business: new mongoose.Types.ObjectId(String(businessId)), staff: new mongoose.Types.ObjectId(String(staffId)), type: "disbursement", isReversed: { $ne: true } } },
+      {
+        $match: {
+          business: new mongoose.Types.ObjectId(String(businessId)),
+          staff:    new mongoose.Types.ObjectId(String(staffId)),
+          type:     "disbursement",
+          isReversed: { $ne: true },
+        },
+      },
       { $group: { _id: null, totalDisbursed: { $sum: "$amount" } } },
     ]),
   ]);
 
-  const totalDaily     = round2(dailyRows[0]?.totalDaily     || 0);
-  const totalHeld      = round2(dailyRows[0]?.totalHeld      || 0);
-  const totalDisbursed = round2(disbursementRows[0]?.totalDisbursed || 0);
-  const pendingToHold  = round2(totalDaily - totalHeld);
-  // balance = what is physically in the savings pot (credited via commission deductions, not yet paid out)
-  // commitment = total accumulated savings obligation (includes pending deductions not yet in the pot)
-  const balance        = round2(Math.max(0, totalHeld - totalDisbursed));
-  const commitment     = round2(Math.max(0, totalDaily - totalDisbursed));
+  const totalDeducted  = round2(deductionAgg[0]?.totalDeducted  || 0);
+  const totalDisbursed = round2(disbursementAgg[0]?.totalDisbursed || 0);
+  const lastCoveredTo  = deductionAgg[0]?.lastCoveredTo || null;
 
-  return { totalDaily, totalHeld, pendingToHold, totalDisbursed, balance, commitment };
+  let pending = 0;
+  if (dailyRate > 0 && lastCoveredTo) {
+    const today    = eatToday();
+    const nextDay  = new Date(lastCoveredTo);
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+    const daysPending = Math.max(0, Math.round((today - nextDay) / (24 * 60 * 60 * 1000)) + 1);
+    pending = round2(daysPending * dailyRate);
+  }
+
+  const balance     = round2(Math.max(0, totalDeducted - totalDisbursed));
+  const totalAccrued = round2(totalDeducted + pending);
+
+  return { totalDeducted, totalDisbursed, pending, balance, totalAccrued, lastCoveredTo };
 };
 
-// ─── Hold savings from a commission payout ───────────────────────────────────
+// ─── Initialize savings tracking for a business ──────────────────────────────
 
 /**
- * Marks unheld daily savings as held in a commission payout.
- * Caps the held amount at commissionAmount so staff can't go negative.
- * Returns amount withheld.
+ * Creates a zero-amount "deduction" anchor record for every active staff member
+ * who does not yet have any deduction history.
+ *
+ * Anchor: coveredTo = startDate - 1 day, amount = 0.
+ * Effect: the pending calculation immediately starts from startDate,
+ *         and the first real deduction at payout will cover startDate → payout date.
+ *
+ * Idempotent — staff already with a deduction record are skipped.
+ * Returns the number of anchors created.
  */
-export const holdSavingsForPayout = async ({ businessId, staffId, commissionPayoutId, commissionAmount }) => {
-  const pending = await CarWashStaffSaving.find({
-    business:         businessId,
-    staff:            staffId,
-    type:             "daily",
-    commissionPayout: null,
-  }).sort({ savingsDate: 1 }).lean();
+export const initializeSavingsForBusiness = async (businessId, startDate = null) => {
+  const today  = eatToday();
+  const anchor = startDate ? new Date(startDate) : today;
+  anchor.setUTCHours(0, 0, 0, 0);
 
-  if (!pending.length) return 0;
+  // The anchor's coveredTo is the day BEFORE startDate so that
+  // pending = daysSince(startDate) = (today - startDate + 1 day) × rate.
+  const anchorCoveredTo = new Date(anchor);
+  anchorCoveredTo.setUTCDate(anchorCoveredTo.getUTCDate() - 1);
 
-  let held = 0;
-  const toMark = [];
-  for (const rec of pending) {
-    const next = round2(held + rec.amount);
-    if (next > round2(commissionAmount) + 0.01) break;
-    held = next;
-    toMark.push(rec._id);
-  }
-  if (!toMark.length) return 0;
+  const dailyRate = await getSavingsDeductionAmount(businessId);
 
-  await CarWashStaffSaving.updateMany(
-    { _id: { $in: toMark } },
-    { $set: { commissionPayout: commissionPayoutId } }
+  // Find active staff
+  const allStaff = await CarWashStaff.find(
+    { business: businessId, active: { $ne: false } },
+    { _id: 1 }
+  ).lean();
+  if (!allStaff.length) return 0;
+
+  // Find staff that already have a deduction record
+  const alreadyStarted = await CarWashStaffSaving.distinct("staff", {
+    business: businessId,
+    type:     "deduction",
+  });
+  const startedSet = new Set(alreadyStarted.map(String));
+
+  // Create anchors for the rest
+  const needsAnchor = allStaff.filter((s) => !startedSet.has(String(s._id)));
+  if (!needsAnchor.length) return 0;
+
+  await CarWashStaffSaving.insertMany(
+    needsAnchor.map((s) => ({
+      business:    businessId,
+      staff:       s._id,
+      type:        "deduction",
+      amount:      0,
+      dailyRate,
+      daysCount:   0,
+      coveredFrom: anchorCoveredTo,
+      coveredTo:   anchorCoveredTo,
+      savingsDate: anchorCoveredTo,
+      notes:       `Savings tracking started from ${anchor.toISOString().slice(0, 10)}`,
+      date:        new Date(),
+    })),
+    { ordered: false }
   );
-  return round2(held);
+
+  return needsAnchor.length;
 };
 
 // ─── Annual / on-request disbursement ────────────────────────────────────────
 
 export const disburseSavings = async ({ req, businessId, staffId, cashbookAccountId, amount, notes = "" }) => {
-  const balance = await getStaffSavingsBalance(businessId, staffId);
-  const disburseAmount = amount != null ? round2(Number(amount)) : balance.balance;
+  const bal = await getStaffSavingsBalance(businessId, staffId);
+  const disburseAmount = amount != null ? round2(Number(amount)) : bal.balance;
 
   if (!Number.isFinite(disburseAmount) || disburseAmount <= 0) {
     throw new Error("No savings available to disburse — the savings pot is empty");
   }
-  // balance = held - disbursed (what is physically in the savings pot, credited via commission deductions)
-  if (disburseAmount > balance.balance + 0.01) {
-    const pending = round2(balance.commitment - balance.balance);
+  if (disburseAmount > bal.balance + 0.01) {
     throw new Error(
-      `Cannot disburse more than the savings pot balance (Ksh ${balance.balance.toLocaleString()}).` +
-      (pending > 0 ? ` Ksh ${pending.toLocaleString()} more will be available after future commission payouts.` : "")
+      `Cannot disburse more than the savings pot balance (Ksh ${bal.balance.toLocaleString()}).` +
+      (bal.pending > 0 ? ` Ksh ${bal.pending.toLocaleString()} more will be available after future commission payouts.` : "")
     );
   }
 
@@ -243,7 +273,7 @@ export const disburseSavings = async ({ req, businessId, staffId, cashbookAccoun
   if (!cashbook) throw new Error("Select a valid posting cashbook account for the savings payout");
 
   const { resolveAuditActorUserId } = await import("../../../utils/systemActor.js");
-  const actorId = req ? await resolveAuditActorUserId({ req, businessId }).catch(() => null) : null;
+  const actorId    = req ? await resolveAuditActorUserId({ req, businessId }).catch(() => null) : null;
   const payoutNumber = await generateSavingsPayoutNumber(businessId);
 
   const record = await CarWashStaffSaving.create({
