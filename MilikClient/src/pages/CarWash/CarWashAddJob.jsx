@@ -411,8 +411,9 @@ const CarWashAddJob = () => {
   const [isAllBranches, setIsAllBranches] = useState(false);
   const [selectedBranchId, setSelectedBranchId] = useState("");
   const [branchType, setBranchType] = useState("both");
-  const [saving, setSaving]         = useState(false);
-  const [loadingJob, setLoadingJob] = useState(false);
+  const [saving, setSaving]           = useState(false);
+  const [loadingJob, setLoadingJob]   = useState(false);
+  const [jobPaymentStatus, setJobPaymentStatus] = useState(null);
 
   const { read: readDraft, write: writeDraft, clear: clearDraft } = useFormDraft("cw-new-job");
 
@@ -538,6 +539,7 @@ const CarWashAddJob = () => {
         if (!job) return;
         setJobType(job.jobType || "vehicle");
         setPlateNumber(job.plateNumber || "");
+        setJobPaymentStatus(job.paymentStatus || "unpaid");
         setItemDescription(job.itemDescription || "");
         setExpectedReadyAt(
           job.expectedReadyAt
@@ -864,8 +866,11 @@ const CarWashAddJob = () => {
                       setLoyaltyCard(card);
                       setApplyReward(false);
                     }}
-                    readOnly={isEditMode}
+                    readOnly={isEditMode && jobPaymentStatus === "paid"}
                   />
+                  {isEditMode && jobPaymentStatus !== "paid" && (
+                    <p className="mt-1 text-[10px] text-amber-600">Plate can be edited — payment not yet completed</p>
+                  )}
                   <CreditAccountBanner
                     plate={plateNumber}
                     jobTotal={totalPrice}

@@ -1081,7 +1081,7 @@ export default function CarWashMpesaNotifications() {
                               )}
                             </div>
                             <p className="text-[10px] text-slate-500">{n.matchedJob.customerName || n.matchedJob.plateNumber}</p>
-                            {(isManual || isAllocated) && <p className="text-[9px] text-slate-400">by {actor || "Admin"}</p>}
+                            {actor && <p className="text-[9px] text-slate-400">by {actor}</p>}
                             {n.isReversed && <p className="text-[9px] text-red-500 font-semibold">Payment reversed</p>}
                           </div>
                         ) : isAllocated ? (
@@ -1090,7 +1090,7 @@ export default function CarWashMpesaNotifications() {
                               <span className="text-[10px] text-slate-500 italic">{n.notes?.match(/Allocated to (\d+ job\(s\))/)?.[1] || "Multiple jobs"}</span>
                               <span className="inline-flex items-center border border-violet-300 bg-violet-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-violet-700">Allocated</span>
                             </div>
-                            <p className="text-[9px] text-slate-400">by {actor || "Admin"}</p>
+                            {actor && <p className="text-[9px] text-slate-400">by {actor}</p>}
                           </div>
                         ) : (
                           <span className="text-[10px] text-slate-400 italic">{n.resultDesc || "—"}</span>

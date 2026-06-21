@@ -496,6 +496,9 @@ export const updateJob = async (req, res, next) => {
     if (existing.jobType === "vehicle") {
       const updatedPlate = normalizePlate(req.body.plateNumber ?? existing.plateNumber);
       if (!updatedPlate) return next(createError(400, "Plate number is required for vehicle jobs"));
+      if (updatedPlate !== existing.plateNumber && existing.paymentStatus === "paid") {
+        return next(createError(400, "Plate number cannot be changed on a paid job"));
+      }
       existing.plateNumber = updatedPlate;
     } else {
       const updatedItem = String(req.body.itemDescription ?? existing.itemDescription).trim();
