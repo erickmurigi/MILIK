@@ -12,6 +12,21 @@ import {
 
 const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 
+// 1-minute in-process cache for commission rules per business
+// Rules rarely change mid-day; avoids a DB hit on every single payment
+const _rulesCache = new Map(); // businessId → { rules, at }
+const RULES_TTL = 60_000;
+const getActiveRules = async (business) => {
+  const key = String(business);
+  const hit = _rulesCache.get(key);
+  if (hit && Date.now() - hit.at < RULES_TTL) return hit.rules;
+  const rules = await CarWashCommissionRule.find({ business, active: true }).lean();
+  _rulesCache.set(key, { rules, at: Date.now() });
+  return rules;
+};
+// Call this whenever rules are saved/deleted so the cache reflects the change immediately
+export const invalidateRulesCache = (business) => _rulesCache.delete(String(business));
+
 const dayRange = (value = new Date()) => {
   const date = value ? new Date(value) : new Date();
   const safe = Number.isNaN(date.getTime()) ? new Date() : date;
@@ -45,7 +60,7 @@ const resolveRuleFromCache = (rules, serviceId, staffId) => {
 
 // Async wrapper kept for backward-compat callers that pass a single (business, service, staff) tuple.
 const resolveCommissionRuleForLine = async (business, serviceId, staffId) => {
-  const rules = await CarWashCommissionRule.find({ business, active: true }).lean();
+  const rules = await getActiveRules(business);
   return resolveRuleFromCache(rules, serviceId, staffId);
 };
 
@@ -94,7 +109,7 @@ export const accrueCommissionForJob = async ({ req = null, job, paidLineSet = nu
 
   const [actorUserId, allRules] = await Promise.all([
     req ? resolveAuditActorUserId({ req, businessId: job.business }) : Promise.resolve(null),
-    CarWashCommissionRule.find({ business: job.business, active: true }).lean(),
+    getActiveRules(job.business),
   ]);
 
   // Build per-staff commission breakdown respecting per-line staff assignment.

@@ -78,5 +78,9 @@ carWashJobSchema.index({ business: 1, paymentStatus: 1, createdAt: -1 });
 carWashJobSchema.index({ business: 1, assignedStaff: 1, createdAt: -1 });
 // M-Pesa plate matching: covers the plate + open-job filter in one scan
 carWashJobSchema.index({ business: 1, plateNumber: 1, status: 1, paymentStatus: 1 });
+// Duplicate-plate-today check + loyalty plate stats with date range
+carWashJobSchema.index({ business: 1, plateNumber: 1, createdAt: -1 });
+// Combined status + paymentStatus filter with sort (job list page multi-filter)
+carWashJobSchema.index({ business: 1, status: 1, paymentStatus: 1, createdAt: -1 });
 
 export default mongoose.model("CarWashJob", carWashJobSchema);

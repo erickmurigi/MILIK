@@ -150,8 +150,7 @@ router.get("/:id/activity", verifyUser, requireCompanyModule(GL_ACCESS_MODULES),
       return res.status(400).json({ error: "Invalid chart account id" });
     }
 
-    await aggregateChartOfAccountBalances(business, [id]);
-
+    // Fetch account without recomputing balance snapshot — activity computes its own
     const account = await ChartOfAccount.findOne({ _id: id, business })
       .populate("parentAccount", "code name")
       .lean();
@@ -175,37 +174,39 @@ router.get("/:id/activity", verifyUser, requireCompanyModule(GL_ACCESS_MODULES),
       includeReversed: shouldIncludeReversed,
     });
 
-    const openingMatch = buildLedgerActivityMatch({
-      business,
-      accountId: id,
-      start: null,
-      end: null,
-      direction,
-      sourceTransactionType,
-      includeReversed: shouldIncludeReversed,
-    });
-
-    if (start) {
-      openingMatch.transactionDate = { $lt: start };
-    }
-
-    const openingRows = start
-      ? await FinancialLedgerEntry.find(openingMatch)
-          .sort({ transactionDate: 1, createdAt: 1, _id: 1 })
-          .lean()
-      : [];
-
+    // Opening balance via aggregation — avoids loading N full documents just to sum amounts
     let openingBalance = 0;
-    for (const row of openingRows) {
-      openingBalance += entrySignedForAccount(row, account.type);
+    if (start) {
+      const openingMatch = buildLedgerActivityMatch({
+        business,
+        accountId: id,
+        start: null,
+        end: null,
+        direction,
+        sourceTransactionType,
+        includeReversed: shouldIncludeReversed,
+      });
+      openingMatch.transactionDate = { $lt: start };
+
+      const normalSide = getNormalBalanceSide(account.type);
+      const [agg] = await FinancialLedgerEntry.aggregate([
+        { $match: openingMatch },
+        {
+          $group: {
+            _id: null,
+            debitSum:  { $sum: { $cond: [{ $eq: ["$direction", "debit"]  }, "$amount", 0] } },
+            creditSum: { $sum: { $cond: [{ $eq: ["$direction", "credit"] }, "$amount", 0] } },
+          },
+        },
+      ]);
+      openingBalance = normalSide === "debit"
+        ? (agg?.debitSum || 0) - (agg?.creditSum || 0)
+        : (agg?.creditSum || 0) - (agg?.debitSum || 0);
     }
 
+    // Load entries — skip PM-specific populates (tenant/unit/property/landlord are null for carwash)
     const entries = await FinancialLedgerEntry.find(match)
       .sort({ transactionDate: 1, createdAt: 1, _id: 1 })
-      .populate("tenant", "name tenantCode")
-      .populate("unit", "unitNumber name")
-      .populate("property", "propertyName propertyCode name")
-      .populate("landlord", "firstName lastName")
       .populate("accountId", "code name type")
       .lean();
 

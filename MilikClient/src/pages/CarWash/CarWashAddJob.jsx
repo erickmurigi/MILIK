@@ -414,6 +414,8 @@ const CarWashAddJob = () => {
   const [saving, setSaving]           = useState(false);
   const [loadingJob, setLoadingJob]   = useState(false);
   const [jobPaymentStatus, setJobPaymentStatus] = useState(null);
+  const [dupWarning, setDupWarning]   = useState(null); // { jobNumber, customerName, plateNumber }
+  const skipDupCheckRef               = React.useRef(false);
 
   const { read: readDraft, write: writeDraft, clear: clearDraft } = useFormDraft("cw-new-job");
 
@@ -708,6 +710,30 @@ const CarWashAddJob = () => {
       toast.error("Discount cannot exceed total price");
       return;
     }
+
+    // Duplicate plate check — new vehicle jobs only, skip if user already confirmed
+    if (!isEditMode && jobType === "vehicle" && plateNumber?.trim() && !skipDupCheckRef.current) {
+      try {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const existing = await carWashApi.listJobs({
+          search:   plateNumber.trim().toUpperCase(),
+          dateFrom: todayStr,
+          dateTo:   todayStr,
+          limit:    1,
+        });
+        const match = Array.isArray(existing?.jobs) ? existing.jobs[0]
+          : Array.isArray(existing)                 ? existing[0]
+          : null;
+        if (match) {
+          setDupWarning(match);
+          return; // pause — render warning modal below
+        }
+      } catch (_) {
+        // non-blocking — if check fails, proceed normally
+      }
+    }
+
+    skipDupCheckRef.current = false; // reset after passing the gate
     setSaving(true);
     const payload = {
       jobType,
@@ -1498,6 +1524,7 @@ const CarWashAddJob = () => {
             {/* Save button */}
             {(isEditMode ? canUpdate : canCreate) && (
               <button
+                id="cw-job-form-submit"
                 type="submit"
                 disabled={saving}
                 className="flex w-full items-center justify-center gap-2 py-3 text-sm font-extrabold uppercase tracking-wide text-white bg-[#0B3B2E] hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
@@ -1529,6 +1556,51 @@ const CarWashAddJob = () => {
           </div>
         </div>
       </form>
+
+      {/* Duplicate plate warning modal */}
+      {dupWarning && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm border border-amber-300 bg-white shadow-2xl">
+            <div className="bg-amber-500 px-4 py-3">
+              <p className="text-sm font-black text-white">Duplicate Plate Number</p>
+            </div>
+            <div className="px-4 py-4 space-y-3">
+              <p className="text-xs text-slate-700">
+                Plate <span className="font-black text-slate-900 tracking-wider">{plateNumber.toUpperCase()}</span> already
+                has a job today:
+              </p>
+              <div className="border border-amber-200 bg-amber-50 px-3 py-2 text-xs space-y-0.5">
+                <p className="font-black text-slate-900">{dupWarning.jobNumber}</p>
+                {dupWarning.customerName && <p className="text-slate-600">{dupWarning.customerName}</p>}
+                <p className="text-slate-500 capitalize">{dupWarning.status || "pending"}</p>
+              </div>
+              <p className="text-xs text-slate-500">
+                This might be a duplicate entry. Confirm only if this is a separate visit.
+              </p>
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setDupWarning(null)}
+                  className="flex-1 h-8 border border-slate-300 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    skipDupCheckRef.current = true;
+                    setDupWarning(null);
+                    setTimeout(() => document.getElementById("cw-job-form-submit")?.click(), 0);
+                  }}
+                  className="flex-1 h-8 bg-amber-500 hover:bg-amber-600 text-white text-xs font-black"
+                >
+                  Yes, Proceed Anyway
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </CarWashShell>
   );
 };

@@ -176,14 +176,16 @@ export const listCustomersEnriched = async (req, res, next) => {
           { $match: { business: businessOid, status: 'active' } },
           { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
         ]),
-        CarWashJob.aggregate([
-          { $match: { business: businessOid, status: { $nin: ['cancelled'] } } },
-          { $lookup: { from: 'carwashpayments', localField: '_id', foreignField: 'job',
-              pipeline: [{ $group: { _id: null, paid: { $sum: '$amount' } } }], as: 'ps' } },
-          { $addFields: { netPrice: { $subtract: ['$price', { $ifNull: ['$discountAmount', 0] }] }, paid: { $ifNull: [{ $arrayElemAt: ['$ps.paid', 0] }, 0] } } },
-          { $addFields: { owed: { $max: [0, { $subtract: ['$netPrice', '$paid'] }] } } },
-          { $group: { _id: null, total: { $sum: '$owed' } } },
-        ]),
+        Promise.all([
+          CarWashJob.aggregate([
+            { $match: { business: businessOid, status: { $nin: ['cancelled'] } } },
+            { $group: { _id: null, total: { $sum: { $subtract: ['$price', { $ifNull: ['$discountAmount', 0] }] } } } },
+          ]),
+          CarWashPayment.aggregate([
+            { $match: { business: businessOid } },
+            { $group: { _id: null, total: { $sum: '$amount' } } },
+          ]),
+        ]).then(([inv, paid]) => [{ total: Math.max(0, (inv[0]?.total || 0) - (paid[0]?.total || 0)) }]),
       ]);
       return res.json({
         success: true, data: [], total: 0, page: pageNum, limit: limitNum, loyaltyProgram: loyaltyProgram || null,
@@ -223,33 +225,37 @@ export const listCustomersEnriched = async (req, res, next) => {
         { $match: { business: businessOid, status: 'active' } },
         { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
       ]),
-      // Global: total outstanding across all non-cancelled jobs (uses $lookup to avoid two-step)
-      CarWashJob.aggregate([
-        { $match: { business: businessOid, status: { $nin: ['cancelled'] } } },
-        { $lookup: {
-          from: 'carwashpayments',
-          localField: '_id',
-          foreignField: 'job',
-          pipeline: [{ $group: { _id: null, paid: { $sum: '$amount' } } }],
-          as: 'ps',
-        }},
-        { $addFields: {
-          netPrice: { $subtract: ['$price', { $ifNull: ['$discountAmount', 0] }] },
-          paid: { $ifNull: [{ $arrayElemAt: ['$ps.paid', 0] }, 0] },
-        }},
-        { $addFields: { owed: { $max: [0, { $subtract: ['$netPrice', '$paid'] }] } } },
-        { $group: { _id: null, total: { $sum: '$owed' } } },
-      ]),
+      // Global outstanding = total invoiced (non-cancelled) minus total collected
+      // Two fast aggregations avoids an expensive per-job $lookup across the full collection
+      Promise.all([
+        CarWashJob.aggregate([
+          { $match: { business: businessOid, status: { $nin: ['cancelled'] } } },
+          { $group: { _id: null, total: { $sum: { $subtract: ['$price', { $ifNull: ['$discountAmount', 0] }] } } } },
+        ]),
+        CarWashPayment.aggregate([
+          { $match: { business: businessOid } },
+          { $group: { _id: null, total: { $sum: '$amount' } } },
+        ]),
+      ]).then(([inv, paid]) => [{
+        total: Math.max(0, (inv[0]?.total || 0) - (paid[0]?.total || 0)),
+      }]),
     ]);
 
-    // Batch payment totals for all jobs found
+    // Batch payment totals — chunk $in to stay within BSON 16MB limit (500 IDs per batch)
     const allJobIds = jobStats.flatMap((s) => s.jobIds);
-    const paymentTotals = allJobIds.length
-      ? await CarWashPayment.aggregate([
-          { $match: { business: businessOid, job: { $in: allJobIds } } },
+    let paymentTotals = [];
+    if (allJobIds.length) {
+      const CHUNK = 500;
+      const chunks = [];
+      for (let i = 0; i < allJobIds.length; i += CHUNK) chunks.push(allJobIds.slice(i, i + CHUNK));
+      const batches = await Promise.all(chunks.map((chunk) =>
+        CarWashPayment.aggregate([
+          { $match: { business: businessOid, job: { $in: chunk } } },
           { $group: { _id: '$job', paid: { $sum: '$amount' } } },
         ])
-      : [];
+      ));
+      paymentTotals = batches.flat();
+    }
 
     const paidByJob = new Map(paymentTotals.map((p) => [String(p._id), Number(p.paid || 0)]));
 

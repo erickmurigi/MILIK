@@ -24,10 +24,10 @@ const ACCOUNT_GROUPS = [
 
 const SUBGROUP_OPTIONS_BY_TYPE = {
   asset:     ["Cashbooks", "Bank Accounts", "Current Assets", "Fixed Assets", "Receivables", "Other Assets"],
-  liability: ["Current Liabilities", "Long-term Liabilities", "Payables", "Control Accounts", "Other Liabilities"],
-  equity:    ["Equity", "Capital", "Retained Earnings", "Reserves", "Other Equity"],
-  income:    ["Operating Income", "Rental Income", "Commission Income", "Car Wash Income", "Other Income"],
-  expense:   ["Operating Expenses", "Administrative Expenses", "Property Expenses", "Car Wash Expenses", "Finance Costs", "Other Expenses"],
+  liability: ["Current Liabilities", "Long-term Liabilities", "Payables", "Other Liabilities"],
+  equity:    ["Capital", "Retained Earnings", "Reserves", "Other Equity"],
+  income:    ["Operating Revenue", "Service Revenue", "Commission & Fees", "Other Income"],
+  expense:   ["Cost of Sales", "Operating Expenses", "Administrative Expenses", "Finance Costs", "Other Expenses"],
 };
 
 const NORMAL_BALANCE_BY_TYPE = {
@@ -50,6 +50,11 @@ const MODULE_SCOPE_OPTIONS = [
   { value: "carwash",            label: "Car Wash" },
   { value: "general",            label: "General" },
 ];
+
+const GROUP_TO_TYPE = {
+  assets: "asset", liabilities: "liability", equity: "equity",
+  income: "income", expenses: "expense",
+};
 
 const blankForm = {
   code: "", name: "", type: "asset", group: "assets",
@@ -106,9 +111,11 @@ const ChartOfAccounts = () => {
   const canDeleteCOA   = hasCompanyPermission(currentUser, currentCompany, "chartOfAccounts", "delete", "accounts");
 
   const [accounts,            setAccounts]          = useState([]);
+  const [searchInput,         setSearchInput]       = useState("");
   const [search,              setSearch]            = useState("");
   const [moduleScope,         setModuleScope]       = useState(() => searchParams.get("scope") || "");
   const [loading,             setLoading]           = useState(false);
+  const [refreshing,          setRefreshing]        = useState(false);
   const [saving,              setSaving]            = useState(false);
   const [showControlAccounts, setShowControlAccounts] = useState(false);
   const [selectedIds,         setSelectedIds]       = useState([]);
@@ -117,6 +124,7 @@ const ChartOfAccounts = () => {
   const [formData,            setFormData]          = useState(blankForm);
   const [collapsed,           setCollapsed]         = useState({});
   const requestSequenceRef = useRef(0);
+  const hasLoadedOnce      = useRef(false);
 
   // ── Draft persistence ──
   const _uid         = currentUser?._id || currentUser?.id;
@@ -139,22 +147,29 @@ const ChartOfAccounts = () => {
     try { window.sessionStorage.setItem(_coaDraftKey, JSON.stringify({ form: formData })); } catch {}
   }, [_coaDraftKey, formData, showForm, editingAccountId]);
 
+  // ── Search debounce ──
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput), 200);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
   // ── Data loading ──
   const businessId = currentCompany?._id || "";
 
   const loadAccounts = useCallback(async () => {
     const requestId = requestSequenceRef.current + 1;
     requestSequenceRef.current = requestId;
-    setAccounts([]);
     setSelectedIds([]);
     if (!businessId) { setLoading(false); return; }
-    setLoading(true);
+    if (!hasLoadedOnce.current) setLoading(true);
+    setRefreshing(true);
     try {
       const params = { business: businessId };
       if (moduleScope) params.moduleScope = moduleScope;
       const rows = await getChartOfAccounts(params);
       if (requestSequenceRef.current !== requestId) return;
       setAccounts(Array.isArray(rows) ? rows : []);
+      hasLoadedOnce.current = true;
     } catch (error) {
       if (requestSequenceRef.current !== requestId) return;
       toast.error(
@@ -163,9 +178,12 @@ const ChartOfAccounts = () => {
         error?.message ||
         "Failed to load chart of accounts"
       );
-      setAccounts([]);
+      if (!hasLoadedOnce.current) setAccounts([]);
     } finally {
-      if (requestSequenceRef.current === requestId) setLoading(false);
+      if (requestSequenceRef.current === requestId) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [businessId, moduleScope]);
 
@@ -194,28 +212,33 @@ const ChartOfAccounts = () => {
     return haystack.includes(normalizedSearch);
   }), [accounts, normalizedSearch, showControlAccounts]);
 
-  // ── Grouping: by type → by class ──
+  // ── Grouping: by type → by class (all predefined subgroups always visible) ──
   const typeGroups = useMemo(() => {
     return ACCOUNT_GROUPS.map((group) => {
+      const groupType = GROUP_TO_TYPE[group.key] || "asset";
+      const allSubgroups = subGroupOptionsForType(groupType);
+
       const typeAccounts = filteredAccounts
         .filter((a) => normalizeGroup(a.group, a.type) === group.key)
         .sort((a, b) => String(a.code || "").localeCompare(String(b.code || "")));
 
-      const classMap = {};
+      // Seed classMap with ALL predefined subgroups in correct order
+      const classMap = new Map(allSubgroups.map((sg) => [sg, []]));
       for (const acc of typeAccounts) {
         const cls = classLabel(acc);
-        if (!classMap[cls]) classMap[cls] = [];
-        classMap[cls].push(acc);
+        if (!classMap.has(cls)) classMap.set(cls, []);
+        classMap.get(cls).push(acc);
       }
 
-      const classes = Object.entries(classMap)
-        .map(([cls, accs]) => ({ cls, accounts: accs }))
-        .sort((a, b) => a.cls.localeCompare(b.cls));
+      const classes = [...classMap.entries()]
+        // Hide empty classes only when searching (empty = no matching results)
+        .filter(([, accs]) => !normalizedSearch || accs.length > 0)
+        .map(([cls, accs]) => ({ cls, accounts: accs, isEmpty: accs.length === 0 }));
 
       const totalBalance = typeAccounts.reduce((s, a) => s + Number(a.balance || 0), 0);
-      return { ...group, classes, count: typeAccounts.length, totalBalance };
+      return { ...group, classes, count: typeAccounts.length, totalBalance, groupType };
     });
-  }, [filteredAccounts]);
+  }, [filteredAccounts, normalizedSearch]);
 
   // ── Form helpers ──
   const parentOptions = useMemo(() =>
@@ -246,10 +269,16 @@ const ChartOfAccounts = () => {
   }, [accounts, selectedIds]);
 
   // ── Actions ──
-  const openCreateModal = () => {
+  const openCreateModal = (preset = {}) => {
     if (!canCreateCOA) { toast.warning("No permission to create accounts."); return; }
     setEditingAccountId(null);
-    setFormData(blankForm);
+    const type = preset.type || "asset";
+    setFormData({
+      ...blankForm,
+      type,
+      group:    normalizeGroup("", type),
+      subGroup: preset.subGroup || subGroupOptionsForType(type)[0] || "Cashbooks",
+    });
     setShowForm(true);
   };
 
@@ -395,8 +424,8 @@ const ChartOfAccounts = () => {
           <div className="relative">
             <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] text-slate-400" />
             <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Code, name, type, class..."
               className="h-7 w-52 border border-slate-200 bg-slate-50 pl-6 pr-2 text-xs focus:outline-none focus:border-[#0B3B2E]"
             />
@@ -436,7 +465,7 @@ const ChartOfAccounts = () => {
               title="Refresh"
               className="h-7 px-2.5 border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 flex items-center text-xs"
             >
-              <FaSyncAlt size={9} />
+              <FaSyncAlt size={9} className={refreshing ? "animate-spin" : ""} />
             </button>
             {selectedAccounts.length === 1 && canUpdateCOA && (
               <button
@@ -529,22 +558,38 @@ const ChartOfAccounts = () => {
                               </td>
                             </tr>
                           ) : (
-                            group.classes.map(({ cls, accounts: clsAccounts }) => (
-                              <React.Fragment key={cls}>
+                            group.classes.map((clsAcc) => (
+                              <React.Fragment key={clsAcc.cls}>
                                 {/* Class sub-header */}
                                 <tr className="bg-slate-50 border-y border-slate-200">
                                   <td colSpan={6} className="px-3 py-1">
                                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                                      {cls}
+                                      {clsAcc.cls}
                                     </span>
-                                    <span className="ml-2 text-[10px] text-slate-400">
-                                      {clsAccounts.length}
-                                    </span>
+                                    {!clsAcc.isEmpty && (
+                                      <span className="ml-2 text-[10px] text-slate-400">
+                                        {clsAcc.accounts.length}
+                                      </span>
+                                    )}
                                   </td>
                                 </tr>
 
+                                {/* Empty class placeholder with quick-add */}
+                                {clsAcc.isEmpty && (
+                                  <tr>
+                                    <td colSpan={6} className="px-3 py-2 text-center">
+                                      <button
+                                        onClick={() => openCreateModal({ type: group.groupType, subGroup: clsAcc.cls })}
+                                        className="text-[10px] italic text-slate-400 hover:text-[#0B3B2E] font-medium"
+                                      >
+                                        + Add first account in this class
+                                      </button>
+                                    </td>
+                                  </tr>
+                                )}
+
                                 {/* Account rows */}
-                                {clsAccounts.map((account) => {
+                                {clsAcc.accounts.map((account) => {
                                   const selected = selectedIds.includes(account._id);
                                   const balance  = Number(account.balance || 0);
                                   return (

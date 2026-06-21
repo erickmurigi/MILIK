@@ -6,7 +6,7 @@ import CarWashCommissionPayout from "../models/CarWashCommissionPayout.js";
 import CarWashService from "../models/CarWashService.js";
 import CarWashStaff from "../models/CarWashStaff.js";
 import { currentUserId, escapeRegex, parseBoolean, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
-import { generatePayoutNumber } from "../services/commissionService.js";
+import { generatePayoutNumber, invalidateRulesCache } from "../services/commissionService.js";
 import { postCarWashCommissionPayout, postCarWashCommissionPayoutWithSavings, resolvePayoutCashbook, reverseCarWashCommissionAccrual, reverseCarWashPayoutLedgerEntries } from "../services/carwashAccountingService.js";
 import { deductSavingsForPayout, getStaffSavingsBalance, disburseSavings, eatToday, getSavingsDeductionAmount, initializeSavingsForBusiness } from "../services/savingsService.js";
 import CarWashStaffSaving from "../models/CarWashStaffSaving.js";
@@ -96,6 +96,7 @@ export const upsertCommissionRule = async (req, res, next) => {
     } else {
       rule = await CarWashCommissionRule.create({ ...payload, createdBy: currentUserId(req) });
     }
+    invalidateRulesCache(business); // clear 1-min cache so next payment uses updated rules
     res.status(req.params.id ? 200 : 201).json({ success: true, data: rule, rule, message: "Commission rule saved" });
   } catch (error) {
     next(error);

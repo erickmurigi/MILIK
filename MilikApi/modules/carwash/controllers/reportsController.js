@@ -3,6 +3,7 @@ import CarWashExpense from "../models/CarWashExpense.js";
 import CarWashJob from "../models/CarWashJob.js";
 import CarWashPayment from "../models/CarWashPayment.js";
 import CarWashStaffCommission from "../models/CarWashStaffCommission.js";
+import CarWashStaff from "../models/CarWashStaff.js";
 import FinancialLedgerEntry from "../../../models/FinancialLedgerEntry.js";
 import { parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { backfillCarWashPaymentLedger, deduplicateCarWashLedgerEntries, repairOrphanedCarWashLedgerEntries } from "../services/carwashAccountingService.js";
@@ -204,11 +205,11 @@ const buildRangeSummary = async (business, start, end, type, branchId = null) =>
       { $sort: { jobs: -1, value: -1 } },
       { $limit: 20 },
     ]),
+    // Group by staff ID (no $lookup) — resolve names in one batched query after
     CarWashJob.aggregate([
       { $match: jobMatch },
-      { $lookup: { from: "carwashstaffs", localField: "assignedStaff", foreignField: "_id", as: "staff" } },
-      { $unwind: { path: "$staff", preserveNullAndEmptyArrays: true } },
-      { $group: { _id: { $ifNull: ["$staff.name", "Unassigned"] }, jobs: { $sum: 1 }, value: { $sum: "$price" } } },
+      { $unwind: { path: "$assignedStaff", preserveNullAndEmptyArrays: true } },
+      { $group: { _id: "$assignedStaff", jobs: { $sum: 1 }, value: { $sum: "$price" } } },
       { $sort: { jobs: -1, value: -1 } },
       { $limit: 20 },
     ]),
@@ -255,7 +256,16 @@ const buildRangeSummary = async (business, start, end, type, branchId = null) =>
     statusCounts,
     trendRows: buildTrendRows(start, end, jobTrendRows, paymentTrendRows),
     serviceRows: serviceRows.map((row) => ({ service: row._id || "Unspecified", jobs: row.jobs || 0, value: row.value || 0 })),
-    staffRows: staffRows.map((row) => ({ staff: row._id || "Unassigned", jobs: row.jobs || 0, value: row.value || 0 })),
+    staffRows: await (async () => {
+      const ids = staffRows.map((r) => r._id).filter(Boolean);
+      const docs = ids.length ? await CarWashStaff.find({ _id: { $in: ids } }).select("name").lean() : [];
+      const nameMap = new Map(docs.map((s) => [String(s._id), s.name]));
+      return staffRows.map((row) => ({
+        staff: row._id ? (nameMap.get(String(row._id)) || "Unassigned") : "Unassigned",
+        jobs: row.jobs || 0,
+        value: row.value || 0,
+      }));
+    })(),
   };
 };
 

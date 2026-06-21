@@ -51,13 +51,15 @@ const effectivePaidAggregation = [
 ];
 
 const refreshJobPaymentStatus = async (business, jobId) => {
-  const job = await CarWashJob.findOne({ _id: jobId, business });
-  if (!job) throw createError(404, "Car Wash job not found");
-
-  const totals = await CarWashPayment.aggregate([
-    { $match: { business: job.business, job: job._id } },
-    ...effectivePaidAggregation,
+  const jobOid = new mongoose.Types.ObjectId(String(jobId));
+  const [job, totals] = await Promise.all([
+    CarWashJob.findOne({ _id: jobOid, business }),
+    CarWashPayment.aggregate([
+      { $match: { business: new mongoose.Types.ObjectId(String(business)), job: jobOid } },
+      ...effectivePaidAggregation,
+    ]),
   ]);
+  if (!job) throw createError(404, "Car Wash job not found");
   const paidAmount = Number(totals?.[0]?.paid || 0);
   const price = netJobPrice(job);
   job.paymentStatus = paidAmount <= 0 ? "unpaid" : paidAmount < price ? "partial" : "paid";

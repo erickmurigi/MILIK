@@ -59,5 +59,7 @@ carWashStaffCommissionSchema.index({ business: 1, job: 1 });
 carWashStaffCommissionSchema.index({ business: 1, status: 1, earnedAt: -1 });
 carWashStaffCommissionSchema.index({ business: 1, staff: 1, status: 1 });
 carWashStaffCommissionSchema.index({ business: 1, branch: 1, earnedAt: -1 });
+// Per-staff commission list sorted by date (commissions page filter)
+carWashStaffCommissionSchema.index({ business: 1, staff: 1, status: 1, earnedAt: -1 });
 
 export default mongoose.model("CarWashStaffCommission", carWashStaffCommissionSchema);

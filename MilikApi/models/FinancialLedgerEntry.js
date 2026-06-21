@@ -275,6 +275,8 @@ FinancialLedgerEntrySchema.index({ business: 1, landlord: 1, status: 1, transact
 FinancialLedgerEntrySchema.index({ business: 1, unit: 1, status: 1, transactionDate: -1 });
 // Optimized for report aggregations: $match on business+status+date, $group on accountId
 FinancialLedgerEntrySchema.index({ business: 1, status: 1, transactionDate: 1, accountId: 1 });
+// Optimized for ledger activity: accountId range scan + sort by date/createdAt
+FinancialLedgerEntrySchema.index({ business: 1, accountId: 1, transactionDate: 1, createdAt: 1 });
 
 FinancialLedgerEntrySchema.pre("findOneAndUpdate", function blockImmutableUpdate(next) {
   return next(new Error("FinancialLedgerEntry is immutable. Use reversal entries instead of updates."));

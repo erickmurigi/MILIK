@@ -46,5 +46,9 @@ carWashExpenseSchema.index({ business: 1, branch: 1, expenseDate: -1 });
 carWashExpenseSchema.index({ business: 1, status: 1 });
 carWashExpenseSchema.index({ business: 1, category: 1 });
 carWashExpenseSchema.index({ business: 1, cashbookAccount: 1 });
+// Filtered expense list with date sort
+carWashExpenseSchema.index({ business: 1, status: 1, expenseDate: -1 });
+// Category report with date range
+carWashExpenseSchema.index({ business: 1, category: 1, expenseDate: -1 });
 
 export default mongoose.model("CarWashExpense", carWashExpenseSchema);

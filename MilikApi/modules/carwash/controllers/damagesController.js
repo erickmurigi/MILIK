@@ -156,32 +156,36 @@ export const listDamagesBalances = async (req, res, next) => {
     const dmgFilter = { business };
     if (branchId) dmgFilter.branch = new mongoose.Types.ObjectId(String(branchId));
 
-    const [allStaff, allDamages] = await Promise.all([
+    // Aggregate damage totals by staff in MongoDB — avoids loading every damage document
+    const [allStaff, damageStats] = await Promise.all([
       CarWashStaff.find(staffFilter).select("_id name role").lean(),
-      CarWashStaffDamage.find(dmgFilter).lean(),
+      CarWashStaffDamage.aggregate([
+        { $match: dmgFilter },
+        { $group: {
+          _id:           '$staff',
+          totalDeducted: { $sum: { $cond: [{ $eq: ['$status', 'deducted'] }, '$amount', 0] } },
+          totalWaived:   { $sum: { $cond: [{ $eq: ['$status', 'waived']   }, '$amount', 0] } },
+          pendingDocs:   { $push: { $cond: [
+            { $and: [{ $ne: ['$status', 'deducted'] }, { $ne: ['$status', 'waived'] }] },
+            { amount: '$amount', amountRecovered: '$amountRecovered', deductionMode: '$deductionMode', deductionValue: '$deductionValue' },
+            '$$REMOVE',
+          ]}},
+        }},
+        { $match: { $or: [{ totalDeducted: { $gt: 0 } }, { totalWaived: { $gt: 0 } }, { 'pendingDocs.0': { $exists: true } }] } },
+      ]),
     ]);
 
-    // Group damages by staff — compute installments for pending ones
-    const byStaff = new Map();
-    for (const d of allDamages) {
-      const key = String(d.staff);
-      if (!byStaff.has(key)) byStaff.set(key, { pendingAmount: 0, pendingInstallment: 0, totalDeducted: 0, totalWaived: 0 });
-      const entry = byStaff.get(key);
-      if (d.status === "waived") {
-        entry.totalWaived = round2(entry.totalWaived + d.amount);
-      } else if (d.status === "deducted") {
-        entry.totalDeducted = round2(entry.totalDeducted + d.amount);
-      } else {
-        const remaining = round2(d.amount - (d.amountRecovered || 0));
-        entry.pendingAmount = round2(entry.pendingAmount + remaining);
-        entry.pendingInstallment = round2(entry.pendingInstallment + computeDamageInstallment(d));
-      }
-    }
+    // Compute installment totals in JS (only for pending docs — much smaller set)
+    const byStaff = new Map(damageStats.map((d) => {
+      const pendingAmount = round2(d.pendingDocs.reduce((s, doc) => s + round2((doc.amount || 0) - (doc.amountRecovered || 0)), 0));
+      const pendingInstallment = round2(d.pendingDocs.reduce((s, doc) => s + computeDamageInstallment(doc), 0));
+      return [String(d._id), { pendingAmount, pendingInstallment, totalDeducted: round2(d.totalDeducted), totalWaived: round2(d.totalWaived) }];
+    }));
 
     const empty = { pendingAmount: 0, pendingInstallment: 0, totalDeducted: 0, totalWaived: 0 };
     const withPending = allStaff
       .map((s) => ({ staff: s, ...(byStaff.get(String(s._id)) || empty) }))
-      .filter((s) => s.pendingAmount > 0);
+      .filter((s) => s.pendingAmount > 0 || s.totalDeducted > 0 || s.totalWaived > 0);
 
     res.json({ success: true, data: withPending, balances: withPending });
   } catch (error) {

@@ -3,12 +3,8 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import {
-  FaArrowLeft,
-  FaExchangeAlt,
-  FaFilter,
-  FaRedoAlt,
-  FaSyncAlt,
-  FaTrashAlt,
+  FaArrowLeft, FaExchangeAlt, FaFilter, FaRedoAlt,
+  FaSyncAlt, FaTrashAlt, FaTimes,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -16,37 +12,22 @@ import { adminRequests } from "../../utils/requestMethods";
 import { deleteTenantInvoice, getChartOfAccounts } from "../../redux/apiCalls";
 import { hasCompanyPermission } from "../../utils/permissions";
 
-const MILIK_GREEN = "bg-[#0B3B2E]";
-const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
-const MILIK_ORANGE = "bg-[#FF8C00]";
-const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
 const DEFAULT_PAGE_SIZE = 50;
 
 const formatMoney = (value) =>
-  new Intl.NumberFormat("en-KE", {
-    style: "currency",
-    currency: "KES",
-    maximumFractionDigits: 2,
-  }).format(Number(value || 0));
+  new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES", maximumFractionDigits: 2 }).format(Number(value || 0));
 
 const formatDate = (value) => {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString("en-KE", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" });
 };
 
 const inputDate = (value) => {
-  const date = value ? new Date(value) : new Date();
-  if (Number.isNaN(date.getTime())) return "";
-  const y = date.getFullYear();
-  const m = `${date.getMonth() + 1}`.padStart(2, "0");
-  const d = `${date.getDate()}`.padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  const d = value ? new Date(value) : new Date();
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
 const accountCanManage = (user) => {
@@ -58,123 +39,104 @@ const accountCanManage = (user) => {
 };
 
 const sourceLabel = (entry) => {
-  if (entry?.isReversalEntry) return "Reversal Entry";
+  if (entry?.isReversalEntry)   return "Reversal Entry";
   if (entry?.isReversedOriginal) return "Reversed Original";
   const type = String(entry?.sourceTransactionType || "other").replace(/_/g, " ");
   return type.replace(/\b\w/g, (m) => m.toUpperCase());
 };
 
-const getAuditBadge = (entry) => {
-  if (entry?.isReversalEntry) {
-    return {
-      label: "reversal entry",
-      className: "bg-blue-100 text-blue-700",
-    };
-  }
-
-  if (entry?.isReversedOriginal) {
-    return {
-      label: "reversed original",
-      className: "bg-amber-100 text-amber-700",
-    };
-  }
-
-  return {
-    label: String(entry?.status || "approved").toLowerCase(),
-    className: "bg-emerald-100 text-emerald-700",
-  };
+const auditBadge = (entry) => {
+  if (entry?.isReversalEntry)   return { label: "Reversal",  cls: "bg-blue-100 text-blue-700" };
+  if (entry?.isReversedOriginal) return { label: "Reversed",  cls: "bg-amber-100 text-amber-700" };
+  const st = String(entry?.status || "approved").toLowerCase();
+  return { label: st.charAt(0).toUpperCase() + st.slice(1), cls: "bg-emerald-100 text-emerald-700" };
 };
 
-const getAuditCaption = (entry) => {
-  if (entry?.isReversalEntry) {
-    return `Reversal of ${entry?.reversalOf || "linked entry"}`;
-  }
+const shortRef = (id) => id ? String(id).slice(-8).toUpperCase() : "—";
 
-  if (entry?.isReversedOriginal) {
-    return `Reversed by ${entry?.reversedByEntry || "linked reversal"}`;
-  }
-
-  return "Live activity";
-};
-
+// ─────────────────────────────────────────────
 const LedgerAccountActivity = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
+  const navigate  = useNavigate();
+  const location  = useLocation();
   const { accountId } = useParams();
-  const backRoute = location.pathname.startsWith("/carwash/")  ? "/carwash/chart-of-accounts"
+
+  const backRoute =
+    location.pathname.startsWith("/carwash/")    ? "/carwash/chart-of-accounts"
     : location.pathname.startsWith("/hr/")       ? "/hr/chart-of-accounts"
     : location.pathname.startsWith("/sale/")     ? "/sale/chart-of-accounts"
     : location.pathname.startsWith("/accounts/") ? "/accounts/chart-of-accounts"
     : "/financial/chart-of-accounts";
-  const currentCompany = useSelector(selectCurrentCompany);
-  const currentUser = useSelector(selectCurrentUser);
 
-  const [account, setAccount] = useState(null);
-  const [accounts, setAccounts] = useState([]);
-  const [rows, setRows] = useState([]);
+  const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser    = useSelector(selectCurrentUser);
+
+  const [account,        setAccount]        = useState(null);
+  const [accounts,       setAccounts]       = useState([]);
+  const [rows,           setRows]           = useState([]);
   const [openingBalance, setOpeningBalance] = useState(0);
   const [closingBalance, setClosingBalance] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [actingKey, setActingKey] = useState("");
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [loading,        setLoading]        = useState(false);
+  const [refreshing,     setRefreshing]     = useState(false);
+  const [actingKey,      setActingKey]      = useState("");
+  const [pageSize,       setPageSize]       = useState(DEFAULT_PAGE_SIZE);
+  const [currentPage,    setCurrentPage]    = useState(1);
 
   const today = new Date();
   const [filters, setFilters] = useState({
-    startDate: inputDate(new Date(today.getFullYear(), today.getMonth(), 1)),
-    endDate: inputDate(today),
-    direction: "all",
+    startDate:       inputDate(new Date(today.getFullYear(), today.getMonth(), 1)),
+    endDate:         inputDate(today),
+    direction:       "all",
     includeReversed: false,
   });
+  const [moveModal, setMoveModal] = useState({ open: false, entry: null, newAccountId: "", reason: "" });
 
-  const [reclassifyModal, setReclassifyModal] = useState({
-    open: false,
-    entry: null,
-    newAccountId: "",
-    reason: "",
-  });
-
-  const businessId = currentCompany?._id || "";
-  const canManage =
+  const businessId  = currentCompany?._id || "";
+  const canManage   =
     accountCanManage(currentUser) &&
     hasCompanyPermission(currentUser || {}, currentCompany, "journals", "reverse", "accounts");
 
-  const loadActivity = useCallback(async () => {
+  // Keep a stable ref to filters so loadActivity doesn't need filters in its deps
+  // (prevents auto-fetch on every date keystroke — user must click Apply)
+  const filtersRef = React.useRef(filters);
+  useEffect(() => { filtersRef.current = filters; }, [filters]);
+
+  // ── Load activity ──
+  const loadActivity = useCallback(async (appliedFilters) => {
     if (!businessId || !accountId) return;
-    setLoading(true);
+    const f = appliedFilters || filtersRef.current;
+    setRefreshing(true);
     try {
       const params = new URLSearchParams({ business: businessId });
-      if (filters.startDate) params.append("startDate", filters.startDate);
-      if (filters.endDate) params.append("endDate", filters.endDate);
-      if (filters.direction && filters.direction !== "all") params.append("direction", filters.direction);
-      if (filters.includeReversed) params.append("includeReversed", "true");
+      if (f.startDate)       params.append("startDate",       f.startDate);
+      if (f.endDate)         params.append("endDate",         f.endDate);
+      if (f.direction && f.direction !== "all") params.append("direction", f.direction);
+      if (f.includeReversed) params.append("includeReversed", "true");
 
-      const res = await adminRequests.get(`/chart-of-accounts/${accountId}/activity?${params.toString()}`);
+      const res     = await adminRequests.get(`/chart-of-accounts/${accountId}/activity?${params.toString()}`);
       const payload = res.data?.data || {};
       setAccount(payload.account || null);
       setRows(Array.isArray(payload.entries) ? payload.entries : []);
       setOpeningBalance(Number(payload.openingBalance || 0));
       setClosingBalance(Number(payload.closingBalance || 0));
+      setCurrentPage(1);
     } catch (error) {
       toast.error(
-        error?.response?.data?.error ||
-          error?.response?.data?.message ||
-          error?.message ||
-          "Failed to load ledger account activity"
+        error?.response?.data?.error || error?.response?.data?.message ||
+        error?.message || "Failed to load ledger activity"
       );
-      setRows([]);
-      setAccount(null);
-      setOpeningBalance(0);
-      setClosingBalance(0);
+      setRows([]); setAccount(null); setOpeningBalance(0); setClosingBalance(0);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }, [businessId, accountId, filters]);
+  }, [businessId, accountId]); // filtersRef.current used instead of filters to avoid auto-fetch on every keystroke
 
   useEffect(() => {
+    setLoading(true);
     loadActivity();
-  }, [loadActivity]);
+  }, [loadActivity]); // eslint-disable-line
 
+  // ── Load accounts for Move dropdown ──
   useEffect(() => {
     if (!businessId) return;
     getChartOfAccounts({ business: businessId })
@@ -182,442 +144,483 @@ const LedgerAccountActivity = () => {
       .catch(() => setAccounts([]));
   }, [businessId]);
 
-  const reclassifyOptions = useMemo(() => {
-    return accounts.filter((item) => item?._id !== accountId && item?.isPosting !== false && !item?.isHeader);
-  }, [accounts, accountId]);
+  const reclassifyOptions = useMemo(() =>
+    accounts.filter((a) => a?._id !== accountId && a?.isPosting !== false && !a?.isHeader),
+    [accounts, accountId]
+  );
 
+  // ── Pagination ──
+  const totalPages      = Math.max(1, Math.ceil(rows.length / pageSize));
+  const safePage        = Math.min(currentPage, totalPages);
+  const startIdx        = (safePage - 1) * pageSize;
+  const paginatedRows   = rows.slice(startIdx, startIdx + pageSize);
+
+  // ── Filter apply / reset ──
+  const applyFilters = () => { loadActivity(filters); };
+  const resetFilters = () => {
+    const now = new Date();
+    const fresh = {
+      startDate:       inputDate(new Date(now.getFullYear(), now.getMonth(), 1)),
+      endDate:         inputDate(now),
+      direction:       "all",
+      includeReversed: false,
+    };
+    setFilters(fresh);
+    loadActivity(fresh);
+  };
+
+  // ── Reverse/delete source ──
   const handleReverseOrDelete = async (entry) => {
-    const type = String(entry?.sourceTransactionType || "").toLowerCase();
+    const type     = String(entry?.sourceTransactionType || "").toLowerCase();
     const sourceId = entry?.sourceTransactionId;
-
-    if (!sourceId) {
-      toast.info("This ledger line has no linked source document.");
-      return;
-    }
-
+    if (!sourceId) { toast.info("No linked source document."); return; }
     const reason = window.prompt("Provide reason", `Correction from ledger ${account?.code || ""}`);
     if (!reason) return;
-
     setActingKey(`${entry._id}:reverse`);
     try {
       if (type === "rent_payment") {
         await adminRequests.put(`/rent-payments/reverse/${sourceId}`, { reason });
-        toast.success("Receipt reversed successfully.");
+        toast.success("Receipt reversed.");
       } else if (type === "tenant_invoice") {
         await deleteTenantInvoice(sourceId);
-        toast.success("Invoice deleted and ledger reversed successfully.");
+        toast.success("Invoice deleted and ledger reversed.");
       } else {
-        toast.info("Direct delete is not enabled for this source type yet. Use the source document workflow.");
+        toast.info("Use the source document workflow to reverse this entry type.");
         return;
       }
       await loadActivity();
       window.dispatchEvent(new Event("invoicesUpdated"));
     } catch (error) {
-      toast.error(
-        error?.response?.data?.error ||
-          error?.response?.data?.message ||
-          error?.message ||
-          "Failed to reverse source transaction"
-      );
+      toast.error(error?.response?.data?.error || error?.message || "Failed to reverse");
     } finally {
       setActingKey("");
     }
   };
 
-  const submitReclassify = async (e) => {
+  // ── Move / reclassify ──
+  const submitMove = async (e) => {
     e.preventDefault();
-    if (!reclassifyModal.entry?._id || !reclassifyModal.newAccountId) {
-      toast.error("Select a destination ledger.");
-      return;
-    }
-
-    setActingKey(`${reclassifyModal.entry._id}:reclassify`);
+    if (!moveModal.entry?._id || !moveModal.newAccountId) { toast.error("Select a destination account."); return; }
+    setActingKey(`${moveModal.entry._id}:move`);
     try {
-      await adminRequests.post(`/chart-of-accounts/activity/${reclassifyModal.entry._id}/reclassify`, {
-        business: businessId,
-        newAccountId: reclassifyModal.newAccountId,
-        reason: reclassifyModal.reason || `Moved from ${account?.code} ${account?.name}`,
+      await adminRequests.post(`/chart-of-accounts/activity/${moveModal.entry._id}/reclassify`, {
+        business:     businessId,
+        newAccountId: moveModal.newAccountId,
+        reason:       moveModal.reason || `Moved from ${account?.code} ${account?.name}`,
       });
-      toast.success("Ledger line moved successfully.");
-      setReclassifyModal({ open: false, entry: null, newAccountId: "", reason: "" });
+      toast.success("Ledger line moved.");
+      setMoveModal({ open: false, entry: null, newAccountId: "", reason: "" });
       await loadActivity();
       window.dispatchEvent(new Event("invoicesUpdated"));
     } catch (error) {
-      toast.error(
-        error?.response?.data?.error ||
-          error?.response?.data?.message ||
-          error?.message ||
-          "Failed to move ledger line"
-      );
+      toast.error(error?.response?.data?.error || error?.message || "Failed to move");
     } finally {
       setActingKey("");
     }
   };
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
-  const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = (safeCurrentPage - 1) * pageSize;
-  const endIndex = startIndex + pageSize;
-  const paginatedRows = rows.slice(startIndex, endIndex);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [filters, rows.length, pageSize]);
-
-  useEffect(() => {
-    if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
-  }, [currentPage, safeCurrentPage]);
-
+  // ── Open source document ──
+  // sourceTransactionId is the record's own _id (payment._id, expense._id, etc.), NOT always the job _id
   const openSource = (entry) => {
-    const type = String(entry?.sourceTransactionType || "").toLowerCase();
+    const type     = String(entry?.sourceTransactionType || "").toLowerCase();
     const sourceId = entry?.sourceTransactionId;
-    if (!sourceId) return;
+    if (!sourceId) { toast.info("No source document linked."); return; }
 
-    if (type === "rent_payment") {
-      navigate(`/receipts/${sourceId}`);
-      return;
-    }
+    // Types with a per-record detail/edit page
+    if (type === "rent_payment")               { navigate(`/receipts/${sourceId}`);           return; }
+    if (type === "tenant_invoice")             { navigate(`/invoices/rental/${sourceId}`);    return; }
+    if (type === "carwash_loyalty_redemption") { navigate(`/carwash/jobs/${sourceId}/edit`);  return; }
 
-    if (type === "tenant_invoice") {
-      navigate(`/invoices/rental/${sourceId}`);
-      return;
-    }
+    // Types that only have a list page — navigate there so user can find it
+    if (type === "carwash_payment")            { navigate("/carwash/payments");                return; }
+    if (type === "carwash_expense")            { navigate("/carwash/expenses");                return; }
+    if (type === "carwash_commission")         { navigate("/carwash/commissions");             return; }
+    if (type === "carwash_commission_payout")  { navigate("/carwash/commissions/payouts");     return; }
+    if (type === "carwash_prepaid_topup")      { navigate("/carwash/customers");               return; }
 
-    toast.info("No direct source page is configured for this entry yet.");
+    toast.info(`No page configured for source type "${type}"`);
   };
+
+  const sourcePageLabel = (entry) => {
+    const type = String(entry?.sourceTransactionType || "").toLowerCase();
+    if (["rent_payment", "tenant_invoice", "carwash_loyalty_redemption"].includes(type)) return "Open";
+    const listLabels = {
+      carwash_payment: "Payments", carwash_expense: "Expenses",
+      carwash_commission: "Commissions", carwash_commission_payout: "Payouts",
+      carwash_prepaid_topup: "Customers",
+    };
+    return listLabels[type] ? `→ ${listLabels[type]}` : "Source";
+  };
+
+  const inputCls  = "h-7 border border-slate-300 px-2.5 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none bg-white";
+  const labelCls  = "block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1";
+  const panelInputCls = "w-full border border-slate-300 px-2.5 py-1.5 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
-        <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col gap-2">
-          <div className="flex-shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
-            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
-                <button
-                  onClick={() => navigate(backRoute)}
-                  className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-gray-600 hover:text-gray-900"
-                >
-                  <FaArrowLeft size={10} />
-                  Back
-                </button>
+      <div className="flex h-full flex-col overflow-hidden bg-slate-100">
 
-                <div className="min-w-0">
-                  <h1 className="truncate text-base font-bold leading-tight text-slate-900 sm:text-lg">
-                    {account?.code || "..."} {account?.name || "Ledger Activity"}
-                  </h1>
-                  <p className="truncate text-[11px] leading-tight text-slate-500">
-                    Compact audit view for live postings and reversal history.
-                  </p>
-                </div>
-              </div>
+        {/* ── Page header strip ── */}
+        <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-2 flex items-center gap-4">
+          <button
+            onClick={() => navigate(backRoute)}
+            className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-[#0B3B2E]"
+          >
+            <FaArrowLeft size={10} /> Back
+          </button>
 
-              <div className="flex flex-wrap items-center gap-1.5">
-                <div className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 sm:px-2.5">
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">Opening</div>
-                  <div className="text-sm font-bold leading-tight text-blue-900">{formatMoney(openingBalance)}</div>
-                </div>
-                <div className="rounded-md border border-green-200 bg-green-50 px-2 py-1 sm:px-2.5">
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-green-600">Entries</div>
-                  <div className="text-sm font-bold leading-tight text-green-900">{rows.length}</div>
-                </div>
-                <div className="rounded-md border border-orange-200 bg-orange-50 px-2 py-1 sm:px-2.5">
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-orange-600">Closing</div>
-                  <div className="text-sm font-bold leading-tight text-orange-900">{formatMoney(closingBalance)}</div>
-                </div>
-                <button
-                  onClick={loadActivity}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[11px] font-semibold text-slate-700 shadow-sm hover:bg-slate-100"
-                >
-                  <FaSyncAlt className="text-[10px]" />
-                  Refresh
-                </button>
-              </div>
-            </div>
+          <div className="border-l border-slate-200 pl-4 min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Ledger Activity</p>
+            <h1 className="text-sm font-black text-slate-900 truncate">
+              {loading ? "Loading…" : account ? `${account.code} — ${account.name}` : "—"}
+            </h1>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-              <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-                <input
-                  type="date"
-                  value={filters.startDate}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))}
-                  className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                  title="From date"
-                />
-                <input
-                  type="date"
-                  value={filters.endDate}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))}
-                  className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                  title="To date"
-                />
-                <select
-                  value={filters.direction}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, direction: e.target.value }))}
-                  className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                >
-                  <option value="all">All directions</option>
-                  <option value="debit">Debits only</option>
-                  <option value="credit">Credits only</option>
-                </select>
-                <label className="h-7 shrink-0 flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={filters.includeReversed}
-                    onChange={(e) =>
-                      setFilters((prev) => ({
-                        ...prev,
-                        includeReversed: e.target.checked,
-                      }))
-                    }
-                  />
-                  Show reversals
-                </label>
-                <button
-                  onClick={loadActivity}
-                  className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
-                >
-                  <FaFilter size={9} /> Apply
-                </button>
-                <button
-                  onClick={() => {
-                    const now = new Date();
-                    setFilters({
-                      startDate: inputDate(new Date(now.getFullYear(), now.getMonth(), 1)),
-                      endDate: inputDate(now),
-                      direction: "all",
-                      includeReversed: false,
-                    });
-                  }}
-                  className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                >
-                  <FaRedoAlt size={9} /> Reset
-                </button>
-              </div>
+          {/* Stats */}
+          <div className="ml-auto flex items-center gap-2">
+            <div className="border border-blue-200 bg-blue-50 px-3 py-1 text-center">
+              <p className="text-[9px] font-bold uppercase tracking-wider text-blue-500">Opening</p>
+              <p className="text-xs font-black text-blue-900 tabular-nums">{formatMoney(openingBalance)}</p>
             </div>
+            <div className="border border-slate-200 bg-slate-50 px-3 py-1 text-center">
+              <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Entries</p>
+              <p className="text-xs font-black text-slate-800">{rows.length}</p>
+            </div>
+            <div className="border border-emerald-200 bg-emerald-50 px-3 py-1 text-center">
+              <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-600">Closing</p>
+              <p className="text-xs font-black text-emerald-900 tabular-nums">{formatMoney(closingBalance)}</p>
+            </div>
+            <button
+              onClick={() => loadActivity()}
+              className="h-7 px-2.5 border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 flex items-center"
+            >
+              <FaSyncAlt size={9} className={refreshing ? "animate-spin" : ""} />
+            </button>
+          </div>
+        </div>
 
-            {loading ? (
-              <div className="px-4 py-6 text-sm text-slate-600">Loading ledger activity...</div>
-            ) : (
-              <div className="min-h-0 flex-1 overflow-auto">
-                <table className="w-full min-w-[1500px] text-xs">
-                  <thead className="sticky top-0 z-10 shadow-sm">
-                    <tr className={`${MILIK_GREEN} text-white`}>
-                      <th className="px-3 py-2 text-left font-semibold">Date</th>
-                      <th className="px-3 py-2 text-left font-semibold">Reference</th>
-                      <th className="px-3 py-2 text-left font-semibold">Type</th>
-                      <th className="px-3 py-2 text-left font-semibold">Narration</th>
-                      <th className="px-3 py-2 text-left font-semibold">Tenant / Unit</th>
-                      <th className="px-3 py-2 text-right font-semibold">Debit</th>
-                      <th className="px-3 py-2 text-right font-semibold">Credit</th>
-                      <th className="px-3 py-2 text-right font-semibold">Running Balance</th>
-                      <th className="px-3 py-2 text-left font-semibold">Status</th>
-                      <th className="px-3 py-2 text-right font-semibold">Actions</th>
+        {/* ── Filter bar ── */}
+        <div className="shrink-0 border-b border-slate-200 bg-white px-3 py-1.5 flex items-center gap-2 flex-wrap">
+          <input
+            type="date"
+            value={filters.startDate}
+            onChange={(e) => setFilters((p) => ({ ...p, startDate: e.target.value }))}
+            className={inputCls}
+            title="From date"
+          />
+          <span className="text-[10px] text-slate-400 font-semibold">to</span>
+          <input
+            type="date"
+            value={filters.endDate}
+            onChange={(e) => setFilters((p) => ({ ...p, endDate: e.target.value }))}
+            className={inputCls}
+            title="To date"
+          />
+          <select
+            value={filters.direction}
+            onChange={(e) => setFilters((p) => ({ ...p, direction: e.target.value }))}
+            className={`${inputCls} pr-2`}
+          >
+            <option value="all">All directions</option>
+            <option value="debit">Debits only</option>
+            <option value="credit">Credits only</option>
+          </select>
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={filters.includeReversed}
+              onChange={(e) => setFilters((p) => ({ ...p, includeReversed: e.target.checked }))}
+              className="text-[#0B3B2E]"
+            />
+            Show reversals
+          </label>
+          <button
+            onClick={applyFilters}
+            className="h-7 px-3 bg-[#FF8C00] hover:bg-[#e67e00] text-white text-xs font-bold flex items-center gap-1"
+          >
+            <FaFilter size={9} /> Apply
+          </button>
+          <button
+            onClick={resetFilters}
+            className="h-7 px-3 bg-[#0B3B2E] hover:bg-[#0A3127] text-white text-xs font-bold flex items-center gap-1"
+          >
+            <FaRedoAlt size={9} /> Reset
+          </button>
+        </div>
+
+        {/* ── Table + pagination ── */}
+        <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
+
+          {loading ? (
+            <div className="flex-1 flex items-center justify-center text-xs text-slate-500">
+              Loading ledger entries…
+            </div>
+          ) : (
+            <div className="flex-1 overflow-auto">
+              <table className="w-full min-w-[1100px] text-xs">
+                <thead>
+                  <tr className="bg-[#0B3B2E] text-white">
+                    <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Date</th>
+                    <th className="px-3 py-2 text-left font-semibold">Ref</th>
+                    <th className="px-3 py-2 text-left font-semibold">Transaction</th>
+                    <th className="px-3 py-2 text-left font-semibold">Narration</th>
+                    <th className="px-3 py-2 text-right font-semibold">Debit</th>
+                    <th className="px-3 py-2 text-right font-semibold">Credit</th>
+                    <th className="px-3 py-2 text-right font-semibold">Running Balance</th>
+                    <th className="px-3 py-2 text-left font-semibold">Status</th>
+                    <th className="px-3 py-2 text-right font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="px-4 py-10 text-center text-slate-400 italic text-xs">
+                        No ledger entries for the selected period and filters.
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {rows.length === 0 ? (
-                      <tr>
-                        <td colSpan="10" className="px-4 py-8 text-center text-slate-500">
-                          No ledger entries found for the selected filters.
+                  ) : paginatedRows.map((entry) => {
+                    const badge       = auditBadge(entry);
+                    const isDebit     = String(entry.direction) === "debit";
+                    const isCredit    = String(entry.direction) === "credit";
+                    const balance     = Number(entry.runningBalance || 0);
+                    const canReverse  =
+                      canManage &&
+                      !entry?.isReversalEntry &&
+                      !entry?.isReversedOriginal &&
+                      !entry?.reversedByEntry &&
+                      ["rent_payment", "tenant_invoice"].includes(
+                        String(entry?.sourceTransactionType || "").toLowerCase()
+                      );
+
+                    return (
+                      <tr
+                        key={entry._id}
+                        className={`border-b border-slate-100 hover:bg-slate-50 ${
+                          entry?.isReversalEntry   ? "bg-blue-50/40" :
+                          entry?.isReversedOriginal ? "bg-amber-50/40" : ""
+                        }`}
+                      >
+                        {/* Date */}
+                        <td className="px-3 py-2 whitespace-nowrap text-slate-700 font-medium">
+                          {formatDate(entry.transactionDate)}
+                        </td>
+
+                        {/* Ref */}
+                        <td className="px-3 py-2">
+                          <span className="font-mono text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5">
+                            {shortRef(entry.sourceTransactionId || entry._id)}
+                          </span>
+                        </td>
+
+                        {/* Transaction type */}
+                        <td className="px-3 py-2 text-slate-700 whitespace-nowrap">
+                          {sourceLabel(entry)}
+                        </td>
+
+                        {/* Narration */}
+                        <td className="px-3 py-2 max-w-xs text-slate-600">
+                          <p className="truncate">{entry.notes || entry.category || "—"}</p>
+                          {(entry?.reversalOf || entry?.reversedByEntry) && (
+                            <p className="text-[10px] text-slate-400 font-mono truncate">
+                              {entry?.reversalOf ? `↩ reversal of ${shortRef(entry.reversalOf)}` : `↩ reversed by ${shortRef(entry.reversedByEntry)}`}
+                            </p>
+                          )}
+                        </td>
+
+                        {/* Debit */}
+                        <td className="px-3 py-2 text-right tabular-nums font-semibold">
+                          {isDebit
+                            ? <span className="text-emerald-700">{formatMoney(entry.amount)}</span>
+                            : <span className="text-slate-300">—</span>
+                          }
+                        </td>
+
+                        {/* Credit */}
+                        <td className="px-3 py-2 text-right tabular-nums font-semibold">
+                          {isCredit
+                            ? <span className="text-rose-600">{formatMoney(entry.amount)}</span>
+                            : <span className="text-slate-300">—</span>
+                          }
+                        </td>
+
+                        {/* Running balance */}
+                        <td className={`px-3 py-2 text-right tabular-nums font-bold ${
+                          balance < 0 ? "text-rose-600" : "text-slate-800"
+                        }`}>
+                          {formatMoney(balance)}
+                        </td>
+
+                        {/* Status badge */}
+                        <td className="px-3 py-2">
+                          <span className={`px-1.5 py-0.5 text-[9px] font-bold uppercase ${badge.cls}`}>
+                            {badge.label}
+                          </span>
+                        </td>
+
+                        {/* Actions */}
+                        <td className="px-3 py-2">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {entry.sourceTransactionId && (
+                              <button
+                                onClick={() => openSource(entry)}
+                                title={`Source: ${entry.sourceTransactionType}`}
+                                className="h-6 px-2 border border-slate-200 bg-white text-[10px] font-semibold text-slate-600 hover:bg-slate-50"
+                              >
+                                {sourcePageLabel(entry)}
+                              </button>
+                            )}
+                            {canManage && !entry?.isReversalEntry && (
+                              <button
+                                onClick={() => setMoveModal({
+                                  open: true, entry, newAccountId: "",
+                                  reason: `Move from ${account?.code} ${account?.name}`,
+                                })}
+                                className="h-6 px-2 bg-[#0B3B2E] hover:bg-[#0A3127] text-[10px] font-bold text-white flex items-center gap-1"
+                              >
+                                <FaExchangeAlt size={8} /> Move
+                              </button>
+                            )}
+                            {canReverse && (
+                              <button
+                                onClick={() => handleReverseOrDelete(entry)}
+                                disabled={actingKey === `${entry._id}:reverse`}
+                                className="h-6 px-2 bg-rose-600 hover:bg-rose-700 text-[10px] font-bold text-white flex items-center gap-1 disabled:opacity-60"
+                              >
+                                <FaTrashAlt size={8} />
+                                {String(entry.sourceTransactionType).toLowerCase() === "tenant_invoice" ? "Delete" : "Reverse"}
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
-                    ) : (
-                      paginatedRows.map((entry) => {
-                        const tenantName = entry?.tenant?.name || "-";
-                        const unitLabel = entry?.unit?.unitNumber || entry?.unit?.name || "-";
-                        const auditBadge = getAuditBadge(entry);
-                        const canReverseSource =
-                          canManage &&
-                          !entry?.isReversalEntry &&
-                          !entry?.isReversedOriginal &&
-                          !entry?.reversedByEntry &&
-                          ["rent_payment", "tenant_invoice"].includes(
-                            String(entry?.sourceTransactionType || "").toLowerCase()
-                          );
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
 
-                        return (
-                          <tr key={entry._id} className="border-b border-slate-100 align-top hover:bg-slate-50">
-                            <td className="whitespace-nowrap px-3 py-2">{formatDate(entry.transactionDate)}</td>
-                            <td className="px-3 py-2">
-                              <div className="font-medium text-slate-800">{entry.sourceTransactionId || entry._id}</div>
-                              <div className="text-[11px] text-slate-500">
-                                {entry.accountId?.code} {entry.accountId?.name}
-                              </div>
-                            </td>
-                            <td className="px-3 py-2 text-slate-700">
-                              <div>{sourceLabel(entry)}</div>
-                              <div className="text-[11px] text-slate-500">{getAuditCaption(entry)}</div>
-                            </td>
-                            <td className="min-w-[300px] px-3 py-2 text-slate-700">
-                              <div>{entry.notes || entry.category || "-"}</div>
-                              {entry?.auditLinkId && (
-                                <div className="text-[11px] text-slate-500">Linked entry: {entry.auditLinkId}</div>
-                              )}
-                            </td>
-                            <td className="px-3 py-2">
-                              <div className="font-medium text-slate-800">{tenantName}</div>
-                              <div className="text-[11px] text-slate-500">{unitLabel}</div>
-                            </td>
-                            <td className="px-3 py-2 text-right font-semibold text-slate-900">
-                              {String(entry.direction) === "debit" ? formatMoney(entry.amount) : "-"}
-                            </td>
-                            <td className="px-3 py-2 text-right font-semibold text-slate-900">
-                              {String(entry.direction) === "credit" ? formatMoney(entry.amount) : "-"}
-                            </td>
-                            <td className="px-3 py-2 text-right font-bold text-slate-900">
-                              {formatMoney(entry.runningBalance)}
-                            </td>
-                            <td className="px-3 py-2">
-                              <span className={`inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${auditBadge.className}`}>
-                                {auditBadge.label}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2">
-                              <div className="flex flex-wrap justify-end gap-2">
-                                <button
-                                  onClick={() => openSource(entry)}
-                                  className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
-                                >
-                                  Open Source
-                                </button>
-                                {canManage && !entry?.isReversalEntry && (
-                                  <button
-                                    onClick={() =>
-                                      setReclassifyModal({
-                                        open: true,
-                                        entry,
-                                        newAccountId: "",
-                                        reason: `Move ${entry.accountId?.code || account?.code} to another ledger`,
-                                      })
-                                    }
-                                    className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1 text-[11px] font-semibold text-white hover:bg-blue-700"
-                                  >
-                                    <FaExchangeAlt />
-                                    Move
-                                  </button>
-                                )}
-                                {canReverseSource && (
-                                  <button
-                                    onClick={() => handleReverseOrDelete(entry)}
-                                    disabled={actingKey === `${entry._id}:reverse`}
-                                    className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-3 py-1 text-[11px] font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
-                                  >
-                                    <FaTrashAlt />
-                                    {String(entry.sourceTransactionType).toLowerCase() === "tenant_invoice"
-                                      ? "Delete"
-                                      : "Reverse"}
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            <div className="flex-shrink-0 border-t border-slate-200 bg-white px-4 py-2">
-              <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
-                <div className="font-semibold">
-                  Showing <span className="font-bold text-slate-900">{paginatedRows.length > 0 ? startIndex + 1 : 0}</span> to{" "}
-                  <span className="font-bold text-slate-900">{Math.min(endIndex, rows.length)}</span> of{" "}
-                  <span className="font-bold text-slate-900">{rows.length}</span> ledger entries
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-semibold text-slate-500">Per page:</span>
-                    <select
-                      value={pageSize}
-                      onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                      className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition"
-                    >
-                      {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
-                    </select>
-                  </div>
-                  <button
-                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                    disabled={safeCurrentPage === 1}
-                    className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Previous
-                  </button>
-                  <span className="font-semibold text-slate-700">
-                    Page {safeCurrentPage} of {totalPages}
-                  </span>
-                  <button
-                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                    disabled={safeCurrentPage === totalPages}
-                    className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
+          {/* ── Pagination footer ── */}
+          <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-2 flex items-center justify-between text-xs text-slate-600">
+            <span className="font-semibold">
+              Showing{" "}
+              <span className="text-slate-900 font-bold">{paginatedRows.length > 0 ? startIdx + 1 : 0}</span>
+              {" "}–{" "}
+              <span className="text-slate-900 font-bold">{Math.min(startIdx + pageSize, rows.length)}</span>
+              {" "}of{" "}
+              <span className="text-slate-900 font-bold">{rows.length}</span>
+              {" "}entries
+            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-slate-500 font-semibold">Per page:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
+                className="h-7 border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:outline-none"
+              >
+                {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={safePage === 1}
+                className="h-7 px-3 border border-slate-200 bg-white font-semibold hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <span className="font-semibold text-slate-700 px-1">Page {safePage} of {totalPages}</span>
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={safePage === totalPages}
+                className="h-7 px-3 border border-slate-200 bg-white font-semibold hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
             </div>
           </div>
         </div>
 
-        {reclassifyModal.open && (
+        {/* ── Move ledger line modal ── */}
+        {moveModal.open && (
           <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4">
-            <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-2xl">
-              <div className="bg-[#0B3B2E] px-5 py-4 text-white">
-                <h3 className="text-lg font-bold">Move Ledger Line</h3>
-                <p className="mt-1 text-sm text-emerald-100">
-                  This creates a controlled reclassification entry instead of editing history directly.
-                </p>
-              </div>
-              <form onSubmit={submitReclassify} className="space-y-4 p-5">
+            <div className="w-full max-w-lg overflow-hidden border border-slate-200 bg-white shadow-2xl">
+              {/* Header */}
+              <div className="bg-[#0B3B2E] px-5 py-3 flex items-start justify-between">
                 <div>
-                  <div className="text-sm text-slate-600">Current Ledger</div>
-                  <div className="mt-1 font-semibold text-slate-900">
-                    {account?.code} {account?.name}
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-300">Reclassify</p>
+                  <p className="text-sm font-bold text-white mt-0.5">Move Ledger Line</p>
+                  <p className="text-[10px] text-emerald-200 mt-0.5">
+                    Creates a controlled correction entry — no history is overwritten.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setMoveModal({ open: false, entry: null, newAccountId: "", reason: "" })}
+                  className="text-white/50 hover:text-white mt-0.5"
+                >
+                  <FaTimes size={14} />
+                </button>
+              </div>
+
+              <form onSubmit={submitMove} className="p-5 space-y-4">
+                {/* Current ledger */}
+                <div>
+                  <label className={labelCls}>From (Current Ledger)</label>
+                  <div className="border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-700">
+                    {account?.code} — {account?.name}
                   </div>
                 </div>
-                <label className="block">
-                  <span className="text-sm font-semibold text-slate-700">Move To</span>
+
+                {/* Entry narration */}
+                {moveModal.entry?.notes && (
+                  <div>
+                    <label className={labelCls}>Entry Narration</label>
+                    <div className="border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600 truncate">
+                      {moveModal.entry.notes}
+                    </div>
+                  </div>
+                )}
+
+                {/* Destination */}
+                <div>
+                  <label className={labelCls}>Move To *</label>
                   <select
-                    value={reclassifyModal.newAccountId}
-                    onChange={(e) =>
-                      setReclassifyModal((prev) => ({ ...prev, newAccountId: e.target.value }))
-                    }
-                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]"
+                    value={moveModal.newAccountId}
+                    onChange={(e) => setMoveModal((p) => ({ ...p, newAccountId: e.target.value }))}
+                    className={panelInputCls}
+                    required
                   >
-                    <option value="">Select destination ledger</option>
-                    {reclassifyOptions.map((item) => (
-                      <option key={item._id} value={item._id}>
-                        {item.code} - {item.name}
-                      </option>
+                    <option value="">Select destination account…</option>
+                    {reclassifyOptions.map((a) => (
+                      <option key={a._id} value={a._id}>{a.code} — {a.name}</option>
                     ))}
                   </select>
-                </label>
-                <label className="block">
-                  <span className="text-sm font-semibold text-slate-700">Reason</span>
+                </div>
+
+                {/* Reason */}
+                <div>
+                  <label className={labelCls}>Reason</label>
                   <textarea
-                    value={reclassifyModal.reason}
-                    onChange={(e) => setReclassifyModal((prev) => ({ ...prev, reason: e.target.value }))}
-                    rows={3}
-                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]"
+                    value={moveModal.reason}
+                    onChange={(e) => setMoveModal((p) => ({ ...p, reason: e.target.value }))}
+                    rows={2}
+                    className={`${panelInputCls} resize-none`}
+                    placeholder="Why is this being reclassified?"
                   />
-                </label>
-                <div className="flex justify-end gap-3">
+                </div>
+
+                <div className="flex gap-2 pt-1">
                   <button
                     type="button"
-                    onClick={() => setReclassifyModal({ open: false, entry: null, newAccountId: "", reason: "" })}
-                    className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 font-semibold text-slate-700 hover:bg-slate-100"
+                    onClick={() => setMoveModal({ open: false, entry: null, newAccountId: "", reason: "" })}
+                    className="flex-1 h-8 border border-slate-300 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    disabled={actingKey === `${reclassifyModal.entry?._id}:reclassify`}
-                    className="rounded-xl bg-[#FF8C00] px-4 py-2.5 font-semibold text-white hover:bg-[#e67e00] disabled:opacity-60"
+                    disabled={actingKey === `${moveModal.entry?._id}:move` || !moveModal.newAccountId}
+                    className="flex-1 h-8 bg-[#FF8C00] hover:bg-[#e67e00] text-white text-xs font-bold disabled:opacity-50"
                   >
-                    {actingKey === `${reclassifyModal.entry?._id}:reclassify` ? "Moving..." : "Move Ledger Line"}
+                    {actingKey === `${moveModal.entry?._id}:move` ? "Moving…" : "Move Ledger Line"}
                   </button>
                 </div>
               </form>
