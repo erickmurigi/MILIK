@@ -1,16 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  FaBook,
-  FaSearch,
-  FaLayerGroup,
-  FaPlus,
-  FaEdit,
-  FaTrash,
-  FaSyncAlt,
-  FaFolderOpen,
-  FaCheckSquare,
-  FaSquare,
+  FaSearch, FaPlus, FaEdit, FaTrash, FaSyncAlt,
+  FaChevronDown, FaChevronUp, FaCheckSquare, FaSquare,
+  FaExclamationTriangle, FaTimes,
 } from "react-icons/fa";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
@@ -22,172 +15,114 @@ import { hasCompanyPermission } from "../../utils/permissions";
 import { useConfirm } from "../../context/ConfirmContext";
 
 const ACCOUNT_GROUPS = [
-  {
-    key: "assets",
-    label: "Assets",
-    color: "bg-emerald-50 border-emerald-200",
-    tag: "text-emerald-700 bg-emerald-100",
-  },
-  {
-    key: "liabilities",
-    label: "Liabilities",
-    color: "bg-rose-50 border-rose-200",
-    tag: "text-rose-700 bg-rose-100",
-  },
-  {
-    key: "equity",
-    label: "Equity",
-    color: "bg-violet-50 border-violet-200",
-    tag: "text-violet-700 bg-violet-100",
-  },
-  {
-    key: "income",
-    label: "Income",
-    color: "bg-blue-50 border-blue-200",
-    tag: "text-blue-700 bg-blue-100",
-  },
-  {
-    key: "expenses",
-    label: "Expenses",
-    color: "bg-amber-50 border-amber-200",
-    tag: "text-amber-700 bg-amber-100",
-  },
+  { key: "assets",      label: "Assets",      bg: "bg-[#0B3B2E]",  badge: "bg-emerald-100 text-emerald-800" },
+  { key: "liabilities", label: "Liabilities", bg: "bg-rose-900",   badge: "bg-rose-100 text-rose-800" },
+  { key: "equity",      label: "Equity",      bg: "bg-violet-900", badge: "bg-violet-100 text-violet-800" },
+  { key: "income",      label: "Income",      bg: "bg-blue-900",   badge: "bg-blue-100 text-blue-800" },
+  { key: "expenses",    label: "Expenses",    bg: "bg-amber-900",  badge: "bg-amber-100 text-amber-800" },
 ];
 
 const SUBGROUP_OPTIONS_BY_TYPE = {
-  asset: [
-    "Cashbooks",
-    "Bank Accounts",
-    "Current Assets",
-    "Fixed Assets",
-    "Receivables",
-    "Other Assets",
-  ],
-  liability: [
-    "Current Liabilities",
-    "Long-term Liabilities",
-    "Payables",
-    "Control Accounts",
-    "Other Liabilities",
-  ],
-  equity: ["Equity", "Capital", "Retained Earnings", "Reserves", "Other Equity"],
-  income: [
-    "Operating Income",
-    "Rental Income",
-    "Commission Income",
-    "Other Income",
-  ],
-  expense: [
-    "Operating Expenses",
-    "Administrative Expenses",
-    "Property Expenses",
-    "Finance Costs",
-    "Other Expenses",
-  ],
+  asset:     ["Cashbooks", "Bank Accounts", "Current Assets", "Fixed Assets", "Receivables", "Other Assets"],
+  liability: ["Current Liabilities", "Long-term Liabilities", "Payables", "Control Accounts", "Other Liabilities"],
+  equity:    ["Equity", "Capital", "Retained Earnings", "Reserves", "Other Equity"],
+  income:    ["Operating Income", "Rental Income", "Commission Income", "Car Wash Income", "Other Income"],
+  expense:   ["Operating Expenses", "Administrative Expenses", "Property Expenses", "Car Wash Expenses", "Finance Costs", "Other Expenses"],
 };
 
 const NORMAL_BALANCE_BY_TYPE = {
-  asset: "Debit",
-  expense: "Debit",
-  liability: "Credit",
-  equity: "Credit",
-  income: "Credit",
+  asset: "Debit", expense: "Debit",
+  liability: "Credit", equity: "Credit", income: "Credit",
 };
 
+const TYPE_OPTIONS = [
+  { value: "asset",     label: "Asset" },
+  { value: "liability", label: "Liability" },
+  { value: "equity",    label: "Equity" },
+  { value: "income",    label: "Income" },
+  { value: "expense",   label: "Expense" },
+];
+
+const MODULE_SCOPE_OPTIONS = [
+  { value: "",                   label: "All Modules" },
+  { value: "hr",                 label: "HR & Payroll" },
+  { value: "propertyManagement", label: "Property Management" },
+  { value: "carwash",            label: "Car Wash" },
+  { value: "general",            label: "General" },
+];
+
 const blankForm = {
-  code: "",
-  name: "",
-  type: "asset",
-  group: "assets",
-  subGroup: "Cashbooks",
-  parentAccount: "",
-  isHeader: false,
-  isPosting: true,
+  code: "", name: "", type: "asset", group: "assets",
+  subGroup: "Cashbooks", parentAccount: "", isHeader: false, isPosting: true,
 };
 
 const normalizeGroup = (value = "", type = "") => {
   const v = String(value || "").toLowerCase();
   if (["assets", "liabilities", "equity", "income", "expenses"].includes(v)) return v;
-
   const t = String(type || "").toLowerCase();
-  if (t === "asset") return "assets";
+  if (t === "asset")     return "assets";
   if (t === "liability") return "liabilities";
-  if (t === "equity") return "equity";
-  if (t === "income") return "income";
-  if (t === "expense") return "expenses";
+  if (t === "equity")    return "equity";
+  if (t === "income")    return "income";
+  if (t === "expense")   return "expenses";
   return "assets";
 };
 
-const subGroupOptionsForType = (type = "") => {
-  const t = String(type || "").toLowerCase();
-  return SUBGROUP_OPTIONS_BY_TYPE[t] || [];
-};
-
-const typeLabel = (type = "") => {
-  const t = String(type || "").toLowerCase();
-  if (!t) return "-";
-  return t.charAt(0).toUpperCase() + t.slice(1);
-};
+const subGroupOptionsForType = (type = "") =>
+  SUBGROUP_OPTIONS_BY_TYPE[String(type || "").toLowerCase()] || [];
 
 const classLabel = (account) => {
   if (account?.subGroup) return account.subGroup;
-  const type = String(account?.type || "").toLowerCase();
-  if (type === "asset") return "Current Assets";
-  if (type === "liability") return "Current Liabilities";
-  if (type === "equity") return "Equity";
-  if (type === "income") return "Operating Income";
-  if (type === "expense") return "Operating Expenses";
-  return "-";
+  const t = String(account?.type || "").toLowerCase();
+  if (t === "asset")     return "Current Assets";
+  if (t === "liability") return "Current Liabilities";
+  if (t === "equity")    return "Equity";
+  if (t === "income")    return "Operating Income";
+  if (t === "expense")   return "Operating Expenses";
+  return "Other";
 };
 
-const formatMoney = (value) => {
-  const amount = Number(value || 0);
-  return new Intl.NumberFormat("en-KE", {
-    style: "currency",
-    currency: "KES",
-    maximumFractionDigits: 2,
-  }).format(amount);
-};
+const formatMoney = (value) =>
+  new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES", maximumFractionDigits: 0 }).format(Number(value || 0));
 
-const MODULE_SCOPE_OPTIONS = [
-  { value: "",                 label: "All Modules" },
-  { value: "hr",               label: "HR & Payroll" },
-  { value: "propertyManagement", label: "Property Management" },
-  { value: "carwash",          label: "Car Wash" },
-  { value: "general",          label: "General" },
-];
-
+// ─────────────────────────────────────────────
 const ChartOfAccounts = () => {
-  const confirm = useConfirm();
-  const navigate = useNavigate();
-  const location = useLocation();
+  const confirm    = useConfirm();
+  const navigate   = useNavigate();
+  const location   = useLocation();
   const [searchParams] = useSearchParams();
-  const activityBase = location.pathname.startsWith("/carwash/")  ? "/carwash/chart-of-accounts"
-    : location.pathname.startsWith("/hr/")       ? "/hr/chart-of-accounts"
-    : location.pathname.startsWith("/sale/")     ? "/sale/chart-of-accounts"
+
+  const activityBase =
+    location.pathname.startsWith("/carwash/")  ? "/carwash/chart-of-accounts"
+    : location.pathname.startsWith("/hr/")     ? "/hr/chart-of-accounts"
+    : location.pathname.startsWith("/sale/")   ? "/sale/chart-of-accounts"
     : location.pathname.startsWith("/accounts/") ? "/accounts/chart-of-accounts"
     : "/financial/chart-of-accounts";
+
   const currentCompany = useSelector(selectCurrentCompany);
-  const currentUser = useSelector(selectCurrentUser);
-  const canCreateCOA = hasCompanyPermission(currentUser, currentCompany, "chartOfAccounts", "create", "accounts");
-  const canUpdateCOA = hasCompanyPermission(currentUser, currentCompany, "chartOfAccounts", "update", "accounts");
-  const canDeleteCOA = hasCompanyPermission(currentUser, currentCompany, "chartOfAccounts", "delete", "accounts");
+  const currentUser    = useSelector(selectCurrentUser);
+  const canCreateCOA   = hasCompanyPermission(currentUser, currentCompany, "chartOfAccounts", "create", "accounts");
+  const canUpdateCOA   = hasCompanyPermission(currentUser, currentCompany, "chartOfAccounts", "update", "accounts");
+  const canDeleteCOA   = hasCompanyPermission(currentUser, currentCompany, "chartOfAccounts", "delete", "accounts");
 
-  const [accounts, setAccounts] = useState([]);
-  const [search, setSearch] = useState("");
-  const [moduleScope, setModuleScope] = useState(() => searchParams.get("scope") || "");
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [accounts,            setAccounts]          = useState([]);
+  const [search,              setSearch]            = useState("");
+  const [moduleScope,         setModuleScope]       = useState(() => searchParams.get("scope") || "");
+  const [loading,             setLoading]           = useState(false);
+  const [saving,              setSaving]            = useState(false);
   const [showControlAccounts, setShowControlAccounts] = useState(false);
-
-  const [selectedIds, setSelectedIds] = useState([]);
-  const [showForm, setShowForm] = useState(false);
-  const [editingAccountId, setEditingAccountId] = useState(null);
-  const [formData, setFormData] = useState(blankForm);
+  const [selectedIds,         setSelectedIds]       = useState([]);
+  const [showForm,            setShowForm]          = useState(false);
+  const [editingAccountId,    setEditingAccountId]  = useState(null);
+  const [formData,            setFormData]          = useState(blankForm);
+  const [collapsed,           setCollapsed]         = useState({});
   const requestSequenceRef = useRef(0);
 
-  const _uid = currentUser?._id || currentUser?.id;
-  const _coaDraftKey = (currentCompany?._id && _uid) ? `milik:draft:coa-account:${currentCompany._id}:${_uid}` : null;
+  // ── Draft persistence ──
+  const _uid         = currentUser?._id || currentUser?.id;
+  const _coaDraftKey = (currentCompany?._id && _uid)
+    ? `milik:draft:coa-account:${currentCompany._id}:${_uid}`
+    : null;
   const _coaDraftRestored = useRef(false);
 
   useEffect(() => {
@@ -204,22 +139,15 @@ const ChartOfAccounts = () => {
     try { window.sessionStorage.setItem(_coaDraftKey, JSON.stringify({ form: formData })); } catch {}
   }, [_coaDraftKey, formData, showForm, editingAccountId]);
 
+  // ── Data loading ──
   const businessId = currentCompany?._id || "";
 
   const loadAccounts = useCallback(async () => {
     const requestId = requestSequenceRef.current + 1;
     requestSequenceRef.current = requestId;
-
     setAccounts([]);
     setSelectedIds([]);
-    setShowForm(false);
-    setEditingAccountId(null);
-
-    if (!businessId) {
-      setLoading(false);
-      return;
-    }
-
+    if (!businessId) { setLoading(false); return; }
     setLoading(true);
     try {
       const params = { business: businessId };
@@ -229,18 +157,15 @@ const ChartOfAccounts = () => {
       setAccounts(Array.isArray(rows) ? rows : []);
     } catch (error) {
       if (requestSequenceRef.current !== requestId) return;
-      console.error("Failed to load chart of accounts", error);
       toast.error(
         error?.response?.data?.error ||
-          error?.response?.data?.message ||
-          error?.message ||
-          "Failed to load chart of accounts"
+        error?.response?.data?.message ||
+        error?.message ||
+        "Failed to load chart of accounts"
       );
       setAccounts([]);
     } finally {
-      if (requestSequenceRef.current === requestId) {
-        setLoading(false);
-      }
+      if (requestSequenceRef.current === requestId) setLoading(false);
     }
   }, [businessId, moduleScope]);
 
@@ -252,196 +177,173 @@ const ChartOfAccounts = () => {
     return () => window.removeEventListener("invoicesUpdated", handleRefresh);
   }, [businessId]);
 
+  // ── Filtering ──
   const normalizedSearch = search.trim().toLowerCase();
 
-  const filteredAccounts = useMemo(() => {
-    return accounts.filter((account) => {
-      const isControlAccount =
-        String(account?.subGroup || "").toLowerCase().includes("control") ||
-        String(account?.name || "").toLowerCase().includes("control") ||
-        String(account?.code || "").toLowerCase().includes("ctrl");
+  const filteredAccounts = useMemo(() => accounts.filter((account) => {
+    const isControl =
+      String(account?.subGroup || "").toLowerCase().includes("control") ||
+      String(account?.name    || "").toLowerCase().includes("control") ||
+      String(account?.code    || "").toLowerCase().includes("ctrl");
+    if (!showControlAccounts && isControl) return false;
+    if (!normalizedSearch) return true;
+    const haystack = [
+      account.code, account.name, account.type, account.group, account.subGroup,
+      account.normalBalanceSide, account.parentAccount?.name, account.parentAccount?.code,
+    ].filter(Boolean).join(" ").toLowerCase();
+    return haystack.includes(normalizedSearch);
+  }), [accounts, normalizedSearch, showControlAccounts]);
 
-      if (!showControlAccounts && isControlAccount) return false;
-      if (!normalizedSearch) return true;
+  // ── Grouping: by type → by class ──
+  const typeGroups = useMemo(() => {
+    return ACCOUNT_GROUPS.map((group) => {
+      const typeAccounts = filteredAccounts
+        .filter((a) => normalizeGroup(a.group, a.type) === group.key)
+        .sort((a, b) => String(a.code || "").localeCompare(String(b.code || "")));
 
-      const haystack = [
-        account.code,
-        account.name,
-        account.type,
-        account.group,
-        account.subGroup,
-        account.normalBalanceSide,
-        account.parentAccount?.name,
-        account.parentAccount?.code,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+      const classMap = {};
+      for (const acc of typeAccounts) {
+        const cls = classLabel(acc);
+        if (!classMap[cls]) classMap[cls] = [];
+        classMap[cls].push(acc);
+      }
 
-      return haystack.includes(normalizedSearch);
+      const classes = Object.entries(classMap)
+        .map(([cls, accs]) => ({ cls, accounts: accs }))
+        .sort((a, b) => a.cls.localeCompare(b.cls));
+
+      const totalBalance = typeAccounts.reduce((s, a) => s + Number(a.balance || 0), 0);
+      return { ...group, classes, count: typeAccounts.length, totalBalance };
     });
-  }, [accounts, normalizedSearch, showControlAccounts]);
-
-  const groupedAccounts = useMemo(() => {
-    return ACCOUNT_GROUPS.map((group) => ({
-      ...group,
-      accounts: filteredAccounts
-        .filter((account) => normalizeGroup(account.group, account.type) === group.key)
-        .sort((a, b) => String(a.code || "").localeCompare(String(b.code || ""))),
-    }));
   }, [filteredAccounts]);
 
-  const parentOptions = useMemo(() => {
-    return accounts
-      .slice()
-      .sort((a, b) => String(a.code || "").localeCompare(String(b.code || "")));
-  }, [accounts]);
+  // ── Form helpers ──
+  const parentOptions = useMemo(() =>
+    accounts.slice().sort((a, b) => String(a.code || "").localeCompare(String(b.code || ""))),
+    [accounts]
+  );
 
-  const parentAccountForForm = useMemo(() => {
-    return parentOptions.find((a) => String(a._id) === String(formData.parentAccount || ""));
-  }, [parentOptions, formData.parentAccount]);
+  const parentAccountForForm = useMemo(() =>
+    parentOptions.find((a) => String(a._id) === String(formData.parentAccount || "")),
+    [parentOptions, formData.parentAccount]
+  );
 
-  const effectiveType = parentAccountForForm?.type || formData.type;
-  const effectiveGroup = parentAccountForForm?.group || normalizeGroup(formData.group, effectiveType);
+  const effectiveType         = parentAccountForForm?.type || formData.type;
+  const effectiveGroup        = parentAccountForForm?.group || normalizeGroup(formData.group, effectiveType);
   const currentSubGroupOptions = subGroupOptionsForType(effectiveType);
 
-  const totalAccounts = accounts.length;
-  const totalBalance = accounts.reduce((sum, account) => sum + Number(account.balance || 0), 0);
+  const codeConflict = useMemo(() => {
+    if (!formData.code.trim()) return false;
+    const upper = formData.code.trim().toUpperCase();
+    return accounts.some(
+      (a) => a.code === upper && String(a._id) !== String(editingAccountId || "")
+    );
+  }, [accounts, formData.code, editingAccountId]);
 
   const selectedAccounts = useMemo(() => {
-    const selectedSet = new Set(selectedIds);
-    return accounts.filter((account) => selectedSet.has(account._id));
+    const set = new Set(selectedIds);
+    return accounts.filter((a) => set.has(a._id));
   }, [accounts, selectedIds]);
 
+  // ── Actions ──
   const openCreateModal = () => {
-    if (!canCreateCOA) { toast.warning("You do not have permission to create chart of accounts entries."); return; }
+    if (!canCreateCOA) { toast.warning("No permission to create accounts."); return; }
     setEditingAccountId(null);
     setFormData(blankForm);
     setShowForm(true);
   };
 
-  const openEditModal = () => {
-    if (selectedAccounts.length !== 1) {
-      toast.info("Select one account to edit.");
-      return;
-    }
-    if (!canUpdateCOA) { toast.warning("You do not have permission to edit chart of accounts entries."); return; }
-
-    const account = selectedAccounts[0];
+  const openEditModal = (account) => {
+    if (!canUpdateCOA) { toast.warning("No permission to edit accounts."); return; }
     setEditingAccountId(account._id);
     setFormData({
-      code: account.code || "",
-      name: account.name || "",
-      type: account.type || "asset",
-      group: normalizeGroup(account.group, account.type),
-      subGroup: account.subGroup || subGroupOptionsForType(account.type)[0] || "",
+      code:          account.code || "",
+      name:          account.name || "",
+      type:          account.type || "asset",
+      group:         normalizeGroup(account.group, account.type),
+      subGroup:      account.subGroup || subGroupOptionsForType(account.type)[0] || "",
       parentAccount: account.parentAccount?._id || account.parentAccount || "",
-      isHeader: Boolean(account.isHeader),
-      isPosting: account.isHeader ? false : account.isPosting !== false,
+      isHeader:      Boolean(account.isHeader),
+      isPosting:     account.isHeader ? false : account.isPosting !== false,
     });
     setShowForm(true);
   };
 
-  const closeModal = () => {
+  const closeForm = () => {
     if (_coaDraftKey) { try { window.sessionStorage.removeItem(_coaDraftKey); } catch {} }
     setShowForm(false);
     setEditingAccountId(null);
     setFormData(blankForm);
   };
 
-  const toggleSelect = (accountId) => {
+  const toggleSelect = (id) =>
+    setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+
+  const toggleSelectGroup = (accs) => {
+    const ids    = accs.map((a) => a._id);
+    const allSel = ids.every((id) => selectedIds.includes(id));
     setSelectedIds((prev) =>
-      prev.includes(accountId) ? prev.filter((id) => id !== accountId) : [...prev, accountId]
+      allSel ? prev.filter((id) => !ids.includes(id)) : Array.from(new Set([...prev, ...ids]))
     );
-  };
-
-  const toggleSelectAllInGroup = (groupAccounts) => {
-    const ids = groupAccounts.map((a) => a._id);
-    const allSelected = ids.every((id) => selectedIds.includes(id));
-
-    if (allSelected) {
-      setSelectedIds((prev) => prev.filter((id) => !ids.includes(id)));
-    } else {
-      setSelectedIds((prev) => Array.from(new Set([...prev, ...ids])));
-    }
   };
 
   const handleTypeChange = (nextType) => {
     const options = subGroupOptionsForType(nextType);
     setFormData((prev) => ({
-      ...prev,
-      type: nextType,
-      group: normalizeGroup("", nextType),
-      subGroup: options[0] || "",
+      ...prev, type: nextType, group: normalizeGroup("", nextType), subGroup: options[0] || "",
     }));
   };
 
   const handleParentChange = (parentId) => {
-    const parent = parentOptions.find((account) => String(account._id) === String(parentId));
-    if (!parent) {
-      setFormData((prev) => ({
-        ...prev,
-        parentAccount: "",
-      }));
-      return;
-    }
-
+    const parent = parentOptions.find((a) => String(a._id) === String(parentId));
+    if (!parent) { setFormData((prev) => ({ ...prev, parentAccount: "" })); return; }
     const inheritedOptions = subGroupOptionsForType(parent.type);
     setFormData((prev) => ({
       ...prev,
       parentAccount: parentId,
-      type: parent.type,
-      group: normalizeGroup(parent.group, parent.type),
+      type:    parent.type,
+      group:   normalizeGroup(parent.group, parent.type),
       subGroup: parent.subGroup || inheritedOptions[0] || "",
     }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (!businessId) {
-      toast.error("Select a company first.");
-      return;
-    }
-
-    if (!formData.code.trim() || !formData.name.trim() || !effectiveType) {
-      toast.error("Code, account name and type are required.");
-      return;
-    }
+    if (!businessId)                           { toast.error("Select a company first.");           return; }
+    if (!formData.code.trim() || !formData.name.trim() || !effectiveType)
+                                               { toast.error("Code, name and type are required."); return; }
+    if (codeConflict)                          { toast.error("Code already in use — choose another."); return; }
 
     const payload = {
-      business: businessId,
-      code: formData.code.trim().toUpperCase(),
-      name: formData.name.trim(),
-      type: effectiveType,
-      group: effectiveGroup,
-      subGroup:
-        formData.subGroup.trim() || currentSubGroupOptions[0] || "",
+      business:      businessId,
+      code:          formData.code.trim().toUpperCase(),
+      name:          formData.name.trim(),
+      type:          effectiveType,
+      group:         effectiveGroup,
+      subGroup:      formData.subGroup.trim() || currentSubGroupOptions[0] || "",
       parentAccount: formData.parentAccount || null,
-      isHeader: Boolean(formData.isHeader),
-      isPosting: formData.isHeader ? false : Boolean(formData.isPosting),
+      isHeader:      Boolean(formData.isHeader),
+      isPosting:     formData.isHeader ? false : Boolean(formData.isPosting),
     };
 
     setSaving(true);
     try {
       if (editingAccountId) {
         await adminRequests.put(`/chart-of-accounts/${editingAccountId}`, payload);
-        toast.success("Account updated successfully.");
+        toast.success("Account updated.");
       } else {
         await adminRequests.post("/chart-of-accounts", payload);
-        toast.success("Account created successfully.");
+        toast.success("Account created.");
       }
-
-      closeModal();
+      closeForm();
       setSelectedIds([]);
       await loadAccounts();
     } catch (error) {
-      console.error("Failed to save chart account", error);
       toast.error(
         error?.response?.data?.error ||
-          error?.response?.data?.message ||
-          error?.message ||
-          "Failed to save chart account"
+        error?.response?.data?.message ||
+        error?.message ||
+        "Failed to save account"
       );
     } finally {
       setSaving(false);
@@ -449,376 +351,471 @@ const ChartOfAccounts = () => {
   };
 
   const handleDeleteSelected = async () => {
-    if (selectedAccounts.length === 0) {
-      toast.info("Select at least one account to delete.");
-      return;
-    }
-    if (!canDeleteCOA) { toast.warning("You do not have permission to delete chart of accounts entries."); return; }
+    if (!selectedAccounts.length) { toast.info("Select accounts to delete."); return; }
+    if (!canDeleteCOA)            { toast.warning("No permission to delete accounts."); return; }
     const names = selectedAccounts.map((a) => `${a.code} ${a.name}`).join(", ");
-    const confirmed = await confirm({ title: "Delete Accounts", message: `Delete the following account(s)? ${names}`, confirmText: "Delete", isDangerous: true });
-    if (!confirmed) return;
-
+    const ok = await confirm({
+      title: "Delete Accounts", message: `Delete: ${names}?`, confirmText: "Delete", isDangerous: true,
+    });
+    if (!ok) return;
     setSaving(true);
     try {
       await Promise.all(
-        selectedAccounts.map((account) =>
-          adminRequests.delete(`/chart-of-accounts/${account._id}`, { data: { business: businessId } })
+        selectedAccounts.map((a) =>
+          adminRequests.delete(`/chart-of-accounts/${a._id}`, { data: { business: businessId } })
         )
       );
-
-      toast.success("Selected account(s) deleted.");
+      toast.success("Deleted successfully.");
       setSelectedIds([]);
       await loadAccounts();
     } catch (error) {
-      console.error("Failed to delete chart account", error);
       toast.error(
         error?.response?.data?.error ||
-          error?.response?.data?.message ||
-          error?.message ||
-          "Failed to delete chart account"
+        error?.response?.data?.message ||
+        error?.message ||
+        "Failed to delete"
       );
     } finally {
       setSaving(false);
     }
   };
 
+  // ── Style shortcuts ──
+  const labelCls = "block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1";
+  const inputCls = "w-full border border-slate-300 px-2.5 py-1.5 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
+
+  // ── Render ──
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
-        <div className="flex min-h-0 w-full max-w-full flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-              <div className="relative shrink-0">
-                <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Code, account name, type, class, subgroup"
-                  className="h-7 w-56 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                />
-              </div>
-              <select
-                value={moduleScope}
-                onChange={(e) => setModuleScope(e.target.value)}
-                className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                title="Filter by module"
-              >
-                {MODULE_SCOPE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-              <label className="h-7 shrink-0 flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600">
-                <input
-                  type="checkbox"
-                  checked={showControlAccounts}
-                  onChange={(e) => setShowControlAccounts(e.target.checked)}
-                  className="rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
-                />
-                Control Accounts
-              </label>
-              <span className="shrink-0 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600">
-                <FaFolderOpen className="inline mr-1 text-[#0B3B2E]" />{selectedAccounts.length} selected
-              </span>
-              <button onClick={loadAccounts} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaSyncAlt size={9} /></button>
-              <button onClick={openCreateModal} disabled={!canCreateCOA} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#FF8C00] px-2.5 text-xs font-semibold text-white hover:bg-[#e67e00] disabled:cursor-not-allowed disabled:bg-slate-300"><FaPlus size={9} /> Add Account</button>
-              <button onClick={openEditModal} disabled={selectedAccounts.length !== 1 || !canUpdateCOA} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 ${selectedAccounts.length === 1 && canUpdateCOA ? "bg-amber-500 hover:bg-amber-600" : "bg-slate-300"}`}><FaEdit size={9} /> Edit</button>
-              <button onClick={handleDeleteSelected} disabled={selectedAccounts.length === 0 || !canDeleteCOA} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 ${selectedAccounts.length > 0 && canDeleteCOA ? "bg-rose-600 hover:bg-rose-700" : "bg-slate-300"}`}><FaTrash size={9} /> Delete</button>
-            </div>
+      <div className="flex h-full flex-col overflow-hidden bg-slate-100">
+
+        {/* ── Toolbar ── */}
+        <div className="shrink-0 border-b border-slate-200 bg-white px-3 py-2 flex items-center gap-2 flex-wrap">
+          {/* Search */}
+          <div className="relative">
+            <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] text-slate-400" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Code, name, type, class..."
+              className="h-7 w-52 border border-slate-200 bg-slate-50 pl-6 pr-2 text-xs focus:outline-none focus:border-[#0B3B2E]"
+            />
           </div>
 
-          {loading && (
-            <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm text-blue-800">
-              Loading chart of accounts...
-            </div>
-          )}
+          {/* Module scope */}
+          <select
+            value={moduleScope}
+            onChange={(e) => setModuleScope(e.target.value)}
+            className="h-7 border border-slate-200 bg-slate-50 px-2 text-xs font-semibold text-slate-700 focus:outline-none focus:border-[#0B3B2E]"
+          >
+            {MODULE_SCOPE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
 
-          <div className="min-h-0 flex-1 overflow-auto p-2">
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
-            {groupedAccounts.map((group) => {
-              const groupIds = group.accounts.map((a) => a._id);
-              const allGroupSelected =
-                groupIds.length > 0 && groupIds.every((id) => selectedIds.includes(id));
+          {/* Control accounts */}
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showControlAccounts}
+              onChange={(e) => setShowControlAccounts(e.target.checked)}
+              className="text-[#0B3B2E]"
+            />
+            Control Accounts
+          </label>
+
+          {/* Right-side actions */}
+          <div className="ml-auto flex items-center gap-1.5">
+            {selectedIds.length > 0 && (
+              <span className="text-[11px] font-semibold text-slate-500 px-1">
+                {selectedIds.length} selected
+              </span>
+            )}
+            <button
+              onClick={loadAccounts}
+              title="Refresh"
+              className="h-7 px-2.5 border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 flex items-center text-xs"
+            >
+              <FaSyncAlt size={9} />
+            </button>
+            {selectedAccounts.length === 1 && canUpdateCOA && (
+              <button
+                onClick={() => openEditModal(selectedAccounts[0])}
+                className="h-7 px-3 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold flex items-center gap-1"
+              >
+                <FaEdit size={9} /> Edit
+              </button>
+            )}
+            {selectedAccounts.length > 0 && canDeleteCOA && (
+              <button
+                onClick={handleDeleteSelected}
+                className="h-7 px-3 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1"
+              >
+                <FaTrash size={9} /> Delete
+              </button>
+            )}
+            <button
+              onClick={openCreateModal}
+              disabled={!canCreateCOA}
+              className="h-7 px-3 bg-[#FF8C00] hover:bg-[#e67e00] text-white text-xs font-bold flex items-center gap-1 disabled:opacity-50"
+            >
+              <FaPlus size={9} /> Add Account
+            </button>
+          </div>
+        </div>
+
+        {/* ── Body: list + form panel ── */}
+        <div className="flex flex-1 min-h-0 overflow-hidden">
+
+          {/* ── Account list ── */}
+          <div className="flex-1 overflow-auto p-3 space-y-2">
+            {loading && (
+              <p className="text-xs text-slate-500 px-1 py-2">Loading accounts...</p>
+            )}
+
+            {!loading && typeGroups.map((group) => {
+              const isCollapsed = Boolean(collapsed[group.key]);
+              const allGroupAccounts = group.classes.flatMap((c) => c.accounts);
+              const allIds  = allGroupAccounts.map((a) => a._id);
+              const allSel  = allIds.length > 0 && allIds.every((id) => selectedIds.includes(id));
 
               return (
-                <div key={group.key} className={`rounded-xl border ${group.color} overflow-hidden`}>
-                  <div className="px-3 py-1.5 border-b border-slate-200 flex items-center justify-between bg-white/70">
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => toggleSelectAllInGroup(group.accounts)}
-                        className="text-slate-700 hover:text-slate-900"
-                        title="Select group"
-                      >
-                        {allGroupSelected ? <FaCheckSquare /> : <FaSquare />}
-                      </button>
-                      <div className="font-bold text-slate-900">{group.label}</div>
-                    </div>
-
-                    <span className={`text-xs px-2 py-1 rounded-full font-semibold ${group.tag}`}>
-                      {group.accounts.length} accounts
+                <div key={group.key} className="overflow-hidden border border-slate-200 shadow-sm">
+                  {/* Type section header */}
+                  <div className={`${group.bg} flex items-center gap-2.5 px-3 py-2`}>
+                    <button
+                      onClick={() => toggleSelectGroup(allGroupAccounts)}
+                      className="text-white/50 hover:text-white shrink-0"
+                    >
+                      {allSel && allIds.length > 0
+                        ? <FaCheckSquare size={12} />
+                        : <FaSquare size={12} />
+                      }
+                    </button>
+                    <span className="font-bold text-white text-sm">{group.label}</span>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 ${group.badge}`}>
+                      {group.count} {group.count === 1 ? "account" : "accounts"}
                     </span>
+                    <span className="ml-auto text-xs font-bold text-white/80 tabular-nums">
+                      {formatMoney(group.totalBalance)}
+                    </span>
+                    <button
+                      onClick={() => setCollapsed((prev) => ({ ...prev, [group.key]: !prev[group.key] }))}
+                      className="text-white/60 hover:text-white ml-1 shrink-0"
+                    >
+                      {isCollapsed ? <FaChevronDown size={11} /> : <FaChevronUp size={11} />}
+                    </button>
                   </div>
 
-                  <div className="overflow-x-auto bg-white">
-                    <table className="w-full min-w-[860px] text-xs">
-                      <thead className="bg-[#0B3B2E] text-white">
-                        <tr>
-                          <th className="text-left px-3 py-1.5 w-[44px]"></th>
-                          <th className="text-left px-3 py-1.5">Code</th>
-                          <th className="text-left px-3 py-1.5">Account Name</th>
-                          <th className="text-left px-3 py-1.5">Type</th>
-                          <th className="text-left px-3 py-1.5">Class</th>
-                          <th className="text-left px-3 py-1.5">Normal Side</th>
-                          <th className="text-right px-3 py-1.5">Balance</th>
-                          <th className="text-right px-3 py-1.5">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {group.accounts.length === 0 ? (
-                          <tr>
-                            <td colSpan="8" className="px-3 py-6 text-center text-slate-500">
-                              No accounts found.
-                            </td>
+                  {/* Accounts table */}
+                  {!isCollapsed && (
+                    <div className="overflow-x-auto bg-white">
+                      <table className="w-full min-w-[680px] text-xs">
+                        <thead>
+                          <tr className="border-b border-slate-200 bg-slate-50">
+                            <th className="w-10 px-3 py-1.5"></th>
+                            <th className="text-left px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Code</th>
+                            <th className="text-left px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Account Name</th>
+                            <th className="text-left px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Normal Side</th>
+                            <th className="text-right px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Balance</th>
+                            <th className="text-right px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Status</th>
                           </tr>
-                        ) : (
-                          group.accounts.map((account) => {
-                            const selected = selectedIds.includes(account._id);
-                            return (
-                              <tr
-                                key={account._id}
-                                className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer"
-                                onDoubleClick={() => {
-                                  if (account?.isPosting !== false && !account?.isHeader) {
-                                    navigate(`${activityBase}/${account._id}/activity`);
-                                  }
-                                }}
-                                title={account?.isPosting !== false && !account?.isHeader ? "Double-click to open ledger activity" : "Header accounts cannot open activity"}
-                              >
-                                <td className="px-3 py-1.5">
-                                  <button
-                                    onClick={() => toggleSelect(account._id)}
-                                    className="text-slate-700 hover:text-slate-900"
-                                  >
-                                    {selected ? <FaCheckSquare /> : <FaSquare />}
-                                  </button>
-                                </td>
-                                <td className="px-3 py-1.5 font-mono text-slate-900">{account.code}</td>
-                                <td className="px-3 py-1.5">
-                                  <div
-                                    className="font-medium text-slate-900"
-                                    style={{ paddingLeft: `${Number(account.level || 0) * 18}px` }}
-                                  >
-                                    {account.name}
-                                  </div>
-                                </td>
-                                <td className="px-3 py-1.5 text-slate-700">{typeLabel(account.type)}</td>
-                                <td className="px-3 py-1.5 text-slate-600">{classLabel(account)}</td>
-                                <td className="px-3 py-1.5 text-slate-600">
-                                  {account.normalBalanceSide || NORMAL_BALANCE_BY_TYPE[account.type] || "-"}
-                                </td>
-                                <td className="px-3 py-1.5 text-right font-semibold text-slate-900">
-                                  {formatMoney(account.balance || 0)}
-                                </td>
-                                <td className="px-3 py-1.5 text-right">
-                                  <div className="inline-flex gap-2 flex-wrap justify-end">
-                                    {account.isSystem && (
-                                      <span className="inline-flex text-[11px] px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-semibold">
-                                        System
-                                      </span>
-                                    )}
-                                    {account.isHeader ? (
-                                      <span className="inline-flex text-[11px] px-2 py-0.5 rounded bg-blue-100 text-blue-700 font-semibold">
-                                        Header
-                                      </span>
-                                    ) : (
-                                      <span className="inline-flex text-[11px] px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 font-semibold">
-                                        Posting
-                                      </span>
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {group.classes.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} className="px-3 py-6 text-center text-slate-400 italic text-xs">
+                                No accounts in this category
+                              </td>
+                            </tr>
+                          ) : (
+                            group.classes.map(({ cls, accounts: clsAccounts }) => (
+                              <React.Fragment key={cls}>
+                                {/* Class sub-header */}
+                                <tr className="bg-slate-50 border-y border-slate-200">
+                                  <td colSpan={6} className="px-3 py-1">
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                      {cls}
+                                    </span>
+                                    <span className="ml-2 text-[10px] text-slate-400">
+                                      {clsAccounts.length}
+                                    </span>
+                                  </td>
+                                </tr>
+
+                                {/* Account rows */}
+                                {clsAccounts.map((account) => {
+                                  const selected = selectedIds.includes(account._id);
+                                  const balance  = Number(account.balance || 0);
+                                  return (
+                                    <tr
+                                      key={account._id}
+                                      className={`border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors ${
+                                        selected ? "bg-emerald-50 hover:bg-emerald-50" : ""
+                                      }`}
+                                      onDoubleClick={() => {
+                                        if (account?.isPosting !== false && !account?.isHeader)
+                                          navigate(`${activityBase}/${account._id}/activity`);
+                                      }}
+                                      title={
+                                        account?.isPosting !== false && !account?.isHeader
+                                          ? "Double-click to open ledger activity"
+                                          : "Header accounts cannot open activity"
+                                      }
+                                    >
+                                      <td className="px-3 py-1.5">
+                                        <button
+                                          onClick={() => toggleSelect(account._id)}
+                                          className="text-slate-300 hover:text-slate-600"
+                                        >
+                                          {selected
+                                            ? <FaCheckSquare size={12} className="text-[#0B3B2E]" />
+                                            : <FaSquare size={12} />
+                                          }
+                                        </button>
+                                      </td>
+                                      <td className="px-3 py-1.5 font-mono font-semibold text-slate-700">
+                                        {account.code}
+                                      </td>
+                                      <td className="px-3 py-1.5">
+                                        <span
+                                          className="font-medium text-slate-900"
+                                          style={{ paddingLeft: `${Number(account.level || 0) * 16}px` }}
+                                        >
+                                          {account.name}
+                                        </span>
+                                      </td>
+                                      <td className="px-3 py-1.5 text-slate-500">
+                                        {account.normalBalanceSide || NORMAL_BALANCE_BY_TYPE[account.type] || "—"}
+                                      </td>
+                                      <td className={`px-3 py-1.5 text-right font-semibold tabular-nums ${
+                                        balance !== 0 ? "text-slate-800" : "text-slate-300"
+                                      }`}>
+                                        {formatMoney(balance)}
+                                      </td>
+                                      <td className="px-3 py-1.5 text-right">
+                                        <div className="inline-flex gap-1 items-center justify-end">
+                                          {account.isSystem && (
+                                            <span className="px-1.5 py-0.5 text-[9px] bg-slate-100 text-slate-500 font-bold uppercase">
+                                              System
+                                            </span>
+                                          )}
+                                          {account.isHeader ? (
+                                            <span className="px-1.5 py-0.5 text-[9px] bg-blue-100 text-blue-700 font-bold uppercase">
+                                              Header
+                                            </span>
+                                          ) : (
+                                            <span className="px-1.5 py-0.5 text-[9px] bg-emerald-100 text-emerald-700 font-bold uppercase">
+                                              Posting
+                                            </span>
+                                          )}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </React.Fragment>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
-        </div>
 
-        {showForm && (
-          <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4">
-            <div className="w-full max-w-2xl rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white">
-              <div className="bg-[#0B3B2E] px-6 py-4 text-white">
-                <h3 className="text-lg font-bold">
-                  {editingAccountId ? "Edit Chart Account" : "Add Chart Account"}
-                </h3>
-                <p className="text-sm text-emerald-100 mt-1">
-                  Maintain your MILIK chart structure with clean parent-child account setup.
-                </p>
+          {/* ── Form panel ── */}
+          {showForm && (
+            <div className="w-96 shrink-0 border-l border-slate-200 bg-white flex flex-col overflow-hidden shadow-lg">
+              {/* Panel header */}
+              <div className="bg-[#0B3B2E] px-4 py-3 shrink-0 flex items-start justify-between">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-300">
+                    {editingAccountId ? "Edit Account" : "New Account"}
+                  </p>
+                  <p className="text-sm font-bold text-white mt-0.5 truncate max-w-[280px]">
+                    {editingAccountId
+                      ? `${formData.code} — ${formData.name || "…"}`
+                      : "Chart of Accounts"
+                    }
+                  </p>
+                </div>
+                <button onClick={closeForm} className="text-white/50 hover:text-white mt-0.5">
+                  <FaTimes size={14} />
+                </button>
               </div>
 
-              <form onSubmit={handleSubmit} className="p-6 space-y-5">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <label className="block">
-                    <span className="text-sm font-semibold text-slate-700">Account Code</span>
+              {/* Form body */}
+              <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                <div className="flex-1 overflow-auto p-4 space-y-4">
+
+                  {/* Code */}
+                  <div>
+                    <label className={labelCls}>Account Code *</label>
                     <input
                       value={formData.code}
                       onChange={(e) => setFormData((prev) => ({ ...prev, code: e.target.value }))}
-                      className="mt-1 w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]"
-                      placeholder="e.g. 1115"
+                      placeholder="e.g. 1600"
+                      autoFocus
+                      className={`${inputCls} ${codeConflict ? "border-red-400 bg-red-50 text-red-700" : ""}`}
                     />
-                  </label>
+                    {codeConflict && (
+                      <p className="mt-1 flex items-center gap-1 text-[10px] text-red-600 font-semibold">
+                        <FaExclamationTriangle size={8} />
+                        Code already in use — choose a different number
+                      </p>
+                    )}
+                    {!codeConflict && formData.code.trim() && (
+                      <p className="mt-1 text-[10px] text-emerald-600 font-semibold">✓ Code is available</p>
+                    )}
+                  </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-slate-700">Account Name</span>
+                  {/* Name */}
+                  <div>
+                    <label className={labelCls}>Account Name *</label>
                     <input
                       value={formData.name}
                       onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
-                      className="mt-1 w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]"
-                      placeholder="e.g. Agency Float Collections"
+                      placeholder="e.g. Motor Vehicles"
+                      className={inputCls}
                     />
-                  </label>
-                </div>
+                  </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <label className="block">
-                    <span className="text-sm font-semibold text-slate-700">Type</span>
-                    <select
-                      value={effectiveType}
-                      disabled={Boolean(parentAccountForForm)}
-                      onChange={(e) => handleTypeChange(e.target.value)}
-                      className="mt-1 w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0B3B2E] disabled:bg-slate-100 disabled:text-slate-500"
-                    >
-                      <option value="asset">Asset</option>
-                      <option value="liability">Liability</option>
-                      <option value="equity">Equity</option>
-                      <option value="income">Income</option>
-                      <option value="expense">Expense</option>
-                    </select>
-                    {parentAccountForForm && (
-                      <p className="mt-1 text-xs text-slate-500">
-                        Type is inherited from the selected parent account.
+                  {/* Type */}
+                  <div>
+                    <label className={labelCls}>Type *</label>
+                    {parentAccountForForm ? (
+                      <p className="text-xs text-slate-500 italic bg-slate-50 border border-slate-200 px-2.5 py-1.5">
+                        Inherited from parent: <span className="font-bold capitalize text-slate-700">{effectiveType}</span>
                       </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {TYPE_OPTIONS.map((t) => (
+                          <button
+                            key={t.value}
+                            type="button"
+                            onClick={() => handleTypeChange(t.value)}
+                            className={`px-2.5 py-1 text-xs font-bold transition-colors ${
+                              effectiveType === t.value
+                                ? "bg-[#0B3B2E] text-white"
+                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                            }`}
+                          >
+                            {t.label}
+                          </button>
+                        ))}
+                      </div>
                     )}
-                  </label>
+                  </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-slate-700">Group</span>
-                    <input
-                      value={effectiveGroup}
-                      disabled
-                      className="mt-1 w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-slate-100 text-slate-600 focus:outline-none"
-                    />
-                  </label>
-
-                  <label className="block">
-                    <span className="text-sm font-semibold text-slate-700">Normal Balance Side</span>
-                    <input
-                      value={NORMAL_BALANCE_BY_TYPE[effectiveType] || ""}
-                      disabled
-                      className="mt-1 w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-slate-100 text-slate-600 focus:outline-none"
-                    />
-                  </label>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <label className="block">
-                    <span className="text-sm font-semibold text-slate-700">Account Class</span>
+                  {/* Account class */}
+                  <div>
+                    <label className={labelCls}>Account Class</label>
                     <select
                       value={formData.subGroup}
                       onChange={(e) => setFormData((prev) => ({ ...prev, subGroup: e.target.value }))}
-                      className="mt-1 w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]"
+                      className={inputCls}
                     >
-                      {currentSubGroupOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
+                      {currentSubGroupOptions.map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
                       ))}
                     </select>
-                  </label>
+                  </div>
 
-                  <label className="block">
-                    <span className="text-sm font-semibold text-slate-700">Parent Account</span>
+                  {/* Parent account */}
+                  <div>
+                    <label className={labelCls}>Parent Account</label>
                     <select
                       value={formData.parentAccount}
                       onChange={(e) => handleParentChange(e.target.value)}
-                      className="mt-1 w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]"
+                      className={inputCls}
                     >
                       <option value="">None</option>
                       {parentOptions
-                        .filter((account) => account._id !== editingAccountId)
-                        .map((account) => (
-                          <option key={account._id} value={account._id}>
-                            {account.code} - {account.name}
+                        .filter((a) => a._id !== editingAccountId)
+                        .map((a) => (
+                          <option key={a._id} value={a._id}>
+                            {a.code} — {a.name}
                           </option>
-                        ))}
+                        ))
+                      }
                     </select>
-                  </label>
+                  </div>
+
+                  {/* Normal balance (informational) */}
+                  <div>
+                    <label className={labelCls}>Normal Balance Side</label>
+                    <div className="border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-500">
+                      {NORMAL_BALANCE_BY_TYPE[effectiveType] || "—"} <span className="text-slate-400">(auto-derived)</span>
+                    </div>
+                  </div>
+
+                  {/* Divider */}
+                  <div className="border-t border-slate-100" />
+
+                  {/* Header / Posting toggles */}
+                  <div className="space-y-3">
+                    <label className="flex items-start gap-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.isHeader}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            isHeader:  e.target.checked,
+                            isPosting: e.target.checked ? false : prev.isPosting,
+                          }))
+                        }
+                        className="mt-0.5 text-[#0B3B2E]"
+                      />
+                      <div>
+                        <p className="text-xs font-semibold text-slate-800">Header Account</p>
+                        <p className="text-[10px] text-slate-500">Groups child accounts; no direct postings allowed</p>
+                      </div>
+                    </label>
+
+                    <label className={`flex items-start gap-2.5 ${formData.isHeader ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}>
+                      <input
+                        type="checkbox"
+                        checked={formData.isPosting}
+                        disabled={formData.isHeader}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, isPosting: e.target.checked }))}
+                        className="mt-0.5 text-[#0B3B2E]"
+                      />
+                      <div>
+                        <p className="text-xs font-semibold text-slate-800">Posting Account</p>
+                        <p className="text-[10px] text-slate-500">Receives ledger entries directly</p>
+                      </div>
+                    </label>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <label className="flex items-center justify-between rounded-xl border border-slate-300 px-3 py-1.5">
-                    <div>
-                      <div className="text-sm font-semibold text-slate-800">Header Account</div>
-                      <div className="text-xs text-slate-500">Use for grouping children, not direct posting.</div>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={formData.isHeader}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          isHeader: e.target.checked,
-                          isPosting: e.target.checked ? false : prev.isPosting,
-                        }))
-                      }
-                    />
-                  </label>
-
-                  <label className="flex items-center justify-between rounded-xl border border-slate-300 px-3 py-1.5">
-                    <div>
-                      <div className="text-sm font-semibold text-slate-800">Posting Account</div>
-                      <div className="text-xs text-slate-500">Receives ledger entries directly.</div>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={formData.isPosting}
-                      disabled={formData.isHeader}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          isPosting: e.target.checked,
-                        }))
-                      }
-                    />
-                  </label>
-                </div>
-
-                <div className="flex items-center justify-end gap-3 pt-2">
+                {/* Form footer */}
+                <div className="shrink-0 border-t border-slate-200 px-4 py-3 flex gap-2 bg-slate-50">
                   <button
                     type="button"
-                    onClick={closeModal}
-                    className="px-4 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-700 font-semibold hover:bg-slate-100"
+                    onClick={closeForm}
+                    className="flex-1 h-8 border border-slate-300 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-100"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    disabled={saving}
-                    className="px-5 py-2.5 rounded-xl bg-[#FF8C00] hover:bg-[#e67e00] text-white font-semibold shadow-sm disabled:opacity-60"
+                    disabled={saving || codeConflict || !formData.code.trim() || !formData.name.trim()}
+                    className="flex-1 h-8 bg-[#FF8C00] hover:bg-[#e67e00] text-white text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {saving ? "Saving..." : editingAccountId ? "Save Changes" : "Create Account"}
+                    {saving
+                      ? "Saving..."
+                      : editingAccountId ? "Save Changes" : "Create Account"
+                    }
                   </button>
                 </div>
               </form>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
       </div>
     </DashboardLayout>
   );
