@@ -741,6 +741,10 @@ export const listMpesaNotifications = async (req, res, next) => {
       const p = normalizePlate(req.query.plate);
       if (p) filter.plate = buildPlateRegex(p);
     }
+    if (req.query.search) {
+      const re = new RegExp(String(req.query.search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      filter.$or = [{ transactionCode: re }, { senderName: re }];
+    }
     if (req.query.date) {
       const { start, end } = parseDateRange(req.query.date);
       filter.createdAt = { $gte: start, $lt: end };
@@ -861,10 +865,11 @@ export const reassignMpesaNotification = async (req, res, next) => {
       throw payErr;
     }
 
+    const assignActorName = [req.user?.otherNames, req.user?.surname].filter(Boolean).join(" ") || req.user?.email || "Admin";
     notif.status = "matched";
     notif.matchedJob = job._id;
     notif.matchedPayment = payment._id;
-    notif.resultDesc = `Manually assigned to job ${job.jobNumber || job._id} by admin`;
+    notif.resultDesc = `Manually assigned to job ${job.jobNumber || job._id} by ${assignActorName}`;
     notif.notes = `Corrected — original account reference: ${notif.billRefNumber}`;
     await notif.save();
 
@@ -1047,7 +1052,8 @@ export const allocateNotification = async (req, res, next) => {
       notif.status = "matched";
       if (!notif.matchedJob && results.length === 1) notif.matchedJob = results[0].jobId;
     }
-    notif.notes = (notif.notes ? notif.notes + " | " : "") + `Allocated to ${results.length} job(s) via multi-allocation`;
+    const allocActorName = [req.user?.otherNames, req.user?.surname].filter(Boolean).join(" ") || req.user?.email || "Admin";
+    notif.notes = (notif.notes ? notif.notes + " | " : "") + `Allocated to ${results.length} job(s) via multi-allocation by ${allocActorName}`;
     await notif.save();
 
     const populated = await CarWashMpesaNotification.findById(notif._id)

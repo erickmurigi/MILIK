@@ -38,6 +38,12 @@ const StatusBadge = ({ status }) => {
 const fmtDate = (v) =>
   v ? new Date(v).toLocaleString("en-KE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
 
+const extractActor = (text) => {
+  if (!text) return null;
+  const m = text.match(/\bby\s+([^|]+?)(?:\s*\||$)/i);
+  return m?.[1]?.trim() || null;
+};
+
 // ─── Allocate Modal — memoized row ───────────────────────────────────────────
 const JobAllocRow = React.memo(({ job, value, available, onSet, onFill }) => (
   <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-2.5 hover:bg-slate-50">
@@ -830,18 +836,19 @@ export default function CarWashMpesaNotifications() {
   const [showUpload, setShowUpload]         = useState(false);
   const [reverseTarget, setReverseTarget]   = useState(null);
 
-  const [filters, setFilters] = useState({ status: "", plate: "", dateFrom: todayISO(), dateTo: todayISO() });
-  const [applied, setApplied] = useState({ status: "", plate: "", dateFrom: todayISO(), dateTo: todayISO() });
+  const [filters, setFilters] = useState({ status: "", plate: "", search: "", dateFrom: todayISO(), dateTo: todayISO() });
+  const [applied, setApplied] = useState({ status: "", plate: "", search: "", dateFrom: todayISO(), dateTo: todayISO() });
   const [page, setPage] = useState(1);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const res = await carWashApi.listMpesaNotifications({
-        status: applied.status || undefined,
-        plate: applied.plate || undefined,
+        status:   applied.status   || undefined,
+        plate:    applied.plate    || undefined,
+        search:   applied.search   || undefined,
         dateFrom: applied.dateFrom || undefined,
-        dateTo: applied.dateTo || undefined,
+        dateTo:   applied.dateTo   || undefined,
         page,
         limit: PAGE_SIZE,
       });
@@ -859,7 +866,7 @@ export default function CarWashMpesaNotifications() {
 
   const apply = (e) => { e.preventDefault(); setPage(1); setApplied({ ...filters }); };
   const reset = () => {
-    const d = { status: "", plate: "", dateFrom: todayISO(), dateTo: todayISO() };
+    const d = { status: "", plate: "", search: "", dateFrom: todayISO(), dateTo: todayISO() };
     setFilters(d); setApplied(d); setPage(1);
   };
 
@@ -963,6 +970,21 @@ export default function CarWashMpesaNotifications() {
           value={filters.plate}
           onChange={e => setFilters(p => ({ ...p, plate: e.target.value.toUpperCase() }))}
         />
+        <div className="relative flex items-center">
+          <FaSearch size={9} className="pointer-events-none absolute left-2 text-slate-400" />
+          <input
+            className="h-8 w-52 border border-slate-300 pl-6 pr-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none placeholder:font-normal placeholder:normal-case"
+            placeholder="Txn ID or sender name"
+            value={filters.search}
+            onChange={e => setFilters(p => ({ ...p, search: e.target.value }))}
+          />
+          {filters.search && (
+            <button type="button" onClick={() => setFilters(p => ({ ...p, search: "" }))}
+              className="absolute right-1.5 text-slate-400 hover:text-slate-600">
+              <FaTimesCircle size={11} />
+            </button>
+          )}
+        </div>
         <input type="date" className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
           value={filters.dateFrom} onChange={e => setFilters(p => ({ ...p, dateFrom: e.target.value }))} title="From" />
         <span className="text-xs text-slate-400 font-bold">→</span>
@@ -1043,15 +1065,37 @@ export default function CarWashMpesaNotifications() {
                     </td>
                     <td className="px-3 py-2 font-mono text-slate-700">{n.transactionCode || "—"}</td>
                     <td className="px-3 py-2">
-                      {n.matchedJob ? (
-                        <div>
-                          <p className={`font-bold ${n.isReversed ? "text-slate-400 line-through" : "text-[#0B3B2E]"}`}>{n.matchedJob.jobNumber}</p>
-                          <p className="text-[10px] text-slate-500">{n.matchedJob.customerName || n.matchedJob.plateNumber}</p>
-                          {n.isReversed && <p className="text-[9px] text-red-500 font-semibold">Payment reversed</p>}
-                        </div>
-                      ) : (
-                        <span className="text-[10px] text-slate-400 italic">{n.resultDesc || "—"}</span>
-                      )}
+                      {(() => {
+                        const isManual    = n.resultDesc?.toLowerCase().includes("manually assigned");
+                        const isAllocated = n.notes?.includes("multi-allocation");
+                        const actor       = extractActor(isManual ? n.resultDesc : n.notes);
+                        return n.matchedJob ? (
+                          <div>
+                            <div className="flex flex-wrap items-center gap-1">
+                              <p className={`font-bold ${n.isReversed ? "text-slate-400 line-through" : "text-[#0B3B2E]"}`}>{n.matchedJob.jobNumber}</p>
+                              {isManual && (
+                                <span className="inline-flex items-center border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-amber-700">Manual</span>
+                              )}
+                              {isAllocated && (
+                                <span className="inline-flex items-center border border-violet-300 bg-violet-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-violet-700">Allocated</span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-slate-500">{n.matchedJob.customerName || n.matchedJob.plateNumber}</p>
+                            {actor && <p className="text-[9px] text-slate-400">by {actor}</p>}
+                            {n.isReversed && <p className="text-[9px] text-red-500 font-semibold">Payment reversed</p>}
+                          </div>
+                        ) : isAllocated ? (
+                          <div>
+                            <div className="flex flex-wrap items-center gap-1">
+                              <span className="text-[10px] text-slate-500 italic">{n.notes?.match(/Allocated to (\d+ job\(s\))/)?.[1] || "Multiple jobs"}</span>
+                              <span className="inline-flex items-center border border-violet-300 bg-violet-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-violet-700">Allocated</span>
+                            </div>
+                            {actor && <p className="text-[9px] text-slate-400">by {actor}</p>}
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 italic">{n.resultDesc || "—"}</span>
+                        );
+                      })()}
                     </td>
                     <td className="px-2 py-2 text-center">
                       <div className="flex items-center justify-center gap-1.5">
