@@ -1764,7 +1764,8 @@ export const getCashMonthlySummary = async (req, res, next) => {
           business: businessOid,
           accountId: { $in: accountIds },
           transactionDate: { $gte: from },
-          status: { $ne: "reversed" },
+          status: "approved",
+          category: { $ne: "REVERSAL" },
         },
       },
       {

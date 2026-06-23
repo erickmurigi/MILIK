@@ -422,7 +422,7 @@ const LedgerAccountActivity = () => {
                           <p className="truncate">{entry.notes || entry.category || "—"}</p>
                           {(entry?.reversalOf || entry?.reversedByEntry) && (
                             <p className="text-[10px] text-slate-400 font-mono truncate">
-                              {entry?.reversalOf ? `↩ reversal of ${shortRef(entry.reversalOf)}` : `↩ reversed by ${shortRef(entry.reversedByEntry)}`}
+                              {entry?.reversalOf ? `↩ reversal of ${shortRef(entry.reversalOf)}` : `↩ reversed by ${entry?.reversedByUserName || shortRef(entry.reversedByEntry)}`}
                             </p>
                           )}
                         </td>
