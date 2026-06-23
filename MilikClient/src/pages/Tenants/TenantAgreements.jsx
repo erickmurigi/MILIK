@@ -556,12 +556,16 @@ const TenantAgreements = () => {
   };
 
   const handleDelete = async (row) => {
-    const confirmed = await confirm({ title: "Delete Agreement", message: `Delete agreement ${row.agreementNumber}?`, confirmText: "Delete", isDangerous: true });
+    const isAutoCreated = Boolean(row.raw?.autoCreatedFromTenant);
+    const message = isAutoCreated
+      ? `Delete the auto-generated agreement ${row.agreementNumber} for ${row.tenantName}? Once deleted, the tenant record can be permanently removed.`
+      : `Delete agreement ${row.agreementNumber}? This action cannot be undone.`;
+    const confirmed = await confirm({ title: "Delete Agreement", message, confirmText: "Delete", isDangerous: true });
     if (!confirmed) return;
 
     try {
       await deleteLease(dispatch, row.id);
-      toast.success("Agreement deleted successfully.");
+      toast.success("Agreement deleted. You may now delete the tenant record.");
       await loadData();
     } catch (error) {
       toast.error(error?.response?.data?.message || error?.message || "Failed to delete agreement.");
@@ -641,11 +645,12 @@ const TenantAgreements = () => {
                       const normalizedStatus = String(row.status || "").toLowerCase();
                       const tenantPending = !row.signedByTenant;
                       const landlordPending = !row.signedByLandlord;
+                      const isAutoCreated = Boolean(row.raw?.autoCreatedFromTenant);
                       const canEdit = !["renewed", "terminated", "cancelled"].includes(normalizedStatus);
                       const canSign = !["renewed", "terminated", "cancelled", "expired"].includes(normalizedStatus);
                       const canRenew = ["active", "expired"].includes(normalizedStatus);
                       const canTerminate = ["draft", "pending_signature", "active", "expired"].includes(normalizedStatus);
-                      const canDelete = ["draft", "cancelled"].includes(normalizedStatus) && tenantPending && landlordPending;
+                      const canDelete = (["draft", "cancelled"].includes(normalizedStatus) && tenantPending && landlordPending) || isAutoCreated;
                       const hasDocument = Boolean(String(row.raw?.documentUrl || "").trim());
 
                       const isExpanded = expandedAgreements.has(row.id);
@@ -793,8 +798,8 @@ const TenantAgreements = () => {
                                     </button>
                                   )}
                                   {canDelete && (
-                                    <button onClick={() => { handleDelete(row); setOpenDropdownId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-slate-600 transition hover:bg-slate-50">
-                                      <FaTrash size={11} /> Delete
+                                    <button onClick={() => { handleDelete(row); setOpenDropdownId(null); }} className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold transition ${isAutoCreated ? "text-red-700 hover:bg-red-50 border-t border-slate-100" : "text-slate-600 hover:bg-slate-50"}`}>
+                                      <FaTrash size={11} /> {isAutoCreated ? "Delete (Wrong Add)" : "Delete"}
                                     </button>
                                   )}
                                 </div>

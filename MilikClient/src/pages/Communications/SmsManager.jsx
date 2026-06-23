@@ -1,16 +1,19 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useDispatch, useSelector } from "react-redux";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useSelector } from "react-redux";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   FaSms, FaSpinner, FaSearch, FaSyncAlt, FaPaperPlane,
   FaTimesCircle, FaPlus, FaTimes, FaUsers, FaCheckCircle,
   FaChevronDown, FaChevronRight, FaEnvelope, FaExclamationTriangle,
-  FaClock, FaInbox,
+  FaInbox, FaTrash,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { adminRequests } from "../../utils/requestMethods";
-import { getTenants } from "../../redux/tenantsRedux";
+import { hasCompanyModule } from "../../utils/companyModules";
+import { carWashApi } from "../../services/carWashApi";
+import { saleApi } from "../../services/propertySaleApi";
+import { inventoryApi } from "../../services/inventoryApi";
 
 const PAGE_SIZE = 50;
 
@@ -76,44 +79,175 @@ const StatusChip = ({ status }) => {
   );
 };
 
+// Registry of all selectable contact types — built per-company based on enabled modules
+const buildContactTypes = ({ hasPM, hasCarWash, hasHR, hasPropertySale, hasInventory }) => {
+  const types = [];
+  if (hasPM) {
+    types.push({ key: "tenants",   label: "Tenants",        singular: "Tenant",   contextType: "tenant_bulk",          templateKey: "tenant_notice_sms",      phoneKey: "phone",  nameKey: "name" });
+    types.push({ key: "landlords", label: "Landlords",      singular: "Landlord", contextType: "landlord_bulk",        templateKey: "landlord_notice_sms",    phoneKey: "phoneNumber", nameKey: "landlordName" });
+  }
+  if (hasCarWash)       types.push({ key: "cw_customers", label: "Car Wash Customers", singular: "Customer", contextType: "carwash_customer_bulk", templateKey: "carwash_notice_sms",     phoneKey: "phone",  nameKey: "name" });
+  if (hasHR)            types.push({ key: "employees",    label: "Employees",          singular: "Employee", contextType: "hr_employee_bulk",      templateKey: "hr_employee_notice_sms", phoneKey: "phoneNumber", nameKey: "_fullName" });
+  if (hasPropertySale) {
+    types.push({ key: "buyers", label: "Property Buyers", singular: "Buyer", contextType: "sale_buyer_bulk",  templateKey: "sale_buyer_notice_sms",  phoneKey: "phone", nameKey: "fullName" });
+    types.push({ key: "agents", label: "Sales Agents",    singular: "Agent", contextType: "sale_agent_bulk",  templateKey: "sale_agent_notice_sms",  phoneKey: "phone", nameKey: "fullName" });
+  }
+  if (hasInventory) types.push({ key: "suppliers", label: "Suppliers", singular: "Supplier", contextType: "inv_supplier_bulk", templateKey: "inv_supplier_notice_sms", phoneKey: "phone", nameKey: "name" });
+  return types;
+};
+
+// Server-side search for each contact type (100 results per request)
+const fetchContacts = async (key, businessId, search = "") => {
+  const p = { limit: 100, ...(search ? { search } : {}) };
+  switch (key) {
+    case "tenants": {
+      const res = await adminRequests.get("/tenants", { params: { business: businessId, ...p } });
+      return Array.isArray(res?.data?.tenants) ? res.data.tenants : Array.isArray(res?.data) ? res.data : [];
+    }
+    case "landlords": {
+      const res = await adminRequests.get("/landlords", { params: { business: businessId, ...p } });
+      return Array.isArray(res?.data?.landlords) ? res.data.landlords : Array.isArray(res?.data) ? res.data : [];
+    }
+    case "cw_customers": {
+      const res = await carWashApi.listLoyaltyCustomers(p);
+      return Array.isArray(res?.customers) ? res.customers : Array.isArray(res) ? res : [];
+    }
+    case "employees": {
+      const res = await adminRequests.get("/hr/employees", { params: p });
+      const list = Array.isArray(res?.data?.employees) ? res.data.employees : Array.isArray(res?.data) ? res.data : [];
+      return list.map(e => ({ ...e, _fullName: [e.name, e.surname].filter(Boolean).join(" ") }));
+    }
+    case "buyers": {
+      const res = await saleApi.listBuyers(p);
+      return Array.isArray(res?.data) ? res.data : [];
+    }
+    case "agents": {
+      const res = await saleApi.listAgents(p);
+      return Array.isArray(res?.data) ? res.data : [];
+    }
+    case "suppliers": {
+      const res = await inventoryApi.listSuppliers(p);
+      return Array.isArray(res) ? res : [];
+    }
+    default: return [];
+  }
+};
+
 // ── Compose slide panel ────────────────────────────────────────────────────────
-const ComposePanel = ({ open, onClose, businessId, tenants, onSent }) => {
-  const [recipientMode, setRecipientMode] = useState("select");
-  const [selectedIds, setSelectedIds]     = useState([]);
-  const [manualPhone, setManualPhone]     = useState("");
-  const [body, setBody]                   = useState("");
-  const [sending, setSending]             = useState(false);
-  const [tenantSearch, setTenantSearch]   = useState("");
+const ComposePanel = ({ open, onClose, businessId, hasPM, hasCarWash, hasHR, hasPropertySale, hasInventory, onSent }) => {
+  const contactTypes = useMemo(
+    () => buildContactTypes({ hasPM, hasCarWash, hasHR, hasPropertySale, hasInventory }),
+    [hasPM, hasCarWash, hasHR, hasPropertySale, hasInventory]
+  );
 
-  const filteredTenants = useMemo(() => {
-    const t = tenantSearch.trim().toLowerCase();
-    return t
-      ? tenants.filter(tn => (tn.name || "").toLowerCase().includes(t) || (tn.phone || "").includes(t))
-      : tenants;
-  }, [tenants, tenantSearch]);
+  const [selectedType,    setSelectedType]    = useState("manual");
+  const [selectedIds,     setSelectedIds]     = useState([]);
+  const [manualPhone,     setManualPhone]     = useState("");
+  const [body,            setBody]            = useState("");
+  const [sending,         setSending]         = useState(false);
+  const [contactSearch,   setContactSearch]   = useState("");
+  const [contacts,        setContacts]        = useState([]);
+  const [contactsLoading, setContactsLoading] = useState(false);
 
-  const toggleTenant = (id) =>
-    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  // Session-level cache: avoids re-fetching the same contact list if user switches type and back
+  const cache = React.useRef(new Map());
 
-  const reset = () => {
-    setSelectedIds([]); setManualPhone(""); setBody(""); setTenantSearch(""); setSending(false);
+  // Reset on panel open; clear cache so data is fresh each time panel opens
+  useEffect(() => {
+    if (open) {
+      cache.current.clear();
+      const first = contactTypes.length > 0 ? contactTypes[0].key : "manual";
+      setSelectedType(first);
+      setSelectedIds([]);
+      setContactSearch("");
+      setContacts([]);
+    }
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load initial list when type changes (uses cache to avoid duplicate requests)
+  useEffect(() => {
+    if (!open || selectedType === "manual" || !businessId) return;
+    setContactSearch("");
+    setSelectedIds([]);
+
+    const cached = cache.current.get(selectedType);
+    if (cached) { setContacts(cached); return; }
+
+    let mounted = true;
+    setContactsLoading(true);
+    setContacts([]);
+    fetchContacts(selectedType, businessId)
+      .then(list => {
+        if (!mounted) return;
+        cache.current.set(selectedType, list);
+        setContacts(list);
+      })
+      .catch(() => { if (mounted) setContacts([]); })
+      .finally(() => { if (mounted) setContactsLoading(false); });
+    return () => { mounted = false; };
+  }, [open, selectedType, businessId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Debounced server-side search — runs on every search keystroke after 300ms
+  useEffect(() => {
+    if (selectedType === "manual" || !businessId) return;
+    const q = contactSearch.trim();
+
+    if (!q) {
+      // Search cleared → restore cached initial list
+      const cached = cache.current.get(selectedType);
+      if (cached) setContacts(cached);
+      return;
+    }
+
+    let mounted = true;
+    const timer = setTimeout(() => {
+      setContactsLoading(true);
+      fetchContacts(selectedType, businessId, q)
+        .then(list => { if (mounted) setContacts(list); })
+        .catch(() => { if (mounted) setContacts([]); })
+        .finally(() => { if (mounted) setContactsLoading(false); });
+    }, 300);
+    return () => { mounted = false; clearTimeout(timer); };
+  }, [contactSearch]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const activeTypeDef = contactTypes.find(t => t.key === selectedType);
+  const nameKey       = activeTypeDef?.nameKey  || "name";
+  const phoneKey      = activeTypeDef?.phoneKey || "phone";
+  const singular      = activeTypeDef?.singular || "Contact";
+
+  // Select-all helpers
+  const allIds       = contacts.map(c => c._id);
+  const allSelected  = allIds.length > 0 && allIds.every(id => selectedIds.includes(id));
+  const someSelected = allIds.some(id => selectedIds.includes(id));
+  const toggleAll    = () => {
+    if (allSelected) setSelectedIds(prev => prev.filter(id => !allIds.includes(id)));
+    else             setSelectedIds(prev => [...new Set([...prev, ...allIds])]);
   };
+
+  const toggle = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+
+  const reset = () => { setSelectedIds([]); setManualPhone(""); setBody(""); setContactSearch(""); setSending(false); };
   const handleClose = () => { reset(); onClose(); };
 
-  const smsCount = Math.ceil(body.length / 160) || 1;
+  const smsCount         = Math.ceil(body.length / 160) || 1;
+  const noPhoneCount     = selectedIds.filter(id => { const c = contacts.find(x => x._id === id); return c && !String(c[phoneKey] || "").trim(); }).length;
 
   const handleSend = async () => {
     if (!body.trim()) { toast.error("Message body is required."); return; }
-    if (recipientMode === "select" && selectedIds.length === 0) { toast.error("Select at least one recipient."); return; }
-    if (recipientMode === "manual" && !manualPhone.trim()) { toast.error("Enter a phone number."); return; }
+    if (selectedType === "manual" && !manualPhone.trim()) { toast.error("Enter a phone number."); return; }
+    if (selectedType !== "manual" && selectedIds.length === 0) { toast.error(`Select at least one ${singular.toLowerCase()}.`); return; }
     setSending(true);
     try {
-      if (recipientMode === "manual") {
+      if (selectedType === "manual") {
         await adminRequests.post("/communications/test-sms", { business: businessId, phone: manualPhone.trim(), message: body.trim() });
       } else {
         await adminRequests.post("/communications/send", {
-          business: businessId, contextType: "tenant_bulk", channel: "sms",
-          templateKey: "tenant_notice_sms", recordIds: selectedIds, customBody: body.trim(),
+          business: businessId,
+          contextType: activeTypeDef.contextType,
+          channel: "sms",
+          templateKey: activeTypeDef.templateKey,
+          recordIds: selectedIds,
+          customBody: body.trim(),
         });
       }
       toast.success("SMS sent successfully.");
@@ -130,6 +264,7 @@ const ComposePanel = ({ open, onClose, businessId, tenants, onSent }) => {
     <div className="fixed inset-0 z-[80] flex">
       <div className="absolute inset-0 bg-black/40" onClick={handleClose} />
       <div className="absolute inset-y-0 right-0 flex w-full max-w-[480px] flex-col bg-white shadow-2xl">
+
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between bg-[#0B3B2E] px-5 py-3.5">
           <div>
@@ -142,26 +277,24 @@ const ComposePanel = ({ open, onClose, businessId, tenants, onSent }) => {
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          {/* Recipient toggle */}
+
+          {/* Send To dropdown — scales to any number of modules */}
           <div>
-            <label className={lc}>Recipients</label>
-            <div className="flex overflow-hidden border border-slate-300">
-              <button
-                onClick={() => setRecipientMode("select")}
-                className={`flex-1 py-2 text-xs font-bold transition ${recipientMode === "select" ? "bg-[#0B3B2E] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+            <label className={lc}>Send To</label>
+            <div className="relative">
+              <select
+                value={selectedType}
+                onChange={e => setSelectedType(e.target.value)}
+                className="h-9 w-full appearance-none border border-slate-300 bg-white pl-3 pr-8 text-xs font-bold text-slate-800 focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20 transition"
               >
-                <FaUsers className="inline mr-1.5" size={10} /> Select Tenants
-              </button>
-              <button
-                onClick={() => setRecipientMode("manual")}
-                className={`flex-1 border-l border-slate-300 py-2 text-xs font-bold transition ${recipientMode === "manual" ? "bg-[#0B3B2E] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
-              >
-                <FaSms className="inline mr-1.5" size={10} /> Manual Phone
-              </button>
+                {contactTypes.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+                <option value="manual">Manual Phone Number</option>
+              </select>
+              <FaChevronDown size={9} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
             </div>
           </div>
 
-          {recipientMode === "manual" ? (
+          {selectedType === "manual" ? (
             <div>
               <label className={lc}>Phone Number</label>
               <input value={manualPhone} onChange={e => setManualPhone(e.target.value)}
@@ -169,43 +302,84 @@ const ComposePanel = ({ open, onClose, businessId, tenants, onSent }) => {
             </div>
           ) : (
             <div>
+              {/* Header row: label + select-all + count + clear */}
               <div className="flex items-center gap-2 mb-1.5">
-                <label className={lc + " mb-0"}>Tenants</label>
+                <button
+                  onClick={toggleAll}
+                  disabled={contacts.length === 0 || contactsLoading}
+                  className={`flex h-5 w-5 shrink-0 items-center justify-center border-2 transition disabled:opacity-30 ${
+                    allSelected ? "border-[#0B3B2E] bg-[#0B3B2E]" : someSelected ? "border-[#0B3B2E] bg-[#0B3B2E]/20" : "border-slate-300"
+                  }`}
+                  title={allSelected ? "Deselect all" : "Select all"}
+                >
+                  {allSelected && <FaCheckCircle size={9} className="text-white" />}
+                </button>
+                <label className={lc + " mb-0 cursor-pointer"} onClick={toggleAll}>{singular}s</label>
                 {selectedIds.length > 0 && (
-                  <span className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700">
-                    {selectedIds.length} selected
-                  </span>
-                )}
-                {selectedIds.length > 0 && (
-                  <button onClick={() => setSelectedIds([])} className="ml-auto text-[10px] font-bold text-rose-500 hover:text-rose-700">Clear</button>
+                  <>
+                    <span className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700">
+                      {selectedIds.length} selected
+                    </span>
+                    <button onClick={() => setSelectedIds([])} className="ml-auto text-[10px] font-bold text-rose-500 hover:text-rose-700">
+                      Clear
+                    </button>
+                  </>
                 )}
               </div>
+
+              {/* Search — debounced, server-side */}
               <div className="mb-2 flex items-center gap-2 border border-slate-300 px-3 py-2">
                 <FaSearch size={10} className="text-slate-400 shrink-0" />
-                <input value={tenantSearch} onChange={e => setTenantSearch(e.target.value)}
-                  placeholder="Search tenants…"
-                  className="flex-1 bg-transparent text-xs outline-none text-slate-700 placeholder-slate-400" />
+                <input
+                  value={contactSearch}
+                  onChange={e => setContactSearch(e.target.value)}
+                  placeholder={`Search ${singular.toLowerCase()}s…`}
+                  className="flex-1 bg-transparent text-xs outline-none text-slate-700 placeholder-slate-400"
+                />
+                {contactSearch && (
+                  <button onClick={() => setContactSearch("")} className="text-slate-400 hover:text-slate-600">
+                    <FaTimesCircle size={10} />
+                  </button>
+                )}
+                {contactsLoading && <FaSpinner size={10} className="animate-spin text-slate-400 shrink-0" />}
               </div>
-              <div className="max-h-[180px] overflow-y-auto border border-slate-200 divide-y divide-slate-100">
-                {filteredTenants.length === 0 ? (
-                  <div className="py-5 text-center text-xs text-slate-400">No tenants found</div>
-                ) : filteredTenants.map(tn => {
-                  const sel = selectedIds.includes(tn._id);
+
+              {/* Contact list */}
+              <div className="max-h-[200px] overflow-y-auto border border-slate-200 divide-y divide-slate-100">
+                {!contactsLoading && contacts.length === 0 ? (
+                  <div className="py-5 text-center text-xs text-slate-400">
+                    {contactSearch ? `No ${singular.toLowerCase()}s matching "${contactSearch}"` : `No ${singular.toLowerCase()}s found`}
+                  </div>
+                ) : contacts.map(c => {
+                  const id    = c._id;
+                  const name  = String(c[nameKey] || singular);
+                  const phone = String(c[phoneKey] || "").trim();
+                  const sel   = selectedIds.includes(id);
                   return (
-                    <button key={tn._id} onClick={() => toggleTenant(tn._id)}
+                    <button key={id} onClick={() => toggle(id)}
                       className={`w-full flex items-center gap-3 px-3 py-2 text-left transition ${sel ? "bg-[#EDF5F1]" : "hover:bg-slate-50"}`}
                     >
                       <div className={`flex h-5 w-5 shrink-0 items-center justify-center border-2 transition ${sel ? "border-[#0B3B2E] bg-[#0B3B2E]" : "border-slate-300"}`}>
                         {sel && <FaCheckCircle size={9} className="text-white" />}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className={`truncate text-[11px] font-bold ${sel ? "text-[#0B3B2E]" : "text-slate-800"}`}>{tn.name || "Tenant"}</div>
-                        <div className="text-[10px] text-slate-400">{tn.phone || tn.phoneNo || "No phone"}</div>
+                        <div className={`truncate text-[11px] font-bold ${sel ? "text-[#0B3B2E]" : "text-slate-800"}`}>{name}</div>
+                        {phone
+                          ? <div className="text-[10px] text-slate-400">{phone}</div>
+                          : <div className="text-[10px] font-semibold text-amber-600">No phone — will be blocked</div>
+                        }
                       </div>
                     </button>
                   );
                 })}
               </div>
+
+              {/* No-phone warning */}
+              {noPhoneCount > 0 && (
+                <p className="mt-1.5 text-[10px] font-semibold text-amber-600">
+                  {noPhoneCount} selected {noPhoneCount === 1 ? "contact has" : "contacts have"} no phone and will be skipped.
+                </p>
+              )}
             </div>
           )}
 
@@ -233,7 +407,7 @@ const ComposePanel = ({ open, onClose, businessId, tenants, onSent }) => {
           <button onClick={handleSend} disabled={sending || !body.trim()}
             className="inline-flex items-center gap-2 bg-[#FF8C00] px-5 py-2 text-[11px] font-bold text-white transition hover:bg-[#E67E00] disabled:opacity-40">
             {sending ? <FaSpinner className="animate-spin" size={11} /> : <FaPaperPlane size={11} />}
-            {sending ? "Sending…" : "Send SMS"}
+            {sending ? "Sending…" : selectedIds.length > 0 ? `Send to ${selectedIds.length}` : "Send SMS"}
           </button>
         </div>
       </div>
@@ -243,21 +417,20 @@ const ComposePanel = ({ open, onClose, businessId, tenants, onSent }) => {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 const SmsManager = () => {
-  const dispatch    = useDispatch();
   const navigate    = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const { currentUser }    = useSelector(s => s.auth || {});
   const { currentCompany } = useSelector(s => s.company || {});
-  const rawTenants         = useSelector(s => s.tenant?.tenants);
 
   const businessId = currentCompany?._id ||
     (typeof currentUser?.company === "string" ? currentUser.company : currentUser?.company?._id) || "";
 
-  const tenants = useMemo(() => {
-    const arr = Array.isArray(rawTenants) ? rawTenants : rawTenants?.data || rawTenants?.tenants || [];
-    return Array.isArray(arr) ? arr : [];
-  }, [rawTenants]);
+  const hasPM           = hasCompanyModule(currentCompany, "propertyManagement");
+  const hasCarWash      = hasCompanyModule(currentCompany, "carwash");
+  const hasHR           = hasCompanyModule(currentCompany, "hr");
+  const hasPropertySale = hasCompanyModule(currentCompany, "propertySale");
+  const hasInventory    = hasCompanyModule(currentCompany, "inventory");
 
   // ── URL-driven state ──────────────────────────────────────────────────────
   const activeStatus = searchParams.get("status") || "";
@@ -272,6 +445,7 @@ const SmsManager = () => {
   const [compose,        setCompose]        = useState(false);
   const [expandedId,     setExpanded]       = useState(null);
   const [loading,        setLoading]        = useState(false);
+  const [deletingId,     setDeletingId]     = useState(null);
   const [data, setData] = useState({
     logs: [],
     pagination: { page: 1, limit: PAGE_SIZE, total: 0, pages: 1 },
@@ -311,8 +485,22 @@ const SmsManager = () => {
     }
   }, [businessId, urlPage, activeStatus, debouncedSearch]);
 
-  useEffect(() => { if (businessId) dispatch(getTenants({ business: businessId })); }, [businessId, dispatch]);
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
+
+  const handleDeleteLog = async (logId) => {
+    if (!window.confirm("Delete this log entry? This cannot be undone.")) return;
+    setDeletingId(logId);
+    try {
+      await adminRequests.delete(`/communications/sms-logs/${logId}`);
+      toast.success("Log entry deleted.");
+      setExpanded(null);
+      fetchLogs();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to delete log entry.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const { logs, pagination, counts } = data;
   const { page: currentPage, total, pages } = pagination;
@@ -389,7 +577,7 @@ const SmsManager = () => {
             </div>
           </div>
         </div>{/* end header */}
-
+        
         {/* ── Table ────────────────────────────────────────────────────────── */}
         <div className="flex-1 overflow-auto">
           {loading ? (
@@ -497,6 +685,21 @@ const SmsManager = () => {
                                   </div>
                                 </div>
                               )}
+                              {/* Delete — only on failed or test entries; sent messages are audit trail */}
+                              {(log.status !== "sent" || log.isTest) && (
+                                <div className="mt-3 flex justify-end">
+                                  <button
+                                    onClick={e => { e.stopPropagation(); handleDeleteLog(log._id); }}
+                                    disabled={deletingId === log._id}
+                                    className="inline-flex items-center gap-1.5 border border-rose-300 bg-rose-50 px-3 py-1.5 text-[10px] font-bold text-rose-600 transition hover:bg-rose-100 disabled:opacity-50"
+                                  >
+                                    {deletingId === log._id
+                                      ? <FaSpinner size={9} className="animate-spin" />
+                                      : <FaTrash size={9} />}
+                                    {deletingId === log._id ? "Deleting…" : "Delete Entry"}
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -540,7 +743,11 @@ const SmsManager = () => {
         open={compose}
         onClose={() => setCompose(false)}
         businessId={businessId}
-        tenants={tenants}
+        hasPM={hasPM}
+        hasCarWash={hasCarWash}
+        hasHR={hasHR}
+        hasPropertySale={hasPropertySale}
+        hasInventory={hasInventory}
         onSent={fetchLogs}
       />
     </DashboardLayout>

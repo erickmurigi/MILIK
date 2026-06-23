@@ -84,7 +84,20 @@
       "Bash(pm2 --version)",
       "Bash(npm --version)",
       "Bash(wmic cpu *)",
-      "PowerShell(\\(Get-WmiObject Win32_Processor\\).NumberOfCores)"
+      "PowerShell(\\(Get-WmiObject Win32_Processor\\).NumberOfCores)",
+      "Bash(xargs grep -l \"carwash\")",
+      "Bash(xargs grep -l \"GET.*tenants\\\\|router.get.*tenant\")",
+      "Bash(xargs grep -l \"listEmployee\\\\|req.query\\\\|exports\\\\.\")",
+      "Bash(xargs grep -l \"router.get.*employees\\\\|/hr/employees\")",
+      "Bash(grep -n 'req.query.search\\\\|search.*query\\\\|$text\\\\|$search\\\\|name.*regex\\\\|filter.*search' c:/Users/murig/OneDrive/Desktop/MILIKPMS/Milik/MilikApi/routes/propertyRoutes/tenants.js)",
+      "Bash(grep -n 'req.query.search\\\\|search.*query\\\\|$text\\\\|$search' c:/Users/murig/OneDrive/Desktop/MILIKPMS/Milik/MilikApi/modules/propertySale/models/SaleBuyer.js)",
+      "Bash(grep -rn 'req.query.search\\\\|$text\\\\|regex.*search' c:/Users/murig/OneDrive/Desktop/MILIKPMS/Milik/MilikApi/routes/propertyRoutes/landlord.js)",
+      "Bash(grep -n 'search\\\\|name.*regex\\\\|$text\\\\|req.query' c:/Users/murig/OneDrive/Desktop/MILIKPMS/Milik/MilikApi/routes/propertyRoutes/tenants.js)",
+      "Bash(xargs grep -l \"Tenant.find\\\\|getTenants\\\\|listTenants\")",
+      "Bash(grep -n 'search\\\\|name.*regex\\\\|$text\\\\|req.query.search\\\\|req.query.name' c:/Users/murig/OneDrive/Desktop/MILIKPMS/Milik/MilikApi/controllers/propertyController/tenants.js)",
+      "Bash(grep -n 'search\\\\|req.query.search\\\\|$text\\\\|landlord.*find\\\\|Landlord.find' c:/Users/murig/OneDrive/Desktop/MILIKPMS/Milik/MilikApi/controllers/propertyController/landlord.js)",
+      "Bash(cd /c/Users/murig/OneDrive/Desktop/MILIKPMS/Milik/MilikApi && grep -n \"business:\" controllers/propertyController/tenants.js | head -30)",
+      "Read(//c/c/Users/murig/OneDrive/Desktop/MILIKPMS/Milik/MilikApi/controllers/propertyController/**)"
     ]
   }
 }

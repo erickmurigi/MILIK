@@ -1,5 +1,10 @@
 import axios from 'axios';
 import Company from '../models/Company.js';
+import CarWashCustomer from '../modules/carwash/models/CarWashCustomer.js';
+import HREmployee from '../modules/hr/models/HREmployee.js';
+import SaleBuyer from '../modules/propertySale/models/SaleBuyer.js';
+import SaleAgent from '../modules/propertySale/models/SaleAgent.js';
+import InvSupplier from '../modules/inventory/models/InvSupplier.js';
 import Landlord from '../models/Landlord.js';
 import { generateStatementPdf } from './statementPdfService.js';
 import { generateInvoicePdf } from './invoicePdfService.js';
@@ -74,6 +79,11 @@ const escapeHtml = (value = '') =>
 const SMS_ALLOWED_TEMPLATE_KEYS = {
   landlord_bulk: ['landlord_notice_sms', 'landlord_statement_ready', 'landlord_payment_sms'],
   tenant_bulk: ['tenant_notice_sms', 'overdue_reminder_tenant', 'receipt_sms_tenant', 'invoice_sms_tenant', 'penalty_notice_sms', 'meter_usage_notification_sms'],
+  carwash_customer_bulk: ['carwash_notice_sms'],
+  hr_employee_bulk:      ['hr_employee_notice_sms'],
+  sale_buyer_bulk:       ['sale_buyer_notice_sms'],
+  sale_agent_bulk:       ['sale_agent_notice_sms'],
+  inv_supplier_bulk:     ['inv_supplier_notice_sms'],
   processed_statement: ['landlord_statement_ready'],
   receipt: ['receipt_sms_tenant'],
   invoice: ['invoice_sms_tenant'],
@@ -169,6 +179,11 @@ const EMAIL_ALLOWED_TEMPLATE_KEYS = {
 const CONTEXT_PERMISSION_MAP = {
   landlord_bulk: { resource: 'landlords', moduleKey: 'propertyManagement' },
   tenant_bulk: { resource: 'tenants', moduleKey: 'propertyManagement' },
+  carwash_customer_bulk: { resource: 'carwashCustomers', moduleKey: 'carwash' },
+  hr_employee_bulk:      { resource: 'hrEmployees',      moduleKey: 'hr' },
+  sale_buyer_bulk:       { resource: 'saleBuyers',       moduleKey: 'propertySale' },
+  sale_agent_bulk:       { resource: 'saleAgents',       moduleKey: 'propertySale' },
+  inv_supplier_bulk:     { resource: 'invSuppliers',     moduleKey: 'inventory' },
   processed_statement: { resource: 'processedStatements', moduleKey: 'accounts' },
   receipt: { resource: 'receipts', moduleKey: 'propertyManagement' },
   invoice: { resource: 'tenantInvoices', moduleKey: 'propertyManagement' },
@@ -517,6 +532,69 @@ const loadLandlordRecords = async (ids = [], businessId) => {
   }));
 };
 
+const loadCarWashCustomerRecords = async (ids = [], businessId) => {
+  const rows = await CarWashCustomer.find({ _id: { $in: ids }, business: businessId }).lean();
+  return rows.map((customer) => ({
+    recordId: String(customer._id),
+    payload: { customerName: customer.name || 'Customer' },
+    recipientName: customer.name || 'Customer',
+    recipientPhone: customer.phone || '',
+    recipientEmail: '',
+    customer,
+  }));
+};
+
+const loadHREmployeeRecords = async (ids = [], businessId) => {
+  const rows = await HREmployee.find({ _id: { $in: ids }, company: businessId }).lean();
+  return rows.map((emp) => {
+    const employeeName = [emp.name, emp.surname].filter(Boolean).join(' ') || 'Employee';
+    return {
+      recordId: String(emp._id),
+      payload: { employeeName },
+      recipientName: employeeName,
+      recipientPhone: emp.phoneNumber || '',
+      recipientEmail: emp.email || '',
+      employee: emp,
+    };
+  });
+};
+
+const loadSaleBuyerRecords = async (ids = [], businessId) => {
+  const rows = await SaleBuyer.find({ _id: { $in: ids }, business: businessId }).lean();
+  return rows.map((buyer) => ({
+    recordId: String(buyer._id),
+    payload: { buyerName: buyer.fullName || 'Buyer' },
+    recipientName: buyer.fullName || 'Buyer',
+    recipientPhone: buyer.phone || '',
+    recipientEmail: buyer.email || '',
+    buyer,
+  }));
+};
+
+const loadSaleAgentRecords = async (ids = [], businessId) => {
+  const rows = await SaleAgent.find({ _id: { $in: ids }, business: businessId }).lean();
+  return rows.map((agent) => ({
+    recordId: String(agent._id),
+    payload: { agentName: agent.fullName || 'Agent' },
+    recipientName: agent.fullName || 'Agent',
+    recipientPhone: agent.phone || '',
+    recipientEmail: agent.email || '',
+    agent,
+  }));
+};
+
+const loadInvSupplierRecords = async (ids = [], businessId) => {
+  const rows = await InvSupplier.find({ _id: { $in: ids }, business: businessId }).lean();
+  return rows.map((supplier) => ({
+    recordId: String(supplier._id),
+    payload: { supplierName: supplier.name || 'Supplier' },
+    recipientName: supplier.name || 'Supplier',
+    recipientPhone: supplier.phone || '',
+    recipientEmail: supplier.email || '',
+    supplier,
+  }));
+};
+
 const loadProcessedStatementRecords = async (ids = [], businessId) => {
   const rows = await ProcessedStatement.find({ _id: { $in: ids }, business: businessId })
     .populate('landlord', 'landlordName email phoneNumber landlordCode')
@@ -623,6 +701,11 @@ const loadLandlordPaymentRecords = async (ids = [], businessId) => {
 const CONTEXT_LOADERS = {
   landlord_bulk: loadLandlordRecords,
   tenant_bulk: loadTenantRecords,
+  carwash_customer_bulk: loadCarWashCustomerRecords,
+  hr_employee_bulk:      loadHREmployeeRecords,
+  sale_buyer_bulk:       loadSaleBuyerRecords,
+  sale_agent_bulk:       loadSaleAgentRecords,
+  inv_supplier_bulk:     loadInvSupplierRecords,
   processed_statement: loadProcessedStatementRecords,
   receipt: loadReceiptRecords,
   invoice: loadInvoiceRecords,

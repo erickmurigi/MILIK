@@ -57,10 +57,8 @@ const LandlordImportModal = ({ isOpen, onClose, onImport }) => {
     setIsImporting(true);
     
     try {
-      console.log('Calling onImport with records:', parseResult.validCount);
       const result = await onImport(parseResult.valid);
-      console.log('Import completed:', result);
-      
+
       // Show detailed success/failure message based on actual backend result
       if (result?.data) {
         const { successful = [], failed = [] } = result.data;

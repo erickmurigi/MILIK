@@ -570,7 +570,7 @@ const getTenantDependencySummary = async (tenant) => {
     meterReadings,
   ] = await Promise.all([
     RentPayment.countDocuments({ tenant: tenantId, business: businessId }),
-    Receipt.countDocuments({ tenant: tenantId }),
+    Receipt.countDocuments({ tenant: tenantId, business: businessId }),
     TenantInvoice.countDocuments({ tenant: tenantId, business: businessId }),
     TenantInvoiceNote.countDocuments({ tenant: tenantId, business: businessId }),
     Lease.countDocuments({ tenant: tenantId, business: businessId }),
@@ -581,9 +581,9 @@ const getTenantDependencySummary = async (tenant) => {
       business: businessId,
       status: { $nin: ["void", "draft"] },
     }),
-    LandlordStatementLine.countDocuments({ tenant: tenantId }),
-    Maintenance.countDocuments({ tenant: tenantId }),
-    Inspection.countDocuments({ tenant: tenantId }),
+    LandlordStatementLine.countDocuments({ tenant: tenantId, business: businessId }),
+    Maintenance.countDocuments({ tenant: tenantId, business: businessId }),
+    Inspection.countDocuments({ tenant: tenantId, business: businessId }),
     MeterReading.countDocuments({ tenant: tenantId, business: businessId }),
   ]);
 
@@ -831,14 +831,15 @@ export const createTenant = async (req, res, next) => {
       }
     }
 
-    await syncTenantAssignedUnitOccupancy({
-      previousUnitIds: [],
-      nextUnitIds: shouldTenantOccupyUnits(savedTenant) ? getTenantAssignedUnitIds(savedTenant) : [],
-      tenantId: savedTenant._id,
-      effectiveDate: new Date(),
-    });
-
-    const populatedTenant = await populateTenantQuery(Tenant.findById(savedTenant._id));
+    const [populatedTenant] = await Promise.all([
+      populateTenantQuery(Tenant.findById(savedTenant._id)),
+      syncTenantAssignedUnitOccupancy({
+        previousUnitIds: [],
+        nextUnitIds: shouldTenantOccupyUnits(savedTenant) ? getTenantAssignedUnitIds(savedTenant) : [],
+        tenantId: savedTenant._id,
+        effectiveDate: new Date(),
+      }),
+    ]);
 
     await syncTenantLeaseRecord({
       tenantDoc: populatedTenant,
@@ -895,7 +896,7 @@ export const createTenant = async (req, res, next) => {
       });
     }
 
-    await logAuditEvent({
+    logAuditEvent({
       req,
       company: businessId,
       action: "tenants.create",
@@ -911,7 +912,7 @@ export const createTenant = async (req, res, next) => {
         additionalUnits: savedTenant.additionalUnits,
         rent: savedTenant.rent,
       },
-    });
+    }).catch(err => console.error("Audit log failed:", err));
 
     return res.status(201).json({
       success: true,
@@ -1010,14 +1011,14 @@ export const getTenants = async (req, res, next) => {
     if (search) {
       const re = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
       filter.$or = [
-        { tenantName: re },
+        { name: re },
         { phone: re },
         { email: re },
         { tenantCode: re },
         { idNumber: re },
       ];
     } else if (tenantName) {
-      filter.tenantName = { $regex: tenantName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
+      filter.name = { $regex: tenantName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
     } else if (tenantCode) {
       filter.tenantCode = { $regex: tenantCode.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
     }
@@ -1596,7 +1597,7 @@ export const updateTenantStatus = async (req, res, next) => {
 
     const tenantObj = updatedTenant.toObject({ virtuals: true });
     tenantObj.status = computeOperationalTenantStatus({ tenant: updatedTenant });
-    return res.status(200).json(tenantObj);
+    return res.status(200).json({ success: true, data: tenantObj, message: status === "terminated" ? "Tenant terminated successfully" : "Tenant status updated successfully" });
   } catch (err) {
     next(err);
   }
@@ -1877,7 +1878,7 @@ export const bulkImportTenants = async (req, res, next) => {
       });
     }
 
-    const units = await Unit.find({ business: businessId }).lean().select("_id unitNumber property status isVacant").populate("property");
+    const units = await Unit.find({ business: businessId }).lean().select("_id unitNumber property status isVacant rent deposit utilities").populate("property");
     const unitMap = new Map();
 
     units.forEach((unit) => {
@@ -1906,6 +1907,7 @@ export const bulkImportTenants = async (req, res, next) => {
 
     const successful = [];
     const failed = [];
+    const docsToInsert = [];
 
     for (let i = 0; i < tenantsData.length; i++) {
       const record = tenantsData[i];
@@ -2113,19 +2115,7 @@ export const bulkImportTenants = async (req, res, next) => {
           },
         });
 
-        const savedTenant = await newTenant.save();
-        await syncTenantAssignedUnitOccupancy({
-          previousUnitIds: [],
-          nextUnitIds: shouldTenantOccupyUnits(savedTenant) ? getTenantAssignedUnitIds(savedTenant) : [],
-          tenantId: savedTenant._id,
-          effectiveDate: moveInDate,
-        });
-
-        const leaseRecord = await syncTenantLeaseRecord({
-          tenantDoc: savedTenant,
-          unitDoc: primaryUnitDoc,
-          action: "upsert",
-        });
+        docsToInsert.push({ doc: newTenant, primaryUnitDoc, requestedUnitDocs, importedTenantOccupiesUnits, rowIndex, record });
 
         existingIds.add(normalizedIdNumberKey);
         existingCodes.add(String(tenantCode).toLowerCase());
@@ -2134,22 +2124,10 @@ export const bulkImportTenants = async (req, res, next) => {
             const code = unitDoc.property?.propertyCode?.toLowerCase();
             const number = unitDoc.unitNumber?.toLowerCase();
             if (code && number) {
-              unitMap.set(`${code}|${number}`, {
-                ...unitDoc,
-                status: "occupied",
-                isVacant: false,
-                lastTenant: savedTenant._id,
-              });
+              unitMap.set(`${code}|${number}`, { ...unitDoc, status: "occupied", isVacant: false });
             }
           });
         }
-
-        successful.push({
-          tenantName: record.tenantName,
-          _id: savedTenant._id,
-          tenantCode,
-          agreementNumber: leaseRecord?.agreementNumber || "",
-        });
       } catch (error) {
         failed.push({
           tenantName: record.tenantName,
@@ -2157,6 +2135,63 @@ export const bulkImportTenants = async (req, res, next) => {
           row: rowIndex,
         });
       }
+    }
+
+    // Parallel saves — all tenants at once instead of sequential
+    if (docsToInsert.length > 0) {
+      const saveResults = await Promise.allSettled(docsToInsert.map(item => item.doc.save()));
+
+      const unitBulkOps = [];
+      const affectedPropertyIds = new Set();
+      const leaseSyncTasks = [];
+
+      for (let i = 0; i < docsToInsert.length; i++) {
+        const item = docsToInsert[i];
+        const result = saveResults[i];
+
+        if (result.status === "rejected") {
+          failed.push({
+            tenantName: item.record.tenantName,
+            error: result.reason?.message || "Failed to save tenant",
+            row: item.rowIndex,
+          });
+          continue;
+        }
+
+        const savedTenant = result.value;
+        const successEntry = { tenantName: item.record.tenantName, _id: savedTenant._id, tenantCode: savedTenant.tenantCode, agreementNumber: "" };
+        successful.push(successEntry);
+
+        if (item.importedTenantOccupiesUnits) {
+          for (const unitDoc of item.requestedUnitDocs) {
+            unitBulkOps.push({
+              updateOne: {
+                filter: { _id: unitDoc._id },
+                update: { $set: { status: "occupied", isVacant: false, vacantSince: null, daysVacant: 0, lastTenant: savedTenant._id } },
+              },
+            });
+            const propId = String(unitDoc.property?._id || unitDoc.property || "");
+            if (propId && mongoose.Types.ObjectId.isValid(propId)) affectedPropertyIds.add(propId);
+          }
+        }
+
+        leaseSyncTasks.push(
+          syncTenantLeaseRecord({ tenantDoc: savedTenant, unitDoc: item.primaryUnitDoc, action: "upsert" })
+            .then(lease => { successEntry.agreementNumber = lease?.agreementNumber || ""; })
+            .catch(err => console.error(`Lease sync failed for ${savedTenant._id}:`, err))
+        );
+      }
+
+      // Unit updates → property counts run in parallel with all lease syncs
+      await Promise.all([
+        (async () => {
+          if (unitBulkOps.length > 0) await Unit.bulkWrite(unitBulkOps, { ordered: false });
+          if (affectedPropertyIds.size > 0) {
+            await Promise.all([...affectedPropertyIds].map(id => updatePropertyUnitCounts(id)));
+          }
+        })(),
+        Promise.allSettled(leaseSyncTasks),
+      ]);
     }
 
     return res.status(200).json({

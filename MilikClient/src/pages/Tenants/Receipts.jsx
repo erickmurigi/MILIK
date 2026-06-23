@@ -1,4 +1,5 @@
 import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtils";
+import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -314,6 +315,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
 
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
+  const isCompanyLandlordMode = isSelfManagingLandlordCompany(currentCompany);
   const canCreateReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "create", "propertyManagement");
   const canProcessReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "process", "propertyManagement");
   const canReverseReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "reverse", "propertyManagement");
@@ -405,8 +407,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
 
       setTenantInvoices(normalizedInvoices);
       setCashbookOptions(normalizedChartRows.filter(isCashbookAccount));
-    } catch (error) {
-      console.error("Failed to load tenant invoices:", error);
+    } catch {
       setTenantInvoices([]);
       setCashbookOptions([]);
     }
@@ -415,14 +416,12 @@ const Receipts = ({ viewMode = "tenant" }) => {
   const loadData = useCallback(async () => {
     if (!currentCompany?._id) return;
     try {
-      await getTenants(dispatch, currentCompany._id);
-      await getRentPayments(
-        dispatch,
-        currentCompany._id,
-        appliedFilters.tenant !== "all" ? appliedFilters.tenant : null
-      );
-      await loadInvoices();
-    } catch (error) {
+      await Promise.all([
+        getTenants(dispatch, currentCompany._id),
+        getRentPayments(dispatch, currentCompany._id, appliedFilters.tenant !== "all" ? appliedFilters.tenant : null),
+        loadInvoices(),
+      ]);
+    } catch {
       toast.error("Failed to load receipts");
     }
   }, [currentCompany?._id, appliedFilters.tenant, dispatch, loadInvoices]);
@@ -466,8 +465,8 @@ const Receipts = ({ viewMode = "tenant" }) => {
       if (payment?.ledgerType !== "receipts") return false;
       if (payment?.reversalOf) return false;
       if (payment?.isCancelled === true) return false;
-      if (isLandlordReceiptView && payment?.paidDirectToLandlord !== true) return false;
-      if (isDefaultTenantView && payment?.paidDirectToLandlord === true) return false;
+      if (!isCompanyLandlordMode && isLandlordReceiptView && payment?.paidDirectToLandlord !== true) return false;
+      if (!isCompanyLandlordMode && isDefaultTenantView && payment?.paidDirectToLandlord === true) return false;
 
       const isReversedReceipt =
         payment?.isReversed === true ||
@@ -722,10 +721,6 @@ const visibleReceiptIds = useMemo(
       toast.warning(activeReceipt?._id ? "You do not have permission to update receipts" : "You do not have permission to record receipts");
       return;
     }
-    if (!(activeReceipt?._id ? canUpdateReceipt : canCreateReceipt)) {
-      toast.warning(activeReceipt?._id ? "You do not have permission to update receipts" : "You do not have permission to record receipts");
-      return;
-    }
     if (!formData.tenantId) {
       toast.error("Tenant is required");
       return;
@@ -815,13 +810,11 @@ const visibleReceiptIds = useMemo(
     }
 
     try {
-      for (const receiptId of selectedIds) {
-        await deleteRentPayment(dispatch, receiptId);
-      }
+      await Promise.all(selectedIds.map((receiptId) => deleteRentPayment(dispatch, receiptId)));
       toast.success(`${selectedIds.length} receipt(s) deleted`);
       setSelectedIds([]);
       await loadData();
-    } catch (error) {
+    } catch {
       toast.error("Failed to delete selected receipts");
     }
   };
@@ -875,9 +868,7 @@ const visibleReceiptIds = useMemo(
     if (reason === null) return;
 
     try {
-      for (const receipt of eligible) {
-        await reverseRentPayment(dispatch, receipt._id, { reason });
-      }
+      await Promise.all(eligible.map((receipt) => reverseRentPayment(dispatch, receipt._id, { reason })));
       toast.success(`${eligible.length} receipt(s) reversed successfully`);
       setSelectedIds([]);
       await loadData();
@@ -887,10 +878,6 @@ const visibleReceiptIds = useMemo(
   };
 
   const handleCancelReversalOne = async () => {
-    if (!canReverseReceipt) {
-      toast.warning("You do not have permission to cancel receipt reversals");
-      return;
-    }
     if (!canReverseReceipt) {
       toast.warning("You do not have permission to cancel receipt reversals");
       return;
@@ -998,10 +985,6 @@ const visibleReceiptIds = useMemo(
       toast.warning("You do not have permission to confirm receipts");
       return;
     }
-    if (!canProcessReceipt) {
-      toast.warning("You do not have permission to confirm receipts");
-      return;
-    }
     if (receipt.isConfirmed) {
       toast.info("Receipt already confirmed");
       return;
@@ -1025,27 +1008,24 @@ const visibleReceiptIds = useMemo(
     }
 
     try {
-      for (const receiptId of selectedIds) {
-        const receipt = filteredReceipts.find((item) => item._id === receiptId);
-        if (receipt && !receipt.isConfirmed) {
-          await confirmRentPayment(dispatch, receiptId, {
-            confirmedBy: currentUser?._id || currentUser?.id || null,
-          });
-        }
-      }
+      const toConfirm = selectedIds.filter((id) => {
+        const receipt = filteredReceipts.find((item) => item._id === id);
+        return receipt && !receipt.isConfirmed;
+      });
+      await Promise.all(
+        toConfirm.map((receiptId) =>
+          confirmRentPayment(dispatch, receiptId, { confirmedBy: currentUser?._id || currentUser?.id || null })
+        )
+      );
       toast.success("Selected receipts confirmed");
       setSelectedIds([]);
       await loadData();
-    } catch (error) {
+    } catch {
       toast.error("Failed to confirm selected receipts");
     }
   };
 
   const handleUnconfirmOne = async (receipt) => {
-    if (!canProcessReceipt) {
-      toast.warning("You do not have permission to unconfirm receipts");
-      return;
-    }
     if (!canProcessReceipt) {
       toast.warning("You do not have permission to unconfirm receipts");
       return;
@@ -2206,6 +2186,7 @@ const visibleReceiptIds = useMemo(
                   />
                 </div>
 
+                {!isCompanyLandlordMode && (
                 <div className="md:col-span-2 flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -2223,6 +2204,7 @@ const visibleReceiptIds = useMemo(
                     Direct to landlord receipt (do not post to MILIK cashbook)
                   </label>
                 </div>
+                )}
 
                 <div className="md:col-span-2 flex items-center gap-2">
                   <input

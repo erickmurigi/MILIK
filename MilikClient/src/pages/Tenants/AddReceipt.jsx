@@ -215,12 +215,12 @@ const AddReceipt = () => {
     }));
   };
 
-  // In self-managing landlord mode, always default to direct-to-landlord and auto-confirm.
+  // In self-managing landlord mode, receipts are always auto-confirmed.
+  // Cashbook is still required — landlords need to track which account received the payment.
   useEffect(() => {
     if (!isCompanyLandlordMode) return;
     setFormData((prev) => ({
       ...prev,
-      paidDirectToLandlord: true,
       isConfirmed: true,
     }));
   }, [isCompanyLandlordMode]);
@@ -230,12 +230,9 @@ const AddReceipt = () => {
 
     const load = async () => {
       try {
-        await Promise.all([
+        const [,, invoiceRows, chartRows] = await Promise.all([
           dispatch(getProperties({ business: currentCompany._id })),
           dispatch(getTenants({ business: currentCompany._id })),
-        ]);
-
-        const [invoiceRows, chartRows] = await Promise.all([
           getTenantInvoices({ business: currentCompany._id, includeSnapshots: true }),
           getChartOfAccounts({ business: currentCompany._id, type: "asset" }),
         ]);
@@ -542,8 +539,9 @@ const AddReceipt = () => {
       return;
     }
 
-    if (!String(formData.referenceNumber || "").trim()) {
-      toast.error("Reference number is required");
+    const referenceRequired = ["mobile_money", "bank_transfer"].includes(formData.paymentMethod);
+    if (referenceRequired && !String(formData.referenceNumber || "").trim()) {
+      toast.error("Reference number is required for Mobile Money and Bank Transfer payments");
       return;
     }
 
@@ -576,7 +574,7 @@ const AddReceipt = () => {
       paymentDate: formData.paymentDate,
       dueDate: new Date(paymentDateObj.getFullYear(), paymentDateObj.getMonth(), 1).toISOString().slice(0, 10),
       referenceNumber: String(formData.referenceNumber || "").trim(),
-      bankingDate: isCompanyLandlordMode ? undefined : (formData.bankingDate || formData.paymentDate || undefined),
+      bankingDate: formData.bankingDate || formData.paymentDate || undefined,
       description: formData.description,
       isConfirmed: formData.isConfirmed,
       ledgerType: "receipts",
@@ -731,13 +729,15 @@ const AddReceipt = () => {
 
                   {/* Reference Number */}
                   <div>
-                    <label className={labelClass}>Reference Number</label>
+                    <label className={labelClass}>
+                      Reference Number{["mobile_money", "bank_transfer"].includes(formData.paymentMethod) ? " *" : ""}
+                    </label>
                     <input
                       type="text"
                       value={formData.referenceNumber}
                       onChange={(e) => setFormData((prev) => ({ ...prev, referenceNumber: e.target.value }))}
                       className={inputClass}
-                      placeholder="Bank ref / MPESA code"
+                      placeholder={["mobile_money"].includes(formData.paymentMethod) ? "M-Pesa transaction code" : ["bank_transfer"].includes(formData.paymentMethod) ? "Bank reference / slip no." : "Optional ref / receipt no."}
                     />
                   </div>
 
@@ -810,8 +810,8 @@ const AddReceipt = () => {
                     />
                   </div>
 
-                  {/* Banking Date — only relevant for bank transfer / cheque; hidden in landlord mode */}
-                  {!isCompanyLandlordMode && ["bank_transfer", "check"].includes(formData.paymentMethod) && (
+                  {/* Banking Date — only relevant for bank transfer / cheque */}
+                  {["bank_transfer", "check"].includes(formData.paymentMethod) && (
                     <div>
                       <label className={labelClass}>Banking / Clearance Date</label>
                       <input
@@ -839,7 +839,7 @@ const AddReceipt = () => {
                   <div className="col-span-2 md:col-span-4 flex flex-wrap items-center gap-6 border-t border-slate-100 pt-3">
                     {isCompanyLandlordMode ? (
                       <span className="rounded-full border border-[#0B3B2E]/20 bg-[#0B3B2E]/8 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[#0B3B2E]">
-                        Landlord Mode — receipts recorded as direct to owner, not posted to cashbook
+                        Landlord Mode — select the cashbook where payment was received
                       </span>
                     ) : (
                       <label htmlFor="paidDirectToLandlord" className="inline-flex cursor-pointer items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600">
@@ -859,16 +859,22 @@ const AddReceipt = () => {
                         Direct to Landlord Receipt (do not post to cashbook)
                       </label>
                     )}
-                    <label htmlFor="isConfirmed" className="inline-flex cursor-pointer items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600">
-                      <input
-                        type="checkbox"
-                        id="isConfirmed"
-                        checked={formData.isConfirmed}
-                        onChange={(e) => setFormData((prev) => ({ ...prev, isConfirmed: e.target.checked }))}
-                        className="h-3.5 w-3.5 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
-                      />
-                      Mark as Confirmed
-                    </label>
+                    {isCompanyLandlordMode ? (
+                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-700">
+                        Auto-Confirmed
+                      </span>
+                    ) : (
+                      <label htmlFor="isConfirmed" className="inline-flex cursor-pointer items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600">
+                        <input
+                          type="checkbox"
+                          id="isConfirmed"
+                          checked={formData.isConfirmed}
+                          onChange={(e) => setFormData((prev) => ({ ...prev, isConfirmed: e.target.checked }))}
+                          className="h-3.5 w-3.5 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
+                        />
+                        Mark as Confirmed
+                      </label>
+                    )}
                   </div>
                 </div>
               </div>

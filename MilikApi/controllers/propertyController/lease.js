@@ -6,6 +6,8 @@ import fs from "fs";
 import Lease from "../../models/Lease.js";
 import Tenant from "../../models/Tenant.js";
 import Unit from "../../models/Unit.js";
+import Receipt from "../../models/Receipts.js";
+import RentPayment from "../../models/RentPayment.js";
 import { emitToCompany } from "../../utils/socketManager.js";
 import { canonicalizeBillingPeriodKey } from "../../services/billingPeriodService.js";
 import { generateLeasePdf } from "../../services/leasePdfService.js";
@@ -428,6 +430,23 @@ export const deleteLease = async (req, res, next) => {
     const lease = await Lease.findOne(filter).lean();
     if (!lease) {
       return res.status(404).json({ message: "Lease not found" });
+    }
+
+    // Auto-created agreements (generated when a tenant is added) may be deleted to
+    // correct a wrong tenant entry, provided no financial transactions have been recorded.
+    if (lease.autoCreatedFromTenant) {
+      const [receiptsCount, rentPaymentsCount] = await Promise.all([
+        Receipt.countDocuments({ tenant: lease.tenant, business: lease.business }),
+        RentPayment.countDocuments({ tenant: lease.tenant, business: lease.business }),
+      ]);
+      if (receiptsCount > 0 || rentPaymentsCount > 0) {
+        return res.status(400).json({
+          message: "This agreement cannot be deleted because the tenant already has payment history. Use Terminate to close the agreement while preserving financial records.",
+        });
+      }
+      await Lease.findByIdAndDelete(lease._id);
+      emitToCompany(lease.business, "lease:deleted", { _id: lease._id });
+      return res.status(200).json({ message: "Agreement deleted successfully" });
     }
 
     if (!["draft", "cancelled"].includes(String(lease.status || "").toLowerCase())) {

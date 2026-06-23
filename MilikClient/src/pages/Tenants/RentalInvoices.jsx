@@ -3083,15 +3083,16 @@ const createInvoiceForTenant = async (
         currentCompany?._id ||
         currentUser?.company?._id ||
         currentUser?.company;
-      const allBatchResults = [];
 
-      for (let chunkStart = 0; chunkStart < batchItems.length; chunkStart += BATCH_CHUNK_SIZE) {
-        const chunk = batchItems.slice(chunkStart, chunkStart + BATCH_CHUNK_SIZE);
-        const chunkResponse = await createTenantInvoicesBatch({ business: batchBusinessId, items: chunk });
-        if (Array.isArray(chunkResponse?.results)) {
-          allBatchResults.push(...chunkResponse.results);
-        }
+      const chunks = [];
+      for (let start = 0; start < batchItems.length; start += BATCH_CHUNK_SIZE) {
+        chunks.push(batchItems.slice(start, start + BATCH_CHUNK_SIZE));
       }
+
+      const chunkResponses = await Promise.all(
+        chunks.map((chunk) => createTenantInvoicesBatch({ business: batchBusinessId, items: chunk }))
+      );
+      const allBatchResults = chunkResponses.flatMap((r) => (Array.isArray(r?.results) ? r.results : []));
 
       const successfulRows = allBatchResults.filter((row) => row?.success);
       const failedRows = allBatchResults.filter((row) => !row?.success);
@@ -3102,13 +3103,7 @@ const createInvoiceForTenant = async (
       if (createdCount === 0 && failedRows.length > 0) {
         const primaryError =
           failedRows.find((row) => String(row?.error || "").trim())?.error ||
-          batchResponse?.message ||
           "Batch booking failed";
-
-        console.warn("Batch booking returned zero created rows. Falling back to legacy booking.", {
-          summary: batchResponse?.summary,
-          firstErrors: failedRows.slice(0, 5),
-        });
 
         const fallbackOutcome = await runLegacySequentialBatch(primaryError);
         if (fallbackOutcome === true) {
@@ -3159,11 +3154,6 @@ const createInvoiceForTenant = async (
           batchData?.message ||
           batchData?.error ||
           "Batch booking failed";
-
-        console.warn("Batch booking request failed with structured response. Falling back to legacy booking.", {
-          summary: batchData?.summary,
-          firstErrors: failedRows.slice(0, 5),
-        });
 
         const fallbackOutcome = await runLegacySequentialBatch(primaryError);
         if (fallbackOutcome === true) {
@@ -3228,19 +3218,19 @@ const createInvoiceForTenant = async (
       return;
     }
 
-    try {
-      for (const invoice of selectedRows) {
-        if (!invoice?._id) continue;
-        await deleteTenantInvoice(invoice._id);
-      }
+    const idsToDelete = selectedRows.filter((inv) => inv?._id).map((inv) => inv._id);
+    setDeletingInvoiceIds(idsToDelete);
 
-      toast.success(`${selectedRows.length} invoice(s) deleted successfully`);
+    try {
+      await Promise.all(idsToDelete.map((id) => deleteTenantInvoice(id)));
+      toast.success(`${idsToDelete.length} invoice(s) deleted successfully`);
       window.dispatchEvent(new Event("invoicesUpdated"));
       setRefreshTick((prev) => prev + 1);
       setSelectedInvoices([]);
       setSelectAll(false);
       setDeletingInvoiceIds([]);
     } catch (error) {
+      setDeletingInvoiceIds([]);
       toast.error(
         error?.response?.data?.error ||
           error?.response?.data?.message ||
@@ -3265,6 +3255,8 @@ const createInvoiceForTenant = async (
       return;
     }
 
+    setDeletingInvoiceIds((prev) => [...prev, invoice._id]);
+
     try {
       await deleteTenantInvoice(invoice._id);
       window.dispatchEvent(new Event("invoicesUpdated"));
@@ -3280,6 +3272,8 @@ const createInvoiceForTenant = async (
           error.message ||
           `Failed to delete invoice ${invoice.id}`
       );
+    } finally {
+      setDeletingInvoiceIds((prev) => prev.filter((id) => String(id) !== String(invoice._id)));
     }
   };
 

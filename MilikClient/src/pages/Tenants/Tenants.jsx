@@ -1288,6 +1288,41 @@ const confirmTransferUnit = async () => {
     }
   };
 
+  const handleMoveOutInspection = useCallback((tenantId) => {
+    const rawTenant = (Array.isArray(tenantsData) ? tenantsData : []).find(
+      (t) => normalizeId(t._id) === normalizeId(tenantId)
+    );
+    const unitId = normalizeId(rawTenant?.unit?._id || rawTenant?.unit) || "";
+    const propertyId = normalizeId(rawTenant?.unit?.property?._id || rawTenant?.unit?.property) || "";
+    const draftKey = currentCompany?._id && (currentUser?._id || currentUser?.id)
+      ? `milik:draft:insp-modal:${currentCompany._id}:${currentUser?._id || currentUser?.id || "u"}`
+      : null;
+    if (draftKey) {
+      try {
+        window.sessionStorage.setItem(draftKey, JSON.stringify({
+          form: {
+            type: "move_out",
+            status: "scheduled",
+            tenant: normalizeId(tenantId) || "",
+            unit: unitId,
+            property: propertyId,
+            inspectorName: "",
+            scheduledDate: new Date().toISOString().slice(0, 10),
+            completedDate: "",
+            nextInspectionDate: "",
+            score: "",
+            issuesFound: "0",
+            photosCount: "0",
+            tenantPresent: false,
+            recommendations: "",
+            notes: "",
+          },
+        }));
+      } catch {}
+    }
+    navigate("/inspections");
+  }, [currentCompany, currentUser, tenantsData, navigate]);
+
   const handleResetFilters = () => {
     const resetState = {
       property: "any",
@@ -1984,7 +2019,7 @@ const confirmTransferUnit = async () => {
                                         Deposit Settlement
                                       </button>
                                       <button
-                                        onClick={() => navigate(`/inspections`)}
+                                        onClick={() => handleMoveOutInspection(tenant.id)}
                                         className="rounded px-2 py-1 text-xs font-semibold text-white transition-colors bg-slate-600 hover:bg-slate-700"
                                       >
                                         Move-out Inspection

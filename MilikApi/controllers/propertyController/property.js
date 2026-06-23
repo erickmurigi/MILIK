@@ -1407,9 +1407,10 @@ export const getPropertyTenants = async (req, res, next) => {
       });
     }
 
+    const propertyBusinessId = String(property.business?._id || property.business);
     if (!req.user.isSystemAdmin) {
       const userBusinessId = req.user?.company || req.user?.business;
-      if (property.business.toString() !== userBusinessId?.toString()) {
+      if (propertyBusinessId !== String(userBusinessId)) {
         return res.status(403).json({
           success: false,
           message: "Not authorized to access this property's tenants",
@@ -1419,7 +1420,7 @@ export const getPropertyTenants = async (req, res, next) => {
 
     const units = await Unit.find({ property: req.params.id }).distinct("_id");
     const tenants = await Tenant.find({
-      business: userBusinessId,
+      business: propertyBusinessId,
       $or: [{ unit: { $in: units } }, { additionalUnits: { $in: units } }],
     }).populate("unit", "unitNumber rent");
 
@@ -1700,7 +1701,7 @@ export const bulkImportProperties = async (req, res, next) => {
     const allFailed = results.successful.length === 0 && results.failed.length > 0;
     res.status(200).json({
       success: !allFailed,
-      ...results,
+      data: results,
     });
   } catch (err) {
     next(err);

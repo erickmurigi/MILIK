@@ -26,7 +26,7 @@ const routeNames = {
   '/receipts': 'Receipts',
   '/receipts/new': 'New Receipt',
   '/receipts/landlord': 'Landlord Receipts',
-  '/receipts/mpesa-import': 'M-Pesa Import',
+  '/receipts/mpesa-collections':  'M-Pesa Collections',
   '/receipts/prepayments': 'Prepayments',
   '/receipts/instant': 'Instant Receipts',
   '/maintenances': 'Maintenance',

@@ -386,7 +386,7 @@ const Properties = () => {
       };
       dispatch(getProperties(params));
 
-      return response;
+      return response.data;
     } catch (error) {
       throw error;
     }

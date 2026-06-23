@@ -422,15 +422,27 @@ export const listMpesaCollections = async (req, res) => {
       return res.status(400).json({ success: false, message: "Valid business id is required" });
     }
 
-    const filters = { business: businessId };
-    const status = normalizeText(req.query.status);
-    const source = normalizeText(req.query.source);
-    const shortCode = normalizeText(req.query.shortCode);
-    const search = normalizeText(req.query.search);
+    const page     = Math.max(Number(req.query.page  || 1),  1);
+    const limit    = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);
+    const skip     = (page - 1) * limit;
 
-    if (status) filters.matchingStatus = status;
-    if (source) filters.source = source;
-    if (shortCode) filters.shortCode = shortCode;
+    const filters = { business: businessId };
+    const status    = normalizeText(req.query.status);
+    const source    = normalizeText(req.query.source);
+    const shortCode = normalizeText(req.query.shortCode);
+    const search    = normalizeText(req.query.search);
+    const dateFrom  = normalizeText(req.query.dateFrom);
+    const dateTo    = normalizeText(req.query.dateTo);
+
+    if (status)    filters.matchingStatus = status;
+    if (source)    filters.source         = source;
+    if (shortCode) filters.shortCode      = shortCode;
+    if (dateFrom || dateTo) {
+      filters.transactionDate = {};
+      if (dateFrom) { const d = new Date(dateFrom); d.setUTCHours(0, 0, 0, 0);    filters.transactionDate.$gte = d; }
+      if (dateTo)   { const d = new Date(dateTo);   d.setUTCHours(23, 59, 59, 999); filters.transactionDate.$lte = d; }
+      if (!dateFrom && !dateTo) delete filters.transactionDate;
+    }
     if (search) {
       const regex = new RegExp(escapeRegExp(search), "i");
       filters.$or = [
@@ -443,9 +455,16 @@ export const listMpesaCollections = async (req, res) => {
       ];
     }
 
-    const rows = await populateCollectionQuery(
-      MpesaCollection.find(filters).sort({ transactionDate: -1, createdAt: -1 }).limit(300)
-    ).lean();
+    const [total, summaryRows, rows] = await Promise.all([
+      MpesaCollection.countDocuments(filters),
+      MpesaCollection.aggregate([
+        { $match: { business: new mongoose.Types.ObjectId(String(businessId)) } },
+        { $group: { _id: "$matchingStatus", count: { $sum: 1 }, totalAmount: { $sum: "$amount" } } },
+      ]),
+      populateCollectionQuery(
+        MpesaCollection.find(filters).sort({ transactionDate: -1, createdAt: -1 }).skip(skip).limit(limit)
+      ).lean(),
+    ]);
 
     // ── Batch sync ────────────────────────────────────────────────────────────
     // 1. Rows already captured with both references populated → skip all DB I/O.
@@ -553,7 +572,12 @@ export const listMpesaCollections = async (req, res) => {
       (a, b) => (idOrder.get(String(a._id)) ?? 0) - (idOrder.get(String(b._id)) ?? 0)
     );
 
-    res.status(200).json({ success: true, data: allRows });
+    res.status(200).json({
+      success: true,
+      data: allRows,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+      summary: summaryRows,
+    });
   } catch (error) {
     res.status(error.statusCode || 500).json({ success: false, message: error.message || "Failed to load M-Pesa collections" });
   }
@@ -705,5 +729,81 @@ export const deleteMpesaCollection = async (req, res) => {
     return res.status(200).json({ success: true, message: "M-Pesa notification removed successfully." });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ success: false, message: error.message || "Failed to delete M-Pesa notification" });
+  }
+};
+
+export const assignTenantToCollection = async (req, res) => {
+  try {
+    const businessId = String(req.query.business || req.body?.business || req.userCompany || req.user?.company?._id || req.user?.company || "");
+    if (!isValidObjectId(businessId)) return res.status(400).json({ success: false, message: "Valid business id is required" });
+
+    const row = await MpesaCollection.findOne({ _id: req.params.id, business: businessId }).lean();
+    if (!row) return res.status(404).json({ success: false, message: "M-Pesa collection not found" });
+    if (row.matchingStatus === "ignored") return res.status(400).json({ success: false, message: "Cannot assign tenant to an ignored collection" });
+
+    const tenantId = normalizeText(req.body?.tenantId || "");
+    if (!tenantId || !isValidObjectId(tenantId)) return res.status(400).json({ success: false, message: "Valid tenant id is required" });
+
+    const tenant = await Tenant.findOne({ _id: tenantId, business: businessId })
+      .select("name tenantCode phone unit business")
+      .populate({ path: "unit", select: "unitNumber property", populate: { path: "property", select: "propertyName" } })
+      .lean();
+    if (!tenant) return res.status(404).json({ success: false, message: "Tenant not found in this business" });
+
+    const matchedReceipt = await findReceiptMatch({ businessId, transactionCode: row.transactionCode, amount: row.amount });
+    const nextStatus = deriveMatchingStatus({ tenant, matchedReceipt });
+
+    await MpesaCollection.findByIdAndUpdate(row._id, {
+      $set: { tenant: tenant._id, matchingStatus: nextStatus, matchedReceipt: matchedReceipt?._id || null },
+    });
+
+    const updated = await populateCollectionQuery(MpesaCollection.findById(row._id)).lean();
+    return res.status(200).json({ success: true, message: `Assigned to ${tenant.name}`, data: updated });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message || "Failed to assign tenant" });
+  }
+};
+
+export const ignoreCollection = async (req, res) => {
+  try {
+    const businessId = String(req.query.business || req.body?.business || req.userCompany || req.user?.company?._id || req.user?.company || "");
+    if (!isValidObjectId(businessId)) return res.status(400).json({ success: false, message: "Valid business id is required" });
+
+    const row = await MpesaCollection.findOne({ _id: req.params.id, business: businessId }).lean();
+    if (!row) return res.status(404).json({ success: false, message: "M-Pesa collection not found" });
+    if (row.matchedReceipt) return res.status(400).json({ success: false, message: "Cannot ignore a collection already linked to a receipt" });
+
+    const notes = normalizeText(req.body?.notes || "");
+    await MpesaCollection.findByIdAndUpdate(row._id, {
+      $set: { matchingStatus: "ignored", notes: [row.notes, notes].filter(Boolean).join(" | ") },
+    });
+
+    const updated = await populateCollectionQuery(MpesaCollection.findById(row._id)).lean();
+    return res.status(200).json({ success: true, message: "Collection marked as ignored", data: updated });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message || "Failed to ignore collection" });
+  }
+};
+
+export const unignoreCollection = async (req, res) => {
+  try {
+    const businessId = String(req.query.business || req.body?.business || req.userCompany || req.user?.company?._id || req.user?.company || "");
+    if (!isValidObjectId(businessId)) return res.status(400).json({ success: false, message: "Valid business id is required" });
+
+    const row = await MpesaCollection.findOne({ _id: req.params.id, business: businessId }).lean();
+    if (!row) return res.status(404).json({ success: false, message: "M-Pesa collection not found" });
+
+    const tenant = row.tenant ? await Tenant.findById(row.tenant).select("_id").lean() : await findTenantMatch({ businessId, accountReference: row.accountReference, msisdn: row.msisdn });
+    const matchedReceipt = await findReceiptMatch({ businessId, transactionCode: row.transactionCode, amount: row.amount });
+    const nextStatus = deriveMatchingStatus({ tenant, matchedReceipt });
+
+    await MpesaCollection.findByIdAndUpdate(row._id, {
+      $set: { matchingStatus: nextStatus, tenant: tenant?._id || null, matchedReceipt: matchedReceipt?._id || null },
+    });
+
+    const updated = await populateCollectionQuery(MpesaCollection.findById(row._id)).lean();
+    return res.status(200).json({ success: true, message: "Collection restored", data: updated });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message || "Failed to restore collection" });
   }
 };

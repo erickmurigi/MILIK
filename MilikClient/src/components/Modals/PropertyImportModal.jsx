@@ -11,6 +11,7 @@ const PropertyImportModal = ({ isOpen, onClose, onImport }) => {
   const [isImporting, setIsImporting] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [importFailures, setImportFailures] = useState([]);
 
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
@@ -46,27 +47,31 @@ const PropertyImportModal = ({ isOpen, onClose, onImport }) => {
     setIsImporting(true);
 
     try {
-      console.log('Calling onImport with records:', parseResult.valid.length);
       const result = await onImport(parseResult.valid);
-      console.log('Import completed:', result);
 
       if (result?.data) {
         const { successful = [], failed = [] } = result.data;
         if (successful.length > 0 && failed.length === 0) {
-          toast.success(`Successfully imported ${successful.length} properties!`);
+          toast.success(`Successfully imported ${successful.length} propert${successful.length !== 1 ? 'ies' : 'y'}!`);
+          handleClose();
         } else if (successful.length > 0 && failed.length > 0) {
-          toast.warning(`Imported ${successful.length} properties. ${failed.length} failed.`);
+          toast.warning(`Imported ${successful.length} propert${successful.length !== 1 ? 'ies' : 'y'}. ${failed.length} failed — see details below.`);
+          setImportFailures(failed);
+          setIsImporting(false);
         } else {
-          toast.error(`Import failed for all ${failed.length} records.`);
+          toast.error(`Import failed: all ${failed.length} record${failed.length !== 1 ? 's' : ''} could not be saved. See errors below.`);
+          setImportFailures(failed);
+          setIsImporting(false);
         }
+      } else if (result?.success === false) {
+        toast.error(result?.message || 'Import failed. Please check your file and try again.');
+        setIsImporting(false);
       } else {
-        toast.success(`Successfully imported ${parseResult.validCount} properties!`);
+        toast.success(`Successfully imported ${parseResult.validCount} propert${parseResult.validCount !== 1 ? 'ies' : 'y'}!`);
+        handleClose();
       }
-
-      handleClose();
     } catch (error) {
-      console.error('Import error in modal:', error);
-      toast.error(error.message || 'Failed to import properties. Please check console for details.');
+      toast.error(error.message || 'Failed to import properties.');
       setIsImporting(false);
     }
   };
@@ -77,6 +82,7 @@ const PropertyImportModal = ({ isOpen, onClose, onImport }) => {
     setShowErrors(false);
     setIsUploading(false);
     setIsImporting(false);
+    setImportFailures([]);
     onClose();
   };
 
@@ -229,6 +235,35 @@ const PropertyImportModal = ({ isOpen, onClose, onImport }) => {
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {importFailures.length > 0 && (
+            <div className="mt-4 bg-red-50 rounded-lg p-4 border border-red-200">
+              <div className="flex items-center gap-2 mb-3">
+                <FaExclamationTriangle className="text-red-600" />
+                <h3 className="text-sm font-bold text-red-900">
+                  Import Failures ({importFailures.length} record{importFailures.length !== 1 ? 's' : ''})
+                </h3>
+              </div>
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {importFailures.map((failure, idx) => (
+                  <div key={idx} className="bg-white rounded p-3 border border-red-200">
+                    <div className="flex items-start gap-2">
+                      <FaExclamationTriangle className="text-red-500 mt-0.5 flex-shrink-0" />
+                      <div className="flex-1">
+                        <div className="text-xs font-bold text-red-900 mb-0.5">
+                          {failure.propertyName || 'Unknown property'}
+                        </div>
+                        <div className="text-xs text-red-700">{failure.error}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-red-600 mt-3">
+                Correct the issues above in your Excel file and re-import those specific rows.
+              </p>
             </div>
           )}
         </div>

@@ -628,7 +628,7 @@ export const createLatePenaltyRule = async (req, res) => {
 export const updateLatePenaltyRule = async (req, res) => {
   try {
     const businessId = resolveBusinessId(req);
-    const actorUserId = await resolveActorUserId({ req, business: businessId, fallbackUserId: req.user?.id || req.user?._id });
+    const actorUserId = await resolveActorUserId({ req, business: businessId, bodyCreatedBy: req.user?.id || req.user?._id });
     const rule = await LatePenaltyRule.findOne({ _id: req.params.id, business: businessId });
 
     if (!rule) {
@@ -725,7 +725,7 @@ export const processLatePenalties = async (req, res) => {
     const rule = await loadRuleOrThrow(businessId, req.body.ruleId);
     const runDate = normalizeDate(req.body.runDate || new Date());
     const periodKey = buildPeriodKey(rule, runDate);
-    const actorUserId = await resolveActorUserId({ req, business: businessId, fallbackUserId: req.user?.id || req.user?._id });
+    const actorUserId = await resolveActorUserId({ req, business: businessId, bodyCreatedBy: req.user?.id || req.user?._id });
 
     const previewRows = await buildCandidateRows({ businessId, rule, runDate });
     const requestedIds = Array.isArray(req.body.selectedSourceInvoiceIds) && req.body.selectedSourceInvoiceIds.length > 0
@@ -989,7 +989,7 @@ export const reverseLatePenalty = async (req, res) => {
     const actorUserId = await resolveActorUserId({
       req,
       business: businessId,
-      fallbackUserId: req.user?.id || req.user?._id,
+      bodyCreatedBy: req.user?.id || req.user?._id,
     });
 
     // Pre-load all matching batches and penalty invoices in two queries
@@ -1158,7 +1158,7 @@ export const deleteLatePenalty = async (req, res) => {
     const actorUserId = await resolveActorUserId({
       req,
       business: businessId,
-      fallbackUserId: req.user?.id || req.user?._id,
+      bodyCreatedBy: req.user?.id || req.user?._id,
     });
 
     const { batch, item } = await findBatchAndItemOrThrow({ businessId, itemId });

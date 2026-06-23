@@ -1,0 +1,904 @@
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useSelector } from "react-redux";
+import { useNavigate } from "react-router-dom";
+import {
+  FaCheckCircle, FaExclamationTriangle, FaTimesCircle, FaCopy,
+  FaSearch, FaRedoAlt, FaTimes, FaLink, FaBan, FaUndo, FaUpload,
+  FaFileAlt, FaReceipt, FaUser, FaMobileAlt, FaTrash, FaSpinner,
+  FaChevronDown, FaChevronUp, FaPaste,
+} from "react-icons/fa";
+import { toast } from "react-toastify";
+import { adminRequests } from "../../utils/requestMethods";
+import { selectCurrentCompany } from "../../redux/selectors";
+import DashboardLayout from "../../components/Layout/DashboardLayout";
+
+const PAGE_SIZE   = 50;
+const AUTO_RELOAD = 30; // seconds
+
+const todayISO    = () => new Date().toISOString().slice(0, 10);
+const formatMoney = (v) => `Ksh ${Number(v || 0).toLocaleString()}`;
+const fmtDate     = (v) =>
+  v ? new Date(v).toLocaleString("en-KE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
+
+const getTenantLabel = (t) => t?.name || "—";
+const getUnitLabel   = (t) => [t?.unit?.unitNumber, t?.unit?.property?.propertyName].filter(Boolean).join(" · ") || "";
+
+const STATUS_META = {
+  unmatched:      { label: "Unmatched",      bg: "bg-amber-50",   border: "border-amber-200",   text: "text-amber-700",   dot: "bg-amber-400"   },
+  matched_tenant: { label: "Tenant Matched", bg: "bg-blue-50",    border: "border-blue-200",    text: "text-blue-700",    dot: "bg-blue-400"    },
+  captured:       { label: "Captured",       bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-700", dot: "bg-emerald-500" },
+  duplicate:      { label: "Duplicate",      bg: "bg-slate-50",   border: "border-slate-200",   text: "text-slate-500",   dot: "bg-slate-400"   },
+  ignored:        { label: "Ignored",        bg: "bg-red-50",     border: "border-red-200",     text: "text-red-700",     dot: "bg-red-400"     },
+};
+
+const StatusBadge = ({ status }) => {
+  const m = STATUS_META[status] || STATUS_META.unmatched;
+  return (
+    <span className={`inline-flex items-center gap-1 border px-2 py-0.5 text-[10px] font-bold uppercase ${m.bg} ${m.border} ${m.text}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${m.dot}`} />
+      {m.label}
+    </span>
+  );
+};
+
+// ─── Assign Tenant Modal ──────────────────────────────────────────────────────
+function AssignTenantModal({ notif, businessId, onClose, onAssigned }) {
+  const [search,    setSearch]    = useState(notif?.accountReference || "");
+  const [tenants,   setTenants]   = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [selected,  setSelected]  = useState(null);
+  const [saving,    setSaving]    = useState(false);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    if (notif?.accountReference) doSearch(notif.accountReference);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const doSearch = async (q = search) => {
+    const term = q.trim();
+    if (!term) return;
+    setSearching(true); setSelected(null);
+    try {
+      const res  = await adminRequests.get("/tenants", { params: { business: businessId, search: term, limit: 20 } });
+      const list = Array.isArray(res?.data?.tenants) ? res.data.tenants : Array.isArray(res?.data) ? res.data : [];
+      setTenants(list);
+    } catch { toast.error("Tenant search failed"); }
+    finally   { setSearching(false); }
+  };
+
+  const handleSubmit = async () => {
+    if (!selected) return;
+    setSaving(true);
+    try {
+      const res = await adminRequests.post(`/mpesa-collections/${notif._id}/assign-tenant`, { tenantId: selected._id, business: businessId });
+      toast.success(`Assigned to ${selected.name}`);
+      onAssigned(res?.data?.data || res?.data);
+      onClose();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Assignment failed");
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-lg border border-slate-200 bg-white shadow-xl">
+        <div className="flex items-center justify-between bg-[#0B3B2E] px-4 py-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-white">Assign to Tenant</p>
+            <p className="text-[11px] text-emerald-200">
+              {formatMoney(notif.amount)} · ref: <span className="font-mono">{notif.accountReference || notif.billRefNumber || "—"}</span>
+            </p>
+          </div>
+          <button onClick={onClose} className="text-white/70 hover:text-white"><FaTimes size={14} /></button>
+        </div>
+
+        <div className="border-b border-amber-100 bg-amber-50 px-4 py-2.5 text-[11px] text-amber-800">
+          <FaExclamationTriangle className="mr-1.5 inline text-amber-500" size={11} />
+          Customer typed <strong className="font-mono">&ldquo;{notif.accountReference || notif.billRefNumber}&rdquo;</strong> as account reference — search to find the correct tenant.
+        </div>
+
+        <div className="px-4 pb-2 pt-3">
+          <div className="flex gap-2">
+            <input ref={inputRef}
+              className="h-9 flex-1 border border-slate-300 px-3 text-xs font-semibold placeholder:font-normal focus:border-[#0B3B2E] focus:outline-none"
+              placeholder="Name, tenant code, or phone"
+              value={search} onChange={e => setSearch(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && doSearch()} />
+            <button type="button" onClick={() => doSearch()} disabled={searching}
+              className="inline-flex h-9 items-center gap-1.5 bg-[#FF8C00] px-4 text-xs font-bold text-white hover:bg-[#E67E00] disabled:opacity-50">
+              <FaSearch size={10} /> Search
+            </button>
+          </div>
+        </div>
+
+        <div className="max-h-64 overflow-y-auto border-t border-slate-100">
+          {searching && <p className="px-4 py-6 text-center text-xs text-slate-400">Searching…</p>}
+          {!searching && tenants.length === 0 && (
+            <p className="px-4 py-6 text-center text-xs text-slate-400">No tenants found. Search by name, code, or phone.</p>
+          )}
+          {!searching && tenants.map(t => {
+            const isSel = selected?._id === t._id;
+            return (
+              <button key={t._id} type="button" onClick={() => setSelected(t)}
+                className={`flex w-full items-center gap-3 border-b border-slate-100 px-4 py-2.5 text-left transition-colors ${isSel ? "border-l-2 border-l-emerald-500 bg-emerald-50" : "hover:bg-slate-50"}`}>
+                <FaUser size={12} className={isSel ? "text-emerald-600" : "text-slate-400"} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-extrabold text-slate-900">{t.name}</span>
+                    <span className="font-mono text-[10px] text-slate-500">{t.tenantCode}</span>
+                  </div>
+                  <div className="mt-0.5 text-[10px] text-slate-500">
+                    {getUnitLabel(t)}{t.phone ? ` · ${t.phone}` : ""}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3">
+          {selected
+            ? <div className="text-[11px] text-slate-600">Assigning to <strong className="text-[#0B3B2E]">{selected.name} · {selected.tenantCode}</strong></div>
+            : <span className="text-[11px] text-slate-400">Select a tenant above</span>}
+          <div className="flex gap-2">
+            <button onClick={onClose} className="inline-flex h-8 items-center px-3 text-xs font-bold text-slate-600 hover:text-slate-900">Cancel</button>
+            <button onClick={handleSubmit} disabled={!selected || saving}
+              className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50">
+              <FaLink size={10} /> {saving ? "Assigning…" : "Confirm Assignment"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Ignore Modal ─────────────────────────────────────────────────────────────
+function IgnoreModal({ notif, businessId, onClose, onIgnored }) {
+  const [notes,  setNotes]  = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const handleConfirm = async () => {
+    setSaving(true);
+    try {
+      const res = await adminRequests.post(`/mpesa-collections/${notif._id}/ignore`, { notes: notes.trim(), business: businessId });
+      toast.success("Collection marked as ignored");
+      onIgnored(res?.data?.data || res?.data);
+      onClose();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to ignore collection");
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-md border border-slate-200 bg-white shadow-xl">
+        <div className="flex items-center justify-between bg-red-700 px-4 py-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-white">Ignore Collection</p>
+            <p className="text-[11px] text-red-200">{formatMoney(notif.amount)} · <span className="font-mono">{notif.transactionCode || "—"}</span></p>
+          </div>
+          <button onClick={onClose} className="text-white/70 hover:text-white"><FaTimes size={14} /></button>
+        </div>
+        <div className="space-y-3 p-4">
+          <p className="text-sm text-slate-700">Mark this M-Pesa payment as ignored? It will be excluded from all future auto-matching.</p>
+          <p className="text-[11px] text-slate-500">Use this for wrong paybill payments, test transactions, or non-rent receipts.</p>
+          <div>
+            <label className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Reason (optional)</label>
+            <input type="text" value={notes} onChange={e => setNotes(e.target.value)}
+              placeholder="e.g. Wrong paybill, test payment…"
+              className="h-9 w-full border border-slate-300 px-3 text-xs text-slate-700 focus:border-red-500 focus:outline-none"
+              autoFocus />
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <button onClick={onClose} className="inline-flex h-8 items-center px-3 text-xs font-bold text-slate-600 hover:text-slate-900">Cancel</button>
+          <button onClick={handleConfirm} disabled={saving}
+            className="inline-flex h-8 items-center gap-1.5 bg-red-600 px-4 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50">
+            <FaBan size={10} /> {saving ? "Saving…" : "Mark as Ignored"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── CSV helpers ──────────────────────────────────────────────────────────────
+const parseClientCsv = (text) => {
+  const rows = [];
+  for (const line of text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n")) {
+    if (!line.trim()) continue;
+    const cells = []; let cur = ""; let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') { if (inQ && line[i + 1] === '"') { cur += '"'; i++; } else { inQ = !inQ; } }
+      else if (ch === "," && !inQ) { cells.push(cur.trim()); cur = ""; }
+      else { cur += ch; }
+    }
+    cells.push(cur.trim());
+    rows.push(cells);
+  }
+  return rows;
+};
+
+const normH = (h) => String(h || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+const detectCsvFormat = (headers) => {
+  const nh = headers.map(normH);
+  if (nh.includes("receiptno") || nh.includes("paidin") || nh.includes("amountpaidin")) return "portal";
+  if (nh.includes("transid")   || nh.includes("billrefnumber"))                          return "daraja";
+  return null;
+};
+
+const RESULT_META = {
+  matched:   { label: "Matched",   cls: "bg-emerald-50 border-emerald-200 text-emerald-700" },
+  duplicate: { label: "Duplicate", cls: "bg-slate-50 border-slate-200 text-slate-500"       },
+  unmatched: { label: "Unmatched", cls: "bg-amber-50 border-amber-200 text-amber-700"       },
+  skipped:   { label: "Skipped",   cls: "bg-slate-50 border-slate-200 text-slate-500"       },
+  error:     { label: "Error",     cls: "bg-red-50 border-red-200 text-red-700"             },
+};
+
+const ImportResultsSummary = ({ results, onClose }) => (
+  <>
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {[
+        { label: "Matched",   value: results.summary.matched,   cls: "bg-emerald-50 border-emerald-300 text-emerald-700" },
+        { label: "Duplicate", value: results.summary.duplicate, cls: "bg-slate-50 border-slate-200 text-slate-500"       },
+        { label: "Unmatched", value: results.summary.unmatched, cls: "bg-amber-50 border-amber-200 text-amber-700"       },
+        { label: "Total",     value: results.summary.total,     cls: "bg-white border-slate-200 text-slate-700"          },
+      ].map(({ label, value, cls }) => (
+        <div key={label} className={`rounded border px-3 py-2 text-center ${cls}`}>
+          <p className="text-xl font-black leading-none">{value}</p>
+          <p className="mt-0.5 text-[9px] font-black uppercase tracking-wide opacity-70">{label}</p>
+        </div>
+      ))}
+    </div>
+    <div className="overflow-x-auto rounded border border-slate-200">
+      <table className="w-full text-xs">
+        <thead className="bg-slate-100">
+          <tr>
+            <th className="px-3 py-1.5 text-left text-[10px] font-black uppercase text-slate-500">Status</th>
+            <th className="px-3 py-1.5 text-left text-[10px] font-black uppercase text-slate-500">Transaction Code</th>
+            <th className="px-3 py-1.5 text-left text-[10px] font-black uppercase text-slate-500">Ref / Account</th>
+            <th className="px-3 py-1.5 text-right text-[10px] font-black uppercase text-slate-500">Amount</th>
+            <th className="px-3 py-1.5 text-left text-[10px] font-black uppercase text-slate-500">Tenant</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {results.items.map((item, i) => {
+            const s    = item.matchingStatus || (item.wasDuplicate ? "duplicate" : "unmatched");
+            const meta = RESULT_META[s === "captured" || s === "matched_tenant" ? "matched" : s === "ignored" ? "skipped" : s] || RESULT_META.unmatched;
+            return (
+              <tr key={i} className="hover:bg-slate-50">
+                <td className="px-3 py-1.5"><span className={`inline-flex items-center rounded border px-2 py-0.5 text-[9px] font-black uppercase ${meta.cls}`}>{item.wasDuplicate ? "Duplicate" : meta.label}</span></td>
+                <td className="px-3 py-1.5 font-mono text-slate-700">{item.transactionCode || "—"}</td>
+                <td className="px-3 py-1.5 font-semibold text-slate-800">{item.accountReference || item.billRefNumber || "—"}</td>
+                <td className="px-3 py-1.5 text-right font-bold text-slate-700">{item.amount > 0 ? formatMoney(item.amount) : "—"}</td>
+                <td className="px-3 py-1.5 text-slate-600">
+                  {getTenantLabel(item.tenant) !== "—"
+                    ? <span className="font-bold text-[#0B3B2E]">{getTenantLabel(item.tenant)}</span>
+                    : <span className="italic text-slate-400">Unmatched</span>}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  </>
+);
+
+// ─── Upload / Import Modal ────────────────────────────────────────────────────
+function UploadModal({ businessId, onClose, onUploaded }) {
+  const fileInputRef                = useRef(null);
+  const [tab,        setTab]        = useState("csv");   // "csv" | "paste"
+  const [file,       setFile]       = useState(null);
+  const [preview,    setPreview]    = useState(null);
+  const [pasteText,  setPasteText]  = useState("");
+  const [processing, setProcessing] = useState(false);
+  const [results,    setResults]    = useState(null);
+  const [dragOver,   setDragOver]   = useState(false);
+
+  const processItems = (items) => {
+    const matched   = items.filter(i => i.matchingStatus === "captured" || i.matchingStatus === "matched_tenant").length;
+    const duplicate = items.filter(i => i.wasDuplicate).length;
+    const unmatched = items.filter(i => i.matchingStatus === "unmatched").length;
+    setResults({ summary: { matched, duplicate, unmatched, total: items.length }, items });
+    if (matched > 0) onUploaded?.();
+  };
+
+  const loadFile = (f) => {
+    if (!f) return;
+    if (f.name.split(".").pop().toLowerCase() !== "csv") { toast.error("Only CSV files are supported"); return; }
+    setFile(f); setResults(null);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const rows = parseClientCsv(e.target.result);
+      if (rows.length < 2) { toast.error("File appears empty"); return; }
+      const format = detectCsvFormat(rows[0]);
+      if (!format) { toast.error("Unrecognised format. Expected M-Pesa Business Portal or Daraja C2B export."); setFile(null); return; }
+      setPreview({ headers: rows[0], rows: rows.slice(1, 51), total: rows.length - 1, format });
+    };
+    reader.readAsText(f);
+  };
+
+  const handleDrop = (e) => { e.preventDefault(); setDragOver(false); loadFile(e.dataTransfer.files?.[0]); };
+
+  const handleProcessCsv = async () => {
+    if (!file) return;
+    setProcessing(true);
+    try {
+      const text  = await file.text();
+      const rows  = parseClientCsv(text).slice(1);
+      const lines = rows.map(c => c.filter(Boolean).join("\t")).filter(Boolean);
+      const res   = await adminRequests.post("/mpesa-collections/import-batch", { business: businessId, rawText: lines.join("\n") });
+      processItems(res?.data?.data?.items || []);
+    } catch (err) { toast.error(err?.response?.data?.message || "Upload failed"); }
+    finally      { setProcessing(false); }
+  };
+
+  const handleProcessPaste = async () => {
+    const lines = pasteText.trim().split("\n").map(l => l.trim()).filter(Boolean);
+    if (!lines.length) { toast.error("Paste at least one transaction line"); return; }
+    setProcessing(true);
+    try {
+      const res = await adminRequests.post("/mpesa-collections/import-batch", { business: businessId, rawText: lines.join("\n") });
+      processItems(res?.data?.data?.items || []);
+    } catch (err) { toast.error(err?.response?.data?.message || "Import failed"); }
+    finally      { setProcessing(false); }
+  };
+
+  const previewCols = preview?.format === "portal"
+    ? [{ label: "Receipt No.", key: "receiptno" }, { label: "Date", key: "completiontime" }, { label: "Reference", key: "details" }, { label: "Amount", key: "paidin" }, { label: "Status", key: "transactionstatus" }]
+    : [{ label: "TransID", key: "transid" }, { label: "Date", key: "transtime" }, { label: "BillRefNumber", key: "billrefnumber" }, { label: "Amount", key: "transamount" }, { label: "MSISDN", key: "msisdn" }];
+  const headerIdxMap = preview ? Object.fromEntries(preview.headers.map((h, i) => [normH(h), i])) : {};
+  const getCell = (cells, key) => { const i = headerIdxMap[key] ?? -1; return i >= 0 ? (cells[i] || "—") : "—"; };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="flex w-full max-w-3xl flex-col border border-slate-200 bg-white shadow-xl" style={{ maxHeight: "90vh" }}>
+
+        {/* Header */}
+        <div className="flex shrink-0 items-center justify-between bg-[#0B3B2E] px-4 py-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-white">Import M-Pesa Transactions</p>
+            <p className="text-[11px] text-emerald-200">Match payments to tenants and record rent receipts</p>
+          </div>
+          <button onClick={onClose} className="text-white/70 hover:text-white"><FaTimes size={14} /></button>
+        </div>
+
+        {/* Tabs — only when no results yet */}
+        {!results && (
+          <div className="flex shrink-0 border-b border-slate-200 bg-slate-50">
+            {[
+              { id: "csv",   label: "Upload CSV",    icon: FaFileAlt },
+              { id: "paste", label: "Paste Lines",   icon: FaPaste   },
+            ].map(({ id, label, icon: Icon }) => (
+              <button key={id} type="button" onClick={() => { setTab(id); setFile(null); setPreview(null); }}
+                className={`inline-flex items-center gap-2 border-b-2 px-5 py-2.5 text-xs font-bold transition-colors ${tab === id ? "border-[#0B3B2E] text-[#0B3B2E]" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+                <Icon size={11} /> {label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Body */}
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 space-y-4">
+
+          {/* ── CSV tab ── */}
+          {tab === "csv" && !results && (
+            <>
+              {!preview && (
+                <>
+                  <div
+                    onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                    onDragLeave={() => setDragOver(false)} onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded border-2 border-dashed py-12 transition-colors ${dragOver ? "border-[#0B3B2E] bg-[#EDF5F1]" : "border-slate-300 hover:border-slate-400"}`}>
+                    <FaFileAlt size={32} className="text-slate-300" />
+                    <div className="text-center">
+                      <p className="text-sm font-bold text-slate-600">Drop CSV here, or click to browse</p>
+                      <p className="mt-1 text-[11px] text-slate-400">M-Pesa Business Portal export or Daraja C2B format</p>
+                    </div>
+                    <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={e => loadFile(e.target.files?.[0])} />
+                  </div>
+                  <div className="rounded border border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-600">
+                    <p className="mb-1.5 font-black uppercase tracking-wide text-slate-500">Supported Formats</p>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div><p className="font-bold text-slate-700">M-Pesa Business Portal</p><p className="text-slate-500">Headers: Receipt No., Completion Time, Details, Transaction Status, Paid In</p></div>
+                      <div><p className="font-bold text-slate-700">Safaricom Daraja C2B</p><p className="text-slate-500">Headers: TransID, TransTime, TransAmount, BillRefNumber, MSISDN</p></div>
+                    </div>
+                  </div>
+                </>
+              )}
+              {preview && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">{file.name}</p>
+                      <p className="text-[11px] text-slate-500">{preview.total} row{preview.total !== 1 ? "s" : ""} · Format: <span className="font-bold text-[#0B3B2E]">{preview.format === "portal" ? "M-Pesa Business Portal" : "Safaricom Daraja C2B"}</span></p>
+                    </div>
+                    <button onClick={() => { setFile(null); setPreview(null); }} className="text-[11px] font-bold text-slate-400 hover:text-red-500">Change file</button>
+                  </div>
+                  <div className="overflow-x-auto rounded border border-slate-200">
+                    <table className="w-full min-w-[500px] text-xs">
+                      <thead className="bg-[#0B3B2E] text-white">
+                        <tr>
+                          <th className="px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-wide">#</th>
+                          {previewCols.map(c => <th key={c.key} className="px-3 py-1.5 text-left text-[10px] font-bold uppercase tracking-wide">{c.label}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {preview.rows.map((cells, i) => (
+                          <tr key={i} className="hover:bg-slate-50">
+                            <td className="px-2 py-1.5 font-mono text-[10px] text-slate-400">{i + 2}</td>
+                            {previewCols.map(c => <td key={c.key} className="max-w-[160px] truncate px-3 py-1.5 text-slate-700" title={getCell(cells, c.key)}>{getCell(cells, c.key)}</td>)}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {preview.total > 50 && <p className="border-t border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] text-slate-500">Showing first 50 of {preview.total} rows — all rows will be processed</p>}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {/* ── Paste tab ── */}
+          {tab === "paste" && !results && (
+            <>
+              <div className="rounded border border-slate-200 bg-amber-50 p-3 text-[11px] text-amber-800">
+                <p className="mb-1 font-black uppercase tracking-wide text-amber-700">Format — one transaction per line:</p>
+                <p className="font-mono text-[10px]">DD/MM/YYYY TXN_CODE Payer Name MSISDN TenantCode KES Amount</p>
+                <p className="mt-1 text-slate-500">Example: <span className="font-mono">04/06/2026 RGF12K9P1D John Doe 254712345678 TT0004 KES 12,000</span></p>
+              </div>
+              <textarea
+                className="w-full rounded border border-slate-300 p-3 font-mono text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+                rows={10}
+                placeholder={"04/06/2026 RGF12K9P1D John Doe 254712345678 TT0004 KES 12,000\n05/06/2026 SDF89X3Q2A Jane Smith 254700111222 TT0007 KES 18,500"}
+                value={pasteText}
+                onChange={e => setPasteText(e.target.value)}
+              />
+              <p className="text-[11px] text-slate-500">{pasteText.trim().split("\n").filter(Boolean).length} line{pasteText.trim().split("\n").filter(Boolean).length !== 1 ? "s" : ""} ready to process</p>
+            </>
+          )}
+
+          {/* ── Results ── */}
+          {results && <ImportResultsSummary results={results} onClose={onClose} />}
+        </div>
+
+        {/* Footer */}
+        <div className="flex shrink-0 items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3">
+          {results
+            ? <span className="text-[11px] text-slate-500">{results.summary.matched} payment{results.summary.matched !== 1 ? "s" : ""} matched · {results.summary.total} total</span>
+            : tab === "csv" && preview
+              ? <span className="text-[11px] text-slate-500">{preview.total} rows will be processed</span>
+              : tab === "paste"
+                ? <span className="text-[11px] text-slate-500">{pasteText.trim().split("\n").filter(Boolean).length} lines</span>
+                : <span className="text-[11px] text-slate-400">Select a file to begin</span>}
+          <div className="flex gap-2">
+            {results
+              ? <button onClick={onClose} className="inline-flex h-8 items-center px-4 text-xs font-bold text-slate-600 hover:text-slate-900">Close</button>
+              : <>
+                  <button onClick={onClose} className="inline-flex h-8 items-center px-3 text-xs font-bold text-slate-600 hover:text-slate-900">Cancel</button>
+                  {tab === "csv" && preview && (
+                    <button onClick={handleProcessCsv} disabled={processing}
+                      className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50">
+                      {processing ? <FaSpinner size={10} className="animate-spin" /> : <FaUpload size={10} />}
+                      {processing ? "Processing…" : `Process ${preview.total} row${preview.total !== 1 ? "s" : ""}`}
+                    </button>
+                  )}
+                  {tab === "paste" && pasteText.trim() && (
+                    <button onClick={handleProcessPaste} disabled={processing}
+                      className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50">
+                      {processing ? <FaSpinner size={10} className="animate-spin" /> : <FaPaste size={10} />}
+                      {processing ? "Processing…" : `Import ${pasteText.trim().split("\n").filter(Boolean).length} line${pasteText.trim().split("\n").filter(Boolean).length !== 1 ? "s" : ""}`}
+                    </button>
+                  )}
+                </>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+export default function PmsMpesaNotifications() {
+  const navigate       = useNavigate();
+  const currentCompany = useSelector(selectCurrentCompany);
+  const businessId     = String(currentCompany?._id || currentCompany?.id || "");
+
+  const [notifications, setNotifications] = useState([]);
+  const [summary,       setSummary]       = useState([]);
+  const [pagination,    setPagination]    = useState({ page: 1, limit: PAGE_SIZE, total: 0, pages: 1 });
+  const [loading,       setLoading]       = useState(false);
+  const [expanded,      setExpanded]      = useState(null);
+  const [assignTarget,  setAssignTarget]  = useState(null);
+  const [ignoreTarget,  setIgnoreTarget]  = useState(null);
+  const [showUpload,    setShowUpload]    = useState(false);
+  const [deletingId,    setDeletingId]    = useState(null);
+  const [unignoringId,  setUnignoringId]  = useState(null);
+  const [countdown,     setCountdown]     = useState(AUTO_RELOAD);
+
+  const [filters, setFilters] = useState({ status: "", ref: "", search: "", dateFrom: todayISO(), dateTo: todayISO() });
+  const [applied, setApplied] = useState({ status: "", ref: "", search: "", dateFrom: todayISO(), dateTo: todayISO() });
+  const [page,    setPage]    = useState(1);
+
+  const load = useCallback(async (silent = false) => {
+    if (!businessId) return;
+    if (!silent) setLoading(true);
+    try {
+      const res = await adminRequests.get("/mpesa-collections", {
+        params: {
+          business: businessId,
+          status:   applied.status   || undefined,
+          search:   applied.search   || applied.ref || undefined,
+          dateFrom: applied.dateFrom || undefined,
+          dateTo:   applied.dateTo   || undefined,
+          page, limit: PAGE_SIZE,
+        },
+      });
+      const payload = res?.data;
+      setNotifications(payload?.data || []);
+      setPagination(payload?.pagination || { page: 1, limit: PAGE_SIZE, total: 0, pages: 1 });
+      setSummary(Array.isArray(payload?.summary) ? payload.summary : []);
+      setCountdown(AUTO_RELOAD);
+    } catch { if (!silent) toast.error("Failed to load M-Pesa collections"); }
+    finally  { if (!silent) setLoading(false); }
+  }, [businessId, applied, page]);
+
+  // Initial + filter/page load
+  useEffect(() => { load(); }, [load]);
+
+  // Auto-refresh countdown
+  useEffect(() => {
+    const tick = setInterval(() => {
+      setCountdown(c => {
+        if (c <= 1) { load(true); return AUTO_RELOAD; }
+        return c - 1;
+      });
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [load]);
+
+  const apply = (e) => { e.preventDefault(); setPage(1); setApplied({ ...filters }); };
+  const reset = () => {
+    const d = { status: "", ref: "", search: "", dateFrom: todayISO(), dateTo: todayISO() };
+    setFilters(d); setApplied(d); setPage(1);
+  };
+
+  // Clicking a summary chip quick-filters by that status
+  const quickFilter = (status) => {
+    const next = { ...filters, status };
+    setFilters(next); setApplied(next); setPage(1);
+  };
+
+  const handleUpdate = useCallback((updated) => {
+    if (!updated) { load(); return; }
+    setNotifications(prev => prev.map(n => n._id === updated._id ? { ...n, ...updated } : n));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Delete this M-Pesa collection record? This cannot be undone.")) return;
+    setDeletingId(id);
+    try {
+      await adminRequests.delete(`/mpesa-collections/${id}`, { params: { business: businessId } });
+      toast.success("Collection record deleted.");
+      setExpanded(null); load();
+    } catch (err) { toast.error(err?.response?.data?.message || "Delete failed"); }
+    finally      { setDeletingId(null); }
+  };
+
+  const handleUnignore = async (id) => {
+    setUnignoringId(id);
+    try {
+      const res = await adminRequests.post(`/mpesa-collections/${id}/unignore`, { business: businessId });
+      toast.success("Collection restored");
+      handleUpdate(res?.data?.data);
+    } catch (err) { toast.error(err?.response?.data?.message || "Failed to restore"); }
+    finally      { setUnignoringId(null); }
+  };
+
+  // Summary map
+  const summaryMap         = Object.fromEntries(summary.map(s => [s._id, s]));
+  const countUnmatched     = summaryMap.unmatched?.count      || 0;
+  const countMatchedTenant = summaryMap.matched_tenant?.count  || 0;
+  const countCaptured      = summaryMap.captured?.count        || 0;
+  const countDuplicate     = summaryMap.duplicate?.count       || 0;
+  const countIgnored       = summaryMap.ignored?.count         || 0;
+  const amountCaptured     = summaryMap.captured?.totalAmount  || 0;
+
+  const SUMMARY_CHIPS = [
+    { key: "captured",       label: "Captured",       value: countCaptured,      sub: formatMoney(amountCaptured), dot: "bg-emerald-500", text: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200" },
+    { key: "matched_tenant", label: "Tenant Matched", value: countMatchedTenant, sub: "awaiting receipt",          dot: "bg-blue-400",    text: "text-blue-700",    bg: "bg-blue-50",    border: "border-blue-200"   },
+    { key: "unmatched",      label: "Unmatched",      value: countUnmatched,     sub: "needs assignment",          dot: "bg-amber-400",   text: "text-amber-700",   bg: "bg-amber-50",   border: "border-amber-200"  },
+    { key: "duplicate",      label: "Duplicate",      value: countDuplicate,     sub: "already processed",         dot: "bg-slate-400",   text: "text-slate-600",   bg: "bg-white",      border: "border-slate-200"  },
+    { key: "ignored",        label: "Ignored",        value: countIgnored,       sub: "excluded",                  dot: "bg-red-400",     text: "text-red-700",     bg: "bg-red-50",     border: "border-red-200"    },
+  ];
+
+  return (
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full flex-col overflow-hidden bg-slate-50">
+
+        {/* Modals */}
+        {showUpload && <UploadModal businessId={businessId} onClose={() => { setShowUpload(false); load(); }} onUploaded={load} />}
+        {assignTarget && (
+          <AssignTenantModal notif={assignTarget} businessId={businessId}
+            onClose={() => setAssignTarget(null)}
+            onAssigned={(u) => { handleUpdate(u); setAssignTarget(null); load(); }} />
+        )}
+        {ignoreTarget && (
+          <IgnoreModal notif={ignoreTarget} businessId={businessId}
+            onClose={() => setIgnoreTarget(null)}
+            onIgnored={(u) => { handleUpdate(u); setIgnoreTarget(null); }} />
+        )}
+
+        {/* Summary chips — clickable quick-filters */}
+        <div className="shrink-0 flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
+          {SUMMARY_CHIPS.map(({ key, label, value, sub, dot, text, bg, border }) => {
+            const active = applied.status === key;
+            return (
+              <button key={key} type="button" onClick={() => quickFilter(active ? "" : key)}
+                title={`Filter by ${label}`}
+                className={`inline-flex items-center gap-2 border px-3 py-1.5 transition-all ${bg} ${border} ${active ? "ring-2 ring-offset-1 ring-[#0B3B2E]" : "hover:opacity-80"}`}>
+                <span className={`h-2 w-2 rounded-full ${dot}`} />
+                <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">{label}</span>
+                <span className={`text-sm font-black ${text}`}>{value}</span>
+                <span className="text-[10px] text-slate-400">{sub}</span>
+                {active && <FaTimes size={8} className="ml-1 text-slate-500" />}
+              </button>
+            );
+          })}
+          {/* Total — not a filter, just info */}
+          <div className="inline-flex items-center gap-2 border border-slate-200 bg-white px-3 py-1.5">
+            <span className="h-2 w-2 rounded-full bg-slate-400" />
+            <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Total</span>
+            <span className="text-sm font-black text-slate-700">{pagination.total}</span>
+            <span className="text-[10px] text-slate-400">in filter</span>
+          </div>
+        </div>
+
+        {/* Filter bar */}
+        <form onSubmit={apply} className="shrink-0 flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
+          <select value={filters.status} onChange={e => setFilters(p => ({ ...p, status: e.target.value }))}
+            className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none">
+            <option value="">All statuses</option>
+            {Object.entries(STATUS_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+          <input
+            className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 placeholder:font-normal focus:border-[#0B3B2E] focus:outline-none"
+            placeholder="Account ref / tenant code"
+            value={filters.ref} onChange={e => setFilters(p => ({ ...p, ref: e.target.value }))} />
+          <div className="relative flex items-center">
+            <FaSearch size={9} className="pointer-events-none absolute left-2 text-slate-400" />
+            <input
+              className="h-8 w-48 border border-slate-300 pl-6 pr-2 text-xs font-semibold text-slate-700 placeholder:font-normal focus:border-[#0B3B2E] focus:outline-none"
+              placeholder="Txn ID or payer name"
+              value={filters.search} onChange={e => setFilters(p => ({ ...p, search: e.target.value }))} />
+          </div>
+          <input type="date" value={filters.dateFrom} onChange={e => setFilters(p => ({ ...p, dateFrom: e.target.value }))}
+            className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none" />
+          <span className="text-xs font-bold text-slate-400">→</span>
+          <input type="date" value={filters.dateTo} onChange={e => setFilters(p => ({ ...p, dateTo: e.target.value }))}
+            className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none" />
+          <button type="submit" className="inline-flex h-8 items-center gap-1.5 bg-[#FF8C00] px-4 text-xs font-bold text-white hover:bg-[#E67E00]">
+            <FaSearch size={10} /> Search
+          </button>
+          <button type="button" onClick={reset} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0A3127]">
+            <FaRedoAlt size={10} /> Reset
+          </button>
+          <div className="ml-auto flex items-center gap-2">
+            <button type="button" onClick={() => setShowUpload(true)}
+              className="inline-flex h-8 items-center gap-1.5 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50">
+              <FaUpload size={10} /> Import
+            </button>
+            <button type="button" onClick={() => load()}
+              className="inline-flex h-8 items-center gap-1.5 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              title={`Auto-refreshes in ${countdown}s`}>
+              {loading ? <FaSpinner size={10} className="animate-spin" /> : <FaRedoAlt size={10} />}
+              <span>{loading ? "Loading" : `${countdown}s`}</span>
+            </button>
+          </div>
+        </form>
+
+        {/* Table area */}
+        <div className="relative flex-1 overflow-auto">
+          {loading && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/60">
+              <FaSpinner size={22} className="animate-spin text-[#0B3B2E]" />
+            </div>
+          )}
+
+          <table className="w-full min-w-[1040px] text-xs">
+            <thead className="sticky top-0 z-[5] bg-[#0B3B2E] text-white">
+              <tr>
+                <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide">Time</th>
+                <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide">Status</th>
+                <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide">Account Ref</th>
+                <th className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wide">Amount</th>
+                <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide">Payer</th>
+                <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide">Phone</th>
+                <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide">Transaction Code</th>
+                <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide">Matched Tenant</th>
+                <th className="px-2 py-2 text-center text-[10px] font-bold uppercase tracking-wide">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {!loading && notifications.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="px-4 py-16 text-center">
+                    <div className="flex flex-col items-center gap-2">
+                      <FaSearch size={28} className="text-slate-200" />
+                      <p className="text-sm font-bold text-slate-400">No collections found</p>
+                      <p className="text-[11px] text-slate-400">
+                        {applied.status || applied.ref || applied.search
+                          ? "Try adjusting your filters or click a status chip above to clear"
+                          : "No M-Pesa transactions for today. Upload a CSV or wait for callbacks."}
+                      </p>
+                      {(applied.status || applied.ref || applied.search) && (
+                        <button onClick={reset} className="mt-1 inline-flex items-center gap-1.5 border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
+                          <FaRedoAlt size={9} /> Clear filters
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )}
+
+              {notifications.map((n) => {
+                const canAssign = n.matchingStatus === "unmatched";
+                const canRecord = n.matchingStatus === "matched_tenant";
+                const canIgnore = n.matchingStatus !== "ignored" && !n.matchedReceipt;
+                const isIgnored = n.matchingStatus === "ignored";
+                const isOpen    = expanded === n._id;
+                const rowBg     = isIgnored ? "bg-red-50/30" : "";
+
+                return (
+                  <React.Fragment key={n._id}>
+                    <tr
+                      onClick={() => setExpanded(isOpen ? null : n._id)}
+                      className={`cursor-pointer border-b border-slate-100 transition-colors hover:bg-slate-50 ${rowBg}`}>
+                      <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{fmtDate(n.transactionDate || n.createdAt)}</td>
+                      <td className="px-3 py-2"><StatusBadge status={n.matchingStatus} /></td>
+                      <td className="px-3 py-2">
+                        <div className="font-extrabold tracking-wider text-slate-900">{n.accountReference || "—"}</div>
+                        {n.billRefNumber && n.billRefNumber !== n.accountReference && (
+                          <div className="text-[10px] text-slate-400">raw: {n.billRefNumber}</div>
+                        )}
+                      </td>
+                      <td className={`px-3 py-2 text-right font-extrabold ${n.matchingStatus === "captured" ? "text-emerald-700" : "text-slate-700"}`}>
+                        {n.amount > 0 ? formatMoney(n.amount) : "—"}
+                      </td>
+                      <td className="px-3 py-2 font-semibold text-slate-700">{n.payerName || <span className="font-normal italic text-slate-400">—</span>}</td>
+                      <td className="px-3 py-2 text-slate-600">
+                        {n.msisdn
+                          ? <span className="inline-flex items-center gap-1 font-mono"><FaMobileAlt size={9} className="text-slate-400" />{n.msisdn.slice(0, 4)}***{n.msisdn.slice(-3)}</span>
+                          : "—"}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-slate-700">{n.transactionCode || "—"}</td>
+                      <td className="px-3 py-2">
+                        {n.tenant ? (
+                          <div>
+                            <div className="font-bold text-[#0B3B2E]">{getTenantLabel(n.tenant)}</div>
+                            {getUnitLabel(n.tenant) && <div className="text-[10px] text-slate-500">{getUnitLabel(n.tenant)}</div>}
+                            {n.matchedReceipt && (
+                              <div className="text-[10px] font-semibold text-emerald-700">
+                                Receipt: {n.matchedReceipt.receiptNumber || n.matchedReceipt.referenceNumber || "linked"}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="italic text-[10px] text-slate-400">{n.notes || "No tenant matched"}</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-2 text-center" onClick={e => e.stopPropagation()}>
+                        <div className="flex flex-wrap items-center justify-center gap-1">
+                          {canAssign && (
+                            <button type="button" onClick={() => setAssignTarget(n)}
+                              className="inline-flex items-center gap-1 border border-amber-300 bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-700 hover:bg-amber-100">
+                              <FaLink size={9} /> Assign
+                            </button>
+                          )}
+                          {canRecord && (
+                            <button type="button"
+                              onClick={() => navigate(`/receipts/new?tenant=${n.tenant?._id}&amount=${n.amount}&reference=${n.transactionCode}&collectionId=${n._id}&paymentMethod=mpesa&payerName=${encodeURIComponent(n.payerName || "")}&msisdn=${n.msisdn || ""}`)  }
+                              className="inline-flex items-center gap-1 border border-emerald-300 bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100">
+                              <FaReceipt size={9} /> Record
+                            </button>
+                          )}
+                          {canIgnore && (
+                            <button type="button" onClick={() => setIgnoreTarget(n)}
+                              className="inline-flex items-center gap-1 border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-bold text-red-600 hover:bg-red-100">
+                              <FaBan size={9} /> Ignore
+                            </button>
+                          )}
+                          {isIgnored && (
+                            <button type="button" onClick={() => handleUnignore(n._id)} disabled={unignoringId === n._id}
+                              className="inline-flex items-center gap-1 border border-slate-300 bg-white px-2 py-1 text-[10px] font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50">
+                              <FaUndo size={9} /> {unignoringId === n._id ? "…" : "Restore"}
+                            </button>
+                          )}
+                          <span className="text-slate-400">{isOpen ? <FaChevronUp size={9} /> : <FaChevronDown size={9} />}</span>
+                        </div>
+                      </td>
+                    </tr>
+
+                    {isOpen && (
+                      <tr className="border-b border-slate-200 bg-slate-50">
+                        <td colSpan={9} className="px-4 py-3">
+                          <div className="mb-3 grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
+                            {[
+                              { label: "Payer Name",       value: n.payerName || "—"                                              },
+                              { label: "Phone",            value: n.msisdn || "—"                                                 },
+                              { label: "Transaction Code", value: n.transactionCode || "—"                                        },
+                              { label: "Amount",           value: n.amount > 0 ? formatMoney(n.amount) : "—"                     },
+                              { label: "Account Ref",      value: n.accountReference || "—"                                       },
+                              { label: "Bill Ref",         value: n.billRefNumber || "—"                                          },
+                              { label: "Source",           value: n.source || "—"                                                 },
+                              { label: "Short Code",       value: n.shortCode || "—"                                              },
+                              { label: "Transaction Date", value: n.transactionDate ? new Date(n.transactionDate).toLocaleString("en-KE") : "—" },
+                              { label: "Config",           value: n.configName || "—"                                             },
+                              { label: "Org Balance",      value: n.orgAccountBalance || "—"                                      },
+                              { label: "Matching Status",  value: n.matchingStatus || "—"                                         },
+                            ].map(({ label, value }) => (
+                              <div key={label}>
+                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">{label}</p>
+                                <p className="mt-0.5 break-all text-[11px] font-semibold text-slate-800">{value}</p>
+                              </div>
+                            ))}
+                          </div>
+                          {n.notes && (
+                            <div className="mb-2 flex items-start gap-2 border border-amber-200 bg-amber-50 px-3 py-2">
+                              <span className="text-[10px] font-bold uppercase text-amber-700">Notes:</span>
+                              <span className="text-[10px] text-amber-800">{n.notes}</span>
+                            </div>
+                          )}
+                          {n.rawPayload && (
+                            <>
+                              <p className="mb-1 text-[10px] font-black uppercase tracking-wide text-slate-400">Raw Safaricom Payload</p>
+                              <pre className="max-h-40 overflow-auto rounded border border-slate-200 bg-white p-3 text-[10px] font-mono text-slate-700">
+                                {JSON.stringify(n.rawPayload, null, 2)}
+                              </pre>
+                            </>
+                          )}
+                          {!n.matchedReceipt && (
+                            <div className="mt-3 flex justify-end">
+                              <button onClick={() => handleDelete(n._id)} disabled={deletingId === n._id}
+                                className="inline-flex items-center gap-1.5 border border-rose-300 bg-rose-50 px-3 py-1.5 text-[10px] font-bold text-rose-600 hover:bg-rose-100 disabled:opacity-50">
+                                {deletingId === n._id ? <FaSpinner size={9} className="animate-spin" /> : <FaTrash size={9} />}
+                                {deletingId === n._id ? "Deleting…" : "Delete Record"}
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+
+          {/* Pagination footer */}
+          <div className="sticky bottom-0 flex items-center justify-between border-t border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600">
+            <span className="text-slate-400">
+              Showing <strong className="text-slate-700">{notifications.length}</strong> of <strong className="text-slate-700">{pagination.total}</strong> · {PAGE_SIZE} per page
+            </span>
+            <div className="flex items-center gap-1.5">
+              <button disabled={page <= 1 || loading} onClick={() => setPage(p => p - 1)}
+                className="border border-slate-300 bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-40">
+                Previous
+              </button>
+              <span className="px-2">Page {pagination.page} of {pagination.pages || 1}</span>
+              <button disabled={page >= pagination.pages || loading} onClick={() => setPage(p => p + 1)}
+                className="border border-slate-300 bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-40">
+                Next
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </DashboardLayout>
+  );
+}

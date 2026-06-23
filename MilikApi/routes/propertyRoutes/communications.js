@@ -2,6 +2,7 @@ import express from 'express';
 import { verifyUser } from '../../controllers/verifyToken.js';
 import {
   getCommunicationTemplates,
+  deleteSmsLogController,
   getSmsLogsController,
   previewCommunicationController,
   sendCommunicationController,
@@ -14,6 +15,7 @@ router.get('/templates', verifyUser, getCommunicationTemplates);
 router.post('/preview', verifyUser, previewCommunicationController);
 router.post('/send', verifyUser, sendCommunicationController);
 router.get('/sms-logs', verifyUser, getSmsLogsController);
+router.delete('/sms-logs/:id', verifyUser, deleteSmsLogController);
 router.post('/test-sms', verifyUser, sendTestSmsController);
 
 export default router;

@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { createError } from '../../utils/error.js';
 import { hasCompanyActionPermission } from '../../utils/permissionControl.js';
 import { normalizeCompanyId } from '../verifyToken.js';
@@ -9,6 +10,7 @@ import {
   sendCommunication,
   sendTestSms,
 } from '../../services/communicationService.js';
+import SmsLog from '../../models/SmsLog.js';
 
 const resolveBusinessId = (req) =>
   normalizeCompanyId(
@@ -160,6 +162,28 @@ export const getSmsLogsController = async (req, res, next) => {
 
     const result = await getSmsLogs({ businessId, limit, page, channel, contextType, status, search });
     return res.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const deleteSmsLogController = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) return next(createError(400, 'Business is required.'));
+
+    const { id } = req.params;
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) return next(createError(400, 'Invalid log ID.'));
+
+    const log = await SmsLog.findOne({ _id: id, business: businessId }).lean();
+    if (!log) return next(createError(404, 'SMS log not found.'));
+
+    if (log.status === 'sent' && !log.isTest) {
+      return next(createError(400, 'Sent messages cannot be deleted — they form part of the communication audit trail.'));
+    }
+
+    await SmsLog.deleteOne({ _id: id });
+    return res.status(200).json({ success: true, message: 'Log entry deleted.' });
   } catch (error) {
     return next(error);
   }

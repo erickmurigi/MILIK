@@ -2949,19 +2949,15 @@ export const reverseTenantInvoiceNote = async (req, res) => {
 
     const ledgerEntryIds = Array.isArray(note.ledgerEntries) ? note.ledgerEntries.map((entry) => String(entry)) : [];
     const originalEntries = ledgerEntryIds.length
-      ? await FinancialLedgerEntry.find({ _id: { $in: ledgerEntryIds } }).select("_id accountId status reversedByEntry")
+      ? await FinancialLedgerEntry.find({ _id: { $in: ledgerEntryIds } }).lean().select("_id accountId status reversedByEntry")
       : [];
 
-    for (const entry of originalEntries) {
-      if (entry?.status === "reversed" || entry?.reversedByEntry) {
-        continue;
-      }
-      await postReversal({
-        entryId: entry._id,
-        userId: actorUserId,
-        reason: req.body?.reason || `Reversal of ${normalizedNoteType === "CREDIT_NOTE" ? "credit" : "debit"} note ${note.noteNumber}`,
-      });
-    }
+    const reversalReason = req.body?.reason || `Reversal of ${normalizedNoteType === "CREDIT_NOTE" ? "credit" : "debit"} note ${note.noteNumber}`;
+    await Promise.all(
+      originalEntries
+        .filter((entry) => entry?.status !== "reversed" && !entry?.reversedByEntry)
+        .map((entry) => postReversal({ entryId: entry._id, userId: actorUserId, reason: reversalReason }))
+    );
 
     note.status = "reversed";
     note.postingStatus = "reversed";
@@ -3578,7 +3574,7 @@ export const updateTakeOnBalance = async (req, res) => {
     }
 
     const requestedInvoiceDate = normalizeDate(req.body.invoiceDate || invoice.invoiceDate || new Date());
-    const shouldForceMonthlyDates = shouldForceMonthlyBillingDates({
+    const shouldForceMonthlyDates = shouldUseRecurringBillingDateAlignment({
       category: normalizedCategory,
       metadata: req.body.metadata || invoice.metadata || {},
     });
@@ -3676,20 +3672,22 @@ export const updateTakeOnBalance = async (req, res) => {
         sourceTransactionId: String(invoice._id),
         status: "approved",
         category: { $ne: "REVERSAL" },
-      });
+      }).lean().select("_id accountId status reversedByEntry");
 
       for (const entry of originalEntries) {
         if (entry?.accountId) touchedAccountIds.add(String(entry.accountId));
-        if (!entry.reversedByEntry && entry.status !== "reversed") {
-          const reversal = await postReversal({
+      }
+      const takeOnReversals = await Promise.all(
+        originalEntries
+          .filter((entry) => !entry.reversedByEntry && entry.status !== "reversed")
+          .map((entry) => postReversal({
             entryId: entry._id,
             reason: `Take-on balance ${invoice.invoiceNumber} updated`,
             userId: actorUserId,
-          });
-          if (reversal?.reversalEntry?.accountId) {
-            touchedAccountIds.add(String(reversal.reversalEntry.accountId));
-          }
-        }
+          }))
+      );
+      for (const reversal of takeOnReversals) {
+        if (reversal?.reversalEntry?.accountId) touchedAccountIds.add(String(reversal.reversalEntry.accountId));
       }
     }
 
@@ -4250,24 +4248,22 @@ export const deleteTenantInvoice = async (req, res) => {
         sourceTransactionId: String(invoice._id),
         status: "approved",
         category: { $ne: "REVERSAL" },
-      });
+      }).lean().select("_id accountId status reversedByEntry");
 
       for (const entry of originalEntries) {
-        if (entry?.accountId) {
-          touchedAccountIds.add(String(entry.accountId));
-        }
-
-        if (!entry.reversedByEntry && entry.status !== "reversed") {
-          const reversal = await postReversal({
+        if (entry?.accountId) touchedAccountIds.add(String(entry.accountId));
+      }
+      const deleteReversals = await Promise.all(
+        originalEntries
+          .filter((entry) => !entry.reversedByEntry && entry.status !== "reversed")
+          .map((entry) => postReversal({
             entryId: entry._id,
             reason: `Invoice ${invoice.invoiceNumber} deleted`,
             userId: actorUserId,
-          });
-
-          if (reversal?.reversalEntry?.accountId) {
-            touchedAccountIds.add(String(reversal.reversalEntry.accountId));
-          }
-        }
+          }))
+      );
+      for (const reversal of deleteReversals) {
+        if (reversal?.reversalEntry?.accountId) touchedAccountIds.add(String(reversal.reversalEntry.accountId));
       }
     }
 

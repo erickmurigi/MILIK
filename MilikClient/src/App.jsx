@@ -99,7 +99,7 @@ const TenantPrepayments   = lazy(() => import("./pages/Tenants/TenantPrepayments
 const InstantReceipts     = lazy(() => import("./pages/Tenants/InstantReceipts"));
 const TakeOnBalances      = lazy(() => import("./pages/Tenants/TakeOnBalances"));
 const TenantAgreements    = lazy(() => import("./pages/Tenants/TenantAgreements"));
-const MpesaBatchImport    = lazy(() => import("./pages/Tenants/MpesaBatchImport"));
+const PmsMpesaNotifications   = lazy(() => import("./pages/Tenants/PmsMpesaNotifications"));
 
 // Lease / Vacants / Ops
 const UnitTypesPage  = lazy(() => import("./pages/Lease/Lease"));
@@ -781,7 +781,7 @@ function App() {
             <Route path="/receipts"                 element={<Guard resource="receipts" moduleKey="propertyManagement"><Receipts /></Guard>} />
             <Route path="/receipts/new"             element={<Guard resource="receipts" action="create" moduleKey="propertyManagement"><AddReceipt /></Guard>} />
             <Route path="/receipts/prepayments"     element={<Guard resource="prepayments" moduleKey="propertyManagement"><TenantPrepayments /></Guard>} />
-            <Route path="/receipts/mpesa-import"    element={<Guard resource="receipts" action="import" moduleKey="propertyManagement"><MpesaBatchImport /></Guard>} />
+            <Route path="/receipts/mpesa-collections"   element={<Guard resource="receipts" action="view"   moduleKey="propertyManagement"><PmsMpesaNotifications /></Guard>} />
             <Route path="/receipts/instant"         element={<Guard resource="receipts" moduleKey="propertyManagement"><InstantReceipts /></Guard>} />
             <Route path="/receipts/landlord"        element={<Guard companyMode={{ allowLandlord: false }} resource="landlordReceipts" moduleKey="accounts"><LandlordReceipts /></Guard>} />
             <Route path="/receipts/:id"             element={<Guard resource="receipts" moduleKey="propertyManagement"><Receipts /></Guard>} />

@@ -744,29 +744,20 @@ const Landlords = () => {
   // Excel Import Handler
   const handleBulkImport = async (landlords) => {
     try {
-      console.log('Starting bulk import...', { count: landlords.length, company: currentCompany?._id });
-      
       if (!currentCompany?._id) {
         throw new Error('No company selected. Please ensure you are logged in.');
       }
 
-      // Call backend bulk import endpoint
       const response = await adminRequests.post('/landlords/bulk-import', {
         landlords,
         company: currentCompany._id
       });
 
-      console.log('Bulk import response:', response.data);
-
       setCurrentPage(1);
       await dispatch(getLandlords(buildLandlordParams(1)));
 
-      console.log('Landlords list refreshed');
-
-      // Return the result data for the modal
       return response.data;
     } catch (error) {
-      console.error('Bulk import error:', error);
       const errorMessage = error?.response?.data?.message || error?.message || 'Failed to import landlords';
       throw new Error(errorMessage);
     }
