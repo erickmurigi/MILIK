@@ -393,6 +393,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
   });
   const requestedReceiptId = useMemo(() => new URLSearchParams(location.search).get("receipt") || "", [location.search]);
   const [autoOpenedReceiptId, setAutoOpenedReceiptId] = useState("");
+  const [reversalModal, setReversalModal] = useState({ open: false, isBatch: false, receipt: null, receipts: [], reason: "", loading: false });
 
   const loadInvoices = useCallback(async () => {
     if (!currentCompany?._id) return;
@@ -834,16 +835,7 @@ const visibleReceiptIds = useMemo(
       return;
     }
 
-    const reason = window.prompt("Provide reversal reason", "Customer correction");
-    if (reason === null) return;
-
-    try {
-      await reverseRentPayment(dispatch, receipt._id, { reason });
-      toast.success("Receipt reversed successfully");
-      await loadData();
-    } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to reverse receipt");
-    }
+    setReversalModal({ open: true, isBatch: false, receipt, receipts: [], reason: "Customer correction", loading: false });
   };
 
   const handleReverseSelected = async () => {
@@ -864,16 +856,26 @@ const visibleReceiptIds = useMemo(
       return;
     }
 
-    const reason = window.prompt("Provide reversal reason for selected receipts", "Batch correction");
-    if (reason === null) return;
+    setReversalModal({ open: true, isBatch: true, receipt: null, receipts: eligible, reason: "Batch correction", loading: false });
+  };
 
+  const handleReversalConfirm = async () => {
+    const reason = (reversalModal.reason || "").trim() || (reversalModal.isBatch ? "Batch correction" : "Customer correction");
+    setReversalModal((prev) => ({ ...prev, loading: true }));
     try {
-      await Promise.all(eligible.map((receipt) => reverseRentPayment(dispatch, receipt._id, { reason })));
-      toast.success(`${eligible.length} receipt(s) reversed successfully`);
-      setSelectedIds([]);
+      if (reversalModal.isBatch) {
+        await Promise.all(reversalModal.receipts.map((r) => reverseRentPayment(dispatch, r._id, { reason })));
+        toast.success(`${reversalModal.receipts.length} receipt(s) reversed successfully`);
+        setSelectedIds([]);
+      } else {
+        await reverseRentPayment(dispatch, reversalModal.receipt._id, { reason });
+        toast.success("Receipt reversed successfully");
+      }
+      setReversalModal({ open: false, isBatch: false, receipt: null, receipts: [], reason: "", loading: false });
       await loadData();
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to reverse selected receipts");
+      toast.error(error?.response?.data?.message || "Failed to reverse receipt");
+      setReversalModal((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -2932,6 +2934,87 @@ const visibleReceiptIds = useMemo(
         defaultChannel="email"
         onSent={() => setShowEmailModal(false)}
       />
+
+      {/* ── Reversal Reason Modal ── */}
+      {reversalModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            {/* Header */}
+            <div className="bg-[#0B3B2E] px-6 py-4 flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15">
+                <FaUndo className="text-white text-sm" />
+              </div>
+              <div>
+                <h2 className="text-white font-semibold text-base leading-tight">
+                  {reversalModal.isBatch ? `Reverse ${reversalModal.receipts.length} Receipt${reversalModal.receipts.length !== 1 ? "s" : ""}` : "Reverse Receipt"}
+                </h2>
+                {!reversalModal.isBatch && reversalModal.receipt?.receiptNumber && (
+                  <p className="text-white/60 text-xs mt-0.5">{reversalModal.receipt.receiptNumber}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-5 space-y-4">
+              <div className="flex items-start gap-3 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3">
+                <FaInfoCircle className="text-amber-500 mt-0.5 shrink-0" />
+                <p className="text-sm text-amber-800">
+                  {reversalModal.isBatch
+                    ? `This will reverse ${reversalModal.receipts.length} confirmed receipt(s) and post offsetting ledger entries. This action cannot be undone.`
+                    : "This will reverse the receipt and post an offsetting ledger entry. This action cannot be undone."}
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                  Reversal Reason
+                </label>
+                <textarea
+                  rows={3}
+                  autoFocus
+                  className="w-full resize-none rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  placeholder="Enter reason for reversal…"
+                  value={reversalModal.reason}
+                  onChange={(e) => setReversalModal((prev) => ({ ...prev, reason: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleReversalConfirm(); } }}
+                  disabled={reversalModal.loading}
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 pb-5 flex justify-end gap-3">
+              <button
+                onClick={() => setReversalModal({ open: false, isBatch: false, receipt: null, receipts: [], reason: "", loading: false })}
+                disabled={reversalModal.loading}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReversalConfirm}
+                disabled={reversalModal.loading}
+                className="rounded-lg bg-red-600 hover:bg-red-700 px-5 py-2 text-sm font-semibold text-white transition-colors disabled:opacity-60 flex items-center gap-2"
+              >
+                {reversalModal.loading ? (
+                  <>
+                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    Reversing…
+                  </>
+                ) : (
+                  <>
+                    <FaUndo className="text-xs" />
+                    Confirm Reversal
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 };
