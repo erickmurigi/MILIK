@@ -14,7 +14,13 @@ import { computeTenantInvoiceSnapshotsBatch } from "./tenantInvoices.js";
 import { ensureSystemChartOfAccounts } from "../../services/chartOfAccountsService.js";
 import { computeAccountBalance, getNormalBalanceSide } from "../../services/accountingClassificationService.js";
 import { escapeRegex } from "../../utils/escapeRegex.js";
-import { isOperatingIncomeAccount, isOperatingExpenseAccount } from "../../utils/accountClassifiers.js";
+import {
+  isOperatingIncomeAccount,
+  isOperatingExpenseAccount,
+  isSelfManagingLandlordIncomeAccount,
+  isSelfManagingLandlordExpenseAccount,
+} from "../../utils/accountClassifiers.js";
+import { isSelfManagingLandlordCompany } from "../../utils/companyModules.js";
 
 const toObjectId = (value) => {
   const raw = typeof value === "object" && value?._id ? value._id : value;
@@ -325,8 +331,12 @@ export const getIncomeStatementReport = async (req, res, next) => {
     const [accounts, ledgerMap, company] = await Promise.all([
       ChartOfAccount.find(accountQuery).sort({ code: 1 }).lean(),
       buildLedgerMap({ businessId, startDate, endDate, propertyId: scopePropertyId }),
-      Company.findById(businessId, { modules: 1 }).lean(),
+      Company.findById(businessId, { modules: 1, companyMode: 1 }).lean(),
     ]);
+
+    const selfManaging = isSelfManagingLandlordCompany(company);
+    const incomeClassifier = selfManaging ? isSelfManagingLandlordIncomeAccount : isOperatingIncomeAccount;
+    const expenseClassifier = selfManaging ? isSelfManagingLandlordExpenseAccount : isOperatingExpenseAccount;
 
     const incomeRows = [];
     const expenseRows = [];
@@ -348,13 +358,8 @@ export const getIncomeStatementReport = async (req, res, next) => {
         balanceSource: derived.source,
       };
 
-      if (account.type === "income" && isOperatingIncomeAccount(account)) {
-        incomeRows.push(row);
-      }
-
-      if (account.type === "expense" && isOperatingExpenseAccount(account)) {
-        expenseRows.push(row);
-      }
+      if (account.type === "income" && incomeClassifier(account)) incomeRows.push(row);
+      if (account.type === "expense" && expenseClassifier(account)) expenseRows.push(row);
     }
 
     const incomeSections = buildSectionBuckets(incomeRows);
@@ -363,6 +368,25 @@ export const getIncomeStatementReport = async (req, res, next) => {
     const totalIncome = round2(incomeRows.reduce((sum, row) => sum + Number(row.amount || 0), 0));
     const totalExpenses = round2(expenseRows.reduce((sum, row) => sum + Number(row.amount || 0), 0));
     const netProfit = round2(totalIncome - totalExpenses);
+
+    const reportBasis = selfManaging
+      ? "All rental income and direct property expenses"
+      : "All operating income and expenses for this company";
+
+    const exclusions = selfManaging
+      ? [
+          "Commission income (not applicable — self-managed)",
+          "Management fee income (not applicable — self-managed)",
+          "Landlord remittance accounts (you are the landlord)",
+        ]
+      : company?.modules?.propertyManagement
+        ? [
+            "Rent collected on behalf of landlords",
+            "Property control movements",
+            "Landlord remittance payable",
+            "Landlord/property deductions such as repairs and utilities",
+          ]
+        : [];
 
     return res.status(200).json({
       success: true,
@@ -384,13 +408,8 @@ export const getIncomeStatementReport = async (req, res, next) => {
         netProfit,
         resultLabel: netProfit >= 0 ? "Net Profit" : "Net Loss",
       },
-      reportBasis: "All operating income and expenses for this company",
-      exclusions: company?.modules?.propertyManagement ? [
-        "Rent collected on behalf of landlords",
-        "Property control movements",
-        "Landlord remittance payable",
-        "Landlord/property deductions such as repairs and utilities",
-      ] : [],
+      reportBasis,
+      exclusions,
     });
   } catch (error) {
     next(error);

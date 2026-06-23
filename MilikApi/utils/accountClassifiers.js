@@ -92,3 +92,36 @@ export const isOperatingExpenseAccount = (account = {}) => {
   if (LANDLORD_EXPENSE_NAMES.some((n) => name.includes(n))) return false;
   return true;
 };
+
+// ─── Self-managing landlord P&L classifiers ──────────────────────────────────
+// Used when companyMode === 'self_managing_landlord'.
+// Rent income IS their revenue; maintenance/repairs ARE their expenses.
+// Commission / management-fee accounts are excluded — they manage themselves.
+
+export const isSelfManagingLandlordIncomeAccount = (account = {}) => {
+  const { code, name, subGroup } = normalizeAcc(account);
+  // Exclude commission and management-fee lines — not applicable for self-managers
+  if (["4200", "4210"].includes(code)) return false;
+  if (name.includes("commission income") || name.includes("management fee")) return false;
+  // All property / rental income is the landlord's own revenue
+  if (LANDLORD_INCOME_CODES.includes(code)) return true;
+  if (LANDLORD_INCOME_NAMES.some((n) => name.includes(n))) return true;
+  if (subGroup === "property income" || subGroup === "rental income") return true;
+  // Penalty / late-fee income
+  if (code === "4103" || name.includes("late fee") || name.includes("penalty")) return true;
+  return false;
+};
+
+export const isSelfManagingLandlordExpenseAccount = (account = {}) => {
+  const { code, name, subGroup } = normalizeAcc(account);
+  // All direct property expenses — the landlord bears these themselves
+  if (LANDLORD_EXPENSE_CODES.includes(code)) return true;
+  if (subGroup === "property expenses") return true;
+  if (LANDLORD_EXPENSE_NAMES.some((n) => name.includes(n))) return true;
+  // General admin / finance costs also belong on the landlord's P&L
+  if (["5200", "5201", "5202"].includes(code)) return true;
+  if (subGroup === "administrative expenses" || subGroup === "finance costs") return true;
+  if (name.includes("bank charge") || name.includes("insurance") || name.includes("legal") || name.includes("compliance")) return true;
+  if (name.includes("mortgage") || name.includes("loan interest")) return true;
+  return false;
+};
