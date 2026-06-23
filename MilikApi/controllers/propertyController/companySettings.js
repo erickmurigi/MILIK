@@ -983,6 +983,14 @@ export const updateTaxConfiguration = async (req, res, next) => {
     settings.markModified("taxSettings");
     settings.markModified("taxCodes");
 
+    if (req.body?.mriRate !== undefined) {
+      const parsedMriRate = Number(req.body.mriRate);
+      if (!Number.isFinite(parsedMriRate) || parsedMriRate < 0 || parsedMriRate > 1) {
+        return res.status(400).json({ message: "MRI rate must be between 0 and 1 (e.g. 0.075 for 7.5%)." });
+      }
+      settings.mriRate = parsedMriRate;
+    }
+
     await settings.save();
     await settings.populate?.("accountingDefaults.tenantReceivableAccount accountingDefaults.rentIncomeAccount accountingDefaults.utilityRechargeIncomeAccount accountingDefaults.penaltyIncomeAccount accountingDefaults.depositLiabilityAccount accountingDefaults.managementCommissionIncomeAccount accountingDefaults.leaseAgreementFeeIncomeAccount");
     await logAuditEvent({
@@ -1005,6 +1013,7 @@ export const updateTaxConfiguration = async (req, res, next) => {
       message: "Tax configuration updated successfully",
       taxSettings: settings.taxSettings,
       taxCodes: settings.taxCodes,
+      mriRate: settings.mriRate,
       settings,
     });
   } catch (err) {

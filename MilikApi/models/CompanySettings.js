@@ -297,6 +297,7 @@ const CompanySettingsSchema = new mongoose.Schema(
       type: hrAccountingDefaultsSchema,
       default: () => ({}),
     },
+    mriRate: { type: Number, default: 0.075, min: 0, max: 1 },
     currencyCode: { type: String, default: "KES" },
     decimalPlaces: { type: Number, default: 2 },
     timezone: { type: String, default: "Africa/Nairobi" },

@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
 import Company from "../../models/Company.js";
+import CompanySettings from "../../models/CompanySettings.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import Tenant from "../../models/Tenant.js";
 import TenantInvoice from "../../models/TenantInvoice.js";
@@ -1450,7 +1451,10 @@ export const getMRITaxSummaryReport = async (req, res, next) => {
       return res.status(400).json({ success: false, error: "Valid start and end dates are required." });
     }
 
-    const MRI_RATE = 0.10;
+    const settingsDoc = await CompanySettings.findOne({ company: new mongoose.Types.ObjectId(String(businessId)) })
+      .select("mriRate")
+      .lean();
+    const MRI_RATE = Number(settingsDoc?.mriRate ?? 0.075);
 
     let propertyIds = null;
     if (req.query.propertyId) {

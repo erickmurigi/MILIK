@@ -41,7 +41,7 @@ const MRITaxSummaryReport = () => {
     endDate: toDateInputValue(new Date(currentYear, 11, 31)),
     propertyId: '',
   });
-  const [report, setReport] = useState({ summary: {}, byProperty: [], byMonth: [], mriRate: 0.10 });
+  const [report, setReport] = useState({ summary: {}, byProperty: [], byMonth: [], mriRate: 0.075 });
 
   useEffect(() => {
     if (!businessId) return;
@@ -58,7 +58,7 @@ const MRITaxSummaryReport = () => {
         summary: data?.summary || {},
         byProperty: Array.isArray(data?.byProperty) ? data.byProperty : [],
         byMonth: Array.isArray(data?.byMonth) ? data.byMonth : [],
-        mriRate: data?.mriRate ?? 0.10,
+        mriRate: data?.mriRate ?? 0.075,
       });
     } catch (error) {
       toast.error(error?.response?.data?.error || error?.response?.data?.message || 'Failed to load MRI tax summary.');
@@ -77,7 +77,7 @@ const MRITaxSummaryReport = () => {
   }, [filters.startDate, filters.endDate, filters.propertyId]);
 
   const summary = report.summary || {};
-  const mriRatePercent = Math.round((report.mriRate || 0.10) * 100);
+  const mriRatePercent = Math.round((report.mriRate || 0.075) * 100);
   const propertyNameMap = useMemo(() => new Map(properties.map((p) => [String(p?._id), p?.propertyName || p?.name || 'Unnamed'])), [properties]);
   const printGeneratedAt = useMemo(() => new Date().toLocaleString(), [report, filters]);
 

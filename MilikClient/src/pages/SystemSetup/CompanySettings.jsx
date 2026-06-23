@@ -109,6 +109,7 @@ const sanitizeTaxKey = (value, fallback = "") =>
     .replace(/[^a-z0-9_]+/g, "_");
 
 const normalizeTaxConfiguration = (settings = {}) => ({
+  mriRate: Number(settings?.mriRate ?? 0.075),
   taxSettings: {
     enabled: Boolean(settings?.taxSettings?.enabled),
     defaultTaxMode: settings?.taxSettings?.defaultTaxMode || "exclusive",
@@ -161,6 +162,7 @@ const normalizeTaxConfiguration = (settings = {}) => ({
 });
 
 const buildTaxSavePayload = (taxConfig = {}) => ({
+  mriRate: Number(taxConfig?.mriRate ?? 0.075),
   taxSettings: {
     enabled: Boolean(taxConfig?.taxSettings?.enabled),
     defaultTaxMode: String(taxConfig?.taxSettings?.defaultTaxMode || "exclusive").toLowerCase() === "inclusive" ? "inclusive" : "exclusive",
@@ -1179,6 +1181,29 @@ const CompanySettings = () => {
               description={`Future default taxability for ${label.toLowerCase()}.`}
             />
           ))}
+        </div>
+
+        <div className="mt-5 border-t border-slate-100 pt-4">
+          <p className="mb-3 text-xs font-bold text-slate-700">KRA Statutory Tax Rates</p>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-700">
+                Monthly Rental Income (MRI) Tax Rate (%)
+              </label>
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                value={Number(((taxConfig.mriRate ?? 0.075) * 100).toFixed(4)).toString()}
+                onChange={(e) => setTaxConfig((prev) => ({ ...prev, mriRate: Number(e.target.value || 0) / 100 }))}
+                placeholder="7.5"
+              />
+              <p className="mt-1 text-[11px] text-slate-500">
+                Applied to gross residential rent on the MRI Tax Summary Report. KRA rate effective Jan 2024: 7.5%. Update here when KRA revises it.
+              </p>
+            </div>
+          </div>
         </div>
       </Card>
 
