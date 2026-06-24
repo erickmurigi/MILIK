@@ -40,11 +40,11 @@ const dec = (v) => parseFloat(v) / 100;
 
 // ── Shared tiny label ─────────────────────────────────────────────────────────
 const Label = ({ children }) => (
-  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">
+  <label className="mb-0.5 block text-xs font-semibold text-slate-700">
     {children}
   </label>
 );
-const inp = 'h-8 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]';
+const inp = 'w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TAB 1 — Existing Dept / Desig forms
@@ -571,7 +571,7 @@ export default function HRSetup() {
                   </div>
                   <div className="relative mt-2">
                     <FaSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400"/>
-                    <input value={deptSearch} onChange={(e) => setDeptSearch(e.target.value)} placeholder="Search departments..." className="h-7 w-full rounded-lg border border-slate-200 bg-slate-50 pl-7 pr-3 text-[11px] text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"/>
+                    <input value={deptSearch} onChange={(e) => setDeptSearch(e.target.value)} placeholder="Search departments..." className="h-7 w-full rounded border border-slate-200 bg-slate-50 pl-7 pr-3 text-[11px] text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"/>
                   </div>
                 </div>
                 {deptFormMode === 'new' && <div className="flex-shrink-0 border-b border-slate-100 p-3"><DeptForm onSave={saveDept} onCancel={() => setDeptFormMode(null)} saving={saving}/></div>}
@@ -620,7 +620,7 @@ export default function HRSetup() {
                   {selectedDept && (
                     <div className="relative mt-2">
                       <FaSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400"/>
-                      <input value={desigSearch} onChange={(e) => setDesigSearch(e.target.value)} placeholder="Search designations..." className="h-7 w-full rounded-lg border border-slate-200 bg-slate-50 pl-7 pr-3 text-[11px] text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"/>
+                      <input value={desigSearch} onChange={(e) => setDesigSearch(e.target.value)} placeholder="Search designations..." className="h-7 w-full rounded border border-slate-200 bg-slate-50 pl-7 pr-3 text-[11px] text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"/>
                     </div>
                   )}
                 </div>
@@ -770,7 +770,7 @@ export default function HRSetup() {
                           {/* Signatory selector */}
                           <div className="mb-2">
                             <Label>Signatory for this letter type</Label>
-                            <select value={tplSignatory} onChange={(e) => setTplSignatory(e.target.value)} className="h-7 w-full rounded-lg border border-slate-200 bg-white px-2 text-[11px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                            <select value={tplSignatory} onChange={(e) => setTplSignatory(e.target.value)} className="h-7 w-full rounded border border-slate-200 bg-white px-2 text-[11px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                               <option value="">— Use type-assigned or default signatory —</option>
                               {signatories.map((s) => <option key={s._id} value={s._id}>{s.name} — {s.title}</option>)}
                             </select>

@@ -350,42 +350,42 @@ const InstantReceipts = () => {
               <span className="shrink-0 rounded border border-orange-300 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700">{stats.unconfirmed} Unconfirmed</span>
               <span className="shrink-0 rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">{stats.unmatched} Pending</span>
               <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search code, tenant, TNT…" className="h-7 w-44 shrink-0 rounded border border-slate-300 px-2 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-              <select value={selectedShortCode} onChange={(e) => setSelectedShortCode(e.target.value)} className="h-7 shrink-0 rounded border border-slate-300 bg-white px-2 text-[11px] appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search code, tenant, TNT…" className="h-7 w-44 shrink-0 rounded border border-slate-200 px-2 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              <select value={selectedShortCode} onChange={(e) => setSelectedShortCode(e.target.value)} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-[11px] appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                 <option value="">Paybill</option>
                 {mpesaConfigs.map((config, index) => (<option key={config?._id || `${config?.shortCode || "mpesa"}-${index}`} value={config?.shortCode || ""}>{config?.name || `Paybill ${config?.shortCode || index + 1}`}{config?.shortCode ? ` · ${config.shortCode}` : ""}</option>))}
               </select>
-              <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} className="h-7 shrink-0 rounded border border-slate-300 bg-white px-2 text-[11px] appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+              <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-[11px] appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                 <option value="callback_confirmation">Confirmations</option>
                 <option value="callback_validation">Validations</option>
                 <option value="manual_batch">Manual Batch</option>
                 <option value="all">All Sources</option>
               </select>
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-7 shrink-0 rounded border border-slate-300 bg-white px-2 text-[11px] appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-[11px] appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                 <option value="all">All</option>
                 <option value="captured">Captured</option>
                 <option value="matched_tenant">Matched Tenant</option>
                 <option value="unmatched">Unmatched</option>
               </select>
-              <button onClick={loadRows} disabled={loading} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-300 bg-white px-2.5 text-[11px] font-semibold hover:bg-slate-50 disabled:opacity-60"><FaRedoAlt size={10} className={loading ? "animate-spin" : ""} /></button>
+              <button onClick={loadRows} disabled={loading} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-[11px] font-semibold hover:bg-slate-50 disabled:opacity-60"><FaRedoAlt size={10} className={loading ? "animate-spin" : ""} /></button>
             </div>
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white rounded-lg shadow-sm border border-slate-200">
             <div className="flex-1 min-h-0 overflow-auto">
-              <table className="min-w-full text-xs">
+              <table className="min-w-full text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 shadow-sm">
-                  <tr className="bg-[#0B3B2E] text-white uppercase tracking-wide">
-                    <th className="px-3 py-2 text-left">M-Pesa Code</th>
-                    <th className="px-3 py-2 text-left">Date</th>
-                    <th className="px-3 py-2 text-left">Tenant</th>
-                    <th className="px-3 py-2 text-left">Property</th>
-                    <th className="px-3 py-2 text-left">Unit</th>
-                    <th className="px-3 py-2 text-left">TNT Code</th>
-                    <th className="px-3 py-2 text-left">Receipt</th>
-                    <th className="px-3 py-2 text-left">Status</th>
-                    <th className="px-3 py-2 text-right">Amount</th>
-                    <th className="px-3 py-2 text-left">Actions</th>
+                  <tr className="bg-[#0B3B2E] text-white">
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">M-Pesa Code</th>
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Date</th>
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Tenant</th>
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Property</th>
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Unit</th>
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">TNT Code</th>
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Receipt</th>
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Status</th>
+                    <th className="px-3 py-2 text-right font-bold border-r border-white/10">Amount</th>
+                    <th className="px-3 py-2 text-left font-bold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -404,18 +404,18 @@ const InstantReceipts = () => {
                       return (
                         <tr
                           key={row._id}
-                          className={`border-b border-slate-200 ${index % 2 === 0 ? "bg-white" : "bg-slate-50"}`}
+                          className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}
                         >
-                          <td className="px-3 py-2 font-bold text-slate-900">{row?.transactionCode || row?.accountReference || "-"}</td>
-                          <td className="px-3 py-2 font-semibold text-slate-900">{formatDate(row?.transactionDate || row?.createdAt)}</td>
-                          <td className="px-3 py-2 font-semibold text-slate-900">
+                          <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900">{row?.transactionCode || row?.accountReference || "-"}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{formatDate(row?.transactionDate || row?.createdAt)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">
                             <div>{getTenantName(row?.tenant)}</div>
                             <div className="text-[10px] text-slate-500">{row?.payerName || row?.msisdn || "-"}</div>
                           </td>
-                          <td className="px-3 py-2 font-semibold text-slate-900">{getPropertyName(row?.tenant)}</td>
-                          <td className="px-3 py-2 font-semibold text-slate-900">{getUnitName(row?.tenant)}</td>
-                          <td className="px-3 py-2 font-semibold text-slate-900">{row?.tenant?.tenantCode || row?.accountReference || "-"}</td>
-                          <td className="px-3 py-2 font-semibold text-slate-900">
+                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getPropertyName(row?.tenant)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getUnitName(row?.tenant)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row?.tenant?.tenantCode || row?.accountReference || "-"}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">
                             {matchedReceipt ? (
                               <div>
                                 <div>{matchedReceipt?.receiptNumber || matchedReceipt?.referenceNumber || "Receipt"}</div>
@@ -425,23 +425,23 @@ const InstantReceipts = () => {
                               <span className="text-slate-500">Not yet captured</span>
                             )}
                           </td>
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-1 border-r border-gray-100">
                             <span
-                              className={`inline-flex px-2 py-1 rounded text-[10px] font-semibold ${
+                              className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold border ${
                                 matchedReceipt
                                   ? isConfirmed
-                                    ? "bg-green-100 text-green-700"
-                                    : "bg-orange-100 text-orange-700"
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                    : "bg-orange-50 text-orange-700 border-orange-200"
                                   : row?.tenant?._id
-                                  ? "bg-blue-100 text-blue-700"
-                                  : "bg-amber-100 text-amber-700"
+                                  ? "bg-blue-50 text-blue-700 border-blue-200"
+                                  : "bg-amber-50 text-amber-700 border-amber-200"
                               }`}
                             >
-                              {matchedReceipt ? (isConfirmed ? "Confirmed" : "Unconfirmed") : row?.tenant?._id ? "Matched tenant" : "Unmatched"}
+                              {matchedReceipt ? (isConfirmed ? "Confirmed" : "Unconfirmed") : row?.tenant?._id ? "Matched" : "Unmatched"}
                             </span>
                           </td>
-                          <td className="px-3 py-2 text-right font-bold text-slate-900">{formatMoney(row?.amount || 0)}</td>
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{formatMoney(row?.amount || 0)}</td>
+                          <td className="px-3 py-1">
                             <div className="flex flex-wrap items-center gap-1">
                               <button
                                 type="button"
@@ -528,12 +528,12 @@ const InstantReceipts = () => {
                 </div>
               </div>
               <div>
-                <label className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-700">Tenant TNT code</label>
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Tenant TNT code <span className="text-red-500">*</span></label>
                 <input
                   value={confirmModal.tenantCode}
                   onChange={(e) => setConfirmModal((prev) => ({ ...prev, tenantCode: e.target.value }))}
                   placeholder="Example: TT0004"
-                  className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm transition focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10"
+                  className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                 />
                 <p className="mt-2 text-xs text-slate-500">
                   This uses the tenant code to resolve the tenant and unit before the receipt is confirmed.
@@ -545,7 +545,7 @@ const InstantReceipts = () => {
                 type="button"
                 onClick={closeConfirmModal}
                 disabled={submitting}
-                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -553,7 +553,7 @@ const InstantReceipts = () => {
                 type="button"
                 onClick={handleConfirmInstantReceipt}
                 disabled={submitting}
-                className={`rounded-xl px-4 py-2 text-sm font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER} disabled:opacity-50`}
+                className={`rounded-lg px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-50 ${MILIK_GREEN}`}
               >
                 {submitting ? "Confirming..." : "Confirm instant receipt"}
               </button>

@@ -277,7 +277,7 @@ ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px
     setTimeout(()=>{win.focus();win.print();},400);
   };
 
-  const inputCls = "mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none focus:ring-2 focus:ring-[#027333]/20";
+  const inputCls = "mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20";
 
   return (
     <PropertySaleShell
@@ -319,18 +319,18 @@ ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px
         {/* Table */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="min-h-0 flex-1 overflow-auto">
-            <table className="min-w-full text-xs">
+            <table className="min-w-full text-[11px] border-collapse">
               <thead className="sticky top-0 z-10 bg-[#027333] text-white">
                 <tr>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Deal No.</th>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Property</th>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Buyer</th>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Agent</th>
-                  <th className="px-3 py-2.5 text-right font-black tracking-wide">Agreed Price</th>
-                  <th className="px-3 py-2.5 text-right font-black tracking-wide">Paid</th>
-                  <th className="px-3 py-2.5 text-right font-black tracking-wide">Balance</th>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Status</th>
-                  <th className="px-3 py-2.5 text-right font-black tracking-wide">Actions</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Deal No.</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Buyer</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Agent</th>
+                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Agreed Price</th>
+                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Paid</th>
+                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Balance</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
+                  <th className="px-3 py-1 text-right font-bold">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -342,27 +342,27 @@ ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px
                     ? Math.min(100, Math.round(((row.totalPaid || 0) / row.agreedPrice) * 100))
                     : 0;
                   return (
-                    <tr key={row._id} className={`border-t border-slate-100 transition ${i % 2 === 0 ? "bg-white hover:bg-slate-50" : "bg-slate-50/60 hover:bg-slate-100/40"}`}>
-                      <td className="px-3 py-2 font-black text-slate-900">{row.dealNumber}</td>
-                      <td className="px-3 py-2">
+                    <tr key={row._id} className={`border-b border-gray-100 transition ${i % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                      <td className="px-3 py-1 border-r border-gray-100 font-black text-slate-900">{row.dealNumber}</td>
+                      <td className="px-3 py-1 border-r border-gray-100">
                         <div className="max-w-[140px] truncate font-bold text-slate-900">{row.listing?.title || "—"}</div>
-                        <div className="text-[11px] text-slate-400">{row.listing?.listingNumber}</div>
+                        <div className="text-[10px] text-slate-400">{row.listing?.listingNumber}</div>
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-1 border-r border-gray-100">
                         <div className="font-bold text-slate-900">{row.buyer?.fullName || "—"}</div>
-                        <div className="text-[11px] text-slate-400">{row.buyer?.buyerNumber}</div>
+                        <div className="text-[10px] text-slate-400">{row.buyer?.buyerNumber}</div>
                       </td>
-                      <td className="px-3 py-2 text-slate-600">{row.agent?.fullName || <span className="italic text-slate-400">None</span>}</td>
-                      <td className="px-3 py-2 text-right">
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{row.agent?.fullName || <span className="italic text-slate-400">None</span>}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right">
                         <div className="font-black text-slate-900">{fmtKES(row.agreedPrice)}</div>
-                        <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-slate-100" title={`${pct}% paid`}>
+                        <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-slate-100" title={`${pct}% paid`}>
                           <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
                         </div>
                       </td>
-                      <td className="px-3 py-2 text-right font-bold text-emerald-700">{fmtKES(row.totalPaid || 0)}</td>
-                      <td className={`px-3 py-2 text-right font-black ${balance > 0 ? "text-rose-700" : "text-emerald-700"}`}>{fmtKES(balance)}</td>
-                      <td className="px-3 py-2"><span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[10px] font-black ${statusColors[row.status] || ""}`}>{row.status}</span></td>
-                      <td className="px-3 py-2 text-right">
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-emerald-700">{fmtKES(row.totalPaid || 0)}</td>
+                      <td className={`px-3 py-1 border-r border-gray-100 text-right font-black ${balance > 0 ? "text-rose-700" : "text-emerald-700"}`}>{fmtKES(balance)}</td>
+                      <td className="px-3 py-1 border-r border-gray-100"><span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${statusColors[row.status] || ""}`}>{row.status}</span></td>
+                      <td className="px-3 py-1 text-right">
                         <div className="inline-flex flex-wrap justify-end gap-1.5">
                           <button onClick={() => printDeal(row)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-bold text-slate-600"><FaPrint /></button>
                           {row.status === "active" && <button onClick={() => openEdit(row)} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[10px] font-bold text-blue-700"><FaEdit /></button>}
@@ -397,7 +397,7 @@ ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px
                 <select
                   value={pageSize}
                   onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-                  className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition"
+                  className="h-7 rounded border border-slate-200 bg-slate-50 px-2 mb-0.5 block text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition"
                 >
                   {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
                 </select>
@@ -422,34 +422,34 @@ ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px
               <button onClick={() => setShowModal(false)} className="rounded-full border border-white/30 p-2 hover:bg-white/10"><FaTimes /></button>
             </div>
             <div className="grid gap-4 overflow-y-auto p-6 md:grid-cols-2">
-              <label className="block"><span className="text-xs font-bold text-slate-700">Listing / Property</span>
-                <select value={form.listing} onChange={(e) => setForm((p) => ({ ...p, listing: e.target.value }))} className={`mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none focus:ring-2 focus:ring-[#027333]/20`}>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Listing / Property</span>
+                <select value={form.listing} onChange={(e) => setForm((p) => ({ ...p, listing: e.target.value }))} className={`mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20`}>
                   <option value="">Select listing...</option>
                   {listings.filter((l) => ["available","reserved","under_contract"].includes(l.status)).map((l) => <option key={l._id} value={l._id}>{l.listingNumber} — {l.title}</option>)}
                 </select>
               </label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Buyer</span>
-                <select value={form.buyer} onChange={(e) => setForm((p) => ({ ...p, buyer: e.target.value }))} className={`mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none focus:ring-2 focus:ring-[#027333]/20`}>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Buyer</span>
+                <select value={form.buyer} onChange={(e) => setForm((p) => ({ ...p, buyer: e.target.value }))} className={`mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20`}>
                   <option value="">Select buyer...</option>
                   {buyers.map((b) => <option key={b._id} value={b._id}>{b.fullName} ({b.buyerNumber})</option>)}
                 </select>
               </label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Sales Agent (Optional)</span>
-                <select value={form.agent} onChange={(e) => setForm((p) => ({ ...p, agent: e.target.value }))} className={`mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none focus:ring-2 focus:ring-[#027333]/20`}>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Sales Agent (Optional)</span>
+                <select value={form.agent} onChange={(e) => setForm((p) => ({ ...p, agent: e.target.value }))} className={`mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20`}>
                   <option value="">No agent</option>
                   {agents.map((a) => <option key={a._id} value={a._id}>{a.fullName} ({a.agentNumber})</option>)}
                 </select>
               </label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Agreed Price (KES)</span>
-                <AmountInput value={form.agreedPrice} onChange={(v) => setForm((p) => ({ ...p, agreedPrice: v }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none" placeholder="e.g. 8,500,000" required />
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Agreed Price (KES)</span>
+                <AmountInput value={form.agreedPrice} onChange={(v) => setForm((p) => ({ ...p, agreedPrice: v }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" placeholder="e.g. 8,500,000" required />
               </label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Deal Date</span><input type="date" value={form.dealDate} onChange={(e) => setForm((p) => ({ ...p, dealDate: e.target.value }))} className={`mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none`} /></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Expected Closing Date</span><input type="date" value={form.expectedClosingDate} onChange={(e) => setForm((p) => ({ ...p, expectedClosingDate: e.target.value }))} className={`mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none`} /></label>
-              <label className="block md:col-span-2"><span className="text-xs font-bold text-slate-700">Notes</span><textarea rows={2} value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} className={`mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none`} /></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Deal Date</span><input type="date" value={form.dealDate} onChange={(e) => setForm((p) => ({ ...p, dealDate: e.target.value }))} className={`mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20`} /></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Expected Closing Date</span><input type="date" value={form.expectedClosingDate} onChange={(e) => setForm((p) => ({ ...p, expectedClosingDate: e.target.value }))} className={`mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20`} /></label>
+              <label className="block md:col-span-2"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Notes</span><textarea rows={2} value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} className={`mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20`} /></label>
             </div>
             <div className="flex shrink-0 items-center justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
-              <button onClick={() => setShowModal(false)} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-black text-slate-700">Cancel</button>
-              <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-[#027333] px-4 py-2 text-sm font-black text-white disabled:opacity-60">{saving ? "Saving..." : editingId ? "Update Deal" : "Create Deal"}</button>
+              <button onClick={() => setShowModal(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-[#027333] px-4 py-2 text-xs font-black text-white hover:bg-[#0c5d2b] disabled:opacity-60">{saving ? "Saving..." : editingId ? "Update Deal" : "Create Deal"}</button>
             </div>
           </div>
         </div>
@@ -471,19 +471,19 @@ ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px
                 Cancelling will revert the listing to <strong>Available</strong> and cancel any pending commissions.
               </div>
               <label className="block">
-                <span className="text-xs font-bold text-slate-700">Reason for Cancellation</span>
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Reason for Cancellation</span>
                 <textarea
                   rows={3}
                   value={cancelReason}
                   onChange={(e) => setCancelReason(e.target.value)}
                   placeholder="Optional — e.g. buyer withdrew, financing fell through..."
-                  className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-500/20"
+                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-rose-500 focus:ring-1 focus:ring-rose-500/20"
                 />
               </label>
             </div>
             <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-5 py-4">
-              <button onClick={() => setShowCancelModal(false)} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-black text-slate-700">Back</button>
-              <button onClick={handleCancel} disabled={!!actionKey} className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-sm font-black text-white hover:bg-rose-700 disabled:opacity-60">
+              <button onClick={() => setShowCancelModal(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Back</button>
+              <button onClick={handleCancel} disabled={!!actionKey} className="inline-flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-xs font-black text-white hover:bg-rose-700 disabled:opacity-60">
                 <FaBan /> {actionKey ? "Cancelling..." : "Cancel Deal"}
               </button>
             </div>
@@ -507,13 +507,13 @@ ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px
                 <p className="text-xs font-bold text-emerald-800">Balance: <span className="text-sm font-black">{fmtKES(closingDeal.agreedPrice - (closingDeal.totalPaid || 0))}</span></p>
                 <p className="mt-1 text-[11px] text-emerald-700">Closing requires full payment to be cleared.</p>
               </div>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Actual Closing Date</span><input type="date" value={closeForm.actualClosingDate} onChange={(e) => setCloseForm((p) => ({ ...p, actualClosingDate: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none" /></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Title Transfer Date</span><input type="date" value={closeForm.titleTransferDate} onChange={(e) => setCloseForm((p) => ({ ...p, titleTransferDate: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none" /></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Handover Notes</span><textarea rows={3} value={closeForm.handoverNotes} onChange={(e) => setCloseForm((p) => ({ ...p, handoverNotes: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none" /></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Actual Closing Date</span><input type="date" value={closeForm.actualClosingDate} onChange={(e) => setCloseForm((p) => ({ ...p, actualClosingDate: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" /></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Title Transfer Date</span><input type="date" value={closeForm.titleTransferDate} onChange={(e) => setCloseForm((p) => ({ ...p, titleTransferDate: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" /></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Handover Notes</span><textarea rows={3} value={closeForm.handoverNotes} onChange={(e) => setCloseForm((p) => ({ ...p, handoverNotes: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" /></label>
             </div>
             <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-5 py-4">
-              <button onClick={() => setShowCloseModal(false)} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-black text-slate-700">Cancel</button>
-              <button onClick={handleClose} disabled={!!actionKey} className="inline-flex items-center gap-2 rounded-xl bg-[#027333] px-4 py-2 text-sm font-black text-white disabled:opacity-60"><FaCheck /> {actionKey ? "Closing..." : "Confirm Close"}</button>
+              <button onClick={() => setShowCloseModal(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button onClick={handleClose} disabled={!!actionKey} className="inline-flex items-center gap-2 rounded-lg bg-[#027333] px-4 py-2 text-xs font-black text-white hover:bg-[#0c5d2b] disabled:opacity-60"><FaCheck /> {actionKey ? "Closing..." : "Confirm Close"}</button>
             </div>
           </div>
         </div>

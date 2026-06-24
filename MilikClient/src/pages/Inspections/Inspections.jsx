@@ -18,6 +18,7 @@ import {
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import AppSelect from "../../components/common/AppSelect";
 import { adminRequests } from "../../utils/requestMethods";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { useConfirm } from "../../context/ConfirmContext";
@@ -238,23 +239,24 @@ const Inspections = () => {
   const filteredInspections = inspections;
 
   const stats = useMemo(() => {
-    let scheduled = 0, completed = 0, totalIssues = 0, scoreSum = 0, scoreCount = 0;
+    let scheduled = 0, inProgress = 0, completed = 0, cancelled = 0, totalIssues = 0, scoreSum = 0, scoreCount = 0;
     inspections.forEach(i => {
       if (i?.status === "scheduled") scheduled++;
+      if (i?.status === "in_progress") inProgress++;
       if (i?.status === "completed") completed++;
+      if (i?.status === "cancelled") cancelled++;
       totalIssues += Number(i?.issuesFound || 0);
       const s = Number(i?.score);
       if (Number.isFinite(s)) { scoreSum += s; scoreCount++; }
     });
-    return { total: serverTotal, scheduled, completed, totalIssues, avgScore: scoreCount > 0 ? (scoreSum / scoreCount).toFixed(1) : "—" };
+    return { total: serverTotal, scheduled, inProgress, completed, cancelled, totalIssues, avgScore: scoreCount > 0 ? (scoreSum / scoreCount).toFixed(1) : "—" };
   }, [inspections, serverTotal]);
 
-  const statsCards = useMemo(() => [
-    { label: "Total",        value: stats.total,       cls: "bg-slate-900 text-white",                                  icon: <FaClipboardCheck /> },
-    { label: "Scheduled",    value: stats.scheduled,   cls: "bg-amber-50 text-amber-800 border border-amber-200",       icon: <FaCalendarAlt /> },
-    { label: "Completed",    value: stats.completed,   cls: "bg-emerald-50 text-emerald-800 border border-emerald-200", icon: <FaCheckCircle /> },
-    { label: "Avg Score",    value: stats.avgScore,    cls: "bg-blue-50 text-blue-800 border border-blue-200",          icon: <FaClipboardCheck /> },
-    { label: "Total Issues", value: stats.totalIssues, cls: "bg-rose-50 text-rose-800 border border-rose-200",          icon: <FaExclamationTriangle /> },
+  const SUMMARY_CHIPS = useMemo(() => [
+    { key: "scheduled",   label: "Scheduled",   count: stats.scheduled,  dot: "bg-amber-400",   text: "text-amber-700",   bg: "bg-amber-50",   border: "border-amber-200",   filterType: "status" },
+    { key: "in_progress", label: "In Progress", count: stats.inProgress, dot: "bg-blue-400",    text: "text-blue-700",    bg: "bg-blue-50",    border: "border-blue-200",    filterType: "status" },
+    { key: "completed",   label: "Completed",   count: stats.completed,  dot: "bg-emerald-500", text: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200", filterType: "status" },
+    { key: "cancelled",   label: "Cancelled",   count: stats.cancelled,  dot: "bg-slate-400",   text: "text-slate-600",   bg: "bg-slate-50",   border: "border-slate-200",   filterType: "status" },
   ], [stats]);
 
   const totalPages = Math.max(1, serverPages);
@@ -380,52 +382,62 @@ const Inspections = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
-        <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col gap-2">
+      <div className="flex h-full flex-col overflow-hidden bg-slate-50">
 
-          {/* KPI Strip */}
-          <div className="grid flex-shrink-0 grid-cols-2 gap-2 md:grid-cols-5">
-            {statsCards.map((card) => (
-              <div key={card.label} className={`flex items-center gap-2 rounded-lg px-3 py-2 shadow-sm ${card.cls}`}>
-                <span className="text-base opacity-35">{card.icon}</span>
-                <div className="flex flex-1 items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider opacity-75">{card.label}</span>
-                  <span className="text-sm font-black">{card.value}</span>
-                </div>
-              </div>
-            ))}
+        {/* Summary chips */}
+        <div className="shrink-0 flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
+          {SUMMARY_CHIPS.map(({ key, label, count, dot, text, bg, border }) => {
+            const active = statusFilter === key;
+            return (
+              <button key={key} type="button" onClick={() => setStatusFilter(active ? "all" : key)}
+                className={`inline-flex items-center gap-2 border px-3 py-1.5 transition-all ${bg} ${border} ${active ? "ring-2 ring-offset-1 ring-[#0B3B2E]" : "hover:opacity-80"}`}>
+                <span className={`h-2 w-2 rounded-full ${dot}`} />
+                <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">{label}</span>
+                <span className={`text-sm font-black ${text}`}>{count}</span>
+                {active && <FaTimes size={8} className="ml-1 text-slate-500" />}
+              </button>
+            );
+          })}
+          <div className="inline-flex items-center gap-2 border border-slate-200 bg-white px-3 py-1.5">
+            <span className="h-2 w-2 rounded-full bg-slate-400" />
+            <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Total</span>
+            <span className="text-sm font-black text-slate-700">{stats.total}</span>
           </div>
+          <div className="inline-flex items-center gap-2 border border-blue-100 bg-blue-50 px-3 py-1.5">
+            <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Avg Score</span>
+            <span className="text-sm font-black text-blue-700">{stats.avgScore}</span>
+          </div>
+          <div className="inline-flex items-center gap-2 border border-rose-100 bg-rose-50 px-3 py-1.5">
+            <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Issues</span>
+            <span className="text-sm font-black text-rose-700">{stats.totalIssues}</span>
+          </div>
+        </div>
 
-          {/* Main card */}
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        {/* Filter bar */}
+        <div className="shrink-0 flex flex-wrap items-center gap-1.5 border-b border-slate-200 bg-white px-3 py-2">
+          <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search inspections…" className="h-7 w-48 shrink-0 border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:border-[#0B3B2E]" />
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 appearance-none outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
+            {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 appearance-none outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
+            {TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <button onClick={() => { setSearchTerm(""); setStatusFilter("all"); setTypeFilter("all"); }} className="inline-flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"><FaFilter size={9} /> Reset</button>
+          <button onClick={loadInspections} className="inline-flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50"><FaRedoAlt size={9} /></button>
+          <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+          <button onClick={exportCsv} className="inline-flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaDownload size={9} /> CSV</button>
+          {canCreate && !isDemoUser && (
+            <button onClick={openCreateModal} className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-2 text-xs font-black text-white hover:bg-[#0A3127]"><FaPlus size={9} /> Schedule Inspection</button>
+          )}
+        </div>
 
-            <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
-              <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-                <span className="shrink-0 text-xs font-black text-slate-800">Inspections</span>
-                <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search…" className="h-7 w-44 shrink-0 rounded border border-slate-300 bg-[#DDEFE1] px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-7 shrink-0 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 appearance-none focus:outline-none">
-                  {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-                <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="h-7 shrink-0 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 appearance-none focus:outline-none">
-                  {TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-                <button onClick={() => { setSearchTerm(""); setStatusFilter("all"); setTypeFilter("all"); }} className="h-7 shrink-0 inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"><FaFilter size={9} /> Reset</button>
-                <button onClick={loadInspections} className="h-7 shrink-0 inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50"><FaRedoAlt size={9} /></button>
-                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                <button onClick={exportCsv} className="h-7 shrink-0 inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaDownload size={9} /> CSV</button>
-                {canCreate && !isDemoUser && (
-                  <button onClick={openCreateModal} className="h-7 shrink-0 inline-flex items-center gap-1 rounded bg-[#0B3B2E] px-2 text-xs font-black text-white hover:bg-[#0A3127]"><FaPlus size={9} /> Schedule Inspection</button>
-                )}
-              </div>
-            </div>
-
-            {/* Table */}
-            <div className="flex-1 min-h-0 overflow-auto">
-              <table className="w-full min-w-[960px] text-xs">
+        {/* Table */}
+        <div className="flex-1 min-h-0 overflow-auto">
+              <table className="w-full min-w-[960px] text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className="bg-[#0B3B2E] text-white">
                     {["Inspection", "Location", "Schedule", "Score & Findings", "Next Inspection", "Actions"].map((h, i) => (
-                      <th key={h} className={`px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] ${i === 5 ? "text-right" : "text-left"}`}>{h}</th>
+                      <th key={h} className={`px-3 py-1 font-bold ${i === 5 ? "text-right" : "text-left border-r border-white/10"}`}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -451,8 +463,8 @@ const Inspections = () => {
                       const scoreNum = Number.isFinite(Number(item?.score)) ? Number(item.score) : null;
 
                       return (
-                        <tr key={item._id} className={`border-t border-slate-100 ${rowBg} hover:bg-slate-50 align-top`}>
-                          <td className="px-3 py-2 max-w-[220px]">
+                        <tr key={item._id} className={`border-b border-gray-100 ${rowBg} hover:bg-blue-50/40 align-top`}>
+                          <td className="px-3 py-1 border-r border-gray-100 max-w-[220px]">
                             <div className="flex items-start gap-2">
                               <div className={`mt-0.5 flex-shrink-0 rounded-lg p-2 text-xs ${item?.status === "completed" ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-500"}`}>
                                 {item?.status === "completed" ? <FaCheckCircle /> : <FaClipboardCheck />}
@@ -471,16 +483,16 @@ const Inspections = () => {
                               </div>
                             </div>
                           </td>
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-1 border-r border-gray-100">
                             <p className="font-semibold text-slate-900">{getInspectionPropertyName(item) || "—"}</p>
                             <p className="text-[10px] text-slate-500 mt-0.5">Unit {item?.unit?.unitNumber || "Common / Property"}</p>
                             <p className="text-[10px] text-slate-500 mt-0.5">{item?.tenant?.name || "No tenant"}</p>
                           </td>
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-1 border-r border-gray-100">
                             <p className="font-semibold text-slate-900">{formatDate(item?.scheduledDate)}</p>
                             <p className="text-[10px] text-slate-500 mt-0.5">Completed {formatDate(item?.completedDate)}</p>
                           </td>
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-1 border-r border-gray-100">
                             <div className="flex items-center gap-2">
                               <span className={`rounded-full border px-2.5 py-1 text-[10px] font-black ${scoreColor(item?.score)}`}>
                                 {scoreNum !== null ? `${scoreNum}/100` : "N/A"}
@@ -491,11 +503,11 @@ const Inspections = () => {
                               <p className="text-[10px] text-slate-400 mt-1 line-clamp-2 leading-4">{item.recommendations}</p>
                             )}
                           </td>
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-1 border-r border-gray-100">
                             <p className="font-semibold text-slate-900">{formatDate(item?.nextInspectionDate)}</p>
                             <p className="text-[10px] text-slate-500 mt-0.5">Tenant present: {item?.tenantPresent ? "Yes" : "No"}</p>
                           </td>
-                          <td className="px-3 py-2 text-right">
+                          <td className="px-3 py-1 border-r border-gray-100 text-right">
                             <div className="inline-flex flex-wrap justify-end gap-1.5">
                               {canUpdate && !isDemoUser && (
                                 <button
@@ -534,7 +546,7 @@ const Inspections = () => {
                   <select
                     value={pageSize}
                     onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                    className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition"
+                    className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition"
                   >
                     {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
                   </select>
@@ -543,8 +555,6 @@ const Inspections = () => {
                 <span className="font-semibold text-slate-700">Page {safePage} of {totalPages}</span>
                 <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={safePage >= totalPages} className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
               </div>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -562,86 +572,88 @@ const Inspections = () => {
 
             <form onSubmit={handleSave} className="space-y-4 px-6 py-5">
               <div className="grid gap-4 md:grid-cols-3">
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-bold text-slate-700">Property *</span>
-                  <select
+                <div>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Property <span className="text-red-500">*</span></span>
+                  <AppSelect
                     value={selectedPropertyId}
-                    onChange={(e) => setForm((prev) => ({ ...prev, property: e.target.value, unit: "", tenant: "" }))}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
-                  >
-                    <option value="">Select property</option>
-                    {properties.map((p) => <option key={p._id} value={p._id}>{getPropertyName(p)}</option>)}
-                  </select>
-                </label>
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-bold text-slate-700">Unit</span>
-                  <select
+                    onChange={(v) => setForm((prev) => ({ ...prev, property: v ?? "", unit: "", tenant: "" }))}
+                    options={properties.map((p) => ({ value: p._id, label: getPropertyName(p) }))}
+                    placeholder="Select property…"
+                    searchable
+                    size="sm"
+                  />
+                </div>
+                <div>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Unit</span>
+                  <AppSelect
                     value={form.unit}
-                    onChange={(e) => setForm((prev) => ({ ...prev, unit: e.target.value, tenant: "" }))}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
-                  >
-                    <option value="">Property-level / common area</option>
-                    {availableUnits.map((u) => <option key={u._id} value={u._id}>{getPropertyName(u?.property)} · Unit {u?.unitNumber || "—"}</option>)}
-                  </select>
-                </label>
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-bold text-slate-700">Tenant</span>
-                  <select
+                    onChange={(v) => setForm((prev) => ({ ...prev, unit: v ?? "", tenant: "" }))}
+                    options={availableUnits.map((u) => ({ value: u._id, label: `${getPropertyName(u?.property)} · Unit ${u?.unitNumber || "—"}` }))}
+                    placeholder="Property-level / common area"
+                    searchable
+                    clearable
+                    size="sm"
+                  />
+                </div>
+                <div>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Tenant</span>
+                  <AppSelect
                     value={form.tenant}
-                    onChange={(e) => setForm((prev) => ({ ...prev, tenant: e.target.value }))}
+                    onChange={(v) => setForm((prev) => ({ ...prev, tenant: v ?? "" }))}
+                    options={availableTenants.map((t) => ({ value: t._id, label: t?.name || "Unnamed" }))}
+                    placeholder="No linked tenant"
+                    searchable
+                    clearable
                     disabled={!form.unit}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10 disabled:bg-slate-100"
-                  >
-                    <option value="">No linked tenant</option>
-                    {availableTenants.map((t) => <option key={t._id} value={t._id}>{t?.name || "Unnamed"}</option>)}
-                  </select>
-                </label>
+                    size="sm"
+                  />
+                </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-4">
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-bold text-slate-700">Type</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Type</span>
                   <select
                     value={form.type}
                     onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value }))}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     {TYPE_OPTIONS.filter((o) => o.value !== "all").map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </label>
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-bold text-slate-700">Status</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Status</span>
                   <select
                     value={form.status}
                     onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     {STATUS_OPTIONS.filter((o) => o.value !== "all").map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </label>
                 <label className="block md:col-span-2">
-                  <span className="mb-1.5 block text-xs font-bold text-slate-700">Inspector name *</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Inspector name <span className="text-red-500">*</span></span>
                   <input
                     value={form.inspectorName}
                     onChange={(e) => setForm((prev) => ({ ...prev, inspectorName: e.target.value }))}
                     placeholder="Inspector, staff or service provider"
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </label>
               </div>
 
               <div className="grid gap-4 md:grid-cols-4">
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-bold text-slate-700">Scheduled *</span>
-                  <input type="date" value={form.scheduledDate} onChange={(e) => setForm((prev) => ({ ...prev, scheduledDate: e.target.value }))} className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10" />
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Scheduled <span className="text-red-500">*</span></span>
+                  <input type="date" value={form.scheduledDate} onChange={(e) => setForm((prev) => ({ ...prev, scheduledDate: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </label>
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-bold text-slate-700">Completed</span>
-                  <input type="date" value={form.completedDate} onChange={(e) => setForm((prev) => ({ ...prev, completedDate: e.target.value }))} className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10" />
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Completed</span>
+                  <input type="date" value={form.completedDate} onChange={(e) => setForm((prev) => ({ ...prev, completedDate: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </label>
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-bold text-slate-700">Next inspection</span>
-                  <input type="date" value={form.nextInspectionDate} onChange={(e) => setForm((prev) => ({ ...prev, nextInspectionDate: e.target.value }))} className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10" />
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Next inspection</span>
+                  <input type="date" value={form.nextInspectionDate} onChange={(e) => setForm((prev) => ({ ...prev, nextInspectionDate: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </label>
                 <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-700 md:mt-6">
                   <input
@@ -656,32 +668,32 @@ const Inspections = () => {
 
               <div className="grid gap-4 md:grid-cols-3">
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-bold text-slate-700">Score (0–100)</span>
-                  <input type="number" min="0" max="100" value={form.score} onChange={(e) => setForm((prev) => ({ ...prev, score: e.target.value }))} placeholder="e.g. 92" className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10" />
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Score (0–100)</span>
+                  <input type="number" min="0" max="100" value={form.score} onChange={(e) => setForm((prev) => ({ ...prev, score: e.target.value }))} placeholder="e.g. 92" className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </label>
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-bold text-slate-700">Issues found</span>
-                  <input type="number" min="0" value={form.issuesFound} onChange={(e) => setForm((prev) => ({ ...prev, issuesFound: e.target.value }))} className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10" />
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Issues found</span>
+                  <input type="number" min="0" value={form.issuesFound} onChange={(e) => setForm((prev) => ({ ...prev, issuesFound: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </label>
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-bold text-slate-700">Photos count</span>
-                  <input type="number" min="0" value={form.photosCount} onChange={(e) => setForm((prev) => ({ ...prev, photosCount: e.target.value }))} className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10" />
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Photos count</span>
+                  <input type="number" min="0" value={form.photosCount} onChange={(e) => setForm((prev) => ({ ...prev, photosCount: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </label>
               </div>
 
               <label className="block">
-                <span className="mb-1.5 block text-xs font-bold text-slate-700">Recommendations</span>
-                <textarea rows={2} value={form.recommendations} onChange={(e) => setForm((prev) => ({ ...prev, recommendations: e.target.value }))} placeholder="Recommended repairs, deductions, compliance actions…" className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10" />
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Recommendations</span>
+                <textarea rows={2} value={form.recommendations} onChange={(e) => setForm((prev) => ({ ...prev, recommendations: e.target.value }))} placeholder="Recommended repairs, deductions, compliance actions…" className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </label>
 
               <label className="block">
-                <span className="mb-1.5 block text-xs font-bold text-slate-700">Notes</span>
-                <textarea rows={3} value={form.notes} onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))} placeholder="Observations for the property manager or next inspection cycle." className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10" />
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Notes</span>
+                <textarea rows={3} value={form.notes} onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))} placeholder="Observations for the property manager or next inspection cycle." className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </label>
 
               <div className="sticky bottom-0 flex flex-wrap justify-end gap-3 border-t border-slate-200 bg-white/95 pt-4 backdrop-blur-sm">
-                <button type="button" onClick={closeModal} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-                <button type="submit" disabled={submitting} className="rounded-xl bg-[#0B3B2E] px-4 py-2 text-sm font-bold text-white hover:bg-[#0A3127] disabled:opacity-60">
+                <button type="button" onClick={closeModal} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+                <button type="submit" disabled={submitting} className="rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
                   {submitting ? "Saving…" : editingInspection?._id ? "Save Changes" : "Create Inspection"}
                 </button>
               </div>

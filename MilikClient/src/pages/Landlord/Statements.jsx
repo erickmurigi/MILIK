@@ -1445,7 +1445,7 @@ const Statements = () => {
                 type="number"
                 value={year}
                 onChange={(e) => setYear(e.target.value)}
-                className="h-8 w-full rounded-md border border-orange-400 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-400"
+                className="h-8 w-full rounded-md border border-orange-400 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
               />
             </div>
 
@@ -1466,7 +1466,7 @@ const Statements = () => {
                   value={periodStart}
                   max={todayIso}
                   onChange={(e) => setPeriodStart(e.target.value)}
-                  className="h-8 w-full rounded-md border border-orange-400 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-400"
+                  className="h-8 w-full rounded-md border border-orange-400 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                 />
               )}
               <p className="mt-0.5 text-[9px] text-slate-400 truncate">
@@ -1495,7 +1495,7 @@ const Statements = () => {
                   setPeriodEnd(v);
                   setPeriodEndIsCustom(v !== todayIso && v !== "");
                 }}
-                className="h-8 w-full rounded-md border border-orange-400 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-400"
+                className="h-8 w-full rounded-md border border-orange-400 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
               />
               <p className="mt-0.5 text-[9px] text-slate-400 truncate">
                 {periodEnd && periodEnd !== todayIso
@@ -1557,7 +1557,7 @@ const Statements = () => {
                 onClick={handleRegenerateDraft}
                 disabled={!canCreateStatement || !selectedPropertyId || loadingDraft || loadingProcessedContext || !hasValidPeriodSelection}
                 title="Regenerate draft from current ledger data"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 disabled:opacity-35"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-200 hover:bg-slate-50 hover:text-slate-700 disabled:opacity-35"
               >
                 <FaSyncAlt size={10} className={loadingDraft ? "animate-spin" : ""} />
               </button>
@@ -1568,7 +1568,7 @@ const Statements = () => {
                 onClick={handlePrint}
                 disabled={!canExportStatement || !draftStatement?._id || loadingPdfPreview}
                 title="Print statement"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 disabled:opacity-35"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-200 hover:bg-slate-50 hover:text-slate-700 disabled:opacity-35"
               >
                 <FaPrint size={10} className={loadingPdfPreview ? "animate-pulse" : ""} />
               </button>
@@ -1577,7 +1577,7 @@ const Statements = () => {
                 onClick={handleOpenPdf}
                 disabled={!canExportStatement || !draftStatement?._id || loadingPdfPreview}
                 title="Download PDF"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 disabled:opacity-35"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-200 hover:bg-slate-50 hover:text-slate-700 disabled:opacity-35"
               >
                 <FaDownload size={10} />
               </button>

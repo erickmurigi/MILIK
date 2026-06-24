@@ -171,12 +171,12 @@ const UnitTypesPage = () => {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50 p-0">
         <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
           <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-            <div className="h-7 shrink-0 flex items-center gap-2 rounded border border-gray-300 bg-[#DDEFE1] px-2 text-xs text-gray-800">
+            <div className="h-7 shrink-0 flex items-center gap-2 rounded border border-slate-200 bg-white px-2 text-xs text-gray-800">
               <FaSearch size={10} />
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search unit type" className="w-36 bg-transparent text-xs outline-none" />
             </div>
-            <button onClick={() => setSearch("")} className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={10} /> Reset</button>
-            <button onClick={handleRestoreDefaults} className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaRedoAlt size={10} /> Restore Defaults</button>
+            <button onClick={() => setSearch("")} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={10} /> Reset</button>
+            <button onClick={handleRestoreDefaults} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaRedoAlt size={10} /> Restore Defaults</button>
           </div>
         </div>
 
@@ -198,13 +198,13 @@ const UnitTypesPage = () => {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-600">
-                    <tr>
-                      <th className="px-4 py-3 text-left font-bold">Saved Value</th>
-                      <th className="px-4 py-3 text-left font-bold">Display Name</th>
-                      <th className="px-4 py-3 text-left font-bold">Status</th>
-                      <th className="px-4 py-3 text-right font-bold">Actions</th>
+                <table className="min-w-full text-[11px] border-collapse">
+                  <thead className="sticky top-0 z-10">
+                    <tr className="bg-[#0B3B2E] text-white">
+                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Saved Value</th>
+                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Display Name</th>
+                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
+                      <th className="px-3 py-1 text-right font-bold">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -215,18 +215,18 @@ const UnitTypesPage = () => {
                         </td>
                       </tr>
                     ) : (
-                      filteredTypes.map((item) => {
+                      filteredTypes.map((item, idx) => {
                         const isEditing = String(editingValue || "").toLowerCase() === String(item || "").toLowerCase();
                         return (
-                          <tr key={item} className="border-t border-gray-200 hover:bg-gray-50/80">
-                            <td className="px-4 py-3 font-semibold text-gray-900">{item}</td>
-                            <td className="px-4 py-3 text-gray-700">{formatUnitTypeLabel(item)}</td>
-                            <td className="px-4 py-3">
-                              <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
+                          <tr key={item} className={`border-b border-gray-100 ${idx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                            <td className="px-3 py-1 border-r border-gray-100 font-semibold text-gray-900">{item}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-gray-700">{formatUnitTypeLabel(item)}</td>
+                            <td className="px-3 py-1 border-r border-gray-100">
+                              <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
                                 Active
                               </span>
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-3 py-1">
                               <div className="flex items-center justify-end gap-2">
                                 <button
                                   onClick={() => handleEdit(item)}
@@ -266,12 +266,12 @@ const UnitTypesPage = () => {
 
               <div className="space-y-4 p-4">
                 <div>
-                  <label className="mb-1 block text-sm font-bold text-gray-700">Unit type value</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Unit type value <span className="text-red-500">*</span></label>
                   <input
                     value={draftValue}
                     onChange={(e) => { setDraftValue(e.target.value); if (formError) setFormError(""); }}
                     placeholder="e.g. Studio, 1bed, Shop, Office"
-                    className={`w-full rounded-lg border px-3 py-2 text-sm shadow-sm outline-none transition focus:border-[#FF8C00] focus:ring-2 focus:ring-[#FF8C00]/20 ${formError ? "border-red-400" : "border-gray-300"}`}
+                    className={`w-full rounded border px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 ${formError ? "border-red-400" : "border-slate-200"}`}
                   />
                   {formError ? <p className="mt-1 text-xs font-semibold text-red-600">{formError}</p> : null}
                   <p className="mt-2 text-xs text-gray-500">
@@ -292,7 +292,7 @@ const UnitTypesPage = () => {
                   <button
                     onClick={handleSave}
                     disabled={isSavingCompany}
-                    className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER} disabled:cursor-not-allowed disabled:opacity-60`}
+                    className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60 ${MILIK_GREEN}`}
                   >
                     {editingValue ? <FaSave /> : <FaPlus />}
                     {editingValue ? "Update Unit Type" : "Add Unit Type"}
@@ -300,7 +300,7 @@ const UnitTypesPage = () => {
                   <button
                     onClick={resetForm}
                     disabled={isSavingCompany}
-                    className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER} disabled:cursor-not-allowed disabled:opacity-60`}
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <FaTimes /> Clear
                   </button>

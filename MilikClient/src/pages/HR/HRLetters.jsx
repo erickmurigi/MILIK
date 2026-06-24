@@ -118,7 +118,7 @@ function ComposeModal({ employees, letterMeta, onClose, onCreate }) {
                   onChange={(e) => setEmpSearch(e.target.value)}
                   placeholder="Search employee…"
                   autoFocus
-                  className="h-9 w-full rounded-xl border border-slate-200 bg-slate-50 pl-8 pr-3 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                  className="h-8 w-full rounded border border-slate-200 bg-white pl-8 pr-3 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                 />
               </div>
               <div className="divide-y divide-slate-50 rounded-xl border border-slate-200 overflow-hidden max-h-64 overflow-y-auto">
@@ -147,21 +147,21 @@ function ComposeModal({ employees, letterMeta, onClose, onCreate }) {
             <div className="space-y-4">
               {meta.fields.map((f) => (
                 <div key={f.key}>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">
-                    {f.label}{f.required && <span className="text-rose-500 ml-0.5">*</span>}
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">
+                    {f.label}{f.required && <span className="text-red-500 ml-0.5">*</span>}
                   </label>
                   {f.type === 'textarea' ? (
                     <textarea
                       rows={3}
                       value={fields[f.key] ?? (f.default || '')}
                       onChange={(e) => setFields((p) => ({ ...p, [f.key]: e.target.value }))}
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] resize-none"
+                      className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 resize-none"
                     />
                   ) : f.type === 'select' ? (
                     <select
                       value={fields[f.key] ?? (f.default || '')}
                       onChange={(e) => setFields((p) => ({ ...p, [f.key]: e.target.value }))}
-                      className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                     >
                       {(f.options || []).map((o) => <option key={o} value={o}>{o}</option>)}
                     </select>
@@ -170,7 +170,7 @@ function ComposeModal({ employees, letterMeta, onClose, onCreate }) {
                       type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
                       value={fields[f.key] ?? (f.default || '')}
                       onChange={(e) => setFields((p) => ({ ...p, [f.key]: e.target.value }))}
-                      className="h-9 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                     />
                   )}
                 </div>
@@ -216,7 +216,7 @@ function ComposeModal({ employees, letterMeta, onClose, onCreate }) {
             <button
               onClick={() => step === 3 ? setStep(4) : null}
               disabled={step === 3 && !employeeId}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0a2e23] disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60"
               style={{ display: step === 3 ? 'inline-flex' : 'none' }}
             >
               Preview <FaChevronRight size={9} />
@@ -225,7 +225,7 @@ function ComposeModal({ employees, letterMeta, onClose, onCreate }) {
             <button
               onClick={handleCreate}
               disabled={saving || !employeeId || !letterType}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0a2e23] disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60"
             >
               {saving ? 'Creating…' : 'Create Letter'}
             </button>
@@ -501,14 +501,14 @@ export default function HRLetters() {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search letters…"
-                  className="h-7 w-full rounded-lg border border-slate-200 bg-slate-50 pl-7 pr-3 text-[11px] text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                  className="h-7 w-full rounded border border-slate-200 bg-slate-50 pl-7 pr-3 text-[11px] text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                 />
               </div>
               <div className="flex gap-1.5">
                 <select
                   value={filterType}
                   onChange={(e) => setFilterType(e.target.value)}
-                  className="h-7 flex-1 rounded-lg border border-slate-200 bg-white px-2 text-[11px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                  className="h-7 flex-1 rounded border border-slate-200 bg-white px-2 text-[11px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                 >
                   <option value="">All types</option>
                   {Object.entries(TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -516,7 +516,7 @@ export default function HRLetters() {
                 <select
                   value={filterStatus}
                   onChange={(e) => setFilterStatus(e.target.value)}
-                  className="h-7 w-24 rounded-lg border border-slate-200 bg-white px-2 text-[11px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                  className="h-7 w-24 rounded border border-slate-200 bg-white px-2 text-[11px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                 >
                   <option value="">All</option>
                   <option value="draft">Draft</option>

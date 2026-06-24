@@ -840,16 +840,16 @@ function InvoiceTableRowBase({
 }) {
   return (
     <tr
-      className={`cursor-pointer border-b border-slate-200 transition-colors ${
+      className={`cursor-pointer border-b border-gray-100 transition-colors ${
         isSelected
           ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50"
           : idx % 2 === 0
           ? "bg-white hover:bg-blue-50/40"
-          : "bg-slate-50 hover:bg-blue-50/40"
+          : "bg-slate-50/60 hover:bg-blue-50/40"
       }`}
       onClick={() => onSelect(invoice.key)}
     >
-      <td className="px-3 py-2">
+      <td className="px-3 py-1 border-r border-gray-100">
         <input
           type="checkbox"
           checked={isSelected}
@@ -857,7 +857,7 @@ function InvoiceTableRowBase({
           onClick={(e) => e.stopPropagation()}
         />
       </td>
-      <td className="px-3 py-2">
+      <td className="px-3 py-1 border-r border-gray-100">
         <button
           type="button"
           className="font-bold text-blue-700 hover:text-blue-900 hover:underline focus:outline-none"
@@ -867,41 +867,39 @@ function InvoiceTableRowBase({
         </button>
       </td>
       {showTenantColumns && (
-        <td className="px-3 py-2 font-bold text-slate-900">{invoice.tenantName}</td>
+        <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900">{invoice.tenantName}</td>
       )}
       {showTenantColumns && (
-        <td className="px-3 py-2 font-semibold text-slate-900">{invoice.propertyName}</td>
+        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{invoice.propertyName}</td>
       )}
-      <td className="px-3 py-2 font-semibold text-slate-900">{invoice.unitName}</td>
-      <td className="px-3 py-2 font-semibold text-orange-700">{invoice.invoiceDescription || invoice.period}</td>
-      <td className="px-3 py-2">
-        <span className="inline-flex rounded bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-700">
+      <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{invoice.unitName}</td>
+      <td className="px-3 py-1 border-r border-gray-100 font-semibold text-orange-700">{invoice.invoiceDescription || invoice.period}</td>
+      <td className="px-3 py-1 border-r border-gray-100">
+        <span className="inline-flex rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-700">
           {invoice.chargeTypeLabel || getInvoiceChargeTypeLabel(invoice.chargeType)}
         </span>
       </td>
-      <td className="px-3 py-2 text-center text-gray-700">{invoice.invoiceDateLabel}</td>
-      <td className="px-3 py-2 text-center text-gray-700">{invoice.dueDateLabel}</td>
-      <td className="px-3 py-2 text-right font-bold text-slate-900">
+      <td className="px-3 py-1 border-r border-gray-100 text-center text-gray-700">{invoice.invoiceDateLabel}</td>
+      <td className="px-3 py-1 border-r border-gray-100 text-center text-gray-700">{invoice.dueDateLabel}</td>
+      <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">
         KES {Number(invoice.amount || 0).toLocaleString()}
       </td>
-      <td className="px-3 py-2 text-right font-semibold text-emerald-700">
+      <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-emerald-700">
         {Number(invoice.appliedAmount || 0) > 0 ? `KES ${Number(invoice.appliedAmount).toLocaleString()}` : <span className="text-slate-400">—</span>}
       </td>
-      <td className="px-3 py-2 text-center">
-        <span
-          className={`inline-flex rounded px-2 py-0.5 text-[10px] font-semibold ${
+      <td className="px-3 py-1 border-r border-gray-100 text-center">
+        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${
             invoice.status === "Paid"
-              ? "bg-green-100 text-green-700"
+              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
               : invoice.status === "Cancelled" || invoice.status === "Reversed"
-              ? "bg-slate-100 text-slate-700"
-              : "bg-orange-100 text-orange-700"
-          }`}
-        >
+              ? "bg-slate-100 text-slate-600 border-slate-200"
+              : "bg-amber-50 text-amber-700 border-amber-200"
+          }`}>
           {invoice.status}
         </span>
       </td>
-      <td className="px-3 py-2 text-center text-gray-600">{invoice.createdDate}</td>
-      <td className="px-3 py-2 text-right">
+      <td className="px-3 py-1 border-r border-gray-100 text-center text-gray-600">{invoice.createdDate}</td>
+      <td className="px-3 py-1 text-right">
         <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
           <button
             onClick={() => onView(invoice)}
@@ -3297,7 +3295,7 @@ const createInvoiceForTenant = async (
                 <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Total: {formatCurrency(invoicePageSummary.pageTotalAmount || 0)}</span>
                 <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">Pending: {formatCurrency(invoicePageSummary.pagePendingAmount || 0)}</span>
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                <select value={draftFilters.status} onChange={(e) => setDraftFilters((prev) => ({ ...prev, status: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                <select value={draftFilters.status} onChange={(e) => setDraftFilters((prev) => ({ ...prev, status: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs font-semibold text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="ACTIVE">All</option>
                   <option value="Issued">Issued</option>
                   <option value="Paid">Paid</option>
@@ -3358,25 +3356,25 @@ const createInvoiceForTenant = async (
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
-              <table className="w-full min-w-[1320px] text-xs">
+              <table className="w-full min-w-[1320px] text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className={`${MILIK_GREEN} text-white`}>
-                    <th className="px-3 py-2 text-left">
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">
                       <input type="checkbox" checked={currentPageInvoices.length > 0 && selectAll} onChange={toggleSelectAll} />
                     </th>
-                    <th className="px-3 py-2 text-left font-semibold">Invoice #</th>
-                    {!tenantId && <th className="px-3 py-2 text-left font-semibold">Tenant</th>}
-                    {!tenantId && <th className="px-3 py-2 text-left font-semibold">Property</th>}
-                    <th className="px-3 py-2 text-left font-semibold">Unit</th>
-                    <th className="px-3 py-2 text-left font-semibold">Description</th>
-                    <th className="px-3 py-2 text-left font-semibold">Type</th>
-                    <th className="px-3 py-2 text-center font-semibold">Booking / Invoice Date</th>
-                    <th className="px-3 py-2 text-center font-semibold">Due Date</th>
-                    <th className="px-3 py-2 text-right font-semibold">Amount</th>
-                    <th className="px-3 py-2 text-right font-semibold">Paid</th>
-                    <th className="px-3 py-2 text-center font-semibold">Status</th>
-                    <th className="px-3 py-2 text-center font-semibold">Created</th>
-                    <th className="px-3 py-2 text-right font-semibold">Actions</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Invoice #</th>
+                    {!tenantId && <th className="px-3 py-1 text-left font-bold border-r border-white/10">Tenant</th>}
+                    {!tenantId && <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>}
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Unit</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Description</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
+                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Booking / Invoice Date</th>
+                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Due Date</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Paid</th>
+                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
+                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Created</th>
+                    <th className="px-3 py-1 text-right font-bold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3480,7 +3478,7 @@ const createInvoiceForTenant = async (
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Property Filter</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Property Filter</label>
                   <select
                     value={singleBookingPropertyFilter}
                     onChange={(e) => {
@@ -3489,7 +3487,7 @@ const createInvoiceForTenant = async (
                       setSingleBookingTenantDropdownOpen(false);
                       setSingleBookingForm((prev) => ({ ...prev, tenantId: "" }));
                     }}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     <option value="all">All active properties</option>
                     {activeProperties.map((property) => (
@@ -3501,7 +3499,7 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div className="relative md:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Tenant</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Tenant</label>
                   <input
                     type="text"
                     value={singleBookingTenantSearch || formatTenantOptionLabel(selectedSingleBookingTenantOption)}
@@ -3559,7 +3557,7 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Period</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Period</label>
                   <select
                     value={singleBookingForm.month}
                     onChange={(e) =>
@@ -3568,7 +3566,7 @@ const createInvoiceForTenant = async (
                         return { ...prev, month: nextPeriod.month, year: nextPeriod.year };
                       })
                     }
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     {MONTH_OPTIONS.map((monthOption) => (
                       <option
@@ -3583,7 +3581,7 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Year</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Year</label>
                   <input
                     type="number"
                     min="2000"
@@ -3596,20 +3594,20 @@ const createInvoiceForTenant = async (
                         return { ...prev, month: nextPeriod.month, year: nextPeriod.year };
                       })
                     }
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
 
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Booking Date</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Booking Date</label>
                   <input
                     type="date"
                     value={singleBookingForm.invoiceDate ? new Date(singleBookingForm.invoiceDate).toISOString().slice(0, 10) : ""}
                     onChange={(e) =>
                       setSingleBookingForm((prev) => ({ ...prev, invoiceDate: e.target.value ? new Date(e.target.value) : prev.invoiceDate, bookWithInvoiceDate: true }))
                     }
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                   <label className="mt-2 flex items-center gap-2 text-xs font-semibold text-slate-700">
                     <input
@@ -3628,7 +3626,7 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Due Day</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Due Day</label>
                   <div className="flex items-center gap-2">
                     <input
                       type="number"
@@ -3641,7 +3639,7 @@ const createInvoiceForTenant = async (
                           dueDay: normalizeDueDay(e.target.value, prev.month, prev.year),
                         }))
                       }
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                      className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                     />
                     <button
                       type="button"
@@ -3654,13 +3652,13 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Booking Option</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Booking Option</label>
                   <select
                     value={singleBookingForm.billingMode}
                     onChange={(e) =>
                       setSingleBookingForm((prev) => ({ ...prev, billingMode: e.target.value }))
                     }
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     <option value="separate">Rent + Utility (separate)</option>
                     <option value="combined">Rent + Utility (combined)</option>
@@ -3670,13 +3668,13 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Tax Handling</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Tax Handling</label>
                   <select
                     value={singleBookingForm.taxHandling}
                     onChange={(e) =>
                       setSingleBookingForm((prev) => ({ ...prev, taxHandling: e.target.value }))
                     }
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     <option value="company_default">Use company default</option>
                     <option value="taxable" disabled={!companyTaxEnabled}>Force taxable</option>
@@ -3685,14 +3683,14 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Tax Code</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Tax Code</label>
                   <select
                     value={singleBookingForm.taxCodeKey}
                     onChange={(e) =>
                       setSingleBookingForm((prev) => ({ ...prev, taxCodeKey: e.target.value }))
                     }
                     disabled={singleBookingForm.taxHandling === "non_taxable"}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg disabled:bg-slate-100"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed"
                   >
                     {activeTaxCodes.map((code) => (
                       <option key={code.key} value={code.key}>
@@ -3703,14 +3701,14 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Tax Mode</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Tax Mode</label>
                   <select
                     value={singleBookingForm.taxMode}
                     onChange={(e) =>
                       setSingleBookingForm((prev) => ({ ...prev, taxMode: e.target.value }))
                     }
                     disabled={singleBookingForm.taxHandling === "non_taxable"}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg disabled:bg-slate-100"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed"
                   >
                     <option value="company_default">Use company default</option>
                     <option value="exclusive">Exclusive</option>
@@ -3823,7 +3821,7 @@ const createInvoiceForTenant = async (
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">
                     Property Scope
                   </label>
                   <select
@@ -3831,7 +3829,7 @@ const createInvoiceForTenant = async (
                     onChange={(e) => {
                       setBatchBookingForm((prev) => ({ ...prev, propertyId: e.target.value }));
                     }}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     <option value="all">All active properties</option>
                     {activeProperties.map((property) => (
@@ -3848,7 +3846,7 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Period</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Period</label>
                   <select
                     value={batchBookingForm.month}
                     onChange={(e) =>
@@ -3857,7 +3855,7 @@ const createInvoiceForTenant = async (
                         return { ...prev, month: nextPeriod.month, year: nextPeriod.year };
                       })
                     }
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     {MONTH_OPTIONS.map((monthOption) => (
                       <option
@@ -3872,7 +3870,7 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Year</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Year</label>
                   <input
                     type="number"
                     min="2000"
@@ -3885,19 +3883,19 @@ const createInvoiceForTenant = async (
                         return { ...prev, month: nextPeriod.month, year: nextPeriod.year };
                       })
                     }
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Booking Date</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Booking Date</label>
                   <input
                     type="date"
                     value={batchBookingForm.invoiceDate ? new Date(batchBookingForm.invoiceDate).toISOString().slice(0, 10) : ""}
                     onChange={(e) =>
                       setBatchBookingForm((prev) => ({ ...prev, invoiceDate: e.target.value ? new Date(e.target.value) : prev.invoiceDate, bookWithInvoiceDate: true }))
                     }
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                   <label className="mt-2 flex items-center gap-2 text-xs font-semibold text-slate-700">
                     <input
@@ -3916,7 +3914,7 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Due Day</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Due Day</label>
                   <div className="flex items-center gap-2">
                     <input
                       type="number"
@@ -3929,7 +3927,7 @@ const createInvoiceForTenant = async (
                           dueDay: normalizeDueDay(e.target.value, prev.month, prev.year),
                         }))
                       }
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                      className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                     />
                     <button
                       type="button"
@@ -3942,13 +3940,13 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Booking Option</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Booking Option</label>
                   <select
                     value={batchBookingForm.billingMode}
                     onChange={(e) =>
                       setBatchBookingForm((prev) => ({ ...prev, billingMode: e.target.value }))
                     }
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     <option value="separate">Rent + Utility (separate)</option>
                     <option value="combined">Rent + Utility (combined)</option>
@@ -3958,13 +3956,13 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Tax Handling</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Tax Handling</label>
                   <select
                     value={batchBookingForm.taxHandling}
                     onChange={(e) =>
                       setBatchBookingForm((prev) => ({ ...prev, taxHandling: e.target.value }))
                     }
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     <option value="company_default">Use company default</option>
                     <option value="taxable" disabled={!companyTaxEnabled}>Force taxable</option>
@@ -3973,14 +3971,14 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Tax Code</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Tax Code</label>
                   <select
                     value={batchBookingForm.taxCodeKey}
                     onChange={(e) =>
                       setBatchBookingForm((prev) => ({ ...prev, taxCodeKey: e.target.value }))
                     }
                     disabled={batchBookingForm.taxHandling === "non_taxable"}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg disabled:bg-slate-100"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed"
                   >
                     {activeTaxCodes.map((code) => (
                       <option key={code.key} value={code.key}>
@@ -3991,14 +3989,14 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Tax Mode</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Tax Mode</label>
                   <select
                     value={batchBookingForm.taxMode}
                     onChange={(e) =>
                       setBatchBookingForm((prev) => ({ ...prev, taxMode: e.target.value }))
                     }
                     disabled={batchBookingForm.taxHandling === "non_taxable"}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg disabled:bg-slate-100"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed"
                   >
                     <option value="company_default">Use company default</option>
                     <option value="exclusive">Exclusive</option>
@@ -4196,35 +4194,35 @@ const createInvoiceForTenant = async (
                     <FaMoneyBillWave size={10} className="text-slate-400" />
                     <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Charge Breakdown</span>
                   </div>
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b border-slate-100">
-                        <th className="px-6 py-2 text-left text-[9px] font-black uppercase tracking-widest text-slate-400">Description</th>
-                        <th className="px-6 py-2 text-right text-[9px] font-black uppercase tracking-widest text-slate-400">Amount (KES)</th>
+                  <table className="w-full text-[11px] border-collapse">
+                    <thead className="bg-[#0B3B2E] text-white">
+                      <tr>
+                        <th className="px-4 py-1 text-left font-bold border-r border-white/10">Description</th>
+                        <th className="px-4 py-1 text-right font-bold">Amount (KES)</th>
                       </tr>
                     </thead>
                     <tbody>
                       {activeInvoiceBreakdown.map((item, i) => (
-                        <tr key={`${item.label}-${i}`} className="border-b border-slate-50 hover:bg-slate-50/60">
-                          <td className="px-6 py-2.5 text-slate-700">{item.label}</td>
-                          <td className="px-6 py-2.5 text-right font-mono font-semibold text-slate-900">{formatCurrency(item.amount)}</td>
+                        <tr key={`${item.label}-${i}`} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                          <td className="px-4 py-1.5 border-r border-gray-100 text-slate-700">{item.label}</td>
+                          <td className="px-4 py-1.5 text-right font-mono font-semibold text-slate-900">{formatCurrency(item.amount)}</td>
                         </tr>
                       ))}
                     </tbody>
                     <tfoot>
                       <tr className="border-t border-slate-200 bg-slate-50/80">
-                        <td className="px-6 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Net Amount</td>
-                        <td className="px-6 py-2 text-right font-mono font-bold text-slate-700">{formatCurrency(activeInvoiceNetAmount)}</td>
+                        <td className="px-4 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400">Net Amount</td>
+                        <td className="px-4 py-1.5 text-right font-mono font-bold text-slate-700">{formatCurrency(activeInvoiceNetAmount)}</td>
                       </tr>
                       {activeInvoiceTaxAmount > 0 && (
                         <tr className="bg-slate-50/80">
-                          <td className="px-6 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400">VAT / Tax</td>
-                          <td className="px-6 py-2 text-right font-mono font-bold text-slate-700">{formatCurrency(activeInvoiceTaxAmount)}</td>
+                          <td className="px-4 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400">VAT / Tax</td>
+                          <td className="px-4 py-1.5 text-right font-mono font-bold text-slate-700">{formatCurrency(activeInvoiceTaxAmount)}</td>
                         </tr>
                       )}
                       <tr className="border-t-2 border-[#0B3B2E]/20 bg-[#0B3B2E]/5">
-                        <td className="px-6 py-3 text-[11px] font-black uppercase tracking-wider text-[#0B3B2E]">Total Payable</td>
-                        <td className="px-6 py-3 text-right font-mono text-sm font-black text-[#0B3B2E]">{formatCurrency(activeInvoiceGrossAmount)}</td>
+                        <td className="px-4 py-2 text-[11px] font-black uppercase tracking-wider text-[#0B3B2E]">Total Payable</td>
+                        <td className="px-4 py-2 text-right font-mono font-black text-[#0B3B2E]">{formatCurrency(activeInvoiceGrossAmount)}</td>
                       </tr>
                     </tfoot>
                   </table>
@@ -4236,25 +4234,25 @@ const createInvoiceForTenant = async (
                     <FaFileInvoice size={10} className="text-slate-400" />
                     <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Journal Entries</span>
                   </div>
-                  <table className="w-full text-xs">
+                  <table className="w-full text-[11px] border-collapse">
                     <thead>
                       <tr className="bg-slate-900 text-white">
-                        <th className="px-6 py-2 text-left text-[9px] font-black uppercase tracking-widest">Account</th>
-                        <th className="px-6 py-2 text-right text-[9px] font-black uppercase tracking-widest">Debit</th>
-                        <th className="px-6 py-2 text-right text-[9px] font-black uppercase tracking-widest">Credit</th>
+                        <th className="px-4 py-1 text-left font-bold border-r border-white/10">Account</th>
+                        <th className="px-4 py-1 text-right font-bold border-r border-white/10">Debit</th>
+                        <th className="px-4 py-1 text-right font-bold">Credit</th>
                       </tr>
                     </thead>
                     <tbody>
                       {activeInvoiceJournalLines.map((line, i) => (
-                        <tr key={`${line.accountCode}-${i}`} className="border-b border-slate-50 hover:bg-slate-50/60">
-                          <td className="px-6 py-2.5">
+                        <tr key={`${line.accountCode}-${i}`} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                          <td className="px-4 py-1.5 border-r border-gray-100">
                             <p className="font-mono font-bold text-slate-800">{line.accountCode} · {line.accountName}</p>
                             <p className="mt-0.5 text-[10px] text-slate-400">{line.narration}</p>
                           </td>
-                          <td className="px-6 py-2.5 text-right font-mono font-semibold text-slate-700">
+                          <td className="px-4 py-1.5 border-r border-gray-100 text-right font-mono font-semibold text-slate-700">
                             {line.debit ? formatCurrency(line.debit) : <span className="text-slate-300">—</span>}
                           </td>
-                          <td className="px-6 py-2.5 text-right font-mono font-semibold text-slate-700">
+                          <td className="px-4 py-1.5 text-right font-mono font-semibold text-slate-700">
                             {line.credit ? formatCurrency(line.credit) : <span className="text-slate-300">—</span>}
                           </td>
                         </tr>
@@ -4277,25 +4275,25 @@ const createInvoiceForTenant = async (
                       No payments have been applied to this invoice yet.
                     </div>
                   ) : (
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="border-b border-slate-100 bg-slate-50">
-                          <th className="px-6 py-2 text-left text-[9px] font-black uppercase tracking-widest text-slate-400">Receipt</th>
-                          <th className="px-6 py-2 text-left text-[9px] font-black uppercase tracking-widest text-slate-400">Date</th>
-                          <th className="px-6 py-2 text-right text-[9px] font-black uppercase tracking-widest text-slate-400">Applied</th>
-                          <th className="px-6 py-2 text-right text-[9px] font-black uppercase tracking-widest text-slate-400">Bal. After</th>
+                    <table className="w-full text-[11px] border-collapse">
+                      <thead className="bg-[#0B3B2E] text-white">
+                        <tr>
+                          <th className="px-4 py-1 text-left font-bold border-r border-white/10">Receipt</th>
+                          <th className="px-4 py-1 text-left font-bold border-r border-white/10">Date</th>
+                          <th className="px-4 py-1 text-right font-bold border-r border-white/10">Applied</th>
+                          <th className="px-4 py-1 text-right font-bold">Bal. After</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {activeInvoiceReceiptApplications.map((row) => (
-                          <tr key={row.key} className="border-b border-slate-50 hover:bg-slate-50/60">
-                            <td className="px-6 py-2.5">
+                        {activeInvoiceReceiptApplications.map((row, i) => (
+                          <tr key={row.key} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                            <td className="px-4 py-1.5 border-r border-gray-100">
                               <p className="font-mono font-bold text-slate-900">{row.receiptNumber}</p>
                               <p className="text-[10px] capitalize text-slate-400">{String(row.paymentType || "receipt").replace(/_/g, " ")}</p>
                             </td>
-                            <td className="px-6 py-2.5 text-slate-500">{row.receiptDate ? formatDateDisplay(row.receiptDate) : "—"}</td>
-                            <td className="px-6 py-2.5 text-right font-mono font-bold text-emerald-700">{formatCurrency(row.appliedAmount)}</td>
-                            <td className="px-6 py-2.5 text-right font-mono font-semibold text-slate-500">{formatCurrency(row.afterOutstanding)}</td>
+                            <td className="px-4 py-1.5 border-r border-gray-100 text-slate-500">{row.receiptDate ? formatDateDisplay(row.receiptDate) : "—"}</td>
+                            <td className="px-4 py-1.5 border-r border-gray-100 text-right font-mono font-bold text-emerald-700">{formatCurrency(row.appliedAmount)}</td>
+                            <td className="px-4 py-1.5 text-right font-mono font-semibold text-slate-500">{formatCurrency(row.afterOutstanding)}</td>
                           </tr>
                         ))}
                       </tbody>

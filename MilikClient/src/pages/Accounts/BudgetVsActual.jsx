@@ -318,28 +318,28 @@ const BudgetVsActual = () => {
                 <p className="text-[11px]">Click "New Budget" to get started</p>
               </div>
             ) : (
-              <table className="min-w-full text-xs">
+              <table className="min-w-full text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10">
-                  <tr className="border-b-2 border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                    <th className="px-4 py-2.5 text-left">Budget Name</th>
-                    <th className="px-4 py-2.5 text-left">Period</th>
-                    <th className="px-4 py-2.5 text-center">Status</th>
-                    <th className="px-4 py-2.5 text-right">Lines</th>
-                    <th className="px-4 py-2.5 text-right">Total Budgeted (KES)</th>
-                    <th className="px-4 py-2.5 text-left">Notes</th>
-                    <th className="px-4 py-2.5" />
+                  <tr className="bg-[#0B3B2E] text-white">
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Budget Name</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Period</th>
+                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Lines</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Total Budgeted (KES)</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Notes</th>
+                    <th className="px-3 py-1 font-bold" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {budgets.map((b) => (
-                    <tr key={b._id} className="cursor-pointer hover:bg-slate-50/70" onClick={() => openBudget(b)}>
-                      <td className="px-4 py-2.5 font-semibold text-slate-800">{b.name}</td>
-                      <td className="px-4 py-2.5 text-slate-500">{fmtDate(b.periodStart)} — {fmtDate(b.periodEnd)}</td>
-                      <td className="px-4 py-2.5 text-center">{statusPill(b.status)}</td>
-                      <td className="px-4 py-2.5 text-right text-slate-500">{b.lineCount}</td>
-                      <td className="px-4 py-2.5 text-right font-mono font-semibold text-slate-700">{fmt(b.totalBudgeted)}</td>
-                      <td className="max-w-[180px] truncate px-4 py-2.5 text-slate-400">{b.notes || "—"}</td>
-                      <td className="px-4 py-2.5 text-right">
+                <tbody>
+                  {budgets.map((b, idx) => (
+                    <tr key={b._id} className={`border-b border-gray-100 cursor-pointer ${idx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`} onClick={() => openBudget(b)}>
+                      <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{b.name}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{fmtDate(b.periodStart)} — {fmtDate(b.periodEnd)}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-center">{statusPill(b.status)}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-500">{b.lineCount}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold text-slate-700">{fmt(b.totalBudgeted)}</td>
+                      <td className="max-w-[180px] truncate px-3 py-1 border-r border-gray-100 text-slate-400">{b.notes || "—"}</td>
+                      <td className="px-3 py-1 text-right">
                         {b.status === "draft" && (
                           <button onClick={(e) => handleDelete(b._id, e)}
                             className="rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500">
@@ -440,28 +440,28 @@ const BudgetVsActual = () => {
             {/* Draft lines mini table */}
             {draftLines.length > 0 && (
               <div className="mb-3 overflow-x-auto rounded border border-slate-200 bg-white">
-                <table className="min-w-full text-xs">
+                <table className="min-w-full text-[11px] border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50 text-[9px] font-black uppercase tracking-wider text-slate-400">
-                      <th className="px-3 py-2 text-left">Code</th>
-                      <th className="px-3 py-2 text-left">Account</th>
-                      <th className="px-3 py-2 text-left">Type</th>
-                      <th className="px-3 py-2 text-right">Budgeted (KES)</th>
-                      <th className="px-3 py-2" />
+                    <tr className="bg-[#0B3B2E] text-white">
+                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Code</th>
+                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Account</th>
+                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
+                      <th className="px-3 py-1 text-right font-bold border-r border-white/10">Budgeted (KES)</th>
+                      <th className="px-3 py-1 font-bold" />
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody>
                     {draftLines.map((line, idx) => (
-                      <tr key={line.account}>
-                        <td className="px-3 py-1.5 font-mono text-slate-400">{line.accountCode || "—"}</td>
-                        <td className="px-3 py-1.5 font-semibold text-slate-700">{line.accountName}</td>
-                        <td className="px-3 py-1.5 capitalize text-slate-500">{line.accountType}</td>
-                        <td className="px-3 py-1.5 text-right">
+                      <tr key={line.account} className={`border-b border-gray-100 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"}`}>
+                        <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-400">{line.accountCode || "—"}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-700">{line.accountName}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 capitalize text-slate-500">{line.accountType}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right">
                           <input type="number" value={line.budgetedAmount} min="0"
                             onChange={(e) => setDraftLines((p) => p.map((l, i) => i === idx ? { ...l, budgetedAmount: Number(e.target.value) } : l))}
                             className="h-6 w-32 rounded border border-slate-200 px-2 text-right text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
                         </td>
-                        <td className="px-3 py-1.5 text-right">
+                        <td className="px-3 py-1 text-right">
                           <button onClick={() => setDraftLines((p) => p.filter((_, i) => i !== idx))}
                             className="text-slate-300 hover:text-red-500"><FaTimes size={10} /></button>
                         </td>
@@ -499,39 +499,39 @@ const BudgetVsActual = () => {
               {!isLocked && <p className="text-[11px]">Click "Edit Lines" to add accounts and amounts</p>}
             </div>
           ) : (
-            <table className="min-w-full text-xs">
+            <table className="min-w-full text-[11px] border-collapse">
               <thead className="sticky top-0 z-10">
-                <tr className="border-b-2 border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                  <th className="px-4 py-2.5 text-left">Code</th>
-                  <th className="px-4 py-2.5 text-left">Account</th>
-                  <th className="px-4 py-2.5 text-right">Budgeted (KES)</th>
-                  <th className="px-4 py-2.5 text-right">Actual (KES)</th>
-                  <th className="px-4 py-2.5 text-right">Variance (KES)</th>
-                  <th className="px-4 py-2.5 text-right">% Used</th>
+                <tr className="bg-[#0B3B2E] text-white">
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Code</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Account</th>
+                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Budgeted (KES)</th>
+                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Actual (KES)</th>
+                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Variance (KES)</th>
+                  <th className="px-3 py-1 text-right font-bold">% Used</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {groupedLines.map(({ type, lines }) => (
                   <React.Fragment key={type}>
                     {/* Group header */}
-                    <tr className="bg-slate-50/80">
-                      <td colSpan={6} className="px-4 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    <tr className="bg-slate-100/80">
+                      <td colSpan={6} className="px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-500">
                         {TYPE_LABEL[type] || type}
                       </td>
                     </tr>
-                    {lines.map((line) => {
+                    {lines.map((line, lineIdx) => {
                       const varColor = varianceColor(line.accountType, line.variance);
                       const pct = line.pctUsed;
                       return (
-                        <tr key={String(line.account)} className="hover:bg-slate-50/60">
-                          <td className="px-4 py-2.5 font-mono text-slate-400">{line.accountCode || "—"}</td>
-                          <td className="px-4 py-2.5 font-semibold text-slate-800">{line.accountName}</td>
-                          <td className="px-4 py-2.5 text-right font-mono text-slate-700">{fmt(line.budgeted ?? line.budgetedAmount)}</td>
-                          <td className="px-4 py-2.5 text-right font-mono text-slate-700">{fmt(line.actual)}</td>
-                          <td className={`px-4 py-2.5 text-right font-mono font-semibold ${varColor}`}>
+                        <tr key={String(line.account)} className={`border-b border-gray-100 ${lineIdx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                          <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-400">{line.accountCode || "—"}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{line.accountName}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-700">{fmt(line.budgeted ?? line.budgetedAmount)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-700">{fmt(line.actual)}</td>
+                          <td className={`px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold ${varColor}`}>
                             {line.variance > 0 ? "+" : ""}{fmt(line.variance)}
                           </td>
-                          <td className="px-4 py-2.5 text-right">
+                          <td className="px-3 py-1 text-right">
                             {pct !== null ? (
                               <div className="flex items-center justify-end gap-2">
                                 <div className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-100">
@@ -551,10 +551,10 @@ const BudgetVsActual = () => {
                     })}
                     {/* Group subtotal */}
                     <tr className="bg-slate-50/40 text-[10px] font-bold text-slate-500">
-                      <td colSpan={2} className="px-4 py-1.5 text-right uppercase tracking-wide">Subtotal</td>
-                      <td className="px-4 py-1.5 text-right font-mono">{fmt(lines.reduce((s, l) => s + Number(l.budgeted ?? l.budgetedAmount ?? 0), 0))}</td>
-                      <td className="px-4 py-1.5 text-right font-mono">{fmt(lines.reduce((s, l) => s + Number(l.actual || 0), 0))}</td>
-                      <td className={`px-4 py-1.5 text-right font-mono ${varianceColor(type, lines.reduce((s, l) => s + Number(l.variance || 0), 0))}`}>
+                      <td colSpan={2} className="px-3 py-1 text-right uppercase tracking-wide">Subtotal</td>
+                      <td className="px-3 py-1 text-right font-mono">{fmt(lines.reduce((s, l) => s + Number(l.budgeted ?? l.budgetedAmount ?? 0), 0))}</td>
+                      <td className="px-3 py-1 text-right font-mono">{fmt(lines.reduce((s, l) => s + Number(l.actual || 0), 0))}</td>
+                      <td className={`px-3 py-1 text-right font-mono ${varianceColor(type, lines.reduce((s, l) => s + Number(l.variance || 0), 0))}`}>
                         {(() => { const v = lines.reduce((s, l) => s + Number(l.variance || 0), 0); return `${v > 0 ? "+" : ""}${fmt(v)}`; })()}
                       </td>
                       <td />

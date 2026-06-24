@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import AppSelect from "../../components/common/AppSelect";
 import {
   FaArrowLeft,
   FaMoneyBillWave,
@@ -709,7 +710,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
             <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
               <div className="relative shrink-0">
                 <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]" />
-                <input value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder="Search name, code, email…" className="h-7 w-44 rounded border border-orange-300 bg-orange-50 pl-6 pr-2 text-xs outline-none focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]" />
+                <input value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder="Search name, code, email…" className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </div>
               <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                 <option value="all">All Status</option><option value="Active">Active</option><option value="Archived">Archived</option>
@@ -731,10 +732,10 @@ const LandlordPayments = ({ mode = "payments" }) => {
           {/* Table */}
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="min-h-0 flex-1 overflow-auto">
-              <table className="w-full min-w-[1400px] text-xs">
+              <table className="w-full min-w-[1400px] text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className={`${MILIK_GREEN} text-white`}>
-                    <th className="px-3 py-2 text-center">
+                    <th className="px-3 py-2 text-center border-r border-white/10">
                       <input
                         type="checkbox"
                         checked={
@@ -745,14 +746,14 @@ const LandlordPayments = ({ mode = "payments" }) => {
                         className="cursor-pointer"
                       />
                     </th>
-                    <th className="px-3 py-2 text-left font-bold">Code</th>
-                    <th className="px-3 py-2 text-left font-bold">Landlord Name</th>
-                    <th className="px-3 py-2 text-center font-bold">Properties</th>
-                    <th className="px-3 py-2 text-center font-bold">Tenants</th>
-                    <th className="px-3 py-2 text-right font-bold">Rent Collected</th>
-                    <th className="px-3 py-2 text-right font-bold">Paid Out</th>
-                    <th className="px-3 py-2 text-right font-bold">Balance</th>
-                    <th className="px-3 py-2 text-center font-bold">Status</th>
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Code</th>
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Landlord Name</th>
+                    <th className="px-3 py-2 text-center font-bold border-r border-white/10">Properties</th>
+                    <th className="px-3 py-2 text-center font-bold border-r border-white/10">Tenants</th>
+                    <th className="px-3 py-2 text-right font-bold border-r border-white/10">Rent Collected</th>
+                    <th className="px-3 py-2 text-right font-bold border-r border-white/10">Paid Out</th>
+                    <th className="px-3 py-2 text-right font-bold border-r border-white/10">Balance</th>
+                    <th className="px-3 py-2 text-center font-bold border-r border-white/10">Status</th>
                     <th className="px-3 py-2 text-center font-bold">Actions</th>
                   </tr>
                 </thead>
@@ -773,11 +774,9 @@ const LandlordPayments = ({ mode = "payments" }) => {
                     currentPageData.map((landlord, idx) => (
                       <tr
                         key={landlord._id}
-                        className={`${
-                          idx % 2 === 0 ? "bg-white" : "bg-slate-50"
-                        } border-b border-slate-200 hover:bg-slate-100`}
+                        className={`border-b border-gray-100 transition-colors ${idx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}
                       >
-                        <td className="px-3 py-2 text-center">
+                        <td className="px-3 py-1 border-r border-gray-100 text-center">
                           <input
                             type="checkbox"
                             checked={selectedLandlords.includes(landlord._id)}
@@ -785,45 +784,35 @@ const LandlordPayments = ({ mode = "payments" }) => {
                             className="cursor-pointer"
                           />
                         </td>
-                        <td className="px-3 py-2 font-mono text-slate-700">
+                        <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-700">
                           {landlord.landlordCode}
                         </td>
-                        <td className="px-3 py-2 font-semibold text-slate-900">
+                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">
                           {landlord.landlordName}
                         </td>
-                        <td className="px-3 py-2 text-center text-slate-700">
+                        <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-700">
                           {landlord.propertiesCount}
                         </td>
-                        <td className="px-3 py-2 text-center text-slate-700">
+                        <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-700">
                           {landlord.tenantsCount}
                         </td>
-                        <td className="px-3 py-2 text-right font-bold text-blue-700">
+                        <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-blue-700">
                           Ksh {landlord.rentCollected.toLocaleString()}
                         </td>
-                        <td className="px-3 py-2 text-right font-bold text-green-700">
+                        <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-green-700">
                           Ksh {landlord.paymentsMade.toLocaleString()}
                         </td>
-                        <td className="px-3 py-2 text-right font-bold">
-                          <span
-                            className={
-                              landlord.balance > 0 ? "text-orange-700" : "text-green-700"
-                            }
-                          >
+                        <td className="px-3 py-1 border-r border-gray-100 text-right font-bold">
+                          <span className={landlord.balance > 0 ? "text-orange-700" : "text-green-700"}>
                             Ksh {landlord.balance.toLocaleString()}
                           </span>
                         </td>
-                        <td className="px-3 py-2 text-center">
-                          <span
-                            className={`inline-flex px-2 py-1 rounded text-[10px] font-bold ${
-                              landlord.status === "Active"
-                                ? "bg-green-100 text-green-700"
-                                : "bg-gray-100 text-gray-700"
-                            }`}
-                          >
+                        <td className="px-3 py-1 border-r border-gray-100 text-center">
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold border ${landlord.status === "Active" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-600 border-slate-200"}`}>
                             {landlord.status}
                           </span>
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-1">
                           <div className="flex items-center justify-center gap-1">
                             <button
                               onClick={() => handleViewDetails(landlord)}
@@ -921,37 +910,37 @@ const LandlordPayments = ({ mode = "payments" }) => {
             <div className="p-4 space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">Amount to Pay *</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Amount to Pay <span className="text-red-500">*</span></label>
                   <input
                     type="number"
                     min="0"
                     value={paymentForm.amount}
                     onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                     placeholder="0.00"
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">Payment Date *</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Payment Date <span className="text-red-500">*</span></label>
                   <input
                     type="date"
                     value={paymentForm.paymentDate}
                     onChange={(e) =>
                       setPaymentForm({ ...paymentForm, paymentDate: e.target.value })
                     }
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">Payment Method *</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Payment Method <span className="text-red-500">*</span></label>
                   <select
                     value={paymentForm.paymentMethod}
                     onChange={(e) =>
                       setPaymentForm({ ...paymentForm, paymentMethod: e.target.value })
                     }
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     <option value="bank_transfer">Bank Transfer</option>
                     <option value="check">Check</option>
@@ -961,45 +950,39 @@ const LandlordPayments = ({ mode = "payments" }) => {
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">Cashbook Account *</label>
-                  <select
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Cashbook Account <span className="text-red-500">*</span></label>
+                  <AppSelect
                     value={paymentForm.cashbook}
-                    onChange={(e) => setPaymentForm({ ...paymentForm, cashbook: e.target.value })}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
-                  >
-                    <option value="">Select cashbook / bank account...</option>
-                    {cashbookAccounts.map((account) => (
-                      <option key={account._id} value={account._id}>
-                        {account.code ? `${account.code} - ` : ""}{account.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(v) => setPaymentForm({ ...paymentForm, cashbook: v ?? "" })}
+                    options={cashbookAccounts.map((a) => ({ value: a._id, label: `${a.code ? `${a.code} - ` : ""}${a.name}` }))}
+                    placeholder="Select cashbook / bank account…"
+                    searchable
+                    size="sm"
+                  />
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">
-                    Reference Number
-                  </label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Reference Number</label>
                   <input
                     type="text"
                     value={paymentForm.referenceNumber}
                     onChange={(e) =>
                       setPaymentForm({ ...paymentForm, referenceNumber: e.target.value })
                     }
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                     placeholder="Transaction ref"
                   />
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="text-xs font-semibold text-slate-700">Description</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Description</label>
                   <textarea
                     rows={3}
                     value={paymentForm.description}
                     onChange={(e) =>
                       setPaymentForm({ ...paymentForm, description: e.target.value })
                     }
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                     placeholder="Payment notes"
                   />
                 </div>
@@ -1009,13 +992,13 @@ const LandlordPayments = ({ mode = "payments" }) => {
             <div className="px-4 py-3 border-t border-slate-200 flex justify-end gap-2">
               <button
                 onClick={() => setShowPaymentModal(false)}
-                className="px-4 py-2 text-xs border border-slate-300 rounded-md font-semibold hover:bg-slate-50"
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSavePayment}
-                className={`px-4 py-2 text-xs rounded-md text-white font-semibold ${MILIK_GREEN} hover:bg-[#0A3127]`}
+                className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-black text-white ${MILIK_GREEN} hover:bg-[#0A3127]`}
               >
                 Record Payment
               </button>
@@ -1070,24 +1053,14 @@ const LandlordPayments = ({ mode = "payments" }) => {
                   📋 Property Breakdown & Collections
                 </h4>
                 <div className="border border-slate-200 rounded-lg overflow-hidden shadow-sm">
-                  <table className="w-full text-xs">
+                  <table className="w-full text-[11px] border-collapse">
                     <thead>
                       <tr className={`${MILIK_GREEN} text-white`}>
-                        <th className="px-3 py-2 text-left font-semibold">
-                          Property
-                        </th>
-                        <th className="px-3 py-2 text-center font-semibold">
-                          Units
-                        </th>
-                        <th className="px-3 py-2 text-right font-semibold">
-                          Monthly Rent
-                        </th>
-                        <th className="px-3 py-2 text-right font-semibold">
-                          Collected
-                        </th>
-                        <th className="px-3 py-2 text-right font-semibold">
-                          Outstanding
-                        </th>
+                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
+                        <th className="px-3 py-1 text-center font-bold border-r border-white/10">Units</th>
+                        <th className="px-3 py-1 text-right font-bold border-r border-white/10">Monthly Rent</th>
+                        <th className="px-3 py-1 text-right font-bold border-r border-white/10">Collected</th>
+                        <th className="px-3 py-1 text-right font-bold">Outstanding</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1102,41 +1075,21 @@ const LandlordPayments = ({ mode = "payments" }) => {
                           {activeDetail.propertyBreakdown.map((property, idx) => (
                             <tr
                               key={property.propertyId}
-                              className={`${
-                                idx % 2 === 0 ? "bg-white" : "bg-slate-50"
-                              } border-b border-slate-200 hover:bg-blue-50`}
+                              className={`border-b border-gray-100 ${idx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}
                             >
-                              <td className="px-3 py-2 text-slate-900 font-medium">
-                                {property.propertyName}
-                              </td>
-                              <td className="px-3 py-2 text-center text-slate-700">
-                                {property.tenantsCount}
-                              </td>
-                              <td className="px-3 py-2 text-right font-semibold text-slate-900">
-                                Ksh {property.rentExpected.toLocaleString()}
-                              </td>
-                              <td className="px-3 py-2 text-right font-semibold text-green-700">
-                                Ksh {property.rentCollected.toLocaleString()}
-                              </td>
-                              <td className="px-3 py-2 text-right font-semibold text-orange-700">
-                                Ksh {property.outstanding.toLocaleString()}
-                              </td>
+                              <td className="px-3 py-1 border-r border-gray-100 text-slate-900 font-medium">{property.propertyName}</td>
+                              <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-700">{property.tenantsCount}</td>
+                              <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-900">Ksh {property.rentExpected.toLocaleString()}</td>
+                              <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-green-700">Ksh {property.rentCollected.toLocaleString()}</td>
+                              <td className="px-3 py-1 text-right font-semibold text-orange-700">Ksh {property.outstanding.toLocaleString()}</td>
                             </tr>
                           ))}
                           <tr className="bg-slate-100 border-t-2 border-slate-200 font-bold">
-                            <td colSpan="1" className="px-3 py-2 text-slate-900">TOTAL</td>
-                            <td className="px-3 py-2 text-center text-slate-900">
-                              {activeDetail.tenantsCount || 0}
-                            </td>
-                            <td className="px-3 py-2 text-right text-slate-900">
-                              Ksh {activeDetail.rentExpected?.toLocaleString?.() || "0"}
-                            </td>
-                            <td className="px-3 py-2 text-right text-green-700">
-                              Ksh {activeDetail.rentCollected.toLocaleString()}
-                            </td>
-                            <td className="px-3 py-2 text-right text-orange-700">
-                              Ksh {Math.max(0, activeDetail.balance).toLocaleString()}
-                            </td>
+                            <td className="px-3 py-1 text-slate-900">TOTAL</td>
+                            <td className="px-3 py-1 text-center text-slate-900">{activeDetail.tenantsCount || 0}</td>
+                            <td className="px-3 py-1 text-right text-slate-900">Ksh {activeDetail.rentExpected?.toLocaleString?.() || "0"}</td>
+                            <td className="px-3 py-1 text-right text-green-700">Ksh {activeDetail.rentCollected.toLocaleString()}</td>
+                            <td className="px-3 py-1 text-right text-orange-700">Ksh {Math.max(0, activeDetail.balance).toLocaleString()}</td>
                           </tr>
                         </>
                       )}
@@ -1184,14 +1137,14 @@ const LandlordPayments = ({ mode = "payments" }) => {
                 </h4>
                 <div className="border border-slate-200 rounded-lg overflow-hidden shadow-sm">
                   <div className="max-h-64 overflow-auto">
-                    <table className="w-full text-xs">
-                      <thead className="bg-slate-100 text-slate-600 sticky top-0">
+                    <table className="w-full text-[11px] border-collapse">
+                      <thead className="bg-[#0B3B2E] text-white sticky top-0">
                         <tr>
-                          <th className="px-4 py-2 text-left">Date</th>
-                          <th className="px-4 py-2 text-left">Method</th>
-                          <th className="px-4 py-2 text-left">Reference</th>
-                          <th className="px-4 py-2 text-right">Amount</th>
-                          <th className="px-4 py-2 text-left">Status</th>
+                          <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date</th>
+                          <th className="px-3 py-1 text-left font-bold border-r border-white/10">Method</th>
+                          <th className="px-3 py-1 text-left font-bold border-r border-white/10">Reference</th>
+                          <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount</th>
+                          <th className="px-3 py-1 text-left font-bold">Status</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1200,13 +1153,13 @@ const LandlordPayments = ({ mode = "payments" }) => {
                             <td colSpan="5" className="px-4 py-6 text-center text-slate-500">No landlord payments recorded yet.</td>
                           </tr>
                         ) : activeDetailHistory.map((payment, index) => (
-                          <tr key={payment._id || index} className={index % 2 === 0 ? "bg-white" : "bg-slate-50"}>
-                            <td className="px-4 py-2">{formatDate(payment.date || payment.createdAt)}</td>
-                            <td className="px-4 py-2 font-semibold text-slate-800">{payment.paymentMethod ? payment.paymentMethod.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '-'}</td>
-                            <td className="px-4 py-2 text-slate-600">{payment.reference || payment.referenceNumber || '-'}</td>
-                            <td className="px-4 py-2 text-right font-bold text-slate-900">Ksh {Number(payment.amount || 0).toLocaleString()}</td>
-                            <td className="px-4 py-2">
-                              <span className={`inline-flex rounded-full px-2 py-1 font-semibold ${payment.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : payment.status === 'approved' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700'}`}>
+                          <tr key={payment._id || index} className={`border-b border-gray-100 ${index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                            <td className="px-3 py-1 border-r border-gray-100">{formatDate(payment.date || payment.createdAt)}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{payment.paymentMethod ? payment.paymentMethod.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '-'}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{payment.reference || payment.referenceNumber || '-'}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">Ksh {Number(payment.amount || 0).toLocaleString()}</td>
+                            <td className="px-3 py-1">
+                              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${payment.status === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : payment.status === 'approved' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-slate-100 text-slate-700 border-slate-200'}`}>
                                 {payment.status || 'draft'}
                               </span>
                             </td>
@@ -1223,7 +1176,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
               {canExportPayment && (
               <button
                 onClick={() => handlePrintLandlordStatement(activeDetail)}
-                className="px-4 py-2 text-xs rounded-md text-white font-semibold bg-purple-600 hover:bg-purple-700 flex items-center gap-2"
+                className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-black text-white bg-purple-600 hover:bg-purple-700 flex items-center gap-2"
               >
                 <FaPrint />
                 Print Statement
@@ -1232,7 +1185,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
               {canProcessPayment && (
               <button
                 onClick={() => handleOpenPayment(activeDetail)}
-                className={`px-4 py-2 text-xs rounded-md text-white font-semibold ${MILIK_ORANGE} hover:bg-[#e67e00] flex items-center gap-2`}
+                className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-black text-white ${MILIK_ORANGE} hover:bg-[#e67e00] flex items-center gap-2`}
                 disabled={activeDetail.balance <= 0}
               >
                 <FaMoneyBillWave />
@@ -1241,7 +1194,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
               )}
               <button
                 onClick={() => setShowDetailModal(false)}
-                className="px-4 py-2 text-xs border border-slate-300 rounded-md font-semibold hover:bg-slate-50"
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
               >
                 Close
               </button>

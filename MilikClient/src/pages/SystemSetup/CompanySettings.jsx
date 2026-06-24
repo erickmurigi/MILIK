@@ -981,51 +981,51 @@ const CompanySettings = () => {
     deposits: ["Name", "Code", "Default Amount", "Refundable", "Description", "Status", "Actions"],
   };
 
-  const renderCollectionRow = (tabKey, item) => {
+  const renderCollectionRow = (tabKey, item, idx = 0) => {
     const isActive = item?.isActive !== false;
     return (
-      <tr key={item._id} className="even:bg-slate-50/50 hover:bg-emerald-50/20">
-        <td className="px-3 py-2 font-medium text-slate-900">{item.name || "—"}</td>
+      <tr key={item._id} className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+        <td className="px-3 py-1 border-r border-gray-100 font-medium text-slate-900">{item.name || "—"}</td>
         {tabKey === "utilities" && (
           <>
-            <td className="px-3 py-2 capitalize text-slate-600">{String(item.category || "").replace(/_/g, " ") || "—"}</td>
-            <td className="max-w-[200px] truncate px-3 py-2 text-slate-500">{item.description || "—"}</td>
+            <td className="px-3 py-1 border-r border-gray-100 capitalize text-slate-600">{String(item.category || "").replace(/_/g, " ") || "—"}</td>
+            <td className="max-w-[200px] truncate px-3 py-1 border-r border-gray-100 text-slate-500">{item.description || "—"}</td>
           </>
         )}
         {tabKey === "periods" && (
           <>
-            <td className="px-3 py-2 text-center text-slate-600">{item.durationInMonths ?? "—"}</td>
-            <td className="px-3 py-2 text-center text-slate-600">{item.durationInDays ?? "—"}</td>
+            <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-600">{item.durationInMonths ?? "—"}</td>
+            <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-600">{item.durationInDays ?? "—"}</td>
           </>
         )}
         {tabKey === "commissions" && (
           <>
-            <td className="px-3 py-2 text-center text-slate-600">{item.percentage != null ? `${item.percentage}%` : "—"}</td>
-            <td className="px-3 py-2 capitalize text-slate-600">{String(item.applicableTo || "").replace(/_/g, " ") || "—"}</td>
-            <td className="max-w-[160px] truncate px-3 py-2 text-slate-500">{item.description || "—"}</td>
+            <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-600">{item.percentage != null ? `${item.percentage}%` : "—"}</td>
+            <td className="px-3 py-1 border-r border-gray-100 capitalize text-slate-600">{String(item.applicableTo || "").replace(/_/g, " ") || "—"}</td>
+            <td className="max-w-[160px] truncate px-3 py-1 border-r border-gray-100 text-slate-500">{item.description || "—"}</td>
           </>
         )}
         {tabKey === "expenses" && (
           <>
-            <td className="px-3 py-2 text-slate-600">{item.code || "—"}</td>
-            <td className="px-3 py-2 capitalize text-slate-600">{String(item.category || "").replace(/_/g, " ") || "—"}</td>
-            <td className="px-3 py-2 text-right text-slate-600">{Number(item.defaultAmount || 0).toLocaleString()}</td>
+            <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{item.code || "—"}</td>
+            <td className="px-3 py-1 border-r border-gray-100 capitalize text-slate-600">{String(item.category || "").replace(/_/g, " ") || "—"}</td>
+            <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-600">{Number(item.defaultAmount || 0).toLocaleString()}</td>
           </>
         )}
         {tabKey === "deposits" && (
           <>
-            <td className="px-3 py-2 text-slate-600">{item.code || "—"}</td>
-            <td className="px-3 py-2 text-right text-slate-600">{Number(item.defaultAmount || 0).toLocaleString()}</td>
-            <td className="px-3 py-2 text-slate-600">{item.refundable === false ? "No" : "Yes"}</td>
-            <td className="max-w-[180px] truncate px-3 py-2 text-slate-500">{item.description || "—"}</td>
+            <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{item.code || "—"}</td>
+            <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-600">{Number(item.defaultAmount || 0).toLocaleString()}</td>
+            <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{item.refundable === false ? "No" : "Yes"}</td>
+            <td className="max-w-[180px] truncate px-3 py-1 border-r border-gray-100 text-slate-500">{item.description || "—"}</td>
           </>
         )}
-        <td className="px-3 py-2">
-          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${isActive ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+        <td className="px-3 py-1 border-r border-gray-100">
+          <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${isActive ? "border-emerald-200 bg-emerald-100 text-emerald-700" : "border-slate-200 bg-slate-100 text-slate-500"}`}>
             {isActive ? "Active" : "Archived"}
           </span>
         </td>
-        <td className="px-3 py-2">
+        <td className="px-3 py-1">
           <div className="flex items-center gap-1">
             <button onClick={() => openEditModal(tabKey, item)} className="rounded px-2 py-1 text-[10px] font-bold text-slate-600 hover:bg-slate-100">Edit</button>
             <button
@@ -1067,16 +1067,16 @@ const CompanySettings = () => {
           {visibleItems.length === 0 ? (
             <div className="flex h-40 items-center justify-center text-sm text-slate-500">{tab.empty}</div>
           ) : (
-            <table className="w-full text-xs">
+            <table className="w-full text-[11px] border-collapse">
               <thead className="sticky top-0 z-10">
                 <tr className="bg-[#0B3B2E] text-white">
-                  {(COLLECTION_COLUMNS[tabKey] || []).map((h) => (
-                    <th key={h} className="px-3 py-2 text-left font-semibold">{h}</th>
+                  {(COLLECTION_COLUMNS[tabKey] || []).map((h, i, arr) => (
+                    <th key={h} className={`px-3 py-1 text-left font-bold ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                {visibleItems.map((item) => renderCollectionRow(tabKey, item))}
+              <tbody>
+                {visibleItems.map((item, i) => renderCollectionRow(tabKey, item, i))}
               </tbody>
             </table>
           )}
@@ -1254,7 +1254,7 @@ const CompanySettings = () => {
                       type="checkbox"
                       checked={Boolean(code.isDefault)}
                       onChange={(e) => handleTaxCodeChange(index, "isDefault", e.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                      className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-[#0B3B2E]/20"
                     />
                     Default tax code
                   </label>
@@ -1263,7 +1263,7 @@ const CompanySettings = () => {
                       type="checkbox"
                       checked={code.isActive !== false}
                       onChange={(e) => handleTaxCodeChange(index, "isActive", e.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                      className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-[#0B3B2E]/20"
                     />
                     Active
                   </label>

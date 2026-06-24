@@ -247,26 +247,26 @@ export default function SaleFinancials() {
               />
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[700px] border-collapse text-xs">
-                  <thead className="border-b border-slate-200 bg-slate-50">
+                <table className="w-full min-w-[700px] border-collapse text-[11px]">
+                  <thead className="bg-[#027333] text-white">
                     <tr>
-                      {["Journal #", "Date", "Debit Account", "Credit Account", "Amount (KES)", "Status"].map((col) => (
-                        <th key={col} className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-slate-500 whitespace-nowrap">
+                      {["Journal #", "Date", "Debit Account", "Credit Account", "Amount (KES)", "Status"].map((col, i, arr) => (
+                        <th key={col} className={`px-3 py-1 text-left font-bold whitespace-nowrap ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>
                           {col}
                         </th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {journals.map((j) => (
-                      <tr key={j._id} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-4 py-2.5 font-mono text-[11px] font-bold text-slate-700">{j.journalNo || "—"}</td>
-                        <td className="px-4 py-2.5 whitespace-nowrap text-slate-600">{fmtDate(j.date)}</td>
-                        <td className="px-4 py-2.5 text-slate-700 max-w-[200px]">{j.debitAccount ? `${j.debitAccount.code} – ${j.debitAccount.name}` : "—"}</td>
-                        <td className="px-4 py-2.5 text-slate-700 max-w-[200px]">{j.creditAccount ? `${j.creditAccount.code} – ${j.creditAccount.name}` : "—"}</td>
-                        <td className="px-4 py-2.5 text-right font-mono font-black text-slate-900 whitespace-nowrap">{fmt(j.amount)}</td>
-                        <td className="px-4 py-2.5">
-                          <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-black capitalize ${STATUS_BADGE[j.status] || "bg-slate-100 text-slate-500 border-slate-200"}`}>
+                  <tbody>
+                    {journals.map((j, i) => (
+                      <tr key={j._id} className={`border-b border-gray-100 transition-colors ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                        <td className="px-3 py-1 border-r border-gray-100 font-mono font-bold text-slate-700">{j.journalNo || "—"}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 whitespace-nowrap text-slate-600">{fmtDate(j.date)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[200px]">{j.debitAccount ? `${j.debitAccount.code} – ${j.debitAccount.name}` : "—"}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[200px]">{j.creditAccount ? `${j.creditAccount.code} – ${j.creditAccount.name}` : "—"}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-black text-slate-900 whitespace-nowrap">{fmt(j.amount)}</td>
+                        <td className="px-3 py-1">
+                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black capitalize ${STATUS_BADGE[j.status] || "bg-slate-100 text-slate-500 border-slate-200"}`}>
                             {j.status || "—"}
                           </span>
                         </td>
@@ -297,35 +297,35 @@ export default function SaleFinancials() {
               />
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[560px] border-collapse text-xs">
-                  <thead className="border-b border-slate-200 bg-slate-50">
+                <table className="w-full min-w-[560px] border-collapse text-[11px]">
+                  <thead className="bg-[#027333] text-white">
                     <tr>
-                      {["Code", "Account Name", "Type", "Sub-Group", "Balance (KES)"].map((col) => (
-                        <th key={col} className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-slate-500">
+                      {["Code", "Account Name", "Type", "Sub-Group", "Balance (KES)"].map((col, i, arr) => (
+                        <th key={col} className={`px-3 py-1 text-left font-bold ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>
                           {col}
                         </th>
                       ))}
-                      <th className="px-4 py-2.5" />
+                      <th className="px-3 py-1" />
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {accounts.map((a) => (
-                      <tr key={a._id} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-4 py-2.5 font-mono font-bold text-slate-700">{a.code}</td>
-                        <td className="px-4 py-2.5 font-semibold text-slate-900">{a.name}</td>
-                        <td className="px-4 py-2.5">
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold capitalize ${ACCOUNT_TYPE_COLORS[a.type] || "bg-slate-100 text-slate-600"}`}>
+                  <tbody>
+                    {accounts.map((a, i) => (
+                      <tr key={a._id} className={`border-b border-gray-100 transition-colors ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                        <td className="px-3 py-1 border-r border-gray-100 font-mono font-bold text-slate-700">{a.code}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{a.name}</td>
+                        <td className="px-3 py-1 border-r border-gray-100">
+                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold capitalize ${ACCOUNT_TYPE_COLORS[a.type] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
                             {a.type}
                           </span>
                         </td>
-                        <td className="px-4 py-2.5 text-slate-500">{a.subGroup || a.group || "—"}</td>
-                        <td className={`px-4 py-2.5 text-right font-mono font-black ${Number(a.balance || 0) < 0 ? "text-rose-600" : "text-slate-900"}`}>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{a.subGroup || a.group || "—"}</td>
+                        <td className={`px-3 py-1 border-r border-gray-100 text-right font-mono font-black ${Number(a.balance || 0) < 0 ? "text-rose-600" : "text-slate-900"}`}>
                           {fmt(a.balance)}
                         </td>
-                        <td className="px-4 py-2.5 text-right">
+                        <td className="px-3 py-1 text-right">
                           <button
                             onClick={() => navigate(`/sale/chart-of-accounts/${a._id}/activity`)}
-                            className="inline-flex items-center gap-1 border border-slate-200 px-2.5 py-1 text-[10px] font-bold text-slate-600 hover:text-[#027333] hover:border-[#027333] transition-colors"
+                            className="inline-flex items-center gap-1 border border-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-600 hover:text-[#027333] hover:border-[#027333] transition-colors"
                           >
                             <FaChartLine size={8} /> Ledger
                           </button>

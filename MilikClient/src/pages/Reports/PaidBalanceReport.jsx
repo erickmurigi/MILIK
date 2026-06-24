@@ -378,23 +378,23 @@ const PaidBalanceReport = () => {
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
               <div className="grid gap-1.5 md:grid-cols-2 xl:grid-cols-4">
-                <input type="date" value={filters.asOfDate} onChange={(e) => setFilters((prev) => ({ ...prev, asOfDate: e.target.value }))} className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40" />
-                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40">
+                <input type="date" value={filters.asOfDate} onChange={(e) => setFilters((prev) => ({ ...prev, asOfDate: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
                   <option value="">All properties</option>
                   {properties.map((property) => <option key={property._id} value={property._id}>{property.propertyName || property.name}</option>)}
                 </select>
-                <select value={filters.status} onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))} className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40">
+                <select value={filters.status} onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
                   <option value="all">All tenant positions</option>
                   <option value="owing">Owing</option>
                   <option value="credit">Credit</option>
                   <option value="settled">Settled</option>
                 </select>
-                <input value={filters.search} onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Search tenant, property, unit" className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40" />
+                <input value={filters.search} onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Search tenant, property, unit" className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </div>
               <div className="mt-1.5 flex flex-wrap justify-end gap-1.5">
-                <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaFileDownload /> Export CSV</button>
-                <button onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaPrint /> Print</button>
-                <button onClick={loadReport} className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] transition ${filtersChanged ? 'border border-orange-400 bg-orange-50 text-orange-700 hover:bg-orange-100' : 'border border-slate-300 bg-white text-slate-700 hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700'}`}><FaSyncAlt className={loading ? 'animate-spin' : ''} /> {filtersChanged ? 'Apply Filters' : 'Refresh'}</button>
+                <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaFileDownload /> Export CSV</button>
+                <button onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaPrint /> Print</button>
+                <button onClick={loadReport} className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] transition ${filtersChanged ? 'border border-orange-400 bg-orange-50 text-orange-700 hover:bg-orange-100' : 'border border-slate-200 bg-white text-slate-700 hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700'}`}><FaSyncAlt className={loading ? 'animate-spin' : ''} /> {filtersChanged ? 'Apply Filters' : 'Refresh'}</button>
               </div>
             </div>
 
@@ -449,34 +449,34 @@ const PaidBalanceReport = () => {
               </div>
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200">
                 <div className="min-h-0 flex-1 overflow-auto">
-                  <table className="min-w-full text-xs">
-                    <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700">
+                  <table className="min-w-full text-[11px] border-collapse">
+                    <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                     <tr>
-                      {['Tenant', 'Property', 'Unit', 'Invoiced', 'Paid', 'Outstanding', 'Unapplied Credit', 'Net Balance', 'Rent Bal', 'Utility Bal', 'Penalty Bal', 'Deposit Bal', 'Other Bal', 'Oldest Due', 'Last Payment', 'Status'].map((header) => <th key={header} className="whitespace-nowrap px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-[0.12em]">{header}</th>)}
+                      {['Tenant', 'Property', 'Unit', 'Invoiced', 'Paid', 'Outstanding', 'Unapplied Credit', 'Net Balance', 'Rent Bal', 'Utility Bal', 'Penalty Bal', 'Deposit Bal', 'Other Bal', 'Oldest Due', 'Last Payment', 'Status'].map((header, i, arr) => <th key={header} className={`whitespace-nowrap px-2 py-1 text-left font-bold ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{header}</th>)}
                     </tr>
                   </thead>
                   <tbody>
                     {(report.rows || []).length === 0 ? (
                       <tr><td colSpan={16} className="px-2 py-4 text-center text-slate-500">No tenants matched the selected filters.</td></tr>
-                    ) : paginatedRows.map((row) => (
-                      <tr key={row.tenantId} className="border-t border-slate-200 hover:bg-slate-50/80">
-                        <td className="px-2 py-1.5 font-semibold text-slate-900">{row.tenantName}</td>
-                        <td className="px-2 py-1.5 text-slate-700">{row.propertyName}</td>
-                        <td className="px-2 py-1.5 text-slate-700">{row.unitNumber}</td>
-                        <td className="px-2 py-1.5 text-slate-700">{formatMoney(row.totalInvoiced)}</td>
-                        <td className="px-2 py-1.5 text-emerald-700">{formatMoney(row.totalPaidApplied)}</td>
-                        <td className="px-2 py-1.5 text-red-600">{formatMoney(row.outstanding)}</td>
-                        <td className="px-2 py-1.5 text-amber-700">{formatMoney(row.unappliedCredit)}</td>
-                        <td className={`px-2 py-1.5 font-bold ${Number(row.netBalance || 0) > 0 ? 'text-red-700' : Number(row.netBalance || 0) < 0 ? 'text-emerald-700' : 'text-slate-700'}`}>{formatMoney(row.netBalance)}</td>
-                        <td className="px-2 py-1.5 text-slate-700">{formatMoney(row.rentBalance)}</td>
-                        <td className="px-2 py-1.5 text-slate-700">{formatMoney(row.utilityBalance)}</td>
-                        <td className="px-2 py-1.5 text-slate-700">{formatMoney(row.penaltyBalance)}</td>
-                        <td className="px-2 py-1.5 text-slate-700">{formatMoney(row.depositBalance)}</td>
-                        <td className="px-2 py-1.5 text-slate-700">{formatMoney(row.otherBalance)}</td>
-                        <td className="px-2 py-1.5 text-slate-700">{formatDate(row.oldestDueDate)}</td>
-                        <td className="px-2 py-1.5 text-slate-700">{formatDate(row.lastPaymentDate)}</td>
-                        <td className="px-2 py-1.5">
-                          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-[0.12em] ${row.status === 'owing' ? 'bg-red-100 text-red-700' : row.status === 'credit' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>
+                    ) : paginatedRows.map((row, i) => (
+                      <tr key={row.tenantId} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                        <td className="px-2 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.tenantName}</td>
+                        <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{row.propertyName}</td>
+                        <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{row.unitNumber}</td>
+                        <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.totalInvoiced)}</td>
+                        <td className="px-2 py-1 border-r border-gray-100 text-emerald-700">{formatMoney(row.totalPaidApplied)}</td>
+                        <td className="px-2 py-1 border-r border-gray-100 text-red-600">{formatMoney(row.outstanding)}</td>
+                        <td className="px-2 py-1 border-r border-gray-100 text-amber-700">{formatMoney(row.unappliedCredit)}</td>
+                        <td className={`px-2 py-1 border-r border-gray-100 font-bold ${Number(row.netBalance || 0) > 0 ? 'text-red-700' : Number(row.netBalance || 0) < 0 ? 'text-emerald-700' : 'text-slate-700'}`}>{formatMoney(row.netBalance)}</td>
+                        <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.rentBalance)}</td>
+                        <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.utilityBalance)}</td>
+                        <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.penaltyBalance)}</td>
+                        <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.depositBalance)}</td>
+                        <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.otherBalance)}</td>
+                        <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatDate(row.oldestDueDate)}</td>
+                        <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatDate(row.lastPaymentDate)}</td>
+                        <td className="px-2 py-1">
+                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${row.status === 'owing' ? 'border-red-200 bg-red-100 text-red-700' : row.status === 'credit' ? 'border-emerald-200 bg-emerald-100 text-emerald-700' : 'border-slate-200 bg-slate-100 text-slate-700'}`}>
                             {row.status}
                           </span>
                         </td>

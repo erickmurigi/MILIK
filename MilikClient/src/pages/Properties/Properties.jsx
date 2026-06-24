@@ -433,8 +433,8 @@ const Properties = () => {
 
   // Row styling
   const getRowClass = (index, id) => {
-    if (selectedProperties.includes(id)) return "bg-[#CDE7D3] hover:bg-[#DFF1E3]";
-    return index % 2 === 0 ? "bg-white hover:bg-[#f8f8f8]" : "bg-[#f9f9f9] hover:bg-[#f0f0f0]";
+    if (selectedProperties.includes(id)) return "bg-emerald-50 shadow-[inset_3px_0_0_0_#0B3B2E]";
+    return index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40";
   };
 
   // Helpers
@@ -462,27 +462,19 @@ const Properties = () => {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case "active":
-        return "bg-green-100 text-green-800 border border-green-300";
-      case "maintenance":
-        return "bg-yellow-100 text-yellow-800 border border-yellow-300";
-      case "closed":
-        return "bg-red-100 text-red-800 border border-red-300";
-      default:
-        return "bg-gray-100 text-gray-800 border border-gray-300";
+      case "active": return "bg-emerald-50 text-emerald-700 border-emerald-200";
+      case "maintenance": return "bg-amber-50 text-amber-700 border-amber-200";
+      case "closed": return "bg-red-50 text-red-700 border-red-200";
+      default: return "bg-slate-100 text-slate-600 border-slate-200";
     }
   };
 
   const getCategoryColor = (category) => {
     switch (category?.toLowerCase()) {
-      case "residential":
-        return "bg-blue-100 text-blue-800 border border-blue-300";
-      case "commercial":
-        return "bg-purple-100 text-purple-800 border border-purple-300";
-      case "mixed use":
-        return "bg-yellow-100 text-yellow-800 border border-yellow-300";
-      default:
-        return "bg-gray-100 text-gray-800 border border-gray-300";
+      case "residential": return "bg-blue-50 text-blue-700 border-blue-200";
+      case "commercial": return "bg-purple-50 text-purple-700 border-purple-200";
+      case "mixed use": return "bg-amber-50 text-amber-700 border-amber-200";
+      default: return "bg-slate-100 text-slate-600 border-slate-200";
     }
   };
 
@@ -742,35 +734,24 @@ const Properties = () => {
                 {/* table scroll area */}
                 <div className="overflow-y-auto flex-1 min-h-0">
                   <table
-                    className="w-full text-xs border-collapse border border-gray-200 font-bold bg-white"
+                    className="w-full text-[11px] border-collapse bg-white"
                     ref={tableRef}
                     style={{ tableLayout: "fixed" }}
                   >
                     <thead className="sticky top-0 z-10 shadow-sm">
-                      <tr className="bg-[#0B3B2E]">
-                        <th
-                          className="px-3 py-1.5 text-left font-bold text-white border border-gray-200 bg-[#0B3B2E]"
-                          style={{ width: "46px" }}
-                        >
+                      <tr className="bg-[#0B3B2E] text-white">
+                        <th className="px-3 py-2 text-center font-bold border-r border-white/10" style={{ width: "44px" }}>
                           <input
                             type="checkbox"
                             checked={selectAll && (properties || []).length > 0}
                             onChange={handleSelectAll}
                             onClick={handleCheckboxClick}
-                            className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                            className="rounded border-gray-300 text-emerald-600 focus:ring-[#0B3B2E]/20"
                           />
                         </th>
-
-                        <th
-                          className="px-3 py-1.5 text-left font-bold text-white border border-gray-200 bg-[#0B3B2E]"
-                          style={{ width: "44px" }}
-                        />
-
+                        <th className="px-1 py-2 font-bold border-r border-white/10" style={{ width: "40px" }} />
                         {columns.map((column) => (
-                          <th
-                            key={column.key}
-                            className="px-3 py-1.5 text-left font-bold text-white border border-gray-200 bg-[#0B3B2E] whitespace-nowrap"
-                          >
+                          <th key={column.key} className="px-3 py-2 text-left font-bold border-r border-white/10 whitespace-nowrap">
                             {column.label}
                           </th>
                         ))}
@@ -782,79 +763,53 @@ const Properties = () => {
                         properties.map((property, index) => (
                           <React.Fragment key={property._id}>
                             <tr
-                              className={`border-b border-gray-200 cursor-pointer transition-colors duration-150 ${getRowClass(
-                                index,
-                                property._id
-                              )}`}
+                              className={`border-b border-gray-100 cursor-pointer transition-colors ${getRowClass(index, property._id)}`}
                               onClick={(e) => handleRowClick(property._id, e)}
                             >
-                              <td className="px-3 py-1 border border-gray-200 align-top" onClick={handleCheckboxClick}>
+                              <td className="px-3 py-1.5 text-center border-r border-gray-100" onClick={handleCheckboxClick}>
                                 <input
                                   type="checkbox"
                                   checked={selectedProperties.includes(property._id)}
                                   onChange={() => handleSelectProperty(property._id)}
                                   onClick={handleCheckboxClick}
-                                  className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                                  className="rounded border-gray-300 text-emerald-600 focus:ring-[#0B3B2E]/20"
                                 />
                               </td>
-
-                              <td className="px-1 py-1 border border-gray-200 align-top text-center">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    toggleRowExpand(property._id);
-                                  }}
-                                  className="p-1 hover:bg-gray-200 rounded transition-colors"
-                                  title={expandedRows.includes(property._id) ? "Collapse" : "Expand"}
-                                >
-                                  {expandedRows.includes(property._id) ? (
-                                    <FaChevronUp className="text-gray-600 text-xs" />
-                                  ) : (
-                                    <FaChevronDown className="text-gray-600 text-xs" />
-                                  )}
-                                </button>
+                              <td className="px-1 py-1.5 text-center border-r border-gray-100 text-slate-300 transition hover:text-slate-600"
+                                onClick={(e) => { e.stopPropagation(); toggleRowExpand(property._id); }}>
+                                {expandedRows.includes(property._id) ? <FaChevronUp size={9} /> : <FaChevronDown size={9} />}
                               </td>
-
-                              <td className="px-3 py-1 border border-gray-200 align-top truncate">{toListingCaps(property.propertyCode)}</td>
-                              <td className="px-3 py-1 border border-gray-200 align-top truncate">{toListingCaps(property.propertyName)}</td>
-                              <td className="px-3 py-1 border border-gray-200 align-top truncate">
-                                {toListingCaps(getPrimaryLandlord(property.landlords))}
+                              <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                                <span className="font-mono text-[10px] text-slate-500 tracking-wide truncate block">{toListingCaps(property.propertyCode)}</span>
                               </td>
-
-                              <td className="px-3 py-1 border border-gray-200 align-top">
-                                <span
-                                  className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold whitespace-nowrap ${getCategoryColor(
-                                    property.propertyType
-                                  )}`}
-                                >
+                              <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                                <span className="font-semibold text-slate-900 truncate block">{toListingCaps(property.propertyName)}</span>
+                              </td>
+                              <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                                <span className="text-slate-600 truncate block">{toListingCaps(getPrimaryLandlord(property.landlords))}</span>
+                              </td>
+                              <td className="px-3 py-1 border-r border-gray-100">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${getCategoryColor(property.propertyType)}`}>
                                   {property.propertyType || "N/A"}
                                 </span>
                               </td>
-
-                              <td className="px-3 py-1 border border-gray-200 align-top truncate">
-                                {toListingCaps(property.zoneRegion || "N/A")}
+                              <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                                <span className="text-slate-600 truncate block">{toListingCaps(property.zoneRegion || "—")}</span>
                               </td>
-
-                              <td className="px-3 py-1 border border-gray-200 align-top truncate">{toListingCaps(getFullAddress(property))}</td>
-
-                              <td className="px-3 py-1 text-center border border-gray-200 align-top">
+                              <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                                <span className="text-slate-600 truncate block">{toListingCaps(getFullAddress(property))}</span>
+                              </td>
+                              <td className="px-3 py-1.5 text-center border-r border-gray-100 font-semibold text-slate-700">
                                 {property.totalUnits || 0}
                               </td>
-
-                              <td className="px-3 py-1 text-center border border-gray-200 align-top">
-                                <span className="font-bold text-green-700">{property.occupiedUnits || 0}</span>
+                              <td className="px-3 py-1.5 text-center border-r border-gray-100 font-bold text-emerald-700">
+                                {property.occupiedUnits || 0}
                               </td>
-
-                              <td className="px-3 py-1 text-center border border-gray-200 align-top">
-                                <span className="font-bold text-red-700">{property.vacantUnits || 0}</span>
+                              <td className="px-3 py-1.5 text-center border-r border-gray-100 font-bold text-red-600">
+                                {property.vacantUnits || 0}
                               </td>
-
-                              <td className="px-3 py-1 border border-gray-200 align-top">
-                                <span
-                                  className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold whitespace-nowrap ${getStatusColor(
-                                    property.status
-                                  )}`}
-                                >
+                              <td className="px-3 py-1.5">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${getStatusColor(property.status)}`}>
                                   {property.status || "N/A"}
                                 </span>
                               </td>
@@ -994,7 +949,7 @@ const Properties = () => {
                         <tr>
                           <td
                             colSpan={columns.length + 2}
-                            className="px-3 py-4 text-center text-gray-500 border border-gray-200 bg-white"
+                            className="px-3 py-8 text-center text-gray-500 bg-white"
                           >
                             <div className="flex flex-col items-center justify-center py-8">
                             
@@ -1046,7 +1001,7 @@ const Properties = () => {
                         <select
                           value={pageSize}
                           onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                          className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition"
+                          className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition"
                         >
                           {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
                         </select>

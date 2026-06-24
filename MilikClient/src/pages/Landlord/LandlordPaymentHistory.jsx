@@ -52,15 +52,15 @@ const LandlordPaymentHistory = () => {
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 bg-white shadow-sm">
-          <table className="w-full min-w-[900px] text-xs">
+          <table className="w-full min-w-[900px] text-[11px] border-collapse">
             <thead className="sticky top-0 z-10 shadow-sm">
               <tr className="bg-[#0B3B2E] text-white">
-                <th className="px-3 py-2 text-left">Date</th>
-                <th className="px-3 py-2 text-left">Landlord</th>
-                <th className="px-3 py-2 text-right">Amount</th>
-                <th className="px-3 py-2 text-left">Method</th>
-                <th className="px-3 py-2 text-left">Reference</th>
-                <th className="px-3 py-2 text-center">Reversal Status</th>
+                <th className="px-3 py-2 text-left font-bold border-r border-white/10">Date</th>
+                <th className="px-3 py-2 text-left font-bold border-r border-white/10">Landlord</th>
+                <th className="px-3 py-2 text-right font-bold border-r border-white/10">Amount</th>
+                <th className="px-3 py-2 text-left font-bold border-r border-white/10">Method</th>
+                <th className="px-3 py-2 text-left font-bold border-r border-white/10">Reference</th>
+                <th className="px-3 py-2 text-center font-bold">Reversal Status</th>
               </tr>
             </thead>
             <tbody>
@@ -70,14 +70,14 @@ const LandlordPaymentHistory = () => {
                 <tr><td colSpan="6" className="px-3 py-8 text-center text-slate-500">No landlord payments found</td></tr>
               ) : (
                 filteredPayments.map((payment, index) => (
-                  <tr key={payment._id || index} className={`${index % 2 === 0 ? "bg-white" : "bg-slate-50"} border-b border-slate-200 hover:bg-slate-100`}>
-                    <td className="px-3 py-2">{formatDate(payment.date || payment.paymentDate || payment.paidDate || payment.createdAt)}</td>
-                    <td className="px-3 py-2 font-semibold text-slate-900">{payment?.landlord?.landlordName || payment?.landlordName || "-"}</td>
-                    <td className="px-3 py-2 text-right font-bold text-slate-900">{money(payment.amount)}</td>
-                    <td className="px-3 py-2 uppercase text-slate-700">{payment.paymentMethod || "-"}</td>
-                    <td className="px-3 py-2 text-slate-700">{payment.reference || payment.referenceNumber || "-"}</td>
-                    <td className="px-3 py-2 text-center">
-                      <span className={`inline-flex rounded px-2 py-1 text-[10px] font-bold ${payment.status === "reversed" ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                  <tr key={payment._id || index} className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{formatDate(payment.date || payment.paymentDate || payment.paidDate || payment.createdAt)}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{payment?.landlord?.landlordName || payment?.landlordName || "-"}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{money(payment.amount)}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 uppercase text-slate-700">{payment.paymentMethod || "-"}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{payment.reference || payment.referenceNumber || "-"}</td>
+                    <td className="px-3 py-1 text-center">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold border ${payment.status === "reversed" ? "bg-red-50 text-red-700 border-red-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}>
                         {payment.status === "reversed" ? "Reversed" : "Confirmed"}
                       </span>
                     </td>

@@ -203,7 +203,7 @@ const CommissionsList = () => {
               )}
               <button
                 onClick={() => navigate(-1)}
-                className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 text-[10px] font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
+                className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
               >
                 <FaArrowLeft /> Back
               </button>
@@ -230,26 +230,26 @@ const CommissionsList = () => {
               <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
                 <span className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">Visible <span className="normal-case text-slate-900">{filteredProperties.length}</span></span>
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                <input type="text" placeholder="Search by property code or name" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="h-7 w-40 shrink-0 rounded-md border border-slate-300 bg-white px-2 text-[10px] text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <select value={filterMode} onChange={(e) => setFilterMode(e.target.value)} className="h-7 shrink-0 rounded-md border border-slate-300 bg-[#DDEFE1] px-2 text-[10px] text-slate-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                <input type="text" placeholder="Search by property code or name" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="h-7 w-40 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                <select value={filterMode} onChange={(e) => setFilterMode(e.target.value)} className="h-7 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-[10px] text-slate-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="all">All Properties</option>
                   <option value="configured">Configured Only</option>
                   <option value="unconfigured">Unconfigured Only</option>
                 </select>
-                <button onClick={resetFilters} className="h-7 shrink-0 inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-[10px] font-semibold text-slate-700 shadow-sm hover:bg-slate-100"><FaRedoAlt size={9} /> Reset</button>
+                <button onClick={resetFilters} className="h-7 shrink-0 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-700 shadow-sm hover:bg-slate-100"><FaRedoAlt size={9} /> Reset</button>
               </div>
             </div>
 
             <div className="flex-1 min-h-0 overflow-auto">
-              <table className="w-full min-w-[980px] text-[10px]">
+              <table className="w-full min-w-[980px] text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className={`${MILIK_GREEN_BG} text-white`}>
-                    <th className="sticky left-0 z-20 bg-[#0B3B2E] px-2 py-1.5 text-left text-[9px] font-black uppercase tracking-[0.12em]">Code</th>
-                    <th className="px-2 py-1 text-left text-[9px] font-black uppercase tracking-[0.12em]">Property</th>
-                    <th className="px-2 py-1 text-left text-[9px] font-black uppercase tracking-[0.12em]">Commission</th>
-                    <th className="px-2 py-1 text-left text-[9px] font-black uppercase tracking-[0.12em]">Recognition Basis</th>
-                    <th className="px-2 py-1 text-left text-[9px] font-black uppercase tracking-[0.12em]">Tenants Pay To</th>
-                    <th className="px-2 py-1 text-left text-[9px] font-black uppercase tracking-[0.12em]">Deposits Held By</th>
+                    <th className="sticky left-0 z-20 bg-[#0B3B2E] px-2 py-2 text-left font-bold border-r border-white/10">Code</th>
+                    <th className="px-2 py-2 text-left font-bold border-r border-white/10">Property</th>
+                    <th className="px-2 py-2 text-left font-bold border-r border-white/10">Commission</th>
+                    <th className="px-2 py-2 text-left font-bold border-r border-white/10">Recognition Basis</th>
+                    <th className="px-2 py-2 text-left font-bold border-r border-white/10">Tenants Pay To</th>
+                    <th className="px-2 py-2 text-left font-bold border-r border-white/10">Deposits Held By</th>
                     <th className="px-2 py-1 text-right text-[9px] font-black uppercase tracking-[0.12em]">Actions</th>
                   </tr>
                 </thead>
@@ -350,31 +350,31 @@ const CommissionsList = () => {
                           </tr>
                         ) : (
                           <>
-                            <tr onClick={() => setExpandedPropertyId((prev) => (prev === property._id ? null : property._id))} className={`cursor-pointer border-t border-slate-100 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'} transition hover:bg-slate-50`}>
-                              <td className="sticky left-0 z-10 bg-inherit px-2 py-1 text-[10px] font-semibold text-slate-900">{expandedPropertyId === property._id ? '▾' : '▸'} {property.propertyCode || '-'}</td>
-                              <td className="px-2 py-1 text-[10px] text-slate-700">
+                            <tr onClick={() => setExpandedPropertyId((prev) => (prev === property._id ? null : property._id))} className={`cursor-pointer border-b border-gray-100 transition-colors ${index % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                              <td className="sticky left-0 z-10 bg-inherit px-2 py-1 border-r border-gray-100 font-semibold text-slate-900">{expandedPropertyId === property._id ? '▾' : '▸'} {property.propertyCode || '-'}</td>
+                              <td className="px-2 py-1 border-r border-gray-100 text-slate-700">
                                 <div className="font-semibold text-slate-900">{property.propertyName || property.name || '-'}</div>
                               </td>
-                              <td className="px-2 py-1 text-[10px]">
+                              <td className="px-2 py-1 border-r border-gray-100">
                                 {Number(property.commissionPercentage) > 0 ? (
-                                  <span className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-black text-orange-700">
+                                  <span className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-[10px] font-bold text-orange-700">
                                     {property.commissionPercentage}%
                                   </span>
                                 ) : (
                                   <span className="text-slate-400">Not set</span>
                                 )}
                               </td>
-                              <td className="px-2 py-1 text-[10px] text-slate-700">
+                              <td className="px-2 py-1 border-r border-gray-100 text-slate-700">
                                 {property.commissionRecognitionBasis
                                   ? property.commissionRecognitionBasis === 'received'
                                     ? 'Rent Collected (Cash)'
                                     : 'Rent Expected (Accrual)'
                                   : '-'}
                               </td>
-                              <td className="px-2 py-1 text-[10px] text-slate-700">
+                              <td className="px-2 py-1 border-r border-gray-100 text-slate-700">
                                 {property.tenantsPaysTo ? (property.tenantsPaysTo === 'propertyManager' ? 'Manager' : 'Landlord') : '-'}
                               </td>
-                              <td className="px-2 py-1 text-[10px] text-slate-700">
+                              <td className="px-2 py-1 border-r border-gray-100 text-slate-700">
                                 {property.depositHeldBy ? (property.depositHeldBy === 'propertyManager' ? 'Manager' : 'Landlord') : '-'}
                               </td>
                               <td className="px-2 py-1 text-right">

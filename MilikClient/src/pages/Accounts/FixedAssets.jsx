@@ -440,38 +440,38 @@ const FixedAssets = () => {
               )}
             </div>
           ) : (
-            <table className="min-w-full text-xs">
+            <table className="min-w-full text-[11px] border-collapse">
               <thead className="sticky top-0 z-10">
-                <tr className="border-b-2 border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                  <th className="px-4 py-2.5 text-left">Code</th>
-                  <th className="px-4 py-2.5 text-left">Asset Name</th>
-                  <th className="px-4 py-2.5 text-left">Category</th>
-                  <th className="px-4 py-2.5 text-left">Method</th>
-                  <th className="px-4 py-2.5 text-right">Cost (KES)</th>
-                  <th className="px-4 py-2.5 text-right">Acc. Dep. (KES)</th>
-                  <th className="px-4 py-2.5 text-right">Book Value (KES)</th>
-                  <th className="px-4 py-2.5 text-center">Status</th>
-                  <th className="px-4 py-2.5 text-left">Last Dep.</th>
-                  <th className="px-4 py-2.5" />
+                <tr className="bg-[#0B3B2E] text-white">
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Code</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Asset Name</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Category</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Method</th>
+                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Cost (KES)</th>
+                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Acc. Dep. (KES)</th>
+                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Book Value (KES)</th>
+                  <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Last Dep.</th>
+                  <th className="px-3 py-1 font-bold" />
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredAssets.map((asset) => (
-                  <tr key={asset._id} className="hover:bg-slate-50/60">
-                    <td className="px-4 py-2.5 font-mono text-slate-400">{asset.code || "—"}</td>
-                    <td className="px-4 py-2.5 font-semibold text-slate-800">{asset.name}</td>
-                    <td className="px-4 py-2.5 text-slate-500">{asset.category || "—"}</td>
-                    <td className="px-4 py-2.5 text-slate-500">{methodLabel(asset.depreciationMethod)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-slate-700">{fmt(asset.purchaseCost)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-rose-500">{fmt(asset.accumulatedDepreciation)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono font-semibold" style={{ color: GRN }}>{fmt(asset.bookValue)}</td>
-                    <td className="px-4 py-2.5 text-center">{statusPill(asset.status)}</td>
-                    <td className="px-4 py-2.5 text-slate-400">
+              <tbody>
+                {filteredAssets.map((asset, idx) => (
+                  <tr key={asset._id} className={`border-b border-gray-100 ${idx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                    <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-400">{asset.code || "—"}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{asset.name}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{asset.category || "—"}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{methodLabel(asset.depreciationMethod)}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-700">{fmt(asset.purchaseCost)}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-rose-500">{fmt(asset.accumulatedDepreciation)}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold" style={{ color: GRN }}>{fmt(asset.bookValue)}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-center">{statusPill(asset.status)}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-400">
                       {asset.lastDepreciationDate
                         ? new Date(asset.lastDepreciationDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" })
                         : "—"}
                     </td>
-                    <td className="px-4 py-2.5">
+                    <td className="px-3 py-1">
                       <div className="flex items-center justify-end gap-2">
                         {asset.status !== "disposed" && (
                           <button onClick={() => openEdit(asset)} className="text-slate-300 hover:text-slate-600" title="Edit">

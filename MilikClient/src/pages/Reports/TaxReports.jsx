@@ -383,19 +383,19 @@ const TaxReports = () => {
               <p className="mt-1 text-xs text-emerald-50">Default company VAT rate: {Number(companyTaxConfig?.taxSettings?.defaultVatRate || DEFAULT_RATE)}%</p>
             </div>
             <div className="min-h-0 flex-1 overflow-auto">
-              <table className="w-full min-w-[1000px] text-xs">
+              <table className="w-full min-w-[1000px] text-[11px] border-collapse">
                 <thead className="sticky top-0 z-20 bg-[#0B3B2E] text-white">
                   <tr>
-                    <th className="px-4 py-2 text-left font-bold text-white">Date</th>
-                    <th className="px-4 py-2 text-left font-bold text-white">Source</th>
-                    <th className="px-4 py-2 text-left font-bold text-white">Reference</th>
-                    <th className="px-4 py-2 text-left font-bold text-slate-700">Property</th>
-                    <th className="px-4 py-2 text-left font-bold text-white">Party</th>
-                    <th className="px-4 py-2 text-left font-bold text-white">Tax Code</th>
-                    <th className="px-4 py-2 text-right font-bold text-white">Rate</th>
-                    <th className="px-4 py-2 text-right font-bold text-white">Net</th>
-                    <th className="px-4 py-2 text-right font-bold text-white">Tax</th>
-                    <th className="px-4 py-2 text-right font-bold text-white">Gross</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Source</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Reference</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Party</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Tax Code</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Rate</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Net</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Tax</th>
+                    <th className="px-3 py-1 text-right font-bold">Gross</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -408,18 +408,18 @@ const TaxReports = () => {
                       <td colSpan="10" className="px-4 py-8 text-center text-slate-500">No tax rows found for the selected period.</td>
                     </tr>
                   ) : (
-                    paginatedRows.map((row) => (
-                      <tr key={row.id} className="border-t border-slate-200 hover:bg-slate-50">
-                        <td className="px-4 py-2">{new Date(row.date).toLocaleDateString()}</td>
-                        <td className="px-4 py-2">{row.source}</td>
-                        <td className="px-4 py-2 font-semibold text-slate-900">{row.reference}</td>
-                        <td className="px-4 py-2">{row.propertyName}</td>
-                        <td className="px-4 py-2">{row.partyName}</td>
-                        <td className="px-4 py-2 uppercase">{row.taxCode}</td>
-                        <td className="px-4 py-2 text-right">{row.taxRate.toFixed(2)}%</td>
-                        <td className="px-4 py-2 text-right font-semibold">{formatMoney(row.netAmount)}</td>
-                        <td className="px-4 py-2 text-right font-semibold text-orange-700">{formatMoney(row.taxAmount)}</td>
-                        <td className="px-4 py-2 text-right font-bold text-slate-900">{formatMoney(row.grossAmount)}</td>
+                    paginatedRows.map((row, idx) => (
+                      <tr key={row.id} className={`border-b border-gray-100 ${idx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                        <td className="px-3 py-1 border-r border-gray-100">{new Date(row.date).toLocaleDateString()}</td>
+                        <td className="px-3 py-1 border-r border-gray-100">{row.source}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.reference}</td>
+                        <td className="px-3 py-1 border-r border-gray-100">{row.propertyName}</td>
+                        <td className="px-3 py-1 border-r border-gray-100">{row.partyName}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 uppercase">{row.taxCode}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right">{row.taxRate.toFixed(2)}%</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold">{formatMoney(row.netAmount)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-orange-700">{formatMoney(row.taxAmount)}</td>
+                        <td className="px-3 py-1 text-right font-bold text-slate-900">{formatMoney(row.grossAmount)}</td>
                       </tr>
                     ))
                   )}

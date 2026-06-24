@@ -156,19 +156,19 @@ export default function KpiLibrary() {
 
         {/* ── Scrollable table area ── */}
         <div className="flex-1 overflow-auto">
-          <table className="min-w-full text-xs">
+          <table className="min-w-full text-[11px] border-collapse">
             <thead className="sticky top-0 z-10 shadow-sm">
-              <tr className="border-b border-slate-200 bg-[#f0f4f2] text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                <th className="w-8 px-3 py-2 text-left">#</th>
-                <th className="px-3 py-2 text-left">KPI Name</th>
-                <th className="w-32 px-3 py-2 text-left">Category</th>
-                <th className="w-24 px-3 py-2 text-left">Unit</th>
-                <th className="w-24 px-3 py-2 text-center">Max Score</th>
-                <th className="w-24 px-3 py-2 text-center">Status</th>
-                <th className="w-20 px-3 py-2 text-right">Actions</th>
+              <tr className="bg-[#0B3B2E] text-white">
+                <th className="w-8 px-3 py-1 text-left font-bold border-r border-white/10">#</th>
+                <th className="px-3 py-1 text-left font-bold border-r border-white/10">KPI Name</th>
+                <th className="w-32 px-3 py-1 text-left font-bold border-r border-white/10">Category</th>
+                <th className="w-24 px-3 py-1 text-left font-bold border-r border-white/10">Unit</th>
+                <th className="w-24 px-3 py-1 text-center font-bold border-r border-white/10">Max Score</th>
+                <th className="w-24 px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
+                <th className="w-20 px-3 py-1 text-right font-bold">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
+            <tbody>
               {loading && <tr><td colSpan={7} className="py-10 text-center text-[11px] text-slate-400">Loading…</td></tr>}
               {!loading && !pageKpis.length && (
                 <tr><td colSpan={7} className="py-10 text-center text-[11px] text-slate-400">
@@ -176,28 +176,28 @@ export default function KpiLibrary() {
                 </td></tr>
               )}
               {!loading && pageKpis.map((kpi, idx) => (
-                <tr key={kpi._id} className="hover:bg-[#0B3B2E]/[0.03]">
-                  <td className="px-3 py-1.5 tabular-nums text-slate-400">{(page - 1) * PAGE_SIZE + idx + 1}</td>
-                  <td className="px-3 py-1.5">
+                <tr key={kpi._id} className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                  <td className="px-3 py-1 tabular-nums text-slate-400 border-r border-gray-100">{(page - 1) * PAGE_SIZE + idx + 1}</td>
+                  <td className="px-3 py-1 border-r border-gray-100">
                     <span className="font-semibold text-slate-800">{kpi.name}</span>
                     {kpi.description && <span className="ml-2 text-[10px] text-slate-400">{kpi.description}</span>}
                   </td>
-                  <td className="px-3 py-1.5">
-                    <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold ${CAT_COLORS[kpi.category] || CAT_COLORS.Other}`}>
+                  <td className="px-3 py-1 border-r border-gray-100">
+                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${CAT_COLORS[kpi.category] || CAT_COLORS.Other}`}>
                       {kpi.category}
                     </span>
                   </td>
-                  <td className="px-3 py-1.5 text-slate-600">{kpi.unit}</td>
-                  <td className="px-3 py-1.5 text-center font-semibold tabular-nums text-slate-700">{kpi.maxScore}</td>
-                  <td className="px-3 py-1.5 text-center">
+                  <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{kpi.unit}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-center font-semibold tabular-nums text-slate-700">{kpi.maxScore}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-center">
                     <button onClick={() => toggleActive(kpi)}>
                       {kpi.isActive
-                        ? <span className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700"><FaToggleOn size={10} /> Active</span>
-                        : <span className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-500"><FaToggleOff size={10} /> Inactive</span>
+                        ? <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700"><FaToggleOn size={10} /> Active</span>
+                        : <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-500"><FaToggleOff size={10} /> Inactive</span>
                       }
                     </button>
                   </td>
-                  <td className="px-3 py-1.5 text-right">
+                  <td className="px-3 py-1 text-right">
                     <div className="flex items-center justify-end gap-1">
                       <button onClick={() => openEdit(kpi)} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Edit"><FaEdit size={11} /></button>
                       <button onClick={() => { if (window.confirm(`Delete "${kpi.name}"?`)) handleDelete(kpi); }}

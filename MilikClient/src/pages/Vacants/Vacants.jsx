@@ -779,7 +779,7 @@ const Vacants = () => {
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50 p-0">
-        <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
+        <div className="flex-none sticky top-0 z-30 border-b border-gray-100 bg-white shadow-sm">
           <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
             <button onClick={applySearch} className={`h-7 shrink-0 flex items-center gap-1 rounded-md px-2.5 text-[10px] font-bold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaSearch size={9} /></button>
             <button onClick={resetFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded-md px-2 text-[10px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={9} /></button>
@@ -791,10 +791,10 @@ const Vacants = () => {
             <button onClick={handlePrint} className="h-7 shrink-0 flex items-center gap-1 rounded-md bg-slate-700 px-2 text-[10px] font-bold text-white shadow-sm hover:bg-slate-800"><FaPrint size={9} /></button>
             <button onClick={handleExport} className="h-7 shrink-0 flex items-center gap-1 rounded-md border border-gray-300 px-2 text-[10px] font-bold shadow-sm hover:bg-gray-50"><FaFileExport size={9} /></button>
             <div className="mx-1 h-4 w-px shrink-0 bg-gray-300" />
-            <select value={draftFilters.property} onChange={(event) => setDraftFilters((prev) => ({ ...prev, property: event.target.value }))} className="h-7 shrink-0 rounded border border-gray-300 bg-[#DDEFE1] px-2 text-[11px] text-gray-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+            <select value={draftFilters.property} onChange={(event) => setDraftFilters((prev) => ({ ...prev, property: event.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-[11px] text-gray-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
               {uniqueProperties.map((property) => (<option key={property.value} value={property.value}>{property.label}</option>))}
             </select>
-            <select value={draftFilters.status} onChange={(event) => setDraftFilters((prev) => ({ ...prev, status: event.target.value }))} className="h-7 shrink-0 rounded border border-gray-300 bg-[#DDEFE1] px-2 text-[11px] text-gray-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+            <select value={draftFilters.status} onChange={(event) => setDraftFilters((prev) => ({ ...prev, status: event.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-[11px] text-gray-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
               <option value="any">Status</option>
               <option value="occupied">Occupied</option>
               <option value="vacant">Vacant</option>
@@ -803,11 +803,11 @@ const Vacants = () => {
               <option value="under_maintenance">Under Maintenance</option>
               <option value="off_market">Off Market</option>
             </select>
-            <select value={draftFilters.unitType} onChange={(event) => setDraftFilters((prev) => ({ ...prev, unitType: event.target.value }))} className="h-7 shrink-0 rounded border border-gray-300 bg-[#DDEFE1] px-2 text-[11px] text-gray-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+            <select value={draftFilters.unitType} onChange={(event) => setDraftFilters((prev) => ({ ...prev, unitType: event.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-[11px] text-gray-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
               <option value="any">Unit Type</option>
               {unitTypeOptions.map((type) => (<option key={type} value={type}>{formatUnitTypeLabel(type)}</option>))}
             </select>
-            <select value={draftFilters.window} onChange={(event) => setDraftFilters((prev) => ({ ...prev, window: event.target.value }))} className="h-7 shrink-0 rounded border border-gray-300 bg-[#DDEFE1] px-2 text-[11px] text-gray-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+            <select value={draftFilters.window} onChange={(event) => setDraftFilters((prev) => ({ ...prev, window: event.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-[11px] text-gray-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
               <option value="all">Availability</option>
               <option value="now">Available Now</option>
               <option value="next7">In 7 Days</option>
@@ -821,7 +821,7 @@ const Vacants = () => {
 
         <div className="min-h-0 flex-1 overflow-hidden px-2 pb-2">
           <div className="flex h-full min-h-0 flex-col rounded-lg border border-gray-200 bg-white shadow-sm">
-            <div className="border-b border-gray-200 bg-white px-3 py-3">
+            <div className="border-b border-gray-100 bg-white px-3 py-3">
               <div className="grid grid-cols-3 gap-1.5 md:grid-cols-6">
                 {[
                   { label: "Rentable Units", value: summary.rentable, tone: "bg-emerald-50 border border-emerald-200 text-emerald-900", icon: <FaBuilding className="text-emerald-700" /> },
@@ -861,16 +861,16 @@ const Vacants = () => {
                 </colgroup>
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className="border-b border-gray-300 bg-[#0B3B2E]">
-                    <th className="border-r border-gray-300 px-1 py-1.5 text-center font-bold text-white"></th>
-                    <th className="sticky left-[42px] z-20 border-r border-gray-300 bg-[#0B3B2E] px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Property</th>
-                    <th className="border-r border-gray-300 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Unit No</th>
-                    <th className="border-r border-gray-300 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Code</th>
-                    <th className="border-r border-gray-300 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Unit Type</th>
-                    <th className="border-r border-gray-300 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Availability</th>
-                    <th className="border-r border-gray-300 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Current Tenant</th>
-                    <th className="border-r border-gray-300 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Available From</th>
-                    <th className="border-r border-gray-300 px-1.5 py-1 text-right font-bold text-white whitespace-nowrap">Days Vacant</th>
-                    <th className="border-r border-gray-300 px-1.5 py-1 text-right font-bold text-white whitespace-nowrap">Rent</th>
+                    <th className="border-r border-white/10 px-1 py-1.5 text-center font-bold text-white"></th>
+                    <th className="sticky left-[42px] z-20 border-r border-white/10 bg-[#0B3B2E] px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Property</th>
+                    <th className="border-r border-white/10 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Unit No</th>
+                    <th className="border-r border-white/10 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Code</th>
+                    <th className="border-r border-white/10 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Unit Type</th>
+                    <th className="border-r border-white/10 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Availability</th>
+                    <th className="border-r border-white/10 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Current Tenant</th>
+                    <th className="border-r border-white/10 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Available From</th>
+                    <th className="border-r border-white/10 px-1.5 py-1 text-right font-bold text-white whitespace-nowrap">Days Vacant</th>
+                    <th className="border-r border-white/10 px-1.5 py-1 text-right font-bold text-white whitespace-nowrap">Rent</th>
                     <th className="px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Actions</th>
                   </tr>
                 </thead>
@@ -902,8 +902,8 @@ const Vacants = () => {
                             </tr>
                           )}
 
-                          <tr className={`border-b border-gray-200 transition-colors hover:bg-[#f8fbf9] ${isExpanded ? "bg-[#fcfdfc]" : "bg-white"}`}>
-                            <td className="border-r border-gray-200 px-1 py-1.5 text-center align-top">
+                          <tr className={`border-b border-gray-100 transition-colors hover:bg-blue-50/40 ${isExpanded ? "bg-[#fcfdfc]" : "bg-white"}`}>
+                            <td className="border-r border-gray-100 px-1 py-1.5 text-center align-top">
                               <button
                                 onClick={() => toggleRow(row.id)}
                                 className="rounded border border-gray-300 bg-white p-1 text-slate-600 transition-colors hover:bg-gray-50"
@@ -912,39 +912,39 @@ const Vacants = () => {
                                 {isExpanded ? <FaChevronUp size={10} /> : <FaChevronDown size={10} />}
                               </button>
                             </td>
-                            <td className="border-r border-gray-200 px-1.5 py-1 align-top font-bold text-slate-800">
+                            <td className="border-r border-gray-100 px-1.5 py-1 align-top font-bold text-slate-800">
                               <div className="truncate whitespace-nowrap" title={row.propertyName}>
                                 {row.propertyName}
                               </div>
                             </td>
-                            <td className="border-r border-gray-200 px-1.5 py-1 align-top font-bold text-slate-900 whitespace-nowrap">
+                            <td className="border-r border-gray-100 px-1.5 py-1 align-top font-bold text-slate-900 whitespace-nowrap">
                               {row.unitNo}
                             </td>
-                            <td className="border-r border-gray-200 px-1.5 py-1 align-top font-semibold text-slate-600 whitespace-nowrap">
+                            <td className="border-r border-gray-100 px-1.5 py-1 align-top font-semibold text-slate-600 whitespace-nowrap">
                               {row.unitCode}
                             </td>
-                            <td className="border-r border-gray-200 px-1.5 py-1 align-top">
+                            <td className="border-r border-gray-100 px-1.5 py-1 align-top">
                               <span className="inline-flex max-w-full truncate whitespace-nowrap rounded-full border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">
                                 {row.unitTypeLabel}
                               </span>
                             </td>
-                            <td className="border-r border-gray-200 px-1.5 py-1 align-top">
+                            <td className="border-r border-gray-100 px-1.5 py-1 align-top">
                               <span className={`inline-flex max-w-full truncate whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${getAvailabilityTone(row.status)}`}>
                                 {row.statusLabel}
                               </span>
                             </td>
-                            <td className="border-r border-gray-200 px-1.5 py-1 align-top font-semibold text-slate-700">
+                            <td className="border-r border-gray-100 px-1.5 py-1 align-top font-semibold text-slate-700">
                               <div className="truncate whitespace-nowrap" title={row.tenantName}>
                                 {row.tenantName}
                               </div>
                             </td>
-                            <td className="border-r border-gray-200 px-1.5 py-1 align-top font-semibold text-slate-700 whitespace-nowrap">
+                            <td className="border-r border-gray-100 px-1.5 py-1 align-top font-semibold text-slate-700 whitespace-nowrap">
                               {row.availableFromLabel}
                             </td>
-                            <td className="border-r border-gray-200 px-1.5 py-1 text-right align-top font-bold text-slate-700 whitespace-nowrap">
+                            <td className="border-r border-gray-100 px-1.5 py-1 text-right align-top font-bold text-slate-700 whitespace-nowrap">
                               {row.daysVacantLabel}
                             </td>
-                            <td className="border-r border-gray-200 px-1.5 py-1 text-right align-top font-bold text-slate-900 whitespace-nowrap">
+                            <td className="border-r border-gray-100 px-1.5 py-1 text-right align-top font-bold text-slate-900 whitespace-nowrap">
                               {row.rentLabel}
                             </td>
                             <td className="px-1.5 py-1 align-top">

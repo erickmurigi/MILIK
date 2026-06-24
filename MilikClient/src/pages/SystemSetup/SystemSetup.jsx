@@ -186,7 +186,7 @@ const evaluateCompanySetup = (company = {}, userCount = 0) => {
 const CompanyAvatar = ({ company, size = "md" }) => {
   const logo = company?.logo;
   const name = company?.companyName || "Company";
-  const dim = size === "lg" ? "h-9 w-9 rounded-xl text-xs" : "h-7 w-7 rounded-lg text-[10px]";
+  const dim = size === "lg" ? "h-9 w-9 rounded-xl text-xs" : "h-7 w-7 rounded text-[10px]";
   if (logo) return <img src={logo} alt={name} className={`${dim} border border-slate-200 bg-white object-cover shrink-0`} />;
   return (
     <div className={`flex ${dim} items-center justify-center bg-gradient-to-br from-emerald-700 to-emerald-900 font-black text-white shrink-0`}>
@@ -198,7 +198,7 @@ const CompanyAvatar = ({ company, size = "md" }) => {
 const UserAvatar = ({ user, size = "md" }) => {
   const name = `${user?.surname || ""} ${user?.otherNames || ""}`.trim() || user?.email || "User";
   const colorClass = getRoleColors(user);
-  const dim = size === "lg" ? "h-9 w-9 rounded-xl text-xs" : "h-7 w-7 rounded-lg text-[10px]";
+  const dim = size === "lg" ? "h-9 w-9 rounded-xl text-xs" : "h-7 w-7 rounded text-[10px]";
   return (
     <div className={`flex ${dim} items-center justify-center ${colorClass} font-black shrink-0`}>
       {initialsFromName(name)}
@@ -258,7 +258,7 @@ const Pagination = ({ page, totalPages, total, pageSize, onPage, onPageSize }) =
           <select
             value={pageSize}
             onChange={(e) => onPageSize(Number(e.target.value))}
-            className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition"
+            className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition"
           >
             {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
@@ -524,21 +524,21 @@ const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, onAddC
 
       {/* Table */}
       <div className="min-h-0 flex-1 overflow-auto">
-        <table className="min-w-full text-xs">
+        <table className="min-w-full text-[11px] border-collapse">
           <thead className="sticky top-0 z-10">
             <tr className="bg-[#0B3B2E] text-white">
-              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Company</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Mode</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Status</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Readiness</th>
-              <th className="px-4 py-2.5 text-center text-[10px] font-black uppercase tracking-[0.18em]">Users</th>
-              <th className="px-4 py-2.5 text-center text-[10px] font-black uppercase tracking-[0.18em]">Modules</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Contact</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Updated</th>
-              <th className="px-4 py-2.5 text-right text-[10px] font-black uppercase tracking-[0.18em]">Actions</th>
+              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Company</th>
+              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Mode</th>
+              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
+              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Readiness</th>
+              <th className="px-3 py-1 text-center font-bold border-r border-white/10">Users</th>
+              <th className="px-3 py-1 text-center font-bold border-r border-white/10">Modules</th>
+              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Contact</th>
+              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Updated</th>
+              <th className="px-3 py-1 text-right font-bold border-r border-white/10">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody>
             {pageRows.length === 0 ? (
               <tr><td colSpan={9}><EmptyState icon={FaBuilding} title="No companies match" body="Try adjusting your search or filter criteria" /></td></tr>
             ) : pageRows.map((company) => {
@@ -547,8 +547,8 @@ const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, onAddC
               const userCount = companyUserCounts.get(companyId) || 0;
               const statusLabel = getCompanyStatusLabel(company);
               return (
-                <tr key={companyId} className="group bg-white hover:bg-slate-50/80 transition">
-                  <td className="px-4 py-3">
+                <tr key={companyId} className="group border-b border-gray-100 bg-white hover:bg-blue-50/40 transition">
+                  <td className="px-3 py-1.5 border-r border-gray-100">
                     <div className="flex items-center gap-2.5">
                       <CompanyAvatar company={company} />
                       <div>
@@ -557,21 +557,21 @@ const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, onAddC
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-[11px] text-slate-600">{getCompanyOperatingModeLabel(company?.companyMode)}</td>
-                  <td className="px-4 py-3"><StatusBadge label={statusLabel} /></td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-[11px] text-slate-600">{getCompanyOperatingModeLabel(company?.companyMode)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100"><StatusBadge label={statusLabel} /></td>
+                  <td className="px-3 py-1.5 border-r border-gray-100">
                     <ReadinessBar score={readiness.score} />
                     {readiness.missing.length > 0 && (
                       <div className="mt-1 text-[10px] text-rose-500 leading-tight">Missing: {readiness.missing.slice(0, 2).join(", ")}{readiness.missing.length > 2 ? ` +${readiness.missing.length - 2}` : ""}</div>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-center">
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-center">
                     <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-[10px] font-black text-slate-700">{userCount}</span>
                   </td>
-                  <td className="px-4 py-3 text-center">
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-center">
                     <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-[10px] font-black text-emerald-700">{readiness.enabledModules.length}</span>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-1.5 border-r border-gray-100">
                     <div className="flex items-center gap-1 text-[11px] text-slate-500">
                       <FaEnvelope className="shrink-0 text-emerald-600 text-[10px]" />
                       <span className="truncate max-w-[130px]">{company.email || "—"}</span>
@@ -581,8 +581,8 @@ const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, onAddC
                       <span>{[company.town, company.country].filter(Boolean).join(", ") || "—"}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-[11px] text-slate-400 whitespace-nowrap">{formatDate(company.updatedAt || company.createdAt)}</td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-[11px] text-slate-400 whitespace-nowrap">{formatDate(company.updatedAt || company.createdAt)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right">
                     <ActionMenu items={[
                       { label: "Setup", icon: FaCog, onClick: () => onOpenCompanySetup(company) },
                       { label: "Operational Settings", icon: FaGlobeAfrica, onClick: () => onOpenOperationalSettings(company) },
@@ -660,20 +660,20 @@ const UsersPanel = ({ users, companies, companyMap, selectedCompanyId, onSelecte
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
-        <table className="min-w-full text-xs">
+        <table className="min-w-full text-[11px] border-collapse">
           <thead className="sticky top-0 z-10">
             <tr className="bg-[#0B3B2E] text-white">
-              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">User</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Email</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Role</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Primary Company</th>
-              <th className="px-4 py-2.5 text-center text-[10px] font-black uppercase tracking-[0.18em]">Companies</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Status</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Created</th>
-              <th className="px-4 py-2.5 text-right text-[10px] font-black uppercase tracking-[0.18em]">Actions</th>
+              <th className="px-3 py-1 text-left font-bold border-r border-white/10">User</th>
+              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Email</th>
+              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Role</th>
+              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Primary Company</th>
+              <th className="px-3 py-1 text-center font-bold border-r border-white/10">Companies</th>
+              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
+              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Created</th>
+              <th className="px-3 py-1 text-right font-bold border-r border-white/10">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody>
             {pageRows.length === 0 ? (
               <tr><td colSpan={8}><EmptyState icon={FaUsers} title="No users match" body="Try adjusting your search or filter criteria" /></td></tr>
             ) : pageRows.map((user) => {
@@ -682,24 +682,24 @@ const UsersPanel = ({ users, companies, companyMap, selectedCompanyId, onSelecte
               const assignedCompanyIds = getUserAssignedCompanyIds(user);
               const lockState = user?.locked ? "Locked" : user?.isActive === false ? "Inactive" : "Active";
               return (
-                <tr key={userId} className="group bg-white hover:bg-slate-50/80 transition">
-                  <td className="px-4 py-3">
+                <tr key={userId} className="group border-b border-gray-100 bg-white hover:bg-blue-50/40 transition">
+                  <td className="px-3 py-1.5 border-r border-gray-100">
                     <div className="flex items-center gap-2.5">
                       <UserAvatar user={user} />
                       <span className="font-black text-slate-900">{name}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-[11px] text-slate-500">{user?.email || "—"}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-[11px] text-slate-500">{user?.email || "—"}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100">
                     <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${getRoleBadgeColors(user)}`}>{getUserRoleLabel(user)}</span>
                   </td>
-                  <td className="px-4 py-3 text-[11px] text-slate-600">{getPrimaryCompanyName(user, companyMap)}</td>
-                  <td className="px-4 py-3 text-center">
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-[11px] text-slate-600">{getPrimaryCompanyName(user, companyMap)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-center">
                     <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-[10px] font-black text-slate-700">{assignedCompanyIds.length}</span>
                   </td>
-                  <td className="px-4 py-3"><StatusBadge label={lockState} /></td>
-                  <td className="px-4 py-3 text-[11px] text-slate-400 whitespace-nowrap">{formatDate(user?.createdAt)}</td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-3 py-1.5 border-r border-gray-100"><StatusBadge label={lockState} /></td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-[11px] text-slate-400 whitespace-nowrap">{formatDate(user?.createdAt)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right">
                     <ActionMenu items={[
                       { label: "Edit", icon: FaEdit, onClick: () => onEditUser(user) },
                       { label: user?.locked ? "Unlock" : "Lock", icon: user?.locked ? FaLockOpen : FaLock, onClick: () => onToggleUserLock(user) },
@@ -759,20 +759,20 @@ const TrialsPanel = ({ companies, companyReadiness, companyUserCounts, onOpenWor
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
-        <table className="min-w-full text-xs">
+        <table className="min-w-full text-[11px] border-collapse">
           <thead className="sticky top-0 z-10">
             <tr className="bg-[#0B3B2E] text-white">
-              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Company</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Type</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Mode</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Readiness</th>
-              <th className="px-4 py-2.5 text-center text-[10px] font-black uppercase tracking-[0.18em]">Users</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Missing Setup</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Updated</th>
-              <th className="px-4 py-2.5 text-right text-[10px] font-black uppercase tracking-[0.18em]">Actions</th>
+              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Company</th>
+              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
+              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Mode</th>
+              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Readiness</th>
+              <th className="px-3 py-1 text-center font-bold border-r border-white/10">Users</th>
+              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Missing Setup</th>
+              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Updated</th>
+              <th className="px-3 py-1 text-right font-bold border-r border-white/10">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody>
             {pageRows.length === 0 ? (
               <tr><td colSpan={8}><EmptyState icon={FaCheckDouble} title="No spotlight companies" body="All companies are active and fully set up" /></td></tr>
             ) : pageRows.map((company) => {
@@ -781,24 +781,24 @@ const TrialsPanel = ({ companies, companyReadiness, companyUserCounts, onOpenWor
               const userCount = companyUserCounts.get(companyId) || 0;
               const spotlightLabel = company?.isDemoWorkspace ? "Demo" : !isCompanyActive(company) ? "Inactive" : "Needs Attention";
               return (
-                <tr key={companyId} className="group bg-white hover:bg-slate-50/80 transition">
-                  <td className="px-4 py-3">
+                <tr key={companyId} className="group border-b border-gray-100 bg-white hover:bg-blue-50/40 transition">
+                  <td className="px-3 py-1.5 border-r border-gray-100">
                     <div className="flex items-center gap-2.5">
                       <CompanyAvatar company={company} />
                       <div className="font-black text-slate-900 leading-tight">{company.companyName}</div>
                     </div>
                   </td>
-                  <td className="px-4 py-3"><StatusBadge label={spotlightLabel} /></td>
-                  <td className="px-4 py-3 text-[11px] text-slate-600">{getCompanyOperatingModeLabel(company.companyMode)}</td>
-                  <td className="px-4 py-3"><ReadinessBar score={readiness.score} showLabel /></td>
-                  <td className="px-4 py-3 text-center">
+                  <td className="px-3 py-1.5 border-r border-gray-100"><StatusBadge label={spotlightLabel} /></td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-[11px] text-slate-600">{getCompanyOperatingModeLabel(company.companyMode)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100"><ReadinessBar score={readiness.score} showLabel /></td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-center">
                     <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-[10px] font-black text-slate-700">{userCount}</span>
                   </td>
-                  <td className="px-4 py-3 text-[11px] text-slate-500">
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-[11px] text-slate-500">
                     {readiness.missing.length ? readiness.missing.slice(0, 3).join(", ") + (readiness.missing.length > 3 ? ` +${readiness.missing.length - 3}` : "") : <span className="text-emerald-600 font-semibold">No gaps</span>}
                   </td>
-                  <td className="px-4 py-3 text-[11px] text-slate-400 whitespace-nowrap">{formatDate(company.updatedAt || company.createdAt)}</td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-[11px] text-slate-400 whitespace-nowrap">{formatDate(company.updatedAt || company.createdAt)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right">
                     <div className="flex justify-end gap-1.5">
                       <button onClick={() => onOpenWorkspace(company)} className="inline-flex items-center gap-1 rounded-lg border border-[#0B3B2E]/30 bg-[#EDF5F1] px-2.5 py-1 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#EDF5F1]/80 transition">
                         <FaEye className="text-[10px]" /> Workspace
@@ -874,29 +874,29 @@ const AuditPanel = ({ companies, users, companyMap }) => {
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
-        <table className="min-w-full text-xs">
+        <table className="min-w-full text-[11px] border-collapse">
           <thead className="sticky top-0 z-10">
             <tr className="bg-[#0B3B2E] text-white">
-              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Date</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Event</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Type</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-[0.18em]">Detail</th>
+              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date</th>
+              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Event</th>
+              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
+              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Detail</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody>
             {pageRows.length === 0 ? (
               <tr><td colSpan={4}><EmptyState icon={FaHistory} title="No platform activity found" body="Events will appear here as the system is used" /></td></tr>
             ) : pageRows.map((event) => (
-              <tr key={event.id} className="group bg-white hover:bg-slate-50/80 transition">
-                <td className="px-4 py-3 text-[11px] text-slate-400 whitespace-nowrap">{formatDate(event.timestamp)}</td>
-                <td className="px-4 py-3 font-black text-slate-900">{event.title}</td>
-                <td className="px-4 py-3">
+              <tr key={event.id} className="group border-b border-gray-100 bg-white hover:bg-blue-50/40 transition">
+                <td className="px-3 py-1.5 border-r border-gray-100 text-[11px] text-slate-400 whitespace-nowrap">{formatDate(event.timestamp)}</td>
+                <td className="px-3 py-1.5 border-r border-gray-100 font-black text-slate-900">{event.title}</td>
+                <td className="px-3 py-1.5 border-r border-gray-100">
                   <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${event.type === "Company" ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-orange-100 text-orange-700 border-orange-200"}`}>
                     {event.type === "Company" ? <FaBuilding className="mr-1 text-[9px]" /> : <FaUsers className="mr-1 text-[9px]" />}
                     {event.type}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-[11px] text-slate-500">{event.detail}</td>
+                <td className="px-3 py-1.5 border-r border-gray-100 text-[11px] text-slate-500">{event.detail}</td>
               </tr>
             ))}
           </tbody>

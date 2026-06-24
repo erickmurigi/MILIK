@@ -205,7 +205,7 @@ td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
           <input
             type="date" value={asOf}
             onChange={(e) => setAsOf(e.target.value)}
-            className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
           />
           {PERIOD_PRESETS.map(({ label, date }) => (
             <button
@@ -236,7 +236,7 @@ td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
               type="text" value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Tenant or invoice…"
-              className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs text-slate-700 placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs text-slate-700 placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
             />
           </div>
 
@@ -244,7 +244,7 @@ td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
             <select
               value={selectedProperty}
               onChange={(e) => setSelectedProperty(e.target.value)}
-              className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
             >
               <option value="">All Properties</option>
               {properties.map((p) => <option key={p} value={p}>{p}</option>)}
@@ -302,33 +302,33 @@ td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
               )}
             </div>
           ) : (
-            <table className="min-w-full text-xs">
+            <table className="min-w-full text-[11px] border-collapse">
               <thead className="sticky top-0 z-10">
-                <tr className="border-b-2 border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-wider">
-                  <th className="px-3 py-2.5 text-left text-slate-500">Invoice #</th>
-                  <th className="px-3 py-2.5 text-left text-slate-500">Tenant</th>
-                  <th className="px-3 py-2.5 text-left text-slate-500">Property / Unit</th>
-                  <th className="px-3 py-2.5 text-right text-slate-500">Due Date</th>
-                  <th className="px-3 py-2.5 text-right text-slate-500">Days Overdue</th>
-                  {BUCKETS.map((b) => (
-                    <th key={b.key} className={`px-3 py-2.5 text-right ${b.headerCls}`}>
+                <tr className="bg-[#0B3B2E] text-white">
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Invoice #</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Tenant</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property / Unit</th>
+                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Due Date</th>
+                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Days Overdue</th>
+                  {BUCKETS.map((b, i, arr) => (
+                    <th key={b.key} className={`px-3 py-1 text-right font-bold ${b.headerCls} ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>
                       {b.label}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {filteredRows.map((row, i) => (
-                  <tr key={i} className="hover:bg-slate-50/60">
-                    <td className="px-3 py-2 font-mono text-slate-500">{row.invoiceNumber}</td>
-                    <td className="px-3 py-2 font-semibold text-slate-800">{row.tenantName}</td>
-                    <td className="px-3 py-2 text-slate-500">
+                  <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                    <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-500">{row.invoiceNumber}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{row.tenantName}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-500">
                       {row.propertyName}{row.unitName && row.unitName !== "—" ? ` / ${row.unitName}` : ""}
                     </td>
-                    <td className="px-3 py-2 text-right text-slate-500">
+                    <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-500">
                       {new Date(row.dueDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" })}
                     </td>
-                    <td className="px-3 py-2 text-right font-semibold">
+                    <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold">
                       {row.daysOverdue <= 0
                         ? <span className="text-emerald-600">Current</span>
                         : <span className={
@@ -338,8 +338,8 @@ td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
                           }>{row.daysOverdue}d</span>
                       }
                     </td>
-                    {BUCKETS.map((b) => (
-                      <td key={b.key} className="px-3 py-2 text-right font-mono">
+                    {BUCKETS.map((b, j, arr) => (
+                      <td key={b.key} className={`px-3 py-1 text-right font-mono ${j < arr.length - 1 ? 'border-r border-gray-100' : ''}`}>
                         {row.bucket === b.key
                           ? <span className={`font-semibold ${b.valueCls}`}>{fmt(row.outstanding)}</span>
                           : <span className="select-none text-slate-200">—</span>

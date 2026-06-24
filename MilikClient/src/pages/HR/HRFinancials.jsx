@@ -304,7 +304,7 @@ export default function HRFinancials() {
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Search journal #, narration…"
-                    className="w-full rounded-lg border border-slate-200 py-1.5 pl-8 pr-8 text-xs text-slate-700 placeholder-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    className="w-full rounded-lg border border-slate-200 py-1.5 pl-8 pr-8 text-xs text-slate-700 placeholder-slate-400 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20/20"
                   />
                   {search && (
                     <button
@@ -318,7 +318,7 @@ export default function HRFinancials() {
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20/20"
                 >
                   <option value="all">All Status</option>
                   <option value="draft">Draft</option>
@@ -350,8 +350,8 @@ export default function HRFinancials() {
                 />
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[750px] border-collapse text-xs">
-                    <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50">
+                  <table className="w-full min-w-[750px] border-collapse text-[11px]">
+                    <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                       <tr>
                         {[
                           "Journal #",
@@ -361,46 +361,46 @@ export default function HRFinancials() {
                           "Credit Account",
                           "Amount (KES)",
                           "Status",
-                        ].map((col) => (
+                        ].map((col, i, arr) => (
                           <th
                             key={col}
-                            className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-slate-500 whitespace-nowrap"
+                            className={`px-3 py-1 text-left font-bold whitespace-nowrap ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}
                           >
                             {col}
                           </th>
                         ))}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 bg-white">
-                      {journals.map((j) => (
-                        <tr key={j._id} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-4 py-2.5 font-mono text-[11px] font-bold text-slate-700">
+                    <tbody>
+                      {journals.map((j, idx) => (
+                        <tr key={j._id} className={`border-b border-gray-100 transition-colors ${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                          <td className="px-3 py-1 border-r border-gray-100 font-mono font-bold text-slate-700">
                             {j.journalNo || "—"}
                           </td>
-                          <td className="px-4 py-2.5 whitespace-nowrap text-slate-600">
+                          <td className="px-3 py-1 border-r border-gray-100 whitespace-nowrap text-slate-600">
                             {fmtDate(j.date)}
                           </td>
-                          <td className="px-4 py-2.5">
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                          <td className="px-3 py-1 border-r border-gray-100">
+                            <span className="inline-flex rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
                               {JOURNAL_TYPE_LABELS[j.journalType] || j.journalType || "—"}
                             </span>
                           </td>
-                          <td className="px-4 py-2.5 text-slate-700 max-w-[200px]">
+                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[200px]">
                             {j.debitAccount
                               ? `${j.debitAccount.code} – ${j.debitAccount.name}`
                               : "—"}
                           </td>
-                          <td className="px-4 py-2.5 text-slate-700 max-w-[200px]">
+                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[200px]">
                             {j.creditAccount
                               ? `${j.creditAccount.code} – ${j.creditAccount.name}`
                               : "—"}
                           </td>
-                          <td className="px-4 py-2.5 text-right font-mono font-black text-slate-900 whitespace-nowrap">
+                          <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-black text-slate-900 whitespace-nowrap">
                             {fmt(j.amount)}
                           </td>
-                          <td className="px-4 py-2.5">
+                          <td className="px-3 py-1">
                             <span
-                              className={`rounded-full border px-2.5 py-0.5 text-[10px] font-black capitalize ${
+                              className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black capitalize ${
                                 STATUS_BADGE[j.status] || "bg-slate-100 text-slate-500 border-slate-200"
                               }`}
                             >
@@ -436,52 +436,52 @@ export default function HRFinancials() {
                 />
               ) : (
                 <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-                  <table className="w-full min-w-[580px] border-collapse text-xs">
-                    <thead className="border-b border-slate-200 bg-slate-50">
+                  <table className="w-full min-w-[580px] border-collapse text-[11px]">
+                    <thead className="bg-[#0B3B2E] text-white">
                       <tr>
                         {["Code", "Account Name", "Type", "Sub-Group", "Balance (KES)"].map(
-                          (col) => (
+                          (col, i, arr) => (
                             <th
                               key={col}
-                              className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-slate-500"
+                              className={`px-3 py-1 text-left font-bold ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}
                             >
                               {col}
                             </th>
                           )
                         )}
-                        <th className="px-4 py-2.5" />
+                        <th className="px-3 py-1" />
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {accounts.map((a) => (
-                        <tr key={a._id} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-4 py-2.5 font-mono font-bold text-slate-700">
+                    <tbody>
+                      {accounts.map((a, idx) => (
+                        <tr key={a._id} className={`border-b border-gray-100 transition-colors ${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                          <td className="px-3 py-1 border-r border-gray-100 font-mono font-bold text-slate-700">
                             {a.code}
                           </td>
-                          <td className="px-4 py-2.5 font-semibold text-slate-900">{a.name}</td>
-                          <td className="px-4 py-2.5">
+                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{a.name}</td>
+                          <td className="px-3 py-1 border-r border-gray-100">
                             <span
-                              className={`rounded-full px-2 py-0.5 text-[10px] font-bold capitalize ${
-                                ACCOUNT_TYPE_COLORS[a.type] || "bg-slate-100 text-slate-600"
+                              className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold capitalize ${
+                                ACCOUNT_TYPE_COLORS[a.type] || "bg-slate-100 text-slate-600 border-slate-200"
                               }`}
                             >
                               {a.type}
                             </span>
                           </td>
-                          <td className="px-4 py-2.5 text-slate-500">{a.subGroup || a.group || "—"}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{a.subGroup || a.group || "—"}</td>
                           <td
-                            className={`px-4 py-2.5 text-right font-mono font-black ${
+                            className={`px-3 py-1 border-r border-gray-100 text-right font-mono font-black ${
                               Number(a.balance || 0) < 0 ? "text-rose-600" : "text-slate-900"
                             }`}
                           >
                             {fmt(a.balance)}
                           </td>
-                          <td className="px-4 py-2.5 text-right">
+                          <td className="px-3 py-1 text-right">
                             <button
                               onClick={() =>
                                 navigate(`/hr/chart-of-accounts/${a._id}/activity`)
                               }
-                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-[10px] font-bold text-slate-600 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
+                              className="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-[10px] font-bold text-slate-600 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
                             >
                               <FaChartLine size={8} /> Ledger
                             </button>

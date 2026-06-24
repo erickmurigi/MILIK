@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { FaBuilding, FaCheck, FaEdit, FaPlus, FaPrint, FaSearch, FaSquare, FaTimes, FaTrash } from "react-icons/fa";
@@ -145,23 +145,23 @@ const SaleListings = () => {
   const printListing = (row) => {
     const co = currentCompany || {};
     const coName = co.companyName || co.name || "MILIK";
-    const coInfo = [co.phone || co.phoneNumber, co.email || co.companyEmail, co.address || co.location].filter(Boolean).join(" • ");
+    const coInfo = [co.phone || co.phoneNumber, co.email || co.companyEmail, co.address || co.location].filter(Boolean).join(" â€¢ ");
     const logoHtml = co.logo
       ? `<img src="${co.logo}" alt="logo" style="width:72px;height:72px;object-fit:contain;border-radius:10px;border:1px solid #cbd5e1;" />`
       : `<div style="width:72px;height:72px;background:#027333;color:#fff;font-size:26px;font-weight:900;display:flex;align-items:center;justify-content:center;border-radius:10px;">${coName.slice(0,1).toUpperCase()}</div>`;
     const esc = (v) => String(v ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-    const fmtD = (d) => d ? new Date(d).toLocaleDateString("en-KE",{day:"2-digit",month:"long",year:"numeric"}) : "—";
+    const fmtD = (d) => d ? new Date(d).toLocaleDateString("en-KE",{day:"2-digit",month:"long",year:"numeric"}) : "â€”";
     const statusLabel = String(row.status || "").replace(/_/g, " ").toUpperCase();
     const statusC = { available:"#166534", reserved:"#92400e", under_contract:"#1e40af", sold:"#0f172a", withdrawn:"#9f1239" }[row.status] || "#334155";
     const statusBg = { available:"#dcfce7", reserved:"#fef3c7", under_contract:"#dbeafe", sold:"#f1f5f9", withdrawn:"#ffe4e6" }[row.status] || "#f1f5f9";
     const printedOn = new Date().toLocaleDateString("en-KE",{day:"2-digit",month:"long",year:"numeric"});
 
-    const field = (label, value) => `<div class="field"><div class="fl">${esc(label)}</div><div class="fv">${esc(value || "—")}</div></div>`;
+    const field = (label, value) => `<div class="field"><div class="fl">${esc(label)}</div><div class="fv">${esc(value || "â€”")}</div></div>`;
 
     const win = window.open("", "_blank", "width=900,height=720");
     if (!win) return;
     win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
-<title>Sale Listing — ${esc(row.listingNumber)}</title>
+<title>Sale Listing â€” ${esc(row.listingNumber)}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 32px;font-size:12px}
@@ -196,7 +196,7 @@ body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 32px;font
 </div>
 
 <div class="price-box">
-  <div><div class="price-label">Asking Price</div><div class="price-val">${esc(fmtKES(row.askingPrice))}</div><div class="price-note">${row.negotiable?"Price is negotiable":"Fixed price — not negotiable"}</div></div>
+  <div><div class="price-label">Asking Price</div><div class="price-val">${esc(fmtKES(row.askingPrice))}</div><div class="price-note">${row.negotiable?"Price is negotiable":"Fixed price â€” not negotiable"}</div></div>
   <div style="text-align:right"><div class="price-label">Property Type</div><div style="font-size:15px;font-weight:900;color:#0f172a;text-transform:capitalize;margin-top:4px">${esc(row.propertyType)}</div></div>
 </div>
 
@@ -206,7 +206,7 @@ body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 32px;font
   ${field("Title", row.title)}
   ${field("Listed Date", fmtD(row.listedDate))}
   ${field("Size", row.size ? `${row.size} ${row.sizeUnit}` : "Not specified")}
-  ${field("Title Deed", row.titleDeedAvailable ? `Yes — ${row.titleDeedNumber || "Number N/A"}` : "Not available")}
+  ${field("Title Deed", row.titleDeedAvailable ? `Yes â€” ${row.titleDeedNumber || "Number N/A"}` : "Not available")}
   ${field("Assigned Agent", row.assignedAgent?.fullName || "Unassigned")}
 </div>
 
@@ -219,10 +219,10 @@ body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 32px;font
 </div>
 
 ${row.description?`<div class="section-title">Description</div><div class="desc-box">${esc(row.description)}</div>`:""}
-${row.amenities?.length?`<div class="section-title">Amenities</div><div class="desc-box">${row.amenities.map(esc).join(" • ")}</div>`:""}
+${row.amenities?.length?`<div class="section-title">Amenities</div><div class="desc-box">${row.amenities.map(esc).join(" â€¢ ")}</div>`:""}
 ${row.notes?`<div class="section-title">Notes</div><div class="desc-box">${esc(row.notes)}</div>`:""}
 
-<div class="notice">Official property sale listing issued by ${esc(coName)} • Printed: ${esc(printedOn)} • All prices in KES unless otherwise stated</div>
+<div class="notice">Official property sale listing issued by ${esc(coName)} â€¢ Printed: ${esc(printedOn)} â€¢ All prices in KES unless otherwise stated</div>
 </body></html>`);
     win.document.close();
     setTimeout(() => { win.focus(); win.print(); }, 400);
@@ -275,17 +275,17 @@ ${row.notes?`<div class="section-title">Notes</div><div class="desc-box">${esc(r
         {/* Table */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="min-h-0 flex-1 overflow-auto">
-            <table className="min-w-full text-xs">
+            <table className="min-w-full text-[11px] border-collapse">
               <thead className="sticky top-0 z-10 bg-[#027333] text-white">
                 <tr>
-                  <th className="px-3 py-2.5 text-left"><button onClick={toggleAll}>{selectedIds.length === filtered.length && filtered.length > 0 ? <FaCheck className="text-xs" /> : <FaSquare className="text-xs opacity-60" />}</button></th>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Listing</th>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Type</th>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Location</th>
-                  <th className="px-3 py-2.5 text-right font-black tracking-wide">Asking Price</th>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Agent</th>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Status</th>
-                  <th className="px-3 py-2.5 text-right font-black tracking-wide">Actions</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10"><button onClick={toggleAll}>{selectedIds.length === filtered.length && filtered.length > 0 ? <FaCheck className="text-xs" /> : <FaSquare className="text-xs opacity-60" />}</button></th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Listing</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Location</th>
+                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Asking Price</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Agent</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
+                  <th className="px-3 py-1 text-right font-bold">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -294,22 +294,22 @@ ${row.notes?`<div class="section-title">Notes</div><div class="desc-box">${esc(r
                 ) : pageRows.length === 0 ? (
                   <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">No listings found.</td></tr>
                 ) : pageRows.map((row, i) => (
-                  <tr key={row._id} className={`border-t border-slate-100 transition ${selectedIds.includes(row._id) ? "bg-emerald-50/80 shadow-[inset_4px_0_0_0_#027333]" : i % 2 === 0 ? "bg-white hover:bg-slate-50" : "bg-slate-50/60 hover:bg-slate-100/40"}`}>
-                    <td className="px-3 py-2"><button onClick={() => toggleSelect(row._id)}>{selectedIds.includes(row._id) ? <FaCheck className="text-[#027333] text-xs" /> : <FaSquare className="text-xs text-slate-300" />}</button></td>
-                    <td className="px-3 py-2">
+                  <tr key={row._id} className={`border-b border-gray-100 transition ${selectedIds.includes(row._id) ? "bg-emerald-50/80 shadow-[inset_4px_0_0_0_#027333]" : i % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                    <td className="px-3 py-1 border-r border-gray-100"><button onClick={() => toggleSelect(row._id)}>{selectedIds.includes(row._id) ? <FaCheck className="text-[#027333] text-xs" /> : <FaSquare className="text-xs text-slate-300" />}</button></td>
+                    <td className="px-3 py-1 border-r border-gray-100">
                       <div className="font-black text-slate-900">{row.listingNumber}</div>
-                      <div className="text-[11px] text-slate-500 truncate max-w-[160px]">{row.title}</div>
+                      <div className="text-[10px] text-slate-500 truncate max-w-[160px]">{row.title}</div>
                     </td>
-                    <td className="px-3 py-2 capitalize text-slate-600">{row.propertyType}</td>
-                    <td className="px-3 py-2 text-slate-600">{[row.town, row.county].filter(Boolean).join(", ") || row.location || "—"}</td>
-                    <td className="px-3 py-2 text-right font-black text-slate-900">{fmtKES(row.askingPrice)}</td>
-                    <td className="px-3 py-2 text-slate-600">{row.assignedAgent?.fullName || <span className="text-slate-400 italic">Unassigned</span>}</td>
-                    <td className="px-3 py-2">
-                      <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[10px] font-black ${statusColors[row.status] || ""}`}>
+                    <td className="px-3 py-1 border-r border-gray-100 capitalize text-slate-600">{row.propertyType}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{[row.town, row.county].filter(Boolean).join(", ") || row.location || "â€”"}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">{fmtKES(row.askingPrice)}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{row.assignedAgent?.fullName || <span className="text-slate-400 italic">Unassigned</span>}</td>
+                    <td className="px-3 py-1 border-r border-gray-100">
+                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${statusColors[row.status] || ""}`}>
                         {String(row.status || "").replace(/_/g, " ")}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-right">
+                    <td className="px-3 py-1 text-right">
                       <div className="inline-flex flex-wrap justify-end gap-1.5">
                         <button onClick={() => printListing(row)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50"><FaPrint /> Print</button>
                         <button onClick={() => openEdit(row)} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[10px] font-bold text-blue-700"><FaEdit /> Edit</button>
@@ -324,7 +324,7 @@ ${row.notes?`<div class="section-title">Notes</div><div class="desc-box">${esc(r
             </table>
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-white px-4 py-2 text-xs text-slate-500">
-            <span>Showing <strong className="text-slate-900">{serverTotal === 0 ? 0 : (safePage - 1) * ITEMS_PER_PAGE + 1}</strong>–<strong className="text-slate-900">{Math.min(safePage * ITEMS_PER_PAGE, serverTotal)}</strong> of <strong className="text-slate-900">{serverTotal}</strong></span>
+            <span>Showing <strong className="text-slate-900">{serverTotal === 0 ? 0 : (safePage - 1) * ITEMS_PER_PAGE + 1}</strong>â€“<strong className="text-slate-900">{Math.min(safePage * ITEMS_PER_PAGE, serverTotal)}</strong> of <strong className="text-slate-900">{serverTotal}</strong></span>
             <div className="flex items-center gap-2">
               <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} className="rounded-lg border border-slate-200 px-3 py-1 font-semibold disabled:opacity-40">Prev</button>
               <span>Page {safePage} of {totalPages}</span>
@@ -345,27 +345,27 @@ ${row.notes?`<div class="section-title">Notes</div><div class="desc-box">${esc(r
               <button onClick={() => setShowModal(false)} className="rounded-full border border-white/30 p-2 hover:bg-white/10"><FaTimes /></button>
             </div>
             <div className="grid gap-4 overflow-y-auto p-6 md:grid-cols-2 xl:grid-cols-3">
-              <label className="block xl:col-span-2"><span className="text-xs font-bold text-slate-700">Title / Property Name</span><input value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none focus:ring-2 focus:ring-[#027333]/20" /></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Property Type</span><select value={form.propertyType} onChange={(e) => setForm((p) => ({ ...p, propertyType: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none focus:ring-2 focus:ring-[#027333]/20">{PROPERTY_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}</select></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Asking Price (KES)</span><AmountInput value={form.askingPrice} onChange={(v) => setForm((p) => ({ ...p, askingPrice: v }))} placeholder="e.g. 8,500,000" className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none focus:ring-2 focus:ring-[#027333]/20" /></label>
-              <div className="block"><span className="text-xs font-bold text-slate-700">Size</span><div className="mt-1 flex gap-2"><input type="number" value={form.size} onChange={(e) => setForm((p) => ({ ...p, size: e.target.value }))} placeholder="e.g. 50" className="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none" /><select value={form.sizeUnit} onChange={(e) => setForm((p) => ({ ...p, sizeUnit: e.target.value }))} className="rounded-xl border border-slate-300 px-2 py-2 text-sm focus:border-[#027333] focus:outline-none">{SIZE_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}</select></div></div>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Assigned Agent</span><select value={form.assignedAgent} onChange={(e) => setForm((p) => ({ ...p, assignedAgent: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none focus:ring-2 focus:ring-[#027333]/20"><option value="">Unassigned</option>{agents.map((a) => <option key={a._id} value={a._id}>{a.fullName} ({a.agentNumber})</option>)}</select></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Location / Address</span><input value={form.location} onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none" /></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Town / City</span><input value={form.town} onChange={(e) => setForm((p) => ({ ...p, town: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none" /></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">County</span><input value={form.county} onChange={(e) => setForm((p) => ({ ...p, county: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none" /></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Listed Date</span><input type="date" value={form.listedDate} onChange={(e) => setForm((p) => ({ ...p, listedDate: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none" /></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Title Deed No.</span><input value={form.titleDeedNumber} onChange={(e) => setForm((p) => ({ ...p, titleDeedNumber: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none" /></label>
+              <label className="block xl:col-span-2"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Title / Property Name</span><input value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" /></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Property Type</span><select value={form.propertyType} onChange={(e) => setForm((p) => ({ ...p, propertyType: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20">{PROPERTY_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}</select></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Asking Price (KES)</span><AmountInput value={form.askingPrice} onChange={(v) => setForm((p) => ({ ...p, askingPrice: v }))} placeholder="e.g. 8,500,000" className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" /></label>
+              <div className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Size</span><div className="mt-1 flex gap-2"><input type="number" value={form.size} onChange={(e) => setForm((p) => ({ ...p, size: e.target.value }))} placeholder="e.g. 50" className="flex-1 rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" /><select value={form.sizeUnit} onChange={(e) => setForm((p) => ({ ...p, sizeUnit: e.target.value }))} className="rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20">{SIZE_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}</select></div></div>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Assigned Agent</span><select value={form.assignedAgent} onChange={(e) => setForm((p) => ({ ...p, assignedAgent: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20"><option value="">Unassigned</option>{agents.map((a) => <option key={a._id} value={a._id}>{a.fullName} ({a.agentNumber})</option>)}</select></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Location / Address</span><input value={form.location} onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" /></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Town / City</span><input value={form.town} onChange={(e) => setForm((p) => ({ ...p, town: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" /></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">County</span><input value={form.county} onChange={(e) => setForm((p) => ({ ...p, county: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" /></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Listed Date</span><input type="date" value={form.listedDate} onChange={(e) => setForm((p) => ({ ...p, listedDate: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" /></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Title Deed No.</span><input value={form.titleDeedNumber} onChange={(e) => setForm((p) => ({ ...p, titleDeedNumber: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" /></label>
               <div className="flex items-center gap-4 pt-5">
-                <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={form.negotiable} onChange={(e) => setForm((p) => ({ ...p, negotiable: e.target.checked }))} className="accent-[#027333]" /><span className="text-xs font-bold text-slate-700">Negotiable</span></label>
-                <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={form.titleDeedAvailable} onChange={(e) => setForm((p) => ({ ...p, titleDeedAvailable: e.target.checked }))} className="accent-[#027333]" /><span className="text-xs font-bold text-slate-700">Title Deed Available</span></label>
+                <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={form.negotiable} onChange={(e) => setForm((p) => ({ ...p, negotiable: e.target.checked }))} className="accent-[#027333]" /><span className="mb-0.5 block text-xs font-semibold text-slate-700">Negotiable</span></label>
+                <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={form.titleDeedAvailable} onChange={(e) => setForm((p) => ({ ...p, titleDeedAvailable: e.target.checked }))} className="accent-[#027333]" /><span className="mb-0.5 block text-xs font-semibold text-slate-700">Title Deed Available</span></label>
               </div>
-              <label className="block md:col-span-2 xl:col-span-3"><span className="text-xs font-bold text-slate-700">Amenities (comma-separated)</span><input value={form.amenities} onChange={(e) => setForm((p) => ({ ...p, amenities: e.target.value }))} placeholder="Borehole, Power, Road access, ..." className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none" /></label>
-              <label className="block md:col-span-2 xl:col-span-3"><span className="text-xs font-bold text-slate-700">Description</span><textarea rows={3} value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none" /></label>
-              <label className="block md:col-span-2 xl:col-span-3"><span className="text-xs font-bold text-slate-700">Internal Notes</span><textarea rows={2} value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none" /></label>
+              <label className="block md:col-span-2 xl:col-span-3"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Amenities (comma-separated)</span><input value={form.amenities} onChange={(e) => setForm((p) => ({ ...p, amenities: e.target.value }))} placeholder="Borehole, Power, Road access, ..." className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" /></label>
+              <label className="block md:col-span-2 xl:col-span-3"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Description</span><textarea rows={3} value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" /></label>
+              <label className="block md:col-span-2 xl:col-span-3"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Internal Notes</span><textarea rows={2} value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" /></label>
             </div>
             <div className="flex shrink-0 items-center justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
-              <button onClick={() => setShowModal(false)} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-black text-slate-700">Cancel</button>
-              <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-[#027333] px-4 py-2 text-sm font-black text-white hover:bg-[#0c5d2b] disabled:opacity-60">{saving ? "Saving..." : editingId ? "Update Listing" : "Save Listing"}</button>
+              <button onClick={() => setShowModal(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-[#027333] px-4 py-2 text-xs font-black text-white hover:bg-[#0c5d2b] disabled:opacity-60">{saving ? "Saving..." : editingId ? "Update Listing" : "Save Listing"}</button>
             </div>
           </div>
         </div>

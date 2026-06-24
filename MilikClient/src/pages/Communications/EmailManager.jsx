@@ -372,17 +372,17 @@ const EmailManager = () => {
               <p className="text-xs font-semibold text-slate-400">{search ? "No emails match your search." : "No emails yet. Compose one above."}</p>
             </div>
           ) : (
-            <table className="w-full min-w-[640px] text-xs">
+            <table className="w-full min-w-[640px] text-[11px] border-collapse">
               <thead className="sticky top-0 z-10">
                 <tr className="bg-[#0B3B2E] text-white">
-                  <th className="px-4 py-2.5 text-left font-semibold">Recipient</th>
-                  <th className="px-4 py-2.5 text-left font-semibold">Subject</th>
-                  <th className="px-4 py-2.5 text-left font-semibold">Type</th>
-                  <th className="px-4 py-2.5 text-center font-semibold">Status</th>
-                  <th className="px-4 py-2.5 text-right font-semibold">Sent</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Recipient</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Subject</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
+                  <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
+                  <th className="px-3 py-1 text-right font-bold">Sent</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {filtered.map((log, i) => {
                   const rowKey = log._id || i;
                   const isExpanded = expandedId === rowKey;
@@ -390,21 +390,21 @@ const EmailManager = () => {
                     <React.Fragment key={rowKey}>
                       <tr
                         onClick={() => setExpanded(isExpanded ? null : rowKey)}
-                        className="cursor-pointer bg-white transition hover:bg-[#EDF5F1]"
+                        className={`border-b border-gray-100 cursor-pointer transition ${i % 2 === 0 ? "bg-white hover:bg-[#EDF5F1]" : "bg-slate-50/60 hover:bg-[#EDF5F1]"}`}
                       >
-                        <td className="px-4 py-2.5">
+                        <td className="px-3 py-1 border-r border-gray-100">
                           <div className="font-bold text-slate-900">{log.recipientName || "—"}</div>
                           <div className="text-[10px] text-slate-400">{log.recipient || log.to || ""}</div>
                         </td>
-                        <td className="px-4 py-2.5 max-w-[300px]">
+                        <td className="px-3 py-1 border-r border-gray-100 max-w-[300px]">
                           <p className="line-clamp-1 font-semibold text-slate-800">{log.subject || "—"}</p>
                           <p className="line-clamp-1 text-slate-500">{log.body || log.message || ""}</p>
                         </td>
-                        <td className="px-4 py-2.5">
+                        <td className="px-3 py-1 border-r border-gray-100">
                           <span className="border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">{log.templateName || log.type || "—"}</span>
                         </td>
-                        <td className="px-4 py-2.5 text-center"><StatusChip status={log.status} /></td>
-                        <td className="px-4 py-2.5 text-right">
+                        <td className="px-3 py-1 border-r border-gray-100 text-center"><StatusChip status={log.status} /></td>
+                        <td className="px-3 py-1 text-right">
                           <div className="font-semibold text-slate-700">{fmtRel(log.sentAt || log.createdAt)}</div>
                           <div className="text-[10px] text-slate-400">{fmtDateTime(log.sentAt || log.createdAt)}</div>
                         </td>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { FaEdit, FaFilter, FaPlus, FaTimes, FaTrash } from "react-icons/fa";
@@ -9,13 +9,13 @@ import { useConfirm } from "../../context/ConfirmContext";
 
 const ACTIVITY_TYPES = ["call", "email", "meeting", "site_visit", "whatsapp", "note", "follow_up"];
 const OUTCOMES       = ["positive", "neutral", "negative", "no_answer", "not_applicable"];
-const ACT_ICONS      = { call: "📞", email: "✉️", meeting: "🤝", site_visit: "🏠", whatsapp: "💬", note: "📝", follow_up: "🔔" };
+const ACT_ICONS      = { call: "ðŸ“ž", email: "âœ‰ï¸", meeting: "ðŸ¤", site_visit: "ðŸ ", whatsapp: "ðŸ’¬", note: "ðŸ“", follow_up: "ðŸ””" };
 const OUTCOME_COLORS = { positive: "text-emerald-600", neutral: "text-slate-500", negative: "text-rose-600", no_answer: "text-amber-600", not_applicable: "text-slate-400" };
 const TYPE_COLORS    = { call: "bg-blue-100 text-blue-700", email: "bg-indigo-100 text-indigo-700", meeting: "bg-violet-100 text-violet-700", site_visit: "bg-emerald-100 text-emerald-700", whatsapp: "bg-green-100 text-green-700", note: "bg-slate-100 text-slate-600", follow_up: "bg-amber-100 text-amber-700" };
 
 const blankForm = { type: "call", subject: "", notes: "", date: "", durationMinutes: "", outcome: "not_applicable", nextAction: "", nextActionDate: "", relatedLead: "", relatedBuyer: "", relatedDeal: "" };
 
-const fmt    = (v) => v ? new Date(v).toLocaleString("en-KE", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
+const fmt    = (v) => v ? new Date(v).toLocaleString("en-KE", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "â€”";
 const fmtDay = (v) => v ? new Date(v).toLocaleDateString("en-KE", { weekday: "long", day: "2-digit", month: "long", year: "numeric" }) : "";
 const LIMIT  = 50;
 
@@ -134,7 +134,7 @@ export default function SaleActivities() {
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white flex-shrink-0">
           <div className="flex items-center gap-2">
             <FaFilter className="text-indigo-400" size={13} />
-            <h2 className="font-semibold text-slate-700 text-sm">CRM — Activity Log</h2>
+            <h2 className="font-semibold text-slate-700 text-sm">CRM â€” Activity Log</h2>
             {total > 0 && <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">{total}</span>}
           </div>
           <button onClick={openCreate} className="flex items-center gap-1.5 bg-indigo-600 text-white text-xs px-3 py-1.5 rounded hover:bg-indigo-700 transition-colors">
@@ -167,7 +167,7 @@ export default function SaleActivities() {
 
         {/* Timeline */}
         <div className="flex-1 overflow-auto px-4 py-4 space-y-6">
-          {isLoading && <div className="text-center text-slate-400 text-sm py-10">Loading…</div>}
+          {isLoading && <div className="text-center text-slate-400 text-sm py-10">Loadingâ€¦</div>}
           {!isLoading && activities.length === 0 && (
             <div className="text-center text-slate-400 text-sm py-10">No activities found</div>
           )}
@@ -181,7 +181,7 @@ export default function SaleActivities() {
               <div className="space-y-2">
                 {dayActs.map((act) => (
                   <div key={act._id} className="flex gap-3 group bg-white border border-slate-100 rounded-lg px-4 py-3 hover:border-slate-200 transition-colors">
-                    <div className="text-xl flex-shrink-0 mt-0.5">{ACT_ICONS[act.type] || "📋"}</div>
+                    <div className="text-xl flex-shrink-0 mt-0.5">{ACT_ICONS[act.type] || "ðŸ“‹"}</div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -207,7 +207,7 @@ export default function SaleActivities() {
                       {act.notes && <p className="text-xs text-slate-500 mt-1.5">{act.notes}</p>}
                       {act.nextAction && (
                         <p className="text-xs text-indigo-600 mt-1">
-                          → {act.nextAction}{act.nextActionDate ? ` · ${new Date(act.nextActionDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short" })}` : ""}
+                          â†’ {act.nextAction}{act.nextActionDate ? ` Â· ${new Date(act.nextActionDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short" })}` : ""}
                         </p>
                       )}
                     </div>
@@ -221,16 +221,16 @@ export default function SaleActivities() {
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-2 border-t border-slate-200 bg-white flex-shrink-0">
-            <span className="text-xs text-slate-500">{total} activities · Page {page} of {totalPages}</span>
+            <span className="text-xs text-slate-500">{total} activities Â· Page {page} of {totalPages}</span>
             <div className="flex gap-1">
-              <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="text-xs px-2.5 py-1 border rounded disabled:opacity-40 hover:bg-slate-50">‹</button>
-              <button disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} className="text-xs px-2.5 py-1 border rounded disabled:opacity-40 hover:bg-slate-50">›</button>
+              <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="text-xs px-2.5 py-1 border rounded disabled:opacity-40 hover:bg-slate-50">â€¹</button>
+              <button disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} className="text-xs px-2.5 py-1 border rounded disabled:opacity-40 hover:bg-slate-50">â€º</button>
             </div>
           </div>
         )}
       </div>
 
-      {/* ── Log / Edit Activity Modal ──────────────────────────────────────────── */}
+      {/* â”€â”€ Log / Edit Activity Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
@@ -240,70 +240,70 @@ export default function SaleActivities() {
             </div>
             <div className="px-5 py-4 grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Type *</label>
-                <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none">
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Type *</label>
+                <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20">
                   {ACTIVITY_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, " ")}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Date & Time *</label>
-                <input type="datetime-local" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Date & Time *</label>
+                <input type="datetime-local" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
               </div>
               <div className="col-span-2">
-                <label className="block text-xs font-medium text-slate-600 mb-1">Subject</label>
-                <input value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Subject</label>
+                <input value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Outcome</label>
-                <select value={form.outcome} onChange={(e) => setForm((f) => ({ ...f, outcome: e.target.value }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none">
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Outcome</label>
+                <select value={form.outcome} onChange={(e) => setForm((f) => ({ ...f, outcome: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20">
                   {OUTCOMES.map((o) => <option key={o} value={o}>{o.replace(/_/g, " ")}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Duration (min)</label>
-                <input type="number" value={form.durationMinutes} onChange={(e) => setForm((f) => ({ ...f, durationMinutes: e.target.value }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Duration (min)</label>
+                <input type="number" value={form.durationMinutes} onChange={(e) => setForm((f) => ({ ...f, durationMinutes: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
               </div>
 
-              {/* Linking — at most one entity */}
+              {/* Linking â€” at most one entity */}
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Link to Lead</label>
-                <select value={form.relatedLead} onChange={(e) => setForm((f) => ({ ...f, relatedLead: e.target.value, relatedBuyer: "", relatedDeal: "" }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none">
-                  <option value="">— None —</option>
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Link to Lead</label>
+                <select value={form.relatedLead} onChange={(e) => setForm((f) => ({ ...f, relatedLead: e.target.value, relatedBuyer: "", relatedDeal: "" }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20">
+                  <option value="">â€” None â€”</option>
                   {leads.map((l) => <option key={l._id} value={l._id}>{l.fullName} ({l.leadNumber})</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Link to Buyer</label>
-                <select value={form.relatedBuyer} onChange={(e) => setForm((f) => ({ ...f, relatedBuyer: e.target.value, relatedLead: "", relatedDeal: "" }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none" disabled={!!form.relatedLead}>
-                  <option value="">— None —</option>
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Link to Buyer</label>
+                <select value={form.relatedBuyer} onChange={(e) => setForm((f) => ({ ...f, relatedBuyer: e.target.value, relatedLead: "", relatedDeal: "" }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" disabled={!!form.relatedLead}>
+                  <option value="">â€” None â€”</option>
                   {buyers.map((b) => <option key={b._id} value={b._id}>{b.fullName} ({b.buyerNumber})</option>)}
                 </select>
               </div>
               <div className="col-span-2">
-                <label className="block text-xs font-medium text-slate-600 mb-1">Link to Deal</label>
-                <select value={form.relatedDeal} onChange={(e) => setForm((f) => ({ ...f, relatedDeal: e.target.value, relatedLead: "", relatedBuyer: "" }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none" disabled={!!(form.relatedLead || form.relatedBuyer)}>
-                  <option value="">— None —</option>
-                  {deals.map((d) => <option key={d._id} value={d._id}>{d.dealNumber}{d.buyer?.fullName ? ` — ${d.buyer.fullName}` : ""}</option>)}
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Link to Deal</label>
+                <select value={form.relatedDeal} onChange={(e) => setForm((f) => ({ ...f, relatedDeal: e.target.value, relatedLead: "", relatedBuyer: "" }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" disabled={!!(form.relatedLead || form.relatedBuyer)}>
+                  <option value="">â€” None â€”</option>
+                  {deals.map((d) => <option key={d._id} value={d._id}>{d.dealNumber}{d.buyer?.fullName ? ` â€” ${d.buyer.fullName}` : ""}</option>)}
                 </select>
               </div>
 
               <div className="col-span-2">
-                <label className="block text-xs font-medium text-slate-600 mb-1">Notes</label>
-                <textarea rows={3} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Notes</label>
+                <textarea rows={3} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20 resize-none" />
               </div>
               <div className="col-span-2">
-                <label className="block text-xs font-medium text-slate-600 mb-1">Next Action</label>
-                <input value={form.nextAction} onChange={(e) => setForm((f) => ({ ...f, nextAction: e.target.value }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Next Action</label>
+                <input value={form.nextAction} onChange={(e) => setForm((f) => ({ ...f, nextAction: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Next Action Date</label>
-                <input type="date" value={form.nextActionDate} onChange={(e) => setForm((f) => ({ ...f, nextActionDate: e.target.value }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Next Action Date</label>
+                <input type="date" value={form.nextActionDate} onChange={(e) => setForm((f) => ({ ...f, nextActionDate: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
               </div>
             </div>
             <div className="flex justify-end gap-2 px-5 py-3 border-t bg-slate-50">
-              <button onClick={() => setShowModal(false)} className="text-sm px-4 py-2 border border-slate-300 rounded text-slate-600 hover:bg-slate-100">Cancel</button>
-              <button onClick={handleSave} disabled={saving} className="text-sm px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50">
-                {saving ? "Saving…" : editingId ? "Update" : "Log Activity"}
+              <button onClick={() => setShowModal(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button onClick={handleSave} disabled={saving} className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-black text-white hover:bg-indigo-700 disabled:opacity-50">
+                {saving ? "Savingâ€¦" : editingId ? "Update" : "Log Activity"}
               </button>
             </div>
           </div>

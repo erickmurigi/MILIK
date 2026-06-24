@@ -14,6 +14,7 @@ import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import {
   FaPlus,
+  FaCheck,
   FaSearch,
   FaChevronDown,
   FaChevronLeft,
@@ -68,6 +69,7 @@ import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
 const DEFAULT_PAGE_SIZE = 50;
+const fmtKES = (n) => Number(n || 0).toLocaleString("en-KE");
 
 const normalizeId = (value) => {
   if (!value) return "";
@@ -239,10 +241,13 @@ const Tenants = ({ listingMode = "active" }) => {
   const [showCommunicationModal, setShowCommunicationModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [isTransferring, setIsTransferring] = useState(false);
-  const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", effectiveDate: "", reason: "" });
+  const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", effectiveDate: "", reason: "", filterProperty: "", filterSearch: "", depositTopUp: 0, depositTopUpDueDate: "" });
   const [showTerminateModal, setShowTerminateModal] = useState(false);
   const [isTerminating, setIsTerminating] = useState(false);
   const [terminationForm, setTerminationForm] = useState({ tenantId: "", effectiveDate: "", reason: "" });
+  const [showRestoreModal, setShowRestoreModal] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [restoreForm, setRestoreForm] = useState({ tenantId: "", notes: "" });
   const [invoiceRefreshTick, setInvoiceRefreshTick] = useState(0);
   const [paymentsSnapshotReady, setPaymentsSnapshotReady] = useState(false);
 
@@ -442,6 +447,49 @@ const Tenants = ({ listingMode = "active" }) => {
     return { leaseByTenantId: byId, leaseCountByTenant: countById };
   }, [leases]);
 
+  // Transfer modal — expensive computations gated on modal being open
+  const transferBase = useMemo(() => {
+    if (!showTransferModal || !transferForm.tenantId) return null;
+    const rawTenant = (Array.isArray(tenantsData) ? tenantsData : []).find((t) => normalizeId(t._id) === transferForm.tenantId) || null;
+    const currentDeposit = Number(rawTenant?.depositAmount || 0);
+    const currentRent = Number(rawTenant?.rent || 0);
+    const currentUnitId = normalizeId(rawTenant?.unit?._id || rawTenant?.unit);
+    const currentUnitDoc = (Array.isArray(units) ? units : []).find((u) => normalizeId(u._id) === currentUnitId) || null;
+    const currentPropertyName = currentUnitDoc?.property?.propertyName || rawTenant?.unit?.property?.propertyName || "-";
+    const occupiedUnitIds = new Set([
+      currentUnitId,
+      ...((Array.isArray(rawTenant?.additionalUnits) ? rawTenant.additionalUnits : []).map((u) => normalizeId(u?._id || u))),
+    ].filter(Boolean));
+    const allVacantUnits = (Array.isArray(units) ? units : []).filter((u) => {
+      const id = normalizeId(u?._id);
+      if (!id || occupiedUnitIds.has(id)) return false;
+      return String(u?.status || "").toLowerCase() === "vacant" && u?.isVacant !== false;
+    });
+    const uniqueProperties = Array.from(
+      new Map(allVacantUnits.map((u) => {
+        const id = normalizeId(u?.property?._id || u?.property);
+        return [id, { id, name: u?.property?.propertyName || "Unknown" }];
+      })).values()
+    ).sort((a, b) => a.name.localeCompare(b.name));
+    return { rawTenant, currentDeposit, currentRent, currentPropertyName, allVacantUnits, uniqueProperties };
+  }, [showTransferModal, transferForm.tenantId, tenantsData, units]);
+
+  // Filtered units and destination — re-runs only when filter fields or selected unit change
+  const transferFiltered = useMemo(() => {
+    if (!transferBase) return { filteredUnits: [], destUnit: null, depositDiff: 0, rentDiff: 0, destPropertyName: "-", destDeposit: 0, destRent: 0 };
+    const { allVacantUnits, currentDeposit, currentRent } = transferBase;
+    const filteredUnits = allVacantUnits.filter((u) => {
+      const propId = normalizeId(u?.property?._id || u?.property);
+      if (transferForm.filterProperty && propId !== transferForm.filterProperty) return false;
+      if (transferForm.filterSearch && !String(u?.unitNumber || "").toLowerCase().includes(transferForm.filterSearch.toLowerCase())) return false;
+      return true;
+    });
+    const destUnit = allVacantUnits.find((u) => normalizeId(u._id) === transferForm.newUnit) || null;
+    const destDeposit = Number(destUnit?.deposit || 0);
+    const destRent = Number(destUnit?.rent || 0);
+    return { filteredUnits, destUnit, destDeposit, destRent, destPropertyName: destUnit?.property?.propertyName || "-", depositDiff: destDeposit - currentDeposit, rentDiff: destRent - currentRent };
+  }, [transferBase, transferForm.filterProperty, transferForm.filterSearch, transferForm.newUnit]);
+
   const paymentsByTenant = useMemo(() => {
     const map = new Map();
     rentPayments.forEach(p => {
@@ -533,6 +581,7 @@ const Tenants = ({ listingMode = "active" }) => {
       const hasBalance = Math.abs(Number(balance || 0)) > 0.009;
       const canTerminate = tenantOperationalStatus === "active";
       const canTransfer = tenantOperationalStatus === "active";
+      const canRestore = tenantOperationalStatus === "terminated";
       const canDelete = !hasBalance && leaseCount === 0 && invoiceCount === 0 && invoiceNoteCount === 0 && paymentCount === 0;
       const deleteBlockedReason = hasBalance
         ? "This tenant still has an outstanding balance."
@@ -564,6 +613,7 @@ const Tenants = ({ listingMode = "active" }) => {
         status: tenantOperationalStatus,
         terminationDate: tenant.terminationDate ? new Date(tenant.terminationDate).toLocaleDateString() : "-",
         moveOutDate: tenant.moveOutDate ? new Date(tenant.moveOutDate).toLocaleDateString() : "-",
+        terminationReason: tenant.terminationReason || "",
         depositHeld: Number(tenant.depositAmount || 0),
         depositHeldBy: tenant.depositHeldBy || tenant.unit?.property?.depositHeldBy || "Management Company",
         settlementStatus:
@@ -580,6 +630,7 @@ const Tenants = ({ listingMode = "active" }) => {
         canDelete,
         canTerminate,
         canTransfer,
+        canRestore,
         deleteBlockedReason,
       };
     });
@@ -612,6 +663,12 @@ const Tenants = ({ listingMode = "active" }) => {
   const endIndex = startIndex + pageSize;
   // Tenants from server are already the current page; local sort/filter on the page subset
   const currentTenants = sortedFilteredTenants.slice(0, endIndex - startIndex);
+
+  const propertyTenantCounts = useMemo(() => {
+    const map = {};
+    for (const t of currentTenants) map[t.propertyName] = (map[t.propertyName] || 0) + 1;
+    return map;
+  }, [currentTenants]);
 
   const selectedPrimaryTenant = useMemo(
     () => transformedTenants.find((tenant) => tenant.id === selectedTenants[0]) || null,
@@ -1134,44 +1191,25 @@ const Tenants = ({ listingMode = "active" }) => {
   };
 
 
-const handleTransferUnit = () => {
-  if (!canUpdateTenant) {
-    toast.warning("You do not have permission to transfer tenant units");
-    return;
-  }
-  if (selectedTenants.length === 0) {
-    toast.warning("Please select one tenant to transfer");
-    return;
-  }
-  if (selectedTenants.length > 1) {
-    toast.warning("Please select only one tenant to transfer");
-    return;
-  }
-  if (!selectedPrimaryTenant?.canTransfer) {
-    toast.warning("Only active tenants can be transferred to another unit.");
-    return;
-  }
-
+const handleTransferUnit = useCallback(() => {
+  if (!canUpdateTenant) { toast.warning("You do not have permission to transfer tenant units"); return; }
+  if (selectedTenants.length === 0) { toast.warning("Please select one tenant to transfer"); return; }
+  if (selectedTenants.length > 1) { toast.warning("Please select only one tenant to transfer"); return; }
+  if (!selectedPrimaryTenant?.canTransfer) { toast.warning("Only active tenants can be transferred to another unit."); return; }
+  const due = new Date(); due.setDate(due.getDate() + 7);
   setTransferForm({
-    tenantId: selectedTenants[0],
-    newUnit: "",
-    effectiveDate: new Date().toISOString().slice(0, 10),
-    reason: "",
+    tenantId: selectedTenants[0], newUnit: "", effectiveDate: new Date().toISOString().slice(0, 10),
+    reason: "", filterProperty: "", filterSearch: "", depositTopUp: 0,
+    depositTopUpDueDate: due.toISOString().slice(0, 10),
   });
   setShowTransferModal(true);
   setActionMenuOpen(false);
-};
+}, [canUpdateTenant, selectedTenants, selectedPrimaryTenant]);
 
-const confirmTransferUnit = async () => {
-  if (!canUpdateTenant) {
-    toast.warning("You do not have permission to transfer tenant units");
-    return;
-  }
-  if (!transferForm.tenantId || !transferForm.newUnit) {
-    toast.error("Choose the destination unit before transferring");
-    return;
-  }
-
+const confirmTransferUnit = useCallback(async () => {
+  if (!canUpdateTenant) { toast.warning("You do not have permission to transfer tenant units"); return; }
+  if (!transferForm.tenantId || !transferForm.newUnit) { toast.error("Choose the destination unit before transferring"); return; }
+  const topUp = Number(transferForm.depositTopUp || 0);
   setIsTransferring(true);
   try {
     await adminRequests.post(`/tenants/${transferForm.tenantId}/transfer-unit`, {
@@ -1179,8 +1217,34 @@ const confirmTransferUnit = async () => {
       newUnit: transferForm.newUnit,
       effectiveDate: transferForm.effectiveDate,
       reason: transferForm.reason,
+      ...(topUp > 0 && { depositTopUpAmount: topUp }),
     });
-    toast.success("Tenant unit transferred successfully");
+
+    if (topUp > 0) {
+      const newUnitDoc = transferFiltered.destUnit;
+      const propertyId = newUnitDoc?.property?._id || newUnitDoc?.property;
+      try {
+        await createTenantInvoice({
+          business: currentCompany?._id,
+          tenant: transferForm.tenantId,
+          unit: transferForm.newUnit,
+          property: propertyId,
+          category: "DEPOSIT_CHARGE",
+          amount: topUp,
+          invoiceDate: transferForm.effectiveDate,
+          dueDate: transferForm.depositTopUpDueDate || transferForm.effectiveDate,
+          description: `Deposit top-up — unit transfer to ${newUnitDoc?.unitNumber || "new unit"}`,
+          metadata: { unitTransfer: true, transferEffectiveDate: transferForm.effectiveDate },
+        });
+        toast.success("Tenant transferred and deposit top-up invoice created");
+      } catch {
+        toast.success("Tenant transferred successfully");
+        toast.warning("Deposit top-up invoice could not be created automatically — please create it manually");
+      }
+    } else {
+      toast.success("Tenant unit transferred successfully");
+    }
+
     setShowTransferModal(false);
     await dispatch(getTenants(buildTenantParams()));
     await dispatch(getUnits({ business: currentCompany._id }));
@@ -1190,7 +1254,7 @@ const confirmTransferUnit = async () => {
   } finally {
     setIsTransferring(false);
   }
-};
+}, [canUpdateTenant, transferForm, transferFiltered, currentCompany, dispatch, loadInvoices, buildTenantParams]);
 
   const handleReviewRent = () => {
     if (!canUpdateTenant) {
@@ -1285,6 +1349,45 @@ const confirmTransferUnit = async () => {
       );
     } finally {
       setIsTerminating(false);
+    }
+  };
+
+  const handleOpenRestoreTenant = () => {
+    if (!canUpdateTenant) { toast.warning("You do not have permission to update tenants"); return; }
+    if (selectedTenants.length !== 1) { toast.warning("Select exactly one tenant to restore"); return; }
+    if (!selectedPrimaryTenant?.canRestore) { toast.warning("Only terminated tenants can be restored"); return; }
+    setRestoreForm({ tenantId: selectedTenants[0], notes: "" });
+    setShowRestoreModal(true);
+    setActionMenuOpen(false);
+  };
+
+    const confirmRestoreTenant = async () => {
+    if (!canUpdateTenant) { toast.warning("You do not have permission to update tenants"); return; }
+    if (!restoreForm.tenantId) { toast.error("No tenant selected"); return; }
+    setIsRestoring(true);
+    try {
+      const response = await adminRequests.put(`/tenants/status/${restoreForm.tenantId}`, {
+        business: currentCompany?._id,
+        status: "active",
+      });
+      toast.success(response?.data?.message || "Tenant restored successfully");
+      setShowRestoreModal(false);
+      setRestoreForm({ tenantId: "", notes: "" });
+      setSelectedTenants([]);
+      setSelectAll(false);
+      await dispatch(getTenants(buildTenantParams()));
+      await dispatch(getUnits({ business: currentCompany._id }));
+      await getLeases(dispatch, currentCompany._id).catch(() => {});
+      await loadInvoices();
+    } catch (error) {
+      toast.error(
+        error?.response?.data?.message ||
+          error?.response?.data?.error ||
+          error?.message ||
+          "Failed to restore tenant"
+      );
+    } finally {
+      setIsRestoring(false);
     }
   };
 
@@ -1607,6 +1710,13 @@ const confirmTransferUnit = async () => {
                           <FaUserSlash size={12} /> Terminate Tenant
                         </button>
                       )}
+                      {canUpdateTenant && isTerminatedView && (
+                        <button onClick={handleOpenRestoreTenant}
+                          disabled={selectedTenants.length !== 1 || !selectedPrimaryTenant?.canRestore}
+                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 border-t border-gray-200 ${selectedTenants.length === 1 && selectedPrimaryTenant?.canRestore ? "hover:bg-emerald-50 text-[#0B3B2E] font-semibold" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
+                          <FaRedoAlt size={12} /> Restore Tenant
+                        </button>
+                      )}
                       <button onClick={() => { setActionMenuOpen(false); setShowCommunicationModal(true); }}
                         className="w-full text-left px-3 py-1.5 text-xs hover:bg-orange-50 flex items-center gap-2 text-orange-700 border-t border-gray-200">
                         <FaSms size={12} /> SMS Tenants
@@ -1649,75 +1759,38 @@ const confirmTransferUnit = async () => {
 
         {/* ===== TENANTS TABLE ===== */}
         <div className="flex-1 min-h-0 overflow-auto px-2">
-          <table className="w-full border-collapse">
+          <table className="w-full border-collapse table-fixed">
             <thead className="sticky top-0 z-10 shadow-sm">
-              <tr className={`${MILIK_GREEN} text-white text-xs`}>
-                <th className="px-2 py-1.5 text-center font-bold border-r border-gray-400 w-6">
+              <tr className={`${MILIK_GREEN} text-white text-[11px]`}>
+                <th className="w-9 px-2 py-2 text-center border-r border-white/10">
                   <input
                     type="checkbox"
                     checked={selectAll}
                     onChange={handleSelectAll}
                     onClick={handleCheckboxClick}
-                    className="rounded border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                    className="rounded border-gray-300 text-orange-600 focus:ring-[#0B3B2E]/20 cursor-pointer"
                   />
                 </th>
-                <th className="px-2 py-1.5 text-center font-bold border-r border-gray-400 w-6" />
-                <th className="px-2 py-1.5 text-left font-bold border-r border-gray-400 min-w-[80px]">
-                  Code
-                </th>
-                <th className="px-2 py-1.5 text-left font-bold border-r border-gray-400 min-w-[150px]">
-                  Tenant Name
-                </th>
-                <th className="px-2 py-1.5 text-left font-bold border-r border-gray-400 min-w-[120px]">
-                  Property
-                </th>
-                <th className="px-2 py-1.5 text-left font-bold border-r border-gray-400 min-w-[80px]">
-                  Unit
-                </th>
+                <th className="w-7 px-1 py-2 border-r border-white/10" />
+                <th className="w-[82px] px-3 py-2 text-left font-bold border-r border-white/10">Code</th>
+                <th className="px-3 py-2 text-left font-bold border-r border-white/10">Tenant</th>
+                <th className="w-[72px] px-3 py-2 text-left font-bold border-r border-white/10">Unit</th>
                 {isTerminatedView ? (
                   <>
-                    <th className="px-2 py-1.5 text-left font-bold border-r border-gray-400 min-w-[120px]">
-                      Termination Date
-                    </th>
-                    <th className="px-2 py-1.5 text-left font-bold border-r border-gray-400 min-w-[120px]">
-                      Move-out Date
-                    </th>
-                    <th className="px-2 py-1.5 text-right font-bold border-r border-gray-400 min-w-[110px]">
-                      Final Balance
-                    </th>
-                    <th className="px-2 py-1.5 text-right font-bold border-r border-gray-400 min-w-[110px]">
-                      Deposit Held
-                    </th>
-                    <th className="px-2 py-1.5 text-center font-bold border-r border-gray-400 min-w-[120px]">
-                      Settlement Status
-                    </th>
-                    <th className="px-2 py-1.5 text-left font-bold min-w-[140px]">
-                      Deposit Holder
-                    </th>
+                    <th className="w-[108px] px-3 py-2 text-left font-bold border-r border-white/10">Terminated</th>
+                    <th className="w-[100px] px-3 py-2 text-left font-bold border-r border-white/10">Move-out</th>
+                    <th className="w-[110px] px-3 py-2 text-right font-bold border-r border-white/10">Final Balance</th>
+                    <th className="w-[110px] px-3 py-2 text-right font-bold border-r border-white/10">Deposit Held</th>
+                    <th className="w-[110px] px-3 py-2 text-center font-bold border-r border-white/10">Settlement</th>
+                    <th className="w-[130px] px-3 py-2 text-left font-bold">Held By</th>
                   </>
                 ) : (
                   <>
-                    <th className="px-2 py-1.5 text-left font-bold border-r border-gray-400 min-w-[120px]">
-                      Lease Start Date
-                    </th>
-                    <th className="px-2 py-1.5 text-left font-bold border-r border-gray-400 min-w-[120px]">
-                      Lease End Date
-                    </th>
-                    <th className="px-2 py-1.5 text-right font-bold border-r border-gray-400 min-w-[100px]">
-                      Rent
-                    </th>
-                    <th className="px-2 py-1.5 text-right font-bold border-r border-gray-400 min-w-[110px]">
-                      Balance
-                    </th>
-                    <th className="px-2 py-1.5 text-center font-bold border-r border-gray-400 min-w-[80px]">
-                      Status
-                    </th>
-                    <th className="px-2 py-1.5 text-left font-bold border-r border-gray-400 min-w-[100px]">
-                      Phone
-                    </th>
-                    <th className="px-2 py-1.5 text-left font-bold min-w-[160px]">
-                      Email
-                    </th>
+                    <th className="w-[188px] px-3 py-2 text-left font-bold border-r border-white/10">Lease Period</th>
+                    <th className="w-[100px] px-3 py-2 text-right font-bold border-r border-white/10">Rent</th>
+                    <th className="w-[112px] px-3 py-2 text-right font-bold border-r border-white/10">Balance</th>
+                    <th className="w-[92px] px-3 py-2 text-center font-bold border-r border-white/10">Status</th>
+                    <th className="w-[155px] px-3 py-2 text-left font-bold">Contact</th>
                   </>
                 )}
               </tr>
@@ -1732,171 +1805,146 @@ const confirmTransferUnit = async () => {
                   return (
                     <React.Fragment key={tenant.id}>
                       {isFirstOfProperty && (
-                        <tr className="bg-transparent">
-                          <td colSpan={isTerminatedView ? 12 : 13} className="px-2 pt-1.5 pb-1">
-                            <h3 className="text-sm font-extrabold text-black tracking-normal uppercase">
-                              {toListingCaps(tenant.propertyName)}
-                            </h3>
-                            <div className="mt-1 h-[2px] w-full bg-[#FF8C00]" />
+                        <tr>
+                          <td colSpan={isTerminatedView ? 11 : 10} className="px-3 pt-2.5 pb-1 bg-white">
+                            <div className="flex items-center gap-2.5">
+                              <div className="h-4 w-1 rounded-full bg-[#FF8C00] shrink-0" />
+                              <span className="text-[11px] font-black tracking-widest text-slate-800 uppercase leading-none">
+                                {toListingCaps(tenant.propertyName)}
+                              </span>
+                              <span className="rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-500 tabular-nums leading-none">
+                                {propertyTenantCounts[tenant.propertyName] || 0}
+                              </span>
+                            </div>
+                            <div className="mt-1.5 h-px bg-gradient-to-r from-[#FF8C00]/50 via-orange-200/60 to-transparent" />
                           </td>
                         </tr>
                       )}
 
                       <tr
-                        className={`border-b cursor-pointer transition-colors text-xs ${
-                          tenant.expiryWarning?.hasWarning ? "border-red-200" : "border-gray-200"
+                        className={`border-b text-[11px] cursor-pointer transition-colors ${
+                          tenant.expiryWarning?.hasWarning ? "border-red-200" : "border-gray-100"
                         } ${
                           selectedTenants.includes(tenant.id)
-                            ? "bg-orange-50 hover:bg-orange-100"
+                            ? "bg-emerald-50 shadow-[inset_3px_0_0_0_#0B3B2E]"
                             : tenant.expiryWarning?.hasWarning
-                            ? "bg-red-50/70 hover:bg-red-100/80"
-                            : "bg-white hover:bg-gray-50"
+                            ? "bg-red-50/60 hover:bg-red-100/60"
+                            : idx % 2 === 0
+                            ? "bg-white hover:bg-blue-50/40"
+                            : "bg-slate-50/60 hover:bg-blue-50/40"
                         }`}
                         onClick={() => handleSelectTenant(tenant.id)}
                       >
-                        <td
-                          className="px-2 py-1 text-center border-r border-gray-200"
-                          onClick={handleCheckboxClick}
-                        >
+                        <td className="w-8 px-2 py-1.5 text-center border-r border-gray-100" onClick={handleCheckboxClick}>
                           <input
                             type="checkbox"
                             checked={selectedTenants.includes(tenant.id)}
                             onChange={() => handleSelectTenant(tenant.id)}
                             onClick={handleCheckboxClick}
-                            className="rounded border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                            className="rounded border-gray-300 text-orange-600 focus:ring-[#0B3B2E]/20 cursor-pointer"
                           />
                         </td>
                         <td
-                          className="px-2 py-1 text-center border-r border-gray-200 cursor-pointer text-slate-400 transition hover:text-slate-700"
+                          className="w-6 px-1 py-1.5 text-center border-r border-gray-100 cursor-pointer text-slate-300 transition hover:text-slate-600"
                           onClick={(e) => { e.stopPropagation(); toggleTenantExpand(tenant.id); }}
                         >
-                          {expandedTenants.includes(tenant.id)
-                            ? <FaChevronDown size={10} />
-                            : <FaChevronRight size={10} />}
+                          {expandedTenants.includes(tenant.id) ? <FaChevronDown size={9} /> : <FaChevronRight size={9} />}
                         </td>
-                        <td className="px-2 py-1 font-mono text-gray-600 border-r border-gray-200 text-xs">
-                          {toListingCaps(tenant.tenantCode)}
+                        <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                          <span className="font-mono text-[10px] text-slate-500 tracking-wide truncate block">{toListingCaps(tenant.tenantCode)}</span>
                         </td>
-                        <td className="px-2 py-1 border-r border-gray-200">
-                          <div className="font-bold text-gray-900">{toListingCaps(tenant.tenantName)}</div>
+                        <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                          <div className="font-semibold text-slate-900 leading-tight truncate" title={toListingCaps(tenant.tenantName)}>{toListingCaps(tenant.tenantName)}</div>
                           {tenant.expiryWarning?.hasWarning && (
-                            <div className="mt-0.5 text-[10px] font-semibold text-red-700">
-                              {tenant.expiryWarning.summary}
-                            </div>
+                            <div className="mt-0.5 text-[10px] font-semibold text-red-600 leading-tight truncate">{tenant.expiryWarning.summary}</div>
                           )}
                         </td>
-                        <td className="px-2 py-1 font-bold text-gray-900 border-r border-gray-200">
-                          {toListingCaps(tenant.propertyName)}
-                        </td>
-                        <td className="px-2 py-1 font-bold text-gray-900 border-r border-gray-200">
-                          {toListingCaps(tenant.unitNumber)}
+                        <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                          <span className="font-medium text-slate-700 truncate block">{toListingCaps(tenant.unitNumber)}</span>
                         </td>
                         {isTerminatedView ? (
                           <>
-                            <td className="px-2 py-1 font-bold text-gray-900 border-r border-gray-200">
-                              {tenant.terminationDate}
-                            </td>
-                            <td className="px-2 py-1 font-bold text-gray-900 border-r border-gray-200">
-                              {tenant.moveOutDate}
-                            </td>
-                            <td className="px-2 py-1 font-bold text-right border-r border-gray-200">
+                            <td className="px-3 py-1.5 text-slate-700 border-r border-gray-100 overflow-hidden"><span className="truncate block">{tenant.terminationDate}</span></td>
+                            <td className="px-3 py-1.5 text-slate-700 border-r border-gray-100 overflow-hidden"><span className="truncate block">{tenant.moveOutDate}</span></td>
+                            <td className="px-3 py-1.5 text-right border-r border-gray-100 whitespace-nowrap">
                               {tenant.balance < -0.009 ? (
-                                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">
+                                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
                                   CR&nbsp;{Math.abs(tenant.balance).toLocaleString("en-KE", { minimumFractionDigits: 2 })}
                                 </span>
                               ) : tenant.balance > 0.009 ? (
-                                <span className="font-bold text-red-600">
-                                  KES {tenant.balance.toLocaleString()}
-                                </span>
+                                <span className="font-bold text-red-600">KES {tenant.balance.toLocaleString()}</span>
                               ) : (
-                                <span className="text-gray-400">—</span>
+                                <span className="text-slate-300">—</span>
                               )}
                             </td>
-                            <td className="px-2 py-1 font-bold text-right text-gray-900 border-r border-gray-200">
+                            <td className="px-3 py-1.5 text-right font-semibold text-slate-700 border-r border-gray-100 whitespace-nowrap">
                               Ksh {tenant.depositHeld.toLocaleString()}
                             </td>
-                            <td className="px-2 py-1 text-center border-r border-gray-200">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
-                                tenant.settlementStatus === "SETTLED"
-                                  ? "bg-green-100 text-green-800"
-                                  : tenant.settlementStatus === "REFUND_DUE"
-                                  ? "bg-blue-100 text-blue-800"
-                                  : tenant.settlementStatus === "OWES_BALANCE"
-                                  ? "bg-red-100 text-red-700"
-                                  : "bg-amber-100 text-amber-800"
+                            <td className="px-3 py-1.5 text-center border-r border-gray-100">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                tenant.settlementStatus === "SETTLED" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                : tenant.settlementStatus === "REFUND_DUE" ? "bg-blue-50 text-blue-700 border-blue-200"
+                                : tenant.settlementStatus === "OWES_BALANCE" ? "bg-red-50 text-red-700 border-red-200"
+                                : "bg-amber-50 text-amber-700 border-amber-200"
                               }`}>
                                 {tenant.settlementStatus.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}
                               </span>
                             </td>
-                            <td className="px-2 py-1 font-bold text-gray-900">
-                              {tenant.depositHeldBy}
-                            </td>
+                            <td className="px-3 py-1 text-slate-700">{tenant.depositHeldBy}</td>
                           </>
                         ) : (
                           <>
-                            <td className="px-2 py-1 font-bold text-gray-900 border-r border-gray-200">
-                              {tenant.startDate}
+                            <td className="px-3 py-1 border-r border-gray-100 whitespace-nowrap">
+                              <span className="text-slate-600">{tenant.startDate}</span>
+                              <span className="text-slate-300 mx-1.5">→</span>
+                              {tenant.endDate === "-"
+                                ? <span className="text-slate-400 italic text-[10px]">open</span>
+                                : <span className={tenant.expiryWarning?.hasWarning ? "font-semibold text-red-600" : "text-slate-600"}>{tenant.endDate}</span>
+                              }
                             </td>
-                            <td className={`px-2 py-1 font-bold border-r border-gray-200 ${
-                              tenant.expiryWarning?.hasWarning ? "text-red-700" : "text-gray-900"
-                            }`}>
-                              {tenant.endDate}
-                            </td>
-                            <td className="px-2 py-1 font-bold text-gray-900 text-right border-r border-gray-200">
+                            <td className="px-3 py-1.5 text-right font-semibold text-slate-700 border-r border-gray-100 whitespace-nowrap">
                               {tenant.rent}
                             </td>
-                            <td className="px-2 py-1 font-bold text-right border-r border-gray-200">
+                            <td className="px-3 py-1.5 text-right border-r border-gray-100 whitespace-nowrap">
                               {tenant.balance < -0.009 ? (
-                                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">
+                                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
                                   CR&nbsp;{Math.abs(tenant.balance).toLocaleString("en-KE", { minimumFractionDigits: 2 })}
                                 </span>
                               ) : tenant.balance > 0.009 ? (
-                                <span className="font-bold text-red-600">
-                                  KES {tenant.balance.toLocaleString()}
-                                </span>
+                                <span className="font-bold text-red-600">KES {tenant.balance.toLocaleString()}</span>
                               ) : (
-                                <span className="text-gray-400">—</span>
+                                <span className="text-slate-300">—</span>
                               )}
                             </td>
-                            <td className="px-2 py-1 text-center border-r border-gray-200">
-                              <div className="flex flex-col items-center gap-1">
-                                <span
-                                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
-                                    tenant.status === "active"
-                                      ? "bg-green-100 text-green-800"
-                                      : tenant.status === "terminated"
-                                      ? "bg-red-100 text-red-700"
-                                      : "bg-gray-100 text-gray-800"
-                                  }`}
-                                >
-                                  {tenant.status}
-                                </span>
-                                {tenant.expiryWarning?.hasWarning && (
-                                  <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">
-                                    Expiring Soon
-                                  </span>
-                                )}
-                              </div>
+                            <td className="px-3 py-1.5 text-center border-r border-gray-100">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                tenant.status === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                : tenant.status === "terminated" ? "bg-red-50 text-red-700 border-red-200"
+                                : "bg-slate-100 text-slate-600 border-slate-200"
+                              }`}>
+                                {tenant.status}
+                              </span>
+                              {tenant.expiryWarning?.hasWarning && (
+                                <div className="mt-0.5">
+                                  <span className="inline-flex items-center rounded-full bg-red-50 border border-red-200 px-1.5 py-0.5 text-[9px] font-bold text-red-600">⚠ Expiring</span>
+                                </div>
+                              )}
                             </td>
-                            <td className="px-2 py-1 font-bold text-gray-900 border-r border-gray-200">
-                              {tenant.phone}
-                            </td>
-                            <td className="px-2 py-1">
+                            <td className="px-3 py-1 overflow-hidden">
+                              {tenant.phone && tenant.phone !== "-" && (
+                                <div className="text-[11px] font-medium text-slate-700 leading-tight truncate">{tenant.phone}</div>
+                              )}
                               {tenant.email && tenant.email !== "-" ? (
                                 <a
                                   href={`mailto:${tenant.email}`}
                                   onClick={(e) => e.stopPropagation()}
-                                  className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline font-medium truncate max-w-[160px]"
+                                  className="block text-[10px] text-blue-500 hover:text-blue-700 hover:underline truncate leading-tight mt-0.5"
                                   title={tenant.email}
                                 >
-                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 shrink-0">
-                                    <path d="M3 4a2 2 0 0 0-2 2v1.161l8.441 4.221a1.25 1.25 0 0 0 1.118 0L19 7.162V6a2 2 0 0 0-2-2H3Z"/>
-                                    <path d="m19 8.839-7.77 3.885a2.75 2.75 0 0 1-2.46 0L1 8.839V14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.839Z"/>
-                                  </svg>
-                                  <span className="truncate">{tenant.email}</span>
+                                  {tenant.email}
                                 </a>
                               ) : (
-                                <span className="text-gray-400">—</span>
+                                !tenant.phone || tenant.phone === "-" ? <span className="text-slate-300">—</span> : null
                               )}
                             </td>
                           </>
@@ -1904,8 +1952,8 @@ const confirmTransferUnit = async () => {
                       </tr>
 
                       {expandedTenants.includes(tenant.id) && (
-                        <tr className="bg-gray-100 border-b border-gray-200">
-                          <td colSpan={isTerminatedView ? 12 : 13} className="px-3 py-1.5">
+                        <tr className="bg-slate-50/80 border-b border-gray-100">
+                          <td colSpan={isTerminatedView ? 11 : 10} className="px-3 py-2">
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
                               <div>
                                 <h4 className="mb-2 border-b border-slate-200 pb-1 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">
@@ -2050,7 +2098,7 @@ const confirmTransferUnit = async () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan="12" className="px-3 py-8 text-center text-gray-600 font-semibold text-xs">
+                  <td colSpan={isTerminatedView ? 11 : 10} className="px-3 py-8 text-center text-gray-600 font-semibold text-xs">
                     {isFetchingTenants ? (
                       <div className="flex items-center justify-center gap-2 text-gray-400">
                         <FaSpinner className="animate-spin" size={14} />
@@ -2080,7 +2128,7 @@ const confirmTransferUnit = async () => {
               <select
                 value={pageSize}
                 onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition"
+                className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition"
               >
                 {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
@@ -2143,66 +2191,253 @@ const confirmTransferUnit = async () => {
 
 
 {showTransferModal && (() => {
-  const selectedTenantRecord = (Array.isArray(tenantsData) ? tenantsData : []).find((tenant) => tenant._id === transferForm.tenantId) || null;
-  const occupiedUnitIds = new Set([
-    normalizeId(selectedTenantRecord?.unit?._id || selectedTenantRecord?.unit),
-    ...((Array.isArray(selectedTenantRecord?.additionalUnits) ? selectedTenantRecord.additionalUnits : []).map((unit) => normalizeId(unit?._id || unit))),
-  ].filter(Boolean));
-  const availableTransferUnits = (Array.isArray(units) ? units : []).filter((unit) => {
-    const status = String(unit?.status || "").toLowerCase();
-    const unitId = normalizeId(unit?._id);
-    if (!unitId || occupiedUnitIds.has(unitId)) return false;
-    return status === "vacant" && unit?.isVacant !== false;
-  });
-
+  const { currentDeposit, currentRent, currentPropertyName, allVacantUnits, uniqueProperties } = transferBase || {};
+  const { filteredUnits, destUnit, destDeposit, destRent, destPropertyName, depositDiff, rentDiff } = transferFiltered;
+  const diffCls = (v) => v > 0 ? "text-red-600" : v < 0 ? "text-emerald-600" : "text-slate-500";
+  const diffLabel = (v) => v === 0 ? "No change" : (v > 0 ? `+Ksh ${fmtKES(Math.abs(v))}` : `-Ksh ${fmtKES(Math.abs(v))}`);
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-lg rounded-3xl bg-white shadow-2xl">
-        <div className="border-b border-slate-200 px-6 py-4">
-          <div className="text-lg font-black text-slate-900">Transfer Tenant Unit</div>
-          <div className="mt-1 text-sm text-slate-500">Move the tenant to a new primary unit while preserving tenant history and invoice records.</div>
-        </div>
-        <div className="space-y-4 px-6 py-5">
-          <div>
-            <label className="block text-sm font-semibold text-slate-700">Destination Unit</label>
-            <select
-              value={transferForm.newUnit}
-              onChange={(e) => setTransferForm((prev) => ({ ...prev, newUnit: e.target.value }))}
-              className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm"
-            >
-              <option value="">Select vacant unit</option>
-              {availableTransferUnits.map((unit) => (
-                <option key={unit._id} value={unit._id}>
-                  {unit.unitNumber} - {(unit.property?.propertyName || unit.propertyName || "Property")}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+
+        {/* Header */}
+        <div className="flex items-center justify-between bg-[#0B3B2E] px-5 py-4">
+          <div className="flex items-center gap-2.5 text-white">
+            <FaExchangeAlt size={14} />
             <div>
-              <label className="block text-sm font-semibold text-slate-700">Effective Date</label>
-              <input
-                type="date"
-                value={transferForm.effectiveDate}
-                onChange={(e) => setTransferForm((prev) => ({ ...prev, effectiveDate: e.target.value }))}
-                className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-700">Reason</label>
-              <input
-                type="text"
-                value={transferForm.reason}
-                onChange={(e) => setTransferForm((prev) => ({ ...prev, reason: e.target.value }))}
-                placeholder="Upgrade, relocation, merger of spaces..."
-                className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm"
-              />
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">Internal Transfer</p>
+              <h3 className="text-sm font-black leading-tight">Transfer Tenant to New Unit</h3>
             </div>
           </div>
+          <button onClick={() => { if (!isTransferring) setShowTransferModal(false); }}
+            className="flex h-7 w-7 items-center justify-center rounded text-white/70 hover:bg-white/10 hover:text-white transition">
+            <FaTimes size={13} />
+          </button>
         </div>
-        <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
-          <button onClick={() => setShowTransferModal(false)} className="rounded-2xl border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700">Cancel</button>
-          <button onClick={confirmTransferUnit} disabled={isTransferring} className="rounded-2xl bg-[#0B3B2E] px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-60">{isTransferring ? "Transferring..." : "Transfer Unit"}</button>
+
+        <div className="flex-1 overflow-y-auto">
+          {/* Current tenant summary */}
+          <div className="border-b border-slate-100 bg-slate-50 px-5 py-3">
+            <div className="grid grid-cols-4 gap-3 text-xs">
+              <div>
+                <p className="font-bold uppercase tracking-wider text-slate-400">Tenant</p>
+                <p className="mt-0.5 font-bold text-slate-900 truncate">{selectedPrimaryTenant?.tenantName || "-"}</p>
+                <p className="text-slate-500">{selectedPrimaryTenant?.tenantCode || "-"}</p>
+              </div>
+              <div>
+                <p className="font-bold uppercase tracking-wider text-slate-400">Current Unit</p>
+                <p className="mt-0.5 font-bold text-slate-900">{selectedPrimaryTenant?.unitNumber || "-"}</p>
+                <p className="text-slate-500 truncate">{currentPropertyName}</p>
+              </div>
+              <div>
+                <p className="font-bold uppercase tracking-wider text-slate-400">Rent</p>
+                <p className="mt-0.5 font-bold text-slate-900">Ksh {fmtKES(currentRent)}</p>
+              </div>
+              <div>
+                <p className="font-bold uppercase tracking-wider text-slate-400">Deposit Held</p>
+                <p className="mt-0.5 font-bold text-slate-900">Ksh {fmtKES(currentDeposit)}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4 px-5 py-4">
+            {/* Unit search filters */}
+            <div>
+              <p className="mb-2 text-xs font-black uppercase tracking-wider text-slate-700">Available Vacant Units ({allVacantUnits.length})</p>
+              <div className="flex flex-wrap gap-2">
+                <select
+                  value={transferForm.filterProperty}
+                  onChange={(e) => setTransferForm((p) => ({ ...p, filterProperty: e.target.value }))}
+                  className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 appearance-none outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
+                  <option value="">All properties</option>
+                  {uniqueProperties.map((prop) => (
+                    <option key={prop.id} value={prop.id}>{prop.name}</option>
+                  ))}
+                </select>
+                <div className="relative">
+                  <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" size={9} />
+                  <input
+                    type="text"
+                    placeholder="Search unit no."
+                    value={transferForm.filterSearch}
+                    onChange={(e) => setTransferForm((p) => ({ ...p, filterSearch: e.target.value }))}
+                    className="h-7 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs text-slate-700 outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Units list */}
+            <div className="max-h-44 overflow-y-auto rounded-lg border border-slate-200">
+              {filteredUnits.length === 0 ? (
+                <div className="flex items-center justify-center py-6 text-xs text-slate-400">
+                  {allVacantUnits.length === 0 ? "No vacant units available for transfer" : "No units match the current filters"}
+                </div>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-slate-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-600">Unit</th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-600">Property</th>
+                      <th className="px-3 py-2 text-right font-semibold text-slate-600">Rent</th>
+                      <th className="px-3 py-2 text-right font-semibold text-slate-600">Deposit</th>
+                      <th className="px-3 py-2 text-center font-semibold text-slate-600">Select</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredUnits.map((u) => {
+                      const uId = normalizeId(u._id);
+                      const isSelected = transferForm.newUnit === uId;
+                      const uDeposit = Number(u.deposit || 0);
+                      const uRent = Number(u.rent || 0);
+                      return (
+                        <tr key={uId}
+                          onClick={() => setTransferForm((p) => ({
+                            ...p,
+                            newUnit: uId,
+                            depositTopUp: Math.max(0, uDeposit - currentDeposit),
+                          }))}
+                          className={`cursor-pointer border-t border-slate-100 transition ${isSelected ? "bg-[#0B3B2E]/5 font-semibold" : "hover:bg-slate-50"}`}>
+                          <td className="px-3 py-2">
+                            <span className={`font-bold ${isSelected ? "text-[#0B3B2E]" : "text-slate-900"}`}>{u.unitNumber}</span>
+                          </td>
+                          <td className="px-3 py-2 text-slate-600 max-w-[120px] truncate">{u.property?.propertyName || "-"}</td>
+                          <td className="px-3 py-2 text-right text-slate-700">Ksh {fmtKES(uRent)}</td>
+                          <td className="px-3 py-2 text-right text-slate-700">Ksh {fmtKES(uDeposit)}</td>
+                          <td className="px-3 py-2 text-center">
+                            {isSelected
+                              ? <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#0B3B2E] text-white"><FaCheck size={8} /></span>
+                              : <span className="inline-block h-5 w-5 rounded-full border-2 border-slate-300" />}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Comparison + deposit when unit selected */}
+            {destUnit && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Current</p>
+                    <p className="mt-1 text-xs font-bold text-slate-800">{selectedPrimaryTenant?.unitNumber || "-"}</p>
+                    <p className="text-[11px] text-slate-500 truncate">{currentPropertyName}</p>
+                    <div className="mt-1.5 flex gap-3 text-[11px] text-slate-600">
+                      <span>Rent <span className="font-bold">Ksh {fmtKES(currentRent)}</span></span>
+                      <span>Dep <span className="font-bold">Ksh {fmtKES(currentDeposit)}</span></span>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-[#0B3B2E]/20 bg-[#0B3B2E]/5 px-3 py-2.5">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#0B3B2E]/60">New Unit</p>
+                    <p className="mt-1 text-xs font-bold text-[#0B3B2E]">{destUnit.unitNumber}</p>
+                    <p className="text-[11px] text-[#0B3B2E]/70 truncate">{destPropertyName}</p>
+                    <div className="mt-1.5 flex gap-3 text-[11px]">
+                      <span className={`font-semibold ${diffCls(rentDiff)}`}>
+                        Rent Ksh {fmtKES(destRent)} {rentDiff !== 0 && <span>({diffLabel(rentDiff)})</span>}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 text-[11px]">
+                      <span className={`font-semibold ${diffCls(depositDiff)}`}>
+                        Dep Ksh {fmtKES(destDeposit)} {depositDiff !== 0 && <span>({diffLabel(depositDiff)})</span>}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Deposit top-up section */}
+                {depositDiff > 0 ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500 text-white shrink-0"><span className="text-[9px] font-black">!</span></div>
+                      <p className="text-xs font-semibold text-amber-900">Deposit top-up required — new unit needs Ksh {fmtKES(depositDiff)} more</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">Top-up amount <span className="text-red-500">*</span></label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={transferForm.depositTopUp}
+                          onChange={(e) => setTransferForm((p) => ({ ...p, depositTopUp: Math.max(0, Number(e.target.value || 0)) }))}
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                        />
+                        <p className="mt-0.5 text-[10px] text-slate-400">Suggested: Ksh {fmtKES(depositDiff)}</p>
+                      </div>
+                      <div>
+                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">Invoice due date <span className="text-red-500">*</span></label>
+                        <input
+                          type="date"
+                          value={transferForm.depositTopUpDueDate}
+                          onChange={(e) => setTransferForm((p) => ({ ...p, depositTopUpDueDate: e.target.value }))}
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-amber-700">
+                      {Number(transferForm.depositTopUp) > 0
+                        ? `A Ksh ${fmtKES(transferForm.depositTopUp)} DEPOSIT_CHARGE invoice will be created for this tenant after the transfer.`
+                        : "Set the top-up amount above to auto-generate a deposit invoice, or leave at 0 to handle manually."}
+                    </p>
+                  </div>
+                ) : depositDiff < 0 ? (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs text-emerald-800">
+                    <span className="font-semibold">No top-up needed.</span> The new unit's deposit (Ksh {fmtKES(destDeposit)}) is lower than the tenant's current deposit (Ksh {fmtKES(currentDeposit)}). The surplus of Ksh {fmtKES(Math.abs(depositDiff))} can be refunded or carried forward at your discretion.
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs text-slate-600">
+                    Deposit amounts match — no top-up invoice required.
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Transfer details */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Effective date <span className="text-red-500">*</span></label>
+                <input
+                  type="date"
+                  value={transferForm.effectiveDate}
+                  onChange={(e) => setTransferForm((p) => ({ ...p, effectiveDate: e.target.value }))}
+                  className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                />
+              </div>
+              <div>
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Reason</label>
+                <input
+                  type="text"
+                  value={transferForm.reason}
+                  onChange={(e) => setTransferForm((p) => ({ ...p, reason: e.target.value }))}
+                  placeholder="Upgrade, relocation, preference match…"
+                  className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between border-t border-slate-200 px-5 py-3">
+          <p className="text-[11px] text-slate-400">
+            {filteredUnits.length} unit{filteredUnits.length !== 1 ? "s" : ""} available
+            {transferForm.newUnit && destUnit ? ` · ${destUnit.unitNumber} selected` : ""}
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => { if (!isTransferring) setShowTransferModal(false); }}
+              disabled={isTransferring}
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60">
+              Cancel
+            </button>
+            <button
+              onClick={confirmTransferUnit}
+              disabled={isTransferring || !transferForm.newUnit}
+              className="rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
+              {isTransferring ? "Transferring…" : "Transfer Unit"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -2292,6 +2527,95 @@ const confirmTransferUnit = async () => {
           </div>
         </div>
       )}
+      {showRestoreModal && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between bg-[#0B3B2E] px-5 py-4">
+              <div className="flex items-center gap-2.5 text-white">
+                <FaRedoAlt size={15} />
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">Restore</p>
+                  <h3 className="text-sm font-black leading-tight">Restore Tenant</h3>
+                </div>
+              </div>
+              <button onClick={() => { if (!isRestoring) { setShowRestoreModal(false); } }}
+                className="flex h-7 w-7 items-center justify-center rounded text-white/70 hover:bg-white/10 hover:text-white transition">
+                <FaTimes size={13} />
+              </button>
+            </div>
+
+            <div className="space-y-4 px-5 py-4">
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-900">
+                <p className="font-semibold">Re-activating this tenant will restore their occupancy and restart billing.</p>
+                <p className="mt-0.5 text-emerald-700">The system will verify the unit is still vacant before completing the restoration.</p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Tenant</p>
+                  <p className="mt-1 text-xs font-bold text-slate-900">{selectedPrimaryTenant?.tenantName || "-"}</p>
+                  <p className="text-[11px] text-slate-500">{selectedPrimaryTenant?.tenantCode || "-"}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Unit / Property</p>
+                  <p className="mt-1 text-xs font-bold text-slate-900">{selectedPrimaryTenant?.unitNumber || "-"}</p>
+                  <p className="text-[11px] text-slate-500">{selectedPrimaryTenant?.propertyName || "-"}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Terminated On</p>
+                  <p className="mt-1 text-xs font-bold text-slate-900">{selectedPrimaryTenant?.terminationDate || "-"}</p>
+                  {selectedPrimaryTenant?.terminationReason ? (
+                    <p className="mt-0.5 text-[11px] italic text-slate-500 line-clamp-2">{selectedPrimaryTenant.terminationReason}</p>
+                  ) : null}
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Outstanding Balance</p>
+                  <p className={`mt-1 text-xs font-black ${Math.abs(Number(selectedPrimaryTenant?.balance || 0)) > 0.009 ? "text-red-600" : "text-slate-900"}`}>
+                    Ksh {Number(selectedPrimaryTenant?.balance || 0).toLocaleString()}
+                  </p>
+                  <p className="text-[11px] text-slate-500">Remains collectible after restore</p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+                <p className="font-semibold">Conditions that must be met:</p>
+                <ul className="mt-1 space-y-0.5 list-disc list-inside text-amber-700">
+                  <li>The unit must currently be vacant (not occupied by another tenant)</li>
+                  <li>The unit must still be assigned to this tenant on record</li>
+                </ul>
+                <p className="mt-1.5 text-[11px] text-amber-600">If these conditions are not met, the system will reject the restoration with a clear reason.</p>
+              </div>
+
+              <div>
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Restoration notes <span className="font-normal text-slate-400">(optional)</span></label>
+                <textarea
+                  rows={2}
+                  value={restoreForm.notes}
+                  onChange={(e) => setRestoreForm((p) => ({ ...p, notes: e.target.value }))}
+                  placeholder="Reason for restoring this tenant..."
+                  className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
+              <button
+                onClick={() => { if (!isRestoring) setShowRestoreModal(false); }}
+                disabled={isRestoring}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60">
+                Cancel
+              </button>
+              <button
+                onClick={confirmRestoreTenant}
+                disabled={!canUpdateTenant || isRestoring}
+                className="rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
+                {isRestoring ? "Restoring…" : "Restore Tenant"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showDepositSettlementModal && (
         <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
           <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
@@ -2305,7 +2629,7 @@ const confirmTransferUnit = async () => {
                 <button
                   onClick={closeDepositSettlementModal}
                   disabled={isProcessingDepositSettlement}
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-white/70 transition hover:bg-white/10 hover:text-white disabled:opacity-60"
+                  className="flex h-7 w-7 items-center justify-center rounded text-white/70 transition hover:bg-white/10 hover:text-white disabled:opacity-60"
                 >
                   <FaTimes size={13} />
                 </button>
@@ -2514,20 +2838,20 @@ const confirmTransferUnit = async () => {
                     </div>
                     <div className="mt-3 max-h-[220px] overflow-y-auto rounded-lg border border-slate-200">
                       {depositSettlementContext.creditableInvoices.length > 0 ? (
-                        <table className="min-w-full divide-y divide-slate-200 text-xs">
-                          <thead className="bg-slate-50 text-slate-600">
+                        <table className="min-w-full text-[11px] border-collapse">
+                          <thead className="bg-[#0B3B2E] text-white">
                             <tr>
-                              <th className="px-3 py-1.5 text-left font-bold uppercase tracking-[0.14em]">Invoice</th>
-                              <th className="px-3 py-1.5 text-left font-bold uppercase tracking-[0.14em]">Category</th>
-                              <th className="px-3 py-1.5 text-right font-bold uppercase tracking-[0.14em]">Open</th>
+                              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Invoice</th>
+                              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Category</th>
+                              <th className="px-3 py-1 text-right font-bold">Open</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-100 bg-white">
-                            {depositSettlementContext.creditableInvoices.map((invoice) => (
-                              <tr key={normalizeId(invoice?._id)}>
-                                <td className="px-3 py-1.5 font-semibold text-slate-900">{invoice?.invoiceNumber || "-"}</td>
-                                <td className="px-3 py-1.5 text-slate-600">{String(invoice?.category || "-").replace(/_/g, " ")}</td>
-                                <td className="px-3 py-1.5 text-right font-bold text-slate-900">Ksh {roundMoney(invoice?.remainingCreditableAmount ?? invoice?.remainingBalance ?? 0).toLocaleString()}</td>
+                          <tbody>
+                            {depositSettlementContext.creditableInvoices.map((invoice, i) => (
+                              <tr key={normalizeId(invoice?._id)} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}>
+                                <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{invoice?.invoiceNumber || "-"}</td>
+                                <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{String(invoice?.category || "-").replace(/_/g, " ")}</td>
+                                <td className="px-3 py-1 text-right font-bold text-slate-900">Ksh {roundMoney(invoice?.remainingCreditableAmount ?? invoice?.remainingBalance ?? 0).toLocaleString()}</td>
                               </tr>
                             ))}
                           </tbody>

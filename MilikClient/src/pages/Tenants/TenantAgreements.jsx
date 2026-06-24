@@ -179,6 +179,7 @@ const TenantAgreements = () => {
   const [generatingDocId, setGeneratingDocId] = useState(null);
   const [includeTerminatedTenants, setIncludeTerminatedTenants] = useState(false);
   const [openDropdownId, setOpenDropdownId] = useState(null);
+  const [renewModal, setRenewModal] = useState({ open: false, row: null, newEndDate: "", loading: false });
 
   useEffect(() => {
     if (!openDropdownId) return;
@@ -537,10 +538,14 @@ const TenantAgreements = () => {
     }
   };
 
-  const handleRenew = async (row) => {
-    const newEndDate = window.prompt("Enter the new agreement end date (YYYY-MM-DD)", formatDateInput(row.endDate));
-    if (!newEndDate) return;
+  const handleRenew = (row) => {
+    setRenewModal({ open: true, row, newEndDate: formatDateInput(row.endDate), loading: false });
+  };
 
+  const handleRenewConfirm = async () => {
+    const { row, newEndDate } = renewModal;
+    if (!newEndDate) { toast.warning("Please select a new end date"); return; }
+    setRenewModal((prev) => ({ ...prev, loading: true }));
     try {
       await renewLease(dispatch, row.id, {
         business: currentCompany?._id,
@@ -549,9 +554,11 @@ const TenantAgreements = () => {
         newRentAmount: row.rentAmount,
       });
       toast.success("Agreement renewed successfully.");
+      setRenewModal({ open: false, row: null, newEndDate: "", loading: false });
       await loadData();
     } catch (error) {
       toast.error(error?.response?.data?.message || error?.message || "Failed to renew agreement.");
+      setRenewModal((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -593,8 +600,8 @@ const TenantAgreements = () => {
               <option value="any">Status</option>
               {AGREEMENT_STATUS_OPTIONS.map((status) => (<option key={status} value={status}>{getStatusLabel(status)}</option>))}
             </select>
-            <label className="h-7 shrink-0 inline-flex items-center gap-1.5 rounded border border-gray-300 bg-[#DDEFE1] px-2 text-xs text-gray-800 hover:bg-white cursor-pointer">
-              <input type="checkbox" checked={draftFilters.expiringOnly} onChange={(event) => setDraftFilters((prev) => ({ ...prev, expiringOnly: event.target.checked }))} className="rounded border-gray-300 text-orange-600 focus:ring-orange-500" />
+            <label className="h-7 shrink-0 inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2 text-xs text-gray-800 hover:bg-white cursor-pointer">
+              <input type="checkbox" checked={draftFilters.expiringOnly} onChange={(event) => setDraftFilters((prev) => ({ ...prev, expiringOnly: event.target.checked }))} className="rounded border-gray-300 text-orange-600 focus:ring-[#0B3B2E]/20" />
               Expiring 30d
             </label>
             <input type="text" value={draftFilters.search} onChange={(event) => setDraftFilters((prev) => ({ ...prev, search: normalizeUppercaseInput(event.target.value) }))} placeholder="Search…" className="h-7 w-40 shrink-0 rounded border border-gray-300 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
@@ -607,30 +614,30 @@ const TenantAgreements = () => {
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto px-2 py-1">
-              <table className="w-full min-w-[1320px] border-collapse">
+              <table className="w-full min-w-[1320px] text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 shadow-sm">
-                  <tr className={`${MILIK_GREEN} text-xs text-white`}>
-                    <th className="w-6 border-r border-gray-400 px-2 py-1.5 text-center font-bold">
+                  <tr className={`${MILIK_GREEN} text-white`}>
+                    <th className="w-6 border-r border-white/10 px-2 py-1 text-center font-bold">
                       <input
                         type="checkbox"
                         checked={pagedRows.length > 0 && pagedRows.every((r) => selectedAgreements.includes(r.id))}
                         onChange={toggleSelectAllAgreements}
                         onClick={(event) => event.stopPropagation()}
-                        className="cursor-pointer rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                        className="cursor-pointer rounded border-gray-300 text-orange-600 focus:ring-[#0B3B2E]/20"
                       />
                     </th>
-                    <th className="w-6 border-r border-gray-400 px-2 py-1.5 text-center font-bold">+</th>
-                    <th className="min-w-[130px] border-r border-gray-400 px-2 py-1.5 text-left font-bold">Agreement</th>
-                    <th className="min-w-[150px] border-r border-gray-400 px-2 py-1.5 text-left font-bold">Tenant</th>
-                    <th className="min-w-[150px] border-r border-gray-400 px-2 py-1.5 text-left font-bold">Property</th>
-                    <th className="min-w-[90px] border-r border-gray-400 px-2 py-1.5 text-left font-bold">Unit</th>
-                    <th className="min-w-[95px] border-r border-gray-400 px-2 py-1.5 text-center font-bold">Status</th>
-                    <th className="min-w-[115px] border-r border-gray-400 px-2 py-1.5 text-left font-bold">Start</th>
-                    <th className="min-w-[115px] border-r border-gray-400 px-2 py-1.5 text-left font-bold">End</th>
-                    <th className="min-w-[100px] border-r border-gray-400 px-2 py-1.5 text-right font-bold">Rent</th>
-                    <th className="min-w-[105px] border-r border-gray-400 px-2 py-1.5 text-right font-bold">Deposit</th>
-                    <th className="min-w-[130px] border-r border-gray-400 px-2 py-1.5 text-left font-bold">Signatures</th>
-                    <th className="min-w-[120px] px-2 py-1.5 text-left font-bold">Actions</th>
+                    <th className="w-6 border-r border-white/10 px-2 py-1 text-center font-bold">+</th>
+                    <th className="min-w-[130px] border-r border-white/10 px-2 py-1 text-left font-bold">Agreement</th>
+                    <th className="min-w-[150px] border-r border-white/10 px-2 py-1 text-left font-bold">Tenant</th>
+                    <th className="min-w-[150px] border-r border-white/10 px-2 py-1 text-left font-bold">Property</th>
+                    <th className="min-w-[90px] border-r border-white/10 px-2 py-1 text-left font-bold">Unit</th>
+                    <th className="min-w-[95px] border-r border-white/10 px-2 py-1 text-center font-bold">Status</th>
+                    <th className="min-w-[115px] border-r border-white/10 px-2 py-1 text-left font-bold">Start</th>
+                    <th className="min-w-[115px] border-r border-white/10 px-2 py-1 text-left font-bold">End</th>
+                    <th className="min-w-[100px] border-r border-white/10 px-2 py-1 text-right font-bold">Rent</th>
+                    <th className="min-w-[105px] border-r border-white/10 px-2 py-1 text-right font-bold">Deposit</th>
+                    <th className="min-w-[130px] border-r border-white/10 px-2 py-1 text-left font-bold">Signatures</th>
+                    <th className="min-w-[120px] px-2 py-1 text-left font-bold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -671,17 +678,17 @@ const TenantAgreements = () => {
                         )}
                       <tr
                         onClick={() => toggleAgreementSelect(row.id)}
-                        className={`cursor-pointer border-b text-xs transition-colors ${
-                          row.isExpiring ? "border-red-200" : "border-gray-200"
+                        className={`cursor-pointer border-b transition-colors ${
+                          row.isExpiring ? "border-red-100" : "border-gray-100"
                         } ${
                           isSelected
                             ? "bg-orange-50 hover:bg-orange-100"
                             : row.isExpiring
                               ? "bg-red-50/70 hover:bg-red-100/80"
-                              : "bg-white hover:bg-gray-50"
+                              : idx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"
                         }`}
                       >
-                        <td className="border-r border-gray-200 px-2 py-1 text-center" onClick={(event) => event.stopPropagation()}>
+                        <td className="border-r border-gray-100 px-2 py-1 text-center" onClick={(event) => event.stopPropagation()}>
                           <input
                             type="checkbox"
                             checked={isSelected}
@@ -690,54 +697,54 @@ const TenantAgreements = () => {
                               toggleAgreementSelect(row.id);
                             }}
                             onClick={(event) => event.stopPropagation()}
-                            className="cursor-pointer rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                            className="cursor-pointer rounded border-gray-300 text-orange-600 focus:ring-[#0B3B2E]/20"
                           />
                         </td>
                           <td
-                          className="cursor-pointer border-r border-gray-200 px-2 py-1 text-center text-slate-400 transition hover:text-slate-700"
+                          className="cursor-pointer border-r border-gray-100 px-2 py-1 text-center text-slate-400 transition hover:text-slate-700"
                           onClick={(event) => { event.stopPropagation(); toggleAgreementExpand(row.id); }}
                         >
                           {isExpanded ? <FaChevronDown size={10} /> : <FaChevronRight size={10} />}
                         </td>
-                        <td className="border-r border-gray-200 px-2 py-1 font-mono text-xs font-bold text-[#0B3B2E]">
+                        <td className="border-r border-gray-100 px-2 py-1 font-mono font-bold text-[#0B3B2E]">
                           <div>{toListingCaps(row.agreementNumber)}</div>
-                          <div className="mt-0.5 font-sans font-normal text-gray-600">{getStatusLabel(row.leaseType)}</div>
+                          <div className="mt-0.5 font-sans font-normal text-gray-500">{getStatusLabel(row.leaseType)}</div>
                           {row.isExpiring && (
-                            <div className="mt-1 text-[10px] font-semibold text-red-700">
+                            <div className="mt-0.5 text-[10px] font-semibold text-red-700">
                               Expires in {row.daysToExpiry} day{row.daysToExpiry === 1 ? "" : "s"}
                             </div>
                           )}
                         </td>
-                        <td className="border-r border-gray-200 px-2 py-1">
+                        <td className="border-r border-gray-100 px-2 py-1">
                           <div className="font-bold text-gray-900">{toListingCaps(row.tenantName)}</div>
-                          <div className="mt-0.5 text-xs text-gray-600">{toListingCaps(row.tenantCode || "No code")}</div>
+                          <div className="mt-0.5 text-[10px] text-gray-500">{toListingCaps(row.tenantCode || "No code")}</div>
                         </td>
-                        <td className="border-r border-gray-200 px-2 py-1 font-bold text-gray-900">
+                        <td className="border-r border-gray-100 px-2 py-1 font-bold text-gray-900">
                           <div className="font-semibold text-gray-900">{row.propertyCode ? `${row.propertyCode} • ${row.propertyName}` : row.propertyName}</div>
                           {hasDocument && (
                             <a
                               href={row.raw.documentUrl}
                               target="_blank"
                               rel="noreferrer"
-                              className="mt-2 inline-flex rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-700 hover:bg-slate-200"
+                              className="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-700 hover:bg-slate-200"
                             >
                               Document Link
                             </a>
                           )}
                         </td>
-                        <td className="border-r border-gray-200 px-2 py-1 font-bold text-gray-900">
+                        <td className="border-r border-gray-100 px-2 py-1 font-bold text-gray-900">
                           {toListingCaps(row.unitLabel !== "-" ? row.unitLabel : "No unit linked")}
                         </td>
-                        <td className="border-r border-gray-200 px-2 py-1 text-center">
-                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold ${getStatusTone(row.status)}`}>
+                        <td className="border-r border-gray-100 px-2 py-1 text-center">
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${getStatusTone(row.status)}`}>
                             {getStatusLabel(row.status)}
                           </span>
                         </td>
-                        <td className="border-r border-gray-200 px-2 py-1 font-bold text-gray-900">{formatDateLabel(row.startDate)}</td>
-                        <td className={`border-r border-gray-200 px-2 py-1 font-bold ${row.isExpiring ? "text-red-700" : "text-gray-900"}`}>{formatDateLabel(row.endDate)}</td>
-                        <td className="border-r border-gray-200 px-2 py-1 text-right font-bold text-gray-900">{formatCurrency(row.rentAmount)}</td>
-                        <td className="border-r border-gray-200 px-2 py-1 text-right font-bold text-gray-900">{formatCurrency(row.depositAmount)}</td>
-                        <td className="border-r border-gray-200 px-2 py-1">
+                        <td className="border-r border-gray-100 px-2 py-1 font-bold text-gray-900">{formatDateLabel(row.startDate)}</td>
+                        <td className={`border-r border-gray-100 px-2 py-1 font-bold ${row.isExpiring ? "text-red-700" : "text-gray-900"}`}>{formatDateLabel(row.endDate)}</td>
+                        <td className="border-r border-gray-100 px-2 py-1 text-right font-bold text-gray-900">{formatCurrency(row.rentAmount)}</td>
+                        <td className="border-r border-gray-100 px-2 py-1 text-right font-bold text-gray-900">{formatCurrency(row.depositAmount)}</td>
+                        <td className="border-r border-gray-100 px-2 py-1">
                           <div className="flex flex-col gap-1">
                             <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${row.signedByTenant ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
                               <span className={`h-1.5 w-1.5 rounded-full ${row.signedByTenant ? "bg-emerald-500" : "bg-slate-400"}`} />
@@ -963,6 +970,45 @@ const TenantAgreements = () => {
           </div>
         )}
       </div>
+
+      {renewModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="bg-[#0B3B2E] px-6 py-4 flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15">
+                <FaRedoAlt className="text-white text-sm" />
+              </div>
+              <div>
+                <h2 className="text-white font-semibold text-base leading-tight">Renew Agreement</h2>
+                <p className="text-white/60 text-xs mt-0.5">{renewModal.row?.tenantName || ""} — {renewModal.row?.agreementNumber || ""}</p>
+              </div>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div className="flex items-start gap-3 rounded-lg bg-blue-50 border border-blue-200 px-4 py-3">
+                <FaSyncAlt className="text-blue-500 mt-0.5 shrink-0" />
+                <p className="text-sm text-blue-800">Set the new end date for the renewed agreement. The start date will be updated to today.</p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">New End Date <span className="text-red-500">*</span></label>
+                <input
+                  type="date"
+                  autoFocus
+                  className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed"
+                  value={renewModal.newEndDate}
+                  onChange={(e) => setRenewModal((prev) => ({ ...prev, newEndDate: e.target.value }))}
+                  disabled={renewModal.loading}
+                />
+              </div>
+            </div>
+            <div className="px-6 pb-5 flex justify-end gap-3">
+              <button onClick={() => setRenewModal({ open: false, row: null, newEndDate: "", loading: false })} disabled={renewModal.loading} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Cancel</button>
+              <button onClick={handleRenewConfirm} disabled={renewModal.loading || !renewModal.newEndDate} className="inline-flex items-center gap-2 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
+                {renewModal.loading ? <><svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg>Renewing…</> : <><FaRedoAlt className="text-xs" />Confirm Renewal</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 };

@@ -22,6 +22,7 @@ import {
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import AppSelect from "../../components/common/AppSelect";
 import { useConfirm } from "../../context/ConfirmContext";
 import {
   cancelLandlordAdvancementRecovery,
@@ -644,7 +645,7 @@ const LandlordAdvancements = () => {
           <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
             <div className="relative shrink-0">
               <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]" />
-              <input value={filters.search} onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Reference, title…" className="h-7 w-40 rounded border border-gray-300 bg-[#DDEFE1] pl-6 pr-2 text-xs outline-none focus:border-[#0B3B2E]" />
+              <input value={filters.search} onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Reference, title…" className="h-7 w-40 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs outline-none focus:border-[#0B3B2E]" />
             </div>
             <select value={filters.status} onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
               <option value="all">All statuses</option>
@@ -665,16 +666,16 @@ const LandlordAdvancements = () => {
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="min-h-0 flex-1 overflow-auto">
-            <table className="min-w-full text-xs">
+            <table className="min-w-full text-[11px] border-collapse">
               <thead className="sticky top-0 z-10 shadow-sm">
                 <tr className="bg-[#0B3B2E] text-white">
-                  <th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Reference</th>
-                  <th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Landlord / Property</th>
-                  <th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Type</th>
-                  <th className="px-3 py-2 text-right font-black uppercase tracking-[0.14em]">Amount</th>
-                  <th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Date</th>
-                  <th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Status</th>
-                  <th className="px-3 py-2 text-right font-black uppercase tracking-[0.14em]">Actions</th>
+                  <th className="px-3 py-2 text-left font-bold border-r border-white/10">Reference</th>
+                  <th className="px-3 py-2 text-left font-bold border-r border-white/10">Landlord / Property</th>
+                  <th className="px-3 py-2 text-left font-bold border-r border-white/10">Type</th>
+                  <th className="px-3 py-2 text-right font-bold border-r border-white/10">Amount</th>
+                  <th className="px-3 py-2 text-left font-bold border-r border-white/10">Date</th>
+                  <th className="px-3 py-2 text-left font-bold border-r border-white/10">Status</th>
+                  <th className="px-3 py-2 text-right font-bold">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -689,17 +690,17 @@ const LandlordAdvancements = () => {
                     const propertyLabel = row?.property?.propertyName || row?.property?.name || row?.property?.propertyCode || "Property";
                     return (
                       <React.Fragment key={row._id}>
-                        <tr className={`border-t border-slate-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/50"} hover:bg-slate-50`}>
-                          <td className="px-3 py-1.5"><div className="font-black text-slate-900">{row.referenceNo}</div><button type="button" onClick={() => setExpandedId((prev) => (prev === row._id ? "" : row._id))} className="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-[#0B3B2E]"><FaEye /> {expanded ? "Hide details" : "View details"}<FaChevronDown className={`transition ${expanded ? "rotate-180" : ""}`} /></button></td>
-                          <td className="px-3 py-1.5"><div className="font-semibold text-slate-900">{landlordLabel}</div><div className="text-[11px] text-slate-500">{propertyLabel}</div></td>
-                          <td className="px-3 py-1.5 text-slate-700">{TYPE_OPTIONS.find((item) => item.value === row.advanceType)?.label || statusLabel(row.advanceType)}</td>
-                          <td className="px-3 py-1.5 text-right font-black text-slate-900">{money(row.amount)}</td>
-                          <td className="px-3 py-1.5 text-slate-700">{formatDate(row.disbursementDate)}</td>
-                          <td className="px-3 py-1.5"><span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-black ${STATUS_STYLES[row.status] || STATUS_STYLES.draft}`}>{statusLabel(row.status)}</span></td>
-                          <td className="px-3 py-1.5 text-right"><div className="inline-flex flex-wrap justify-end gap-1.5">{renderActions(row)}</div></td>
+                        <tr className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                          <td className="px-3 py-1 border-r border-gray-100"><div className="font-black text-slate-900">{row.referenceNo}</div><button type="button" onClick={() => setExpandedId((prev) => (prev === row._id ? "" : row._id))} className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-bold text-[#0B3B2E]"><FaEye /> {expanded ? "Hide details" : "View details"}<FaChevronDown className={`transition ${expanded ? "rotate-180" : ""}`} /></button></td>
+                          <td className="px-3 py-1 border-r border-gray-100"><div className="font-semibold text-slate-900">{landlordLabel}</div><div className="text-[10px] text-slate-500">{propertyLabel}</div></td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{TYPE_OPTIONS.find((item) => item.value === row.advanceType)?.label || statusLabel(row.advanceType)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">{money(row.amount)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{formatDate(row.disbursementDate)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100"><span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold border ${STATUS_STYLES[row.status] || STATUS_STYLES.draft}`}>{statusLabel(row.status)}</span></td>
+                          <td className="px-3 py-1 text-right"><div className="inline-flex flex-wrap justify-end gap-1">{renderActions(row)}</div></td>
                         </tr>
                         {expanded && (
-                          <tr className="border-t border-slate-100 bg-slate-50/80">
+                          <tr className="border-b border-gray-100 bg-slate-50/80">
                             <td colSpan={7} className="px-3 py-2">
                               <div className="grid gap-2 md:grid-cols-4">
                                 <div className="rounded-lg border border-slate-200 bg-white p-2"><div className="text-[11px] font-black uppercase text-slate-500">Cashbook</div><div className="mt-1 font-semibold text-slate-900">{row?.cashbook?.name || row?.cashbook?.accountName || "System default"}</div></div>
@@ -791,44 +792,38 @@ const LandlordAdvancements = () => {
               </div>
 
               <div className="mt-6 grid gap-4 xl:grid-cols-3">
-                <label className="block">
-                  <span className="text-sm font-black text-slate-700">Landlord</span>
-                  <select
+                <div>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Landlord</span>
+                  <AppSelect
                     value={form.landlord}
-                    onChange={(e) => setForm((prev) => ({ ...prev, landlord: e.target.value, property: "" }))}
-                    className="mt-1 w-full rounded border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs outline-none focus:border-[#FF8C00]"
-                  >
-                    <option value="">Select landlord</option>
-                    {activeLandlords.map((landlord) => (
-                      <option key={landlord._id} value={landlord._id}>
-                        {landlord.landlordName || landlord.firstName || landlord.email || "Landlord"}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    onChange={(v) => setForm((prev) => ({ ...prev, landlord: v ?? "", property: "" }))}
+                    options={activeLandlords.map((l) => ({ value: l._id, label: l.landlordName || l.firstName || l.email || "Landlord" }))}
+                    placeholder="Select landlord…"
+                    searchable
+                    clearable
+                    size="sm"
+                  />
+                </div>
 
-                <label className="block">
-                  <span className="text-sm font-black text-slate-700">Property</span>
-                  <select
+                <div>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Property</span>
+                  <AppSelect
                     value={form.property}
-                    onChange={(e) => setForm((prev) => ({ ...prev, property: e.target.value }))}
-                    className="mt-1 w-full rounded border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs outline-none focus:border-[#FF8C00]"
-                  >
-                    <option value="">Select property</option>
-                    {filteredProperties.map((property) => (
-                      <option key={property._id} value={property._id}>
-                        {property.propertyName || property.name || property.propertyCode || "Property"}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    onChange={(v) => setForm((prev) => ({ ...prev, property: v ?? "" }))}
+                    options={filteredProperties.map((p) => ({ value: p._id, label: p.propertyName || p.name || p.propertyCode || "Property" }))}
+                    placeholder="Select property…"
+                    searchable
+                    clearable
+                    size="sm"
+                  />
+                </div>
 
                 <label className="block">
-                  <span className="text-sm font-black text-slate-700">Initial workflow step</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Initial workflow step</span>
                   <select
                     value={form.status}
                     onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}
-                    className="mt-1 w-full rounded border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs outline-none focus:border-[#FF8C00]"
+                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     {INITIAL_STATUS_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>{option.label}</option>
@@ -837,41 +832,41 @@ const LandlordAdvancements = () => {
                 </label>
 
                 <label className="block xl:col-span-2">
-                  <span className="text-sm font-black text-slate-700">Title</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Title</span>
                   <input
                     value={form.title}
                     onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
-                    className="mt-1 w-full rounded border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs outline-none focus:border-[#FF8C00]"
+                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </label>
 
                 <label className="block">
-                  <span className="text-sm font-black text-slate-700">Amount</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Amount</span>
                   <input
                     type="number"
                     min="0"
                     value={form.amount}
                     onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
-                    className="mt-1 w-full rounded border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs outline-none focus:border-[#FF8C00]"
+                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </label>
 
                 <label className="block">
-                  <span className="text-sm font-black text-slate-700">Disbursement date</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Disbursement date</span>
                   <input
                     type="date"
                     value={form.disbursementDate}
                     onChange={(e) => setForm((prev) => ({ ...prev, disbursementDate: e.target.value, startDate: prev.advanceType === "against_payable" ? e.target.value : prev.startDate }))}
-                    className="mt-1 w-full rounded border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs outline-none focus:border-[#FF8C00]"
+                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </label>
 
                 <label className="block">
-                  <span className="text-sm font-black text-slate-700">Payment method</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Payment method</span>
                   <select
                     value={form.paymentMethod}
                     onChange={(e) => setForm((prev) => ({ ...prev, paymentMethod: e.target.value }))}
-                    className="mt-1 w-full rounded border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs outline-none focus:border-[#FF8C00]"
+                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     <option value="bank_transfer">Bank transfer</option>
                     <option value="mpesa">M-Pesa</option>
@@ -882,11 +877,11 @@ const LandlordAdvancements = () => {
                 </label>
 
                 <label className="block">
-                  <span className="text-sm font-black text-slate-700">Cashbook / payout account</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Cashbook / payout account</span>
                   <select
                     value={form.cashbook}
                     onChange={(e) => setForm((prev) => ({ ...prev, cashbook: e.target.value }))}
-                    className="mt-1 w-full rounded border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs outline-none focus:border-[#FF8C00]"
+                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     <option value="">Use system default</option>
                     {cashbooks.map((account) => (
@@ -900,40 +895,40 @@ const LandlordAdvancements = () => {
                 {form.advanceType === "future_recoverable" ? (
                   <>
                     <label className="block">
-                      <span className="text-sm font-black text-slate-700">Recover from next statement starting</span>
+                      <span className="mb-0.5 block text-xs font-semibold text-slate-700">Recover from next statement starting</span>
                       <input
                         type="date"
                         value={form.startDate}
                         onChange={(e) => setForm((prev) => ({ ...prev, startDate: e.target.value }))}
-                        className="mt-1 w-full rounded border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs outline-none focus:border-[#FF8C00]"
+                        className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                       />
                     </label>
                     <label className="block">
-                      <span className="text-sm font-black text-slate-700">Recover over next X statements</span>
+                      <span className="mb-0.5 block text-xs font-semibold text-slate-700">Recover over next X statements</span>
                       <input
                         type="number"
                         min="1"
                         value={form.periodMonths}
                         onChange={(e) => setForm((prev) => ({ ...prev, periodMonths: e.target.value }))}
-                        className="mt-1 w-full rounded border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs outline-none focus:border-[#FF8C00]"
+                        className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                       />
                     </label>
                     <label className="block">
-                      <span className="text-sm font-black text-slate-700">Grace period (months)</span>
+                      <span className="mb-0.5 block text-xs font-semibold text-slate-700">Grace period (months)</span>
                       <input
                         type="number"
                         min="0"
                         value={form.gracePeriodMonths}
                         onChange={(e) => setForm((prev) => ({ ...prev, gracePeriodMonths: e.target.value }))}
-                        className="mt-1 w-full rounded border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs outline-none focus:border-[#FF8C00]"
+                        className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                       />
                     </label>
                     <label className="block">
-                      <span className="text-sm font-black text-slate-700">Frequency</span>
+                      <span className="mb-0.5 block text-xs font-semibold text-slate-700">Frequency</span>
                       <select
                         value={form.frequency}
                         onChange={(e) => setForm((prev) => ({ ...prev, frequency: e.target.value }))}
-                        className="mt-1 w-full rounded border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs outline-none focus:border-[#FF8C00]"
+                        className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                       >
                         <option value="monthly">Monthly</option>
                         <option value="weekly">Weekly</option>
@@ -942,47 +937,47 @@ const LandlordAdvancements = () => {
                       </select>
                     </label>
                     <label className="block">
-                      <span className="text-sm font-black text-slate-700">Computed recovery end date</span>
+                      <span className="mb-0.5 block text-xs font-semibold text-slate-700">Computed recovery end date</span>
                       <input
                         type="date"
                         value={form.endDate}
                         onChange={(e) => setForm((prev) => ({ ...prev, endDate: e.target.value }))}
-                        className="mt-1 w-full rounded border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs outline-none focus:border-[#FF8C00]"
+                        className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                       />
                     </label>
                   </>
                 ) : null}
 
                 <label className="block xl:col-span-3">
-                  <span className="text-sm font-black text-slate-700">Narration</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Narration</span>
                   <textarea
                     rows={3}
                     value={form.narration}
                     onChange={(e) => setForm((prev) => ({ ...prev, narration: e.target.value }))}
-                    className="mt-1 w-full rounded border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs outline-none focus:border-[#FF8C00]"
+                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </label>
 
                 <label className="block xl:col-span-3">
-                  <span className="text-sm font-black text-slate-700">Internal notes</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Internal notes</span>
                   <textarea
                     rows={3}
                     value={form.notes}
                     onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
-                    className="mt-1 w-full rounded border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs outline-none focus:border-[#FF8C00]"
+                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </label>
               </div>
             </div>
 
             <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
-              <button onClick={resetModal} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700">
+              <button onClick={resetModal} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
                 Cancel
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-5 py-3 text-sm font-black text-white disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60"
               >
                 <FaSave /> {saving ? "Saving..." : editingId ? "Update landlord advance" : "Save landlord advance"}
               </button>
@@ -1013,7 +1008,7 @@ const LandlordAdvancements = () => {
               </div>
 
               <label className="block">
-                <span className="text-sm font-black text-slate-700">Eligible statement period</span>
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Eligible statement period</span>
                 <select
                   value={recoveryModal.periodKey}
                   onChange={(e) => {
@@ -1036,7 +1031,7 @@ const LandlordAdvancements = () => {
 
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="block">
-                  <span className="text-sm font-black text-slate-700">Recovery amount</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Recovery amount</span>
                   <input
                     type="number"
                     value={recoveryModal.amount}
@@ -1052,7 +1047,7 @@ const LandlordAdvancements = () => {
               </div>
 
               <label className="block">
-                <span className="text-sm font-black text-slate-700">Narration</span>
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Narration</span>
                 <textarea
                   rows={3}
                   value={recoveryModal.note}

@@ -9,6 +9,7 @@ import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import AppSelect from "../../components/common/AppSelect";
 import { getChartOfAccounts } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
 import { hasCompanyPermission } from "../../utils/permissions";
@@ -410,8 +411,8 @@ const ChartOfAccounts = () => {
   };
 
   // ── Style shortcuts ──
-  const labelCls = "block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1";
-  const inputCls = "w-full border border-slate-300 px-2.5 py-1.5 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
+  const labelCls = "mb-0.5 block text-xs font-semibold text-slate-700";
+  const inputCls = "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
 
   // ── Render ──
   return (
@@ -539,15 +540,15 @@ const ChartOfAccounts = () => {
                   {/* Accounts table */}
                   {!isCollapsed && (
                     <div className="overflow-x-auto bg-white">
-                      <table className="w-full min-w-[680px] text-xs">
+                      <table className="w-full min-w-[680px] text-[11px] border-collapse">
                         <thead>
-                          <tr className="border-b border-slate-200 bg-slate-50">
-                            <th className="w-10 px-3 py-1.5"></th>
-                            <th className="text-left px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Code</th>
-                            <th className="text-left px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Account Name</th>
-                            <th className="text-left px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Normal Side</th>
-                            <th className="text-right px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Balance</th>
-                            <th className="text-right px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Status</th>
+                          <tr className="bg-[#0B3B2E] text-white">
+                            <th className="w-10 px-3 py-1 border-r border-white/10"></th>
+                            <th className="text-left px-3 py-1 font-bold border-r border-white/10">Code</th>
+                            <th className="text-left px-3 py-1 font-bold border-r border-white/10">Account Name</th>
+                            <th className="text-left px-3 py-1 font-bold border-r border-white/10">Normal Side</th>
+                            <th className="text-right px-3 py-1 font-bold border-r border-white/10">Balance</th>
+                            <th className="text-right px-3 py-1 font-bold">Status</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -595,7 +596,7 @@ const ChartOfAccounts = () => {
                                   return (
                                     <tr
                                       key={account._id}
-                                      className={`border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors ${
+                                      className={`border-b border-gray-100 hover:bg-blue-50/40 cursor-pointer transition-colors ${
                                         selected ? "bg-emerald-50 hover:bg-emerald-50" : ""
                                       }`}
                                       onDoubleClick={() => {
@@ -608,7 +609,7 @@ const ChartOfAccounts = () => {
                                           : "Header accounts cannot open activity"
                                       }
                                     >
-                                      <td className="px-3 py-1.5">
+                                      <td className="px-3 py-1 border-r border-gray-100">
                                         <button
                                           onClick={() => toggleSelect(account._id)}
                                           className="text-slate-300 hover:text-slate-600"
@@ -619,10 +620,10 @@ const ChartOfAccounts = () => {
                                           }
                                         </button>
                                       </td>
-                                      <td className="px-3 py-1.5 font-mono font-semibold text-slate-700">
+                                      <td className="px-3 py-1 border-r border-gray-100 font-mono font-semibold text-slate-700">
                                         {account.code}
                                       </td>
-                                      <td className="px-3 py-1.5">
+                                      <td className="px-3 py-1 border-r border-gray-100">
                                         <span
                                           className="font-medium text-slate-900"
                                           style={{ paddingLeft: `${Number(account.level || 0) * 16}px` }}
@@ -630,15 +631,15 @@ const ChartOfAccounts = () => {
                                           {account.name}
                                         </span>
                                       </td>
-                                      <td className="px-3 py-1.5 text-slate-500">
+                                      <td className="px-3 py-1 border-r border-gray-100 text-slate-500">
                                         {account.normalBalanceSide || NORMAL_BALANCE_BY_TYPE[account.type] || "—"}
                                       </td>
-                                      <td className={`px-3 py-1.5 text-right font-semibold tabular-nums ${
+                                      <td className={`px-3 py-1 border-r border-gray-100 text-right font-semibold tabular-nums ${
                                         balance !== 0 ? "text-slate-800" : "text-slate-300"
                                       }`}>
                                         {formatMoney(balance)}
                                       </td>
-                                      <td className="px-3 py-1.5 text-right">
+                                      <td className="px-3 py-1 text-right">
                                         <div className="inline-flex gap-1 items-center justify-end">
                                           {account.isSystem && (
                                             <span className="px-1.5 py-0.5 text-[9px] bg-slate-100 text-slate-500 font-bold uppercase">
@@ -772,21 +773,15 @@ const ChartOfAccounts = () => {
                   {/* Parent account */}
                   <div>
                     <label className={labelCls}>Parent Account</label>
-                    <select
+                    <AppSelect
                       value={formData.parentAccount}
-                      onChange={(e) => handleParentChange(e.target.value)}
-                      className={inputCls}
-                    >
-                      <option value="">None</option>
-                      {parentOptions
-                        .filter((a) => a._id !== editingAccountId)
-                        .map((a) => (
-                          <option key={a._id} value={a._id}>
-                            {a.code} — {a.name}
-                          </option>
-                        ))
-                      }
-                    </select>
+                      onChange={(v) => handleParentChange(v ?? "")}
+                      options={parentOptions.filter((a) => a._id !== editingAccountId).map((a) => ({ value: a._id, label: `${a.code} — ${a.name}` }))}
+                      placeholder="None"
+                      searchable
+                      clearable
+                      size="sm"
+                    />
                   </div>
 
                   {/* Normal balance (informational) */}

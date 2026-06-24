@@ -244,22 +244,22 @@ const ServiceProviders = () => {
             </div>
           </div>
           <div className="min-h-0 flex-1 overflow-auto">
-            <table className="min-w-full text-xs">
+            <table className="min-w-full text-[11px] border-collapse">
               <thead className="sticky top-0 z-10 shadow-sm">
                 <tr className="bg-[#0B3B2E] text-white">
-                  <th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Code</th><th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Name</th><th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Contact</th><th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Category</th><th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Settlement</th><th className="px-3 py-2 text-left font-black uppercase tracking-[0.14em]">Status</th><th className="px-3 py-2 text-right font-black uppercase tracking-[0.14em]">Actions</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Code</th><th className="px-3 py-1 text-left font-bold border-r border-white/10">Name</th><th className="px-3 py-1 text-left font-bold border-r border-white/10">Contact</th><th className="px-3 py-1 text-left font-bold border-r border-white/10">Category</th><th className="px-3 py-1 text-left font-bold border-r border-white/10">Settlement</th><th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th><th className="px-3 py-1 text-right font-bold">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (<tr><td colSpan="7" className="px-3 py-8 text-center text-slate-500">Loading service providers...</td></tr>) : filtered.length === 0 ? (<tr><td colSpan="7" className="px-3 py-8 text-center text-slate-500">No service providers found.</td></tr>) : (currentPageRows.map((row, index) => (
-                  <tr key={row._id} className={`border-t border-slate-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/50"} hover:bg-slate-50`}>
-                    <td className="px-3 py-1.5 font-mono font-bold text-slate-900">{row.providerCode}</td>
-                    <td className="px-3 py-1.5"><div className="font-bold text-slate-900">{row.name}</div><div className="text-[11px] text-slate-500">{row.notes || "No notes"}</div></td>
-                    <td className="px-3 py-1.5 text-slate-700"><div>{row.contactPerson || "-"}</div><div className="text-[11px] text-slate-500">{row.phone || row.email || "No contact"}</div></td>
-                    <td className="px-3 py-1.5 text-slate-700">{row.category || "general"}</td>
-                    <td className="px-3 py-1.5 text-slate-700">{row.bankName || row.paybillNumber || row.accountNumber || "-"}</td>
-                    <td className="px-3 py-1.5"><span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold ${row.isActive !== false ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>{row.isActive !== false ? "Active" : "Inactive"}</span></td>
-                    <td className="px-3 py-1.5 text-right"><div className="inline-flex gap-1.5"><button onClick={() => openEdit(row)} disabled={!canUpdate} className="inline-flex items-center gap-1 rounded-md border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><FaEdit /> Edit</button><button onClick={() => handleDelete(row)} disabled={!canDelete} className="inline-flex items-center gap-1 rounded-md border border-rose-300 bg-rose-50 px-2 py-1 text-[11px] font-black text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"><FaTrash /> Delete</button></div></td>
+                  <tr key={row._id} className={`border-b border-gray-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/60"} hover:bg-blue-50/40`}>
+                    <td className="px-3 py-1 border-r border-gray-100 font-mono font-bold text-slate-900">{row.providerCode}</td>
+                    <td className="px-3 py-1 border-r border-gray-100"><div className="font-bold text-slate-900">{row.name}</div><div className="text-[10px] text-slate-500">{row.notes || "No notes"}</div></td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-700"><div>{row.contactPerson || "-"}</div><div className="text-[10px] text-slate-500">{row.phone || row.email || "No contact"}</div></td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row.category || "general"}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row.bankName || row.paybillNumber || row.accountNumber || "-"}</td>
+                    <td className="px-3 py-1 border-r border-gray-100"><span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${row.isActive !== false ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-600 border-slate-200"}`}>{row.isActive !== false ? "Active" : "Inactive"}</span></td>
+                    <td className="px-3 py-1 text-right"><div className="inline-flex gap-1.5"><button onClick={() => openEdit(row)} disabled={!canUpdate} className="inline-flex items-center gap-1 rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[10px] font-black text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><FaEdit /> Edit</button><button onClick={() => handleDelete(row)} disabled={!canDelete} className="inline-flex items-center gap-1 rounded border border-rose-300 bg-rose-50 px-2 py-1 text-[10px] font-black text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"><FaTrash /> Delete</button></div></td>
                   </tr>
                 )))}
               </tbody>
@@ -267,7 +267,7 @@ const ServiceProviders = () => {
           </div>
           <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
             <div className="font-semibold">Showing <span className="font-bold text-slate-900">{serverTotal === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1}</span> to <span className="font-bold text-slate-900">{Math.min(safeCurrentPage * pageSize, serverTotal)}</span> of <span className="font-bold text-slate-900">{serverTotal}</span> provider(s)</div>
-            <div className="flex items-center gap-3"><div className="flex items-center gap-1.5"><span className="font-semibold text-slate-500">Per page:</span><select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }} className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition">{[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}</select></div><button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button><span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span><button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button></div>
+            <div className="flex items-center gap-3"><div className="flex items-center gap-1.5"><span className="font-semibold text-slate-500">Per page:</span><select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }} className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition">{[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}</select></div><button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button><span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span><button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button></div>
           </div>
         </div>
       </div>
@@ -289,9 +289,9 @@ const ServiceProviders = () => {
                 <FaTimes />
               </button>
             </div>
-            <div className="grid gap-4 p-6 md:grid-cols-2">
+            <div className="grid gap-3 p-4 md:grid-cols-2">
               {[
-                ["name", "Provider Name"],
+                ["name", <>Provider Name <span className="text-red-500">*</span></>],
                 ["contactPerson", "Contact Person"],
                 ["phone", "Phone"],
                 ["email", "Email"],
@@ -303,7 +303,7 @@ const ServiceProviders = () => {
                 ["accountName", "Bank Account Name"],
               ].map(([field, label]) => (
                 <label key={field} className="block">
-                  <span className="text-sm font-bold text-slate-700">{label}</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">{label}</span>
                   <input
                     value={form[field]}
                     onChange={(e) =>
@@ -312,12 +312,12 @@ const ServiceProviders = () => {
                         [field]: e.target.value,
                       }))
                     }
-                    className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </label>
               ))}
               <label className="md:col-span-2 block">
-                <span className="text-sm font-bold text-slate-700">Notes</span>
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Notes</span>
                 <textarea
                   rows={3}
                   value={form.notes}
@@ -327,7 +327,7 @@ const ServiceProviders = () => {
                       notes: e.target.value,
                     }))
                   }
-                  className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                 />
               </label>
               <label className="inline-flex items-center gap-3">
@@ -342,20 +342,20 @@ const ServiceProviders = () => {
                   }
                   className="h-4 w-4 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
                 />
-                <span className="text-sm font-bold text-slate-700">Active provider</span>
+                <span className="text-xs font-semibold text-slate-700">Active provider</span>
               </label>
             </div>
             <div className="sticky bottom-0 z-20 flex shrink-0 items-center justify-end gap-3 border-t border-slate-200 bg-white/95 px-6 py-4 backdrop-blur-sm">
               <button
                 onClick={closeModal}
-                className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-black text-slate-700"
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-3 text-sm font-black text-white disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60"
               >
                 <FaSave /> {saving ? "Saving..." : editingId ? "Update Provider" : "Save Provider"}
               </button>

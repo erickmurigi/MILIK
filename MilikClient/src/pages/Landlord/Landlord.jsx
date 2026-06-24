@@ -964,22 +964,22 @@ const Landlords = () => {
             {/* Make THIS the scroll area so the footer stays visible */}
             <div className="min-h-0 flex-1 overflow-auto">
               <table
-                className="min-w-[1180px] w-full text-xs font-bold bg-white"
+                className="min-w-[1100px] w-full text-[11px] bg-white"
                 ref={tableRef}
-                style={{ tableLayout: "fixed" }}
+                style={{ tableLayout: "fixed", borderCollapse: "collapse" }}
               >
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className="bg-[#0B3B2E] text-white">
                     <th
-                      className="px-3 py-1.5 text-left font-bold text-white border border-gray-200 bg-[#0B3B2E]"
-                      style={{ width: "50px", minWidth: "50px", maxWidth: "50px" }}
+                      className="px-3 py-2 text-center font-bold border-r border-white/10"
+                      style={{ width: "44px" }}
                     >
                       <input
                         type="checkbox"
                         checked={selectAll && currentLandlords.length > 0}
                         onChange={handleSelectAll}
                         onClick={handleCheckboxClick}
-                        className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                        className="rounded border-gray-300 text-emerald-600 focus:ring-[#0B3B2E]/20"
                       />
                     </th>
 
@@ -988,21 +988,16 @@ const Landlords = () => {
                       return (
                         <th
                           key={column.key}
-                          className="relative px-3 py-1.5 text-left font-bold text-white border border-gray-200 bg-[#0B3B2E]"
-                          style={{
-                            width: `${width}px`,
-                            minWidth: "80px",
-                            position: "relative",
-                          }}
+                          className="relative px-3 py-2 text-left font-bold border-r border-white/10"
+                          style={{ width: `${width}px`, minWidth: "80px" }}
                         >
                           <div className="flex items-center justify-between">
                             <span className="truncate">{column.label}</span>
                             <div
-                              className="w-2 h-4 ml-1 cursor-col-resize hover:bg-white/20 flex items-center justify-center rounded"
+                              className="w-2 h-4 ml-1 cursor-col-resize hover:bg-white/20 flex items-center justify-center rounded shrink-0"
                               onMouseDown={(e) => startResizing(column.key, e)}
-                              title="Drag to resize"
                             >
-                              <FaGripVertical className="text-white/70 text-xs" />
+                              <FaGripVertical className="text-white/50 text-[9px]" />
                             </div>
                           </div>
                         </th>
@@ -1014,12 +1009,9 @@ const Landlords = () => {
                 <tbody>
                   {isFetching ? (
                     <tr>
-                      <td
-                        colSpan={columns.length + 1}
-                        className="px-3 py-4 text-center text-gray-500 border border-gray-200 bg-white"
-                      >
-                        <div className="flex flex-col items-center justify-center py-8">
-                          <div className="text-lg font-bold text-gray-400 mb-2">Loading landlords...</div>
+                      <td colSpan={columns.length + 1} className="px-3 py-8 text-center text-gray-400 bg-white">
+                        <div className="flex flex-col items-center justify-center gap-1">
+                          <div className="text-sm font-bold">Loading landlords...</div>
                         </div>
                       </td>
                     </tr>
@@ -1027,95 +1019,58 @@ const Landlords = () => {
                     currentLandlords.map((landlord, index) => (
                       <tr
                         key={landlord._id}
-                        className={`border-b border-gray-200 cursor-pointer transition-colors duration-150 ${getRowClass(
-                          index,
-                          landlord._id
-                        )}`}
+                        className={`border-b cursor-pointer transition-colors ${getRowClass(index, landlord._id)}`}
                         onClick={() => handleSelectLandlord(landlord._id)}
                       >
-                        <td
-                          className="px-3 py-1 border border-gray-200 align-top"
-                          style={{ width: "50px", minWidth: "50px", maxWidth: "50px" }}
-                          onClick={handleCheckboxClick}
-                        >
+                        <td className="px-3 py-1.5 text-center border-r border-gray-100" onClick={handleCheckboxClick}>
                           <input
                             type="checkbox"
                             checked={selectedLandlords.includes(landlord._id)}
                             onChange={() => handleSelectLandlord(landlord._id)}
                             onClick={handleCheckboxClick}
-                            className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                            className="rounded border-gray-300 text-emerald-600 focus:ring-[#0B3B2E]/20"
                           />
                         </td>
-
-                        <td className="px-3 py-1 font-bold text-gray-900 border border-gray-200 align-top whitespace-nowrap overflow-hidden text-ellipsis">
-                          {toListingCaps(landlord.landlordCode || landlord.code)}
+                        <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                          <span className="font-mono text-[10px] text-slate-500 tracking-wide truncate block">{toListingCaps(landlord.landlordCode || landlord.code)}</span>
                         </td>
-                        <td className="px-3 py-1 font-bold text-gray-900 border border-gray-200 align-top whitespace-nowrap overflow-hidden text-ellipsis">
-                          {toListingCaps(landlord.fullName || landlord.landlordName || landlord.name || landlord.firstName || "-")}
+                        <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                          <span className="font-semibold text-slate-900 truncate block">{toListingCaps(landlord.fullName || landlord.landlordName || landlord.name || landlord.firstName || "-")}</span>
                         </td>
-
-                        <td className="px-3 py-1 border border-gray-200 align-top">
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold whitespace-nowrap border ${
-                              String(landlord.status || "Active") === "Active"
-                                ? selectedLandlords.includes(landlord._id)
-                                  ? "bg-white text-green-800 border-green-300"
-                                  : "bg-green-100 text-green-800 border-green-300"
-                                : selectedLandlords.includes(landlord._id)
-                                ? "bg-white text-gray-800 border-gray-300"
-                                : "bg-gray-100 text-gray-800 border-gray-300"
-                            }`}
-                          >
+                        <td className="px-3 py-1 border-r border-gray-100">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                            String(landlord.status || "Active") === "Active"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : "bg-slate-100 text-slate-600 border-slate-200"
+                          }`}>
                             {landlord.status || "Active"}
                           </span>
                         </td>
-
-                        <td className="px-3 py-1 font-bold text-gray-900 border border-gray-200 align-top whitespace-nowrap overflow-hidden text-ellipsis">
-                          {toListingCaps(landlord.location || "—")}
+                        <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                          <span className="text-slate-600 truncate block">{toListingCaps(landlord.location || "—")}</span>
                         </td>
-                        <td className="px-3 py-1 font-bold text-gray-900 border border-gray-200 align-top whitespace-nowrap overflow-hidden text-ellipsis">
-                          {landlord.email || "—"}
+                        <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                          <span className="text-slate-600 truncate block">{landlord.email || "—"}</span>
                         </td>
-                        <td className="px-3 py-1 font-bold text-gray-900 border border-gray-200 align-top whitespace-nowrap overflow-hidden text-ellipsis">
-                          {landlord.phoneNumber || landlord.phone || "—"}
+                        <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                          <span className="font-medium text-slate-700 truncate block">{landlord.phoneNumber || landlord.phone || "—"}</span>
                         </td>
-
-                        <td className="px-3 py-1 text-center font-bold text-gray-900 border border-gray-200 align-top">
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border ${
-                              selectedLandlords.includes(landlord._id)
-                                ? "bg-white text-green-800 border-green-300"
-                                : "bg-green-100 text-green-800 border-green-300"
-                            }`}
-                          >
+                        <td className="px-3 py-1.5 text-center border-r border-gray-100">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border bg-emerald-50 text-emerald-700 border-emerald-200">
                             {landlord.activeProperties ?? "0"}
                           </span>
                         </td>
-
-                        <td className="px-3 py-1 text-center font-bold text-gray-900 border border-gray-200 align-top">
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border ${
-                              selectedLandlords.includes(landlord._id)
-                                ? "bg-white text-gray-800 border-gray-300"
-                                : "bg-gray-100 text-gray-800 border-gray-300"
-                            }`}
-                          >
+                        <td className="px-3 py-1.5 text-center border-r border-gray-100">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border bg-slate-100 text-slate-500 border-slate-200">
                             {landlord.archivedProperties ?? "0"}
                           </span>
                         </td>
-
-                        <td className="px-3 py-1 border border-gray-200 align-top">
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold whitespace-nowrap border ${
-                              landlord.portalAccess === "Enabled"
-                                ? selectedLandlords.includes(landlord._id)
-                                  ? "bg-white text-green-800 border-green-300"
-                                  : "bg-green-100 text-green-800 border-green-300"
-                                : selectedLandlords.includes(landlord._id)
-                                ? "bg-white text-gray-800 border-gray-300"
-                                : "bg-gray-100 text-gray-800 border-gray-300"
-                            }`}
-                          >
+                        <td className="px-3 py-1.5">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                            landlord.portalAccess === "Enabled"
+                              ? "bg-blue-50 text-blue-700 border-blue-200"
+                              : "bg-slate-100 text-slate-500 border-slate-200"
+                          }`}>
                             {landlord.portalAccess || "Disabled"}
                           </span>
                         </td>
@@ -1123,13 +1078,10 @@ const Landlords = () => {
                     ))
                   ) : (
                     <tr>
-                      <td
-                        colSpan={columns.length + 1}
-                        className="px-3 py-4 text-center text-gray-500 border border-gray-200 bg-white"
-                      >
-                        <div className="flex flex-col items-center justify-center py-8">
-                          <div className="text-lg font-bold text-gray-400 mb-2">No landlords found</div>
-                          <div className="text-sm text-gray-500">Use the filter fields above, then click Search</div>
+                      <td colSpan={columns.length + 1} className="px-3 py-8 text-center text-gray-400 bg-white">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <div className="text-sm font-bold">No landlords found</div>
+                          <div className="text-xs text-gray-400">Use the filter fields above, then click Search</div>
                           <button
                             onClick={openAddModal}
                             className={`px-4 py-1 text-xs text-white rounded-lg flex items-center gap-2 shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
@@ -1173,7 +1125,7 @@ const Landlords = () => {
                     <select
                       value={pageSize}
                       onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                      className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition"
+                      className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition"
                     >
                       {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
                     </select>

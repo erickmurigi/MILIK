@@ -24,6 +24,7 @@ import {
   FaPhone,
   FaIdCard,
   FaBolt,
+  FaArrowLeft,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { getProperties } from "../../redux/propertyRedux";
@@ -40,8 +41,8 @@ const MILIK_GREEN_BG = "bg-[#0B3B2E]";
 const MILIK_GREEN_BG_HOVER = "hover:bg-[#0A3127]";
 const MILIK_ORANGE_BG = "bg-[#FF8C00]";
 const MILIK_ORANGE_BG_HOVER = "hover:bg-[#e67e00]";
-const MILIK_ORANGE_RING = "focus:ring-orange-500/30";
-const MILIK_ORANGE_BORDER_FOCUS = "focus:border-orange-600";
+const MILIK_ORANGE_RING = "";
+const MILIK_ORANGE_BORDER_FOCUS = "";
 
 const slugifyTakeOnValue = (value) =>
   String(value || "")
@@ -325,7 +326,7 @@ function MilikSelect({
                       "w-full text-left px-3 py-2 text-sm font-semibold transition-colors",
                       isSelected
                         ? `${MILIK_ORANGE_BG} text-white`
-                        : "text-slate-800 hover:bg-orange-50",
+                        : "text-slate-800 hover:bg-slate-50",
                     ].join(" ")}
                   >
                     {getLabel(it)}
@@ -1051,9 +1052,9 @@ useEffect(() => {
   };
 
   const inputClass =
-    "w-full px-3 py-2 text-sm border border-slate-300 rounded-md shadow-sm transition-all duration-200 ease-out hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-600";
+    "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
 
-  const labelClass = "block text-sm font-bold text-slate-800 mb-1 tracking-tight";
+  const labelClass = "mb-0.5 block text-xs font-semibold text-slate-700";
 
   const uppercaseTenantFields = new Set(["tenantCode", "name", "idNumber", "emergencyContactName"]);
 
@@ -1395,32 +1396,65 @@ for (const request of invoiceRequests) {
     navigate("/tenants");
   };
 
+  const handleReset = () => {
+    if (isEditMode) return;
+    setFormData({
+      tenantCode: generateNextTenantCode(),
+      name: "", phone: "", email: "", idNumber: "",
+      property: "", unit: "", additionalUnits: [],
+      moveInDate: "", moveOutDate: "",
+      leaseType: "at_will", rent: "", depositAmount: "",
+      depositHeldBy: isSelfManagingLandlordMode ? "Landlord" : "Management Company",
+      status: "active",
+      emergencyContactName: "", emergencyContactPhone: "", emergencyContactRelationship: "Family",
+      utilities: [], createLeaseFeeInvoice: false, leaseFeeAmount: "", leaseFeeDescription: "",
+    });
+    setFieldErrors({});
+    setGeneralError("");
+    clearDraftState();
+  };
+
   return (
-    <DashboardLayout>
-      <div className="h-[calc(100vh-8rem)] min-h-0 w-full overflow-y-auto overscroll-contain bg-gradient-to-br from-slate-50 via-white to-slate-100 px-2 py-2 pb-28 sm:px-3 lg:px-4">
-        <div className="w-full max-w-none mx-0">
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
+        {/* Sticky dark header */}
+        <div className="flex-shrink-0 bg-[#0B3B2E] px-4 py-2.5">
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={handleCancel} className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#B7C9C0] hover:text-white transition">
+              <FaArrowLeft /> Back
+            </button>
+            <div className="h-4 w-px bg-[#2A5C4A]" />
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B7C9C0]">Tenants</div>
+              <h1 className="text-sm font-black text-white leading-none">{isEditMode ? "Edit Tenant" : "New Tenant"}</h1>
+            </div>
+          </div>
+        </div>
+
+        {/* Scrollable content */}
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
           {generalError && (
-            <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+            <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
               {generalError}
             </div>
           )}
 
           {isEditMode && tenantLoading ? (
-            <div className="bg-white border border-slate-200 rounded-lg shadow-sm px-6 py-10 flex items-center justify-center gap-3 text-slate-700">
-              <FaSpinner className="animate-spin text-orange-600" />
-              <span className="font-semibold">Loading tenant details...</span>
+            <div className="rounded-lg border border-slate-200 bg-white px-6 py-10 flex items-center justify-center gap-3 text-slate-700">
+              <FaSpinner className="animate-spin text-[#0B3B2E]" />
+              <span className="text-xs font-semibold">Loading tenant details...</span>
             </div>
           ) : (
-          <form onSubmit={handleSubmit}>
+          <form id="tenant-form" onSubmit={handleSubmit}>
             <div className="space-y-3">
 
               {/* ── Tenant Information ── */}
-              <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div className="flex items-center gap-2.5 border-b border-slate-100 bg-slate-50 px-4 py-3 rounded-t-xl">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-100 text-orange-600"><FaUser size={13} /></span>
+              <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-center gap-2.5 border-b border-slate-200 bg-slate-50 px-3 py-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded bg-[#0B3B2E]/10 text-[#0B3B2E]"><FaUser size={13} /></span>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-900 leading-tight">Tenant Information</h3>
-                    <p className="text-[11px] text-slate-500 leading-tight">Identity and contact details</p>
+                    <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700 leading-tight">Tenant Information</h3>
+                    <p className="text-[10px] text-slate-500 leading-tight">Identity and contact details</p>
                   </div>
                   <div className="ml-auto">
                     <input
@@ -1429,11 +1463,11 @@ for (const request of invoiceRequests) {
                       value={formData.tenantCode}
                       onChange={handleInputChange}
                       placeholder="Tenant Code (auto)"
-                      className="h-7 w-36 rounded border border-slate-200 bg-white px-2 text-xs font-mono text-slate-700 focus:outline-none focus:ring-1 focus:ring-orange-400"
+                      className="h-7 w-36 rounded border border-slate-200 bg-white px-2 text-xs font-mono text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/30"
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 xl:grid-cols-4">
                   <div>
                     <label className={labelClass}>Full Name <span className="text-red-500">*</span></label>
                     <div className="relative">
@@ -1479,12 +1513,12 @@ for (const request of invoiceRequests) {
               </div>
 
               {/* ── Property & Unit ── */}
-              <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div className="flex items-center gap-2.5 border-b border-slate-100 bg-slate-50 px-4 py-3 rounded-t-xl">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600"><FaBuilding size={13} /></span>
+              <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-center gap-2.5 border-b border-slate-200 bg-slate-50 px-3 py-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded bg-emerald-100 text-emerald-600"><FaBuilding size={13} /></span>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-900 leading-tight">Property &amp; Unit</h3>
-                    <p className="text-[11px] text-slate-500 leading-tight">Assign a property and unit to this tenant</p>
+                    <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700 leading-tight">Property &amp; Unit</h3>
+                    <p className="text-[10px] text-slate-500 leading-tight">Assign a property and unit to this tenant</p>
                   </div>
                 </div>
                 <div className="p-4 space-y-4">
@@ -1602,7 +1636,7 @@ for (const request of invoiceRequests) {
                               setFieldErrors((prev) => ({ ...prev, additionalUnits: "" }));
                             }
                           }}
-                          className="rounded border-slate-300 text-orange-600 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]/30 disabled:cursor-not-allowed disabled:opacity-60"
                         />
                         Assign additional units to this tenant
                       </label>
@@ -1647,12 +1681,12 @@ for (const request of invoiceRequests) {
               </div>
 
               {/* ── Billing Information ── */}
-              <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div className="flex items-center gap-2.5 border-b border-slate-100 bg-slate-50 px-4 py-3 rounded-t-xl">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-100 text-blue-600"><FaMoneyBillWave size={13} /></span>
+              <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-center gap-2.5 border-b border-slate-200 bg-slate-50 px-3 py-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded bg-blue-100 text-blue-600"><FaMoneyBillWave size={13} /></span>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-900 leading-tight">Billing Information</h3>
-                    <p className="text-[11px] text-slate-500 leading-tight">Rent, deposit and billing settings</p>
+                    <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700 leading-tight">Billing Information</h3>
+                    <p className="text-[10px] text-slate-500 leading-tight">Rent, deposit and billing settings</p>
                   </div>
                 </div>
                 <div className="p-4 space-y-4">
@@ -1768,9 +1802,9 @@ for (const request of invoiceRequests) {
 
                     <div>
                       <label className={labelClass}>Total Monthly Bill (Ksh)</label>
-                      <div className="bg-gradient-to-br from-orange-100 to-red-50 border-2 border-orange-400 rounded-lg p-3 min-h-10 flex items-center justify-center">
+                      <div className="bg-gradient-to-br from-[#0B3B2E]/10 to-slate-50 border border-[#0B3B2E]/30 rounded-lg p-3 min-h-10 flex items-center justify-center">
                         <div className="text-center">
-                          <p className="text-2xl font-black text-orange-900">
+                          <p className="text-2xl font-black text-[#0B3B2E]">
                             {(
                               parseFloat(formData.rent || 0) +
                               (combinedUtilitiesPreview.reduce(
@@ -1779,7 +1813,7 @@ for (const request of invoiceRequests) {
                               ) || 0)
                             ).toFixed(2)}
                           </p>
-                          <p className="text-xs text-orange-700 mt-0.5">Rent + Utilities</p>
+                          <p className="text-xs text-[#0B3B2E]/70 mt-0.5">Rent + Utilities</p>
                         </div>
                       </div>
                     </div>
@@ -1802,13 +1836,13 @@ for (const request of invoiceRequests) {
 </div>
 
                   {!isEditMode && (
-                    <div className={`mt-4 rounded-xl border p-4 ${isLettingProperty ? "border-blue-200 bg-blue-50/70" : "border-orange-200 bg-orange-50/70"}`}>
+                    <div className={`mt-4 rounded-xl border p-4 ${isLettingProperty ? "border-blue-200 bg-blue-50/70" : "border-[#0B3B2E]/20 bg-[#0B3B2E]/5"}`}>
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <h4 className={`text-sm font-bold ${isLettingProperty ? "text-blue-900" : "text-orange-900"}`}>
+                          <h4 className={`text-sm font-bold ${isLettingProperty ? "text-blue-900" : "text-[#0B3B2E]"}`}>
                             {isLettingProperty ? "Letting Fee" : "Lease / Agreement Fee"}
                           </h4>
-                          <p className={`mt-1 text-xs ${isLettingProperty ? "text-blue-800" : "text-orange-800"}`}>
+                          <p className={`mt-1 text-xs ${isLettingProperty ? "text-blue-800" : "text-[#0B3B2E]/70"}`}>
                             {isLettingProperty
                               ? `This property is managed under Letting. A letting fee is automatically applied based on the property setting (${
                                   selectedPropertyRecord?.lettingFeeMode === "fixed"
@@ -1823,7 +1857,7 @@ for (const request of invoiceRequests) {
                             </p>
                           )}
                         </div>
-                        <label className={`inline-flex items-center gap-2 text-sm font-semibold ${isLettingProperty ? "text-blue-900" : "text-orange-900"}`}>
+                        <label className={`inline-flex items-center gap-2 text-sm font-semibold ${isLettingProperty ? "text-blue-900" : "text-[#0B3B2E]"}`}>
                           <input
                             type="checkbox"
                             name="createLeaseFeeInvoice"
@@ -1840,7 +1874,7 @@ for (const request of invoiceRequests) {
                                 setFieldErrors((prev) => ({ ...prev, leaseFeeAmount: undefined }));
                               }
                             }}
-                            className="h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+                            className="h-4 w-4 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]/30"
                           />
                           Apply fee
                         </label>
@@ -1912,14 +1946,14 @@ for (const request of invoiceRequests) {
                   )}
 
                   {proratedInfo && (
-                    <div className="mt-4 bg-orange-50 border border-orange-200 rounded-lg p-4">
+                    <div className="mt-4 bg-[#0B3B2E]/5 border border-[#0B3B2E]/20 rounded-lg p-4">
                       <div className="flex items-start gap-2">
-                        <FaCalculator className="text-orange-600 mt-1" />
+                        <FaCalculator className="text-[#0B3B2E] mt-1" />
                         <div className="flex-1">
-                          <h4 className="font-bold text-orange-900 text-sm mb-2">
+                          <h4 className="font-bold text-[#0B3B2E] text-sm mb-2">
                             Prorated Rent Calculation (First Month)
                           </h4>
-                          <div className="text-xs text-orange-800 space-y-1">
+                          <div className="text-xs text-[#0B3B2E]/70 space-y-1">
                             <p>
                               • Days in month:{" "}
                               <span className="font-bold">{proratedInfo.daysInMonth}</span>
@@ -1934,8 +1968,8 @@ for (const request of invoiceRequests) {
                                 Ksh {proratedInfo.dailyRate.toFixed(2)}
                               </span>
                             </p>
-                            <p className="pt-1 border-t border-orange-300">
-                              <span className="font-bold text-orange-900">
+                            <p className="pt-1 border-t border-[#0B3B2E]/20">
+                              <span className="font-bold text-[#0B3B2E]">
                                 First month bill: Ksh {proratedInfo.proratedAmount.toFixed(2)}
                               </span>
                             </p>
@@ -1948,19 +1982,19 @@ for (const request of invoiceRequests) {
               </div>
 
               {/* ── Additional Utilities ── */}
-              <div ref={additionalUtilitiesSectionRef} className="rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div className="flex items-center justify-between gap-2.5 border-b border-slate-100 bg-slate-50 px-4 py-3 rounded-t-xl">
+              <div ref={additionalUtilitiesSectionRef} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-center justify-between gap-2.5 border-b border-slate-200 bg-slate-50 px-3 py-2">
                   <div className="flex items-center gap-2.5">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600"><FaBolt size={13} /></span>
+                    <span className="flex h-7 w-7 items-center justify-center rounded bg-indigo-100 text-indigo-600"><FaBolt size={13} /></span>
                     <div>
-                      <h3 className="text-sm font-bold text-slate-900 leading-tight">Additional Utilities</h3>
-                      <p className="text-[11px] text-slate-500 leading-tight">Add utilities beyond the unit's defaults</p>
+                      <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700 leading-tight">Additional Utilities</h3>
+                      <p className="text-[10px] text-slate-500 leading-tight">Add utilities beyond the unit's defaults</p>
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={addAdditionalUtility}
-                    className="h-7 px-3 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-1.5 transition-all"
+                    className="h-7 px-3 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded flex items-center gap-1.5 transition-all"
                   >
                     <FaPlus size={10} /> Add Utility
                   </button>
@@ -2016,7 +2050,7 @@ for (const request of invoiceRequests) {
                                   onChange={(e) =>
                                     updateAdditionalUtility(idx, "isIncluded", e.target.checked)
                                   }
-                                  className="rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+                                  className="rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]/30"
                                 />
                                 Included in rent
                               </label>
@@ -2043,12 +2077,12 @@ for (const request of invoiceRequests) {
               </div>
 
               {/* ── Emergency Contact ── */}
-              <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div className="flex items-center gap-2.5 border-b border-slate-100 bg-slate-50 px-4 py-3 rounded-t-xl">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-100 text-red-500"><FaExclamationTriangle size={13} /></span>
+              <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-center gap-2.5 border-b border-slate-200 bg-slate-50 px-3 py-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded bg-red-100 text-red-500"><FaExclamationTriangle size={13} /></span>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-900 leading-tight">Emergency Contact</h3>
-                    <p className="text-[11px] text-slate-500 leading-tight">Optional backup contact for this tenant</p>
+                    <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700 leading-tight">Emergency Contact</h3>
+                    <p className="text-[10px] text-slate-500 leading-tight">Optional backup contact for this tenant</p>
                   </div>
                 </div>
                 <div className="p-4">
@@ -2096,38 +2130,41 @@ for (const request of invoiceRequests) {
                 </div>
               </div>
 
-              <div className="sticky bottom-0 z-20 px-4 py-3 bg-slate-50/95 backdrop-blur-sm border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={handleCancel}
-                  className="w-full sm:w-auto h-10 px-4 rounded-md border border-slate-300 bg-white text-slate-700 text-sm font-semibold shadow-sm hover:bg-slate-100 flex items-center justify-center gap-2"
-                >
-                  <FaTimes /> Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={loading || tenantLoading}
-                  className={`w-full sm:w-auto h-10 px-5 rounded-md text-white text-sm font-semibold shadow-sm flex items-center justify-center gap-2 transition-colors ${
-                    loading
-                      ? "bg-slate-400 cursor-not-allowed"
-                      : `${MILIK_GREEN_BG} ${MILIK_GREEN_BG_HOVER}`
-                  }`}
-                >
-                  {loading ? (
-                    <>
-                      <FaSpinner className="animate-spin" /> {isEditMode ? "Updating..." : "Saving..."}
-                    </>
-                  ) : (
-                    <>
-                      <FaSave /> {isEditMode ? "Update Tenant" : "Save Tenant"}
-                    </>
-                  )}
-                </button>
-              </div>
             </div>
           </form>
           )}
+        </div>
+
+        {/* Sticky footer */}
+        <div className="flex-shrink-0 border-t border-slate-200 bg-[#F6FAF8] px-4 py-2.5">
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            {!isEditMode && (
+              <button
+                type="button"
+                onClick={handleReset}
+                disabled={loading}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Reset
+              </button>
+            )}
+            <button
+              type="submit"
+              form="tenant-form"
+              disabled={loading || tenantLoading}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-black text-white transition ${loading || tenantLoading ? "bg-slate-400 cursor-not-allowed" : "bg-[#0B3B2E] hover:bg-[#0A3127]"}`}
+            >
+              {loading ? <FaSpinner className="animate-spin" /> : <FaSave />}
+              {loading ? (isEditMode ? "Updating…" : "Saving…") : (isEditMode ? "Update Tenant" : "Save Tenant")}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -2172,7 +2209,7 @@ for (const request of invoiceRequests) {
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
                 <p className="text-xs uppercase tracking-wide text-slate-500 mb-2">Opening invoice mode</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <label className={`rounded-xl border px-4 py-3 cursor-pointer ${openingInvoiceMode === "separate" ? "border-orange-500 bg-orange-50" : "border-slate-200 bg-white"}`}>
+                  <label className={`rounded-xl border px-4 py-3 cursor-pointer ${openingInvoiceMode === "separate" ? "border-[#0B3B2E] bg-[#0B3B2E]/5" : "border-slate-200 bg-white"}`}>
                     <input
                       type="radio"
                       name="openingInvoiceMode"
@@ -2215,7 +2252,7 @@ for (const request of invoiceRequests) {
                     </div>
                   ))}
                 </div>
-                <div className="px-4 py-3 bg-orange-50 border-t border-orange-100 flex items-center justify-between">
+                <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
                   <span className="font-semibold text-slate-900">Total opening invoice amount</span>
                   <span className="text-lg font-bold text-slate-900">
                     KES {pendingInvoiceContext.items.reduce((sum, item) => sum + Number(item.amount || 0), 0).toLocaleString()}

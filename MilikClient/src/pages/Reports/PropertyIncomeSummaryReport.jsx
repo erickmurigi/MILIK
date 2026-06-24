@@ -350,23 +350,23 @@ const PropertyIncomeSummaryReport = () => {
             {/* Filter bar */}
             <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
               <div className={`grid gap-1.5 md:grid-cols-2 ${isLandlordMode ? 'xl:grid-cols-3' : 'xl:grid-cols-4'}`}>
-                <input type="date" value={filters.startDate} onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))} className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40" />
-                <input type="date" value={filters.endDate} onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))} className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40" />
-                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40">
+                <input type="date" value={filters.startDate} onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                <input type="date" value={filters.endDate} onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
                   <option value="">All properties</option>
                   {properties.map((p) => <option key={p._id} value={p._id}>{p.propertyName || p.name}</option>)}
                 </select>
                 {!isLandlordMode && (
-                  <select value={filters.landlordId} onChange={(e) => setFilters((prev) => ({ ...prev, landlordId: e.target.value }))} className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40">
+                  <select value={filters.landlordId} onChange={(e) => setFilters((prev) => ({ ...prev, landlordId: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
                     <option value="">All landlords</option>
                     {landlords.map((l) => <option key={l._id} value={l._id}>{l.landlordName || l.name}</option>)}
                   </select>
                 )}
               </div>
               <div className="mt-1.5 flex flex-wrap justify-end gap-1.5">
-                <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? 'Export CSV' : 'No export permission'} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaFileDownload /> Export CSV</button>
-                <button onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? 'Print' : 'No print permission'} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaPrint /> Print</button>
-                <button onClick={loadReport} className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] transition ${filtersChanged ? 'border border-orange-400 bg-orange-50 text-orange-700 hover:bg-orange-100' : 'border border-slate-300 bg-white text-slate-700 hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700'}`}><FaSyncAlt className={loading ? 'animate-spin' : ''} /> {filtersChanged ? 'Apply Filters' : 'Refresh'}</button>
+                <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? 'Export CSV' : 'No export permission'} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaFileDownload /> Export CSV</button>
+                <button onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? 'Print' : 'No print permission'} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaPrint /> Print</button>
+                <button onClick={loadReport} className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] transition ${filtersChanged ? 'border border-orange-400 bg-orange-50 text-orange-700 hover:bg-orange-100' : 'border border-slate-200 bg-white text-slate-700 hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700'}`}><FaSyncAlt className={loading ? 'animate-spin' : ''} /> {filtersChanged ? 'Apply Filters' : 'Refresh'}</button>
               </div>
             </div>
 
@@ -420,27 +420,27 @@ const PropertyIncomeSummaryReport = () => {
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white">
                 <div className="flex-shrink-0 bg-[#0B3B2E] px-2 py-1.5 text-xs font-bold text-white">Income &amp; Expenses by Property</div>
                 <div className="min-h-0 flex-1 overflow-auto">
-                  <table className="min-w-full text-xs">
-                    <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700">
+                  <table className="min-w-full text-[11px] border-collapse">
+                    <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                       <tr>
-                        {['Property', 'Rent Invoiced', 'Utilities Invoiced', 'Total Invoiced', 'Collected', 'Expenses', 'Net Income (Cash)', 'Collection %'].map((h) => (
-                          <th key={h} className="whitespace-nowrap px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-[0.12em]">{h}</th>
+                        {['Property', 'Rent Invoiced', 'Utilities Invoiced', 'Total Invoiced', 'Collected', 'Expenses', 'Net Income (Cash)', 'Collection %'].map((h, i, arr) => (
+                          <th key={h} className={`whitespace-nowrap px-2 py-1 text-left font-bold ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {(report.byProperty || []).length === 0 ? (
                         <tr><td colSpan={8} className="px-2 py-4 text-center text-slate-500">{loading ? 'Loading…' : 'No data found for the selected filters.'}</td></tr>
-                      ) : (report.byProperty || []).map((row) => (
-                        <tr key={row.propertyId || row.propertyName} className="border-t border-slate-200 hover:bg-slate-50/80">
-                          <td className="px-2 py-1.5 font-semibold text-slate-900">{row.propertyName}</td>
-                          <td className="px-2 py-1.5 text-slate-700">{formatMoney(row.rentInvoiced)}</td>
-                          <td className="px-2 py-1.5 text-slate-700">{formatMoney(row.utilitiesInvoiced)}</td>
-                          <td className="px-2 py-1.5 text-slate-700">{formatMoney(row.totalInvoiced)}</td>
-                          <td className="px-2 py-1.5 font-semibold text-emerald-700">{formatMoney(row.totalCollected)}</td>
-                          <td className="px-2 py-1.5 text-red-700">{formatMoney(row.totalExpenses)}</td>
-                          <td className={`px-2 py-1.5 font-semibold ${Number(row.netIncome || 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>{formatMoney(row.netIncome)}</td>
-                          <td className="px-2 py-1.5 text-slate-700">{formatPercent(row.collectionRate)}</td>
+                      ) : (report.byProperty || []).map((row, i) => (
+                        <tr key={row.propertyId || row.propertyName} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                          <td className="px-2 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.propertyName}</td>
+                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.rentInvoiced)}</td>
+                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.utilitiesInvoiced)}</td>
+                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.totalInvoiced)}</td>
+                          <td className="px-2 py-1 border-r border-gray-100 font-semibold text-emerald-700">{formatMoney(row.totalCollected)}</td>
+                          <td className="px-2 py-1 border-r border-gray-100 text-red-700">{formatMoney(row.totalExpenses)}</td>
+                          <td className={`px-2 py-1 border-r border-gray-100 font-semibold ${Number(row.netIncome || 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>{formatMoney(row.netIncome)}</td>
+                          <td className="px-2 py-1 text-slate-700">{formatPercent(row.collectionRate)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -453,20 +453,20 @@ const PropertyIncomeSummaryReport = () => {
                 <div className="flex-shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-white" style={{ maxHeight: '200px' }}>
                   <div className="flex-shrink-0 bg-[#0B3B2E] px-2 py-1.5 text-xs font-bold text-white">Expenses by Category</div>
                   <div className="overflow-auto" style={{ maxHeight: '160px' }}>
-                    <table className="min-w-full text-xs">
-                      <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700">
+                    <table className="min-w-full text-[11px] border-collapse">
+                      <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                         <tr>
-                          {['Category', 'Total', 'Transactions'].map((h) => (
-                            <th key={h} className="whitespace-nowrap px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-[0.12em]">{h}</th>
+                          {['Category', 'Total', 'Transactions'].map((h, i, arr) => (
+                            <th key={h} className={`whitespace-nowrap px-2 py-1 text-left font-bold ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {(report.expensesByCategory || []).map((row) => (
-                          <tr key={row.category} className="border-t border-slate-200 hover:bg-slate-50/80">
-                            <td className="px-2 py-1.5 capitalize font-semibold text-slate-900">{formatCategory(row.category)}</td>
-                            <td className="px-2 py-1.5 text-red-700">{formatMoney(row.total)}</td>
-                            <td className="px-2 py-1.5 text-slate-700">{row.count}</td>
+                        {(report.expensesByCategory || []).map((row, i) => (
+                          <tr key={row.category} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                            <td className="px-2 py-1 border-r border-gray-100 capitalize font-semibold text-slate-900">{formatCategory(row.category)}</td>
+                            <td className="px-2 py-1 border-r border-gray-100 text-red-700">{formatMoney(row.total)}</td>
+                            <td className="px-2 py-1 text-slate-700">{row.count}</td>
                           </tr>
                         ))}
                       </tbody>

@@ -241,40 +241,40 @@ export default function LeaveBalances() {
 
               {/* Table */}
               <div className="print-card overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                <table className="min-w-full text-xs">
+                <table className="min-w-full text-[11px] border-collapse">
                   <thead>
                     <tr className="bg-[#0B3B2E] text-white">
-                      <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-widest">Employee</th>
-                      <th className="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest">Department</th>
-                      <th className="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest">Leave Type</th>
-                      <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Entitlement</th>
-                      <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Used</th>
-                      <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Pending</th>
-                      <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Remaining</th>
-                      <th className="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest print-hide">Utilisation</th>
+                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Employee</th>
+                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Department</th>
+                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Leave Type</th>
+                      <th className="px-3 py-1 text-right font-bold border-r border-white/10">Entitlement</th>
+                      <th className="px-3 py-1 text-right font-bold border-r border-white/10">Used</th>
+                      <th className="px-3 py-1 text-right font-bold border-r border-white/10">Pending</th>
+                      <th className="px-3 py-1 text-right font-bold border-r border-white/10">Remaining</th>
+                      <th className="px-3 py-1 text-left font-bold print-hide">Utilisation</th>
                     </tr>
                   </thead>
                   <tbody>
                     {rows.map((r, i) => {
                       const pct = r.entitlement > 0 ? Math.round((r.used / r.entitlement) * 100) : 0;
                       return (
-                        <tr key={`${r.employeeId}_${r.leaveTypeId}`} className={`border-t border-slate-100 hover:bg-slate-50 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
-                          <td className="px-4 py-2.5">
+                        <tr key={`${r.employeeId}_${r.leaveTypeId}`} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                          <td className="px-3 py-1 border-r border-gray-100">
                             <div className="font-black text-slate-900">{r.employeeName}</div>
                             <div className="text-[10px] text-slate-400">{r.employeeNumber}</div>
                           </td>
-                          <td className="px-3 py-2.5 text-slate-600">{r.department}</td>
-                          <td className="px-3 py-2.5">
+                          <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{r.department}</td>
+                          <td className="px-3 py-1 border-r border-gray-100">
                             <div className="font-semibold text-slate-900">{r.leaveTypeName}</div>
                             <span className={`text-[9px] font-black ${r.isPaid ? 'text-emerald-600' : 'text-rose-500'}`}>
                               {r.isPaid ? 'Paid' : 'Unpaid'}
                             </span>
                           </td>
-                          <td className="px-3 py-2.5 text-right font-semibold text-slate-700">{r.entitlement}</td>
-                          <td className={`px-3 py-2.5 text-right font-black ${r.used > 0 ? utilText(pct) : 'text-slate-400'}`}>{r.used}</td>
-                          <td className="px-3 py-2.5 text-right text-amber-600">{r.pending || '—'}</td>
-                          <td className={`px-3 py-2.5 text-right font-black ${r.remaining === 0 ? 'text-rose-600' : 'text-emerald-700'}`}>{r.remaining}</td>
-                          <td className="px-3 py-2.5 print-hide">
+                          <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-700">{r.entitlement}</td>
+                          <td className={`px-3 py-1 border-r border-gray-100 text-right font-black ${r.used > 0 ? utilText(pct) : 'text-slate-400'}`}>{r.used}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-right text-amber-600">{r.pending || '—'}</td>
+                          <td className={`px-3 py-1 border-r border-gray-100 text-right font-black ${r.remaining === 0 ? 'text-rose-600' : 'text-emerald-700'}`}>{r.remaining}</td>
+                          <td className="px-3 py-1 print-hide">
                             <div className="flex items-center gap-2">
                               <div className="flex-1 h-1.5 rounded-full bg-slate-100">
                                 <div className={`h-1.5 rounded-full ${utilColor(pct)}`} style={{ width: `${Math.min(100, pct)}%` }} />

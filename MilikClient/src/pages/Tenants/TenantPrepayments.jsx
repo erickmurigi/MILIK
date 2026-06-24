@@ -253,35 +253,35 @@ const TenantPrepayments = () => {
                   </span>
                 ))}
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…" className="h-7 w-40 shrink-0 rounded-md border border-slate-300 bg-white px-2 text-[11px] outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-200" />
-                <select value={propertyFilter} onChange={(e) => setPropertyFilter(e.target.value)} className="h-7 shrink-0 rounded-md border border-orange-200 bg-orange-50/70 px-2 text-[11px] font-semibold text-slate-800 appearance-none outline-none focus:border-orange-400">
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…" className="h-7 w-40 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-[11px] outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                <select value={propertyFilter} onChange={(e) => setPropertyFilter(e.target.value)} className="h-7 shrink-0 rounded-md border border-orange-200 bg-orange-50/70 px-2 text-[11px] font-semibold text-slate-800 appearance-none outline-none focus:border-[#0B3B2E]">
                   <option value="all">Property</option>
                   {propertyOptions.map((property) => (<option key={property._id} value={property._id}>{property.propertyName}</option>))}
                 </select>
-                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-7 shrink-0 rounded-md border border-orange-200 bg-orange-50/70 px-2 text-[11px] font-semibold text-slate-800 appearance-none outline-none focus:border-orange-400">
+                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-7 shrink-0 rounded-md border border-orange-200 bg-orange-50/70 px-2 text-[11px] font-semibold text-slate-800 appearance-none outline-none focus:border-[#0B3B2E]">
                   <option value="all">All Active</option>
                   <option value="confirmed">Confirmed</option>
                   <option value="unconfirmed">Unconfirmed</option>
                 </select>
                 <button onClick={() => navigate("/receipts/new")} className="h-7 shrink-0 flex items-center gap-1.5 rounded-md bg-[#0B3B2E] px-2.5 text-[11px] font-bold text-white shadow-sm hover:bg-[#0A3127]"><FaReceipt size={10} /> New Receipt</button>
-                <button onClick={() => { setSearch(""); setPropertyFilter("all"); setStatusFilter("all"); }} className="h-7 shrink-0 flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-[11px] font-bold text-slate-700 shadow-sm hover:bg-slate-50"><FaCoins size={10} /> Reset</button>
+                <button onClick={() => { setSearch(""); setPropertyFilter("all"); setStatusFilter("all"); }} className="h-7 shrink-0 flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[11px] font-bold text-slate-700 shadow-sm hover:bg-slate-50"><FaCoins size={10} /> Reset</button>
               </div>
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto">
-              <table className="w-full min-w-[1100px] text-xs">
+              <table className="w-full min-w-[1100px] text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className={`${MILIK_GREEN} text-white`}>
-                    <th className="px-3 py-2 text-left">Receipt #</th>
-                    <th className="px-3 py-2 text-left">Date</th>
-                    <th className="px-3 py-2 text-left">Tenant</th>
-                    <th className="px-3 py-2 text-left">Property</th>
-                    <th className="px-3 py-2 text-left">Unit</th>
-                    <th className="px-3 py-2 text-right">Receipt</th>
-                    <th className="px-3 py-2 text-right">Allocated</th>
-                    <th className="px-3 py-2 text-right">Unapplied</th>
-                    <th className="px-3 py-2 text-left">Status</th>
-                    <th className="px-3 py-2 text-center">Actions</th>
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Receipt #</th>
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Date</th>
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Tenant</th>
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Property</th>
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Unit</th>
+                    <th className="px-3 py-2 text-right font-bold border-r border-white/10">Receipt</th>
+                    <th className="px-3 py-2 text-right font-bold border-r border-white/10">Allocated</th>
+                    <th className="px-3 py-2 text-right font-bold border-r border-white/10">Unapplied</th>
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Status</th>
+                    <th className="px-3 py-2 text-center font-bold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -301,31 +301,31 @@ const TenantPrepayments = () => {
                     rows.map((row, index) => (
                       <tr
                         key={row._id}
-                        className={`border-b border-slate-200 ${index % 2 === 0 ? "bg-white" : "bg-slate-50"}`}
+                        className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}
                       >
-                        <td className="px-3 py-2 font-bold text-slate-900">{row.referenceNumber}</td>
-                        <td className="px-3 py-2 font-semibold text-slate-900">{formatDate(row.paymentDate)}</td>
-                        <td className="px-3 py-2 font-semibold text-slate-900">{row.tenantName}</td>
-                        <td className="px-3 py-2 font-semibold text-slate-900">{row.propertyName}</td>
-                        <td className="px-3 py-2 font-semibold text-slate-900">{row.unitName}</td>
-                        <td className="px-3 py-2 text-right font-bold text-slate-900">{formatMoney(row.amount)}</td>
-                        <td className="px-3 py-2 text-right font-semibold text-emerald-700">{formatMoney(row.allocatedAmount)}</td>
-                        <td className="px-3 py-2 text-right font-bold text-amber-700">{formatMoney(row.unappliedAmount)}</td>
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900">{row.referenceNumber}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{formatDate(row.paymentDate)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.tenantName}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.propertyName}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.unitName}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{formatMoney(row.amount)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-emerald-700">{formatMoney(row.allocatedAmount)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-amber-700">{formatMoney(row.unappliedAmount)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100">
                           <span
-                            className={`inline-flex rounded px-2 py-1 text-[10px] font-semibold ${
-                              row.isConfirmed ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+                            className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold border ${
+                              row.isConfirmed ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"
                             }`}
                           >
                             {row.isConfirmed ? "Confirmed" : "Pending"}
                           </span>
                         </td>
-                        <td className="px-3 py-2 text-center">
+                        <td className="px-3 py-1 text-center">
                           <button
                             onClick={() => navigate(`/receipts?receipt=${row._id}`)}
-                            className="inline-flex items-center gap-1 rounded bg-indigo-600 px-2 py-1 text-white hover:bg-indigo-700"
+                            className="inline-flex items-center gap-1 rounded-full bg-[#0B3B2E] px-2.5 py-0.5 text-[10px] font-bold text-white hover:bg-[#0A3127]"
                           >
-                            <FaArrowRight size={11} /> Manage Allocation
+                            <FaArrowRight size={9} /> Manage
                           </button>
                         </td>
                       </tr>

@@ -279,7 +279,7 @@ const InvoiceCreationModal = ({
                     onChange={(e) => setDepositAmountInput(e.target.value)}
                     disabled={isCreating}
                     placeholder="Enter deposit amount"
-                    className="w-full rounded border border-emerald-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full rounded border border-emerald-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                   />
                   <p className="text-[11px] text-emerald-700 mt-1">
                     You can keep the default deposit, bill 50%, 200%, or any custom amount.

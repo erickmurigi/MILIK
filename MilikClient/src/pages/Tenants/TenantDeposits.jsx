@@ -792,7 +792,7 @@ const TenantDeposits = () => {
                 </select>
                 <input type="date" value={draftFilters.fromDate} onChange={(e) => setDraftFilters((prev) => ({ ...prev, fromDate: e.target.value }))} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
                 <input type="date" value={draftFilters.toDate} onChange={(e) => setDraftFilters((prev) => ({ ...prev, toDate: e.target.value }))} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <button onClick={applySearch} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaSearch size={10} /></button>
+                <button onClick={applySearch} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSearch size={10} /></button>
                 <button onClick={resetFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={10} /></button>
                 <button onClick={loadDepositInvoices} disabled={loading} className="h-7 shrink-0 flex items-center gap-1 rounded border border-gray-300 bg-white px-2.5 text-xs text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-60">{loading ? <FaSpinner className="animate-spin" size={10} /> : <FaRedoAlt size={10} />}</button>
                 <button onClick={handleDeleteSelected} disabled={!canDeleteInvoice || selectedCount === 0 || deleting} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${selectedCount > 0 ? "bg-red-600 hover:bg-red-700" : "cursor-not-allowed bg-gray-400"}`}><FaTrash size={10} /></button>
@@ -814,26 +814,26 @@ const TenantDeposits = () => {
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
-              <table className="w-full min-w-[1480px] text-xs">
+              <table className="w-full min-w-[1480px] text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className={`${MILIK_GREEN} text-white`}>
-                    <th className="px-3 py-2 text-left">
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">
                       <input type="checkbox" checked={currentPageRows.length > 0 && selectAll} onChange={toggleSelectAll} />
                     </th>
-                    <th className="px-3 py-2 text-left font-semibold">Invoice #</th>
-                    <th className="px-3 py-2 text-left font-semibold">Tenant</th>
-                    <th className="px-3 py-2 text-left font-semibold">Property</th>
-                    <th className="px-3 py-2 text-left font-semibold">Unit</th>
-                    <th className="px-3 py-2 text-left font-semibold">Deposit Type</th>
-                    <th className="px-3 py-2 text-left font-semibold">{holderColumnLabel}</th>
-                    <th className="px-3 py-2 text-center font-semibold">Booking / Invoice Date</th>
-                    <th className="px-3 py-2 text-center font-semibold">Due Date</th>
-                    <th className="px-3 py-2 text-right font-semibold">Amount</th>
-                    <th className="px-3 py-2 text-right font-semibold">Paid</th>
-                    <th className="px-3 py-2 text-right font-semibold">Outstanding</th>
-                    <th className="px-3 py-2 text-center font-semibold">Status</th>
-                    <th className="px-3 py-2 text-center font-semibold">Created</th>
-                    <th className="px-3 py-2 text-right font-semibold">Actions</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Invoice #</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Tenant</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Unit</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Deposit Type</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">{holderColumnLabel}</th>
+                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Booking / Invoice Date</th>
+                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Due Date</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Paid</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Outstanding</th>
+                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
+                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Created</th>
+                    <th className="px-3 py-1 text-right font-bold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -856,16 +856,16 @@ const TenantDeposits = () => {
                     currentPageRows.map((row, idx) => (
                       <tr
                         key={row.key}
-                        className={`cursor-pointer border-b border-slate-200 transition-colors ${
+                        className={`cursor-pointer border-b border-gray-100 transition-colors ${
                           selectedInvoices.includes(row.key)
                             ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50"
                             : idx % 2 === 0
                             ? "bg-white hover:bg-blue-50/40"
-                            : "bg-slate-50 hover:bg-blue-50/40"
+                            : "bg-slate-50/60 hover:bg-blue-50/40"
                         }`}
                         onClick={() => navigate(`/tenant/${row.tenantId}/statement`)}
                       >
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-1 border-r border-gray-100">
                           <input
                             type="checkbox"
                             checked={selectedInvoices.includes(row.key)}
@@ -873,27 +873,27 @@ const TenantDeposits = () => {
                             onClick={(e) => e.stopPropagation()}
                           />
                         </td>
-                        <td className="px-3 py-2 font-bold text-blue-700">{row.id}</td>
-                        <td className="px-3 py-2 font-bold text-slate-900">{row.tenantName}</td>
-                        <td className="px-3 py-2 font-semibold text-slate-900">{row.propertyName}</td>
-                        <td className="px-3 py-2 font-semibold text-slate-900">{row.unitName}</td>
-                        <td className="px-3 py-2 font-semibold text-orange-700">
+                        <td className="px-3 py-1 border-r border-gray-100 font-bold text-blue-700">{row.id}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900">{row.tenantName}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.propertyName}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.unitName}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-orange-700">
                           <div>{row.depositTypeLabel}</div>
                           <div className="max-w-[220px] truncate text-[10px] font-normal text-slate-500">{row.description}</div>
                         </td>
-                        <td className="px-3 py-2 text-slate-700">{row.holder}</td>
-                        <td className="px-3 py-2 text-center text-gray-700">{row.invoiceDateLabel}</td>
-                        <td className="px-3 py-2 text-center text-gray-700">{row.dueDateLabel}</td>
-                        <td className="px-3 py-2 text-right font-bold text-slate-900">{formatCurrency(row.amount)}</td>
-                        <td className="px-3 py-2 text-right text-slate-700">{formatCurrency(row.appliedAmount)}</td>
-                        <td className="px-3 py-2 text-right font-bold text-slate-900">{formatCurrency(row.outstandingAmount)}</td>
-                        <td className="px-3 py-2 text-center">
-                          <span className={`inline-flex rounded px-2 py-0.5 text-[10px] font-semibold ${getStatusBadgeClass(row.status)}`}>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row.holder}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-center text-gray-700">{row.invoiceDateLabel}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-center text-gray-700">{row.dueDateLabel}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{formatCurrency(row.amount)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-700">{formatCurrency(row.appliedAmount)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{formatCurrency(row.outstandingAmount)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-center">
+                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${getStatusBadgeClass(row.status)}`}>
                             {row.status}
                           </span>
                         </td>
-                        <td className="px-3 py-2 text-center text-gray-600">{row.createdDate}</td>
-                        <td className="px-3 py-2 text-right">
+                        <td className="px-3 py-1 border-r border-gray-100 text-center text-gray-600">{row.createdDate}</td>
+                        <td className="px-3 py-1 text-right">
                           <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                             <button
                               onClick={() => navigate(`/tenant/${row.tenantId}/statement`)}
@@ -1012,14 +1012,14 @@ const TenantDeposits = () => {
 
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-700">Property Filter</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Property Filter</label>
                   <select
                     value={tenantPropertyFilter}
                     onChange={(e) => {
                       setTenantPropertyFilter(e.target.value);
                       setDepositForm((prev) => ({ ...prev, tenantId: "" }));
                     }}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     <option value="any">All properties</option>
                     {activeProperties.map((property) => (
@@ -1030,11 +1030,11 @@ const TenantDeposits = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-700">Tenant *</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Tenant <span className="text-red-500">*</span></label>
                   <select
                     value={depositForm.tenantId}
                     onChange={(e) => updateDepositTenant(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     <option value="">Select tenant</option>
                     {tenantOptions.map((option) => (
@@ -1045,11 +1045,11 @@ const TenantDeposits = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-700">Deposit Type *</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Deposit Type *</label>
                   <select
                     value={depositForm.depositTypeId}
                     onChange={(e) => updateDepositType(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     {activeDepositTypes.map((type) => (
                       <option key={type._id || type.code || type.name} value={type._id || type.code || type.name}>
@@ -1059,40 +1059,40 @@ const TenantDeposits = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-700">Amount *</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Amount *</label>
                   <input
                     type="number"
                     min="0"
                     step="0.01"
                     value={depositForm.amount}
                     onChange={(e) => setDepositForm((prev) => ({ ...prev, amount: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-700">Invoice Date</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Invoice Date</label>
                   <input
                     type="date"
                     value={depositForm.invoiceDate}
                     onChange={(e) => setDepositForm((prev) => ({ ...prev, invoiceDate: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-700">Due Date</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Due Date</label>
                   <input
                     type="date"
                     value={depositForm.dueDate}
                     onChange={(e) => setDepositForm((prev) => ({ ...prev, dueDate: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-700">{holderColumnLabel}</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">{holderColumnLabel}</label>
                   <select
                     value={depositForm.depositHeldBy}
                     onChange={(e) => setDepositForm((prev) => ({ ...prev, depositHeldBy: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                     disabled={isLandlordWorkspace}
                   >
                     {!isLandlordWorkspace && <option value="manager">Management Company</option>}
@@ -1100,12 +1100,12 @@ const TenantDeposits = () => {
                   </select>
                 </div>
                 <div className="md:col-span-2">
-                  <label className="mb-1 block text-xs font-semibold text-slate-700">Description</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Description</label>
                   <textarea
                     value={depositForm.description}
                     onChange={(e) => setDepositForm((prev) => ({ ...prev, description: e.target.value }))}
                     rows="3"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
               </div>
@@ -1115,7 +1115,7 @@ const TenantDeposits = () => {
               <button
                 type="button"
                 onClick={closeDepositModal}
-                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
               >
                 Cancel
               </button>
@@ -1123,7 +1123,7 @@ const TenantDeposits = () => {
                 type="button"
                 onClick={handleCreateDepositInvoice}
                 disabled={saving}
-                className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER} disabled:opacity-60`}
+                className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60 ${MILIK_GREEN}`}
               >
                 {saving ? <FaSpinner className="animate-spin" /> : <FaMoneyBillWave />}
                 {saving ? "Saving..." : "Create Deposit Invoice"}

@@ -188,20 +188,20 @@ export default function AppraisalCycles() {
 
         {/* ── Table ── */}
         <div className="flex-1 overflow-auto">
-          <table className="min-w-full text-xs">
+          <table className="min-w-full text-[11px] border-collapse">
             <thead className="sticky top-0 z-10 shadow-sm">
-              <tr className="border-b border-slate-200 bg-[#f0f4f2] text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                <th className="px-3 py-1.5 text-left w-8">#</th>
-                <th className="px-3 py-1.5 text-left">Cycle Name</th>
-                <th className="px-3 py-1.5 text-left w-36">Period</th>
-                <th className="px-3 py-1.5 text-left w-52">Date Range</th>
-                <th className="px-3 py-1.5 text-left">KPI Assignments</th>
-                <th className="px-3 py-1.5 text-center w-20">Employees</th>
-                <th className="px-3 py-1.5 text-center w-20">Status</th>
-                <th className="px-3 py-1.5 text-right w-36">Actions</th>
+              <tr className="bg-[#0B3B2E] text-white">
+                <th className="px-3 py-1 text-left font-bold w-8 border-r border-white/10">#</th>
+                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Cycle Name</th>
+                <th className="px-3 py-1 text-left font-bold w-36 border-r border-white/10">Period</th>
+                <th className="px-3 py-1 text-left font-bold w-52 border-r border-white/10">Date Range</th>
+                <th className="px-3 py-1 text-left font-bold border-r border-white/10">KPI Assignments</th>
+                <th className="px-3 py-1 text-center font-bold w-20 border-r border-white/10">Employees</th>
+                <th className="px-3 py-1 text-center font-bold w-20 border-r border-white/10">Status</th>
+                <th className="px-3 py-1 text-right font-bold w-36">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
+            <tbody>
               {loading && <tr><td colSpan={8} className="py-8 text-center text-[11px] text-slate-400">Loading…</td></tr>}
               {!loading && !cycles.length && (
                 <tr>
@@ -212,17 +212,17 @@ export default function AppraisalCycles() {
                 </tr>
               )}
               {!loading && pagedCycles.map((c, idx) => (
-                <tr key={c._id} className="hover:bg-[#0B3B2E]/[0.03]">
-                  <td className="px-3 py-1.5 text-slate-400 tabular-nums">{(page - 1) * pageSize + idx + 1}</td>
-                  <td className="px-3 py-1.5">
+                <tr key={c._id} className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                  <td className="px-3 py-1 text-slate-400 tabular-nums border-r border-gray-100">{(page - 1) * pageSize + idx + 1}</td>
+                  <td className="px-3 py-1 border-r border-gray-100">
                     <span className="font-semibold text-slate-800">{c.name}</span>
                     {c.notes && <span className="ml-2 text-[10px] text-slate-400 italic">{c.notes}</span>}
                   </td>
-                  <td className="px-3 py-1.5 text-slate-600 tabular-nums">{c.year} · {c.periodType}</td>
-                  <td className="px-3 py-1.5 text-slate-500 tabular-nums text-[11px]">
+                  <td className="px-3 py-1 text-slate-600 tabular-nums border-r border-gray-100">{c.year} · {c.periodType}</td>
+                  <td className="px-3 py-1 text-slate-500 tabular-nums border-r border-gray-100">
                     {fmtDate(c.startDate)} – {fmtDate(c.endDate)}
                   </td>
-                  <td className="px-3 py-1.5">
+                  <td className="px-3 py-1 border-r border-gray-100">
                     <div className="flex flex-wrap gap-1">
                       {c.kpis?.length
                         ? c.kpis.map((ck) => (
@@ -234,11 +234,11 @@ export default function AppraisalCycles() {
                       }
                     </div>
                   </td>
-                  <td className="px-3 py-1.5 text-center font-semibold tabular-nums text-slate-700">{c.employeeCount || 0}</td>
-                  <td className="px-3 py-1.5 text-center">
-                    <span className={`rounded border px-2 py-0.5 text-[10px] font-bold whitespace-nowrap ${STATUS_PILL[c.status]}`}>{c.status}</span>
+                  <td className="px-3 py-1 text-center font-semibold tabular-nums text-slate-700 border-r border-gray-100">{c.employeeCount || 0}</td>
+                  <td className="px-3 py-1 text-center border-r border-gray-100">
+                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold whitespace-nowrap ${STATUS_PILL[c.status]}`}>{c.status}</span>
                   </td>
-                  <td className="px-3 py-1.5 text-right">
+                  <td className="px-3 py-1 text-right">
                     <div className="flex items-center justify-end gap-1">
                       {c.status === 'Draft' && (
                         <>
@@ -274,7 +274,7 @@ export default function AppraisalCycles() {
               <select
                 value={pageSize}
                 onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-                className="h-6 rounded-lg border border-slate-200 bg-slate-50 px-1.5 text-[10px] font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition"
+                className="h-6 rounded-lg border border-slate-200 bg-slate-50 px-1.5 text-[10px] font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition"
               >
                 {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
               </select>

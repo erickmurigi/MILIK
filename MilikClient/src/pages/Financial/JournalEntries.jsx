@@ -625,19 +625,19 @@ const JournalEntries = () => {
             </div>
 
             <div className="flex-1 min-h-0 overflow-auto">
-              <table className="w-full min-w-[1440px] text-xs">
+              <table className="w-full min-w-[1440px] text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className="bg-[#0B3B2E] text-white">
-                    <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Journal</th>
-                    <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Date</th>
-                    <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Type</th>
-                    <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Property</th>
-                    <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">{isLandlordWorkspace ? "Owner" : "Landlord"}</th>
-                    <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Debit</th>
-                    <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Credit</th>
-                    <th className="px-3 py-2 text-right text-[11px] font-black uppercase tracking-[0.16em]">Amount</th>
-                    <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Status</th>
-                    <th className="px-3 py-2 text-right text-[11px] font-black uppercase tracking-[0.16em]">Actions</th>
+                    <th className="px-3 py-1 text-left font-black border-r border-white/10">Journal</th>
+                    <th className="px-3 py-1 text-left font-black border-r border-white/10">Date</th>
+                    <th className="px-3 py-1 text-left font-black border-r border-white/10">Type</th>
+                    <th className="px-3 py-1 text-left font-black border-r border-white/10">Property</th>
+                    <th className="px-3 py-1 text-left font-black border-r border-white/10">{isLandlordWorkspace ? "Owner" : "Landlord"}</th>
+                    <th className="px-3 py-1 text-left font-black border-r border-white/10">Debit</th>
+                    <th className="px-3 py-1 text-left font-black border-r border-white/10">Credit</th>
+                    <th className="px-3 py-1 text-right font-black border-r border-white/10">Amount</th>
+                    <th className="px-3 py-1 text-left font-black border-r border-white/10">Status</th>
+                    <th className="px-3 py-1 text-right font-black">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -658,25 +658,25 @@ const JournalEntries = () => {
                       return (
                         <tr
                           key={journal._id}
-                          className={`border-t border-slate-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/40"} hover:bg-slate-50`}
+                          className={`border-b border-gray-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/60"} hover:bg-blue-50/40`}
                         >
-                          <td className="px-3 py-1.5">
+                          <td className="px-3 py-1 border-r border-gray-100">
                             <div className="font-black text-slate-900">{journal.journalNo}</div>
-                            <div className="text-xs text-slate-500">{journal.reference || journal.narration || "No reference"}</div>
+                            <div className="text-[10px] text-slate-500">{journal.reference || journal.narration || "No reference"}</div>
                           </td>
-                          <td className="px-3 py-1.5 text-slate-700">{journal.date ? new Date(journal.date).toLocaleDateString() : "-"}</td>
-                          <td className="px-3 py-1.5 text-slate-700">{getJournalTypePresentation(journal.journalType)?.label || journal.journalType}</td>
-                          <td className="px-3 py-1.5 text-slate-700">{journal.property?.propertyName || journal.property?.name || "N/A"}</td>
-                          <td className="px-3 py-1.5 text-slate-700">{journal.landlord?.landlordName || journal.landlord?.name || "-"}</td>
-                          <td className="px-3 py-1.5 text-slate-700">{journal.debitAccount?.code} - {journal.debitAccount?.name}</td>
-                          <td className="px-3 py-1.5 text-slate-700">{journal.creditAccount?.code} - {journal.creditAccount?.name}</td>
-                          <td className="px-3 py-1.5 text-right font-black text-slate-900">KES {Number(journal.amount || 0).toLocaleString()}</td>
-                          <td className="px-3 py-1.5">
-                            <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${STATUS_STYLES[journal.status] || STATUS_STYLES.draft}`}>
+                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{journal.date ? new Date(journal.date).toLocaleDateString() : "-"}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{getJournalTypePresentation(journal.journalType)?.label || journal.journalType}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{journal.property?.propertyName || journal.property?.name || "N/A"}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{journal.landlord?.landlordName || journal.landlord?.name || "-"}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{journal.debitAccount?.code} - {journal.debitAccount?.name}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{journal.creditAccount?.code} - {journal.creditAccount?.name}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">KES {Number(journal.amount || 0).toLocaleString()}</td>
+                          <td className="px-3 py-1 border-r border-gray-100">
+                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${STATUS_STYLES[journal.status] || STATUS_STYLES.draft}`}>
                               {journal.status}
                             </span>
                           </td>
-                          <td className="px-3 py-1.5 text-right">
+                          <td className="px-3 py-1 text-right">
                             <div className="inline-flex flex-wrap justify-end gap-2">
                               {journal.status === "draft" && (
                                 <>
@@ -723,7 +723,7 @@ const JournalEntries = () => {
             </div>
             <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
               <div className="font-semibold">Showing <span className="font-bold text-slate-900">{journals.length === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1}</span> to <span className="font-bold text-slate-900">{Math.min(safeCurrentPage * pageSize, serverTotal)}</span> of <span className="font-bold text-slate-900">{serverTotal}</span> journal(s)</div>
-              <div className="flex items-center gap-3"><div className="flex items-center gap-1.5"><span className="font-semibold text-slate-500">Per page:</span><select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }} className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition">{[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}</select></div><button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button><span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span><button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button></div>
+              <div className="flex items-center gap-3"><div className="flex items-center gap-1.5"><span className="font-semibold text-slate-500">Per page:</span><select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }} className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition">{[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}</select></div><button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button><span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span><button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button></div>
             </div>
           </div>
         </div>

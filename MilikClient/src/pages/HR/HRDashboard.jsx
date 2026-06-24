@@ -224,7 +224,7 @@ export default function HRDashboard() {
                         const days = daysLeft(emp.probationEndDate);
                         return (
                           <div key={emp._id} className="flex items-center gap-2 rounded-lg border border-slate-100 px-2.5 py-2">
-                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-[9px] font-black text-blue-700">
+                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-blue-100 text-[9px] font-black text-blue-700">
                               {initials(emp.surname, emp.otherNames)}
                             </div>
                             <div className="min-w-0 flex-1">
@@ -329,7 +329,7 @@ export default function HRDashboard() {
                     <div className="space-y-1.5">
                       {stats.recentJoiners.map((emp) => (
                         <button key={emp._id} onClick={() => navigate(`/hr/employees/${emp._id}`)} className="flex w-full cursor-pointer items-center gap-2 rounded-lg border border-slate-100 px-2.5 py-2 hover:bg-slate-50 text-left">
-                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-[9px] font-black text-emerald-700">
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-emerald-100 text-[9px] font-black text-emerald-700">
                             {initials(emp.surname, emp.otherNames)}
                           </div>
                           <div className="min-w-0 flex-1">

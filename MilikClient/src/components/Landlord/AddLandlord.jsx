@@ -13,16 +13,16 @@ import {
   FaTrashAlt,
   FaChevronDown,
   FaSpinner,
+  FaArrowLeft,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { createLandlord, updateLandlord } from "../../redux/apiCalls";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 
-// Orange theme constants
-const MILIK_ORANGE_BG = "bg-orange-600";
-const MILIK_ORANGE_BG_HOVER = "hover:bg-orange-700";
-const MILIK_ORANGE_RING = "focus:ring-orange-500/30";
-const MILIK_ORANGE_BORDER_FOCUS = "focus:border-orange-600";
+const MILIK_ORANGE_BG = "bg-[#0B3B2E]";
+const MILIK_ORANGE_BG_HOVER = "hover:bg-[#0A3127]";
+const MILIK_ORANGE_RING = "";
+const MILIK_ORANGE_BORDER_FOCUS = "";
 
 /**
  * Custom dropdown with orange highlighting
@@ -68,7 +68,7 @@ function MilikSelect({
   return (
     <div className={`${className} relative`} ref={wrapRef}>
       {label ? (
-        <label className="block text-sm font-bold text-slate-800 mb-1 tracking-tight">
+        <label className="mb-0.5 block text-xs font-semibold text-slate-700">
           {label} {required ? <span className="text-red-500">*</span> : ""}
         </label>
       ) : null}
@@ -78,17 +78,16 @@ function MilikSelect({
         disabled={disabled}
         onClick={() => setOpen((s) => !s)}
         className={[
-          "w-full h-10 px-3 rounded-md bg-white text-slate-900 shadow-sm border border-slate-300",
-          "transition-all duration-200 ease-out hover:border-slate-400",
-          `focus:outline-none focus:ring-2 ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`,
+          "w-full h-8 px-3 rounded border border-slate-200 bg-white text-slate-900",
+          "transition focus:outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20",
           "flex items-center justify-between gap-2",
           disabled ? "opacity-50 cursor-not-allowed" : "",
         ].join(" ")}
       >
-        <span className="text-sm font-semibold truncate">
+        <span className="text-xs font-semibold truncate">
           {selectedItem ? getLabel(selectedItem) : <span className="text-slate-400">{placeholder}</span>}
         </span>
-        <FaChevronDown className="text-slate-600" />
+        <FaChevronDown className="text-slate-600" size={10} />
       </button>
 
       {open && !disabled && (
@@ -109,7 +108,7 @@ function MilikSelect({
                       setOpen(false);
                     }}
                     className={[
-                      "w-full text-left px-3 py-2 text-sm font-semibold transition-colors",
+                      "w-full text-left px-3 py-1.5 text-xs font-semibold transition-colors",
                       isSelected
                         ? `${MILIK_ORANGE_BG} text-white`
                         : "text-slate-800 hover:bg-orange-50",
@@ -244,9 +243,9 @@ const AddLandlord = () => {
   }, [attachments, draftReadyNonce, draftStorageKey, formData, isEditMode]);
   // Input classes for consistency
   const inputClass =
-    "w-full px-3 py-2 text-sm border border-slate-300 rounded-md shadow-sm transition-all duration-200 ease-out hover:border-slate-400 focus:outline-none focus:ring-2";
+    "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
 
-  const labelClass = "block text-sm font-bold text-slate-800 mb-1 tracking-tight";
+  const labelClass = "mb-0.5 block text-xs font-semibold text-slate-700";
 
   const uppercaseLandlordFields = new Set(["landlordCode", "landlordName", "regId", "taxPin", "postalAddress", "location"]);
 
@@ -351,42 +350,46 @@ const AddLandlord = () => {
     navigate("/landlords");
   };
 
+  const handleReset = () => {
+    if (isEditMode) return;
+    setFormData({ landlordCode: "", landlordType: "Individual", landlordName: "", regId: "", taxPin: "", postalAddress: "", email: "", phoneNumber: "", location: "", portalAccess: "Disabled", status: "Active" });
+    setAttachments([]);
+    clearDraftState();
+  };
+
   return (
-    <DashboardLayout>
-      <div className="flex h-[calc(100vh-8rem)] min-h-0 flex-col bg-slate-50">
-        {/* Header */}
-        <div className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Landlord Details</h1>
-              <p className="text-sm text-slate-600 mt-1">Fill in the landlord details below</p>
-              {currentCompany?.companyName && (
-                <p className="text-xs text-slate-500 mt-1">
-                  Active company: <span className="font-semibold">{currentCompany.companyName}</span>
-                </p>
-              )}
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
+        {/* Sticky dark header */}
+        <div className="flex-shrink-0 bg-[#0B3B2E] px-4 py-2.5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={handleCancel} className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#B7C9C0] hover:text-white transition">
+                <FaArrowLeft /> Back
+              </button>
+              <div className="h-4 w-px bg-[#2A5C4A]" />
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B7C9C0]">Landlords</div>
+                <h1 className="text-sm font-black text-white leading-none">{isEditMode ? "Edit Landlord" : "New Landlord"}</h1>
+              </div>
             </div>
-            <button
-              onClick={handleCancel}
-              className="h-10 px-4 rounded-md border border-slate-300 bg-white hover:bg-slate-50 transition-colors flex items-center gap-2"
-            >
-              <FaTimes />
-              <span className="text-sm font-semibold">Cancel</span>
-            </button>
+            {currentCompany?.companyName && (
+              <span className="rounded-lg border border-[#2A5C4A] bg-[#0A3127] px-2.5 py-1 text-[10px] font-bold text-[#B7C9C0]">{currentCompany.companyName}</span>
+            )}
           </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 min-h-0 overflow-auto px-3 py-3 pb-28 sm:px-4 lg:px-6">
-          <form onSubmit={handleSubmit} className="w-full max-w-none">
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+        {/* Scrollable content */}
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          <form id="landlord-form" onSubmit={handleSubmit} className="w-full max-w-none">
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-3">
               {/* General Information */}
-              <div className="xl:col-span-7 bg-white rounded-lg shadow-sm border border-slate-200 p-5">
-                <h3 className="text-base font-bold text-slate-900 mb-4 pb-2 border-b border-slate-200">
-                  General Information
-                </h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              <div className="xl:col-span-7 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
+                  <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700">General Information</h3>
+                </div>
+                <div className="p-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                   <div>
                     <label className={labelClass}>Landlord Code</label>
                     <input
@@ -482,15 +485,16 @@ const AddLandlord = () => {
                     />
                   </div>
                 </div>
+                </div>
               </div>
 
               {/* Address Information */}
-              <div className="xl:col-span-5 bg-white rounded-lg shadow-sm border border-slate-200 p-5">
-                <h3 className="text-base font-bold text-slate-900 mb-4 pb-2 border-b border-slate-200">
-                  Address Information
-                </h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="xl:col-span-5 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
+                  <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700">Address Information</h3>
+                </div>
+                <div className="p-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="md:col-span-2">
                     <label className={labelClass}>Postal Address</label>
                     <input
@@ -542,13 +546,15 @@ const AddLandlord = () => {
                     />
                   </div>
                 </div>
+                </div>
               </div>
 
               {/* Attachments */}
-              <div className="xl:col-span-12 bg-white rounded-lg shadow-sm border border-slate-200 p-5">
-                <h3 className="text-base font-bold text-slate-900 mb-4 pb-2 border-b border-slate-200">
-                  Attachments
-                </h3>
+              <div className="xl:col-span-12 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
+                  <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700">Attachments</h3>
+                </div>
+                <div className="p-3">
 
                 <div className="flex gap-2 mb-4">
                   <button
@@ -625,43 +631,43 @@ const AddLandlord = () => {
                     No attachments added yet
                   </div>
                 )}
-              </div>
-            </div>
-
-            {/* Bottom Action Bar */}
-            <div className="mt-4 bg-white rounded-lg shadow-sm border border-slate-200 p-4 flex items-center justify-between">
-              <div className="text-sm text-slate-600">
-                Fields marked with <span className="text-red-500">*</span> are required
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={handleCancel}
-                  disabled={isFetching}
-                  className="px-6 py-2.5 text-sm font-semibold border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isFetching}
-                  className={`px-6 py-2.5 text-sm font-semibold text-white rounded-lg ${MILIK_ORANGE_BG} ${MILIK_ORANGE_BG_HOVER} transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
-                >
-                  {isFetching ? (
-                    <>
-                      <FaSpinner className="animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <FaSave />
-                      {isEditMode ? "Update Landlord" : "Save Landlord"}
-                    </>
-                  )}
-                </button>
+                </div>
               </div>
             </div>
           </form>
+        </div>
+
+        {/* Sticky footer */}
+        <div className="flex-shrink-0 border-t border-slate-200 bg-[#F6FAF8] px-4 py-2.5">
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={handleCancel}
+              disabled={isFetching}
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            {!isEditMode && (
+              <button
+                type="button"
+                onClick={handleReset}
+                disabled={isFetching}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Reset
+              </button>
+            )}
+            <button
+              type="submit"
+              form="landlord-form"
+              disabled={isFetching}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white transition hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isFetching ? <FaSpinner className="animate-spin" /> : <FaSave />}
+              {isFetching ? "Saving…" : isEditMode ? "Update Landlord" : "Save Landlord"}
+            </button>
+          </div>
         </div>
       </div>
     </DashboardLayout>

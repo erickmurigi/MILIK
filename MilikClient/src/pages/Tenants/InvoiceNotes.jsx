@@ -336,6 +336,7 @@ const InvoiceNotes = () => {
   const [selectedNotes, setSelectedNotes] = useState([]);
   const [expandedNotes, setExpandedNotes] = useState(new Set());
   const [communicationModal, setCommunicationModal] = useState(null);
+  const [reverseNoteModal, setReverseNoteModal] = useState({ open: false, note: null, reason: "", loading: false });
 
   const selectedNoteTenantIds = useMemo(() => {
     const objs = notes.filter((n) => selectedNotes.includes(String(n._id)));
@@ -733,18 +734,26 @@ const InvoiceNotes = () => {
     }
   };
 
-  const handleReverseNote = async (note) => {
+  const handleReverseNote = (note) => {
     const noteId = String(note?._id || "");
     if (!noteId) return;
-    const reason = window.prompt(`Reverse ${note.noteNumber || "this note"}? Add an optional reason for the audit trail.`) || "";
+    setReverseNoteModal({ open: true, note, reason: "", loading: false });
+  };
+
+  const handleReverseNoteConfirm = async () => {
+    const { note, reason } = reverseNoteModal;
+    const noteId = String(note?._id || "");
+    setReverseNoteModal((prev) => ({ ...prev, loading: true }));
     try {
       setBusyNoteId(noteId);
       await deleteTenantInvoiceNote(noteId, { business: currentCompany?._id, reason });
       toast.success(`${String(note?.noteType || "").toUpperCase() === "CREDIT_NOTE" ? "Credit" : "Debit"} note reversed successfully.`);
+      setReverseNoteModal({ open: false, note: null, reason: "", loading: false });
       await loadData();
       window.dispatchEvent(new Event("invoicesUpdated"));
     } catch (error) {
       toast.error(error?.response?.data?.error || error?.response?.data?.message || "Failed to reverse invoice note");
+      setReverseNoteModal((prev) => ({ ...prev, loading: false }));
     } finally {
       setBusyNoteId("");
     }
@@ -827,10 +836,10 @@ const InvoiceNotes = () => {
 
             {/* ── TABLE ── */}
             <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
-              <table className="w-full min-w-[1320px] text-xs">
+              <table className="w-full min-w-[1320px] text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className={`${MILIK_GREEN} text-white`}>
-                    <th className="px-3 py-2 text-left">
+                    <th className="px-3 py-2 text-left border-r border-white/10">
                       <input
                         type="checkbox"
                         checked={paginatedNotes.length > 0 && paginatedNotes.every((n) => selectedNotes.includes(String(n._id)))}
@@ -838,20 +847,20 @@ const InvoiceNotes = () => {
                         className="accent-emerald-500"
                       />
                     </th>
-                    <th className="w-6 px-1 py-2" />
-                    <th className="px-3 py-2 text-left font-semibold">Note #</th>
-                    <th className="px-3 py-2 text-left font-semibold">Tenant</th>
-                    <th className="px-3 py-2 text-left font-semibold">Property</th>
-                    <th className="px-3 py-2 text-left font-semibold">Unit</th>
-                    <th className="px-3 py-2 text-left font-semibold">Description</th>
-                    <th className="px-3 py-2 text-left font-semibold">Type</th>
-                    <th className="px-3 py-2 text-center font-semibold">Note Date</th>
-                    <th className="px-3 py-2 text-center font-semibold">Source Invoice</th>
-                    <th className="px-3 py-2 text-right font-semibold">Amount</th>
-                    <th className="px-3 py-2 text-center font-semibold">Status</th>
-                    <th className="px-3 py-2 text-center font-semibold">Payment</th>
-                    <th className="px-3 py-2 text-center font-semibold">Created</th>
-                    <th className="px-3 py-2 text-right font-semibold">Actions</th>
+                    <th className="w-6 px-1 py-2 border-r border-white/10" />
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Note #</th>
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Tenant</th>
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Property</th>
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Unit</th>
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Description</th>
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Type</th>
+                    <th className="px-3 py-2 text-center font-bold border-r border-white/10">Note Date</th>
+                    <th className="px-3 py-2 text-center font-bold border-r border-white/10">Source Invoice</th>
+                    <th className="px-3 py-2 text-right font-bold border-r border-white/10">Amount</th>
+                    <th className="px-3 py-2 text-center font-bold border-r border-white/10">Status</th>
+                    <th className="px-3 py-2 text-center font-bold border-r border-white/10">Payment</th>
+                    <th className="px-3 py-2 text-center font-bold border-r border-white/10">Created</th>
+                    <th className="px-3 py-2 text-right font-bold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -872,16 +881,16 @@ const InvoiceNotes = () => {
                       return (
                         <React.Fragment key={noteId}>
                           <tr
-                            className={`cursor-pointer border-b border-slate-200 transition-colors ${
+                            className={`cursor-pointer border-b border-gray-100 transition-colors ${
                               isNoteSelected
                                 ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50"
                                 : index % 2 === 0
                                   ? "bg-white hover:bg-blue-50/40"
-                                  : "bg-slate-50 hover:bg-blue-50/40"
+                                  : "bg-slate-50/60 hover:bg-blue-50/40"
                             }`}
                             onClick={() => toggleNoteSelect(noteId)}
                           >
-                            <td className="px-3 py-2 text-slate-600">
+                            <td className="px-3 py-1 border-r border-gray-100 text-slate-600">
                               <input
                                 type="checkbox"
                                 checked={isNoteSelected}
@@ -891,36 +900,36 @@ const InvoiceNotes = () => {
                               />
                             </td>
                             <td
-                              className="w-6 cursor-pointer px-1 py-2 text-center text-slate-400"
+                              className="w-6 cursor-pointer px-1 py-1 border-r border-gray-100 text-center text-slate-400"
                               onClick={(event) => { event.stopPropagation(); toggleNoteExpand(noteId); }}
                             >
                               {isNoteExpanded ? "▼" : "▶"}
                             </td>
-                            <td className="px-3 py-2">
+                            <td className="px-3 py-1 border-r border-gray-100">
                               <p className="font-semibold text-blue-700">{note.noteNumber || note.invoiceNumber}</p>
                             </td>
-                            <td className="px-3 py-2 font-semibold text-slate-900">{note?.tenant?.name || note?.tenantName || "-"}</td>
-                            <td className="px-3 py-2 font-semibold text-slate-900">{resolvePropertyName(note, propertyMap)}</td>
-                            <td className="px-3 py-2 font-semibold text-slate-900">{resolveUnitName(note, tenantMap)}</td>
-                            <td className="px-3 py-2 text-orange-700">{note.description || `${humanizeCategory(note.noteType || note.documentType)} - ${humanizeCategory(note.category || "Charge")}`}</td>
-                            <td className="px-3 py-2 text-slate-700">
-                              <span className="rounded bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">{humanizeCategory(note.category || "-")}</span>
+                            <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{note?.tenant?.name || note?.tenantName || "-"}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{resolvePropertyName(note, propertyMap)}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{resolveUnitName(note, tenantMap)}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-orange-700">{note.description || `${humanizeCategory(note.noteType || note.documentType)} - ${humanizeCategory(note.category || "Charge")}`}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-slate-700">
+                              <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">{humanizeCategory(note.category || "-")}</span>
                             </td>
-                            <td className="px-3 py-2 text-center text-slate-700">{formatDate(note.noteDate || note.invoiceDate || note.createdAt)}</td>
-                            <td className="px-3 py-2 text-center text-slate-700">{note.sourceInvoiceNumber || note?.sourceInvoice?.invoiceNumber || "-"}</td>
-                            <td className="px-3 py-2 text-right font-semibold text-slate-900">{formatCurrency(note.amount)}</td>
-                            <td className="px-3 py-2 text-center">
-                              <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-semibold uppercase ${getStatusChip(note?.status)}`}>
+                            <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-700">{formatDate(note.noteDate || note.invoiceDate || note.createdAt)}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-700">{note.sourceInvoiceNumber || note?.sourceInvoice?.invoiceNumber || "-"}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-900">{formatCurrency(note.amount)}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-center">
+                              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${getStatusChip(note?.status)}`}>
                                 {note?.status || "posted"}
                               </span>
                             </td>
-                            <td className="px-3 py-2 text-center">
-                              <span className={`inline-flex rounded px-2 py-0.5 text-[10px] font-semibold ${paymentState.className}`}>
+                            <td className="px-3 py-1 border-r border-gray-100 text-center">
+                              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${paymentState.className}`}>
                                 {paymentState.label}
                               </span>
                             </td>
-                            <td className="px-3 py-2 text-center text-slate-700">{formatDate(note.createdAt || note.noteDate || note.invoiceDate)}</td>
-                            <td className="px-3 py-2 text-right" onClick={(event) => event.stopPropagation()}>
+                            <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-700">{formatDate(note.createdAt || note.noteDate || note.invoiceDate)}</td>
+                            <td className="px-3 py-1 text-right" onClick={(event) => event.stopPropagation()}>
                               {canReverseNote(note) ? (
                                 <button
                                   type="button"
@@ -1042,20 +1051,19 @@ const InvoiceNotes = () => {
       {showAddModal ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
             <div className="max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
-              <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4">
+              <div className="flex items-center justify-between bg-[#0B3B2E] px-5 py-3 text-white">
                 <div>
-                  <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-slate-500">Add invoice note</p>
-                  <h3 className="mt-1 text-lg font-bold text-slate-900">{noteType === "CREDIT_NOTE" ? "Credit Note" : "Debit Note"}</h3>
-                  <p className="mt-1 text-sm text-slate-500">Select property first, then tenant. Credit notes must point to a source invoice. Debit notes can adjust an existing invoice or create a standalone charge.</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-100">Add invoice note</p>
+                  <h3 className="text-lg font-black">{noteType === "CREDIT_NOTE" ? "Credit Note" : "Debit Note"}</h3>
                 </div>
-                <button onClick={() => !saving && setShowAddModal(false)} className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-white hover:text-slate-800">
+                <button onClick={() => !saving && setShowAddModal(false)} className="rounded-full border border-white/30 p-2 hover:bg-white/10">
                   <FaTimes />
                 </button>
               </div>
 
               <div className="max-h-[calc(92vh-78px)] overflow-y-auto px-5 py-5">
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  <label className="space-y-1.5 text-sm font-medium text-slate-700">
+                  <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
                     <span>Note Type</span>
                     <select
                       value={noteType}
@@ -1066,19 +1074,19 @@ const InvoiceNotes = () => {
                         nextParams.set("type", nextValue === "DEBIT_NOTE" ? "debit" : "credit");
                         setSearchParams(nextParams, { replace: true });
                       }}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none"
+                      className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                     >
                       <option value="CREDIT_NOTE">Credit Note</option>
                       <option value="DEBIT_NOTE">Debit Note</option>
                     </select>
                   </label>
 
-                  <label className="space-y-1.5 text-sm font-medium text-slate-700">
+                  <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
                     <span>Property</span>
                     <select
                       value={propertyId}
                       onChange={(e) => setPropertyId(e.target.value)}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none"
+                      className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                     >
                       <option value="">Select property</option>
                       {properties.map((property) => (
@@ -1087,19 +1095,19 @@ const InvoiceNotes = () => {
                     </select>
                   </label>
 
-                  <label className="space-y-1.5 text-sm font-medium text-slate-700">
+                  <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
                     <span>Date</span>
-                    <input type="date" value={noteDate} onChange={(e) => setNoteDate(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none" />
+                    <input type="date" value={noteDate} onChange={(e) => setNoteDate(e.target.value)} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                   </label>
 
-                  <label className="space-y-1.5 text-sm font-medium text-slate-700">
+                  <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
                     <span>Tenant</span>
-                    <select value={tenantScope} onChange={(e) => setTenantScope(e.target.value)} disabled={!propertyId} className="mb-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none disabled:bg-slate-100">
+                    <select value={tenantScope} onChange={(e) => setTenantScope(e.target.value)} disabled={!propertyId} className="mb-2 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed">
                       <option value="active">Active tenants</option>
                       <option value="terminated">Terminated tenants</option>
                       <option value="all">All tenants</option>
                     </select>
-                    <select value={tenantId} onChange={(e) => setTenantId(e.target.value)} disabled={!propertyId} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none disabled:bg-slate-100">
+                    <select value={tenantId} onChange={(e) => setTenantId(e.target.value)} disabled={!propertyId} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed">
                       <option value="">{propertyId ? "Select tenant" : "Select property first"}</option>
                       {propertyScopedTenants.map((tenant) => (
                         <option key={tenant._id} value={tenant._id}>{getTenantDisplayName(tenant)} ({getTenantStatusLabel(tenant)})</option>
@@ -1111,9 +1119,9 @@ const InvoiceNotes = () => {
                   </label>
 
                   {noteType === "CREDIT_NOTE" ? (
-                    <label className="space-y-1.5 text-sm font-medium text-slate-700 md:col-span-2">
+                    <label className="space-y-0.5 block text-xs font-semibold text-slate-700 md:col-span-2">
                       <span>Source Invoice</span>
-                      <select value={sourceInvoiceId} onChange={(e) => setSourceInvoiceId(e.target.value)} disabled={!tenantId} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none disabled:bg-slate-100">
+                      <select value={sourceInvoiceId} onChange={(e) => setSourceInvoiceId(e.target.value)} disabled={!tenantId} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed">
                         <option value="">{tenantId ? (sourceInvoiceOptions.length ? "Select source invoice" : "No matching open posted invoices") : "Select tenant first"}</option>
                         {sourceInvoiceOptions.map((invoice) => (
                           <option key={invoice._id} value={invoice._id}>
@@ -1123,7 +1131,7 @@ const InvoiceNotes = () => {
                       </select>
                     </label>
                   ) : (
-                    <label className="space-y-1.5 text-sm font-medium text-slate-700 md:col-span-2">
+                    <label className="space-y-0.5 block text-xs font-semibold text-slate-700 md:col-span-2">
                       <span>Charge Item</span>
                       <input
                         type="text"
@@ -1131,9 +1139,9 @@ const InvoiceNotes = () => {
                         onChange={(e) => setChargeItemSearch(e.target.value)}
                         disabled={!tenantId}
                         placeholder="Search rent month, utility, deposit, late payment..."
-                        className="mb-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none disabled:bg-slate-100"
+                        className="mb-2 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed"
                       />
-                      <select value={invoiceItemSelection} onChange={(e) => setInvoiceItemSelection(e.target.value)} disabled={!tenantId} size={Math.min(8, Math.max(3, filteredDebitInvoiceItemOptions.length + 1))} className="max-h-56 w-full overflow-y-auto rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none disabled:bg-slate-100">
+                      <select value={invoiceItemSelection} onChange={(e) => setInvoiceItemSelection(e.target.value)} disabled={!tenantId} size={Math.min(8, Math.max(3, filteredDebitInvoiceItemOptions.length + 1))} className="max-h-56 w-full overflow-y-auto rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed">
                         <option value="">{tenantId ? (debitInvoiceItemOptions.length ? "Select charge item" : "No charge items available") : "Select tenant first"}</option>
                         {filteredDebitInvoiceItemOptions.map((item) => (
                           <option key={item.key} value={item.key}>
@@ -1145,9 +1153,9 @@ const InvoiceNotes = () => {
                   )}
 
                   {noteType === "CREDIT_NOTE" ? (
-                    <label className="space-y-1.5 text-sm font-medium text-slate-700">
+                    <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
                       <span>Charge Type</span>
-                      <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none">
+                      <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
                         <option value="">Select charge type</option>
                         {chargeTypes.map((item) => (
                           <option key={item.value} value={item.value}>{item.label}</option>
@@ -1155,25 +1163,25 @@ const InvoiceNotes = () => {
                       </select>
                     </label>
                   ) : (
-                    <label className="space-y-1.5 text-sm font-medium text-slate-700">
+                    <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
                       <span>Charge Category</span>
                       <input
                         type="text"
                         value={selectedInvoiceItem ? humanizeCategory(selectedInvoiceItem.category) : ""}
                         readOnly
-                        className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-700 focus:outline-none"
+                        className="w-full rounded border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700 outline-none"
                       />
                     </label>
                   )}
 
-                  <label className="space-y-1.5 text-sm font-medium text-slate-700">
+                  <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
                     <span>Amount</span>
-                    <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none" />
+                    <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                   </label>
 
-                  <label className="space-y-1.5 text-sm font-medium text-slate-700 xl:col-span-3">
+                  <label className="space-y-0.5 block text-xs font-semibold text-slate-700 xl:col-span-3">
                     <span>Posting Account (optional)</span>
-                    <select value={chartAccountId} onChange={(e) => setChartAccountId(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none">
+                    <select value={chartAccountId} onChange={(e) => setChartAccountId(e.target.value)} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
                       <option value="">Use existing charge mapping</option>
                       {postingAccounts.map((account) => (
                         <option key={account._id} value={account._id}>{account.code} - {account.name}</option>
@@ -1181,9 +1189,9 @@ const InvoiceNotes = () => {
                     </select>
                   </label>
 
-                  <label className="space-y-1.5 text-sm font-medium text-slate-700 xl:col-span-3">
+                  <label className="space-y-0.5 block text-xs font-semibold text-slate-700 xl:col-span-3">
                     <span>Description</span>
-                    <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none" />
+                    <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                   </label>
                 </div>
 
@@ -1201,7 +1209,7 @@ const InvoiceNotes = () => {
               </div>
 
               <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-white px-5 py-4">
-                <button type="button" onClick={() => setShowAddModal(false)} className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                <button type="button" onClick={() => setShowAddModal(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
                   Cancel
                 </button>
                 <button type="button" onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60">
@@ -1223,6 +1231,49 @@ const InvoiceNotes = () => {
         allowedChannels={communicationModal?.allowedChannels || ["sms", "email"]}
         defaultChannel={communicationModal?.defaultChannel || "sms"}
       />
+
+      {reverseNoteModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="bg-[#0B3B2E] px-6 py-4 flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15">
+                <FaUndo className="text-white text-sm" />
+              </div>
+              <div>
+                <h2 className="text-white font-semibold text-base leading-tight">
+                  Reverse {String(reverseNoteModal.note?.noteType || "").toUpperCase() === "CREDIT_NOTE" ? "Credit" : "Debit"} Note
+                </h2>
+                <p className="text-white/60 text-xs mt-0.5">{reverseNoteModal.note?.noteNumber || ""}</p>
+              </div>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div className="flex items-start gap-3 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3">
+                <FaRedoAlt className="text-amber-500 mt-0.5 shrink-0" />
+                <p className="text-sm text-amber-800">This will reverse the note and post offsetting ledger entries. This action cannot be undone.</p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide">Reason (optional)</label>
+                <textarea
+                  rows={3}
+                  autoFocus
+                  className="w-full resize-none rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  placeholder="Add an optional reason for the audit trail…"
+                  value={reverseNoteModal.reason}
+                  onChange={(e) => setReverseNoteModal((prev) => ({ ...prev, reason: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleReverseNoteConfirm(); } }}
+                  disabled={reverseNoteModal.loading}
+                />
+              </div>
+            </div>
+            <div className="px-6 pb-5 flex justify-end gap-3">
+              <button onClick={() => setReverseNoteModal({ open: false, note: null, reason: "", loading: false })} disabled={reverseNoteModal.loading} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50">Cancel</button>
+              <button onClick={handleReverseNoteConfirm} disabled={reverseNoteModal.loading} className="rounded-lg bg-red-600 hover:bg-red-700 px-5 py-2 text-sm font-semibold text-white transition-colors disabled:opacity-60 flex items-center gap-2">
+                {reverseNoteModal.loading ? <><svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg>Reversing…</> : <><FaUndo className="text-xs" />Confirm Reversal</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 };

@@ -196,29 +196,29 @@ ${joinRows?`<div class="sec-head">Recent Joiners (Last 90 Days)</div>
                     <FaBuilding size={11} className="text-emerald-300" />
                     <span className="text-[11px] font-black uppercase tracking-widest text-white">By Department</span>
                   </div>
-                  <table className="min-w-full text-xs">
+                  <table className="min-w-full text-[11px] border-collapse">
                     <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200">
-                        <th className="px-4 py-2 text-left text-[10px] font-black uppercase tracking-widest text-slate-500">Department</th>
-                        <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-slate-500">Total</th>
-                        <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-emerald-600">Active</th>
-                        <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-amber-600">Probation</th>
-                        <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-rose-500">Terminated</th>
+                      <tr className="bg-[#0B3B2E] text-white">
+                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Department</th>
+                        <th className="px-3 py-1 text-right font-bold border-r border-white/10">Total</th>
+                        <th className="px-3 py-1 text-right font-bold border-r border-white/10">Active</th>
+                        <th className="px-3 py-1 text-right font-bold border-r border-white/10">Probation</th>
+                        <th className="px-3 py-1 text-right font-bold">Terminated</th>
                       </tr>
                     </thead>
                     <tbody>
                       {(data?.byDepartment || []).map((d, i) => (
-                        <tr key={i} className={`border-t border-slate-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
-                          <td className="px-4 py-2.5">
+                        <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                          <td className="px-3 py-1 border-r border-gray-100">
                             <div className="font-black text-slate-900">{d.name}</div>
                             <div className="mt-0.5 h-1 w-full rounded-full bg-slate-100">
                               <div className="h-1 rounded-full bg-emerald-500" style={{ width: `${Math.round((d.total / maxDept) * 100)}%` }} />
                             </div>
                           </td>
-                          <td className="px-3 py-2.5 text-right font-black text-slate-900">{d.total}</td>
-                          <td className="px-3 py-2.5 text-right font-semibold text-emerald-700">{d.active}</td>
-                          <td className="px-3 py-2.5 text-right font-semibold text-amber-600">{d.probation}</td>
-                          <td className="px-3 py-2.5 text-right font-semibold text-rose-500">{d.terminated}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">{d.total}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-emerald-700">{d.active}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-amber-600">{d.probation}</td>
+                          <td className="px-3 py-1 text-right font-semibold text-rose-500">{d.terminated}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -231,24 +231,24 @@ ${joinRows?`<div class="sec-head">Recent Joiners (Last 90 Days)</div>
                     <FaUsers size={11} className="text-white" />
                     <span className="text-[11px] font-black uppercase tracking-widest text-white">By Employment Type</span>
                   </div>
-                  <table className="min-w-full text-xs">
+                  <table className="min-w-full text-[11px] border-collapse">
                     <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200">
-                        <th className="px-4 py-2 text-left text-[10px] font-black uppercase tracking-widest text-slate-500">Type</th>
-                        <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-slate-500">Total</th>
-                        <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-emerald-600">Active</th>
-                        <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-slate-500">%</th>
+                      <tr className="bg-[#0B3B2E] text-white">
+                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
+                        <th className="px-3 py-1 text-right font-bold border-r border-white/10">Total</th>
+                        <th className="px-3 py-1 text-right font-bold border-r border-white/10">Active</th>
+                        <th className="px-3 py-1 text-right font-bold">%</th>
                       </tr>
                     </thead>
                     <tbody>
                       {(data?.byType || []).map((t, i) => (
-                        <tr key={i} className={`border-t border-slate-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
-                          <td className="px-4 py-2.5">
-                            <span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${TYPE_COLORS[t.type] || 'bg-slate-100 text-slate-700'}`}>{t.type || '—'}</span>
+                        <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                          <td className="px-3 py-1 border-r border-gray-100">
+                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${TYPE_COLORS[t.type] || 'bg-slate-100 text-slate-700 border-slate-200'}`}>{t.type || '—'}</span>
                           </td>
-                          <td className="px-3 py-2.5 text-right font-black text-slate-900">{t.total}</td>
-                          <td className="px-3 py-2.5 text-right font-semibold text-emerald-700">{t.active}</td>
-                          <td className="px-3 py-2.5 text-right text-slate-500">
+                          <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">{t.total}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-emerald-700">{t.active}</td>
+                          <td className="px-3 py-1 text-right text-slate-500">
                             {data?.summary?.total ? `${Math.round((t.total / data.summary.total) * 100)}%` : '—'}
                           </td>
                         </tr>
@@ -266,29 +266,29 @@ ${joinRows?`<div class="sec-head">Recent Joiners (Last 90 Days)</div>
                     <span className="text-[11px] font-black uppercase tracking-widest text-white">Recent Joiners (Last 90 Days)</span>
                     <span className="ml-auto rounded-full bg-slate-500 px-1.5 py-0.5 text-[10px] font-black text-white">{data.recentJoiners.length}</span>
                   </div>
-                  <table className="min-w-full text-xs">
+                  <table className="min-w-full text-[11px] border-collapse">
                     <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200">
-                        <th className="px-4 py-2 text-left text-[10px] font-black uppercase tracking-widest text-slate-500">Employee</th>
-                        <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-slate-500">Department</th>
-                        <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-slate-500">Designation</th>
-                        <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-slate-500">Type</th>
-                        <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-slate-500">Joined</th>
+                      <tr className="bg-[#0B3B2E] text-white">
+                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Employee</th>
+                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Department</th>
+                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Designation</th>
+                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
+                        <th className="px-3 py-1 text-right font-bold">Joined</th>
                       </tr>
                     </thead>
                     <tbody>
                       {data.recentJoiners.map((emp, i) => (
-                        <tr key={emp._id} className={`border-t border-slate-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
-                          <td className="px-4 py-2.5">
+                        <tr key={emp._id} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                          <td className="px-3 py-1 border-r border-gray-100">
                             <div className="font-black text-slate-900">{emp.surname} {emp.otherNames}</div>
                             <div className="text-[10px] text-slate-400">{emp.employeeNumber}</div>
                           </td>
-                          <td className="px-3 py-2.5 text-slate-600">{emp.department?.name || '—'}</td>
-                          <td className="px-3 py-2.5 text-slate-600">{emp.designation?.name || '—'}</td>
-                          <td className="px-3 py-2.5">
-                            <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${TYPE_COLORS[emp.employmentType] || 'bg-slate-100 text-slate-700'}`}>{emp.employmentType}</span>
+                          <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{emp.department?.name || '—'}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{emp.designation?.name || '—'}</td>
+                          <td className="px-3 py-1 border-r border-gray-100">
+                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${TYPE_COLORS[emp.employmentType] || 'bg-slate-100 text-slate-700 border-slate-200'}`}>{emp.employmentType}</span>
                           </td>
-                          <td className="px-3 py-2.5 text-right text-slate-600 flex items-center justify-end gap-1">
+                          <td className="px-3 py-1 text-right text-slate-600 flex items-center justify-end gap-1">
                             <FaCalendarAlt size={9} className="text-slate-400" /> {fmtDate(emp.dateJoined)}
                           </td>
                         </tr>

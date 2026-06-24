@@ -136,9 +136,9 @@ const CreditorLedger = () => {
                   Loading…
                 </div>
               ) : (
-                <table className="min-w-full text-xs">
-                  <thead className="sticky top-0 z-10 bg-slate-50">
-                    <tr>
+                <table className="min-w-full text-[11px] border-collapse">
+                  <thead className="sticky top-0 z-10">
+                    <tr className="bg-[#0B3B2E] text-white">
                       {[
                         "Code",
                         "Name",
@@ -148,10 +148,10 @@ const CreditorLedger = () => {
                         "Paid (KES)",
                         "Outstanding (KES)",
                         "",
-                      ].map((h) => (
+                      ].map((h, i, arr) => (
                         <th
                           key={h}
-                          className="border-b border-slate-200 px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap"
+                          className={`px-3 py-1 text-left font-bold whitespace-nowrap ${i < arr.length - 1 ? "border-r border-white/10" : ""}`}
                         >
                           {h}
                         </th>
@@ -167,34 +167,34 @@ const CreditorLedger = () => {
                         </td>
                       </tr>
                     ) : (
-                      filtered.map((p) => {
+                      filtered.map((p, idx) => {
                         const outstanding = p.outstanding || 0;
                         return (
                           <tr
                             key={p._id}
-                            className="cursor-pointer border-b border-slate-100 hover:bg-slate-50"
+                            className={`border-b border-gray-100 cursor-pointer ${idx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}
                             onClick={() => openDetail(p)}
                           >
-                            <td className="px-3 py-2 font-mono font-bold text-slate-600">
+                            <td className="px-3 py-1 border-r border-gray-100 font-mono font-bold text-slate-600">
                               {p.providerCode}
                             </td>
-                            <td className="px-3 py-2 font-semibold text-slate-800">{p.name}</td>
-                            <td className="px-3 py-2 capitalize text-slate-500">{p.category || "—"}</td>
-                            <td className="px-3 py-2 text-slate-500">{p.phone || "—"}</td>
-                            <td className="px-3 py-2 text-right font-mono text-slate-700">
+                            <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{p.name}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 capitalize text-slate-500">{p.category || "—"}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{p.phone || "—"}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-700">
                               {fmt(p.totalInvoiced)}
                             </td>
-                            <td className="px-3 py-2 text-right font-mono text-green-700">
+                            <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-green-700">
                               {fmt(p.totalPaid)}
                             </td>
                             <td
-                              className={`px-3 py-2 text-right font-mono font-bold ${
+                              className={`px-3 py-1 border-r border-gray-100 text-right font-mono font-bold ${
                                 outstanding > 0 ? "text-red-600" : "text-slate-400"
                               }`}
                             >
                               {fmt(outstanding)}
                             </td>
-                            <td className="px-3 py-2">
+                            <td className="px-3 py-1">
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -289,9 +289,9 @@ const CreditorLedger = () => {
                   No transactions found for this provider
                 </div>
               ) : (
-                <table className="min-w-full text-xs">
-                  <thead className="sticky top-0 z-10 bg-slate-50">
-                    <tr>
+                <table className="min-w-full text-[11px] border-collapse">
+                  <thead className="sticky top-0 z-10">
+                    <tr className="bg-[#0B3B2E] text-white">
                       {[
                         "Date",
                         "Reference",
@@ -300,10 +300,10 @@ const CreditorLedger = () => {
                         "Invoiced (KES)",
                         "Paid (KES)",
                         "Balance (KES)",
-                      ].map((h) => (
+                      ].map((h, i, arr) => (
                         <th
                           key={h}
-                          className="border-b border-slate-200 px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap"
+                          className={`px-3 py-1 text-left font-bold whitespace-nowrap ${i < arr.length - 1 ? "border-r border-white/10" : ""}`}
                         >
                           {h}
                         </th>
@@ -314,34 +314,36 @@ const CreditorLedger = () => {
                     {statement.lines.map((line, i) => (
                       <tr
                         key={i}
-                        className={`border-b border-slate-100 ${
-                          line.type === "payment" ? "bg-green-50/20" : ""
+                        className={`border-b border-gray-100 ${
+                          line.type === "payment"
+                            ? "bg-emerald-50/30 hover:bg-blue-50/40"
+                            : i % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"
                         }`}
                       >
-                        <td className="whitespace-nowrap px-3 py-2 text-slate-500">
+                        <td className="whitespace-nowrap px-3 py-1 border-r border-gray-100 text-slate-500">
                           {fmtDate(line.date)}
                         </td>
-                        <td className="px-3 py-2 font-mono text-slate-600">{line.ref || "—"}</td>
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-600">{line.ref || "—"}</td>
+                        <td className="px-3 py-1 border-r border-gray-100">
                           <span
-                            className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
-                              TYPE_STYLE[line.type] || "bg-slate-100 text-slate-500"
+                            className={`inline-flex rounded-full border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                              TYPE_STYLE[line.type] || "border-slate-200 bg-slate-100 text-slate-500"
                             }`}
                           >
                             {line.type}
                           </span>
                         </td>
-                        <td className="max-w-xs truncate px-3 py-2 text-slate-700">
+                        <td className="max-w-xs truncate px-3 py-1 border-r border-gray-100 text-slate-700">
                           {line.description || "—"}
                         </td>
-                        <td className="px-3 py-2 text-right font-mono text-slate-700">
+                        <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-700">
                           {line.invoiced > 0 ? fmt(line.invoiced) : "—"}
                         </td>
-                        <td className="px-3 py-2 text-right font-mono text-green-700">
+                        <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-green-700">
                           {line.paid > 0 ? fmt(line.paid) : "—"}
                         </td>
                         <td
-                          className={`px-3 py-2 text-right font-mono font-bold ${
+                          className={`px-3 py-1 text-right font-mono font-bold ${
                             line.balance > 0
                               ? "text-red-600"
                               : line.balance < 0

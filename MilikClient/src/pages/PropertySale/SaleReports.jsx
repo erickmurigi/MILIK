@@ -196,16 +196,16 @@ tfoot tr{background:#0B3B2E;color:#fff}tfoot td{padding:9px 10px;font-size:10px;
         {/* Monthly Breakdown Table */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="min-h-0 flex-1 overflow-auto">
-            <table className="min-w-full text-xs">
+            <table className="min-w-full text-[11px] border-collapse">
               <thead className="sticky top-0 z-10 bg-[#027333] text-white">
                 <tr>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Month</th>
-                  <th className="px-3 py-2.5 text-right font-black tracking-wide">Listings</th>
-                  <th className="px-3 py-2.5 text-right font-black tracking-wide">Offers</th>
-                  <th className="px-3 py-2.5 text-right font-black tracking-wide">Active Deals</th>
-                  <th className="px-3 py-2.5 text-right font-black tracking-wide">Closed Deals</th>
-                  <th className="px-3 py-2.5 text-right font-black tracking-wide">Revenue (KES)</th>
-                  <th className="px-3 py-2.5 text-right font-black tracking-wide">Commissions (KES)</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Month</th>
+                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Listings</th>
+                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Offers</th>
+                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Active Deals</th>
+                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Closed Deals</th>
+                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Revenue (KES)</th>
+                  <th className="px-3 py-1 text-right font-bold">Commissions (KES)</th>
                 </tr>
               </thead>
               <tbody>
@@ -217,15 +217,15 @@ tfoot tr{background:#0B3B2E;color:#fff}tfoot td{padding:9px 10px;font-size:10px;
                   return (
                     <tr
                       key={mName}
-                      className={`cursor-pointer select-none border-t border-slate-100 transition ${
+                      className={`cursor-pointer select-none border-b border-gray-100 transition ${
                         hasActivity
                           ? "bg-white hover:bg-emerald-50/50"
-                          : "bg-white text-slate-400 hover:bg-slate-50"
+                          : "bg-slate-50/60 text-slate-400 hover:bg-blue-50/40"
                       }`}
                       onDoubleClick={() => openMonthTab(mName, idx)}
                       title="Double-click to open monthly detail in a new tab"
                     >
-                      <td className="px-3 py-2.5 font-bold">
+                      <td className="px-3 py-1 border-r border-gray-100 font-bold">
                         <div className="flex items-center gap-2">
                           {mName}
                           {hasActivity && (
@@ -233,12 +233,12 @@ tfoot tr{background:#0B3B2E;color:#fff}tfoot td{padding:9px 10px;font-size:10px;
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-2.5 text-right">{m.listings ?? 0}</td>
-                      <td className="px-3 py-2.5 text-right">{m.offers ?? 0}</td>
-                      <td className="px-3 py-2.5 text-right">{m.dealsActive ?? 0}</td>
-                      <td className="px-3 py-2.5 text-right font-bold text-emerald-700">{m.dealsClosed ?? 0}</td>
-                      <td className="px-3 py-2.5 text-right font-black text-slate-900">{(m.revenue ?? 0) > 0 ? fmtKES(m.revenue) : "—"}</td>
-                      <td className="px-3 py-2.5 text-right text-slate-600">{(m.commissionsApproved ?? 0) > 0 ? fmtKES(m.commissionsApproved) : "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right">{m.listings ?? 0}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right">{m.offers ?? 0}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right">{m.dealsActive ?? 0}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-emerald-700">{m.dealsClosed ?? 0}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">{(m.revenue ?? 0) > 0 ? fmtKES(m.revenue) : "—"}</td>
+                      <td className="px-3 py-1 text-right text-slate-600">{(m.commissionsApproved ?? 0) > 0 ? fmtKES(m.commissionsApproved) : "—"}</td>
                     </tr>
                   );
                 })}
@@ -246,13 +246,13 @@ tfoot tr{background:#0B3B2E;color:#fff}tfoot td{padding:9px 10px;font-size:10px;
               {!loading && report && (
                 <tfoot className="bg-slate-800 text-white">
                   <tr>
-                    <td className="px-3 py-2.5 font-black tracking-wide">TOTALS — {year}</td>
-                    <td className="px-3 py-2.5 text-right font-black">{totals.listings ?? 0}</td>
-                    <td className="px-3 py-2.5 text-right font-black">{totals.offers ?? 0}</td>
-                    <td className="px-3 py-2.5 text-right font-black">{totals.dealsActive ?? 0}</td>
-                    <td className="px-3 py-2.5 text-right font-black">{totals.dealsClosed ?? 0}</td>
-                    <td className="px-3 py-2.5 text-right font-black">{fmtKES(totals.revenue ?? 0)}</td>
-                    <td className="px-3 py-2.5 text-right font-black">{fmtKES(totals.commissionsApproved ?? 0)}</td>
+                    <td className="px-3 py-1.5 font-black tracking-wide">TOTALS — {year}</td>
+                    <td className="px-3 py-1.5 text-right font-black">{totals.listings ?? 0}</td>
+                    <td className="px-3 py-1.5 text-right font-black">{totals.offers ?? 0}</td>
+                    <td className="px-3 py-1.5 text-right font-black">{totals.dealsActive ?? 0}</td>
+                    <td className="px-3 py-1.5 text-right font-black">{totals.dealsClosed ?? 0}</td>
+                    <td className="px-3 py-1.5 text-right font-black">{fmtKES(totals.revenue ?? 0)}</td>
+                    <td className="px-3 py-1.5 text-right font-black">{fmtKES(totals.commissionsApproved ?? 0)}</td>
                   </tr>
                 </tfoot>
               )}

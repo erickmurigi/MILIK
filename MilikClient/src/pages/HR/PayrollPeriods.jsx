@@ -45,19 +45,19 @@ function NewPeriodForm({ onSave, onCancel, saving }) {
       <div className="text-xs font-black text-slate-700 uppercase tracking-widest">New Payroll Period</div>
       <div className="grid grid-cols-3 gap-3">
         <div>
-          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Month *</label>
+          <label className="mb-0.5 block text-xs font-semibold text-slate-700">Month *</label>
           <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className={inputCls}>
             {MONTHS.slice(1).map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Year *</label>
+          <label className="mb-0.5 block text-xs font-semibold text-slate-700">Year *</label>
           <select value={year} onChange={(e) => setYear(Number(e.target.value))} className={inputCls}>
             {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Notes</label>
+          <label className="mb-0.5 block text-xs font-semibold text-slate-700">Notes</label>
           <input value={notes} onChange={(e) => setNotes(e.target.value)} className={inputCls} placeholder="Optional" />
         </div>
       </div>
@@ -246,46 +246,46 @@ export default function PayrollPeriods() {
               {!hasFilters && <p className="text-xs text-slate-400">Click "New Period" to create one</p>}
             </div>
           ) : (
-            <table className="min-w-full text-xs">
+            <table className="min-w-full text-[11px] border-collapse">
               <thead className="sticky top-0 z-10">
                 <tr className="bg-[#0B3B2E] text-white">
-                  <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-widest">Period</th>
-                  <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Employees</th>
-                  <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Total Gross</th>
-                  <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Total Deductions</th>
-                  <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Net Pay</th>
-                  <th className="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest">Status</th>
-                  <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Actions</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Period</th>
+                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Employees</th>
+                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Total Gross</th>
+                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Total Deductions</th>
+                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Net Pay</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
+                  <th className="px-3 py-1 text-right font-bold">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {periods.map((period, idx) => (
                   <tr
                     key={period._id}
-                    className={`border-t border-slate-100 hover:bg-slate-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}
+                    className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}
                   >
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-1 border-r border-gray-100">
                       <div className="font-black text-slate-900">{period.label}</div>
                       {period.notes && <div className="text-[10px] text-slate-400">{period.notes}</div>}
                     </td>
-                    <td className="px-3 py-3 text-right font-semibold text-slate-700">
+                    <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-700">
                       {period.employeeCount ?? <span className="text-slate-300">—</span>}
                     </td>
-                    <td className="px-3 py-3 text-right font-semibold text-slate-700">
+                    <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-700">
                       {period.totalGross > 0 ? fmtKES(period.totalGross) : <span className="text-slate-300">—</span>}
                     </td>
-                    <td className="px-3 py-3 text-right font-semibold text-rose-600">
+                    <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-rose-600">
                       {period.totalDeductions > 0 ? fmtKES(period.totalDeductions) : <span className="text-slate-300">—</span>}
                     </td>
-                    <td className="px-3 py-3 text-right font-black text-emerald-700">
+                    <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-emerald-700">
                       {period.totalNet > 0 ? fmtKES(period.totalNet) : <span className="text-slate-300">—</span>}
                     </td>
-                    <td className="px-3 py-3">
-                      <span className={`rounded-full border px-2 py-0.5 text-[9px] font-black ${STATUS_STYLE[period.status] || STATUS_STYLE.Draft}`}>
+                    <td className="px-3 py-1 border-r border-gray-100">
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black ${STATUS_STYLE[period.status] || STATUS_STYLE.Draft}`}>
                         {period.status}
                       </span>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-1">
                       <div className="flex justify-end gap-1">
                         <button
                           onClick={() => navigate(`/hr/payroll/${period._id}`)}

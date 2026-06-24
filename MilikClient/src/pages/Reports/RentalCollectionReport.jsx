@@ -413,13 +413,13 @@ const RentalCollectionReport = () => {
 
             <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
               <div className="grid gap-1.5 md:grid-cols-2 xl:grid-cols-4">
-                <input type="date" value={filters.startDate} onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))} className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40" />
-                <input type="date" value={filters.endDate} onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))} className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40" />
-                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40">
+                <input type="date" value={filters.startDate} onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                <input type="date" value={filters.endDate} onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
                   <option value="">All properties</option>
                   {properties.map((property) => <option key={property._id} value={property._id}>{property.propertyName || property.name}</option>)}
                 </select>
-                <select value={filters.paymentMethod} onChange={(e) => setFilters((prev) => ({ ...prev, paymentMethod: e.target.value }))} className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40">
+                <select value={filters.paymentMethod} onChange={(e) => setFilters((prev) => ({ ...prev, paymentMethod: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
                   <option value="">All methods</option>
                   <option value="cash">Cash</option>
                   <option value="mobile_money">Mobile money</option>
@@ -427,26 +427,26 @@ const RentalCollectionReport = () => {
                   <option value="check">Cheque</option>
                   <option value="credit_card">Card</option>
                 </select>
-                <select value={filters.tenantId} onChange={(e) => setFilters((prev) => ({ ...prev, tenantId: e.target.value, unitId: '' }))} className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40">
+                <select value={filters.tenantId} onChange={(e) => setFilters((prev) => ({ ...prev, tenantId: e.target.value, unitId: '' }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
                   <option value="">All tenants</option>
                   {tenants.map((tenant) => <option key={tenant._id} value={tenant._id}>{tenant.tenantName || tenant.name}</option>)}
                 </select>
-                <select value={filters.unitId} onChange={(e) => setFilters((prev) => ({ ...prev, unitId: e.target.value }))} className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40">
+                <select value={filters.unitId} onChange={(e) => setFilters((prev) => ({ ...prev, unitId: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
                   <option value="">All units</option>
                   {units.map((unit) => <option key={unit._id} value={unit._id}>{unit.unitNumber}</option>)}
                 </select>
                 {!isLandlordMode && (
-                  <select value={filters.landlordId} onChange={(e) => setFilters((prev) => ({ ...prev, landlordId: e.target.value }))} className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40">
+                  <select value={filters.landlordId} onChange={(e) => setFilters((prev) => ({ ...prev, landlordId: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
                     <option value="">All landlords</option>
                     {landlords.map((landlord) => <option key={landlord._id} value={landlord._id}>{landlord.landlordName || landlord.name}</option>)}
                   </select>
                 )}
-                <input value={filters.cashbook} onChange={(e) => setFilters((prev) => ({ ...prev, cashbook: e.target.value }))} placeholder="Cashbook contains..." className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] transition focus:border-orange-600 focus:ring-1 focus:ring-orange-500/40" />
+                <input value={filters.cashbook} onChange={(e) => setFilters((prev) => ({ ...prev, cashbook: e.target.value }))} placeholder="Cashbook contains..." className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </div>
               <div className="mt-1.5 flex flex-wrap justify-end gap-1.5">
-                <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaFileDownload /> Export CSV</button>
-                <button onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaPrint /> Print</button>
-                <button onClick={loadReport} className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] transition ${filtersChanged ? 'border border-orange-400 bg-orange-50 text-orange-700 hover:bg-orange-100' : 'border border-slate-300 bg-white text-slate-700 hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700'}`}><FaSyncAlt className={loading ? 'animate-spin' : ''} /> {filtersChanged ? 'Apply Filters' : 'Refresh'}</button>
+                <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaFileDownload /> Export CSV</button>
+                <button onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaPrint /> Print</button>
+                <button onClick={loadReport} className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] transition ${filtersChanged ? 'border border-orange-400 bg-orange-50 text-orange-700 hover:bg-orange-100' : 'border border-slate-200 bg-white text-slate-700 hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700'}`}><FaSyncAlt className={loading ? 'animate-spin' : ''} /> {filtersChanged ? 'Apply Filters' : 'Refresh'}</button>
               </div>
             </div>
 
@@ -492,25 +492,25 @@ const RentalCollectionReport = () => {
               <div className="flex min-h-0 max-h-[32%] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white">
                 <div className="flex-shrink-0 bg-[#0B3B2E] px-2 py-1.5 text-xs font-bold text-white">Collection Summary by Property</div>
                 <div className="min-h-0 flex-1 overflow-auto">
-                  <table className="min-w-full text-xs">
-                    <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700">
-                      <tr>
-                        {['Property', 'Receipts', 'Tenants', 'Collected', 'Rent', 'Utilities', 'Penalty', 'Unapplied'].map((header) => <th key={header} className="whitespace-nowrap px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-[0.12em]">{header}</th>)}
+                  <table className="min-w-full text-[11px] border-collapse">
+                    <thead className="sticky top-0 z-10">
+                      <tr className="bg-[#0B3B2E] text-white">
+                        {['Property', 'Receipts', 'Tenants', 'Collected', 'Rent', 'Utilities', 'Penalty', 'Unapplied'].map((header, i, arr) => <th key={header} className={`whitespace-nowrap px-2 py-1 text-left font-bold ${i < arr.length - 1 ? "border-r border-white/10" : ""}`}>{header}</th>)}
                       </tr>
                     </thead>
                     <tbody>
                       {(report.byProperty || []).length === 0 ? (
                         <tr><td colSpan={8} className="px-2 py-4 text-center text-slate-500">No collection rows found for the selected filters.</td></tr>
-                      ) : (report.byProperty || []).map((row) => (
-                        <tr key={row.propertyId || row.propertyName} className="border-t border-slate-200 hover:bg-slate-50/80">
-                          <td className="px-2 py-1.5 font-semibold text-slate-900">{row.propertyName}</td>
-                          <td className="px-2 py-1.5 text-slate-700">{row.paymentCount}</td>
-                          <td className="px-2 py-1.5 text-slate-700">{row.tenantCount}</td>
-                          <td className="px-2 py-1.5 font-semibold text-emerald-700">{formatMoney(row.totalCollected)}</td>
-                          <td className="px-2 py-1.5 text-slate-700">{formatMoney(row.rentApplied)}</td>
-                          <td className="px-2 py-1.5 text-slate-700">{formatMoney(row.utilityApplied)}</td>
-                          <td className="px-2 py-1.5 text-slate-700">{formatMoney(row.penaltyApplied)}</td>
-                          <td className="px-2 py-1.5 text-amber-700">{formatMoney(row.unappliedAmount)}</td>
+                      ) : (report.byProperty || []).map((row, idx) => (
+                        <tr key={row.propertyId || row.propertyName} className={`border-b border-gray-100 ${idx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                          <td className="px-2 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.propertyName}</td>
+                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{row.paymentCount}</td>
+                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{row.tenantCount}</td>
+                          <td className="px-2 py-1 border-r border-gray-100 font-semibold text-emerald-700">{formatMoney(row.totalCollected)}</td>
+                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.rentApplied)}</td>
+                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.utilityApplied)}</td>
+                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.penaltyApplied)}</td>
+                          <td className="px-2 py-1 text-amber-700">{formatMoney(row.unappliedAmount)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -521,30 +521,30 @@ const RentalCollectionReport = () => {
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white">
                 <div className="flex-shrink-0 bg-[#0B3B2E] px-2 py-1.5 text-xs font-bold text-white">Detailed Receipts</div>
                 <div className="min-h-0 flex-1 overflow-auto">
-                  <table className="min-w-full text-xs">
-                    <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700">
-                      <tr>
-                        {['Date', 'Receipt #', 'Property', 'Tenant', 'Unit', 'Method', 'Collected', 'Allocated', 'Rent', 'Utilities', 'Penalty', 'Unapplied', 'Cashbook'].map((header) => <th key={header} className="whitespace-nowrap px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-[0.12em]">{header}</th>)}
+                  <table className="min-w-full text-[11px] border-collapse">
+                    <thead className="sticky top-0 z-10">
+                      <tr className="bg-[#0B3B2E] text-white">
+                        {['Date', 'Receipt #', 'Property', 'Tenant', 'Unit', 'Method', 'Collected', 'Allocated', 'Rent', 'Utilities', 'Penalty', 'Unapplied', 'Cashbook'].map((header, i, arr) => <th key={header} className={`whitespace-nowrap px-2 py-1 text-left font-bold ${i < arr.length - 1 ? "border-r border-white/10" : ""}`}>{header}</th>)}
                       </tr>
                     </thead>
                     <tbody>
                       {(report.rows || []).length === 0 ? (
                         <tr><td colSpan={13} className="px-2 py-4 text-center text-slate-500">No receipts found for the current filters.</td></tr>
-                      ) : paginatedRows.map((row) => (
-                        <tr key={row.receiptId} className="border-t border-slate-200 hover:bg-slate-50/80">
-                          <td className="px-2 py-1.5 text-slate-700">{formatDate(row.paymentDate)}</td>
-                          <td className="px-2 py-1.5 font-semibold text-slate-900">{row.receiptNumber || '—'}</td>
-                          <td className="px-2 py-1.5 text-slate-700">{row.propertyName}</td>
-                          <td className="px-2 py-1.5 text-slate-700">{row.tenantName}</td>
-                          <td className="px-2 py-1.5 text-slate-700">{row.unitNumber}</td>
-                          <td className="px-2 py-1.5 capitalize text-slate-700">{formatMethod(row.paymentMethod)}</td>
-                          <td className="px-2 py-1.5 font-semibold text-emerald-700">{formatMoney(row.amount)}</td>
-                          <td className="px-2 py-1.5 text-slate-700">{formatMoney(row.allocatedAmount)}</td>
-                          <td className="px-2 py-1.5 text-slate-700">{formatMoney(row.rentApplied)}</td>
-                          <td className="px-2 py-1.5 text-slate-700">{formatMoney(row.utilityApplied)}</td>
-                          <td className="px-2 py-1.5 text-slate-700">{formatMoney(row.penaltyApplied)}</td>
-                          <td className="px-2 py-1.5 font-semibold text-amber-700">{formatMoney(row.unappliedAmount)}</td>
-                          <td className="px-2 py-1.5 text-slate-700">{row.cashbook || '—'}</td>
+                      ) : paginatedRows.map((row, idx) => (
+                        <tr key={row.receiptId} className={`border-b border-gray-100 ${idx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatDate(row.paymentDate)}</td>
+                          <td className="px-2 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.receiptNumber || '—'}</td>
+                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{row.propertyName}</td>
+                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{row.tenantName}</td>
+                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{row.unitNumber}</td>
+                          <td className="px-2 py-1 border-r border-gray-100 capitalize text-slate-700">{formatMethod(row.paymentMethod)}</td>
+                          <td className="px-2 py-1 border-r border-gray-100 font-semibold text-emerald-700">{formatMoney(row.amount)}</td>
+                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.allocatedAmount)}</td>
+                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.rentApplied)}</td>
+                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.utilityApplied)}</td>
+                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.penaltyApplied)}</td>
+                          <td className="px-2 py-1 border-r border-gray-100 font-semibold text-amber-700">{formatMoney(row.unappliedAmount)}</td>
+                          <td className="px-2 py-1 text-slate-700">{row.cashbook || '—'}</td>
                         </tr>
                       ))}
                     </tbody>

@@ -203,7 +203,7 @@ export default function HRReportP9() {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search…"
-                  className="h-7 w-full rounded-lg border border-slate-200 bg-slate-50 pl-7 pr-3 text-[11px] text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                  className="h-7 w-full rounded border border-slate-200 bg-slate-50 pl-7 pr-3 text-[11px] text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                 />
               </div>
               <select
@@ -299,47 +299,47 @@ export default function HRReportP9() {
                     {/* Monthly breakdown */}
                     <div className="px-8 py-5">
                       <div className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-500">Monthly Tax Deductions — {data.year}</div>
-                      <table className="w-full text-xs">
+                      <table className="w-full text-[11px] border-collapse">
                         <thead>
-                          <tr className="border-b-2 border-slate-200">
-                            <th className="pb-2 text-left text-[10px] font-black uppercase tracking-widest text-slate-500">Month</th>
-                            <th className="pb-2 text-right text-[10px] font-black uppercase tracking-widest text-slate-500">Gross</th>
-                            <th className="pb-2 text-right text-[10px] font-black uppercase tracking-widest text-slate-500">Personal Relief</th>
-                            <th className="pb-2 text-right text-[10px] font-black uppercase tracking-widest text-rose-500">PAYE</th>
-                            <th className="pb-2 text-right text-[10px] font-black uppercase tracking-widest text-rose-400">SHA</th>
-                            <th className="pb-2 text-right text-[10px] font-black uppercase tracking-widest text-rose-400">NSSF</th>
-                            <th className="pb-2 text-right text-[10px] font-black uppercase tracking-widest text-rose-400">AHL</th>
-                            <th className="pb-2 text-right text-[10px] font-black uppercase tracking-widest text-emerald-600">Net Pay</th>
-                            <th className="pb-2 text-center text-[10px] font-black uppercase tracking-widest text-slate-400">Status</th>
+                          <tr className="bg-[#0B3B2E] text-white">
+                            <th className="py-1 px-2 text-left font-bold border-r border-white/10">Month</th>
+                            <th className="py-1 px-2 text-right font-bold border-r border-white/10">Gross</th>
+                            <th className="py-1 px-2 text-right font-bold border-r border-white/10">Personal Relief</th>
+                            <th className="py-1 px-2 text-right font-bold border-r border-white/10">PAYE</th>
+                            <th className="py-1 px-2 text-right font-bold border-r border-white/10">SHA</th>
+                            <th className="py-1 px-2 text-right font-bold border-r border-white/10">NSSF</th>
+                            <th className="py-1 px-2 text-right font-bold border-r border-white/10">AHL</th>
+                            <th className="py-1 px-2 text-right font-bold border-r border-white/10">Net Pay</th>
+                            <th className="py-1 px-2 text-center font-bold">Status</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-50">
-                          {months.map((m) => (
-                            <tr key={m.month} className="hover:bg-slate-50">
-                              <td className="py-2 font-black text-slate-900">{m.label}</td>
-                              <td className="py-2 text-right text-slate-700">{fmtKES(m.grossSalary)}</td>
-                              <td className="py-2 text-right text-emerald-600">({fmtKES(m.personalRelief)})</td>
-                              <td className="py-2 text-right font-semibold text-rose-600">{fmtKES(m.paye)}</td>
-                              <td className="py-2 text-right text-rose-500">{fmtKES(m.nhif)}</td>
-                              <td className="py-2 text-right text-rose-500">{fmtKES(m.nssf)}</td>
-                              <td className="py-2 text-right text-rose-500">{fmtKES(m.ahl)}</td>
-                              <td className="py-2 text-right font-black text-emerald-700">{fmtKES(m.netSalary)}</td>
-                              <td className="py-2 text-center text-[9px] font-black">
+                        <tbody>
+                          {months.map((m, i) => (
+                            <tr key={m.month} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                              <td className="py-1 px-2 font-black text-slate-900 border-r border-gray-100">{m.label}</td>
+                              <td className="py-1 px-2 text-right text-slate-700 border-r border-gray-100">{fmtKES(m.grossSalary)}</td>
+                              <td className="py-1 px-2 text-right text-emerald-600 border-r border-gray-100">({fmtKES(m.personalRelief)})</td>
+                              <td className="py-1 px-2 text-right font-semibold text-rose-600 border-r border-gray-100">{fmtKES(m.paye)}</td>
+                              <td className="py-1 px-2 text-right text-rose-500 border-r border-gray-100">{fmtKES(m.nhif)}</td>
+                              <td className="py-1 px-2 text-right text-rose-500 border-r border-gray-100">{fmtKES(m.nssf)}</td>
+                              <td className="py-1 px-2 text-right text-rose-500 border-r border-gray-100">{fmtKES(m.ahl)}</td>
+                              <td className="py-1 px-2 text-right font-black text-emerald-700 border-r border-gray-100">{fmtKES(m.netSalary)}</td>
+                              <td className="py-1 px-2 text-center text-[10px] font-black">
                                 <span className={STATUS_STYLE[m.status] || 'text-slate-400'}>{m.status}</span>
                               </td>
                             </tr>
                           ))}
                         </tbody>
                         <tfoot>
-                          <tr className="border-t-2 border-slate-300">
-                            <td className="pt-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500">Annual Total</td>
-                            <td className="pt-2.5 text-right font-black text-slate-900">{fmtKES(totals.grossSalary)}</td>
-                            <td className="pt-2.5 text-right font-black text-emerald-600">({fmtKES(totals.personalRelief)})</td>
-                            <td className="pt-2.5 text-right font-black text-rose-700">{fmtKES(totals.paye)}</td>
-                            <td className="pt-2.5 text-right font-black text-rose-600">{fmtKES(totals.nhif)}</td>
-                            <td className="pt-2.5 text-right font-black text-rose-600">{fmtKES(totals.nssf)}</td>
-                            <td className="pt-2.5 text-right font-black text-rose-600">{fmtKES(totals.ahl)}</td>
-                            <td className="pt-2.5 text-right font-black text-emerald-700">{fmtKES(totals.netSalary)}</td>
+                          <tr className="border-t-2 border-slate-300 bg-slate-50">
+                            <td className="py-1.5 px-2 text-[10px] font-black uppercase tracking-widest text-slate-500">Annual Total</td>
+                            <td className="py-1.5 px-2 text-right font-black text-slate-900">{fmtKES(totals.grossSalary)}</td>
+                            <td className="py-1.5 px-2 text-right font-black text-emerald-600">({fmtKES(totals.personalRelief)})</td>
+                            <td className="py-1.5 px-2 text-right font-black text-rose-700">{fmtKES(totals.paye)}</td>
+                            <td className="py-1.5 px-2 text-right font-black text-rose-600">{fmtKES(totals.nhif)}</td>
+                            <td className="py-1.5 px-2 text-right font-black text-rose-600">{fmtKES(totals.nssf)}</td>
+                            <td className="py-1.5 px-2 text-right font-black text-rose-600">{fmtKES(totals.ahl)}</td>
+                            <td className="py-1.5 px-2 text-right font-black text-emerald-700">{fmtKES(totals.netSalary)}</td>
                             <td />
                           </tr>
                         </tfoot>

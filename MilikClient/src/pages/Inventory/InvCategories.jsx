@@ -7,8 +7,8 @@ import { inventoryApi } from "../../services/inventoryApi";
 
 const emptyForm = () => ({ name: "", description: "" });
 
-const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
-const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
+const inputClass = "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+const labelClass = "mb-0.5 block text-xs font-semibold text-slate-700";
 
 const StatusBadge = ({ active }) => (
   <span className={`inline-flex border px-2 py-0.5 text-[10px] font-bold uppercase ${active !== false ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-orange-200 bg-orange-50 text-orange-700"}`}>
@@ -179,8 +179,8 @@ const InvCategories = () => {
           onClose={closeModal}
           footer={
             <>
-              <button type="button" onClick={closeModal} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
-              <button type="submit" form="category-form" disabled={saving} className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50">
+              <button type="button" onClick={closeModal} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button type="submit" form="category-form" disabled={saving} className="rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
                 {saving ? "Saving…" : "Save Category"}
               </button>
             </>
@@ -193,7 +193,7 @@ const InvCategories = () => {
             </div>
             <div>
               <label className={labelClass}>Description</label>
-              <textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} rows={3} className="w-full border border-slate-300 px-2 py-1.5 text-sm text-slate-800 outline-none focus:border-[#0B3B2E] resize-none" placeholder="Optional description…" />
+              <textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} rows={3} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 resize-none" placeholder="Optional description…" />
             </div>
           </form>
         </Modal>

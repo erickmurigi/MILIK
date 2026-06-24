@@ -549,7 +549,7 @@ const TrialBalanceReport = () => {
                 type="date"
                 value={filters.asOfDate}
                 onChange={(e) => setFilters((prev) => ({ ...prev, asOfDate: e.target.value }))}
-                className="h-8 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#FF8C00] focus:bg-white focus:ring-1 focus:ring-[#FF8C00]"
+                className="h-8 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#0B3B2E] focus:bg-white focus:ring-1 focus:ring-[#0B3B2E]/20"
               />
               <label className="inline-flex h-8 items-center gap-2 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800">
                 <input

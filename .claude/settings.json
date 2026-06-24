@@ -97,7 +97,10 @@
       "Bash(grep -n 'search\\\\|name.*regex\\\\|$text\\\\|req.query.search\\\\|req.query.name' c:/Users/murig/OneDrive/Desktop/MILIKPMS/Milik/MilikApi/controllers/propertyController/tenants.js)",
       "Bash(grep -n 'search\\\\|req.query.search\\\\|$text\\\\|landlord.*find\\\\|Landlord.find' c:/Users/murig/OneDrive/Desktop/MILIKPMS/Milik/MilikApi/controllers/propertyController/landlord.js)",
       "Bash(cd /c/Users/murig/OneDrive/Desktop/MILIKPMS/Milik/MilikApi && grep -n \"business:\" controllers/propertyController/tenants.js | head -30)",
-      "Read(//c/c/Users/murig/OneDrive/Desktop/MILIKPMS/Milik/MilikApi/controllers/propertyController/**)"
+      "Read(//c/c/Users/murig/OneDrive/Desktop/MILIKPMS/Milik/MilikApi/controllers/propertyController/**)",
+      "Bash(node -e ' *)",
+      "Bash(xargs grep -l \"useState.*show\\\\|useState.*open\")",
+      "Bash(grep -A 15 'paymentDate.*$gte.*snapshotDate' 'c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikApi\\\\services\\\\landlordStatementService.js')"
     ]
   }
 }

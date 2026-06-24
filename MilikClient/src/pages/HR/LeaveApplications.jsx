@@ -6,6 +6,7 @@ import {
   FaCalendarAlt, FaUser, FaTag, FaEye,
 } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
+import AppSelect from '../../components/common/AppSelect';
 import MilikConfirmDialog from '../../components/Modals/MilikConfirmDialog';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
@@ -71,7 +72,7 @@ function ApplyLeaveModal({ onClose, onSaved }) {
     }
   };
 
-  const inputCls = 'h-8 w-full rounded-lg border border-slate-200 px-3 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]';
+  const inputCls = 'w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20';
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4">
@@ -86,40 +87,44 @@ function ApplyLeaveModal({ onClose, onSaved }) {
 
         <form onSubmit={handleSubmit} className="space-y-3 p-5">
           <div>
-            <label className="mb-0.5 block text-[10px] font-black uppercase tracking-widest text-slate-500">Employee *</label>
-            <select value={form.employee} onChange={set('employee')} className={inputCls}>
-              <option value="">Select employee</option>
-              {employees.map((e) => (
-                <option key={e._id} value={e._id}>{e.surname} {e.otherNames} ({e.employeeNumber})</option>
-              ))}
-            </select>
+            <label className="mb-0.5 block text-xs font-semibold text-slate-700">Employee <span className="text-red-500">*</span></label>
+            <AppSelect
+              value={form.employee}
+              onChange={(v) => setForm((p) => ({ ...p, employee: v ?? '' }))}
+              options={employees.map((e) => ({ value: e._id, label: `${e.surname} ${e.otherNames} (${e.employeeNumber})` }))}
+              placeholder="Select employee…"
+              searchable
+              size="sm"
+            />
           </div>
 
           <div>
-            <label className="mb-0.5 block text-[10px] font-black uppercase tracking-widest text-slate-500">Leave Type *</label>
-            <select value={form.leaveType} onChange={set('leaveType')} className={inputCls}>
-              <option value="">Select leave type</option>
-              {leaveTypes.map((l) => (
-                <option key={l._id} value={l._id}>{l.name} ({l.daysPerYear} days/yr)</option>
-              ))}
-            </select>
+            <label className="mb-0.5 block text-xs font-semibold text-slate-700">Leave Type <span className="text-red-500">*</span></label>
+            <AppSelect
+              value={form.leaveType}
+              onChange={(v) => setForm((p) => ({ ...p, leaveType: v ?? '' }))}
+              options={leaveTypes.map((l) => ({ value: l._id, label: `${l.name} (${l.daysPerYear} days/yr)` }))}
+              placeholder="Select leave type…"
+              searchable
+              size="sm"
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-0.5 block text-[10px] font-black uppercase tracking-widest text-slate-500">Start Date *</label>
+              <label className="mb-0.5 block text-xs font-semibold text-slate-700">Start Date *</label>
               <input type="date" value={form.startDate} onChange={set('startDate')} className={inputCls} />
             </div>
             <div>
-              <label className="mb-0.5 block text-[10px] font-black uppercase tracking-widest text-slate-500">End Date *</label>
+              <label className="mb-0.5 block text-xs font-semibold text-slate-700">End Date *</label>
               <input type="date" value={form.endDate} onChange={set('endDate')} className={inputCls} />
             </div>
           </div>
 
           <div>
-            <label className="mb-0.5 block text-[10px] font-black uppercase tracking-widest text-slate-500">Reason</label>
+            <label className="mb-0.5 block text-xs font-semibold text-slate-700">Reason</label>
             <textarea value={form.reason} onChange={set('reason')} rows={2}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] resize-none"
+              className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 resize-none"
               placeholder="Optional reason for leave..."
             />
           </div>
@@ -128,7 +133,7 @@ function ApplyLeaveModal({ onClose, onSaved }) {
             <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
               Cancel
             </button>
-            <button type="submit" disabled={saving} className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-black text-white hover:bg-emerald-800 disabled:opacity-60">
+            <button type="submit" disabled={saving} className="rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
               {saving ? 'Submitting…' : 'Submit Application'}
             </button>
           </div>
@@ -275,25 +280,25 @@ export default function LeaveApplications() {
               <p className="text-sm font-semibold">No applications match the current filters</p>
             </div>
           ) : (
-            <table className="min-w-full text-xs">
+            <table className="min-w-full text-[11px] border-collapse">
               <thead className="sticky top-0 z-10">
                 <tr className="bg-[#0B3B2E] text-white">
-                  <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-widest">Employee</th>
-                  <th className="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest">Leave Type</th>
-                  <th className="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest">Period</th>
-                  <th className="px-3 py-2.5 text-center text-[10px] font-black uppercase tracking-widest">Days</th>
-                  <th className="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest">Status</th>
-                  <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Actions</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Employee</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Leave Type</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Period</th>
+                  <th className="px-3 py-1 text-center font-bold border-r border-white/10">Days</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
+                  <th className="px-3 py-1 text-right font-bold">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {applications.map((app, idx) => (
-                  <tr key={app._id} className={`border-t border-slate-100 hover:bg-slate-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
-                    <td className="px-4 py-2.5">
+                  <tr key={app._id} className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                    <td className="px-3 py-1 border-r border-gray-100">
                       <div className="font-black text-slate-900">{app.employee?.surname} {app.employee?.otherNames}</div>
                       <div className="text-[10px] text-slate-400">{app.employee?.employeeNumber}</div>
                     </td>
-                    <td className="px-3 py-2.5">
+                    <td className="px-3 py-1 border-r border-gray-100">
                       <div className="flex items-center gap-1.5 font-semibold text-slate-700">
                         <FaTag size={9} className="text-slate-400" />{app.leaveType?.name}
                       </div>
@@ -301,19 +306,19 @@ export default function LeaveApplications() {
                         <span className="text-[10px] text-rose-500 font-semibold">Unpaid</span>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-slate-600">
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-600">
                       <div className="flex items-center gap-1"><FaCalendarAlt size={9} className="text-slate-400" />{fmtDate(app.startDate)}</div>
                       <div className="text-[10px] text-slate-400">to {fmtDate(app.endDate)}</div>
                     </td>
-                    <td className="px-3 py-2.5 text-center">
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700">{app.days}</span>
+                    <td className="px-3 py-1 border-r border-gray-100 text-center">
+                      <span className="inline-flex rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-700">{app.days}</span>
                     </td>
-                    <td className="px-3 py-2.5">
+                    <td className="px-3 py-1 border-r border-gray-100">
                       <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black ${STATUS_BADGE[app.status] || 'border-slate-200 bg-slate-50 text-slate-500'}`}>
                         {app.status}
                       </span>
                     </td>
-                    <td className="px-3 py-2.5">
+                    <td className="px-3 py-1">
                       <div className="flex flex-wrap justify-end gap-1">
                         {app.status === 'Pending' && (
                           <>

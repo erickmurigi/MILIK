@@ -249,7 +249,7 @@ export default function SaleLeads() {
             <div className="relative flex-1 min-w-36">
               <FaSearch size={10} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search leads…"
-                className="w-full pl-7 pr-3 py-1.5 border border-slate-300 rounded text-xs focus:outline-none focus:border-indigo-400" />
+                className="w-full pl-7 pr-3 py-1.5 border border-slate-300 rounded text-xs focus:outline-none focus:border-[#0B3B2E]" />
             </div>
             <select value={statusFilter} onChange={(e) => setStatus(e.target.value)} className="border border-slate-300 rounded text-xs px-2 py-1.5 focus:outline-none">
               <option value="">All Statuses</option>
@@ -276,11 +276,11 @@ export default function SaleLeads() {
             ) : leads.length === 0 ? (
               <div className="p-10 text-center text-slate-400 text-sm">No leads found</div>
             ) : (
-              <table className="w-full text-xs border-collapse">
-                <thead className="bg-slate-50 sticky top-0 z-10">
+              <table className="w-full text-[11px] border-collapse">
+                <thead className="bg-[#027333] text-white sticky top-0 z-10">
                   <tr>
-                    {["#","Lead #","Name","Contact","Source","Status","Agent","Budget","Next Follow-up",""].map((h) => (
-                      <th key={h} className="text-left px-3 py-2 font-semibold text-slate-500 border-b border-slate-200 whitespace-nowrap">{h}</th>
+                    {["#","Lead #","Name","Contact","Source","Status","Agent","Budget","Next Follow-up",""].map((h, i, arr) => (
+                      <th key={h} className={`text-left px-3 py-1 font-bold whitespace-nowrap ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -290,34 +290,34 @@ export default function SaleLeads() {
                     const isSel    = selected?._id === lead._id;
                     return (
                       <tr key={lead._id} onClick={() => setSelected(isSel ? null : lead)}
-                        className={`border-b border-slate-100 cursor-pointer transition-colors ${isSel ? "bg-indigo-50" : "hover:bg-slate-50"} ${overdue ? "border-l-2 border-l-rose-400" : ""}`}>
-                        <td className="px-3 py-2 text-slate-400">{(page - 1) * LIMIT + i + 1}</td>
-                        <td className="px-3 py-2 text-slate-500 font-mono">{lead.leadNumber}</td>
-                        <td className="px-3 py-2 font-medium text-slate-700 whitespace-nowrap">{lead.fullName}</td>
-                        <td className="px-3 py-2">
+                        className={`border-b border-gray-100 cursor-pointer transition-colors ${isSel ? "bg-indigo-50" : i % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"} ${overdue ? "border-l-2 border-l-rose-400" : ""}`}>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-400">{(page - 1) * LIMIT + i + 1}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-500 font-mono">{lead.leadNumber}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 font-medium text-slate-700 whitespace-nowrap">{lead.fullName}</td>
+                        <td className="px-3 py-1 border-r border-gray-100">
                           <div className="flex flex-col gap-0.5">
                             {lead.phone && <span className="flex items-center gap-1 text-slate-600"><FaPhone size={9} />{lead.phone}</span>}
                             {lead.email && <span className="flex items-center gap-1 text-slate-400"><FaEnvelope size={9} />{lead.email}</span>}
                           </div>
                         </td>
-                        <td className="px-3 py-2 text-slate-500 capitalize whitespace-nowrap">{(lead.source || "").replace(/_/g, " ")}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-0.5 rounded border capitalize ${STATUS_COLORS[lead.status] || ""}`}>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-500 capitalize whitespace-nowrap">{(lead.source || "").replace(/_/g, " ")}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 whitespace-nowrap">
+                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black capitalize ${STATUS_COLORS[lead.status] || ""}`}>
                             {(lead.status || "").replace(/_/g, " ")}
                           </span>
                         </td>
-                        <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{lead.assignedAgent?.fullName || "—"}</td>
-                        <td className="px-3 py-2 text-slate-500 whitespace-nowrap">
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-500 whitespace-nowrap">{lead.assignedAgent?.fullName || "—"}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-500 whitespace-nowrap">
                           {lead.budgetMin || lead.budgetMax
                             ? `${lead.budgetMin ? fmtKES(lead.budgetMin) : "?"} – ${lead.budgetMax ? fmtKES(lead.budgetMax) : "?"}`
                             : "—"}
                         </td>
-                        <td className={`px-3 py-2 whitespace-nowrap ${overdue ? "text-rose-600 font-medium" : "text-slate-500"}`}>
+                        <td className={`px-3 py-1 border-r border-gray-100 whitespace-nowrap ${overdue ? "text-rose-600 font-medium" : "text-slate-500"}`}>
                           {lead.nextFollowUpDate
                             ? <span className="flex items-center gap-1"><FaCalendarAlt size={9} />{fmt(lead.nextFollowUpDate)}{overdue ? " !" : ""}</span>
                             : "—"}
                         </td>
-                        <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                        <td className="px-3 py-1" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-0.5">
                             <button onClick={() => openLogAct(lead)} title="Log Activity" className="p-1.5 text-indigo-500 hover:text-indigo-700 rounded hover:bg-indigo-50"><FaClipboardList size={11} /></button>
                             <button onClick={() => openEdit(lead)} title="Edit" className="p-1.5 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-100"><FaEdit size={11} /></button>
@@ -452,62 +452,62 @@ export default function SaleLeads() {
             </div>
             <div className="px-5 py-4 grid grid-cols-2 gap-3">
               <div className="col-span-2">
-                <label className="block text-xs font-medium text-slate-600 mb-1">Full Name *</label>
-                <input value={form.fullName} onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Full Name *</label>
+                <input value={form.fullName} onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Phone</label>
-                <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Phone</label>
+                <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Email</label>
-                <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Email</label>
+                <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Source</label>
-                <select value={form.source} onChange={(e) => setForm((f) => ({ ...f, source: e.target.value }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none">
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Source</label>
+                <select value={form.source} onChange={(e) => setForm((f) => ({ ...f, source: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20">
                   {LEAD_SOURCES.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Status</label>
-                <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none">
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Status</label>
+                <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20">
                   {LEAD_STATUSES.filter((s) => s !== "converted").map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Assigned Agent</label>
-                <select value={form.assignedAgent} onChange={(e) => setForm((f) => ({ ...f, assignedAgent: e.target.value }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none">
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Assigned Agent</label>
+                <select value={form.assignedAgent} onChange={(e) => setForm((f) => ({ ...f, assignedAgent: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20">
                   <option value="">— Unassigned —</option>
                   {agents.map((a) => <option key={a._id} value={a._id}>{a.fullName}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Next Follow-up</label>
-                <input type="date" value={form.nextFollowUpDate} onChange={(e) => setForm((f) => ({ ...f, nextFollowUpDate: e.target.value }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Next Follow-up</label>
+                <input type="date" value={form.nextFollowUpDate} onChange={(e) => setForm((f) => ({ ...f, nextFollowUpDate: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Budget Min (KES)</label>
-                <input type="number" value={form.budgetMin} onChange={(e) => setForm((f) => ({ ...f, budgetMin: e.target.value }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Budget Min (KES)</label>
+                <input type="number" value={form.budgetMin} onChange={(e) => setForm((f) => ({ ...f, budgetMin: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Budget Max (KES)</label>
-                <input type="number" value={form.budgetMax} onChange={(e) => setForm((f) => ({ ...f, budgetMax: e.target.value }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Budget Max (KES)</label>
+                <input type="number" value={form.budgetMax} onChange={(e) => setForm((f) => ({ ...f, budgetMax: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
               </div>
               {form.status === "lost" && (
                 <div className="col-span-2">
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Lost Reason</label>
-                  <input value={form.lostReason} onChange={(e) => setForm((f) => ({ ...f, lostReason: e.target.value }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Lost Reason</label>
+                  <input value={form.lostReason} onChange={(e) => setForm((f) => ({ ...f, lostReason: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
                 </div>
               )}
               <div className="col-span-2">
-                <label className="block text-xs font-medium text-slate-600 mb-1">Notes</label>
-                <textarea rows={3} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Notes</label>
+                <textarea rows={3} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20 resize-none" />
               </div>
             </div>
             <div className="flex justify-end gap-2 px-5 py-3 border-t bg-slate-50">
-              <button onClick={() => setShowModal(false)} className="text-sm px-4 py-2 border border-slate-300 rounded text-slate-600 hover:bg-slate-100">Cancel</button>
-              <button onClick={handleSave} disabled={saving} className="text-sm px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50">
+              <button onClick={() => setShowModal(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button onClick={handleSave} disabled={saving} className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-black text-white hover:bg-indigo-700 disabled:opacity-50">
                 {saving ? "Saving…" : editingId ? "Update" : "Create Lead"}
               </button>
             </div>
@@ -528,45 +528,45 @@ export default function SaleLeads() {
             </div>
             <div className="px-5 py-4 grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Type *</label>
-                <select value={actForm.type} onChange={(e) => setActForm((f) => ({ ...f, type: e.target.value }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none">
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Type *</label>
+                <select value={actForm.type} onChange={(e) => setActForm((f) => ({ ...f, type: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20">
                   {ACTIVITY_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, " ")}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Date & Time</label>
-                <input type="datetime-local" value={actForm.date} onChange={(e) => setActForm((f) => ({ ...f, date: e.target.value }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Date & Time</label>
+                <input type="datetime-local" value={actForm.date} onChange={(e) => setActForm((f) => ({ ...f, date: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
               </div>
               <div className="col-span-2">
-                <label className="block text-xs font-medium text-slate-600 mb-1">Subject</label>
-                <input value={actForm.subject} onChange={(e) => setActForm((f) => ({ ...f, subject: e.target.value }))} placeholder="e.g. Site visit — Westlands plot" className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Subject</label>
+                <input value={actForm.subject} onChange={(e) => setActForm((f) => ({ ...f, subject: e.target.value }))} placeholder="e.g. Site visit — Westlands plot" className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Duration (min)</label>
-                <input type="number" value={actForm.durationMinutes} onChange={(e) => setActForm((f) => ({ ...f, durationMinutes: e.target.value }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Duration (min)</label>
+                <input type="number" value={actForm.durationMinutes} onChange={(e) => setActForm((f) => ({ ...f, durationMinutes: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Outcome</label>
-                <select value={actForm.outcome} onChange={(e) => setActForm((f) => ({ ...f, outcome: e.target.value }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none">
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Outcome</label>
+                <select value={actForm.outcome} onChange={(e) => setActForm((f) => ({ ...f, outcome: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20">
                   {OUTCOMES.map((o) => <option key={o} value={o}>{o.replace(/_/g, " ")}</option>)}
                 </select>
               </div>
               <div className="col-span-2">
-                <label className="block text-xs font-medium text-slate-600 mb-1">Notes</label>
-                <textarea rows={3} value={actForm.notes} onChange={(e) => setActForm((f) => ({ ...f, notes: e.target.value }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Notes</label>
+                <textarea rows={3} value={actForm.notes} onChange={(e) => setActForm((f) => ({ ...f, notes: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20 resize-none" />
               </div>
               <div className="col-span-2">
-                <label className="block text-xs font-medium text-slate-600 mb-1">Next Action</label>
-                <input value={actForm.nextAction} onChange={(e) => setActForm((f) => ({ ...f, nextAction: e.target.value }))} placeholder="e.g. Send site plan brochure" className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Next Action</label>
+                <input value={actForm.nextAction} onChange={(e) => setActForm((f) => ({ ...f, nextAction: e.target.value }))} placeholder="e.g. Send site plan brochure" className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Next Action Date</label>
-                <input type="date" value={actForm.nextActionDate} onChange={(e) => setActForm((f) => ({ ...f, nextActionDate: e.target.value }))} className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Next Action Date</label>
+                <input type="date" value={actForm.nextActionDate} onChange={(e) => setActForm((f) => ({ ...f, nextActionDate: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
               </div>
             </div>
             <div className="flex justify-end gap-2 px-5 py-3 border-t bg-slate-50">
-              <button onClick={() => setActModal(false)} className="text-sm px-4 py-2 border border-slate-300 rounded text-slate-600 hover:bg-slate-100">Cancel</button>
-              <button onClick={handleSaveAct} disabled={savingAct} className="text-sm px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50">
+              <button onClick={() => setActModal(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button onClick={handleSaveAct} disabled={savingAct} className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-black text-white hover:bg-indigo-700 disabled:opacity-50">
                 {savingAct ? "Saving…" : editingAct ? "Update" : "Log Activity"}
               </button>
             </div>
@@ -587,12 +587,12 @@ export default function SaleLeads() {
                 Convert <strong>{selected.fullName}</strong> to a registered buyer. A buyer profile will be created automatically.
               </p>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">ID / Passport Number</label>
-                <input value={convertId} onChange={(e) => setConvertId(e.target.value)} placeholder="National ID or Passport No." className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+                <label className="mb-0.5 block text-xs font-semibold text-slate-700">ID / Passport Number</label>
+                <input value={convertId} onChange={(e) => setConvertId(e.target.value)} placeholder="National ID or Passport No." className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
               </div>
             </div>
             <div className="flex justify-end gap-2 px-5 py-3 border-t bg-slate-50">
-              <button onClick={() => setShowConvert(false)} className="text-sm px-4 py-2 border border-slate-300 rounded text-slate-600 hover:bg-slate-100">Cancel</button>
+              <button onClick={() => setShowConvert(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
               <button onClick={handleConvert} disabled={converting} className="text-sm px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50">
                 {converting ? "Converting…" : "Convert to Buyer"}
               </button>

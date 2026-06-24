@@ -441,27 +441,27 @@ const PropertyExpenses = () => {
             ) : (
               <>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
+                  <table className="w-full text-[11px] border-collapse">
                     <thead>
-                      <tr className="border-b border-gray-100 bg-slate-50">
-                        {['Date', 'Property / Unit', 'Category', 'Description', 'Amount', 'Payment', 'Ref / By', ''].map((h) => (
-                          <th key={h} className="px-3 py-2.5 text-left text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e]">{h}</th>
+                      <tr className="bg-[#0B3B2E] text-white">
+                        {['Date', 'Property / Unit', 'Category', 'Description', 'Amount', 'Payment', 'Ref / By', ''].map((h, i, arr) => (
+                          <th key={h} className={`px-3 py-1 text-left font-bold ${i < arr.length - 1 ? "border-r border-white/10" : ""}`}>{h}</th>
                         ))}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {paginated.map((exp) => {
+                    <tbody>
+                      {paginated.map((exp, idx) => {
                         const propName = propertyMap.get(normalizeId(exp.property)) || '—';
                         const unitNum  = unitMap.get(normalizeId(exp.unit)) || null;
                         return (
-                          <tr key={exp._id} className="hover:bg-slate-50/60 transition-colors">
-                            <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-gray-700">
+                          <tr key={exp._id} className={`border-b border-gray-100 transition-colors hover:bg-blue-50/40 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"}`}>
+                            <td className="whitespace-nowrap px-3 py-1 border-r border-gray-100 font-semibold text-gray-700">
                               <div className="flex items-center gap-1.5">
                                 <FaCalendarAlt size={9} className="text-gray-400 shrink-0" />
                                 {toInput(exp.date)}
                               </div>
                             </td>
-                            <td className="px-3 py-2.5">
+                            <td className="px-3 py-1 border-r border-gray-100">
                               <div className="flex items-center gap-1.5">
                                 <FaBuilding size={9} className="text-gray-400 shrink-0" />
                                 <div>
@@ -470,23 +470,23 @@ const PropertyExpenses = () => {
                                 </div>
                               </div>
                             </td>
-                            <td className="px-3 py-2.5">
-                              <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${CATEGORY_COLORS[exp.category] || CATEGORY_COLORS.other}`}>
+                            <td className="px-3 py-1 border-r border-gray-100">
+                              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${CATEGORY_COLORS[exp.category] || CATEGORY_COLORS.other}`}>
                                 {humanize(exp.category)}
                               </span>
                             </td>
-                            <td className="px-3 py-2.5 max-w-[200px]">
+                            <td className="px-3 py-1 border-r border-gray-100 max-w-[200px]">
                               <div className="truncate font-medium text-slate-700" title={exp.description}>{exp.description}</div>
                             </td>
-                            <td className="px-3 py-2.5 font-extrabold text-slate-900 whitespace-nowrap">
+                            <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900 whitespace-nowrap">
                               {formatMoney(exp.amount, currency)}
                             </td>
-                            <td className="px-3 py-2.5 text-gray-500">{humanize(exp.paymentMethod)}</td>
-                            <td className="px-3 py-2.5 text-gray-400">
+                            <td className="px-3 py-1 border-r border-gray-100 text-gray-500">{humanize(exp.paymentMethod)}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-gray-500">
                               {exp.receiptNumber && <div className="font-medium text-gray-600">{exp.receiptNumber}</div>}
                               {exp.paidBy && <div className="text-[10px]">{exp.paidBy}</div>}
                             </td>
-                            <td className="px-3 py-2.5">
+                            <td className="px-3 py-1">
                               <div className="flex items-center gap-1">
                                 {canUpdateExpense && (
                                   <button onClick={() => { setEditing(exp); setModalOpen(true); }}

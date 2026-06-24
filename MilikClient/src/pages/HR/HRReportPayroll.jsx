@@ -236,47 +236,47 @@ export default function HRReportPayroll() {
 
               {/* Monthly detail table */}
               <div className="print-card overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                <table className="min-w-full text-xs">
+                <table className="min-w-full text-[11px] border-collapse">
                   <thead>
                     <tr className="bg-[#0B3B2E] text-white">
-                      <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-widest">Month</th>
-                      <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Employees</th>
-                      <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Gross</th>
-                      <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">PAYE</th>
-                      <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">SHA</th>
-                      <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">NSSF</th>
-                      <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">AHL</th>
-                      <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Net Pay</th>
-                      <th className="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest">Status</th>
+                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Month</th>
+                      <th className="px-3 py-1 text-right font-bold border-r border-white/10">Employees</th>
+                      <th className="px-3 py-1 text-right font-bold border-r border-white/10">Gross</th>
+                      <th className="px-3 py-1 text-right font-bold border-r border-white/10">PAYE</th>
+                      <th className="px-3 py-1 text-right font-bold border-r border-white/10">SHA</th>
+                      <th className="px-3 py-1 text-right font-bold border-r border-white/10">NSSF</th>
+                      <th className="px-3 py-1 text-right font-bold border-r border-white/10">AHL</th>
+                      <th className="px-3 py-1 text-right font-bold border-r border-white/10">Net Pay</th>
+                      <th className="px-3 py-1 text-left font-bold">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {months.map((m, i) => (
-                      <tr key={m.month} className={`border-t border-slate-100 hover:bg-slate-50 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
-                        <td className="px-4 py-2.5 font-black text-slate-900">{m.label}</td>
-                        <td className="px-3 py-2.5 text-right text-slate-700">{m.employeeCount}</td>
-                        <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{fmtKES(m.totalGross)}</td>
-                        <td className="px-3 py-2.5 text-right text-rose-600">{fmtKES(m.totalPAYE)}</td>
-                        <td className="px-3 py-2.5 text-right text-rose-600">{fmtKES(m.totalNHIF)}</td>
-                        <td className="px-3 py-2.5 text-right text-rose-600">{fmtKES(m.totalNSSF)}</td>
-                        <td className="px-3 py-2.5 text-right text-rose-600">{fmtKES(m.totalAHL)}</td>
-                        <td className="px-3 py-2.5 text-right font-black text-emerald-700">{fmtKES(m.totalNet)}</td>
-                        <td className="px-3 py-2.5">
-                          <span className={`rounded-full border px-2 py-0.5 text-[9px] font-black ${STATUS_STYLE[m.status] || STATUS_STYLE.Draft}`}>{m.status}</span>
+                      <tr key={m.month} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                        <td className="px-3 py-1 border-r border-gray-100 font-black text-slate-900">{m.label}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-700">{m.employeeCount}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-900">{fmtKES(m.totalGross)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right text-rose-600">{fmtKES(m.totalPAYE)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right text-rose-600">{fmtKES(m.totalNHIF)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right text-rose-600">{fmtKES(m.totalNSSF)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right text-rose-600">{fmtKES(m.totalAHL)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-emerald-700">{fmtKES(m.totalNet)}</td>
+                        <td className="px-3 py-1">
+                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${STATUS_STYLE[m.status] || STATUS_STYLE.Draft}`}>{m.status}</span>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 border-slate-300 bg-slate-50">
-                      <td className="px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500">TOTALS</td>
-                      <td className="px-3 py-2.5 text-right text-[11px] font-black text-slate-700">—</td>
-                      <td className="px-3 py-2.5 text-right text-[11px] font-black text-slate-900">{fmtKES(t.gross)}</td>
-                      <td className="px-3 py-2.5 text-right text-[11px] font-black text-rose-700">{fmtKES(t.paye)}</td>
-                      <td className="px-3 py-2.5 text-right text-[11px] font-black text-rose-700">{fmtKES(t.nhif)}</td>
-                      <td className="px-3 py-2.5 text-right text-[11px] font-black text-rose-700">{fmtKES(t.nssf)}</td>
-                      <td className="px-3 py-2.5 text-right text-[11px] font-black text-rose-700">{fmtKES(t.ahl)}</td>
-                      <td className="px-3 py-2.5 text-right text-[11px] font-black text-emerald-700">{fmtKES(t.net)}</td>
+                      <td className="px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-500">TOTALS</td>
+                      <td className="px-3 py-1.5 text-right font-black text-slate-700">—</td>
+                      <td className="px-3 py-1.5 text-right font-black text-slate-900">{fmtKES(t.gross)}</td>
+                      <td className="px-3 py-1.5 text-right font-black text-rose-700">{fmtKES(t.paye)}</td>
+                      <td className="px-3 py-1.5 text-right font-black text-rose-700">{fmtKES(t.nhif)}</td>
+                      <td className="px-3 py-1.5 text-right font-black text-rose-700">{fmtKES(t.nssf)}</td>
+                      <td className="px-3 py-1.5 text-right font-black text-rose-700">{fmtKES(t.ahl)}</td>
+                      <td className="px-3 py-1.5 text-right font-black text-emerald-700">{fmtKES(t.net)}</td>
                       <td />
                     </tr>
                   </tfoot>

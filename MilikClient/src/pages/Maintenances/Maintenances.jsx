@@ -18,6 +18,7 @@ import {
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import AppSelect from "../../components/common/AppSelect";
 import { adminRequests } from "../../utils/requestMethods";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { useConfirm } from "../../context/ConfirmContext";
@@ -241,22 +242,23 @@ const Maintenances = () => {
   }, [priorityFilter, requests, searchTerm, statusFilter]);
 
   const stats = useMemo(() => {
-    const acc = { total: serverTotal, pending: 0, inProgress: 0, completed: 0, emergency: 0 };
+    const acc = { total: serverTotal, pending: 0, inProgress: 0, completed: 0, cancelled: 0, emergency: 0 };
     requests.forEach(r => {
       if (r?.status === "pending") acc.pending++;
       if (r?.status === "in_progress") acc.inProgress++;
       if (r?.status === "completed") acc.completed++;
+      if (r?.status === "cancelled") acc.cancelled++;
       if (r?.priority === "emergency") acc.emergency++;
     });
     return acc;
   }, [requests, serverTotal]);
 
-  const statsCards = useMemo(() => [
-    { label: "Total",     value: stats.total,     cls: "bg-slate-900 text-white",                                  icon: <FaTools /> },
-    { label: "Pending",   value: stats.pending,   cls: "bg-amber-50 text-amber-800 border border-amber-200",       icon: <FaClock /> },
-    { label: "In Progress", value: stats.inProgress, cls: "bg-blue-50 text-blue-800 border border-blue-200",       icon: <FaTools /> },
-    { label: "Completed", value: stats.completed, cls: "bg-emerald-50 text-emerald-800 border border-emerald-200", icon: <FaCheckCircle /> },
-    { label: "Emergency", value: stats.emergency, cls: "bg-rose-50 text-rose-800 border border-rose-200",          icon: <FaExclamationTriangle /> },
+  const SUMMARY_CHIPS = useMemo(() => [
+    { key: "pending",     label: "Pending",     count: stats.pending,    dot: "bg-amber-400",   text: "text-amber-700",   bg: "bg-amber-50",   border: "border-amber-200",   filterType: "status"   },
+    { key: "in_progress", label: "In Progress", count: stats.inProgress, dot: "bg-blue-400",    text: "text-blue-700",    bg: "bg-blue-50",    border: "border-blue-200",    filterType: "status"   },
+    { key: "completed",   label: "Completed",   count: stats.completed,  dot: "bg-emerald-500", text: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200", filterType: "status"   },
+    { key: "cancelled",   label: "Cancelled",   count: stats.cancelled,  dot: "bg-slate-400",   text: "text-slate-600",   bg: "bg-slate-50",   border: "border-slate-200",   filterType: "status"   },
+    { key: "emergency",   label: "Emergency",   count: stats.emergency,  dot: "bg-rose-500",    text: "text-rose-700",    bg: "bg-rose-50",    border: "border-rose-200",    filterType: "priority" },
   ], [stats]);
 
   const totalPages = Math.max(1, serverPages);
@@ -392,56 +394,59 @@ const Maintenances = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
-        <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col gap-2">
+      <div className="flex h-full flex-col overflow-hidden bg-slate-50">
 
-          {/* KPI Strip */}
-          <div className="grid flex-shrink-0 grid-cols-2 gap-2 md:grid-cols-5">
-            {statsCards.map((card) => (
-              <div key={card.label} className={`flex items-center gap-2 rounded-lg px-3 py-2 shadow-sm ${card.cls}`}>
-                <span className="text-base opacity-35">{card.icon}</span>
-                <div className="flex flex-1 items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider opacity-75">{card.label}</span>
-                  <span className="text-sm font-black">{card.value}</span>
-                </div>
-              </div>
-            ))}
+        {/* Summary chips */}
+        <div className="shrink-0 flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
+          {SUMMARY_CHIPS.map(({ key, label, count, dot, text, bg, border, filterType }) => {
+            const active = filterType === "status" ? statusFilter === key : priorityFilter === key;
+            const toggle = () => filterType === "status" ? setStatusFilter(active ? "all" : key) : setPriorityFilter(active ? "all" : key);
+            return (
+              <button key={key} type="button" onClick={toggle}
+                className={`inline-flex items-center gap-2 border px-3 py-1.5 transition-all ${bg} ${border} ${active ? "ring-2 ring-offset-1 ring-[#0B3B2E]" : "hover:opacity-80"}`}>
+                <span className={`h-2 w-2 rounded-full ${dot}`} />
+                <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">{label}</span>
+                <span className={`text-sm font-black ${text}`}>{count}</span>
+                {active && <FaTimes size={8} className="ml-1 text-slate-500" />}
+              </button>
+            );
+          })}
+          <div className="inline-flex items-center gap-2 border border-slate-200 bg-white px-3 py-1.5">
+            <span className="h-2 w-2 rounded-full bg-slate-400" />
+            <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Total</span>
+            <span className="text-sm font-black text-slate-700">{stats.total}</span>
           </div>
+        </div>
 
-          {/* Main card */}
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        {/* Filter bar */}
+        <div className="shrink-0 flex flex-wrap items-center gap-1.5 border-b border-slate-200 bg-white px-3 py-2">
+          <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search requests…" className="h-7 w-48 shrink-0 border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:border-[#0B3B2E]" />
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 appearance-none outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
+            {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 appearance-none outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
+            {PRIORITY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <button onClick={() => { setSearchTerm(""); setStatusFilter("all"); setPriorityFilter("all"); }} className="inline-flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"><FaFilter size={9} /> Reset</button>
+          <button onClick={loadRequests} className="inline-flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50"><FaRedoAlt size={9} /></button>
+          <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+          <button onClick={exportCsv} className="inline-flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaDownload size={9} /> CSV</button>
+          {canCreate && !isDemoUser && (
+            <button onClick={openCreateModal} className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-2 text-xs font-black text-white hover:bg-[#0A3127]"><FaPlus size={9} /> New Request</button>
+          )}
+        </div>
 
-            <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
-              <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-                <span className="shrink-0 text-xs font-black text-slate-800">Maintenance</span>
-                <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search…" className="h-7 w-44 shrink-0 rounded border border-slate-300 bg-[#DDEFE1] px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-7 shrink-0 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 appearance-none focus:outline-none">
-                  {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-                <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)} className="h-7 shrink-0 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 appearance-none focus:outline-none">
-                  {PRIORITY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-                <button onClick={() => { setSearchTerm(""); setStatusFilter("all"); setPriorityFilter("all"); }} className="h-7 shrink-0 inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"><FaFilter size={9} /> Reset</button>
-                <button onClick={loadRequests} className="h-7 shrink-0 inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50"><FaRedoAlt size={9} /></button>
-                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                <button onClick={exportCsv} className="h-7 shrink-0 inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaDownload size={9} /> CSV</button>
-                {canCreate && !isDemoUser && (
-                  <button onClick={openCreateModal} className="h-7 shrink-0 inline-flex items-center gap-1 rounded bg-[#0B3B2E] px-2 text-xs font-black text-white hover:bg-[#0A3127]"><FaPlus size={9} /> New Request</button>
-                )}
-              </div>
-            </div>
-
-            {/* Table */}
-            <div className="flex-1 min-h-0 overflow-auto">
-              <table className="w-full min-w-[900px] text-xs">
+        {/* Table */}
+        <div className="flex-1 min-h-0 overflow-auto">
+              <table className="w-full min-w-[900px] text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className="bg-[#0B3B2E] text-white">
-                    <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.16em]">Request</th>
-                    <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.16em]">Location</th>
-                    <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.16em]">Assigned To</th>
-                    <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.16em]">Costs</th>
-                    <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.16em]">Dates</th>
-                    <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-[0.16em]">Actions</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Request</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Location</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Assigned To</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Costs</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Dates</th>
+                    <th className="px-3 py-1 border-r border-gray-100 text-right font-bold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -466,8 +471,8 @@ const Maintenances = () => {
                       const busy = updatingId.startsWith(item._id);
 
                       return (
-                        <tr key={item._id} className={`border-t border-slate-100 ${rowBg} hover:bg-slate-50 align-top`}>
-                          <td className="px-3 py-2 max-w-[240px]">
+                        <tr key={item._id} className={`border-b border-gray-100 ${rowBg} hover:bg-blue-50/40 align-top`}>
+                          <td className="px-3 py-1 border-r border-gray-100 max-w-[240px]">
                             <div className="flex items-start gap-2">
                               <div className={`mt-0.5 flex-shrink-0 rounded-lg p-2 text-xs ${isEmergency ? "bg-rose-100 text-rose-600" : "bg-slate-100 text-slate-500"}`}>
                                 {isEmergency ? <FaExclamationTriangle /> : <FaTools />}
@@ -486,24 +491,24 @@ const Maintenances = () => {
                               </div>
                             </div>
                           </td>
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-1 border-r border-gray-100">
                             <p className="font-semibold text-slate-900">{getRequestPropertyName(item) || "—"}</p>
                             <p className="text-[10px] text-slate-500 mt-0.5">Unit {item?.unit?.unitNumber || "—"}</p>
                             <p className="text-[10px] text-slate-500 mt-0.5">{item?.tenant?.name || "No tenant"}</p>
                           </td>
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-1 border-r border-gray-100">
                             <p className="font-semibold text-slate-900">{item?.assignedTo || <span className="text-slate-400 italic">Unassigned</span>}</p>
                             <p className="text-[10px] text-slate-500 mt-0.5">Created {formatDate(item?.createdAt)}</p>
                           </td>
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-1 border-r border-gray-100">
                             <p className="font-semibold text-slate-900">Est {money(item?.estimatedCost)}</p>
                             <p className="text-[10px] text-slate-500 mt-0.5">Actual {money(item?.actualCost)}</p>
                           </td>
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-1 border-r border-gray-100">
                             <p className="font-semibold text-slate-900">Sched. {formatDate(item?.scheduledDate)}</p>
                             <p className="text-[10px] text-slate-500 mt-0.5">Done {formatDate(item?.completedDate)}</p>
                           </td>
-                          <td className="px-3 py-2 text-right">
+                          <td className="px-3 py-1 border-r border-gray-100 text-right">
                             <div className="inline-flex flex-wrap justify-end gap-1.5">
                               {canUpdate && !isDemoUser && item?.status === "pending" && (
                                 <button
@@ -560,7 +565,7 @@ const Maintenances = () => {
                   <select
                     value={pageSize}
                     onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                    className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition"
+                    className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition"
                   >
                     {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
                   </select>
@@ -569,8 +574,6 @@ const Maintenances = () => {
                 <span className="font-semibold text-slate-700">Page {safePage} of {totalPages}</span>
                 <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={safePage >= totalPages} className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
               </div>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -588,79 +591,80 @@ const Maintenances = () => {
 
             <form onSubmit={handleSave} className="space-y-4 px-6 py-5">
               <div className="grid gap-4 md:grid-cols-2">
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-bold text-slate-700">Property</span>
-                  <select
+                <div>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Property</span>
+                  <AppSelect
                     value={selectedPropertyId}
-                    onChange={(e) => setForm((prev) => ({ ...prev, unit: "", tenant: "", property: e.target.value }))}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
-                  >
-                    <option value="">Select property</option>
-                    {properties.map((p) => <option key={p._id} value={p._id}>{getPropertyName(p)}</option>)}
-                  </select>
-                </label>
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-bold text-slate-700">Unit *</span>
-                  <select
+                    onChange={(v) => setForm((prev) => ({ ...prev, unit: "", tenant: "", property: v ?? "" }))}
+                    options={properties.map((p) => ({ value: p._id, label: getPropertyName(p) }))}
+                    placeholder="Select property…"
+                    searchable
+                    size="sm"
+                  />
+                </div>
+                <div>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Unit <span className="text-red-500">*</span></span>
+                  <AppSelect
                     value={form.unit}
-                    onChange={(e) => setForm((prev) => ({ ...prev, unit: e.target.value, tenant: "" }))}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
-                  >
-                    <option value="">Select unit</option>
-                    {availableUnits.map((u) => <option key={u._id} value={u._id}>{getPropertyName(u?.property)} · Unit {u?.unitNumber || "—"}</option>)}
-                  </select>
-                </label>
+                    onChange={(v) => setForm((prev) => ({ ...prev, unit: v ?? "", tenant: "" }))}
+                    options={availableUnits.map((u) => ({ value: u._id, label: `${getPropertyName(u?.property)} · Unit ${u?.unitNumber || "—"}` }))}
+                    placeholder="Select unit…"
+                    searchable
+                    size="sm"
+                  />
+                </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-bold text-slate-700">Tenant</span>
-                  <select
+                <div>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Tenant</span>
+                  <AppSelect
                     value={form.tenant}
-                    onChange={(e) => setForm((prev) => ({ ...prev, tenant: e.target.value }))}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
-                  >
-                    <option value="">No linked tenant</option>
-                    {availableTenants.map((t) => <option key={t._id} value={t._id}>{t?.name || "Unnamed"}</option>)}
-                  </select>
-                </label>
+                    onChange={(v) => setForm((prev) => ({ ...prev, tenant: v ?? "" }))}
+                    options={availableTenants.map((t) => ({ value: t._id, label: t?.name || "Unnamed" }))}
+                    placeholder="No linked tenant"
+                    searchable
+                    clearable
+                    size="sm"
+                  />
+                </div>
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-bold text-slate-700">Assigned to</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Assigned to</span>
                   <input
                     value={form.assignedTo}
                     onChange={(e) => setForm((prev) => ({ ...prev, assignedTo: e.target.value }))}
                     placeholder="Technician or service provider"
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </label>
               </div>
 
               <div className="grid gap-4 md:grid-cols-[1fr_auto_auto]">
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-bold text-slate-700">Issue title *</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Issue title <span className="text-red-500">*</span></span>
                   <input
                     value={form.title}
                     onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
                     placeholder="e.g. Water leak in kitchen"
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-bold text-slate-700">Priority</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Priority</span>
                   <select
                     value={form.priority}
                     onChange={(e) => setForm((prev) => ({ ...prev, priority: e.target.value }))}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     {PRIORITY_OPTIONS.filter((o) => o.value !== "all").map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </label>
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-bold text-slate-700">Status</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Status</span>
                   <select
                     value={form.status}
                     onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
+                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     {STATUS_OPTIONS.filter((o) => o.value !== "all").map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
@@ -668,13 +672,13 @@ const Maintenances = () => {
               </div>
 
               <label className="block">
-                <span className="mb-1.5 block text-xs font-bold text-slate-700">Description *</span>
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Description <span className="text-red-500">*</span></span>
                 <textarea
                   rows={3}
                   value={form.description}
                   onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
                   placeholder="Describe the issue clearly so a technician can act on it."
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
+                  className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                 />
               </label>
 
@@ -686,21 +690,21 @@ const Maintenances = () => {
                   { label: "Actual cost", key: "actualCost", type: "number" },
                 ].map(({ label, key, type }) => (
                   <label key={key} className="block">
-                    <span className="mb-1.5 block text-xs font-bold text-slate-700">{label}</span>
+                    <span className="mb-0.5 block text-xs font-semibold text-slate-700">{label}</span>
                     <input
                       type={type}
                       min={type === "number" ? "0" : undefined}
                       value={form[key]}
                       onChange={(e) => setForm((prev) => ({ ...prev, [key]: e.target.value }))}
-                      className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
+                      className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                     />
                   </label>
                 ))}
               </div>
 
               <div className="sticky bottom-0 flex flex-wrap justify-end gap-3 border-t border-slate-200 bg-white/95 pt-4 backdrop-blur-sm">
-                <button type="button" onClick={closeModal} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-                <button type="submit" disabled={submitting} className="rounded-xl bg-[#0B3B2E] px-4 py-2 text-sm font-bold text-white hover:bg-[#0A3127] disabled:opacity-60">
+                <button type="button" onClick={closeModal} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+                <button type="submit" disabled={submitting} className="rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
                   {submitting ? "Saving…" : editingRequest?._id ? "Save Changes" : "Create Request"}
                 </button>
               </div>

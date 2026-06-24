@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
-import { FaSave, FaSpinner } from "react-icons/fa";
+import { FaArrowLeft, FaSave, FaSpinner } from "react-icons/fa";
 import { useDispatch, useSelector } from "react-redux";
 import {
   selectCurrentUser,
@@ -10,6 +10,7 @@ import {
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import AppSelect from "../../components/common/AppSelect";
 import { createRentPayment, getTenantInvoices, getChartOfAccounts } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 import { getTenants } from "../../redux/tenantsRedux";
@@ -159,7 +160,7 @@ const AddReceipt = () => {
       tenantId: preselectedTenantId,
       amount: prefilledAmount,
       paymentType: ["rent", "deposit", "utility", "late_fee", "other"].includes(prefilledPaymentType) ? prefilledPaymentType : "rent",
-      paymentMethod: ["bank_transfer", "mobile_money", "cash", "check", "credit_card"].includes(prefilledMethod) ? prefilledMethod : "mobile_money",
+      paymentMethod: ["bank_transfer", "mobile_money", "cash", "check", "credit_card", "pesalink", "rtgs", "standing_order", "direct_debit"].includes(prefilledMethod) ? prefilledMethod : "mobile_money",
       cashbook: "Main Cashbook",
       paidDirectToLandlord: isLandlordMode,
       paymentDate: todayInput(),
@@ -500,10 +501,8 @@ const AddReceipt = () => {
   };
 
 
-  const labelClass = "text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-700";
-  const inputClass =
-    "w-full mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10";
-  const sectionCardClass = "rounded-xl border border-slate-200 bg-white shadow-sm";
+  const labelClass = "mb-0.5 block text-xs font-semibold text-slate-700";
+  const inputClass = "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
   const preventWheelValueChange = (event) => {
     event.currentTarget.blur();
   };
@@ -539,9 +538,9 @@ const AddReceipt = () => {
       return;
     }
 
-    const referenceRequired = ["mobile_money", "bank_transfer"].includes(formData.paymentMethod);
+    const referenceRequired = ["mobile_money", "bank_transfer", "pesalink", "rtgs", "standing_order"].includes(formData.paymentMethod);
     if (referenceRequired && !String(formData.referenceNumber || "").trim()) {
-      toast.error("Reference number is required for Mobile Money and Bank Transfer payments");
+      toast.error("Reference number is required for this payment method");
       return;
     }
 
@@ -623,46 +622,59 @@ const AddReceipt = () => {
   const totalOutstanding = outstandingInvoices.reduce((s, i) => s + i.outstanding, 0);
 
   return (
-    <DashboardLayout>
-      <div className="min-h-[calc(100vh-112px)] w-full overflow-x-hidden bg-gradient-to-br from-slate-100 via-slate-50 to-white px-2 py-2 sm:px-3 lg:px-4">
-        <div className="w-full max-w-none">
-          <div className="w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_12px_36px_rgba(15,23,42,0.08)]">
-            <div className="p-4 md:p-5">
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
+
+        {/* Sticky header */}
+        <div className="flex-shrink-0 bg-[#0B3B2E] px-4 py-2.5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={() => navigate(backToPath)} className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#B7C9C0] hover:text-white transition">
+                <FaArrowLeft /> Back
+              </button>
+              <div className="h-4 w-px bg-[#2A5C4A]" />
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B7C9C0]">
+                  {isLandlordMode ? "Landlord" : isInstantMode ? "Instant" : "Tenant"} Receipts
+                </div>
+                <h1 className="text-sm font-black text-white leading-none">New Receipt</h1>
+              </div>
+            </div>
+            <span className="rounded-lg border border-[#2A5C4A] bg-[#0A3127] px-2.5 py-1 text-[10px] font-bold text-[#B7C9C0]">Posting-Safe Entry</span>
+          </div>
+        </div>
+
+        {/* Scrollable content */}
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
 
               {/* ── COLLECTION FORM ── */}
-              <div className={`${sectionCardClass} p-4 mb-4`}>
-                <div className="mb-4 flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">Receipt Details</p>
-                    <h2 className="mt-0.5 text-sm font-black text-slate-900">Collection Information</h2>
-                  </div>
-                  <span className="rounded-full border border-[#0B3B2E]/20 bg-[#0B3B2E]/8 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[#0B3B2E]">
-                    Posting-Safe Entry
-                  </span>
+              <div className="mb-3 overflow-hidden border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
+                  <h2 className="text-[11px] font-bold uppercase tracking-wide text-slate-700">Collection Details</h2>
+                  {isCompanyLandlordMode && (
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Landlord Mode — Auto-Confirmed</span>
+                  )}
                 </div>
+                <div className="p-3">
 
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                   {/* Property */}
                   <div>
-                    <label className={labelClass}>Property *</label>
-                    <select
+                    <label className={labelClass}>Property <span className="text-red-500">*</span></label>
+                    <AppSelect
                       value={formData.propertyId}
-                      onChange={(e) => onPropertyChange(e.target.value)}
-                      className={inputClass}
-                    >
-                      <option value="">Select property</option>
-                      {activeProperties.map((property) => (
-                        <option key={property._id} value={property._id}>
-                          {property.propertyName || property.name || "Unnamed Property"}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(v) => onPropertyChange(v ?? "")}
+                      options={activeProperties.map((p) => ({ value: p._id, label: p.propertyName || p.name || "Unnamed Property" }))}
+                      placeholder="Select property…"
+                      searchable
+                      size="sm"
+                    />
                   </div>
 
                   {/* Tenant */}
                   <div>
                     <div className="flex items-center justify-between gap-2">
-                      <label className={labelClass}>Tenant *</label>
+                      <label className={labelClass}>Tenant <span className="text-red-500">*</span></label>
                       <label className="inline-flex cursor-pointer items-center gap-1.5 text-[10px] font-semibold text-slate-500">
                         <input
                           type="checkbox"
@@ -680,19 +692,16 @@ const AddReceipt = () => {
                         Include terminated
                       </label>
                     </div>
-                    <select
+                    <AppSelect
                       value={formData.tenantId}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, tenantId: e.target.value }))}
-                      className={inputClass}
+                      onChange={(v) => setFormData((prev) => ({ ...prev, tenantId: v ?? "" }))}
+                      options={tenantOptions.map((t) => ({ value: t._id, label: `${getTenantName(t)}${isTerminatedTenant(t) ? " — Terminated" : ""}` }))}
+                      placeholder={formData.propertyId ? "Select tenant…" : "Select property first"}
+                      searchable
+                      clearable
                       disabled={!formData.propertyId}
-                    >
-                      <option value="">{formData.propertyId ? "Select tenant" : "Select property first"}</option>
-                      {tenantOptions.map((tenant) => (
-                        <option key={tenant._id} value={tenant._id}>
-                          {getTenantName(tenant)}{isTerminatedTenant(tenant) ? " — Terminated" : ""}
-                        </option>
-                      ))}
-                    </select>
+                      size="sm"
+                    />
                     {selectedTenant && isTerminatedTenant(selectedTenant) && (
                       <p className="mt-1 text-[10px] font-semibold text-amber-600">
                         Arrears / recovery receipt only — occupancy is not restored.
@@ -718,7 +727,7 @@ const AddReceipt = () => {
                   {/* Amount Due — read-only */}
                   <div>
                     <label className={labelClass}>Amount Due</label>
-                    <div className={`mt-1 flex h-[38px] items-center rounded-lg border px-3 text-sm font-black ${amountDueColor}`}>
+                    <div className={`flex h-8 items-center rounded border px-3 text-xs font-black ${amountDueColor}`}>
                       {formData.tenantId
                         ? balanceSummary.balance < -0.009
                           ? `Ksh ${Math.abs(balanceSummary.balance).toLocaleString()} CR`
@@ -730,14 +739,21 @@ const AddReceipt = () => {
                   {/* Reference Number */}
                   <div>
                     <label className={labelClass}>
-                      Reference Number{["mobile_money", "bank_transfer"].includes(formData.paymentMethod) ? " *" : ""}
+                      Reference Number{["mobile_money", "bank_transfer", "pesalink", "rtgs", "standing_order"].includes(formData.paymentMethod) ? " *" : ""}
                     </label>
                     <input
                       type="text"
                       value={formData.referenceNumber}
                       onChange={(e) => setFormData((prev) => ({ ...prev, referenceNumber: e.target.value }))}
                       className={inputClass}
-                      placeholder={["mobile_money"].includes(formData.paymentMethod) ? "M-Pesa transaction code" : ["bank_transfer"].includes(formData.paymentMethod) ? "Bank reference / slip no." : "Optional ref / receipt no."}
+                      placeholder={
+                        formData.paymentMethod === "mobile_money" ? "M-Pesa / Airtel transaction code"
+                        : formData.paymentMethod === "bank_transfer" ? "Bank EFT reference / slip no."
+                        : formData.paymentMethod === "pesalink" ? "PesaLink transaction reference"
+                        : formData.paymentMethod === "rtgs" ? "RTGS / wire transfer reference"
+                        : formData.paymentMethod === "standing_order" ? "Standing order reference"
+                        : "Optional ref / receipt no."
+                      }
                     />
                   </div>
 
@@ -765,11 +781,15 @@ const AddReceipt = () => {
                       onChange={(e) => setFormData((prev) => ({ ...prev, paymentMethod: e.target.value }))}
                       className={inputClass}
                     >
-                      <option value="mobile_money">Mobile Money</option>
-                      <option value="bank_transfer">Bank Transfer</option>
+                      <option value="mobile_money">Mobile Money (M-Pesa / Airtel)</option>
+                      <option value="bank_transfer">Bank Transfer (EFT)</option>
+                      <option value="pesalink">PesaLink</option>
+                      <option value="rtgs">RTGS / Wire Transfer</option>
+                      <option value="standing_order">Standing Order</option>
+                      <option value="direct_debit">Direct Debit</option>
                       <option value="cash">Cash</option>
-                      <option value="check">Check</option>
-                      <option value="credit_card">Credit Card</option>
+                      <option value="check">Cheque</option>
+                      <option value="credit_card">Card (Debit / Credit)</option>
                     </select>
                   </div>
 
@@ -777,7 +797,7 @@ const AddReceipt = () => {
                   <div>
                     <label className={labelClass}>{isDirectToLandlord ? "Cashbook" : "Cashbook *"}</label>
                     {isDirectToLandlord ? (
-                      <div className="mt-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      <div className="flex h-8 items-center rounded border border-amber-200 bg-amber-50 px-3 text-xs text-amber-800">
                         Direct-to-landlord — not posted to MILIK cashbooks.
                       </div>
                     ) : (
@@ -811,7 +831,7 @@ const AddReceipt = () => {
                   </div>
 
                   {/* Banking Date — only relevant for bank transfer / cheque */}
-                  {["bank_transfer", "check"].includes(formData.paymentMethod) && (
+                  {["bank_transfer", "check", "standing_order", "rtgs", "pesalink"].includes(formData.paymentMethod) && (
                     <div>
                       <label className={labelClass}>Banking / Clearance Date</label>
                       <input
@@ -877,12 +897,13 @@ const AddReceipt = () => {
                     )}
                   </div>
                 </div>
+                </div>
               </div>
 
               {/* ── EXISTING CREDIT BANNER ── */}
               {formData.tenantId && balanceSummary.balance < -0.009 && !creditOnAccountMode && (
                 <div className="mb-3 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-                  <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-200 text-emerald-800 font-bold text-xs">CR</div>
+                  <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded bg-emerald-200 text-emerald-800 font-bold text-xs">CR</div>
                   <div className="flex-1">
                     <p className="text-sm font-bold text-emerald-800">
                       This tenant has KES {Math.abs(balanceSummary.balance).toLocaleString("en-KE", { minimumFractionDigits: 2 })} credit on account
@@ -896,7 +917,7 @@ const AddReceipt = () => {
 
               {/* ── INVOICE PREVIEW (bottom) ── */}
               {formData.tenantId && (
-                <div className="mb-4 space-y-3">
+                <div className="mb-3 space-y-3">
 
                   {/* Flat invoice ledger */}
                   <div className="overflow-hidden rounded-xl border border-slate-200 shadow-sm">
@@ -970,18 +991,18 @@ const AddReceipt = () => {
                       </div>
                     ) : outstandingInvoices.length > 0 ? (
                       <div className="overflow-auto">
-                        <table className="w-full border-collapse text-xs">
-                          <thead className="sticky top-0 z-10 bg-slate-50">
+                        <table className="w-full border-collapse text-[11px]">
+                          <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                             <tr>
-                              <th className="w-9 border-b border-slate-200 px-3 py-2 text-left text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500" />
-                              <th className="border-b border-slate-200 px-3 py-2 text-left text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Invoice</th>
-                              <th className="border-b border-slate-200 px-3 py-2 text-left text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Period</th>
-                              <th className="border-b border-slate-200 px-3 py-2 text-left text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Type</th>
-                              <th className="border-b border-slate-200 px-3 py-2 text-right text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Invoiced</th>
-                              <th className="border-b border-slate-200 px-3 py-2 text-right text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Paid</th>
-                              <th className="border-b border-slate-200 px-3 py-2 text-right text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Outstanding</th>
-                              <th className="border-b border-slate-200 px-3 py-2 text-left text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Status</th>
-                              <th className="w-16 border-b border-slate-200 px-3 py-2 text-center text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Priority</th>
+                              <th className="w-9 px-3 py-1 border-r border-white/10" />
+                              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Invoice</th>
+                              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Period</th>
+                              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
+                              <th className="px-3 py-1 text-right font-bold border-r border-white/10">Invoiced</th>
+                              <th className="px-3 py-1 text-right font-bold border-r border-white/10">Paid</th>
+                              <th className="px-3 py-1 text-right font-bold border-r border-white/10">Outstanding</th>
+                              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
+                              <th className="w-16 px-3 py-1 text-center font-bold">Priority</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -992,7 +1013,7 @@ const AddReceipt = () => {
                                 <tr
                                   key={`${invoice.invoiceKey}-${index}`}
                                   onClick={() => togglePriorityInvoice(invoice.invoiceKey)}
-                                  className={`cursor-pointer border-b border-slate-100 transition-colors hover:bg-[#0B3B2E]/5 ${
+                                  className={`cursor-pointer border-b border-gray-100 transition-colors hover:bg-[#0B3B2E]/5 ${
                                     isSelected ? "bg-[#0B3B2E]/5" : index % 2 === 0 ? "bg-white" : "bg-slate-50/40"
                                   }`}
                                 >
@@ -1108,30 +1129,31 @@ const AddReceipt = () => {
                 </div>
               )}
 
-              {/* ── FOOTER ── */}
-              <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
-                <button
-                  onClick={() => navigate(backToPath)}
-                  className="rounded-xl border border-slate-300 px-4 py-2.5 text-xs font-bold uppercase tracking-[0.16em] text-slate-700 transition hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSubmit}
-                  disabled={!canSaveReceipt || isSaving}
-                  title={canSaveReceipt ? "Save receipt" : "You do not have permission to record receipts"}
-                  className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold uppercase tracking-[0.16em] text-white shadow-sm transition ${
-                    canSaveReceipt && !isSaving ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "cursor-not-allowed bg-gray-400"
-                  }`}
-                >
-                  {isSaving ? <FaSpinner className="animate-spin" /> : <FaSave />}
-                  {isSaving ? "Saving…" : "Save Receipt"}
-                </button>
-              </div>
+        </div>
 
-            </div>
+        {/* Sticky footer */}
+        <div className="flex-shrink-0 border-t border-slate-200 bg-[#F6FAF8] px-4 py-2.5">
+          <div className="flex items-center justify-end gap-2">
+            <button
+              onClick={() => navigate(backToPath)}
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={!canSaveReceipt || isSaving}
+              title={canSaveReceipt ? "Save receipt" : "You do not have permission to record receipts"}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-black text-white transition ${
+                canSaveReceipt && !isSaving ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "cursor-not-allowed bg-gray-400"
+              }`}
+            >
+              {isSaving ? <FaSpinner className="animate-spin" /> : <FaSave />}
+              {isSaving ? "Saving…" : "Save Receipt"}
+            </button>
           </div>
         </div>
+
       </div>
     </DashboardLayout>
   );

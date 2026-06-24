@@ -336,13 +336,13 @@ const RentalAgedAnalysisReport = () => {
               <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
                 <div className="relative shrink-0">
                   <FaFilter className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-orange-500" />
-                  <input value={filters.search} onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Tenant, property, unit" className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500" />
+                  <input value={filters.search} onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Tenant, property, unit" className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </div>
-                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-orange-500">
+                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
                   <option value="all">All properties</option>
                   {properties.map((property) => <option key={property._id} value={property._id}>{property.propertyName || property.name}</option>)}
                 </select>
-                <select value={filters.category} onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-orange-500">
+                <select value={filters.category} onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
                   <option value="all">All charges</option>
                   <option value="RENT_CHARGE">Rent only</option>
                   <option value="UTILITY_CHARGE">Utility only</option>
@@ -357,7 +357,7 @@ const RentalAgedAnalysisReport = () => {
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto">
-              <table className="min-w-full table-fixed text-xs">
+              <table className="min-w-full table-fixed text-[11px] border-collapse">
                 <colgroup>
                   <col className="w-[18%]" />
                   <col className="w-[18%]" />
@@ -372,12 +372,12 @@ const RentalAgedAnalysisReport = () => {
                 </colgroup>
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className="bg-[#0B3B2E] text-white">
-                    {['Tenant', 'Property', 'Unit', 'Current', '1-30', '31-60', '61-90', '90+', 'Total', 'Oldest Due'].map((header) => {
+                    {['Tenant', 'Property', 'Unit', 'Current', '1-30', '31-60', '61-90', '90+', 'Total', 'Oldest Due'].map((header, i, arr) => {
                       const isNumeric = ['Current', '1-30', '31-60', '61-90', '90+', 'Total'].includes(header);
                       return (
                         <th
                           key={header}
-                          className={`whitespace-nowrap px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] ${isNumeric ? 'text-right' : 'text-left'}`}
+                          className={`whitespace-nowrap px-2 py-1 font-bold ${isNumeric ? 'text-right' : 'text-left'} ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}
                         >
                           {header}
                         </th>
@@ -387,19 +387,19 @@ const RentalAgedAnalysisReport = () => {
                 </thead>
                 <tbody>
                   {filteredRows.length === 0 ? (
-                    <tr><td colSpan={10} className="px-2 py-4 text-center text-xs text-slate-500">No aged receivables found for the current filters.</td></tr>
-                  ) : paginatedRows.map((row) => (
-                    <tr key={row.tenantId} className="border-t border-slate-200 hover:bg-slate-50/80">
-                      <td className="px-2 py-1.5 font-semibold text-slate-900">{row.tenantName}</td>
-                      <td className="px-2 py-1.5 text-slate-700">{row.propertyName}</td>
-                      <td className="px-2 py-1.5 text-slate-700">{row.unitNumber}</td>
-                      <td className="px-2 py-1.5 text-right font-semibold text-emerald-700">{formatMoney(row.current)}</td>
-                      <td className="px-2 py-1.5 text-right font-semibold text-amber-600">{formatMoney(row.days30)}</td>
-                      <td className="px-2 py-1.5 text-right font-semibold text-orange-600">{formatMoney(row.days60)}</td>
-                      <td className="px-2 py-1.5 text-right font-semibold text-red-500">{formatMoney(row.days90)}</td>
-                      <td className="px-2 py-1.5 text-right font-semibold text-red-700">{formatMoney(row.days90Plus)}</td>
-                      <td className="px-2 py-1.5 text-right font-black text-slate-900">{formatMoney(row.total)}</td>
-                      <td className="px-2 py-1.5 text-slate-700">{row.oldestDueDate ? new Date(row.oldestDueDate).toLocaleDateString() : '-'}</td>
+                    <tr><td colSpan={10} className="px-2 py-4 text-center text-slate-500">No aged receivables found for the current filters.</td></tr>
+                  ) : paginatedRows.map((row, i) => (
+                    <tr key={row.tenantId} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                      <td className="px-2 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.tenantName}</td>
+                      <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{row.propertyName}</td>
+                      <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{row.unitNumber}</td>
+                      <td className="px-2 py-1 border-r border-gray-100 text-right font-semibold text-emerald-700">{formatMoney(row.current)}</td>
+                      <td className="px-2 py-1 border-r border-gray-100 text-right font-semibold text-amber-600">{formatMoney(row.days30)}</td>
+                      <td className="px-2 py-1 border-r border-gray-100 text-right font-semibold text-orange-600">{formatMoney(row.days60)}</td>
+                      <td className="px-2 py-1 border-r border-gray-100 text-right font-semibold text-red-500">{formatMoney(row.days90)}</td>
+                      <td className="px-2 py-1 border-r border-gray-100 text-right font-semibold text-red-700">{formatMoney(row.days90Plus)}</td>
+                      <td className="px-2 py-1 border-r border-gray-100 text-right font-black text-slate-900">{formatMoney(row.total)}</td>
+                      <td className="px-2 py-1 text-slate-700">{row.oldestDueDate ? new Date(row.oldestDueDate).toLocaleDateString() : '-'}</td>
                     </tr>
                   ))}
                 </tbody>

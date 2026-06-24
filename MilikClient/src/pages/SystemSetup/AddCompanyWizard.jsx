@@ -144,8 +144,8 @@ const Field = ({ label, required, children, span2 }) => (
   </label>
 );
 
-const inputCls = "mt-0.5 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10";
-const selectCls = "mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10";
+const inputCls = "mt-0.5 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+const selectCls = "mt-0.5 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
 
 // ─── Card header strip ────────────────────────────────────────────────────────
 

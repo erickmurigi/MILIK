@@ -466,42 +466,42 @@ export default function PayrollPeriodDetail() {
                 </div>
               ) : (
                 <div className="print-card overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                  <table className="min-w-full text-xs">
+                  <table className="min-w-full text-[11px] border-collapse">
                     <thead>
                       <tr className="bg-[#0B3B2E] text-white">
-                        <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-widest">Employee</th>
-                        <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Basic</th>
-                        <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Gross</th>
-                        <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">PAYE</th>
-                        <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">SHA</th>
-                        <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">NSSF</th>
-                        <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">AHL</th>
-                        <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Net Pay</th>
-                        <th className="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest">Status</th>
-                        <th className="px-3 py-2.5 text-right text-[10px] font-black uppercase tracking-widest">Payslip</th>
-                        {isDraft && <th className="px-3 py-2.5 print-hide" />}
+                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Employee</th>
+                        <th className="px-3 py-1 text-right font-bold border-r border-white/10">Basic</th>
+                        <th className="px-3 py-1 text-right font-bold border-r border-white/10">Gross</th>
+                        <th className="px-3 py-1 text-right font-bold border-r border-white/10">PAYE</th>
+                        <th className="px-3 py-1 text-right font-bold border-r border-white/10">SHA</th>
+                        <th className="px-3 py-1 text-right font-bold border-r border-white/10">NSSF</th>
+                        <th className="px-3 py-1 text-right font-bold border-r border-white/10">AHL</th>
+                        <th className="px-3 py-1 text-right font-bold border-r border-white/10">Net Pay</th>
+                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
+                        <th className="px-3 py-1 text-right font-bold border-r border-white/10">Payslip</th>
+                        {isDraft && <th className="px-3 py-1 print-hide" />}
                       </tr>
                     </thead>
                     <tbody>
                       {payslips.map((ps, idx) => (
-                        <tr key={ps._id} className={`border-t border-slate-100 hover:bg-slate-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
-                          <td className="px-4 py-2.5">
+                        <tr key={ps._id} className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                          <td className="px-3 py-1 border-r border-gray-100">
                             <div className="font-black text-slate-900">{ps.snapshot.name}</div>
                             <div className="text-[10px] text-slate-400">{ps.snapshot.employeeNumber} · {ps.snapshot.department || '—'}</div>
                           </td>
-                          <td className="px-3 py-2.5 text-right text-slate-700">{fmtKES(ps.basicSalary)}</td>
-                          <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{fmtKES(ps.grossSalary)}</td>
-                          <td className="px-3 py-2.5 text-right text-rose-600">{fmtKES(ps.paye)}</td>
-                          <td className="px-3 py-2.5 text-right text-rose-600">{fmtKES(ps.nhif)}</td>
-                          <td className="px-3 py-2.5 text-right text-rose-600">{fmtKES(ps.nssf)}</td>
-                          <td className="px-3 py-2.5 text-right text-rose-600">{fmtKES(ps.ahl)}</td>
-                          <td className="px-3 py-2.5 text-right font-black text-emerald-700">{fmtKES(ps.netSalary)}</td>
-                          <td className="px-3 py-2.5">
-                            <span className={`rounded-full border px-2 py-0.5 text-[9px] font-black ${STATUS_STYLE[ps.status] || STATUS_STYLE.Draft}`}>
+                          <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-700">{fmtKES(ps.basicSalary)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-900">{fmtKES(ps.grossSalary)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-right text-rose-600">{fmtKES(ps.paye)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-right text-rose-600">{fmtKES(ps.nhif)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-right text-rose-600">{fmtKES(ps.nssf)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-right text-rose-600">{fmtKES(ps.ahl)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-emerald-700">{fmtKES(ps.netSalary)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100">
+                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${STATUS_STYLE[ps.status] || STATUS_STYLE.Draft}`}>
                               {ps.status}
                             </span>
                           </td>
-                          <td className="px-3 py-2.5 text-right print-hide">
+                          <td className="px-3 py-1 border-r border-gray-100 text-right print-hide">
                             <button
                               onClick={() => navigate(`/hr/payroll/${periodId}/payslip/${ps._id}`)}
                               className="inline-flex items-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-black text-indigo-700 hover:bg-indigo-100"
@@ -510,7 +510,7 @@ export default function PayrollPeriodDetail() {
                             </button>
                           </td>
                           {isDraft && (
-                            <td className="px-2 py-2.5 print-hide">
+                            <td className="px-2 py-1 print-hide">
                               <button
                                 onClick={() => setAdjustTarget(ps)}
                                 title="Add bonus / manual adjustment"
@@ -525,14 +525,14 @@ export default function PayrollPeriodDetail() {
                     </tbody>
                     <tfoot>
                       <tr className="border-t-2 border-slate-300 bg-slate-50">
-                        <td className="px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500">TOTALS</td>
-                        <td className="px-3 py-2.5 text-right text-[11px] font-black text-slate-700">{fmtKES(period.totalBasic)}</td>
-                        <td className="px-3 py-2.5 text-right text-[11px] font-black text-slate-900">{fmtKES(period.totalGross)}</td>
-                        <td className="px-3 py-2.5 text-right text-[11px] font-black text-rose-700">{fmtKES(period.totalPAYE)}</td>
-                        <td className="px-3 py-2.5 text-right text-[11px] font-black text-rose-700">{fmtKES(period.totalNHIF)}</td>
-                        <td className="px-3 py-2.5 text-right text-[11px] font-black text-rose-700">{fmtKES(period.totalNSSF)}</td>
-                        <td className="px-3 py-2.5 text-right text-[11px] font-black text-rose-700">{fmtKES(period.totalAHL)}</td>
-                        <td className="px-3 py-2.5 text-right text-[11px] font-black text-emerald-700">{fmtKES(period.totalNet)}</td>
+                        <td className="px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-500">TOTALS</td>
+                        <td className="px-3 py-1.5 text-right font-black text-slate-700">{fmtKES(period.totalBasic)}</td>
+                        <td className="px-3 py-1.5 text-right font-black text-slate-900">{fmtKES(period.totalGross)}</td>
+                        <td className="px-3 py-1.5 text-right font-black text-rose-700">{fmtKES(period.totalPAYE)}</td>
+                        <td className="px-3 py-1.5 text-right font-black text-rose-700">{fmtKES(period.totalNHIF)}</td>
+                        <td className="px-3 py-1.5 text-right font-black text-rose-700">{fmtKES(period.totalNSSF)}</td>
+                        <td className="px-3 py-1.5 text-right font-black text-rose-700">{fmtKES(period.totalAHL)}</td>
+                        <td className="px-3 py-1.5 text-right font-black text-emerald-700">{fmtKES(period.totalNet)}</td>
                         <td colSpan={isDraft ? 3 : 2} />
                       </tr>
                     </tfoot>

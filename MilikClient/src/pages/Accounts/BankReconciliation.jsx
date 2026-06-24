@@ -6,6 +6,7 @@ import {
   FaPlus, FaSearch, FaSyncAlt, FaTimes, FaTrash, FaUndo,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import AppSelect from "../../components/common/AppSelect";
 import {
   getBankReconciliationAccounts, getReconciliationEntries,
   getReconciliations, createReconciliation, saveReconciliation,
@@ -337,61 +338,60 @@ td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
             <div className="shrink-0 border-b border-slate-200 bg-slate-50 px-4 py-3">
               <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-500">New Reconciliation</p>
               <div className="flex flex-wrap items-end gap-3">
-                <div className="flex flex-col gap-0.5">
-                  <label className="text-[9px] font-semibold uppercase text-slate-400">Account</label>
-                  <select
-                    value={formAccount} onChange={(e) => setFormAccount(e.target.value)}
-                    className="h-7 min-w-[200px] rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                  >
-                    <option value="">Select account…</option>
-                    {accounts.map((a) => (
-                      <option key={a._id} value={a._id}>{a.code} — {a.name}</option>
-                    ))}
-                  </select>
+                <div className="flex flex-col gap-0.5 min-w-[220px]">
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Account</label>
+                  <AppSelect
+                    value={formAccount}
+                    onChange={(v) => setFormAccount(v ?? "")}
+                    options={accounts.map((a) => ({ value: a._id, label: `${a.code} — ${a.name}` }))}
+                    placeholder="Select account…"
+                    searchable
+                    size="sm"
+                  />
                 </div>
                 <div className="flex flex-col gap-0.5">
-                  <label className="text-[9px] font-semibold uppercase text-slate-400">Period From</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Period From</label>
                   <input type="date" value={formFrom} onChange={(e) => setFormFrom(e.target.value)}
-                    className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    className="rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
                 <div className="flex flex-col gap-0.5">
-                  <label className="text-[9px] font-semibold uppercase text-slate-400">Period To</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Period To</label>
                   <input type="date" value={formTo} onChange={(e) => setFormTo(e.target.value)}
-                    className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    className="rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
                 <div className="flex flex-col gap-0.5">
-                  <label className="text-[9px] font-semibold uppercase text-slate-400">Statement Opening Bal (KES)</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Opening Bal (KES)</label>
                   <input type="number" value={formOpenBal} onChange={(e) => setFormOpenBal(e.target.value)}
                     placeholder="0.00"
-                    className="h-7 w-36 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    className="w-32 rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
                 <div className="flex flex-col gap-0.5">
-                  <label className="text-[9px] font-semibold uppercase text-slate-400">Statement Closing Bal (KES) *</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Closing Bal (KES) <span className="text-red-500">*</span></label>
                   <input type="number" value={formCloseBal} onChange={(e) => setFormCloseBal(e.target.value)}
                     placeholder="0.00"
-                    className="h-7 w-36 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    className="w-32 rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
                 <div className="flex flex-col gap-0.5">
-                  <label className="text-[9px] font-semibold uppercase text-slate-400">Notes</label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Notes</label>
                   <input type="text" value={formNotes} onChange={(e) => setFormNotes(e.target.value)}
                     placeholder="Optional notes…"
-                    className="h-7 w-48 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    className="w-44 rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
                 <button
                   onClick={handleCreate} disabled={creating}
-                  className="flex h-7 items-center gap-1.5 rounded bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60"
                 >
                   {creating ? <FaSyncAlt size={9} className="animate-spin" /> : <FaCheck size={9} />}
                   {creating ? "Creating…" : "Start"}
                 </button>
                 <button
                   onClick={() => setShowNewForm(false)}
-                  className="flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-500 hover:bg-slate-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
                 >
                   <FaTimes size={9} /> Cancel
                 </button>
@@ -411,51 +411,51 @@ td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
                 <p className="mt-1 text-xs">Click "New Reconciliation" to get started</p>
               </div>
             ) : (
-              <table className="min-w-full text-xs">
+              <table className="min-w-full text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10">
-                  <tr className="border-b-2 border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                    <th className="px-4 py-2.5 text-left">Account</th>
-                    <th className="px-4 py-2.5 text-left">Period</th>
-                    <th className="px-4 py-2.5 text-right">Statement Balance (KES)</th>
-                    <th className="px-4 py-2.5 text-right">Difference (KES)</th>
-                    <th className="px-4 py-2.5 text-center">Status</th>
-                    <th className="px-4 py-2.5 text-left">Notes</th>
-                    <th className="px-4 py-2.5" />
+                  <tr className="bg-[#0B3B2E] text-white">
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Account</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Period</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Statement Balance (KES)</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Difference (KES)</th>
+                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Notes</th>
+                    <th className="px-3 py-1 font-bold" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {history.map((r) => (
+                <tbody>
+                  {history.map((r, idx) => (
                     <tr
                       key={r._id}
-                      className="cursor-pointer hover:bg-slate-50/70"
+                      className={`border-b border-gray-100 cursor-pointer ${idx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}
                       onClick={() => openRecon(r)}
                     >
-                      <td className="px-4 py-2.5 font-semibold text-slate-800">
+                      <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">
                         <span className="font-mono text-slate-400 mr-1">{r.accountCode || r.account?.code}</span>
                         {r.accountName || r.account?.name}
                       </td>
-                      <td className="px-4 py-2.5 text-slate-500">
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-500">
                         {fmtDate(r.periodStart)} — {fmtDate(r.periodEnd)}
                       </td>
-                      <td className="px-4 py-2.5 text-right font-mono font-semibold text-slate-700">
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold text-slate-700">
                         {fmt(r.statementClosingBalance)}
                       </td>
-                      <td className={`px-4 py-2.5 text-right font-mono font-semibold ${Math.abs(r.difference) < 0.005 ? "text-emerald-600" : "text-red-600"}`}>
+                      <td className={`px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold ${Math.abs(r.difference) < 0.005 ? "text-emerald-600" : "text-red-600"}`}>
                         {fmt(r.difference)}
                       </td>
-                      <td className="px-4 py-2.5 text-center">
+                      <td className="px-3 py-1 border-r border-gray-100 text-center">
                         {r.status === "reconciled" ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
                             <FaLock size={8} /> Finalised
                           </span>
                         ) : (
-                          <span className="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600">
+                          <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600">
                             Draft
                           </span>
                         )}
                       </td>
-                      <td className="max-w-[160px] truncate px-4 py-2.5 text-slate-400" title={r.notes}>{r.notes || "—"}</td>
-                      <td className="px-4 py-2.5 text-right">
+                      <td className="max-w-[160px] truncate px-3 py-1 border-r border-gray-100 text-slate-400" title={r.notes}>{r.notes || "—"}</td>
+                      <td className="px-3 py-1 text-right">
                         {r.status !== "reconciled" && (
                           <button
                             onClick={(e) => handleDelete(r._id, e)}
@@ -516,7 +516,7 @@ td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
             <input
               type="text" value={search} onChange={(e) => setSearch(e.target.value)}
               placeholder="Filter entries…"
-              className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs text-slate-700 placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs text-slate-700 placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
             />
           </div>
 
@@ -583,10 +583,10 @@ td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
               No ledger entries found for this account and period
             </div>
           ) : (
-            <table className="min-w-full text-xs">
+            <table className="min-w-full text-[11px] border-collapse">
               <thead className="sticky top-0 z-10">
-                <tr className="border-b-2 border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                  <th className="px-3 py-2.5 text-center">
+                <tr className="bg-[#0B3B2E] text-white">
+                  <th className="px-3 py-1 text-center font-bold border-r border-white/10">
                     {!isLocked && (
                       <button
                         onClick={toggleAll}
@@ -597,16 +597,16 @@ td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
                       </button>
                     )}
                   </th>
-                  <th className="px-3 py-2.5 text-left">Date</th>
-                  <th className="px-3 py-2.5 text-left">Description / Category</th>
-                  <th className="px-3 py-2.5 text-left">Type</th>
-                  <th className="px-3 py-2.5 text-right text-emerald-700">Debit (In)</th>
-                  <th className="px-3 py-2.5 text-right text-red-600">Credit (Out)</th>
-                  <th className="px-3 py-2.5 text-center">Cleared</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Description / Category</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
+                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Debit (In)</th>
+                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Credit (Out)</th>
+                  <th className="px-3 py-1 text-center font-bold">Cleared</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredEntries.map((e) => {
+              <tbody>
+                {filteredEntries.map((e, idx) => {
                   const id = String(e._id);
                   const isClear = cleared.has(id);
                   const amt = Number(e.amount || 0);
@@ -614,9 +614,9 @@ td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
                     <tr
                       key={id}
                       onClick={() => !isLocked && toggleEntry(id)}
-                      className={`transition-colors ${isLocked ? "" : "cursor-pointer"} ${isClear ? "bg-emerald-50/40" : "hover:bg-slate-50/60"}`}
+                      className={`border-b border-gray-100 transition-colors ${isLocked ? "" : "cursor-pointer"} ${isClear ? "bg-emerald-50/40" : idx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}
                     >
-                      <td className="px-3 py-2 text-center">
+                      <td className="px-3 py-1 border-r border-gray-100 text-center">
                         <div
                           className={`mx-auto flex h-4 w-4 items-center justify-center rounded border ${
                             isClear ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 bg-white text-transparent"
@@ -625,18 +625,18 @@ td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
                           <FaCheck size={8} />
                         </div>
                       </td>
-                      <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{fmtDate(e.transactionDate)}</td>
-                      <td className="max-w-[240px] truncate px-3 py-2 text-slate-700" title={e.notes}>{e.notes || "—"}</td>
-                      <td className="px-3 py-2 text-slate-400 capitalize">{(e.sourceTransactionType || "").replace(/_/g, " ")}</td>
-                      <td className="px-3 py-2 text-right font-mono font-semibold">
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-500 whitespace-nowrap">{fmtDate(e.transactionDate)}</td>
+                      <td className="max-w-[240px] truncate px-3 py-1 border-r border-gray-100 text-slate-700" title={e.notes}>{e.notes || "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-400 capitalize">{(e.sourceTransactionType || "").replace(/_/g, " ")}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold">
                         {e.direction === "debit" ? <span className="text-emerald-700">{fmt(amt)}</span> : <span className="text-slate-200">—</span>}
                       </td>
-                      <td className="px-3 py-2 text-right font-mono font-semibold">
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold">
                         {e.direction === "credit" ? <span className="text-red-600">{fmt(amt)}</span> : <span className="text-slate-200">—</span>}
                       </td>
-                      <td className="px-3 py-2 text-center">
+                      <td className="px-3 py-1 text-center">
                         {isClear && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">
+                          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">
                             <FaCheck size={7} /> Cleared
                           </span>
                         )}

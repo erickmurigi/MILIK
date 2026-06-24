@@ -8,9 +8,10 @@ import { getProperties, updateProperty } from '../../redux/propertyRedux';
 import { adminRequests } from '../../utils/requestMethods';
 import { selectCurrentCompany, selectCurrentUser } from '../../redux/selectors';
 import { hasCompanyPermission } from '../../utils/permissions';
+import AppSelect from '../../components/common/AppSelect';
 
 const CARD = 'rounded-2xl border border-slate-200 bg-white shadow-sm';
-const INPUT = 'w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100';
+const INPUT = 'w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20';
 const SELECT = INPUT;
 const GREEN = 'bg-[#0B3B2E]';
 const GREEN_HOVER = 'hover:bg-[#0A3127]';
@@ -302,20 +303,16 @@ const PropertyCommissionSettings = () => {
           </div>
 
           <div className={`${CARD} p-5`}>
-            <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-700">Select Property</label>
-            <select
+            <label className="mb-0.5 block text-xs font-semibold text-slate-700">Select Property</label>
+            <AppSelect
               value={selectedPropertyId}
-              onChange={(event) => setSelectedPropertyId(event.target.value)}
-              className={SELECT}
+              onChange={(v) => setSelectedPropertyId(v ?? "")}
+              options={properties.map((p) => ({ value: p._id, label: `${p.propertyCode} - ${p.propertyName}` }))}
+              placeholder="-- Select Property --"
+              searchable
               disabled={loading}
-            >
-              <option value="">-- Select Property --</option>
-              {properties.map((property) => (
-                <option key={property._id} value={property._id}>
-                  {property.propertyCode} - {property.propertyName}
-                </option>
-              ))}
-            </select>
+              size="sm"
+            />
           </div>
 
           {selectedProperty && (
@@ -348,7 +345,7 @@ const PropertyCommissionSettings = () => {
 
                   <div className="mt-5 space-y-4">
                     <div>
-                      <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-700">Commission Mode</label>
+                      <label className="mb-0.5 block text-xs font-semibold text-slate-700">Commission Mode</label>
                       <select name="commissionPaymentMode" value={formData.commissionPaymentMode} onChange={handleFieldChange} className={SELECT}>
                         <option value="percentage">Percentage (%)</option>
                         <option value="fixed">Fixed Amount</option>
@@ -357,7 +354,7 @@ const PropertyCommissionSettings = () => {
                     </div>
 
                     <div>
-                      <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-700">Commission Percentage</label>
+                      <label className="mb-0.5 block text-xs font-semibold text-slate-700">Commission Percentage</label>
                       <input
                         type="number"
                         name="commissionPercentage"
@@ -373,7 +370,7 @@ const PropertyCommissionSettings = () => {
 
                     {(formData.commissionPaymentMode === 'fixed' || formData.commissionPaymentMode === 'both') && (
                       <div>
-                        <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-700">Fixed Commission Amount</label>
+                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">Fixed Commission Amount</label>
                         <input
                           type="number"
                           name="commissionFixedAmount"
@@ -387,7 +384,7 @@ const PropertyCommissionSettings = () => {
                     )}
 
                     <div>
-                      <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-700">Commission Recognition Basis</label>
+                      <label className="mb-0.5 block text-xs font-semibold text-slate-700">Commission Recognition Basis</label>
                       <select name="commissionRecognitionBasis" value={formData.commissionRecognitionBasis} onChange={handleFieldChange} className={SELECT}>
                         <option value="received">Collections Received</option>
                         <option value="invoiced">Rent Expected (Invoiced / Accrual)</option>
@@ -396,7 +393,7 @@ const PropertyCommissionSettings = () => {
                     </div>
 
                     <div>
-                      <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-700">Tenants Pay To</label>
+                      <label className="mb-0.5 block text-xs font-semibold text-slate-700">Tenants Pay To</label>
                       <select name="tenantsPaysTo" value={formData.tenantsPaysTo} onChange={handleFieldChange} className={SELECT}>
                         <option value="propertyManager">Property Manager</option>
                         <option value="landlord">Landlord</option>
@@ -404,7 +401,7 @@ const PropertyCommissionSettings = () => {
                     </div>
 
                     <div>
-                      <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-700">Deposit Held By</label>
+                      <label className="mb-0.5 block text-xs font-semibold text-slate-700">Deposit Held By</label>
                       <select name="depositHeldBy" value={formData.depositHeldBy} onChange={handleFieldChange} className={SELECT}>
                         <option value="propertyManager">Property Manager</option>
                         <option value="landlord">Landlord</option>
@@ -412,7 +409,7 @@ const PropertyCommissionSettings = () => {
                     </div>
 
                     <div>
-                      <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-700">Commissionable Statement Categories</label>
+                      <label className="mb-0.5 block text-xs font-semibold text-slate-700">Commissionable Statement Categories</label>
                       <p className="mb-3 text-xs leading-5 text-slate-500">
                         Select the normalized landlord-statement categories that should contribute to the commission base.
                         Rent stays available for backward compatibility, while active utility and service-charge types come from company operational settings.
@@ -474,7 +471,7 @@ const PropertyCommissionSettings = () => {
                     </label>
 
                     <div>
-                      <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-700">Tax Code</label>
+                      <label className="mb-0.5 block text-xs font-semibold text-slate-700">Tax Code</label>
                       <select
                         name="taxCodeKey"
                         value={formData.commissionTaxSettings.taxCodeKey}
@@ -491,7 +488,7 @@ const PropertyCommissionSettings = () => {
                     </div>
 
                     <div>
-                      <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-700">Tax Mode</label>
+                      <label className="mb-0.5 block text-xs font-semibold text-slate-700">Tax Mode</label>
                       <select
                         name="taxMode"
                         value={formData.commissionTaxSettings.taxMode}
@@ -506,7 +503,7 @@ const PropertyCommissionSettings = () => {
                     </div>
 
                     <div>
-                      <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-700">Rate Override (Optional)</label>
+                      <label className="mb-0.5 block text-xs font-semibold text-slate-700">Rate Override (Optional)</label>
                       <input
                         type="number"
                         name="rateOverride"
@@ -539,7 +536,7 @@ const PropertyCommissionSettings = () => {
                 <button
                   type="button"
                   onClick={() => setFormData(selectedProperty ? normalizePropertyForm(selectedProperty) : defaultForm)}
-                  className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
                 >
                   Reset
                 </button>
@@ -547,7 +544,7 @@ const PropertyCommissionSettings = () => {
                 <button
                   type="submit"
                   disabled={saving}
-                  className={`inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white transition ${GREEN} ${GREEN_HOVER} disabled:opacity-60`}
+                  className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-black text-white disabled:opacity-60 ${GREEN} ${GREEN_HOVER}`}
                 >
                   <FaSave /> {saving ? 'Saving...' : 'Save Commission Settings'}
                 </button>

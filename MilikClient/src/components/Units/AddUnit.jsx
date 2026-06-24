@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useParams } from "react-router-dom";
 import DashboardLayout from "../Layout/DashboardLayout";
-import { FaSave, FaTimes, FaChevronDown, FaSpinner, FaPlus, FaTrash, FaCalculator } from "react-icons/fa";
+import { FaSave, FaTimes, FaChevronDown, FaSpinner, FaPlus, FaTrash, FaCalculator, FaArrowLeft } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { createUnit, getUnits, updateUnit } from "../../redux/unitRedux";
 import { getProperties } from "../../redux/propertyRedux";
@@ -11,8 +11,7 @@ import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "..
 import { adminRequests } from "../../utils/requestMethods";
 import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
 
-// Orange theme constants
-const MILIK_ORANGE_BG = "bg-orange-600";
+const MILIK_ORANGE_BG = "bg-[#0B3B2E]";
 const normalizeBillingPeriodKey = (value = "") =>
   String(value || "")
     .trim()
@@ -42,9 +41,9 @@ const canonicalBillingPeriodKey = (value = "") => {
   return BILLING_PERIOD_ALIASES[normalized] || normalized || "monthly";
 };
 
-const MILIK_ORANGE_BG_HOVER = "hover:bg-orange-700";
-const MILIK_ORANGE_RING = "focus:ring-orange-500/30";
-const MILIK_ORANGE_BORDER_FOCUS = "focus:border-orange-600";
+const MILIK_ORANGE_BG_HOVER = "hover:bg-[#0A3127]";
+const MILIK_ORANGE_RING = "";
+const MILIK_ORANGE_BORDER_FOCUS = "";
 
 /**
  * Custom dropdown with orange highlighting
@@ -91,7 +90,7 @@ function MilikSelect({
   return (
     <div className={`${className} relative`} ref={wrapRef}>
       {label ? (
-        <label className="block text-sm font-bold text-slate-800 mb-1 tracking-tight">
+        <label className="mb-0.5 block text-xs font-semibold text-slate-700">
           {label} {required ? <span className="text-red-500">*</span> : ""}
         </label>
       ) : null}
@@ -101,18 +100,17 @@ function MilikSelect({
         disabled={disabled}
         onClick={() => setOpen((s) => !s)}
         className={[
-          "w-full h-10 px-3 rounded-md bg-white text-slate-900 shadow-sm border",
-          error ? "border-red-500" : "border-slate-300",
-          "transition-all duration-200 ease-out hover:border-slate-400",
-          `focus:outline-none focus:ring-2 ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`,
+          "w-full h-8 px-3 rounded border bg-white text-slate-900",
+          error ? "border-red-500" : "border-slate-200",
+          "transition focus:outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20",
           "flex items-center justify-between gap-2",
           disabled ? "opacity-50 cursor-not-allowed" : "",
         ].join(" ")}
       >
-        <span className="text-sm font-semibold truncate">
+        <span className="text-xs font-semibold truncate">
           {selectedItem ? getLabel(selectedItem) : <span className="text-slate-400">{placeholder}</span>}
         </span>
-        <FaChevronDown className="text-slate-600" />
+        <FaChevronDown className="text-slate-600" size={10} />
       </button>
 
       {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
@@ -135,10 +133,10 @@ function MilikSelect({
                       setOpen(false);
                     }}
                     className={[
-                      "w-full text-left px-3 py-2 text-sm font-semibold transition-colors",
+                      "w-full text-left px-3 py-1.5 text-xs font-semibold transition-colors",
                       isSelected
                         ? `${MILIK_ORANGE_BG} text-white`
-                        : "text-slate-800 hover:bg-orange-50",
+                        : "text-slate-800 hover:bg-slate-50",
                     ].join(" ")}
                   >
                     {getLabel(it)}
@@ -367,9 +365,9 @@ const AddUnit = () => {
 
   // Input classes for consistency
   const inputClass =
-    "w-full px-3 py-2 text-sm border border-slate-300 rounded-md shadow-sm transition-all duration-200 ease-out hover:border-slate-400 focus:outline-none focus:ring-2";
-  
-  const labelClass = "block text-sm font-bold text-slate-800 mb-1 tracking-tight";
+    "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+
+  const labelClass = "mb-0.5 block text-xs font-semibold text-slate-700";
 
   const uppercaseUnitFields = new Set(["unitNumber", "description", "amenities"]);
 
@@ -560,6 +558,14 @@ const AddUnit = () => {
     navigate(-1);
   };
 
+  const handleReset = () => {
+    if (isEditMode) return;
+    setFormData({ unitNumber: "", property: "", unitType: "", areaSqFt: "", rent: "", deposit: "", status: "vacant", description: "", amenities: "", utilities: [], billingFrequency: "monthly" });
+    setFieldErrors({});
+    setGeneralError("");
+    clearDraftState();
+  };
+
   const unitTypes = [
     { value: "studio", label: "Studio" },
     { value: "1bed", label: "1 Bedroom" },
@@ -589,19 +595,27 @@ const AddUnit = () => {
   }, [formData.status, isEditMode]);
 
   return (
-    <DashboardLayout>
-      <div className="h-[calc(100vh-8rem)] min-h-0 w-full max-w-none overflow-y-auto overscroll-contain bg-slate-50 p-3 pb-28 sm:p-4 lg:p-5">
-        {/* Header */}
-        <div className="mb-4 flex flex-col gap-1 lg:flex-row lg:items-end lg:justify-between">
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Unit Details</h1>
-          <p className="text-sm text-slate-600">
-            {isEditMode ? "Edit unit information" : "Create a new unit for a property"}
-          </p>
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
+        {/* Sticky dark header */}
+        <div className="flex-shrink-0 bg-[#0B3B2E] px-4 py-2.5">
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={handleCancel} className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#B7C9C0] hover:text-white transition">
+              <FaArrowLeft /> Back
+            </button>
+            <div className="h-4 w-px bg-[#2A5C4A]" />
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B7C9C0]">Units</div>
+              <h1 className="text-sm font-black text-white leading-none">{isEditMode ? "Edit Unit" : "New Unit"}</h1>
+            </div>
+          </div>
         </div>
 
+        {/* Scrollable content */}
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {/* Form Card */}
-        <div className="bg-white border border-slate-200 rounded-lg shadow-sm">
-          <form onSubmit={handleSubmit} className="p-4 sm:p-5 grid grid-cols-1 xl:grid-cols-12 gap-4">
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <form id="unit-form" onSubmit={handleSubmit} className="p-3 grid grid-cols-1 xl:grid-cols-12 gap-3">
             {/* Property Selection */}
             <div className="xl:col-span-5">
               <MilikSelect
@@ -619,22 +633,22 @@ const AddUnit = () => {
             </div>
 
             {selectedProperty && (
-              <div className="xl:col-span-7 rounded-lg border border-orange-200 bg-orange-50 p-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+              <div className="xl:col-span-7 rounded-lg border border-[#0B3B2E]/20 bg-[#0B3B2E]/5 p-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
                   <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-orange-700">Measurement Basis</div>
-                    <div className="mt-1 font-bold text-slate-900">{measurementLabel}</div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[#0B3B2E]/70">Measurement Basis</div>
+                    <div className="mt-0.5 text-xs font-bold text-slate-900">{measurementLabel}</div>
                   </div>
                   <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-orange-700">Default Rent Rate</div>
-                    <div className="mt-1 font-bold text-slate-900">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[#0B3B2E]/70">Default Rent Rate</div>
+                    <div className="mt-0.5 text-xs font-bold text-slate-900">
                       {Number(selectedProperty.rentPerMeasure || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       {" "}{selectedProperty.rentCurrency || "KES"} / {measurementLabel}
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-orange-700">Default Rent Deposit</div>
-                    <div className="mt-1 font-bold text-slate-900">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[#0B3B2E]/70">Default Rent Deposit</div>
+                    <div className="mt-0.5 text-xs font-bold text-slate-900">
                       {(() => {
                         const rentDeposit = (selectedProperty.securityDeposits || []).find(
                           (item) => String(item?.depositType || "").toLowerCase().includes("rent")
@@ -651,7 +665,7 @@ const AddUnit = () => {
             )}
 
             {/* Unit Number and Type */}
-            <div className="xl:col-span-12 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div className="xl:col-span-12 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
               <div>
                 <label className={labelClass}>
                   Unit Number <span className="text-red-500">*</span>
@@ -689,7 +703,7 @@ const AddUnit = () => {
             </div>
 
             {/* Area, Rent and Deposit */}
-            <div className="xl:col-span-12 grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="xl:col-span-12 grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-3">
               <div>
                 <label className={labelClass}>Area ({measurementLabel})</label>
                 <input
@@ -779,7 +793,7 @@ const AddUnit = () => {
                 <button
                   type="button"
                   onClick={addUtility}
-                  className="h-8 px-3 text-xs font-semibold bg-orange-600 hover:bg-orange-700 text-white rounded-md flex items-center gap-2 transition-colors"
+                  className="h-8 px-3 text-xs font-semibold bg-[#0B3B2E] hover:bg-[#0A3127] text-white rounded-md flex items-center gap-2 transition-colors"
                 >
                   <FaPlus /> Add Utility
                 </button>
@@ -833,7 +847,7 @@ const AddUnit = () => {
                               type="checkbox"
                               checked={util.isIncluded}
                               onChange={(e) => updateUtility(idx, "isIncluded", e.target.checked)}
-                              className="rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+                              className="rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]/30"
                               disabled={loading}
                             />
                             <span className="text-xs font-medium text-slate-700">Include in Rent</span>
@@ -859,9 +873,9 @@ const AddUnit = () => {
             </div>
 
             {/* Billing Calculation Summary */}
-            <div className="xl:col-span-5 bg-gradient-to-br from-orange-50 via-white to-slate-50 border-2 border-orange-200 rounded-lg p-4 space-y-4">
+            <div className="xl:col-span-5 bg-gradient-to-br from-[#0B3B2E]/5 via-white to-slate-50 border border-[#0B3B2E]/20 rounded-lg p-4 space-y-4">
               <h3 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                <FaCalculator className="text-orange-600" />
+                <FaCalculator className="text-[#0B3B2E]" />
                 Billing Calculation Summary
               </h3>
 
@@ -883,21 +897,21 @@ const AddUnit = () => {
                   <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
                     Utilities (Not in Rent)
                   </div>
-                  <div className="text-xl font-bold text-orange-600">
+                  <div className="text-xl font-bold text-[#0B3B2E]">
                     KES {monthlyUtilityBill.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </div>
                   <div className="text-xs text-slate-500 mt-2">Additional monthly charges</div>
                 </div>
 
                 {/* Total Monthly Bill */}
-                <div className="bg-gradient-to-br from-orange-500 to-orange-600 border border-orange-600 rounded-lg p-4 shadow-md">
-                  <div className="text-xs font-semibold text-orange-50 uppercase tracking-wide mb-1">
+                <div className="bg-gradient-to-br from-[#0B3B2E] to-[#0A3127] border border-[#0B3B2E] rounded-lg p-4 shadow-md">
+                  <div className="text-xs font-semibold text-white/70 uppercase tracking-wide mb-1">
                     Total Monthly Bill
                   </div>
                   <div className="text-xl font-bold text-white">
                     KES {totalMonthlyBill.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </div>
-                  <div className="text-xs text-orange-100 mt-2">Rent + utilities</div>
+                  <div className="text-xs text-white/50 mt-2">Rent + utilities</div>
                 </div>
               </div>
 
@@ -911,7 +925,7 @@ const AddUnit = () => {
                       onChange={(e) =>
                         setFormData((prev) => ({ ...prev, billingFrequency: e.target.value }))
                       }
-                      className={`w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-slate-900 font-semibold shadow-sm transition-all duration-200 hover:border-slate-400 focus:outline-none focus:ring-2 ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
+                      className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                       disabled={loading}
                     >
                       {billingPeriodOptions.map((period) => (
@@ -988,66 +1002,43 @@ const AddUnit = () => {
               />
             </div>
 
-            {/* Action Buttons */}
-            <div className="xl:col-span-12 flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
-              <button
-                type="button"
-                onClick={handleCancel}
-                disabled={loading}
-                className="px-5 py-2 text-sm font-semibold border border-slate-300 rounded-md bg-white hover:bg-slate-50 transition-colors disabled:opacity-50"
-              >
-                <FaTimes className="inline mr-2" />
-                Cancel
-              </button>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className={`px-5 py-2 text-sm font-semibold text-white rounded-md transition-colors disabled:opacity-50 ${MILIK_ORANGE_BG} ${MILIK_ORANGE_BG_HOVER}`}
-              >
-                {loading ? (
-                  <>
-                    <FaSpinner className="inline mr-2 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <FaSave className="inline mr-2" />
-                    Save Unit
-                  </>
-                )}
-              </button>
-            </div>
           </form>
         </div>
-      </div>
+        </div>
 
-      {/* Fixed Error Display - Bottom Left */}
-      {generalError && (
-        <div className="fixed bottom-4 left-4 z-50 max-w-md animate-in slide-in-from-left-5">
-          <div className="bg-red-50 border-l-4 border-red-500 rounded-md shadow-lg p-4">
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0">
-                <svg className="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="flex-1">
-                <h3 className="text-sm font-semibold text-red-800">Error</h3>
-                <p className="mt-1 text-sm text-red-700">{generalError}</p>
-              </div>
+        {/* Sticky footer */}
+        <div className="flex-shrink-0 border-t border-slate-200 bg-[#F6FAF8] px-4 py-2.5">
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={handleCancel}
+              disabled={loading}
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            {!isEditMode && (
               <button
-                onClick={() => setGeneralError("")}
-                className="flex-shrink-0 text-red-500 hover:text-red-700 transition-colors"
+                type="button"
+                onClick={handleReset}
+                disabled={loading}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
               >
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                </svg>
+                Reset
               </button>
-            </div>
+            )}
+            <button
+              type="submit"
+              form="unit-form"
+              disabled={loading}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white transition hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loading ? <FaSpinner className="animate-spin" /> : <FaSave />}
+              {loading ? "Saving…" : isEditMode ? "Update Unit" : "Save Unit"}
+            </button>
           </div>
         </div>
-      )}
+      </div>
     </DashboardLayout>
   );
 };

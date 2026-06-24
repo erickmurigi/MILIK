@@ -22,46 +22,46 @@ function LeaveTypeForm({ initial = BLANK, onSave, onCancel, saving }) {
     setF((p) => ({ ...p, [k]: v }));
   };
 
-  const inputCls = 'h-8 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]';
+  const inputCls = 'w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20';
 
   return (
     <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 space-y-3">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <div>
-          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Name *</label>
+          <label className="mb-0.5 block text-xs font-semibold text-slate-700">Name *</label>
           <input value={f.name} onChange={set('name')} className={inputCls} placeholder="e.g. Annual Leave" />
         </div>
         <div>
-          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Code</label>
+          <label className="mb-0.5 block text-xs font-semibold text-slate-700">Code</label>
           <input value={f.code} onChange={set('code')} className={inputCls} placeholder="AL" />
         </div>
         <div>
-          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Days / Year</label>
+          <label className="mb-0.5 block text-xs font-semibold text-slate-700">Days / Year</label>
           <input type="number" min="0" value={f.daysPerYear} onChange={set('daysPerYear')} className={inputCls} />
         </div>
         <div>
-          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Max Carry-Over (days)</label>
+          <label className="mb-0.5 block text-xs font-semibold text-slate-700">Max Carry-Over (days)</label>
           <input type="number" min="0" value={f.maxCarryover} onChange={set('maxCarryover')} className={inputCls} />
         </div>
         <div>
-          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Applicable To</label>
+          <label className="mb-0.5 block text-xs font-semibold text-slate-700">Applicable To</label>
           <select value={f.applicableTo} onChange={set('applicableTo')} className={inputCls}>
             <option>All</option><option>Permanent</option><option>Contract</option>
             <option>Casual</option><option>Intern</option>
           </select>
         </div>
         <div>
-          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Gender Restriction</label>
+          <label className="mb-0.5 block text-xs font-semibold text-slate-700">Gender Restriction</label>
           <select value={f.genderRestriction} onChange={set('genderRestriction')} className={inputCls}>
             <option>None</option><option>Male</option><option>Female</option>
           </select>
         </div>
         <div>
-          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Min. Service (days)</label>
+          <label className="mb-0.5 block text-xs font-semibold text-slate-700">Min. Service (days)</label>
           <input type="number" min="0" value={f.minServiceDays} onChange={set('minServiceDays')} className={inputCls} />
         </div>
         <div className="sm:col-span-2">
-          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Description</label>
+          <label className="mb-0.5 block text-xs font-semibold text-slate-700">Description</label>
           <input value={f.description} onChange={set('description')} className={inputCls} placeholder="Optional" />
         </div>
       </div>

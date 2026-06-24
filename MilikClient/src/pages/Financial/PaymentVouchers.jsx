@@ -552,7 +552,7 @@ const PaymentVouchers = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
+      <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
         <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col gap-2">
 
           {/* KPI Strip */}
@@ -581,13 +581,13 @@ const PaymentVouchers = () => {
                   value={filters.search}
                   onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
                   placeholder={isLandlordWorkspace ? "Voucher, narration, owner, property" : "Voucher, narration, landlord, property"}
-                  className="h-7 w-52 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#FF8C00]"
+                  className="h-7 w-52 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                 />
               </div>
               <select
                 value={filters.category}
                 onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))}
-                className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#FF8C00]"
+                className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
               >
                 <option value="all">All categories</option>
                 {categories.map((item) => (
@@ -599,7 +599,7 @@ const PaymentVouchers = () => {
               <select
                 value={filters.status}
                 onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#FF8C00]"
+                className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
               >
                 <option value="all">All statuses</option>
                 <option value="draft">Draft</option>
@@ -611,7 +611,7 @@ const PaymentVouchers = () => {
                 <select
                   value={filters.propertyId}
                   onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))}
-                  className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#FF8C00]"
+                  className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                 >
                   <option value="all">All properties</option>
                   {properties.map((property) => (
@@ -635,18 +635,18 @@ const PaymentVouchers = () => {
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
             <div className="min-h-0 flex-1 overflow-auto">
-              <table className="min-w-full text-xs">
+              <table className="min-w-full text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                   <tr>
-                    <th className="px-3 py-2 text-left"><button type="button" onClick={toggleSelectAll}>{selectedIds.length === filtered.length && filtered.length > 0 ? <FaCheck /> : <FaSquare />}</button></th>
-                    <th className="px-3 py-2 text-left">Voucher</th>
-                    <th className="px-3 py-2 text-left">Category</th>
-                    <th className="px-3 py-2 text-left">Property</th>
-                    <th className="px-3 py-2 text-left">{isLandlordWorkspace ? "Owner" : "Landlord"}</th>
-                    <th className="px-3 py-2 text-right">Amount</th>
-                    <th className="px-3 py-2 text-left">Due Date</th>
-                    <th className="px-3 py-2 text-left">Status</th>
-                    <th className="px-3 py-2 text-right">Actions</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10"><button type="button" onClick={toggleSelectAll}>{selectedIds.length === filtered.length && filtered.length > 0 ? <FaCheck /> : <FaSquare />}</button></th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Voucher</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Category</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">{isLandlordWorkspace ? "Owner" : "Landlord"}</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Due Date</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
+                    <th className="px-3 py-1 text-right font-bold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -657,16 +657,16 @@ const PaymentVouchers = () => {
                   ) : currentPageRows.map((voucher, index) => {
                     const isBusy = (action) => rowActionKey === `${voucher._id}:${action}`;
                     return (
-                      <tr key={voucher._id} className={`cursor-pointer border-t border-slate-200 transition-colors ${selectedIds.includes(voucher._id) ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50" : index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50 hover:bg-blue-50/40"}`}>
-                        <td className="px-3 py-2"><button type="button" onClick={() => toggleSelect(voucher._id)}>{selectedIds.includes(voucher._id) ? <FaCheck className="text-[#0B3B2E]" /> : <FaSquare className="text-slate-400" />}</button></td>
-                        <td className="px-3 py-2"><div className="font-black text-slate-900">{voucher.voucherNo}</div><div className="text-xs text-slate-500">{voucher.reference || voucher.narration || "No reference"}</div></td>
-                        <td className="px-3 py-2 text-slate-700">{categories.find((item) => item.value === voucher.category)?.label || voucher.category}</td>
-                        <td className="px-3 py-2 text-slate-700">{voucher.propertyName}</td>
-                        <td className="px-3 py-2 text-slate-700">{voucher.landlordName}</td>
-                        <td className="px-3 py-2 text-right font-black text-slate-900">KES {Number(voucher.amount || 0).toLocaleString()}</td>
-                        <td className="px-3 py-2 text-slate-700">{voucher.dueDate ? new Date(voucher.dueDate).toLocaleDateString() : "-"}</td>
-                        <td className="px-3 py-2"><span className={`inline-flex rounded px-2 py-0.5 text-[10px] font-black ${statusColors[voucher.status] || statusColors.draft}`}>{voucher.status}</span></td>
-                        <td className="px-3 py-2 text-right">
+                      <tr key={voucher._id} className={`cursor-pointer border-b border-gray-100 transition-colors ${selectedIds.includes(voucher._id) ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50" : index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                        <td className="px-3 py-1 border-r border-gray-100"><button type="button" onClick={() => toggleSelect(voucher._id)}>{selectedIds.includes(voucher._id) ? <FaCheck className="text-[#0B3B2E]" /> : <FaSquare className="text-slate-400" />}</button></td>
+                        <td className="px-3 py-1 border-r border-gray-100"><div className="font-black text-slate-900">{voucher.voucherNo}</div><div className="text-[10px] text-slate-500">{voucher.reference || voucher.narration || "No reference"}</div></td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{categories.find((item) => item.value === voucher.category)?.label || voucher.category}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{voucher.propertyName}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{voucher.landlordName}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">KES {Number(voucher.amount || 0).toLocaleString()}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{voucher.dueDate ? new Date(voucher.dueDate).toLocaleDateString() : "-"}</td>
+                        <td className="px-3 py-1 border-r border-gray-100"><span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${statusColors[voucher.status] || statusColors.draft}`}>{voucher.status}</span></td>
+                        <td className="px-3 py-1 text-right">
                           <div className="inline-flex flex-wrap justify-end gap-2">
                             <button onClick={() => handlePrintVoucher(voucher)} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50"><FaPrint /> Print</button>
                             {voucher.status === "draft" && canUpdateVoucher && <button onClick={() => openEdit(voucher)} className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700"><FaEdit /> Edit</button>}
@@ -692,7 +692,7 @@ const PaymentVouchers = () => {
                   <select
                     value={pageSize}
                     onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                    className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition"
+                    className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition"
                   >
                     {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
                   </select>
@@ -745,7 +745,7 @@ const PaymentVouchers = () => {
       )}
 
       {showModal && (
-        <div className="fixed inset-0 z-[200] flex flex-col bg-white">
+        <div className="absolute inset-0 z-[20] flex flex-col bg-white">
 
           {/* ── Top bar ────────────────────────────────────────────────────── */}
           <header className="shrink-0 flex items-center justify-between border-b border-[#0A3127] bg-[#0B3B2E] px-6 py-3">
@@ -811,21 +811,21 @@ const PaymentVouchers = () => {
                     options={categoryOptions}
                   />
                   <label className="block">
-                    <span className="text-xs font-bold text-slate-600">Reference / Cheque No.</span>
+                    <span className="mb-0.5 block text-xs font-semibold text-slate-700">Reference / Cheque No.</span>
                     <input
                       value={form.reference}
                       onChange={(e) => setForm((prev) => ({ ...prev, reference: e.target.value }))}
                       placeholder="e.g. CHQ-001, INV-2024-05"
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-300 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/15"
+                      className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                     />
                   </label>
                   <label className="block">
-                    <span className="text-xs font-bold text-slate-600">Due Date *</span>
+                    <span className="mb-0.5 block text-xs font-semibold text-slate-700">Due Date <span className="text-red-500">*</span></span>
                     <input
                       type="date"
                       value={form.dueDate}
                       onChange={(e) => setForm((prev) => ({ ...prev, dueDate: e.target.value }))}
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/15"
+                      className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                     />
                   </label>
                   {!editingVoucherId && (
@@ -961,7 +961,7 @@ const PaymentVouchers = () => {
                       value={form.narration}
                       onChange={(e) => setForm((prev) => ({ ...prev, narration: e.target.value }))}
                       placeholder="Brief description of this payment…"
-                      className="mt-1 w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-300 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/15"
+                      className="mt-1 w-full resize-none rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                     />
                   </label>
                 </div>

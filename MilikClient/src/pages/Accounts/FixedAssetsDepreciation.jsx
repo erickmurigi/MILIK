@@ -144,53 +144,53 @@ const FixedAssetsDepreciation = () => {
 
           {/* Preview table */}
           {preview && (
-            <table className="min-w-full text-xs">
+            <table className="min-w-full text-[11px] border-collapse">
               <thead className="sticky top-0 z-10">
-                <tr className="border-b-2 border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                  <th className="px-4 py-2.5 text-left">Code</th>
-                  <th className="px-4 py-2.5 text-left">Asset Name</th>
-                  <th className="px-4 py-2.5 text-left">Category</th>
-                  <th className="px-4 py-2.5 text-left">Method</th>
-                  <th className="px-4 py-2.5 text-right">Book Value (KES)</th>
-                  <th className="px-4 py-2.5 text-right">Monthly Dep. (KES)</th>
-                  <th className="px-4 py-2.5 text-left">Last Run</th>
-                  <th className="px-4 py-2.5 text-center">Will Post</th>
+                <tr className="bg-[#0B3B2E] text-white">
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Code</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Asset Name</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Category</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Method</th>
+                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Book Value (KES)</th>
+                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Monthly Dep. (KES)</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Last Run</th>
+                  <th className="px-3 py-1 text-center font-bold">Will Post</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                {activeRows.map((p) => (
-                  <tr key={p._id} className="hover:bg-slate-50/60">
-                    <td className="px-4 py-2.5 font-mono text-slate-400">{p.code || "—"}</td>
-                    <td className="px-4 py-2.5 font-semibold text-slate-800">{p.name}</td>
-                    <td className="px-4 py-2.5 text-slate-500">{p.category || "—"}</td>
-                    <td className="px-4 py-2.5 text-slate-500">{methodLabel(p.depreciationMethod)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-slate-700">{fmt(p.bookValue)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono font-semibold text-rose-600">{fmt(p.monthlyDepreciation)}</td>
-                    <td className="px-4 py-2.5 text-slate-400">
+              <tbody>
+                {activeRows.map((p, idx) => (
+                  <tr key={p._id} className={`border-b border-gray-100 ${idx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                    <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-400">{p.code || "—"}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{p.name}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{p.category || "—"}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{methodLabel(p.depreciationMethod)}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-700">{fmt(p.bookValue)}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold text-rose-600">{fmt(p.monthlyDepreciation)}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-400">
                       {p.lastDepreciationDate
                         ? new Date(p.lastDepreciationDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" })
                         : "Never"}
                     </td>
-                    <td className="px-4 py-2.5 text-center">
-                      <span className="inline-block rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700">Yes</span>
+                    <td className="px-3 py-1 text-center">
+                      <span className="inline-block rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Yes</span>
                     </td>
                   </tr>
                 ))}
-                {skippedRows.map((p) => (
-                  <tr key={p._id} className="opacity-35">
-                    <td className="px-4 py-2.5 font-mono text-slate-400">{p.code || "—"}</td>
-                    <td className="px-4 py-2.5 font-semibold text-slate-800">{p.name}</td>
-                    <td className="px-4 py-2.5 text-slate-500">{p.category || "—"}</td>
-                    <td className="px-4 py-2.5 text-slate-500">{methodLabel(p.depreciationMethod)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-slate-700">{fmt(p.bookValue)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-slate-300">—</td>
-                    <td className="px-4 py-2.5 text-slate-400">
+                {skippedRows.map((p, idx) => (
+                  <tr key={p._id} className="border-b border-gray-100 opacity-35">
+                    <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-400">{p.code || "—"}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{p.name}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{p.category || "—"}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{methodLabel(p.depreciationMethod)}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-700">{fmt(p.bookValue)}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-300">—</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-400">
                       {p.lastDepreciationDate
                         ? new Date(p.lastDepreciationDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" })
                         : "Never"}
                     </td>
-                    <td className="px-4 py-2.5 text-center">
-                      <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-bold text-slate-400">Skip</span>
+                    <td className="px-3 py-1 text-center">
+                      <span className="inline-block rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-400">Skip</span>
                     </td>
                   </tr>
                 ))}

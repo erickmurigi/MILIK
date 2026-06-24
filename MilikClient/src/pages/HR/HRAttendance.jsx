@@ -4,6 +4,7 @@ import {
   FaPlus, FaRedoAlt, FaSearch, FaTimes, FaEdit, FaTrash, FaClock,
 } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
+import AppSelect from '../../components/common/AppSelect';
 import MilikConfirmDialog from '../../components/Modals/MilikConfirmDialog';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
@@ -20,7 +21,7 @@ const monthOpts = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
 const thisYear  = new Date().getFullYear();
 const yearOpts  = Array.from({ length: 4 }, (_, i) => thisYear - i);
 
-const F = 'h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]';
+const F = 'rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20';
 
 // ── Record Form Modal ─────────────────────────────────────────────────────────
 function RecordModal({ record, employees, onClose, onSaved }) {
@@ -86,38 +87,40 @@ function RecordModal({ record, employees, onClose, onSaved }) {
         <form onSubmit={handleSubmit} className="space-y-3 p-5">
           {!isEdit && (
             <div>
-              <label className="mb-0.5 block text-[10px] font-black uppercase tracking-widest text-slate-500">Employee *</label>
-              <select value={form.employee} onChange={set('employee')} className={`${F} w-full`}>
-                <option value="">Select employee</option>
-                {employees.map((e) => (
-                  <option key={e._id} value={e._id}>{e.surname} {e.otherNames} ({e.employeeNumber})</option>
-                ))}
-              </select>
+              <label className="mb-0.5 block text-xs font-semibold text-slate-700">Employee <span className="text-red-500">*</span></label>
+              <AppSelect
+                value={form.employee}
+                onChange={(v) => setForm((p) => ({ ...p, employee: v ?? '' }))}
+                options={employees.map((e) => ({ value: e._id, label: `${e.surname} ${e.otherNames} (${e.employeeNumber})` }))}
+                placeholder="Select employee…"
+                searchable
+                size="sm"
+              />
             </div>
           )}
           {!isEdit && (
             <div>
-              <label className="mb-0.5 block text-[10px] font-black uppercase tracking-widest text-slate-500">Date *</label>
+              <label className="mb-0.5 block text-xs font-semibold text-slate-700">Date *</label>
               <input type="date" value={form.date} onChange={set('date')} className={`${F} w-full`} />
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-0.5 block text-[10px] font-black uppercase tracking-widest text-slate-500">Check-in *</label>
+              <label className="mb-0.5 block text-xs font-semibold text-slate-700">Check-in *</label>
               <input type="datetime-local" value={form.checkIn} onChange={set('checkIn')} className={`${F} w-full`} />
             </div>
             <div>
-              <label className="mb-0.5 block text-[10px] font-black uppercase tracking-widest text-slate-500">Check-out</label>
+              <label className="mb-0.5 block text-xs font-semibold text-slate-700">Check-out</label>
               <input type="datetime-local" value={form.checkOut} onChange={set('checkOut')} className={`${F} w-full`} />
             </div>
           </div>
           <div>
-            <label className="mb-0.5 block text-[10px] font-black uppercase tracking-widest text-slate-500">Note</label>
+            <label className="mb-0.5 block text-xs font-semibold text-slate-700">Note</label>
             <input type="text" value={form.note} onChange={set('note')} placeholder="e.g. WFH, Site visit" className={`${F} w-full`} />
           </div>
           <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} className="h-7 rounded border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50">Cancel</button>
-            <button type="submit" disabled={saving} className="h-7 rounded bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0a3127] disabled:opacity-60">
+            <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+            <button type="submit" disabled={saving} className="rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
               {saving ? 'Saving…' : isEdit ? 'Update' : 'Add Record'}
             </button>
           </div>
@@ -265,42 +268,42 @@ export default function HRAttendance() {
               <span className="text-xs">No attendance records found</span>
             </div>
           ) : (
-            <table className="w-full text-xs">
-              <thead className="sticky top-0 z-10 bg-slate-50">
-                <tr>
-                  <th className="border-b border-slate-200 px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-500">Employee</th>
-                  <th className="border-b border-slate-200 px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-500">Date</th>
-                  <th className="border-b border-slate-200 px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-500">Check-in</th>
-                  <th className="border-b border-slate-200 px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-500">Check-out</th>
-                  <th className="border-b border-slate-200 px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-500">Duration</th>
-                  <th className="border-b border-slate-200 px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-500">Note</th>
-                  <th className="border-b border-slate-200 px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-500">Source</th>
-                  <th className="border-b border-slate-200 px-3 py-2" />
+            <table className="w-full text-[11px] border-collapse">
+              <thead className="sticky top-0 z-10">
+                <tr className="bg-[#0B3B2E] text-white">
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Employee</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Check-in</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Check-out</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Duration</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Note</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Source</th>
+                  <th className="px-3 py-1 w-10" />
                 </tr>
               </thead>
               <tbody>
-                {filteredRecords.map((r) => (
-                  <tr key={r._id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="px-3 py-2">
+                {filteredRecords.map((r, idx) => (
+                  <tr key={r._id} className={`border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                    <td className="px-3 py-1 border-r border-gray-100">
                       <div className="font-semibold text-slate-800">{r.employee?.surname} {r.employee?.otherNames}</div>
                       <div className="text-[10px] text-slate-400">{r.employee?.employeeNumber}</div>
                     </td>
-                    <td className="px-3 py-2 text-slate-700">{fmtDate(r.checkIn)}</td>
-                    <td className="px-3 py-2 font-mono text-slate-700">{fmtTime(r.checkIn)}</td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{fmtDate(r.checkIn)}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-700">{fmtTime(r.checkIn)}</td>
+                    <td className="px-3 py-1 border-r border-gray-100">
                       {r.checkOut
                         ? <span className="font-mono text-slate-700">{fmtTime(r.checkOut)}</span>
-                        : <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-600">Still in</span>
+                        : <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-600">Still in</span>
                       }
                     </td>
-                    <td className="px-3 py-2 text-slate-600">{fmtDur(r.duration)}</td>
-                    <td className="max-w-[140px] truncate px-3 py-2 text-slate-500">{r.note || '—'}</td>
-                    <td className="px-3 py-2">
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${r.source === 'ess' ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{fmtDur(r.duration)}</td>
+                    <td className="max-w-[140px] truncate px-3 py-1 border-r border-gray-100 text-slate-500">{r.note || '—'}</td>
+                    <td className="px-3 py-1 border-r border-gray-100">
+                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${r.source === 'ess' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
                         {r.source}
                       </span>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-1">
                       <div className="flex items-center gap-1">
                         <button onClick={() => setModal(r)} className="rounded p-1 text-slate-400 hover:text-[#0B3B2E]" title="Edit">
                           <FaEdit size={11} />

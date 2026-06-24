@@ -1700,8 +1700,8 @@ const visibleReceiptIds = useMemo(
               <span className="shrink-0 rounded border border-blue-300 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">{stats.confirmedCount} Confirmed</span>
               <span className="shrink-0 rounded border border-orange-300 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700">{stats.pendingCount} Pending</span>
               <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-              <input value={draftFilters.search} onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: normalizeUppercaseInput(e.target.value) }))} placeholder="Search…" className="h-7 w-32 shrink-0 rounded border border-slate-300 px-2 text-xs uppercase focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-              <input value={draftFilters.tenantSearch} onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenantSearch: normalizeUppercaseInput(e.target.value) }))} placeholder="Tenant" className="h-7 w-24 shrink-0 rounded border border-slate-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              <input value={draftFilters.search} onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: normalizeUppercaseInput(e.target.value) }))} placeholder="Search…" className="h-7 w-32 shrink-0 rounded border border-slate-200 px-2 text-xs uppercase focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              <input value={draftFilters.tenantSearch} onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenantSearch: normalizeUppercaseInput(e.target.value) }))} placeholder="Tenant" className="h-7 w-24 shrink-0 rounded border border-slate-200 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
               <select value={draftFilters.property} onChange={(e) => setDraftFilters((prev) => ({ ...prev, property: e.target.value, unit: "all" }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                 {propertyOptions.map((p) => (<option key={p} value={p}>{p === "all" ? "Property" : p}</option>))}
               </select>
@@ -1751,7 +1751,7 @@ const visibleReceiptIds = useMemo(
               <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
               <button onClick={applySearchFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSearch size={10} /></button>
               <button onClick={resetSearchFilters} className="h-7 shrink-0 flex items-center gap-1 rounded bg-slate-500 px-2.5 text-xs font-semibold text-white hover:bg-slate-600"><FaRedoAlt size={10} /></button>
-              <button onClick={loadData} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-300 bg-white px-2.5 text-xs font-semibold hover:bg-slate-50"><FaRedoAlt size={10} /></button>
+              <button onClick={loadData} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold hover:bg-slate-50"><FaRedoAlt size={10} /></button>
               <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
               <select
                 value=""
@@ -1764,7 +1764,7 @@ const visibleReceiptIds = useMemo(
                   e.target.value = "";
                 }}
                 title={selectedIds.length === 0 ? "Select receipts first" : "Bulk actions"}
-                className="h-7 shrink-0 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <option value="">Actions</option>
                 {canProcessReceipt && <option value="confirm">Confirm selected</option>}
@@ -1780,31 +1780,31 @@ const visibleReceiptIds = useMemo(
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
-              <table className="w-full min-w-[1200px] text-xs">
+              <table className="w-full min-w-[1200px] text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10">
                   <tr className={`${MILIK_GREEN} text-white`}>
-                    <th className="px-3 py-2 text-center">
+                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">
                       <input
                         type="checkbox"
                         checked={currentPageReceipts.length > 0 && visibleReceiptIds.every((id) => selectedIds.includes(id))}
                         onChange={toggleSelectAll}
                       />
                     </th>
-                    <th className="px-3 py-2 text-left">Receipt #</th>
-                    <th className="px-3 py-2 text-left">Date</th>
-                    <th className="px-3 py-2 text-left">Tenant</th>
-                    <th className="px-3 py-2 text-left">Property</th>
-                    <th className="px-3 py-2 text-left">Unit</th>
-                    <th className="px-3 py-2 text-left">Ledger</th>
-                    <th className="px-3 py-2 text-left">Cashbook</th>
-                    <th className="px-3 py-2 text-left">Type</th>
-                    <th className="px-3 py-2 text-left">Method</th>
-                    <th className="px-3 py-2 text-right">Amount</th>
-                    <th className="px-3 py-2 text-left">Status</th>
-                    <th className="px-3 py-2 text-left">Done By</th>
-                    <th className="px-3 py-2 text-left">Reversed By</th>
-                    <th className="px-3 py-2 text-left">Reference</th>
-                    <th className="px-3 py-2 text-center">Actions</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Receipt #</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Tenant</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Unit</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Ledger</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Cashbook</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Method</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Done By</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Reversed By</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Reference</th>
+                    <th className="px-3 py-1 text-center font-bold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1820,16 +1820,16 @@ const visibleReceiptIds = useMemo(
                       return (
                         <tr
                           key={receipt._id}
-                          className={`cursor-pointer border-b border-slate-200 transition-colors ${
+                          className={`cursor-pointer border-b border-gray-100 transition-colors ${
                             isSelected
                               ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50"
                               : index % 2 === 0
                               ? "bg-white hover:bg-blue-50/40"
-                              : "bg-slate-50 hover:bg-blue-50/40"
+                              : "bg-slate-50/60 hover:bg-blue-50/40"
                           }`}
                           onClick={() => toggleSelection(receipt._id)}
                         >
-                          <td className="px-3 py-2 text-center">
+                          <td className="px-3 py-1 text-center border-r border-gray-100">
                             <input
                               type="checkbox"
                               checked={isSelected}
@@ -1837,7 +1837,7 @@ const visibleReceiptIds = useMemo(
                               onClick={(e) => e.stopPropagation()}
                             />
                           </td>
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-1 border-r border-gray-100">
                             <button
                               type="button"
                               className="font-bold text-blue-700 hover:text-blue-900 hover:underline focus:outline-none"
@@ -1846,42 +1846,36 @@ const visibleReceiptIds = useMemo(
                               {receipt.receiptNumber || "-"}
                             </button>
                           </td>
-                          <td className="px-3 py-2 font-semibold text-slate-900">{formatDate(receipt.paymentDate)}</td>
-                          <td className="px-3 py-2 font-semibold text-slate-900">{getTenantName(receipt, tenants)}</td>
-                          <td className="px-3 py-2 font-semibold text-slate-900">{getPropertyName(receipt, tenants)}</td>
-                          <td className="px-3 py-2 font-semibold text-slate-900">{getUnitName(receipt, tenants)}</td>
-                          <td className="px-3 py-2">
-                            <span className="inline-flex px-2 py-1 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 uppercase">
+                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{formatDate(receipt.paymentDate)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getTenantName(receipt, tenants)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getPropertyName(receipt, tenants)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getUnitName(receipt, tenants)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100">
+                            <span className="inline-flex rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-700">
                               {getLedgerType(receipt)}
                             </span>
                           </td>
-                          <td className="px-3 py-2 font-semibold text-slate-900">{getCashbookLabel(receipt)}</td>
-                          <td className="px-3 py-2 font-semibold text-slate-900">{getReceiptDisplayType(receipt)}</td>
-                          <td className="px-3 py-2 font-semibold text-slate-900 capitalize">{(receipt.paymentMethod || "-").replace("_", " ")}</td>
-                          <td className="px-3 py-2 text-right font-bold text-slate-900">
+                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getCashbookLabel(receipt)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getReceiptDisplayType(receipt)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900 capitalize">{(receipt.paymentMethod || "-").replace("_", " ")}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">
                             Ksh {Math.abs(Number(receipt.amount || 0)).toLocaleString()}
                           </td>
-                          <td className="px-3 py-2">
-                            <span
-                              className={`inline-flex px-2 py-1 rounded text-[10px] font-semibold ${
+                          <td className="px-3 py-1 border-r border-gray-100">
+                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${
                                 receipt.isReversed
-                                  ? "bg-red-100 text-red-700"
+                                  ? "bg-red-50 text-red-700 border-red-200"
                                   : receipt.isConfirmed
-                                  ? "bg-green-100 text-green-700"
-                                  : "bg-amber-100 text-amber-700"
-                              }`}
-                            >
-{receipt.isReversed
-                                  ? "Reversed"
-                                  : receipt.isConfirmed
-                                  ? "Confirmed"
-                                  : "Pending"}
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : "bg-amber-50 text-amber-700 border-amber-200"
+                              }`}>
+                              {receipt.isReversed ? "Reversed" : receipt.isConfirmed ? "Confirmed" : "Pending"}
                             </span>
                           </td>
-                          <td className="px-3 py-2 font-semibold text-slate-900">{getActorDisplayName(receipt.confirmedBy)}</td>
-                          <td className="px-3 py-2 font-semibold text-slate-900">{getActorDisplayName(receipt.reversedBy)}</td>
-                          <td className="px-3 py-2 font-semibold text-slate-900">{receipt.referenceNumber || "-"}</td>
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getActorDisplayName(receipt.confirmedBy)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getActorDisplayName(receipt.reversedBy)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{receipt.referenceNumber || "-"}</td>
+                          <td className="px-3 py-1">
                             <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
                               <button onClick={() => openView(receipt)} className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700" title="View">
                                 <FaEye size={11} />
@@ -2414,25 +2408,25 @@ const visibleReceiptIds = useMemo(
                       <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Allocation Breakdown</span>
                     </div>
                     {summaryBreakdown.length > 0 ? (
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="border-b border-slate-100">
-                            <th className="px-6 py-2 text-left text-[9px] font-black uppercase tracking-widest text-slate-400">Category</th>
-                            <th className="px-6 py-2 text-right text-[9px] font-black uppercase tracking-widest text-slate-400">Amount</th>
+                      <table className="w-full text-[11px] border-collapse">
+                        <thead className="bg-[#0B3B2E] text-white">
+                          <tr>
+                            <th className="px-4 py-1 text-left font-bold border-r border-white/10">Category</th>
+                            <th className="px-4 py-1 text-right font-bold">Amount</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {summaryBreakdown.map((row) => (
-                            <tr key={row.label} className="border-b border-slate-50 hover:bg-slate-50/60">
-                              <td className="px-6 py-2.5 text-slate-700">{row.label}</td>
-                              <td className="px-6 py-2.5 text-right font-mono font-semibold text-slate-900">{formatMoney(row.value)}</td>
+                          {summaryBreakdown.map((row, i) => (
+                            <tr key={row.label} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                              <td className="px-4 py-1.5 border-r border-gray-100 text-slate-700">{row.label}</td>
+                              <td className="px-4 py-1.5 text-right font-mono font-semibold text-slate-900">{formatMoney(row.value)}</td>
                             </tr>
                           ))}
                         </tbody>
                         <tfoot>
                           <tr className="border-t-2 border-[#0B3B2E]/20 bg-[#0B3B2E]/5">
-                            <td className="px-6 py-3 text-[11px] font-black uppercase tracking-wider text-[#0B3B2E]">Total Allocated</td>
-                            <td className="px-6 py-3 text-right font-mono text-sm font-black text-[#0B3B2E]">{formatMoney(allocated)}</td>
+                            <td className="px-4 py-2 text-[11px] font-black uppercase tracking-wider text-[#0B3B2E]">Total Allocated</td>
+                            <td className="px-4 py-2 text-right font-mono font-black text-[#0B3B2E]">{formatMoney(allocated)}</td>
                           </tr>
                         </tfoot>
                       </table>
@@ -2453,27 +2447,27 @@ const visibleReceiptIds = useMemo(
                     {receiptAllocations.length === 0 ? (
                       <div className="px-6 py-8 text-center text-[11px] text-slate-400">No allocation lines saved on this receipt yet.</div>
                     ) : (
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="border-b border-slate-100 bg-slate-50">
-                            <th className="px-6 py-2 text-left text-[9px] font-black uppercase tracking-widest text-slate-400">Invoice</th>
-                            <th className="px-6 py-2 text-left text-[9px] font-black uppercase tracking-widest text-slate-400">Category</th>
-                            <th className="px-6 py-2 text-right text-[9px] font-black uppercase tracking-widest text-slate-400">Applied</th>
-                            <th className="px-6 py-2 text-right text-[9px] font-black uppercase tracking-widest text-slate-400">Before</th>
+                      <table className="w-full text-[11px] border-collapse">
+                        <thead className="bg-[#0B3B2E] text-white">
+                          <tr>
+                            <th className="px-4 py-1 text-left font-bold border-r border-white/10">Invoice</th>
+                            <th className="px-4 py-1 text-left font-bold border-r border-white/10">Category</th>
+                            <th className="px-4 py-1 text-right font-bold border-r border-white/10">Applied</th>
+                            <th className="px-4 py-1 text-right font-bold">Before</th>
                           </tr>
                         </thead>
                         <tbody>
                           {receiptAllocations.map((row, index) => (
-                            <tr key={`${row?.invoice || row?.invoiceId || index}`} className="border-b border-slate-50 hover:bg-slate-50/60">
-                              <td className="px-6 py-2.5">
+                            <tr key={`${row?.invoice || row?.invoiceId || index}`} className={`border-b border-gray-100 ${index % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                              <td className="px-4 py-1.5 border-r border-gray-100">
                                 <p className="font-mono font-bold text-slate-900">{row?.invoiceNumber || `Invoice ${index + 1}`}</p>
                                 {row?.description && <p className="text-[10px] text-slate-400">{row.description}</p>}
                               </td>
-                              <td className="px-6 py-2.5 text-slate-500">
+                              <td className="px-4 py-1.5 border-r border-gray-100 text-slate-500">
                                 {getAllocationGroupLabel(row?.priorityGroup || row?.category)}{row?.utilityType ? ` · ${row.utilityType}` : ""}
                               </td>
-                              <td className="px-6 py-2.5 text-right font-mono font-bold text-emerald-700">{formatMoney(row?.appliedAmount || 0)}</td>
-                              <td className="px-6 py-2.5 text-right font-mono font-semibold text-slate-500">{formatMoney(row?.beforeOutstanding || 0)}</td>
+                              <td className="px-4 py-1.5 border-r border-gray-100 text-right font-mono font-bold text-emerald-700">{formatMoney(row?.appliedAmount || 0)}</td>
+                              <td className="px-4 py-1.5 text-right font-mono font-semibold text-slate-500">{formatMoney(row?.beforeOutstanding || 0)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -2487,25 +2481,25 @@ const visibleReceiptIds = useMemo(
                       <FaFileInvoice size={10} className="text-slate-400" />
                       <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Journal Entries</span>
                     </div>
-                    <table className="w-full text-xs">
+                    <table className="w-full text-[11px] border-collapse">
                       <thead>
                         <tr className="bg-slate-900 text-white">
-                          <th className="px-6 py-2 text-left text-[9px] font-black uppercase tracking-widest">Account</th>
-                          <th className="px-6 py-2 text-right text-[9px] font-black uppercase tracking-widest">Debit</th>
-                          <th className="px-6 py-2 text-right text-[9px] font-black uppercase tracking-widest">Credit</th>
+                          <th className="px-4 py-1 text-left font-bold border-r border-white/10">Account</th>
+                          <th className="px-4 py-1 text-right font-bold border-r border-white/10">Debit</th>
+                          <th className="px-4 py-1 text-right font-bold">Credit</th>
                         </tr>
                       </thead>
                       <tbody>
                         {receiptJournalLines.map((line, i) => (
-                          <tr key={`${line.accountCode}-${i}`} className="border-b border-slate-50 hover:bg-slate-50/60">
-                            <td className="px-6 py-2.5">
+                          <tr key={`${line.accountCode}-${i}`} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                            <td className="px-4 py-1.5 border-r border-gray-100">
                               <p className="font-mono font-bold text-slate-800">{line.accountCode} · {line.accountName}</p>
                               <p className="mt-0.5 text-[10px] text-slate-400">{line.narration}</p>
                             </td>
-                            <td className="px-6 py-2.5 text-right font-mono font-semibold text-slate-700">
+                            <td className="px-4 py-1.5 border-r border-gray-100 text-right font-mono font-semibold text-slate-700">
                               {line.debit ? formatMoney(line.debit) : <span className="text-slate-300">—</span>}
                             </td>
-                            <td className="px-6 py-2.5 text-right font-mono font-semibold text-slate-700">
+                            <td className="px-4 py-1.5 text-right font-mono font-semibold text-slate-700">
                               {line.credit ? formatMoney(line.credit) : <span className="text-slate-300">—</span>}
                             </td>
                           </tr>

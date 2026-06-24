@@ -260,47 +260,47 @@ export default function HRPayrollRegister() {
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
+                  <table className="w-full text-[11px] border-collapse">
                     <thead>
-                      <tr className="border-b-2 border-slate-200 bg-slate-50">
+                      <tr className="bg-[#0B3B2E] text-white">
                         {[
-                          ['No.',          'text-left  pl-4'],
+                          ['No.',          'text-left'],
                           ['Employee',     'text-left'],
                           ['Dept',         'text-left'],
                           ['Basic',        'text-right'],
                           ['Allowances',   'text-right'],
-                          ['Gross',        'text-right font-black text-slate-700'],
-                          ['PAYE',         'text-right text-rose-600'],
-                          ['SHA',          'text-right text-rose-500'],
-                          ['NSSF',         'text-right text-rose-500'],
-                          ['AHL',          'text-right text-rose-500'],
-                          ['Other Deduct', 'text-right text-rose-500'],
-                          ['Total Deduct', 'text-right text-rose-700 font-black'],
-                          ['Net Pay',      'text-right text-emerald-700 font-black pr-4'],
-                        ].map(([h, cls]) => (
-                          <th key={h} className={`py-2.5 px-2 text-[9px] font-black uppercase tracking-widest text-slate-500 whitespace-nowrap ${cls}`}>{h}</th>
+                          ['Gross',        'text-right'],
+                          ['PAYE',         'text-right'],
+                          ['SHA',          'text-right'],
+                          ['NSSF',         'text-right'],
+                          ['AHL',          'text-right'],
+                          ['Other Deduct', 'text-right'],
+                          ['Total Deduct', 'text-right'],
+                          ['Net Pay',      'text-right'],
+                        ].map(([h, cls], i, arr) => (
+                          <th key={h} className={`py-1 px-2 font-bold whitespace-nowrap ${cls} ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
                         ))}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-50">
+                    <tbody>
                       {rows.map((r, i) => (
-                        <tr key={i} className="hover:bg-slate-50">
-                          <td className="py-2 pl-4 pr-2 font-mono text-[10px] text-slate-400 whitespace-nowrap">{r.employeeNumber}</td>
-                          <td className="py-2 px-2 whitespace-nowrap">
+                        <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                          <td className="py-1 px-2 font-mono text-[10px] text-slate-400 whitespace-nowrap border-r border-gray-100">{r.employeeNumber}</td>
+                          <td className="py-1 px-2 whitespace-nowrap border-r border-gray-100">
                             <div className="font-black text-slate-900">{r.name}</div>
                             <div className="text-[9px] text-slate-400">{r.designation}</div>
                           </td>
-                          <td className="py-2 px-2 text-slate-600 whitespace-nowrap">{r.department}</td>
-                          <td className="py-2 px-2 text-right tabular-nums text-slate-700">{fmtKES(r.basicSalary)}</td>
-                          <td className="py-2 px-2 text-right tabular-nums text-slate-600">{fmtKES(r.allowancesTotal)}</td>
-                          <td className="py-2 px-2 text-right tabular-nums font-black text-slate-900">{fmtKES(r.grossSalary)}</td>
-                          <td className="py-2 px-2 text-right tabular-nums text-rose-600">{fmtKES(r.paye)}</td>
-                          <td className="py-2 px-2 text-right tabular-nums text-rose-500">{fmtKES(r.nhif)}</td>
-                          <td className="py-2 px-2 text-right tabular-nums text-rose-500">{fmtKES(r.nssf)}</td>
-                          <td className="py-2 px-2 text-right tabular-nums text-rose-500">{fmtKES(r.ahl)}</td>
-                          <td className="py-2 px-2 text-right tabular-nums text-rose-500">{fmtKES(r.otherDeductionsTotal)}</td>
-                          <td className="py-2 px-2 text-right tabular-nums font-black text-rose-700">{fmtKES(r.totalDeductions)}</td>
-                          <td className="py-2 pl-2 pr-4 text-right tabular-nums font-black text-emerald-700">{fmtKES(r.netSalary)}</td>
+                          <td className="py-1 px-2 text-slate-600 whitespace-nowrap border-r border-gray-100">{r.department}</td>
+                          <td className="py-1 px-2 text-right tabular-nums text-slate-700 border-r border-gray-100">{fmtKES(r.basicSalary)}</td>
+                          <td className="py-1 px-2 text-right tabular-nums text-slate-600 border-r border-gray-100">{fmtKES(r.allowancesTotal)}</td>
+                          <td className="py-1 px-2 text-right tabular-nums font-black text-slate-900 border-r border-gray-100">{fmtKES(r.grossSalary)}</td>
+                          <td className="py-1 px-2 text-right tabular-nums text-rose-600 border-r border-gray-100">{fmtKES(r.paye)}</td>
+                          <td className="py-1 px-2 text-right tabular-nums text-rose-500 border-r border-gray-100">{fmtKES(r.nhif)}</td>
+                          <td className="py-1 px-2 text-right tabular-nums text-rose-500 border-r border-gray-100">{fmtKES(r.nssf)}</td>
+                          <td className="py-1 px-2 text-right tabular-nums text-rose-500 border-r border-gray-100">{fmtKES(r.ahl)}</td>
+                          <td className="py-1 px-2 text-right tabular-nums text-rose-500 border-r border-gray-100">{fmtKES(r.otherDeductionsTotal)}</td>
+                          <td className="py-1 px-2 text-right tabular-nums font-black text-rose-700 border-r border-gray-100">{fmtKES(r.totalDeductions)}</td>
+                          <td className="py-1 px-2 text-right tabular-nums font-black text-emerald-700">{fmtKES(r.netSalary)}</td>
                         </tr>
                       ))}
                     </tbody>

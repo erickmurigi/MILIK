@@ -2426,7 +2426,7 @@ export default function CompanySetupPage() {
                 value={paymentSearch}
                 onChange={(e) => setPaymentSearch(e.target.value)}
                 placeholder="Search paybills…"
-                className="h-7 w-44 border border-slate-300 bg-[#DDEFE1] pl-7 pr-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                className="h-7 w-44 border border-slate-200 bg-white pl-7 pr-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
             </div>
             <span className="border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">
@@ -2537,7 +2537,7 @@ export default function CompanySetupPage() {
             <button
               key={t.key}
               onClick={() => setEmailSubTab(t.key)}
-              className={`inline-flex h-7 items-center gap-1.5 rounded-lg px-3 text-xs font-bold transition ${emailSubTab === t.key ? "bg-[#0B3B2E] text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"}`}
+              className={`inline-flex h-7 items-center gap-1.5 rounded px-3 text-xs font-bold transition ${emailSubTab === t.key ? "bg-[#0B3B2E] text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"}`}
             >
               {t.key === "profiles" && <FaPlug className="text-[9px]" />}
               {t.key === "sent" && <FaPaperPlane className="text-[9px]" />}
@@ -2580,7 +2580,7 @@ export default function CompanySetupPage() {
                       value={emailProfileSearch}
                       onChange={(e) => setEmailProfileSearch(e.target.value)}
                       placeholder="Search email profiles…"
-                      className="h-7 w-48 border border-slate-300 bg-[#DDEFE1] pl-7 pr-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      className="h-7 w-48 border border-slate-200 bg-white pl-7 pr-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                     />
                   </div>
                   <span className="border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">
@@ -2673,7 +2673,7 @@ export default function CompanySetupPage() {
                     value={emailLogsSearch}
                     onChange={(e) => { setEmailLogsSearch(e.target.value); setEmailLogsPage(1); }}
                     placeholder="Search logs…"
-                    className="h-7 w-44 rounded border border-slate-600 bg-[#0d4535] pl-7 pr-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                    className="h-7 w-44 rounded border border-slate-600 bg-[#0d4535] pl-7 pr-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
                 <button
@@ -2792,7 +2792,7 @@ export default function CompanySetupPage() {
                 value={smsProfileSearch}
                 onChange={(e) => setSmsProfileSearch(e.target.value)}
                 placeholder="Search SMS profiles…"
-                className="h-7 w-44 border border-slate-300 bg-[#DDEFE1] pl-7 pr-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                className="h-7 w-44 border border-slate-200 bg-white pl-7 pr-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
             </div>
             <span className="border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">
@@ -2900,7 +2900,7 @@ export default function CompanySetupPage() {
                 value={smsTemplateSearch}
                 onChange={(e) => setSmsTemplateSearch(e.target.value)}
                 placeholder="Search templates…"
-                className="h-8 w-52 rounded border border-slate-300 bg-[#DDEFE1] pl-8 pr-3 text-xs text-slate-800 shadow-sm transition hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                className="h-8 w-52 rounded border border-slate-200 bg-white pl-8 pr-3 text-xs text-slate-800 shadow-sm transition hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
             </div>
             <select
@@ -3082,7 +3082,7 @@ export default function CompanySetupPage() {
               <button
                 key={item.key}
                 onClick={() => switchSmsSection(item.key)}
-                className={`inline-flex h-7 items-center gap-1.5 rounded-lg px-3 text-xs font-bold transition ${isActive ? "bg-[#0B3B2E] text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"}`}
+                className={`inline-flex h-7 items-center gap-1.5 rounded px-3 text-xs font-bold transition ${isActive ? "bg-[#0B3B2E] text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"}`}
               >
                 {item.icon}
                 {item.label}
@@ -3114,7 +3114,7 @@ export default function CompanySetupPage() {
                     value={smsLogsSearch}
                     onChange={(e) => { setSmsLogsSearch(e.target.value); setSmsLogsPage(1); }}
                     placeholder="Search logs…"
-                    className="h-7 w-44 rounded border border-slate-600 bg-[#0d4535] pl-7 pr-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                    className="h-7 w-44 rounded border border-slate-600 bg-[#0d4535] pl-7 pr-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
                 <button
@@ -3275,9 +3275,9 @@ export default function CompanySetupPage() {
               <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50/95 px-3 py-2">
                 <div className="relative">
                   <FaSearch className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
-                  <input value={activitySearch} onChange={(e) => { setActivitySearch(e.target.value); setActivitiesPage(1); }} placeholder="Search events…" className="h-7 w-48 rounded border border-slate-300 bg-[#DDEFE1] pl-7 pr-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                  <input value={activitySearch} onChange={(e) => { setActivitySearch(e.target.value); setActivitiesPage(1); }} placeholder="Search events…" className="h-7 w-48 rounded border border-slate-200 bg-white pl-7 pr-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
                 </div>
-                <select value={activityCategory} onChange={(e) => { setActivityCategory(e.target.value); setActivitiesPage(1); }} className="h-7 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                <select value={activityCategory} onChange={(e) => { setActivityCategory(e.target.value); setActivitiesPage(1); }} className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 appearance-none outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
                   <option value="all">All categories</option>
                   <option value="auth">Sign-ins</option>
                   <option value="users">User access</option>
@@ -4045,7 +4045,7 @@ export default function CompanySetupPage() {
                   const checked = emailForm.usageTags.includes(option.value);
                   return (
                     <label key={option.value} className={["flex items-center gap-2 border px-3 py-2 text-xs transition cursor-pointer", checked ? "border-emerald-200 bg-emerald-50/80" : "border-slate-200 bg-white hover:border-slate-300"].join(" ")}>
-                      <input type="checkbox" checked={checked} onChange={() => toggleUsageTag(option.value)} className="h-3.5 w-3.5 border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+                      <input type="checkbox" checked={checked} onChange={() => toggleUsageTag(option.value)} className="h-3.5 w-3.5 border-slate-300 text-emerald-600 focus:ring-[#0B3B2E]/20" />
                       <span className="font-semibold text-slate-800">{option.label}</span>
                     </label>
                   );

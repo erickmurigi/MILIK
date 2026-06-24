@@ -254,27 +254,27 @@ const ImportResultsSummary = ({ results, onClose }) => (
       ))}
     </div>
     <div className="overflow-x-auto rounded border border-slate-200">
-      <table className="w-full text-xs">
-        <thead className="bg-slate-100">
+      <table className="w-full text-[11px] border-collapse">
+        <thead className="bg-[#0B3B2E] text-white">
           <tr>
-            <th className="px-3 py-1.5 text-left text-[10px] font-black uppercase text-slate-500">Status</th>
-            <th className="px-3 py-1.5 text-left text-[10px] font-black uppercase text-slate-500">Transaction Code</th>
-            <th className="px-3 py-1.5 text-left text-[10px] font-black uppercase text-slate-500">Ref / Account</th>
-            <th className="px-3 py-1.5 text-right text-[10px] font-black uppercase text-slate-500">Amount</th>
-            <th className="px-3 py-1.5 text-left text-[10px] font-black uppercase text-slate-500">Tenant</th>
+            <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
+            <th className="px-3 py-1 text-left font-bold border-r border-white/10">Transaction Code</th>
+            <th className="px-3 py-1 text-left font-bold border-r border-white/10">Ref / Account</th>
+            <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount</th>
+            <th className="px-3 py-1 text-left font-bold">Tenant</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">
+        <tbody>
           {results.items.map((item, i) => {
             const s    = item.matchingStatus || (item.wasDuplicate ? "duplicate" : "unmatched");
             const meta = RESULT_META[s === "captured" || s === "matched_tenant" ? "matched" : s === "ignored" ? "skipped" : s] || RESULT_META.unmatched;
             return (
-              <tr key={i} className="hover:bg-slate-50">
-                <td className="px-3 py-1.5"><span className={`inline-flex items-center rounded border px-2 py-0.5 text-[9px] font-black uppercase ${meta.cls}`}>{item.wasDuplicate ? "Duplicate" : meta.label}</span></td>
-                <td className="px-3 py-1.5 font-mono text-slate-700">{item.transactionCode || "—"}</td>
-                <td className="px-3 py-1.5 font-semibold text-slate-800">{item.accountReference || item.billRefNumber || "—"}</td>
-                <td className="px-3 py-1.5 text-right font-bold text-slate-700">{item.amount > 0 ? formatMoney(item.amount) : "—"}</td>
-                <td className="px-3 py-1.5 text-slate-600">
+              <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                <td className="px-3 py-1 border-r border-gray-100"><span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black ${meta.cls}`}>{item.wasDuplicate ? "Duplicate" : meta.label}</span></td>
+                <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-700">{item.transactionCode || "—"}</td>
+                <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{item.accountReference || item.billRefNumber || "—"}</td>
+                <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-700">{item.amount > 0 ? formatMoney(item.amount) : "—"}</td>
+                <td className="px-3 py-1 text-slate-600">
                   {getTenantLabel(item.tenant) !== "—"
                     ? <span className="font-bold text-[#0B3B2E]">{getTenantLabel(item.tenant)}</span>
                     : <span className="italic text-slate-400">Unmatched</span>}
@@ -421,18 +421,18 @@ function UploadModal({ businessId, onClose, onUploaded }) {
                     <button onClick={() => { setFile(null); setPreview(null); }} className="text-[11px] font-bold text-slate-400 hover:text-red-500">Change file</button>
                   </div>
                   <div className="overflow-x-auto rounded border border-slate-200">
-                    <table className="w-full min-w-[500px] text-xs">
+                    <table className="w-full min-w-[500px] text-[11px] border-collapse">
                       <thead className="bg-[#0B3B2E] text-white">
                         <tr>
-                          <th className="px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-wide">#</th>
-                          {previewCols.map(c => <th key={c.key} className="px-3 py-1.5 text-left text-[10px] font-bold uppercase tracking-wide">{c.label}</th>)}
+                          <th className="px-2 py-1 text-left font-bold border-r border-white/10">#</th>
+                          {previewCols.map(c => <th key={c.key} className="px-3 py-1 text-left font-bold border-r border-white/10">{c.label}</th>)}
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100">
+                      <tbody>
                         {preview.rows.map((cells, i) => (
-                          <tr key={i} className="hover:bg-slate-50">
-                            <td className="px-2 py-1.5 font-mono text-[10px] text-slate-400">{i + 2}</td>
-                            {previewCols.map(c => <td key={c.key} className="max-w-[160px] truncate px-3 py-1.5 text-slate-700" title={getCell(cells, c.key)}>{getCell(cells, c.key)}</td>)}
+                          <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                            <td className="px-2 py-1 border-r border-gray-100 font-mono text-[10px] text-slate-400">{i + 2}</td>
+                            {previewCols.map(c => <td key={c.key} className="max-w-[160px] truncate px-3 py-1 border-r border-gray-100 text-slate-700" title={getCell(cells, c.key)}>{getCell(cells, c.key)}</td>)}
                           </tr>
                         ))}
                       </tbody>
@@ -710,18 +710,18 @@ export default function PmsMpesaNotifications() {
             </div>
           )}
 
-          <table className="w-full min-w-[1040px] text-xs">
+          <table className="w-full min-w-[1040px] text-[11px] border-collapse">
             <thead className="sticky top-0 z-[5] bg-[#0B3B2E] text-white">
               <tr>
-                <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide">Time</th>
-                <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide">Status</th>
-                <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide">Account Ref</th>
-                <th className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wide">Amount</th>
-                <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide">Payer</th>
-                <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide">Phone</th>
-                <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide">Transaction Code</th>
-                <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide">Matched Tenant</th>
-                <th className="px-2 py-2 text-center text-[10px] font-bold uppercase tracking-wide">Action</th>
+                <th className="px-3 py-2 text-left font-bold border-r border-white/10">Time</th>
+                <th className="px-3 py-2 text-left font-bold border-r border-white/10">Status</th>
+                <th className="px-3 py-2 text-left font-bold border-r border-white/10">Account Ref</th>
+                <th className="px-3 py-2 text-right font-bold border-r border-white/10">Amount</th>
+                <th className="px-3 py-2 text-left font-bold border-r border-white/10">Payer</th>
+                <th className="px-3 py-2 text-left font-bold border-r border-white/10">Phone</th>
+                <th className="px-3 py-2 text-left font-bold border-r border-white/10">Transaction Code</th>
+                <th className="px-3 py-2 text-left font-bold border-r border-white/10">Matched Tenant</th>
+                <th className="px-2 py-2 text-center font-bold">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -746,38 +746,37 @@ export default function PmsMpesaNotifications() {
                 </tr>
               )}
 
-              {notifications.map((n) => {
+              {notifications.map((n, index) => {
                 const canAssign = n.matchingStatus === "unmatched";
                 const canRecord = n.matchingStatus === "matched_tenant";
                 const canIgnore = n.matchingStatus !== "ignored" && !n.matchedReceipt;
                 const isIgnored = n.matchingStatus === "ignored";
                 const isOpen    = expanded === n._id;
-                const rowBg     = isIgnored ? "bg-red-50/30" : "";
 
                 return (
                   <React.Fragment key={n._id}>
                     <tr
                       onClick={() => setExpanded(isOpen ? null : n._id)}
-                      className={`cursor-pointer border-b border-slate-100 transition-colors hover:bg-slate-50 ${rowBg}`}>
-                      <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{fmtDate(n.transactionDate || n.createdAt)}</td>
-                      <td className="px-3 py-2"><StatusBadge status={n.matchingStatus} /></td>
-                      <td className="px-3 py-2">
+                      className={`cursor-pointer border-b border-gray-100 transition-colors ${isIgnored ? "bg-red-50/30 hover:bg-red-50/50" : index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-500 whitespace-nowrap">{fmtDate(n.transactionDate || n.createdAt)}</td>
+                      <td className="px-3 py-1 border-r border-gray-100"><StatusBadge status={n.matchingStatus} /></td>
+                      <td className="px-3 py-1 border-r border-gray-100">
                         <div className="font-extrabold tracking-wider text-slate-900">{n.accountReference || "—"}</div>
                         {n.billRefNumber && n.billRefNumber !== n.accountReference && (
                           <div className="text-[10px] text-slate-400">raw: {n.billRefNumber}</div>
                         )}
                       </td>
-                      <td className={`px-3 py-2 text-right font-extrabold ${n.matchingStatus === "captured" ? "text-emerald-700" : "text-slate-700"}`}>
+                      <td className={`px-3 py-1 border-r border-gray-100 text-right font-extrabold ${n.matchingStatus === "captured" ? "text-emerald-700" : "text-slate-700"}`}>
                         {n.amount > 0 ? formatMoney(n.amount) : "—"}
                       </td>
-                      <td className="px-3 py-2 font-semibold text-slate-700">{n.payerName || <span className="font-normal italic text-slate-400">—</span>}</td>
-                      <td className="px-3 py-2 text-slate-600">
+                      <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-700">{n.payerName || <span className="font-normal italic text-slate-400">—</span>}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-600">
                         {n.msisdn
                           ? <span className="inline-flex items-center gap-1 font-mono"><FaMobileAlt size={9} className="text-slate-400" />{n.msisdn.slice(0, 4)}***{n.msisdn.slice(-3)}</span>
                           : "—"}
                       </td>
-                      <td className="px-3 py-2 font-mono text-slate-700">{n.transactionCode || "—"}</td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-700">{n.transactionCode || "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100">
                         {n.tenant ? (
                           <div>
                             <div className="font-bold text-[#0B3B2E]">{getTenantLabel(n.tenant)}</div>
@@ -792,7 +791,7 @@ export default function PmsMpesaNotifications() {
                           <span className="italic text-[10px] text-slate-400">{n.notes || "No tenant matched"}</span>
                         )}
                       </td>
-                      <td className="px-2 py-2 text-center" onClick={e => e.stopPropagation()}>
+                      <td className="px-2 py-1 text-center" onClick={e => e.stopPropagation()}>
                         <div className="flex flex-wrap items-center justify-center gap-1">
                           {canAssign && (
                             <button type="button" onClick={() => setAssignTarget(n)}

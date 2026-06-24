@@ -191,20 +191,20 @@ export default function CompanyUsers({ darkMode }) {
               <span>{search ? 'No users match your search.' : 'No users found. Add your first user.'}</span>
             </div>
           ) : (
-            <table className="w-full text-xs">
-              <thead>
-                <tr className={`border-b text-left text-[10px] font-extrabold uppercase tracking-[0.14em] ${headCls}`}>
-                  <th className="px-4 py-2.5">Name</th>
-                  <th className="px-4 py-2.5 hidden sm:table-cell">Email</th>
-                  <th className="px-4 py-2.5 hidden md:table-cell">Phone</th>
-                  <th className="px-4 py-2.5 hidden lg:table-cell">Profile</th>
-                  <th className="px-4 py-2.5 hidden lg:table-cell">Modules</th>
-                  <th className="px-4 py-2.5">Status</th>
-                  <th className="px-4 py-2.5 text-right">Actions</th>
+            <table className="w-full text-[11px] border-collapse">
+              <thead className="sticky top-0 z-10 shadow-sm">
+                <tr className="bg-[#0B3B2E] text-white">
+                  <th className="px-3 py-2 text-left font-bold border-r border-white/10">Name</th>
+                  <th className="px-3 py-2 text-left font-bold border-r border-white/10 hidden sm:table-cell">Email</th>
+                  <th className="px-3 py-2 text-left font-bold border-r border-white/10 hidden md:table-cell">Phone</th>
+                  <th className="px-3 py-2 text-left font-bold border-r border-white/10 hidden lg:table-cell">Profile</th>
+                  <th className="px-3 py-2 text-left font-bold border-r border-white/10 hidden lg:table-cell">Modules</th>
+                  <th className="px-3 py-2 text-left font-bold border-r border-white/10">Status</th>
+                  <th className="px-3 py-2 text-right font-bold">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((user) => {
+                {filtered.map((user, index) => {
                   const status = userStatusInfo(user);
                   const modules = moduleAccessSummary(user);
                   const fullName = `${user.surname || ''} ${user.otherNames || ''}`.trim();
@@ -213,10 +213,10 @@ export default function CompanyUsers({ darkMode }) {
                   const busy = togglingId === user._id;
 
                   return (
-                    <tr key={user._id} className={`border-b transition-colors ${rowCls} ${busy ? 'opacity-60' : ''}`}>
-                      <td className="px-4 py-2.5">
+                    <tr key={user._id} className={`border-b border-gray-100 transition-colors ${busy ? 'opacity-60' : ''} ${index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                      <td className="px-3 py-1 border-r border-gray-100">
                         <div className="flex items-center gap-2.5">
-                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#1f4a35] text-[10px] font-black text-white">
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-[#1f4a35] text-[10px] font-black text-white">
                             {initials || '?'}
                           </span>
                           <div>
@@ -228,42 +228,42 @@ export default function CompanyUsers({ darkMode }) {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-2.5 hidden sm:table-cell">
-                        <span className={darkMode ? 'text-gray-300' : 'text-slate-700'}>{user.email || '—'}</span>
+                      <td className="px-3 py-1 border-r border-gray-100 hidden sm:table-cell">
+                        <span className="text-slate-700">{user.email || '—'}</span>
                       </td>
-                      <td className="px-4 py-2.5 hidden md:table-cell">
-                        <span className={darkMode ? 'text-gray-300' : 'text-slate-700'}>{user.phoneNumber || '—'}</span>
+                      <td className="px-3 py-1 border-r border-gray-100 hidden md:table-cell">
+                        <span className="text-slate-700">{user.phoneNumber || '—'}</span>
                       </td>
-                      <td className="px-4 py-2.5 hidden lg:table-cell">
-                        <span className={`rounded border px-2 py-0.5 text-[10px] font-bold ${darkMode ? 'border-gray-600 text-gray-300' : 'border-gray-200 text-slate-600'}`}>
+                      <td className="px-3 py-1 border-r border-gray-100 hidden lg:table-cell">
+                        <span className="inline-flex rounded-full border border-gray-200 px-2 py-0.5 text-[10px] font-bold text-slate-600">
                           {user.profile || '—'}
                         </span>
                       </td>
-                      <td className="px-4 py-2.5 hidden lg:table-cell">
+                      <td className="px-3 py-1 border-r border-gray-100 hidden lg:table-cell">
                         <div className="flex flex-wrap gap-1">
                           {modules.length === 0 ? (
                             <span className="text-[10px] text-gray-400">None</span>
                           ) : (
                             modules.slice(0, 3).map((m) => (
-                              <span key={m} className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${darkMode ? 'bg-gray-700 text-gray-300' : 'bg-slate-100 text-slate-600'}`}>
+                              <span key={m} className="rounded-full px-1.5 py-0.5 text-[9px] font-bold bg-slate-100 text-slate-600">
                                 {MODULE_SHORT[m] || m}
                               </span>
                             ))
                           )}
                           {modules.length > 3 && (
-                            <span className="rounded px-1.5 py-0.5 text-[9px] font-bold bg-slate-100 text-slate-500">+{modules.length - 3}</span>
+                            <span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold bg-slate-100 text-slate-500">+{modules.length - 3}</span>
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-2.5">
-                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold ${status.color}`}>
+                      <td className="px-3 py-1 border-r border-gray-100">
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border ${status.label === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : status.label === 'Locked' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
                           {status.label === 'Active' && <FaCheckCircle className="text-[9px]" />}
                           {status.label === 'Locked' && <FaLock className="text-[9px]" />}
                           {status.label === 'Inactive' && <FaBan className="text-[9px]" />}
                           {status.label}
                         </span>
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-3 py-1">
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => navigate(`/users/${user._id}/edit`, { state: { returnTo: '/users' } })}

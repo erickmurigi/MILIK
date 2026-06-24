@@ -185,7 +185,7 @@ const PropertySaleDashboard = () => {
                   onClick={() => navigate(to)}
                   className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-left shadow-sm transition hover:border-[#027333] hover:shadow-md"
                 >
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#027333]/10 text-xs text-[#027333]">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-[#027333]/10 text-xs text-[#027333]">
                     <Icon />
                   </span>
                   <span className="text-xs font-bold leading-tight text-slate-800">{label}</span>

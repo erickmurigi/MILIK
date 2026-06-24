@@ -35,11 +35,11 @@ const Field = ({ label, required, children, span }) => (
 );
 
 const Input = (props) => (
-  <input {...props} className="h-8 w-full rounded-lg border border-slate-200 px-3 text-xs text-slate-800 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-100" />
+  <input {...props} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
 );
 
 const Select = ({ children, ...props }) => (
-  <select {...props} className="h-8 w-full rounded-lg border border-slate-200 px-3 text-xs text-slate-800 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-100">
+  <select {...props} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
     {children}
   </select>
 );
@@ -459,7 +459,7 @@ export default function AddEmployee() {
                   <button type="button" onClick={() => navigate('/hr/employees')} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
                     Cancel
                   </button>
-                  <button type="submit" disabled={saving} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-black text-white hover:bg-emerald-800 disabled:opacity-60">
+                  <button type="submit" disabled={saving} className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
                     <FaSave size={10} /> {saving ? 'Saving...' : (isEditing ? 'Update Employee' : 'Create Employee')}
                   </button>
                 </div>

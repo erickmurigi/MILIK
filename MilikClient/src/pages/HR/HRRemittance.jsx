@@ -252,159 +252,159 @@ export default function HRRemittance() {
                 {/* Table per report type */}
                 <div className="overflow-x-auto">
                   {reportType === 'paye' && (
-                    <table className="w-full text-xs">
+                    <table className="w-full text-[11px] border-collapse">
                       <thead>
-                        <tr className="border-b-2 border-slate-200 bg-slate-50">
+                        <tr className="bg-[#0B3B2E] text-white">
                           {[['No.','pl-4 text-left'],['Employee Name','text-left'],['KRA PIN','text-left'],['Gross Salary','text-right'],['PAYE Deducted','text-right pr-4 text-rose-600']].map(([h,cls]) => (
-                            <th key={h} className={`py-2.5 px-2 text-[9px] font-black uppercase tracking-widest text-slate-500 ${cls}`}>{h}</th>
+                            <th key={h} className={`py-1 px-2 font-bold border-r border-white/10 whitespace-nowrap ${cls.includes('text-left') ? 'text-left' : 'text-right'}`}>{h}</th>
                           ))}
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-50">
+                      <tbody>
                         {rows.map((r, i) => (
-                          <tr key={i} className="hover:bg-slate-50">
-                            <td className="py-2 pl-4 pr-2 font-mono text-[10px] text-slate-400">{r.employeeNumber}</td>
-                            <td className="py-2 px-2 font-black text-slate-900">{r.name}</td>
-                            <td className="py-2 px-2 font-mono text-slate-600">{r.kraPin || '—'}</td>
-                            <td className="py-2 px-2 text-right tabular-nums text-slate-700">{fmtKES(r.grossSalary)}</td>
-                            <td className="py-2 pl-2 pr-4 text-right tabular-nums font-black text-rose-600">{fmtKES(r.paye)}</td>
+                          <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                            <td className="py-1 px-2 font-mono text-[10px] text-slate-400 border-r border-gray-100">{r.employeeNumber}</td>
+                            <td className="py-1 px-2 font-black text-slate-900 border-r border-gray-100">{r.name}</td>
+                            <td className="py-1 px-2 font-mono text-slate-600 border-r border-gray-100">{r.kraPin || '—'}</td>
+                            <td className="py-1 px-2 text-right tabular-nums text-slate-700 border-r border-gray-100">{fmtKES(r.grossSalary)}</td>
+                            <td className="py-1 px-2 text-right tabular-nums font-black text-rose-600">{fmtKES(r.paye)}</td>
                           </tr>
                         ))}
                       </tbody>
                       <tfoot>
                         <tr className="border-t-2 border-slate-300 bg-slate-50">
-                          <td className="py-2.5 pl-4 pr-2 text-[10px] font-black uppercase tracking-widest text-slate-500" colSpan={3}>Total</td>
-                          <td className="py-2.5 px-2 text-right font-black tabular-nums text-slate-900">{fmtKES(totals.grossSalary)}</td>
-                          <td className="py-2.5 pl-2 pr-4 text-right font-black tabular-nums text-rose-700">{fmtKES(totals.paye)}</td>
+                          <td className="py-1.5 px-2 text-[10px] font-black uppercase tracking-widest text-slate-500" colSpan={3}>Total</td>
+                          <td className="py-1.5 px-2 text-right font-black tabular-nums text-slate-900">{fmtKES(totals.grossSalary)}</td>
+                          <td className="py-1.5 px-2 text-right font-black tabular-nums text-rose-700">{fmtKES(totals.paye)}</td>
                         </tr>
                       </tfoot>
                     </table>
                   )}
 
                   {reportType === 'nhif' && (
-                    <table className="w-full text-xs">
+                    <table className="w-full text-[11px] border-collapse">
                       <thead>
-                        <tr className="border-b-2 border-slate-200 bg-slate-50">
+                        <tr className="bg-[#0B3B2E] text-white">
                           {[['No.','pl-4 text-left'],['Employee Name','text-left'],['SHA / NHIF No.','text-left'],['Gross Salary','text-right'],['SHA Contribution','text-right pr-4 text-blue-600']].map(([h,cls]) => (
-                            <th key={h} className={`py-2.5 px-2 text-[9px] font-black uppercase tracking-widest text-slate-500 ${cls}`}>{h}</th>
+                            <th key={h} className={`py-1 px-2 font-bold border-r border-white/10 whitespace-nowrap ${cls.includes('text-left') ? 'text-left' : 'text-right'}`}>{h}</th>
                           ))}
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-50">
+                      <tbody>
                         {rows.map((r, i) => (
-                          <tr key={i} className="hover:bg-slate-50">
-                            <td className="py-2 pl-4 pr-2 font-mono text-[10px] text-slate-400">{r.employeeNumber}</td>
-                            <td className="py-2 px-2 font-black text-slate-900">{r.name}</td>
-                            <td className="py-2 px-2 font-mono text-slate-600">{r.nhifNo || '—'}</td>
-                            <td className="py-2 px-2 text-right tabular-nums text-slate-700">{fmtKES(r.grossSalary)}</td>
-                            <td className="py-2 pl-2 pr-4 text-right tabular-nums font-black text-blue-600">{fmtKES(r.employeeContribution)}</td>
+                          <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                            <td className="py-1 px-2 font-mono text-[10px] text-slate-400 border-r border-gray-100">{r.employeeNumber}</td>
+                            <td className="py-1 px-2 font-black text-slate-900 border-r border-gray-100">{r.name}</td>
+                            <td className="py-1 px-2 font-mono text-slate-600 border-r border-gray-100">{r.nhifNo || '—'}</td>
+                            <td className="py-1 px-2 text-right tabular-nums text-slate-700 border-r border-gray-100">{fmtKES(r.grossSalary)}</td>
+                            <td className="py-1 px-2 text-right tabular-nums font-black text-blue-600">{fmtKES(r.employeeContribution)}</td>
                           </tr>
                         ))}
                       </tbody>
                       <tfoot>
                         <tr className="border-t-2 border-slate-300 bg-slate-50">
-                          <td className="py-2.5 pl-4 pr-2 text-[10px] font-black uppercase tracking-widest text-slate-500" colSpan={3}>Total</td>
-                          <td className="py-2.5 px-2 text-right font-black tabular-nums text-slate-900">{fmtKES(totals.grossSalary)}</td>
-                          <td className="py-2.5 pl-2 pr-4 text-right font-black tabular-nums text-blue-700">{fmtKES(totals.employeeContribution)}</td>
+                          <td className="py-1.5 px-2 text-[10px] font-black uppercase tracking-widest text-slate-500" colSpan={3}>Total</td>
+                          <td className="py-1.5 px-2 text-right font-black tabular-nums text-slate-900">{fmtKES(totals.grossSalary)}</td>
+                          <td className="py-1.5 px-2 text-right font-black tabular-nums text-blue-700">{fmtKES(totals.employeeContribution)}</td>
                         </tr>
                       </tfoot>
                     </table>
                   )}
 
                   {reportType === 'nssf' && (
-                    <table className="w-full text-xs">
+                    <table className="w-full text-[11px] border-collapse">
                       <thead>
-                        <tr className="border-b-2 border-slate-200 bg-slate-50">
+                        <tr className="bg-[#0B3B2E] text-white">
                           {[['No.','pl-4 text-left'],['Employee Name','text-left'],['NSSF No.','text-left'],['Gross','text-right'],['Employee','text-right text-purple-600'],['Employer','text-right text-purple-600'],['Total','text-right pr-4 text-purple-700 font-black']].map(([h,cls]) => (
-                            <th key={h} className={`py-2.5 px-2 text-[9px] font-black uppercase tracking-widest text-slate-500 ${cls}`}>{h}</th>
+                            <th key={h} className={`py-1 px-2 font-bold border-r border-white/10 whitespace-nowrap ${cls.includes('text-left') ? 'text-left' : 'text-right'}`}>{h}</th>
                           ))}
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-50">
+                      <tbody>
                         {rows.map((r, i) => (
-                          <tr key={i} className="hover:bg-slate-50">
-                            <td className="py-2 pl-4 pr-2 font-mono text-[10px] text-slate-400">{r.employeeNumber}</td>
-                            <td className="py-2 px-2 font-black text-slate-900">{r.name}</td>
-                            <td className="py-2 px-2 font-mono text-slate-600">{r.nssfNo || '—'}</td>
-                            <td className="py-2 px-2 text-right tabular-nums text-slate-700">{fmtKES(r.grossSalary)}</td>
-                            <td className="py-2 px-2 text-right tabular-nums text-purple-600">{fmtKES(r.employeeContribution)}</td>
-                            <td className="py-2 px-2 text-right tabular-nums text-purple-600">{fmtKES(r.employerContribution)}</td>
-                            <td className="py-2 pl-2 pr-4 text-right tabular-nums font-black text-purple-700">{fmtKES(r.totalContribution)}</td>
+                          <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                            <td className="py-1 px-2 font-mono text-[10px] text-slate-400 border-r border-gray-100">{r.employeeNumber}</td>
+                            <td className="py-1 px-2 font-black text-slate-900 border-r border-gray-100">{r.name}</td>
+                            <td className="py-1 px-2 font-mono text-slate-600 border-r border-gray-100">{r.nssfNo || '—'}</td>
+                            <td className="py-1 px-2 text-right tabular-nums text-slate-700 border-r border-gray-100">{fmtKES(r.grossSalary)}</td>
+                            <td className="py-1 px-2 text-right tabular-nums text-purple-600 border-r border-gray-100">{fmtKES(r.employeeContribution)}</td>
+                            <td className="py-1 px-2 text-right tabular-nums text-purple-600 border-r border-gray-100">{fmtKES(r.employerContribution)}</td>
+                            <td className="py-1 px-2 text-right tabular-nums font-black text-purple-700">{fmtKES(r.totalContribution)}</td>
                           </tr>
                         ))}
                       </tbody>
                       <tfoot>
                         <tr className="border-t-2 border-slate-300 bg-slate-50">
-                          <td className="py-2.5 pl-4 pr-2 text-[10px] font-black uppercase tracking-widest text-slate-500" colSpan={3}>Total</td>
-                          <td className="py-2.5 px-2 text-right font-black tabular-nums text-slate-900">{fmtKES(totals.grossSalary)}</td>
-                          <td className="py-2.5 px-2 text-right font-black tabular-nums text-purple-600">{fmtKES(totals.employeeContribution)}</td>
-                          <td className="py-2.5 px-2 text-right font-black tabular-nums text-purple-600">{fmtKES(totals.employerContribution)}</td>
-                          <td className="py-2.5 pl-2 pr-4 text-right font-black tabular-nums text-purple-800">{fmtKES(totals.totalContribution)}</td>
+                          <td className="py-1.5 px-2 text-[10px] font-black uppercase tracking-widest text-slate-500" colSpan={3}>Total</td>
+                          <td className="py-1.5 px-2 text-right font-black tabular-nums text-slate-900">{fmtKES(totals.grossSalary)}</td>
+                          <td className="py-1.5 px-2 text-right font-black tabular-nums text-purple-600">{fmtKES(totals.employeeContribution)}</td>
+                          <td className="py-1.5 px-2 text-right font-black tabular-nums text-purple-600">{fmtKES(totals.employerContribution)}</td>
+                          <td className="py-1.5 px-2 text-right font-black tabular-nums text-purple-800">{fmtKES(totals.totalContribution)}</td>
                         </tr>
                       </tfoot>
                     </table>
                   )}
 
                   {reportType === 'ahl' && (
-                    <table className="w-full text-xs">
+                    <table className="w-full text-[11px] border-collapse">
                       <thead>
-                        <tr className="border-b-2 border-slate-200 bg-slate-50">
+                        <tr className="bg-[#0B3B2E] text-white">
                           {[['No.','pl-4 text-left'],['Employee Name','text-left'],['KRA PIN','text-left'],['Gross','text-right'],['Employee Levy','text-right text-amber-600'],['Employer Levy','text-right text-amber-600'],['Total Levy','text-right pr-4 text-amber-700 font-black']].map(([h,cls]) => (
-                            <th key={h} className={`py-2.5 px-2 text-[9px] font-black uppercase tracking-widest text-slate-500 ${cls}`}>{h}</th>
+                            <th key={h} className={`py-1 px-2 font-bold border-r border-white/10 whitespace-nowrap ${cls.includes('text-left') ? 'text-left' : 'text-right'}`}>{h}</th>
                           ))}
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-50">
+                      <tbody>
                         {rows.map((r, i) => (
-                          <tr key={i} className="hover:bg-slate-50">
-                            <td className="py-2 pl-4 pr-2 font-mono text-[10px] text-slate-400">{r.employeeNumber}</td>
-                            <td className="py-2 px-2 font-black text-slate-900">{r.name}</td>
-                            <td className="py-2 px-2 font-mono text-slate-600">{r.kraPin || '—'}</td>
-                            <td className="py-2 px-2 text-right tabular-nums text-slate-700">{fmtKES(r.grossSalary)}</td>
-                            <td className="py-2 px-2 text-right tabular-nums text-amber-600">{fmtKES(r.employeeLevy)}</td>
-                            <td className="py-2 px-2 text-right tabular-nums text-amber-600">{fmtKES(r.employerLevy)}</td>
-                            <td className="py-2 pl-2 pr-4 text-right tabular-nums font-black text-amber-700">{fmtKES(r.totalLevy)}</td>
+                          <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                            <td className="py-1 px-2 font-mono text-[10px] text-slate-400 border-r border-gray-100">{r.employeeNumber}</td>
+                            <td className="py-1 px-2 font-black text-slate-900 border-r border-gray-100">{r.name}</td>
+                            <td className="py-1 px-2 font-mono text-slate-600 border-r border-gray-100">{r.kraPin || '—'}</td>
+                            <td className="py-1 px-2 text-right tabular-nums text-slate-700 border-r border-gray-100">{fmtKES(r.grossSalary)}</td>
+                            <td className="py-1 px-2 text-right tabular-nums text-amber-600 border-r border-gray-100">{fmtKES(r.employeeLevy)}</td>
+                            <td className="py-1 px-2 text-right tabular-nums text-amber-600 border-r border-gray-100">{fmtKES(r.employerLevy)}</td>
+                            <td className="py-1 px-2 text-right tabular-nums font-black text-amber-700">{fmtKES(r.totalLevy)}</td>
                           </tr>
                         ))}
                       </tbody>
                       <tfoot>
                         <tr className="border-t-2 border-slate-300 bg-slate-50">
-                          <td className="py-2.5 pl-4 pr-2 text-[10px] font-black uppercase tracking-widest text-slate-500" colSpan={3}>Total</td>
-                          <td className="py-2.5 px-2 text-right font-black tabular-nums text-slate-900">{fmtKES(totals.grossSalary)}</td>
-                          <td className="py-2.5 px-2 text-right font-black tabular-nums text-amber-600">{fmtKES(totals.employeeLevy)}</td>
-                          <td className="py-2.5 px-2 text-right font-black tabular-nums text-amber-600">{fmtKES(totals.employerLevy)}</td>
-                          <td className="py-2.5 pl-2 pr-4 text-right font-black tabular-nums text-amber-800">{fmtKES(totals.totalLevy)}</td>
+                          <td className="py-1.5 px-2 text-[10px] font-black uppercase tracking-widest text-slate-500" colSpan={3}>Total</td>
+                          <td className="py-1.5 px-2 text-right font-black tabular-nums text-slate-900">{fmtKES(totals.grossSalary)}</td>
+                          <td className="py-1.5 px-2 text-right font-black tabular-nums text-amber-600">{fmtKES(totals.employeeLevy)}</td>
+                          <td className="py-1.5 px-2 text-right font-black tabular-nums text-amber-600">{fmtKES(totals.employerLevy)}</td>
+                          <td className="py-1.5 px-2 text-right font-black tabular-nums text-amber-800">{fmtKES(totals.totalLevy)}</td>
                         </tr>
                       </tfoot>
                     </table>
                   )}
 
                   {reportType === 'bank' && (
-                    <table className="w-full text-xs">
+                    <table className="w-full text-[11px] border-collapse">
                       <thead>
-                        <tr className="border-b-2 border-slate-200 bg-slate-50">
+                        <tr className="bg-[#0B3B2E] text-white">
                           {[['No.','pl-4 text-left'],['Employee Name','text-left'],['Method','text-left'],['Bank / Provider','text-left'],['Account / Number','text-left'],['Branch','text-left'],['Net Pay','text-right pr-4 text-emerald-700 font-black']].map(([h,cls]) => (
-                            <th key={h} className={`py-2.5 px-2 text-[9px] font-black uppercase tracking-widest text-slate-500 ${cls}`}>{h}</th>
+                            <th key={h} className={`py-1 px-2 font-bold border-r border-white/10 whitespace-nowrap ${cls.includes('text-left') ? 'text-left' : 'text-right'}`}>{h}</th>
                           ))}
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-50">
+                      <tbody>
                         {rows.map((r, i) => (
-                          <tr key={i} className="hover:bg-slate-50">
-                            <td className="py-2 pl-4 pr-2 font-mono text-[10px] text-slate-400">{r.employeeNumber}</td>
-                            <td className="py-2 px-2 font-black text-slate-900">{r.name}</td>
-                            <td className="py-2 px-2 text-slate-600">{r.paymentMethod || '—'}</td>
-                            <td className="py-2 px-2 text-slate-600">{r.bankName || (r.mpesaNumber ? 'M-Pesa' : '—')}</td>
-                            <td className="py-2 px-2 font-mono text-slate-700">{r.bankAccountNumber || r.mpesaNumber || '—'}</td>
-                            <td className="py-2 px-2 text-slate-500">{r.bankBranch || '—'}</td>
-                            <td className="py-2 pl-2 pr-4 text-right tabular-nums font-black text-emerald-700">{fmtKES(r.netSalary)}</td>
+                          <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                            <td className="py-1 px-2 font-mono text-[10px] text-slate-400 border-r border-gray-100">{r.employeeNumber}</td>
+                            <td className="py-1 px-2 font-black text-slate-900 border-r border-gray-100">{r.name}</td>
+                            <td className="py-1 px-2 text-slate-600 border-r border-gray-100">{r.paymentMethod || '—'}</td>
+                            <td className="py-1 px-2 text-slate-600 border-r border-gray-100">{r.bankName || (r.mpesaNumber ? 'M-Pesa' : '—')}</td>
+                            <td className="py-1 px-2 font-mono text-slate-700 border-r border-gray-100">{r.bankAccountNumber || r.mpesaNumber || '—'}</td>
+                            <td className="py-1 px-2 text-slate-500 border-r border-gray-100">{r.bankBranch || '—'}</td>
+                            <td className="py-1 px-2 text-right tabular-nums font-black text-emerald-700">{fmtKES(r.netSalary)}</td>
                           </tr>
                         ))}
                       </tbody>
                       <tfoot>
                         <tr className="border-t-2 border-slate-300 bg-slate-50">
-                          <td className="py-2.5 pl-4 pr-2 text-[10px] font-black uppercase tracking-widest text-slate-500" colSpan={6}>Total Net Pay</td>
-                          <td className="py-2.5 pl-2 pr-4 text-right font-black tabular-nums text-emerald-800">{fmtKES(totals.netSalary)}</td>
+                          <td className="py-1.5 px-2 text-[10px] font-black uppercase tracking-widest text-slate-500" colSpan={6}>Total Net Pay</td>
+                          <td className="py-1.5 px-2 text-right font-black tabular-nums text-emerald-800">{fmtKES(totals.netSalary)}</td>
                         </tr>
                       </tfoot>
                     </table>

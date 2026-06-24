@@ -270,14 +270,14 @@ const IncomeStatementReport = () => {
                   type="date"
                   value={filters.startDate}
                   onChange={(e) => setFilters((p) => ({ ...p, startDate: e.target.value }))}
-                  className="h-7 rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                  className="h-7 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                 />
                 <span className="text-[10px] font-medium text-slate-400">to</span>
                 <input
                   type="date"
                   value={filters.endDate}
                   onChange={(e) => setFilters((p) => ({ ...p, endDate: e.target.value }))}
-                  className="h-7 rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                  className="h-7 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                 />
               </div>
 
@@ -285,7 +285,7 @@ const IncomeStatementReport = () => {
                 <select
                   value={filters.propertyId}
                   onChange={(e) => setFilters((p) => ({ ...p, propertyId: e.target.value }))}
-                  className="h-7 rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                  className="h-7 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                 >
                   <option value="">All Properties</option>
                   {properties.map((p) => (
@@ -299,7 +299,7 @@ const IncomeStatementReport = () => {
               <button
                 onClick={loadReport}
                 disabled={loading}
-                className="flex h-7 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-[11px] font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+                className="flex h-7 items-center gap-1.5 rounded bg-blue-600 px-3 text-[11px] font-bold text-white hover:bg-blue-700 disabled:opacity-50"
               >
                 <FaSyncAlt size={9} className={loading ? "animate-spin" : ""} />
                 {loading ? "Loading…" : "Refresh"}
@@ -311,7 +311,7 @@ const IncomeStatementReport = () => {
                 onClick={handleExportCSV}
                 disabled={!canExport}
                 title={!canExport ? "No export permission" : "Export CSV"}
-                className="flex h-7 items-center gap-1.5 rounded-lg bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00] disabled:opacity-50"
+                className="flex h-7 items-center gap-1.5 rounded bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00] disabled:opacity-50"
               >
                 <FaFileDownload size={9} /> Export CSV
               </button>
@@ -319,7 +319,7 @@ const IncomeStatementReport = () => {
                 onClick={handlePrintPDF}
                 disabled={!canExport}
                 title={!canExport ? "No print permission" : "Print PDF"}
-                className="flex h-7 items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127] disabled:opacity-50"
+                className="flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127] disabled:opacity-50"
               >
                 <FaFilePdf size={9} /> Print PDF
               </button>

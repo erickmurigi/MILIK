@@ -276,16 +276,16 @@ const RentalInvoiceVATReport = () => {
                     value={filters.search}
                     onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
                     placeholder="Invoice, tenant, property, unit"
-                    className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-orange-400"
+                    className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
-                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-orange-400">
+                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
                   <option value="all">All properties</option>
                   {properties.map((property) => (
                     <option key={property._id} value={property._id}>{property.propertyName || property.name}</option>
                   ))}
                 </select>
-                <select value={filters.category} onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-orange-400">
+                <select value={filters.category} onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
                   <option value="all">All charge types</option>
                   <option value="RENT_CHARGE">Rent</option>
                   <option value="UTILITY_CHARGE">Utility</option>
@@ -311,11 +311,11 @@ const RentalInvoiceVATReport = () => {
             </div>
 
             <div className="flex-1 min-h-0 overflow-auto">
-              <table className="min-w-full text-xs">
+              <table className="min-w-full text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className="bg-[#0B3B2E] text-white">
-                    {['Invoice', 'Tenant', 'Property', 'Unit', 'Category', 'Invoice Date', 'Due Date', 'Tax', 'Net', 'VAT', 'Gross', 'Status'].map((header) => (
-                      <th key={header} className="whitespace-nowrap px-3 py-2 text-left text-[11px] font-bold uppercase tracking-[0.12em]">{header}</th>
+                    {['Invoice', 'Tenant', 'Property', 'Unit', 'Category', 'Invoice Date', 'Due Date', 'Tax', 'Net', 'VAT', 'Gross', 'Status'].map((header, i, arr) => (
+                      <th key={header} className={`whitespace-nowrap px-3 py-1 text-left font-bold ${i < arr.length - 1 ? "border-r border-white/10" : ""}`}>{header}</th>
                     ))}
                   </tr>
                 </thead>
@@ -325,20 +325,20 @@ const RentalInvoiceVATReport = () => {
                       <td colSpan={12} className="px-3 py-8 text-center text-xs text-slate-500">No taxable rental invoices found for the current filter selection.</td>
                     </tr>
                   ) : (
-                    paginatedRows.map((row) => (
-                      <tr key={row._id} className="border-t border-slate-200 align-top hover:bg-slate-50/80">
-                        <td className="px-3 py-2 font-semibold text-slate-900">{row?.invoiceNumber || '-'}</td>
-                        <td className="px-3 py-2 text-slate-700">{row?.tenant?.tenantName || row?.tenant?.name || '-'}</td>
-                        <td className="px-3 py-2 text-slate-700">{row?.property?.propertyName || '-'}</td>
-                        <td className="px-3 py-2 text-slate-700">{row?.unit?.unitNumber || '-'}</td>
-                        <td className="px-3 py-2 text-slate-700">{String(row?.category || '').replace(/_/g, ' ')}</td>
-                        <td className="px-3 py-2 text-slate-700">{formatDate(row?.invoiceDate)}</td>
-                        <td className="px-3 py-2 text-slate-700">{formatDate(row?.dueDate)}</td>
-                        <td className="px-3 py-2 text-slate-700">{row?.taxSnapshot?.taxCodeName || '-'} ({Number(row?.taxSnapshot?.taxRate || 0)}%)</td>
-                        <td className="px-3 py-2 text-right font-semibold text-slate-900">{formatMoney(row?.taxSnapshot?.netAmount || 0)}</td>
-                        <td className="px-3 py-2 text-right font-semibold text-amber-700">{formatMoney(row?.taxSnapshot?.taxAmount || 0)}</td>
-                        <td className="px-3 py-2 text-right font-bold text-[#0B3B2E]">{formatMoney(row?.taxSnapshot?.grossAmount || row?.amount || 0)}</td>
-                        <td className="px-3 py-2 text-slate-700">{row?.status || '-'}</td>
+                    paginatedRows.map((row, idx) => (
+                      <tr key={row._id} className={`border-b border-gray-100 align-top ${idx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row?.invoiceNumber || '-'}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row?.tenant?.tenantName || row?.tenant?.name || '-'}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row?.property?.propertyName || '-'}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row?.unit?.unitNumber || '-'}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{String(row?.category || '').replace(/_/g, ' ')}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{formatDate(row?.invoiceDate)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{formatDate(row?.dueDate)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row?.taxSnapshot?.taxCodeName || '-'} ({Number(row?.taxSnapshot?.taxRate || 0)}%)</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-900">{formatMoney(row?.taxSnapshot?.netAmount || 0)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-amber-700">{formatMoney(row?.taxSnapshot?.taxAmount || 0)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-[#0B3B2E]">{formatMoney(row?.taxSnapshot?.grossAmount || row?.amount || 0)}</td>
+                        <td className="px-3 py-1 text-slate-700">{row?.status || '-'}</td>
                       </tr>
                     ))
                   )}

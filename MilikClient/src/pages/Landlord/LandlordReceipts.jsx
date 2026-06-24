@@ -17,6 +17,7 @@ import {
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import AppSelect from "../../components/common/AppSelect";
 import { getLandlords, getChartOfAccounts, getLandlordReceipts, getLandlordAdvancements, createLandlordReceipt, updateLandlordReceipt, postLandlordReceipt, reverseLandlordReceipt, deleteLandlordReceipt } from "../../redux/apiCalls";
 import { selectCurrentCompany, selectCurrentUser, selectAllLandlords, selectAllProperties } from "../../redux/selectors";
 import { getProperties } from "../../redux/propertyRedux";
@@ -532,7 +533,7 @@ const LandlordReceipts = () => {
             <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
               <label className="relative shrink-0">
                 <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"><FaSearch /></span>
-                <input value={filters.search} onChange={(e) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, search: e.target.value })); }} placeholder="Search receipt, landlord…" className="h-7 w-44 rounded border border-[#FF8C00]/70 bg-white pl-6 pr-2 text-xs outline-none focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]" />
+                <input value={filters.search} onChange={(e) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, search: e.target.value })); }} placeholder="Search receipt, landlord…" className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </label>
               <select value={filters.status} onChange={(e) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, status: e.target.value })); }} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                 <option value="all">All Statuses</option>
@@ -561,32 +562,32 @@ const LandlordReceipts = () => {
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
             <div className="min-h-0 flex-1 overflow-auto">
-              <table className="min-w-[1180px] w-full text-xs">
+              <table className="min-w-[1180px] w-full text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className={`${MILIK_GREEN} text-white`}>
                     {["Date", "Receipt No", "Landlord", "Property", "Category", "Amount", "Status", "Actions"].map((label) => (
-                      <th key={label} className={`px-3 py-2 text-xs font-semibold ${label === "Amount" || label === "Actions" ? "text-right" : "text-left"}`}>{label}</th>
+                      <th key={label} className={`px-3 py-2 font-bold ${label === "Amount" || label === "Actions" ? "text-right" : "text-left"} ${label !== "Actions" ? "border-r border-white/10" : ""}`}>{label}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {receipts.map((row, index) => (
-                    <tr key={row._id} className={`border-b border-slate-200 transition-colors ${index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50 hover:bg-blue-50/40"}`}>
-                      <td className="px-3 py-2 font-semibold text-slate-700">{formatDate(row.receiptDate)}</td>
-                      <td className="px-3 py-2 font-bold text-blue-700">{row.receiptNumber || "-"}</td>
-                      <td className="px-3 py-2 text-slate-700">
+                    <tr key={row._id} className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                      <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-700">{formatDate(row.receiptDate)}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 font-bold text-blue-700">{row.receiptNumber || "-"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-700">
                         <div className="font-bold text-slate-900">{row?.landlord?.landlordName || "-"}</div>
                         <div className="text-[10px] text-slate-500">{row?.landlord?.landlordCode || ""}</div>
                       </td>
-                      <td className="px-3 py-2 font-semibold text-slate-900">{row?.property?.propertyName || "-"}</td>
-                      <td className="px-3 py-2 text-slate-700">{CATEGORY_OPTIONS.find((item) => item.value === row?.category)?.label || row?.category || "-"}</td>
-                      <td className="px-3 py-2 text-right font-bold text-slate-900">{formatMoney(row?.amount || 0)}</td>
-                      <td className="px-3 py-2">
-                        <span className={`inline-flex rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${row?.status === "posted" ? "bg-emerald-100 text-emerald-700" : row?.status === "reversed" ? "bg-rose-100 text-rose-700" : "bg-orange-100 text-orange-700"}`}>
+                      <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row?.property?.propertyName || "-"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{CATEGORY_OPTIONS.find((item) => item.value === row?.category)?.label || row?.category || "-"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{formatMoney(row?.amount || 0)}</td>
+                      <td className="px-3 py-1 border-r border-gray-100">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase border ${row?.status === "posted" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : row?.status === "reversed" ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-orange-50 text-orange-700 border-orange-200"}`}>
                           {row?.status || "draft"}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-right">
+                      <td className="px-3 py-1 text-right">
                         <div className="inline-flex flex-wrap justify-end gap-1">
                           <button type="button" onClick={() => { setActiveReceipt(row); setShowDetailModal(true); }} className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800" title="View"><FaEye size={12} /></button>
                           <button type="button" onClick={() => handlePrint(row)} className="rounded p-1 text-purple-600 hover:bg-purple-50 hover:text-purple-800" title="Print"><FaPrint size={12} /></button>
@@ -632,123 +633,124 @@ const LandlordReceipts = () => {
 
       {showFormModal && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/50 p-4">
-          <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
+          <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between bg-[#0B3B2E] px-5 py-4 text-white rounded-t-2xl">
               <div>
-                <h2 className="text-xl font-black text-slate-900">{editingReceiptId ? "Edit Landlord Receipt" : "Add Landlord Receipt"}</h2>
-                <p className="mt-1 text-sm text-slate-500">Controlled owner-funds receipt. This does not allocate to tenant invoices.</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-200">Landlord Receipts</p>
+                <h2 className="text-lg font-black">{editingReceiptId ? "Edit Landlord Receipt" : "Add Landlord Receipt"}</h2>
               </div>
-              <button type="button" onClick={() => setShowFormModal(false)} className="rounded-2xl border border-slate-200 p-3 text-slate-500 hover:bg-slate-100"><FaTimes /></button>
+              <button type="button" onClick={() => setShowFormModal(false)} className="rounded-full border border-white/30 p-2 hover:bg-white/10"><FaTimes /></button>
             </div>
-            <div className="grid gap-5 px-6 py-6 md:grid-cols-2">
-              <label className="space-y-2">
-                <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Property</span>
-                <select value={formData.property} onChange={(e) => setFormData((prev) => ({ ...prev, property: e.target.value }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]">
-                  <option value="">Select property</option>
-                  {landlordPropertyOptions.map((property) => <option key={property._id} value={property._id}>{property.propertyName}</option>)}
-                </select>
-              </label>
-              <label className="space-y-2">
-                <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Landlord</span>
+            <div className="grid gap-3 px-5 py-4 md:grid-cols-2">
+              <div>
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Property <span className="text-red-500">*</span></span>
+                <AppSelect
+                  value={formData.property}
+                  onChange={(v) => setFormData((prev) => ({ ...prev, property: v ?? "" }))}
+                  options={landlordPropertyOptions.map((p) => ({ value: p._id, label: p.propertyName }))}
+                  placeholder="Select property…"
+                  searchable
+                  size="sm"
+                />
+              </div>
+              <div>
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Landlord</span>
                 <input
                   type="text"
                   readOnly
                   value={resolvedFormLandlord?.name || ""}
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 outline-none"
+                  className="w-full rounded border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700 outline-none disabled:cursor-not-allowed"
                   placeholder={formData.property ? "No landlord linked to selected property" : "Select property first"}
                 />
-                <p className="text-xs font-semibold text-slate-500">Landlord is auto-filled from the selected property.</p>
-              </label>
-              <label className="space-y-2">
-                <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Receipt date</span>
-                <input type="date" value={formData.receiptDate} onChange={(e) => setFormData((prev) => ({ ...prev, receiptDate: e.target.value }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]" />
-              </label>
-              <label className="space-y-2">
-                <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Amount</span>
-                <input type="number" min="0" step="0.01" value={formData.amount} onChange={(e) => setFormData((prev) => ({ ...prev, amount: e.target.value }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]" />
-              </label>
-              <label className="space-y-2 md:col-span-2">
-                <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Receipt category</span>
-                <select value={formData.category} onChange={(e) => setFormData((prev) => ({ ...prev, category: e.target.value, linkedDocumentType: "", linkedDocumentId: "", linkedDocumentRef: "" }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]">
+                <p className="mt-0.5 text-[10px] text-slate-500">Auto-filled from the selected property.</p>
+              </div>
+              <div>
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Receipt date <span className="text-red-500">*</span></span>
+                <input type="date" value={formData.receiptDate} onChange={(e) => setFormData((prev) => ({ ...prev, receiptDate: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+              </div>
+              <div>
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Amount <span className="text-red-500">*</span></span>
+                <input type="number" min="0" step="0.01" value={formData.amount} onChange={(e) => setFormData((prev) => ({ ...prev, amount: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+              </div>
+              <div className="md:col-span-2">
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Receipt category</span>
+                <select value={formData.category} onChange={(e) => setFormData((prev) => ({ ...prev, category: e.target.value, linkedDocumentType: "", linkedDocumentId: "", linkedDocumentRef: "" }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
                   {CATEGORY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
-                <p className="text-xs font-semibold text-slate-500">Posting rule: Dr selected cashbook, {CATEGORY_OPTIONS.find((item) => item.value === formData.category)?.accountHint || "controlled category account"}.</p>
-              </label>
-              <label className="space-y-2">
-                <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Payment method</span>
-                <select value={formData.paymentMethod} onChange={(e) => setFormData((prev) => ({ ...prev, paymentMethod: e.target.value }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]">
+                <p className="mt-0.5 text-[10px] text-slate-500">Posting rule: Dr selected cashbook, {CATEGORY_OPTIONS.find((item) => item.value === formData.category)?.accountHint || "controlled category account"}.</p>
+              </div>
+              <div>
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Payment method</span>
+                <select value={formData.paymentMethod} onChange={(e) => setFormData((prev) => ({ ...prev, paymentMethod: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
                   {PAYMENT_METHOD_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
-              </label>
-              <label className="space-y-2">
-                <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Cashbook</span>
-                <select value={formData.cashbook} onChange={(e) => setFormData((prev) => ({ ...prev, cashbook: e.target.value }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]">
+              </div>
+              <div>
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Cashbook</span>
+                <select value={formData.cashbook} onChange={(e) => setFormData((prev) => ({ ...prev, cashbook: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
                   {cashbooks.map((account) => <option key={account._id} value={account.name}>{account.name}</option>)}
                 </select>
-              </label>
-              <label className="space-y-2">
-                <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Reference number</span>
-                <input type="text" value={formData.referenceNumber} onChange={(e) => setFormData((prev) => ({ ...prev, referenceNumber: e.target.value }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]" placeholder="Bank ref / M-Pesa code / cheque no" />
-              </label>
+              </div>
+              <div>
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Reference number</span>
+                <input type="text" value={formData.referenceNumber} onChange={(e) => setFormData((prev) => ({ ...prev, referenceNumber: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" placeholder="Bank ref / M-Pesa code / cheque no" />
+              </div>
               {formData.category === "advance_settlement" ? (
-                <label className="space-y-2 md:col-span-2">
-                  <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">
-                    Advancement to settle <span className="normal-case font-semibold text-slate-400">(select the advance this receipt clears)</span>
+                <div className="md:col-span-2">
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">
+                    Advancement to settle <span className="text-slate-400 font-normal">(select the advance this receipt clears)</span>
                   </span>
                   {advancements.length === 0 ? (
-                    <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700">
+                    <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
                       No disbursed advancements found for this property. Select a property with active advancements first.
                     </p>
                   ) : (
-                    <select
+                    <AppSelect
                       value={formData.linkedDocumentId}
-                      onChange={(e) => {
-                        const adv = advancements.find((a) => String(a._id) === e.target.value);
+                      onChange={(v) => {
+                        const adv = advancements.find((a) => String(a._id) === v);
                         setFormData((prev) => ({
                           ...prev,
                           linkedDocumentType: "landlord_advancement",
-                          linkedDocumentId: e.target.value,
+                          linkedDocumentId: v ?? "",
                           linkedDocumentRef: adv?.referenceNo || "",
                           amount: adv ? String(Number(adv.balanceOutstanding || 0)) : prev.amount,
                         }));
                       }}
-                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]"
-                    >
-                      <option value="">— Select advancement —</option>
-                      {advancements.map((adv) => (
-                        <option key={adv._id} value={adv._id}>
-                          {adv.referenceNo} — {adv.title} — Balance: KES {Number(adv.balanceOutstanding || 0).toLocaleString()}
-                        </option>
-                      ))}
-                    </select>
+                      options={advancements.map((adv) => ({ value: adv._id, label: `${adv.referenceNo} — ${adv.title} — Balance: KES ${Number(adv.balanceOutstanding || 0).toLocaleString()}` }))}
+                      placeholder="— Select advancement —"
+                      searchable
+                      clearable
+                      size="sm"
+                    />
                   )}
-                </label>
+                </div>
               ) : (
                 <>
-                  <label className="space-y-2">
-                    <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Linked document type</span>
-                    <select value={formData.linkedDocumentType} onChange={(e) => setFormData((prev) => ({ ...prev, linkedDocumentType: e.target.value }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]">
+                  <div>
+                    <span className="mb-0.5 block text-xs font-semibold text-slate-700">Linked document type</span>
+                    <select value={formData.linkedDocumentType} onChange={(e) => setFormData((prev) => ({ ...prev, linkedDocumentType: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
                       {LINKED_DOCUMENT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </select>
-                  </label>
-                  <label className="space-y-2">
-                    <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Linked document ID</span>
-                    <input type="text" value={formData.linkedDocumentId} onChange={(e) => setFormData((prev) => ({ ...prev, linkedDocumentId: e.target.value }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]" placeholder="Optional internal document id" />
-                  </label>
-                  <label className="space-y-2">
-                    <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Linked document reference</span>
-                    <input type="text" value={formData.linkedDocumentRef} onChange={(e) => setFormData((prev) => ({ ...prev, linkedDocumentRef: e.target.value }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]" placeholder="Statement no / voucher no / manual ref" />
-                  </label>
+                  </div>
+                  <div>
+                    <span className="mb-0.5 block text-xs font-semibold text-slate-700">Linked document ID</span>
+                    <input type="text" value={formData.linkedDocumentId} onChange={(e) => setFormData((prev) => ({ ...prev, linkedDocumentId: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" placeholder="Optional internal document id" />
+                  </div>
+                  <div>
+                    <span className="mb-0.5 block text-xs font-semibold text-slate-700">Linked document reference</span>
+                    <input type="text" value={formData.linkedDocumentRef} onChange={(e) => setFormData((prev) => ({ ...prev, linkedDocumentRef: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" placeholder="Statement no / voucher no / manual ref" />
+                  </div>
                 </>
               )}
-              <label className="space-y-2 md:col-span-2">
-                <span className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Narration</span>
-                <textarea rows={4} value={formData.narration} onChange={(e) => setFormData((prev) => ({ ...prev, narration: e.target.value }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 outline-none focus:border-[#0B3B2E]" placeholder="Explain why this money was received from the landlord" />
-              </label>
+              <div className="md:col-span-2">
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Narration</span>
+                <textarea rows={3} value={formData.narration} onChange={(e) => setFormData((prev) => ({ ...prev, narration: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" placeholder="Explain why this money was received from the landlord" />
+              </div>
             </div>
-            <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-5">
-              <button type="button" onClick={() => setShowFormModal(false)} className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-100">Cancel</button>
-              <button type="button" onClick={handleSave} disabled={saving} className={`inline-flex items-center gap-2 rounded-2xl px-5 py-3 text-sm font-black text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-50 ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}>
+            <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-5 py-4">
+              <button type="button" onClick={() => setShowFormModal(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button type="button" onClick={handleSave} disabled={saving} className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-60 ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}>
                 <FaPlus /> {saving ? "Saving..." : editingReceiptId ? "Update Draft" : "Save Draft"}
               </button>
             </div>

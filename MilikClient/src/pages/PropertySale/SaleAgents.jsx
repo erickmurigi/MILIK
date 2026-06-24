@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { FaEdit, FaPlus, FaPrint, FaSearch, FaTimes, FaTrash, FaUserTie } from "react-icons/fa";
@@ -83,7 +83,7 @@ const SaleAgents = () => {
     const coName = co.companyName || co.name || "MILIK";
     const esc = (v) => String(v ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
     const logoHtml = co.logo ? `<img src="${co.logo}" alt="logo" style="width:72px;height:72px;object-fit:contain;border-radius:10px;border:1px solid #cbd5e1;" />` : `<div style="width:72px;height:72px;background:#027333;color:#fff;font-size:26px;font-weight:900;display:flex;align-items:center;justify-content:center;border-radius:10px;">${coName.slice(0,1)}</div>`;
-    const coInfo = [co.phone||co.phoneNumber, co.email||co.companyEmail].filter(Boolean).join(" • ");
+    const coInfo = [co.phone||co.phoneNumber, co.email||co.companyEmail].filter(Boolean).join(" â€¢ ");
     const printedOn = new Date().toLocaleDateString("en-KE",{day:"2-digit",month:"long",year:"numeric"});
     const statusBg = row.status === "active" ? "#dcfce7" : "#f1f5f9";
     const statusC = row.status === "active" ? "#166534" : "#64748b";
@@ -92,7 +92,7 @@ const SaleAgents = () => {
     const win = window.open("","_blank","width=900,height=680");
     if (!win) return;
     win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
-<title>Agent Profile — ${esc(row.agentNumber)}</title>
+<title>Agent Profile â€” ${esc(row.agentNumber)}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 32px;font-size:12px}
@@ -127,19 +127,19 @@ body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 32px;font
 </div>
 <div class="grid">
   <div class="field"><div class="fl">Full Name</div><div class="fv">${esc(row.fullName)}</div></div>
-  <div class="field"><div class="fl">Phone</div><div class="fv">${esc(row.phone||"—")}</div></div>
-  <div class="field"><div class="fl">Email</div><div class="fv">${esc(row.email||"—")}</div></div>
-  <div class="field"><div class="fl">ID Number</div><div class="fv">${esc(row.idNumber||"—")}</div></div>
+  <div class="field"><div class="fl">Phone</div><div class="fv">${esc(row.phone||"â€”")}</div></div>
+  <div class="field"><div class="fl">Email</div><div class="fv">${esc(row.email||"â€”")}</div></div>
+  <div class="field"><div class="fl">ID Number</div><div class="fv">${esc(row.idNumber||"â€”")}</div></div>
   <div class="field"><div class="fl">Status</div><div class="fv">${esc(row.status)}</div></div>
 </div>
 ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;font-size:11px;color:#334155;line-height:1.6"><div style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:4px">Notes</div>${esc(row.notes)}</div>`:""}
-<div class="notice">Agent profile issued by ${esc(coName)} • Printed: ${esc(printedOn)}</div>
+<div class="notice">Agent profile issued by ${esc(coName)} â€¢ Printed: ${esc(printedOn)}</div>
 </body></html>`);
     win.document.close();
     setTimeout(()=>{win.focus();win.print();},400);
   };
 
-  const inputCls = "mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none focus:ring-2 focus:ring-[#027333]/20";
+  const inputCls = "mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20";
   const f = (key) => (e) => setForm((p) => ({ ...p, [key]: e.target.value }));
 
   return (
@@ -161,7 +161,7 @@ ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px
                 ? `${Number(backendStats.active.avgRate).toFixed(1)}%`
                 : agents.length > 0
                   ? `${(agents.reduce((s, a) => s + Number(a.commissionRate || 0), 0) / agents.length).toFixed(1)}%`
-                  : "—",
+                  : "â€”",
               cls: "bg-emerald-50 border border-emerald-200 text-emerald-900",
             },
           ].map((c) => (
@@ -199,8 +199,8 @@ ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px
                   <tr key={row._id} className={`border-t border-slate-100 transition ${i % 2 === 0 ? "bg-white hover:bg-slate-50" : "bg-slate-50/60 hover:bg-slate-100/40"}`}>
                     <td className="px-3 py-2 font-black text-slate-900">{row.agentNumber}</td>
                     <td className="px-3 py-2 font-bold text-slate-900">{row.fullName}</td>
-                    <td className="px-3 py-2 text-slate-600">{row.phone || "—"}</td>
-                    <td className="px-3 py-2 text-slate-600">{row.email || "—"}</td>
+                    <td className="px-3 py-2 text-slate-600">{row.phone || "â€”"}</td>
+                    <td className="px-3 py-2 text-slate-600">{row.email || "â€”"}</td>
                     <td className="px-3 py-2 font-black text-[#027333]">
                       {row.commissionType === "percentage" ? `${row.commissionRate}%` : fmtKES(row.commissionRate)}
                       <span className="ml-1 text-[10px] font-normal text-slate-400">({row.commissionType})</span>
@@ -242,18 +242,18 @@ ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px
               <button onClick={() => setShowModal(false)} className="rounded-full border border-white/30 p-2 hover:bg-white/10"><FaTimes /></button>
             </div>
             <div className="grid gap-4 overflow-y-auto p-6 md:grid-cols-2">
-              <label className="block md:col-span-2"><span className="text-xs font-bold text-slate-700">Full Name</span><input value={form.fullName} onChange={f("fullName")} className={inputCls} /></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Phone</span><input value={form.phone} onChange={f("phone")} className={inputCls} /></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Email</span><input type="email" value={form.email} onChange={f("email")} className={inputCls} /></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">National ID</span><input value={form.idNumber} onChange={f("idNumber")} className={inputCls} /></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Status</span><select value={form.status} onChange={f("status")} className={inputCls}><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Commission Type</span><select value={form.commissionType} onChange={f("commissionType")} className={inputCls}><option value="percentage">Percentage (%)</option><option value="flat">Flat Amount (KES)</option></select></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Commission Rate {form.commissionType === "percentage" ? "(%)" : "(KES)"}</span><input type="number" value={form.commissionRate} onChange={f("commissionRate")} className={inputCls} /></label>
-              <label className="block md:col-span-2"><span className="text-xs font-bold text-slate-700">Notes</span><textarea rows={2} value={form.notes} onChange={f("notes")} className={inputCls} /></label>
+              <label className="block md:col-span-2"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Full Name</span><input value={form.fullName} onChange={f("fullName")} className={inputCls} /></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Phone</span><input value={form.phone} onChange={f("phone")} className={inputCls} /></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Email</span><input type="email" value={form.email} onChange={f("email")} className={inputCls} /></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">National ID</span><input value={form.idNumber} onChange={f("idNumber")} className={inputCls} /></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Status</span><select value={form.status} onChange={f("status")} className={inputCls}><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Commission Type</span><select value={form.commissionType} onChange={f("commissionType")} className={inputCls}><option value="percentage">Percentage (%)</option><option value="flat">Flat Amount (KES)</option></select></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Commission Rate {form.commissionType === "percentage" ? "(%)" : "(KES)"}</span><input type="number" value={form.commissionRate} onChange={f("commissionRate")} className={inputCls} /></label>
+              <label className="block md:col-span-2"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Notes</span><textarea rows={2} value={form.notes} onChange={f("notes")} className={inputCls} /></label>
             </div>
             <div className="flex shrink-0 items-center justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
-              <button onClick={() => setShowModal(false)} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-black text-slate-700">Cancel</button>
-              <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-[#027333] px-4 py-2 text-sm font-black text-white disabled:opacity-60">{saving ? "Saving..." : editingId ? "Update Agent" : "Save Agent"}</button>
+              <button onClick={() => setShowModal(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-[#027333] px-4 py-2 text-xs font-black text-white hover:bg-[#0c5d2b] disabled:opacity-60">{saving ? "Saving..." : editingId ? "Update Agent" : "Save Agent"}</button>
             </div>
           </div>
         </div>

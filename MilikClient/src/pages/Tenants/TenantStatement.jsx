@@ -1299,22 +1299,22 @@ const TenantStatement = () => {
                   </div>
                 ) : (
                   <div className="overflow-hidden rounded-lg border border-slate-200">
-                    <table className="w-full text-xs">
-                      <thead className="bg-slate-100">
+                    <table className="w-full text-[11px] border-collapse">
+                      <thead className="bg-[#0B3B2E] text-white">
                         <tr>
-                          <th className="px-3 py-2 text-left font-bold text-slate-700">Invoice</th>
-                          <th className="px-3 py-2 text-left font-bold text-slate-700">Charge</th>
-                          <th className="px-3 py-2 text-right font-bold text-slate-700">Applied</th>
-                          <th className="px-3 py-2 text-right font-bold text-slate-700">Outstanding after</th>
+                          <th className="px-3 py-1 text-left font-bold border-r border-white/10">Invoice</th>
+                          <th className="px-3 py-1 text-left font-bold border-r border-white/10">Charge</th>
+                          <th className="px-3 py-1 text-right font-bold border-r border-white/10">Applied</th>
+                          <th className="px-3 py-1 text-right font-bold">Outstanding after</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {selectedAllocationTrace.allocations.map((row) => (
-                          <tr key={`${selectedAllocationTrace.receiptId}-${row.invoiceId}-${row.label}`} className="border-t border-slate-200">
-                            <td className="px-3 py-2 font-semibold text-slate-900">{row.invoiceNumber}</td>
-                            <td className="px-3 py-2 text-slate-600">{row.label}</td>
-                            <td className="px-3 py-2 text-right font-bold text-green-700">Ksh {row.appliedAmount.toLocaleString()}</td>
-                            <td className="px-3 py-2 text-right text-slate-700">Ksh {row.afterOutstanding.toLocaleString()}</td>
+                        {selectedAllocationTrace.allocations.map((row, i) => (
+                          <tr key={`${selectedAllocationTrace.receiptId}-${row.invoiceId}-${row.label}`} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}>
+                            <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.invoiceNumber}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{row.label}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-green-700">Ksh {row.appliedAmount.toLocaleString()}</td>
+                            <td className="px-3 py-1 text-right text-slate-700">Ksh {row.afterOutstanding.toLocaleString()}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1350,28 +1350,28 @@ const TenantStatement = () => {
                   </div>
                 ) : (
                   <div className="overflow-hidden rounded-lg border border-slate-200">
-                    <table className="w-full text-xs">
-                      <thead className="bg-slate-100">
+                    <table className="w-full text-[11px] border-collapse">
+                      <thead className="bg-[#0B3B2E] text-white">
                         <tr>
-                          <th className="px-3 py-2 text-left font-bold text-slate-700">Receipt</th>
-                          <th className="px-3 py-2 text-left font-bold text-slate-700">Date</th>
-                          <th className="px-3 py-2 text-left font-bold text-slate-700">Charge</th>
-                          <th className="px-3 py-2 text-right font-bold text-slate-700">Applied</th>
-                          <th className="px-3 py-2 text-center font-bold text-slate-700">Action</th>
+                          <th className="px-3 py-1 text-left font-bold border-r border-white/10">Receipt</th>
+                          <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date</th>
+                          <th className="px-3 py-1 text-left font-bold border-r border-white/10">Charge</th>
+                          <th className="px-3 py-1 text-right font-bold border-r border-white/10">Applied</th>
+                          <th className="px-3 py-1 text-center font-bold">Action</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {selectedAllocationTrace.receiptApplications.map((row) => (
-                          <tr key={`${selectedAllocationTrace.invoiceId}-${row.receiptId}-${row.appliedAmount}`} className="border-t border-slate-200">
-                            <td className="px-3 py-2 font-semibold text-slate-900">{row.receiptNumber}</td>
-                            <td className="px-3 py-2 text-slate-600">{row.receiptDate ? new Date(row.receiptDate).toLocaleDateString() : "-"}</td>
-                            <td className="px-3 py-2 text-slate-600">{row.label}</td>
-                            <td className="px-3 py-2 text-right font-bold text-green-700">Ksh {row.appliedAmount.toLocaleString()}</td>
-                            <td className="px-2.5 py-1.5 text-center">
+                        {selectedAllocationTrace.receiptApplications.map((row, i) => (
+                          <tr key={`${selectedAllocationTrace.invoiceId}-${row.receiptId}-${row.appliedAmount}`} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}>
+                            <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.receiptNumber}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{row.receiptDate ? new Date(row.receiptDate).toLocaleDateString() : "-"}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{row.label}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-green-700">Ksh {row.appliedAmount.toLocaleString()}</td>
+                            <td className="px-2 py-1 text-center">
                               <button
                                 type="button"
                                 onClick={() => openReceiptAllocationWorkspace(row.receiptId)}
-                                className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-[11px] font-bold text-slate-700 hover:bg-slate-100"
+                                className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-100"
                               >
                                 <FaLink size={10} />
                                 Open receipt
@@ -1752,18 +1752,18 @@ const TenantStatement = () => {
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500"
+              className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
             />
             <input
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500"
+              className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
             />
             <select
               value={transactionType}
               onChange={(e) => setTransactionType(e.target.value)}
-              className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-orange-500"
+              className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
             >
               <option value="ALL">All Transactions</option>
               <option value="CHARGE">Invoices Only</option>
@@ -2077,7 +2077,7 @@ const TenantStatement = () => {
                     setScheduleFilterTo(formatInputDate(to));
                   }
                 }}
-                className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
               >
                 <option value="custom">Custom</option>
                 <option value="this_year">This Year</option>
@@ -2093,7 +2093,7 @@ const TenantStatement = () => {
                   setScheduleDefinedPeriod("custom");
                   setScheduleFilterFrom(e.target.value);
                 }}
-                className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
               />
             </div>
             <div className="md:col-span-2">
@@ -2105,7 +2105,7 @@ const TenantStatement = () => {
                   setScheduleDefinedPeriod("custom");
                   setScheduleFilterTo(e.target.value);
                 }}
-                className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
               />
             </div>
             <div className="md:col-span-3">
@@ -2115,7 +2115,7 @@ const TenantStatement = () => {
                 value={scheduleSearchText}
                 onChange={(e) => setScheduleSearchText(e.target.value)}
                 placeholder="Month, invoice no., status..."
-                className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
               />
             </div>
             <div className="md:col-span-3 flex gap-2 md:justify-end">
@@ -2396,28 +2396,28 @@ const TenantStatement = () => {
                       type="date"
                       value={scheduleForm.from}
                       onChange={(e) => setScheduleForm((prev) => ({ ...prev, from: e.target.value }))}
-                      className="mt-1 h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                      className="mt-1 h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                     />
                     <label className="text-xs font-semibold text-slate-700">To Date</label>
                     <input
                       type="date"
                       value={scheduleForm.to}
                       onChange={(e) => setScheduleForm((prev) => ({ ...prev, to: e.target.value }))}
-                      className="mt-1 h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                      className="mt-1 h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                     />
                     <label className="text-xs font-semibold text-slate-700">Rent</label>
                     <input
                       type="number"
                       value={scheduleForm.rent}
                       onChange={(e) => setScheduleForm((prev) => ({ ...prev, rent: e.target.value }))}
-                      className="mt-1 h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                      className="mt-1 h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                     />
                     <label className="text-xs font-semibold text-slate-700">Utility</label>
                     <input
                       type="number"
                       value={scheduleForm.utility}
                       onChange={(e) => setScheduleForm((prev) => ({ ...prev, utility: e.target.value }))}
-                      className="mt-1 h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                      className="mt-1 h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                     />
                   </div>
                   <div className="px-3 py-2 border-t border-slate-200 flex justify-end gap-2">
@@ -3029,34 +3029,34 @@ const TenantStatement = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[820px] border-collapse text-xs">
+              <table className="w-full min-w-[820px] border-collapse text-[11px]">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50">
-                    {["Effective Date", "Type", "Frequency", "Increase", "Previous Rent", "New Rent", "Status", "Notes", "Actions"].map((h) => (
-                      <th key={h} className="px-3 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-slate-500 whitespace-nowrap">{h}</th>
+                  <tr className="bg-[#0B3B2E] text-white">
+                    {["Effective Date", "Type", "Frequency", "Increase", "Previous Rent", "New Rent", "Status", "Notes", "Actions"].map((h, i, arr) => (
+                      <th key={h} className={`px-3 py-1 text-left font-bold whitespace-nowrap ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {computedRows.map((record) => {
+                <tbody>
+                  {computedRows.map((record, idx) => {
                     const isApplied = record.status === "Applied";
                     const isScheduled = record.status === "Scheduled";
                     return (
-                      <tr key={record.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-3 py-2.5 font-semibold text-slate-800 whitespace-nowrap">{fmtDate(record.effectiveDate)}</td>
-                        <td className="px-3 py-2.5 whitespace-nowrap">
-                          <span className={`inline-block border px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${record.type === "percentage" ? "border-blue-200 bg-blue-50 text-blue-700" : "border-violet-200 bg-violet-50 text-violet-700"}`}>
+                      <tr key={record.id} className={`border-b border-gray-100 transition-colors ${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800 whitespace-nowrap">{fmtDate(record.effectiveDate)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 whitespace-nowrap">
+                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${record.type === "percentage" ? "border-blue-200 bg-blue-50 text-blue-700" : "border-violet-200 bg-violet-50 text-violet-700"}`}>
                             {record.type === "percentage" ? "%" : "Fixed"}
                           </span>
                         </td>
-                        <td className="px-3 py-2.5 text-slate-600 capitalize">{formatFrequency(record.frequency)}</td>
-                        <td className="px-3 py-2.5 font-black text-orange-700 whitespace-nowrap">
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-600 capitalize">{formatFrequency(record.frequency)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 font-black text-orange-700 whitespace-nowrap">
                           {record.type === "percentage" ? `+${Number(record.value)}%` : `+${fmtMoney(record.value)}`}
                         </td>
-                        <td className="px-3 py-2.5 font-mono text-slate-500 whitespace-nowrap">{fmtMoney(record.previousRent)}</td>
-                        <td className="px-3 py-2.5 font-mono font-black text-[#0B3B2E] whitespace-nowrap">{fmtMoney(record.resultingRent)}</td>
-                        <td className="px-3 py-2.5 whitespace-nowrap">
-                          <span className={`inline-block border px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${
+                        <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-500 whitespace-nowrap">{fmtMoney(record.previousRent)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 font-mono font-black text-[#0B3B2E] whitespace-nowrap">{fmtMoney(record.resultingRent)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 whitespace-nowrap">
+                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${
                             isApplied   ? "border-emerald-200 bg-emerald-50 text-emerald-700" :
                             isScheduled ? "border-amber-200 bg-amber-50 text-amber-700" :
                                           "border-slate-200 bg-slate-50 text-slate-600"
@@ -3064,8 +3064,8 @@ const TenantStatement = () => {
                             {record.status}
                           </span>
                         </td>
-                        <td className="px-3 py-2.5 max-w-[180px] truncate text-slate-500" title={record.note || ""}>{record.note || "—"}</td>
-                        <td className="px-3 py-2.5 whitespace-nowrap">
+                        <td className="px-3 py-1 border-r border-gray-100 max-w-[180px] truncate text-slate-500" title={record.note || ""}>{record.note || "—"}</td>
+                        <td className="px-3 py-1 whitespace-nowrap">
                           <div className="flex items-center gap-1.5">
                             {!isApplied && (
                               <button onClick={() => handleApplyReview(record.id)}

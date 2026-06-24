@@ -21,8 +21,8 @@ const StatusPill = ({ status }) => (
   </span>
 );
 
-const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
-const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
+const inputClass = "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+const labelClass = "mb-0.5 block text-xs font-semibold text-slate-700";
 
 const emptyLine = () => ({ product: "", qtyDispatched: "", unitCost: "" });
 
@@ -296,8 +296,8 @@ const InvStockTransfers = () => {
       {showCreate && (
         <Modal title="New Stock Transfer" onClose={() => setShowCreate(false)} wide footer={
           <>
-            <button type="button" onClick={() => setShowCreate(false)} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
-            <button type="submit" form="create-transfer-form" disabled={creating} className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50">
+            <button type="button" onClick={() => setShowCreate(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+            <button type="submit" form="create-transfer-form" disabled={creating} className="rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
               {creating ? "Creating…" : "Create Transfer"}
             </button>
           </>
@@ -383,8 +383,8 @@ const InvStockTransfers = () => {
       {showReceive && selected && (
         <Modal title={`Receive Transfer — ${selected.transferNumber}`} onClose={() => setShowReceive(false)} wide footer={
           <>
-            <button type="button" onClick={() => setShowReceive(false)} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
-            <button type="button" onClick={handleReceive} disabled={receiving} className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50">
+            <button type="button" onClick={() => setShowReceive(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+            <button type="button" onClick={handleReceive} disabled={receiving} className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
               <FaCheck className="text-[9px]" /> {receiving ? "Posting…" : "Confirm Receipt"}
             </button>
           </>

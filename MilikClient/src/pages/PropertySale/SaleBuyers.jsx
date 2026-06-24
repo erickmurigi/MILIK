@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { FaCheck, FaEdit, FaPlus, FaPrint, FaSearch, FaSquare, FaTimes, FaTrash, FaUsers } from "react-icons/fa";
@@ -89,16 +89,16 @@ const SaleBuyers = () => {
     const coName = co.companyName || co.name || "MILIK";
     const esc = (v) => String(v ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
     const logoHtml = co.logo ? `<img src="${co.logo}" alt="logo" style="width:72px;height:72px;object-fit:contain;border-radius:10px;border:1px solid #cbd5e1;" />` : `<div style="width:72px;height:72px;background:#027333;color:#fff;font-size:26px;font-weight:900;display:flex;align-items:center;justify-content:center;border-radius:10px;">${coName.slice(0,1)}</div>`;
-    const coInfo = [co.phone||co.phoneNumber, co.email||co.companyEmail].filter(Boolean).join(" • ");
+    const coInfo = [co.phone||co.phoneNumber, co.email||co.companyEmail].filter(Boolean).join(" â€¢ ");
     const kycC = { pending:"#92400e",verified:"#166534",rejected:"#9f1239" }[row.kycStatus]||"#334155";
     const kycBg = { pending:"#fef3c7",verified:"#dcfce7",rejected:"#ffe4e6" }[row.kycStatus]||"#f1f5f9";
     const printedOn = new Date().toLocaleDateString("en-KE",{day:"2-digit",month:"long",year:"numeric"});
-    const field = (label, value) => `<div class="field"><div class="fl">${esc(label)}</div><div class="fv">${esc(value||"—")}</div></div>`;
+    const field = (label, value) => `<div class="field"><div class="fl">${esc(label)}</div><div class="fv">${esc(value||"â€”")}</div></div>`;
 
     const win = window.open("","_blank","width=900,height=720");
     if (!win) return;
     win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
-<title>Buyer Profile — ${esc(row.buyerNumber)}</title>
+<title>Buyer Profile â€” ${esc(row.buyerNumber)}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 32px;font-size:12px}
@@ -136,7 +136,7 @@ body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 32px;font
   ${field("Address",row.address)}
 </div>
 ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;font-size:11px;color:#334155;line-height:1.6"><div style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:4px">Notes</div>${esc(row.notes)}</div>`:""}
-<div class="notice">Buyer profile issued by ${esc(coName)} • Printed: ${esc(printedOn)}</div>
+<div class="notice">Buyer profile issued by ${esc(coName)} â€¢ Printed: ${esc(printedOn)}</div>
 </body></html>`);
     win.document.close();
     setTimeout(()=>{win.focus();win.print();},400);
@@ -150,7 +150,7 @@ ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px
   }), [buyers, serverTotal]);
 
   const f = (key) => (e) => setForm((p) => ({ ...p, [key]: e.target.value }));
-  const inputCls = "mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-[#027333] focus:outline-none focus:ring-2 focus:ring-[#027333]/20";
+  const inputCls = "mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20";
 
   return (
     <PropertySaleShell
@@ -186,35 +186,35 @@ ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="min-h-0 flex-1 overflow-auto">
-            <table className="min-w-full text-xs">
+            <table className="min-w-full text-[11px] border-collapse">
               <thead className="sticky top-0 z-10 bg-[#027333] text-white">
                 <tr>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Buyer No.</th>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Name</th>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Phone</th>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Email</th>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Source</th>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">KYC</th>
-                  <th className="px-3 py-2.5 text-right font-black tracking-wide">Actions</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Buyer No.</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Name</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Phone</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Email</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Source</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">KYC</th>
+                  <th className="px-3 py-1 text-right font-bold">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">Loading buyers...</td></tr>
                 : pageRows.length === 0 ? <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">No buyers found.</td></tr>
                 : pageRows.map((row, i) => (
-                  <tr key={row._id} className={`border-t border-slate-100 transition ${i % 2 === 0 ? "bg-white hover:bg-slate-50" : "bg-slate-50/60 hover:bg-slate-100/40"}`}>
-                    <td className="px-3 py-2 font-black text-slate-900">{row.buyerNumber}</td>
-                    <td className="px-3 py-2">
+                  <tr key={row._id} className={`border-b border-gray-100 transition ${i % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                    <td className="px-3 py-1 border-r border-gray-100 font-black text-slate-900">{row.buyerNumber}</td>
+                    <td className="px-3 py-1 border-r border-gray-100">
                       <div className="font-bold text-slate-900">{row.fullName}</div>
-                      {row.idNumber && <div className="text-[11px] text-slate-500">ID: {row.idNumber}</div>}
+                      {row.idNumber && <div className="text-[10px] text-slate-500">ID: {row.idNumber}</div>}
                     </td>
-                    <td className="px-3 py-2 text-slate-600">{row.phone || "—"}</td>
-                    <td className="px-3 py-2 text-slate-600">{row.email || "—"}</td>
-                    <td className="px-3 py-2 capitalize text-slate-600">{String(row.source || "").replace(/_/g, " ")}</td>
-                    <td className="px-3 py-2">
-                      <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[10px] font-black ${kycColors[row.kycStatus] || ""}`}>{row.kycStatus}</span>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{row.phone || "â€”"}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{row.email || "â€”"}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 capitalize text-slate-600">{String(row.source || "").replace(/_/g, " ")}</td>
+                    <td className="px-3 py-1 border-r border-gray-100">
+                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${kycColors[row.kycStatus] || ""}`}>{row.kycStatus}</span>
                     </td>
-                    <td className="px-3 py-2 text-right">
+                    <td className="px-3 py-1 text-right">
                       <div className="inline-flex gap-1.5">
                         <button onClick={() => printBuyer(row)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-bold text-slate-600"><FaPrint /></button>
                         <button onClick={() => openEdit(row)} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[10px] font-bold text-blue-700"><FaEdit /></button>
@@ -227,7 +227,7 @@ ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px
             </table>
           </div>
           <div className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-100 bg-white px-4 py-2 text-xs text-slate-500">
-            <span>Showing <strong className="text-slate-900">{serverTotal === 0 ? 0 : (safePage - 1) * ITEMS_PER_PAGE + 1}</strong>–<strong className="text-slate-900">{Math.min(safePage * ITEMS_PER_PAGE, serverTotal)}</strong> of <strong className="text-slate-900">{serverTotal}</strong></span>
+            <span>Showing <strong className="text-slate-900">{serverTotal === 0 ? 0 : (safePage - 1) * ITEMS_PER_PAGE + 1}</strong>â€“<strong className="text-slate-900">{Math.min(safePage * ITEMS_PER_PAGE, serverTotal)}</strong> of <strong className="text-slate-900">{serverTotal}</strong></span>
             <div className="flex items-center gap-2">
               <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} className="rounded-lg border border-slate-200 px-3 py-1 font-semibold disabled:opacity-40">Prev</button>
               <span>Page {safePage} of {totalPages}</span>
@@ -248,19 +248,19 @@ ${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px
               <button onClick={() => setShowModal(false)} className="rounded-full border border-white/30 p-2 hover:bg-white/10"><FaTimes /></button>
             </div>
             <div className="grid gap-4 overflow-y-auto p-6 md:grid-cols-2">
-              <label className="block md:col-span-2"><span className="text-xs font-bold text-slate-700">Full Name</span><input value={form.fullName} onChange={f("fullName")} className={inputCls} /></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">National ID / Passport</span><input value={form.idNumber} onChange={f("idNumber")} className={inputCls} /></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Phone</span><input value={form.phone} onChange={f("phone")} className={inputCls} /></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Email</span><input type="email" value={form.email} onChange={f("email")} className={inputCls} /></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Nationality</span><input value={form.nationality} onChange={f("nationality")} className={inputCls} /></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Source</span><select value={form.source} onChange={f("source")} className={inputCls}>{SOURCES.map((s) => <option key={s} value={s}>{s.replace(/_/g," ")}</option>)}</select></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">KYC Status</span><select value={form.kycStatus} onChange={f("kycStatus")} className={inputCls}>{KYC_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select></label>
-              <label className="block md:col-span-2"><span className="text-xs font-bold text-slate-700">Address</span><input value={form.address} onChange={f("address")} className={inputCls} /></label>
-              <label className="block md:col-span-2"><span className="text-xs font-bold text-slate-700">Notes</span><textarea rows={2} value={form.notes} onChange={f("notes")} className={inputCls} /></label>
+              <label className="block md:col-span-2"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Full Name</span><input value={form.fullName} onChange={f("fullName")} className={inputCls} /></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">National ID / Passport</span><input value={form.idNumber} onChange={f("idNumber")} className={inputCls} /></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Phone</span><input value={form.phone} onChange={f("phone")} className={inputCls} /></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Email</span><input type="email" value={form.email} onChange={f("email")} className={inputCls} /></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Nationality</span><input value={form.nationality} onChange={f("nationality")} className={inputCls} /></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Source</span><select value={form.source} onChange={f("source")} className={inputCls}>{SOURCES.map((s) => <option key={s} value={s}>{s.replace(/_/g," ")}</option>)}</select></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">KYC Status</span><select value={form.kycStatus} onChange={f("kycStatus")} className={inputCls}>{KYC_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select></label>
+              <label className="block md:col-span-2"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Address</span><input value={form.address} onChange={f("address")} className={inputCls} /></label>
+              <label className="block md:col-span-2"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Notes</span><textarea rows={2} value={form.notes} onChange={f("notes")} className={inputCls} /></label>
             </div>
             <div className="flex shrink-0 items-center justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
-              <button onClick={() => setShowModal(false)} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-black text-slate-700">Cancel</button>
-              <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-[#027333] px-4 py-2 text-sm font-black text-white disabled:opacity-60">{saving ? "Saving..." : editingId ? "Update Buyer" : "Register Buyer"}</button>
+              <button onClick={() => setShowModal(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-[#027333] px-4 py-2 text-xs font-black text-white hover:bg-[#0c5d2b] disabled:opacity-60">{saving ? "Saving..." : editingId ? "Update Buyer" : "Register Buyer"}</button>
             </div>
           </div>
         </div>

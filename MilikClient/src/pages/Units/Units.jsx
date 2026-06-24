@@ -437,6 +437,12 @@ const Units = () => {
   const endIndex = startIndex + ITEMS_PER_PAGE;
   const currentUnits = filteredUnits.slice(startIndex, endIndex);
 
+  const propertyUnitCounts = useMemo(() => {
+    const map = {};
+    for (const u of currentUnits) map[u.propertyName] = (map[u.propertyName] || 0) + 1;
+    return map;
+  }, [currentUnits]);
+
   useEffect(() => {
     if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -976,29 +982,27 @@ const Units = () => {
         <div className="flex-1 min-h-0 px-2 pb-2 overflow-hidden">
           <div className="bg-white border border-gray-200 rounded-lg shadow-sm h-full flex flex-col">
             <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0">
-              <table className="min-w-full text-xs border-collapse bg-white" style={{ tableLayout: "auto" }}>
+              <table className="w-full text-[11px] border-collapse table-fixed bg-white">
                 <thead className="sticky top-0 z-10 shadow-sm">
-                  <tr className="bg-[#0B3B2E] border-b border-gray-300">
-                    <th className="px-2 py-1.5 text-left font-bold text-white border-r border-gray-300 w-8">
+                  <tr className="bg-[#0B3B2E] text-white">
+                    <th className="w-9 px-2 py-2 text-center border-r border-white/10">
                       <input
                         type="checkbox"
                         checked={selectAll && visibleUnitIds.length > 0}
                         onChange={handleSelectAll}
                         onClick={handleCheckboxClick}
-                        className="rounded border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                        className="rounded border-gray-300 text-orange-600 focus:ring-[#0B3B2E]/20 cursor-pointer"
                         title="Select all visible units"
                       />
                     </th>
-                    <th className="px-1 py-2 text-center font-bold text-white border-r border-gray-300 w-8" title="Expand details"></th>
-                    <th className="px-2 py-1.5 text-left font-bold text-white border-r border-gray-300 w-20">Property</th>
-                    <th className="px-2 py-1.5 text-left font-bold text-white border-r border-gray-300 w-24">Unit No</th>
-                    <th className="px-2 py-1.5 text-left font-bold text-white border-r border-gray-300 w-16">Code</th>
-                    <th className="px-2 py-1.5 text-left font-bold text-white border-r border-gray-300 w-24">Unit Type</th>
-                    <th className="px-2 py-1.5 text-right font-bold text-white border-r border-gray-300 w-28">Rent (Kshs)</th>
-                    <th className="px-2 py-1.5 text-center font-bold text-white border-r border-gray-300 w-24">Status</th>
-                    <th className="px-2 py-1.5 text-left font-bold text-white border-r border-gray-300 w-32">Tenant</th>
-                    <th className="px-2 py-1.5 text-center font-bold text-white border-r border-gray-300 w-20">Vacant From</th>
-                    <th className="px-2 py-2 text-center font-bold text-white w-16">Action</th>
+                    <th className="w-7 px-1 py-2 border-r border-white/10" />
+                    <th className="w-[90px] px-3 py-2 text-left font-bold border-r border-white/10">Unit No</th>
+                    <th className="w-[78px] px-3 py-2 text-left font-bold border-r border-white/10">Code</th>
+                    <th className="w-[112px] px-3 py-2 text-left font-bold border-r border-white/10">Unit Type</th>
+                    <th className="w-[108px] px-3 py-2 text-right font-bold border-r border-white/10">Rent</th>
+                    <th className="w-[92px] px-3 py-2 text-center font-bold border-r border-white/10">Status</th>
+                    <th className="w-[220px] px-3 py-2 text-left font-bold border-r border-white/10">Occupancy</th>
+                    <th className="w-[72px] px-3 py-2 text-center font-bold">Action</th>
                   </tr>
                 </thead>
 
@@ -1011,118 +1015,90 @@ const Units = () => {
 
                       return (
                         <React.Fragment key={`unit-${u.id}`}>
-                          {/* Property Section Header */}
                           {isFirstOfProperty && (
-                            <tr className="bg-transparent">
-                              <td colSpan={12} className="px-2 pt-1.5 pb-1">
-                                <h3 className="text-sm font-extrabold text-black tracking-normal uppercase">
-                                  {toListingCaps(u.propertyName)}
-                                </h3>
-                                <div className="mt-1 h-[2px] w-full bg-[#FF8C00]" />
+                            <tr>
+                              <td colSpan={9} className="px-3 pt-2.5 pb-1 bg-white">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="h-4 w-1 rounded-full bg-[#FF8C00] shrink-0" />
+                                  <span className="text-[11px] font-black tracking-widest text-slate-800 uppercase leading-none">
+                                    {toListingCaps(u.propertyName)}
+                                  </span>
+                                  <span className="rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-500 tabular-nums leading-none">
+                                    {propertyUnitCounts[u.propertyName] || 0}
+                                  </span>
+                                </div>
+                                <div className="mt-1.5 h-px bg-gradient-to-r from-[#FF8C00]/50 via-orange-200/60 to-transparent" />
                               </td>
                             </tr>
                           )}
 
-                          {/* Unit Row */}
                           <tr
-                            className={`border-b transition-colors cursor-pointer ${
+                            className={`border-b cursor-pointer transition-colors ${
                               selectedUnits.includes(u.id)
-                                ? "bg-blue-100 hover:bg-blue-150"
+                                ? "bg-emerald-50 shadow-[inset_3px_0_0_0_#0B3B2E] border-emerald-100"
                                 : idx % 2 === 0
-                                ? "bg-white hover:bg-slate-50"
-                                : "bg-slate-50 hover:bg-slate-100"
+                                ? "bg-white hover:bg-blue-50/40 border-gray-100"
+                                : "bg-slate-50/60 hover:bg-blue-50/40 border-gray-100"
                             }`}
                             onClick={(e) => handleRowClick(u.id, e)}
                           >
-                            {/* Checkbox */}
-                            <td className="px-2 py-1 border-r border-gray-200" onClick={handleCheckboxClick}>
+                            <td className="w-9 px-2 py-1 text-center border-r border-gray-100" onClick={handleCheckboxClick}>
                               <input
                                 type="checkbox"
                                 checked={selectedUnits.includes(u.id)}
                                 onChange={() => handleSelectUnit(u.id)}
                                 onClick={handleCheckboxClick}
-                                className="rounded border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                                className="rounded border-gray-300 text-orange-600 focus:ring-[#0B3B2E]/20 cursor-pointer"
                               />
                             </td>
-
-                            {/* Expand Button */}
-                            <td className="px-1 py-1 border-r border-gray-200 align-top text-center">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleUnitExpand(u.id);
-                                }}
-                                className="p-1 hover:bg-gray-200 rounded transition-colors"
-                                title={expandedUnits.includes(u.id) ? "Collapse" : "Expand"}
-                              >
-                                {expandedUnits.includes(u.id) ? (
-                                  <FaChevronUp className="text-gray-600 text-xs" />
-                                ) : (
-                                  <FaChevronDown className="text-gray-600 text-xs" />
-                                )}
-                              </button>
+                            <td
+                              className="w-7 px-1 py-1 text-center border-r border-gray-100 text-slate-300 transition hover:text-slate-600"
+                              onClick={(e) => { e.stopPropagation(); toggleUnitExpand(u.id); }}
+                            >
+                              {expandedUnits.includes(u.id) ? <FaChevronUp size={9} /> : <FaChevronDown size={9} />}
                             </td>
-
-                            {/* Property Name */}
-                            <td className="px-2 py-1 border-r border-gray-200 font-bold text-slate-900 text-xs">
-                              {toListingCaps(u.propertyName)}
+                            <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                              <span className="font-semibold text-slate-700 truncate block">{toListingCaps(u.unitNo)}</span>
                             </td>
-
-                            {/* Unit/Space No */}
-                            <td className="px-2 py-1 border-r border-gray-200 font-bold text-slate-900 text-xs">
-                              {toListingCaps(u.unitNo)}
+                            <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                              <span className="font-mono text-[10px] text-slate-500 tracking-wide truncate block">{toListingCaps(u.unitCode)}</span>
                             </td>
-
-                            {/* Unit Code - 2 letters + 4 digits */}
-                            <td className="px-2 py-1 border-r border-gray-200 font-bold font-mono text-slate-900 text-xs bg-gray-50">
-                              {toListingCaps(u.unitCode)}
+                            <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                              <span className="text-slate-600 truncate block">{formatUnitTypeLabel(u.unitType) || "N/A"}</span>
                             </td>
-
-                            {/* Unit Type */}
-                            <td className="px-2 py-1 border-r border-gray-200 font-bold text-slate-900 text-xs">
-                              {formatUnitTypeLabel(u.unitType) || "N/A"}
+                            <td className="px-3 py-1 border-r border-gray-100 text-right whitespace-nowrap">
+                              <span className="font-semibold text-slate-700">{u.currentRent}</span>
                             </td>
-
-                            {/* Rent Estimate */}
-                            <td className="px-2 py-1 border-r border-gray-200 text-right font-bold text-slate-900 text-xs">
-                              {u.currentRent}
-                            </td>
-
-                            {/* Status - Color coded background */}
-                            <td className="px-2 py-1 border-r border-gray-200 text-center">
-                              <span
-                                className={`inline-flex items-center justify-center px-2 py-0.5 rounded text-xs font-bold whitespace-nowrap w-full ${
-                                  u.status === "occupied"
-                                    ? "bg-green-200 text-green-900"
-                                    : u.status === "vacant"
-                                    ? "bg-red-200 text-red-900"
-                                    : u.status === "maintenance"
-                                    ? "bg-yellow-200 text-yellow-900"
-                                    : "bg-gray-200 text-gray-900"
-                                }`}
-                              >
+                            <td className="px-3 py-1 border-r border-gray-100 text-center">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                u.status === "occupied" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                : u.status === "vacant" ? "bg-red-50 text-red-700 border-red-200"
+                                : u.status === "maintenance" ? "bg-amber-50 text-amber-700 border-amber-200"
+                                : u.status === "archived" ? "bg-slate-100 text-slate-500 border-slate-200"
+                                : "bg-slate-100 text-slate-600 border-slate-200"
+                              }`}>
                                 {u.status.charAt(0).toUpperCase() + u.status.slice(1)}
                               </span>
                             </td>
-
-                            {/* Current Resident/Tenant */}
-                            <td className="px-2 py-1 border-r border-gray-200 text-xs font-bold text-slate-900 truncate">
-                              {u.tenant}
+                            <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                              {u.status === "occupied" && u.tenant !== "-" ? (
+                                <span className="font-semibold text-slate-800 truncate block">
+                                  <span className="text-emerald-500 mr-1">●</span>{toListingCaps(u.tenant)}
+                                </span>
+                              ) : u.status === "vacant" ? (
+                                <span className="text-red-500 font-medium text-[11px] truncate block">Since {u.vacantFrom}</span>
+                              ) : u.status === "maintenance" ? (
+                                <span className="text-amber-600 font-semibold text-[10px]">In Maintenance</span>
+                              ) : u.status === "archived" ? (
+                                <span className="text-slate-400 text-[10px]">Archived</span>
+                              ) : (
+                                <span className="text-slate-300">—</span>
+                              )}
                             </td>
-
-                            {/* Vacant From */}
-                            <td className="px-2 py-1 border-r border-gray-200 text-center text-xs font-bold text-slate-900">
-                              {u.status === "vacant" ? u.vacantFrom : "-"}
-                            </td>
-
-                            {/* Action */}
                             <td className="px-2 py-1 text-center">
                               <button
-                                className={`px-2 py-0.5 text-xs text-white rounded font-semibold transition-all ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigate(`/units/${u.id}`);
-                                }}
+                                className="px-2 py-0.5 text-[10px] text-white rounded font-semibold bg-[#0B3B2E] hover:bg-[#0A3127] transition-colors"
+                                onClick={(e) => { e.stopPropagation(); navigate(`/units/${u.id}`); }}
                               >
                                 View
                               </button>
@@ -1131,8 +1107,8 @@ const Units = () => {
 
                           {/* Expanded Unit Details */}
                           {expandedUnits.includes(u.id) && (
-                            <tr className={`border-b ${idx % 2 === 0 ? "bg-white" : "bg-slate-50"}`}>
-                              <td colSpan={12} className="p-4 border border-gray-200 bg-gradient-to-br from-white to-gray-50">
+                            <tr className="bg-slate-50/80 border-b border-gray-100">
+                              <td colSpan={9} className="p-4 bg-gradient-to-br from-white to-slate-50/50">
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                                   {/* Unit Details */}
                                   <div className="space-y-4 p-4 bg-white rounded-lg shadow-md border-2 border-[#0B3B2E]/30">
@@ -1218,10 +1194,10 @@ const Units = () => {
                     })
                   ) : (
                     <tr>
-                      <td colSpan={12} className="px-4 py-8 text-center">
+                      <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
                         <div className="flex flex-col items-center justify-center gap-2">
-                          <div className="text-lg font-bold text-slate-400">No units found</div>
-                          <div className="text-sm text-slate-500">
+                          <div className="text-sm font-bold text-slate-400">No units found</div>
+                          <div className="text-xs text-slate-400">
                             {appliedFilters.property !== "any" || appliedFilters.status !== "any"
                               ? "Try adjusting your filters"
                               : "Create a unit or import existing units"}
@@ -1234,46 +1210,39 @@ const Units = () => {
               </table>
             </div>
 
-            {/* Footer (consistent) */}
-            <div className="flex-shrink-0 sticky bottom-0 z-20 bg-white border-t border-gray-200 shadow-sm">
+            {/* Footer */}
+            <div className="flex-shrink-0 sticky bottom-0 z-20 bg-white border-t border-gray-200">
               <div className="flex items-center justify-between px-3 py-1">
-                <div className="text-xs text-gray-600">
-                  <div className="flex items-center gap-4">
-                    <span className="font-bold">
-                      Showing <span className="font-bold text-slate-900">{currentUnits.length > 0 ? startIndex + 1 : 0}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filteredUnits.length)}</span> of <span className="font-bold text-slate-900">{filteredUnits.length}</span> unit(s) across{" "}
-                      <span className="font-bold text-slate-900">{propertiesGrouped.length}</span> propert{propertiesGrouped.length === 1 ? "y" : "ies"}
+                <div className="text-xs text-gray-600 flex items-center gap-4">
+                  <span className="font-bold">
+                    Showing <span className="text-slate-900">{currentUnits.length > 0 ? startIndex + 1 : 0}</span> to <span className="text-slate-900">{Math.min(endIndex, filteredUnits.length)}</span> of <span className="text-slate-900">{filteredUnits.length}</span> unit(s) across <span className="text-slate-900">{propertiesGrouped.length}</span> propert{propertiesGrouped.length === 1 ? "y" : "ies"}
+                  </span>
+                  {selectedUnits.length > 0 && (
+                    <span className="bg-[#DDEFE1] text-gray-900 px-2 py-0.5 rounded-full text-xs font-bold border border-[#0B3B2E]/30">
+                      {selectedUnits.length} selected
                     </span>
-
-                    {selectedUnits.length > 0 && (
-                      <span className="bg-orange-100 text-orange-900 px-2 py-0.5 rounded-full text-xs font-bold border border-orange-300">
-                        {selectedUnits.length} unit(s) selected
-                      </span>
-                    )}
-                  </div>
+                  )}
                 </div>
-
-                <div className="flex items-center gap-2 text-xs text-slate-500">
-                  <button
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    disabled={safeCurrentPage === 1}
-                    className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg flex items-center gap-1 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-bold"
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-slate-500 text-xs">Per page:</span>
+                  <select
+                    value={ITEMS_PER_PAGE}
+                    disabled
+                    className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:outline-none"
                   >
-                    <FaChevronLeft size={10} />
-                    Previous
+                    <option value={50}>50</option>
+                  </select>
+                  <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={safeCurrentPage === 1}
+                    className="px-2.5 py-0.5 text-xs border border-gray-300 rounded flex items-center gap-1 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed font-bold">
+                    <FaChevronLeft size={10} /> Previous
                   </button>
-
                   <div className="flex items-center gap-1">
                     {visiblePages.map((item) =>
                       typeof item === 'number' ? (
-                        <button
-                          key={item}
-                          onClick={() => setCurrentPage(item)}
-                          className={`px-3 py-1.5 min-w-[32px] text-xs rounded-lg border transition-colors font-bold ${
-                            safeCurrentPage === item
-                              ? "bg-[#0B3B2E] text-white border-[#0B3B2E] hover:bg-[#0A3127]"
-                              : "border-gray-300 hover:bg-gray-50"
-                          }`}
-                        >
+                        <button key={item} onClick={() => setCurrentPage(item)}
+                          className={`px-2 py-0.5 min-w-[24px] text-xs rounded border transition-colors font-bold ${
+                            safeCurrentPage === item ? "bg-[#0B3B2E] text-white border-[#0B3B2E]" : "border-gray-300 hover:bg-gray-50"
+                          }`}>
                           {item}
                         </button>
                       ) : (
@@ -1281,14 +1250,9 @@ const Units = () => {
                       )
                     )}
                   </div>
-
-                  <button
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={safeCurrentPage === totalPages}
-                    className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg flex items-center gap-1 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-bold"
-                  >
-                    Next
-                    <FaChevronRight size={10} />
+                  <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={safeCurrentPage === totalPages}
+                    className="px-2.5 py-0.5 text-xs border border-gray-300 rounded flex items-center gap-1 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed font-bold">
+                    Next <FaChevronRight size={10} />
                   </button>
                 </div>
               </div>
@@ -1323,12 +1287,12 @@ const Units = () => {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Property *</label>
+                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">Property <span className="text-red-500">*</span></label>
                         <select
                           name="property"
                           value={formData.property}
                           onChange={handleInputChange}
-                          className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] bg-white"
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                           required
                         >
                           <option value="">Select Property</option>
@@ -1341,37 +1305,37 @@ const Units = () => {
                       </div>
 
                       <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Specified Floor</label>
+                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">Specified Floor</label>
                         <input
                           type="text"
                           name="specifiedFloor"
                           value={formData.specifiedFloor}
                           onChange={handleInputChange}
-                          className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                           placeholder="e.g., Ground Floor"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">General Floor No.</label>
+                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">General Floor No.</label>
                         <input
                           type="number"
                           name="generalFloorNo"
                           value={formData.generalFloorNo}
                           onChange={handleInputChange}
-                          className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                           placeholder="e.g., 1, 2, 3..."
                         />
                       </div>
 
                       <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Unit/Space No. *</label>
+                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">Unit/Space No. <span className="text-red-500">*</span></label>
                         <input
                           type="text"
                           name="unitSpaceNo"
                           value={formData.unitSpaceNo}
                           onChange={handleInputChange}
-                          className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                           placeholder="e.g., A101, 201, etc."
                           required
                         />
@@ -1387,7 +1351,7 @@ const Units = () => {
                               value="Yes"
                               checked={formData.ownerOccupied === "Yes"}
                               onChange={handleInputChange}
-                              className="text-emerald-600 focus:ring-emerald-500"
+                              className="text-emerald-600 focus:ring-[#0B3B2E]/20"
                             />
                             <span className="text-sm">Yes</span>
                           </label>
@@ -1398,7 +1362,7 @@ const Units = () => {
                               value="No"
                               checked={formData.ownerOccupied === "No"}
                               onChange={handleInputChange}
-                              className="text-emerald-600 focus:ring-emerald-500"
+                              className="text-emerald-600 focus:ring-[#0B3B2E]/20"
                             />
                             <span className="text-sm">No</span>
                           </label>
@@ -1413,51 +1377,51 @@ const Units = () => {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Rent Per Unit Area (Ksh)</label>
+                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">Rent Per Unit Area (Ksh)</label>
                         <input
                           type="number"
                           name="rentPerUnitArea"
                           value={formData.rentPerUnitArea}
                           onChange={handleInputChange}
-                          className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                           placeholder="0.00"
                           step="0.01"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Market Rent (Ksh)</label>
+                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">Market Rent (Ksh)</label>
                         <input
                           type="number"
                           name="marketRent"
                           value={formData.marketRent}
                           onChange={handleInputChange}
-                          className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                           placeholder="0.00"
                           step="0.01"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Area (Sq Ft)</label>
+                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">Area (Sq Ft)</label>
                         <input
                           type="number"
                           name="areaSqFt"
                           value={formData.areaSqFt}
                           onChange={handleInputChange}
-                          className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                           placeholder="0.00"
                           step="0.01"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Charge Freq.</label>
+                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">Charge Freq.</label>
                         <select
                           name="chargeFreq"
                           value={formData.chargeFreq}
                           onChange={handleInputChange}
-                          className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] bg-white"
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         >
                           <option value="">Select Frequency</option>
                           {chargeFrequencies.map((f) => (
@@ -1483,25 +1447,25 @@ const Units = () => {
                       </div>
 
                       <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                        <table className="min-w-full text-xs">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="px-3 py-2 text-left font-medium text-gray-700 border-b w-8"></th>
-                              <th className="px-3 py-2 text-left font-medium text-gray-700 border-b">Service</th>
-                              <th className="px-3 py-2 text-left font-medium text-gray-700 border-b">Cost Per Area</th>
-                              <th className="px-3 py-2 text-left font-medium text-gray-700 border-b">Total Cost</th>
-                              <th className="px-3 py-2 text-left font-medium text-gray-700 border-b w-16">Actions</th>
+                        <table className="min-w-full text-[11px] border-collapse">
+                          <thead>
+                            <tr className="bg-[#0B3B2E] text-white">
+                              <th className="px-3 py-1 font-bold border-r border-white/10 w-8"></th>
+                              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Service</th>
+                              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Cost Per Area</th>
+                              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Total Cost</th>
+                              <th className="px-3 py-1 text-left font-bold w-16">Actions</th>
                             </tr>
                           </thead>
                           <tbody>
                             {services.map((s, i) => (
-                              <tr key={i} className="hover:bg-gray-50">
+                              <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? "bg-white" : "bg-slate-50/60"}`}>
                                 <td className="px-3 py-2 border-b">
                                   <input
                                     type="checkbox"
                                     checked={s.checked}
                                     onChange={(e) => handleServiceChange(i, "checked", e.target.checked)}
-                                    className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                                    className="rounded border-gray-300 text-emerald-600 focus:ring-[#0B3B2E]/20"
                                   />
                                 </td>
                                 <td className="px-3 py-2 border-b">
@@ -1556,46 +1520,46 @@ const Units = () => {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Electricity Ac/No.</label>
+                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">Electricity Ac/No.</label>
                         <input
                           type="text"
                           name="electricityAccountNo"
                           value={formData.electricityAccountNo}
                           onChange={handleInputChange}
-                          className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Water Ac/No.</label>
+                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">Water Ac/No.</label>
                         <input
                           type="text"
                           name="waterAccountNo"
                           value={formData.waterAccountNo}
                           onChange={handleInputChange}
-                          className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Electricity Meter/No.</label>
+                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">Electricity Meter/No.</label>
                         <input
                           type="text"
                           name="electricityMeterNo"
                           value={formData.electricityMeterNo}
                           onChange={handleInputChange}
-                          className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Water Meter/No.</label>
+                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">Water Meter/No.</label>
                         <input
                           type="text"
                           name="waterMeterNo"
                           value={formData.waterMeterNo}
                           onChange={handleInputChange}
-                          className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </div>
                     </div>
@@ -1613,18 +1577,18 @@ const Units = () => {
                       </div>
 
                       <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                        <table className="min-w-full text-xs">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="px-3 py-2 text-left font-medium text-gray-700 border-b w-8"></th>
-                              <th className="px-3 py-2 text-left font-medium text-gray-700 border-b">Meter No</th>
-                              <th className="px-3 py-2 text-left font-medium text-gray-700 border-b w-28">Reading Setup</th>
-                              <th className="px-3 py-2 text-left font-medium text-gray-700 border-b w-16">Actions</th>
+                        <table className="min-w-full text-[11px] border-collapse">
+                          <thead>
+                            <tr className="bg-[#0B3B2E] text-white">
+                              <th className="px-3 py-1 font-bold border-r border-white/10 w-8"></th>
+                              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Meter No</th>
+                              <th className="px-3 py-1 text-left font-bold border-r border-white/10 w-28">Reading Setup</th>
+                              <th className="px-3 py-1 text-left font-bold w-16">Actions</th>
                             </tr>
                           </thead>
                           <tbody>
                             {extraMeters.map((m, i) => (
-                              <tr key={i} className="hover:bg-gray-50">
+                              <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? "bg-white" : "bg-slate-50/60"}`}>
                                 <td className="px-3 py-2 border-b"></td>
                                 <td className="px-3 py-2 border-b">
                                   <input
@@ -1641,7 +1605,7 @@ const Units = () => {
                                       type="checkbox"
                                       checked={m.readingSetup}
                                       onChange={(e) => handleMeterChange(i, "readingSetup", e.target.checked)}
-                                      className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                                      className="rounded border-gray-300 text-emerald-600 focus:ring-[#0B3B2E]/20"
                                     />
                                     <span className="ml-2 text-xs">Enabled</span>
                                   </div>
@@ -1673,7 +1637,7 @@ const Units = () => {
                   <button
                     type="button"
                     onClick={closeAddUnitModal}
-                    className="px-6 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                    className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
                   >
                     Cancel
                   </button>
@@ -1698,14 +1662,14 @@ const Units = () => {
                       setServices([{ service: "", costPerArea: "", totalCost: "", checked: false }]);
                       setExtraMeters([{ meterNo: "", readingSetup: false }]);
                     }}
-                    className="px-6 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                    className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
                   >
                     Reset
                   </button>
                   <button
                     type="submit"
                     form="unitForm"
-                    className={`px-6 py-2 text-sm text-white rounded-lg transition-colors flex items-center gap-2 ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                    className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] ${MILIK_GREEN}`}
                   >
                     <FaSave /> Save Unit
                   </button>

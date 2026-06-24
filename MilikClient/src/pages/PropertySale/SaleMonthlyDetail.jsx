@@ -187,18 +187,18 @@ const SaleMonthlyDetail = () => {
 
             {/* PAYMENTS TAB */}
             {activeTab === "payments" && (
-              <table className="min-w-full text-xs">
+              <table className="min-w-full text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 bg-[#027333] text-white">
                   <tr>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Receipt No.</th>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Deal</th>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Property</th>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Buyer</th>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Type</th>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Method</th>
-                    <th className="px-3 py-2.5 text-right font-black tracking-wide">Amount</th>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Date</th>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Reference</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Receipt No.</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Deal</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Buyer</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Method</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Reference</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -207,20 +207,20 @@ const SaleMonthlyDetail = () => {
                   ) : payments.length === 0 ? (
                     <EmptyRow cols={9} label={`No payments recorded in ${monthName} ${year}`} />
                   ) : payments.map((p, i) => (
-                    <tr key={p._id} className={`border-t border-slate-100 ${i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
-                      <td className="px-3 py-2 font-black text-slate-900">{p.paymentNumber}</td>
-                      <td className="px-3 py-2 font-bold text-slate-700">{p.deal?.dealNumber || "—"}</td>
-                      <td className="px-3 py-2 text-slate-600">{p.deal?.listing?.title || p.deal?.listing?.listingNumber || "—"}</td>
-                      <td className="px-3 py-2 text-slate-600">{p.deal?.buyer?.fullName || "—"}</td>
-                      <td className="px-3 py-2">
+                    <tr key={p._id} className={`border-b border-gray-100 ${i % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                      <td className="px-3 py-1 border-r border-gray-100 font-black text-slate-900">{p.paymentNumber}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-700">{p.deal?.dealNumber || "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{p.deal?.listing?.title || p.deal?.listing?.listingNumber || "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{p.deal?.buyer?.fullName || "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100">
                         <Badge text={fmtLabel(p.paymentType)} cls={TYPE_BADGE[p.paymentType]} />
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-1 border-r border-gray-100">
                         <Badge text={fmtLabel(p.paymentMethod)} cls={METHOD_BADGE[p.paymentMethod]} />
                       </td>
-                      <td className="px-3 py-2 text-right font-black text-slate-900">{fmtKES(p.amount)}</td>
-                      <td className="px-3 py-2 text-slate-500">{p.paymentDate ? new Date(p.paymentDate).toLocaleDateString("en-KE") : "—"}</td>
-                      <td className="px-3 py-2 font-mono text-[10px] text-slate-400">{p.reference || "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">{fmtKES(p.amount)}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{p.paymentDate ? new Date(p.paymentDate).toLocaleDateString("en-KE") : "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 font-mono text-[10px] text-slate-400">{p.reference || "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -238,16 +238,16 @@ const SaleMonthlyDetail = () => {
 
             {/* DEALS TAB */}
             {activeTab === "deals" && (
-              <table className="min-w-full text-xs">
+              <table className="min-w-full text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 bg-[#027333] text-white">
                   <tr>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Deal No.</th>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Property</th>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Buyer</th>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Agent</th>
-                    <th className="px-3 py-2.5 text-right font-black tracking-wide">Agreed Price</th>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Status</th>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Deal Date</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Deal No.</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Buyer</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Agent</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Agreed Price</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Deal Date</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -256,19 +256,19 @@ const SaleMonthlyDetail = () => {
                   ) : deals.length === 0 ? (
                     <EmptyRow cols={7} label={`No deals in ${monthName} ${year}`} />
                   ) : deals.map((d, i) => (
-                    <tr key={d._id} className={`border-t border-slate-100 ${i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
-                      <td className="px-3 py-2 font-black text-slate-900">{d.dealNumber}</td>
-                      <td className="px-3 py-2">
+                    <tr key={d._id} className={`border-b border-gray-100 ${i % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                      <td className="px-3 py-1 border-r border-gray-100 font-black text-slate-900">{d.dealNumber}</td>
+                      <td className="px-3 py-1 border-r border-gray-100">
                         <div className="font-bold text-slate-700">{d.listing?.title || "—"}</div>
                         <div className="text-[10px] capitalize text-slate-400">{d.listing?.propertyType || ""}</div>
                       </td>
-                      <td className="px-3 py-2 text-slate-600">{d.buyer?.fullName || "—"}</td>
-                      <td className="px-3 py-2 text-slate-500">{d.agent?.fullName || <span className="italic text-slate-300">—</span>}</td>
-                      <td className="px-3 py-2 text-right font-black text-slate-900">{fmtKES(d.agreedPrice)}</td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{d.buyer?.fullName || "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{d.agent?.fullName || <span className="italic text-slate-300">—</span>}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">{fmtKES(d.agreedPrice)}</td>
+                      <td className="px-3 py-1 border-r border-gray-100">
                         <Badge text={d.status} cls={STATUS_BADGE[d.status]} />
                       </td>
-                      <td className="px-3 py-2 text-slate-500">{d.dealDate ? new Date(d.dealDate).toLocaleDateString("en-KE") : "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{d.dealDate ? new Date(d.dealDate).toLocaleDateString("en-KE") : "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -277,17 +277,17 @@ const SaleMonthlyDetail = () => {
 
             {/* OFFERS TAB */}
             {activeTab === "offers" && (
-              <table className="min-w-full text-xs">
+              <table className="min-w-full text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 bg-[#027333] text-white">
                   <tr>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Offer No.</th>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Property</th>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Buyer</th>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Agent</th>
-                    <th className="px-3 py-2.5 text-right font-black tracking-wide">Offer Amount</th>
-                    <th className="px-3 py-2.5 text-right font-black tracking-wide">Counter Offer</th>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Status</th>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Date</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Offer No.</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Buyer</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Agent</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Offer Amount</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Counter Offer</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -296,17 +296,17 @@ const SaleMonthlyDetail = () => {
                   ) : offers.length === 0 ? (
                     <EmptyRow cols={8} label={`No offers in ${monthName} ${year}`} />
                   ) : offers.map((o, i) => (
-                    <tr key={o._id} className={`border-t border-slate-100 ${i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
-                      <td className="px-3 py-2 font-black text-slate-900">{o.offerNumber}</td>
-                      <td className="px-3 py-2 text-slate-700">{o.listing?.title || o.listing?.listingNumber || "—"}</td>
-                      <td className="px-3 py-2 text-slate-600">{o.buyer?.fullName || "—"}</td>
-                      <td className="px-3 py-2 text-slate-500">{o.agent?.fullName || <span className="italic text-slate-300">—</span>}</td>
-                      <td className="px-3 py-2 text-right font-black text-slate-900">{fmtKES(o.offerAmount)}</td>
-                      <td className="px-3 py-2 text-right font-bold text-violet-700">{o.counterOfferAmount ? fmtKES(o.counterOfferAmount) : "—"}</td>
-                      <td className="px-3 py-2">
+                    <tr key={o._id} className={`border-b border-gray-100 ${i % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                      <td className="px-3 py-1 border-r border-gray-100 font-black text-slate-900">{o.offerNumber}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{o.listing?.title || o.listing?.listingNumber || "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{o.buyer?.fullName || "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{o.agent?.fullName || <span className="italic text-slate-300">—</span>}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">{fmtKES(o.offerAmount)}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-violet-700">{o.counterOfferAmount ? fmtKES(o.counterOfferAmount) : "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100">
                         <Badge text={o.status === "negotiating" && o.counterOfferAmount ? "Counter Active" : o.status} cls={STATUS_BADGE[o.status]} />
                       </td>
-                      <td className="px-3 py-2 text-slate-500">{o.createdAt ? new Date(o.createdAt).toLocaleDateString("en-KE") : "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{o.createdAt ? new Date(o.createdAt).toLocaleDateString("en-KE") : "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -315,16 +315,16 @@ const SaleMonthlyDetail = () => {
 
             {/* LISTINGS TAB */}
             {activeTab === "listings" && (
-              <table className="min-w-full text-xs">
+              <table className="min-w-full text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 bg-[#027333] text-white">
                   <tr>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Listing No.</th>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Title</th>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Type</th>
-                    <th className="px-3 py-2.5 text-right font-black tracking-wide">Asking Price</th>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Status</th>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Agent</th>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Listed On</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Listing No.</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Title</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Asking Price</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Agent</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Listed On</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -333,16 +333,16 @@ const SaleMonthlyDetail = () => {
                   ) : listings.length === 0 ? (
                     <EmptyRow cols={7} label={`No listings created in ${monthName} ${year}`} />
                   ) : listings.map((l, i) => (
-                    <tr key={l._id} className={`border-t border-slate-100 ${i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
-                      <td className="px-3 py-2 font-black text-slate-900">{l.listingNumber}</td>
-                      <td className="px-3 py-2 font-bold text-slate-700">{l.title || "—"}</td>
-                      <td className="px-3 py-2 capitalize text-slate-500">{l.propertyType || "—"}</td>
-                      <td className="px-3 py-2 text-right font-black text-slate-900">{fmtKES(l.askingPrice)}</td>
-                      <td className="px-3 py-2">
+                    <tr key={l._id} className={`border-b border-gray-100 ${i % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                      <td className="px-3 py-1 border-r border-gray-100 font-black text-slate-900">{l.listingNumber}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-700">{l.title || "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 capitalize text-slate-500">{l.propertyType || "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">{fmtKES(l.askingPrice)}</td>
+                      <td className="px-3 py-1 border-r border-gray-100">
                         <Badge text={l.status} cls={STATUS_BADGE[l.status]} />
                       </td>
-                      <td className="px-3 py-2 text-slate-500">{l.assignedAgent?.fullName || <span className="italic text-slate-300">—</span>}</td>
-                      <td className="px-3 py-2 text-slate-500">{l.createdAt ? new Date(l.createdAt).toLocaleDateString("en-KE") : "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{l.assignedAgent?.fullName || <span className="italic text-slate-300">—</span>}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{l.createdAt ? new Date(l.createdAt).toLocaleDateString("en-KE") : "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -351,16 +351,16 @@ const SaleMonthlyDetail = () => {
 
             {/* COMMISSIONS TAB */}
             {activeTab === "commissions" && (
-              <table className="min-w-full text-xs">
+              <table className="min-w-full text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 bg-[#027333] text-white">
                   <tr>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Comm. No.</th>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Agent</th>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Deal</th>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Property</th>
-                    <th className="px-3 py-2.5 text-right font-black tracking-wide">Rate</th>
-                    <th className="px-3 py-2.5 text-right font-black tracking-wide">Amount</th>
-                    <th className="px-3 py-2.5 text-left font-black tracking-wide">Status</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Comm. No.</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Agent</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Deal</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Rate</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -369,16 +369,16 @@ const SaleMonthlyDetail = () => {
                   ) : commissions.length === 0 ? (
                     <EmptyRow cols={7} label={`No commissions in ${monthName} ${year}`} />
                   ) : commissions.map((c, i) => (
-                    <tr key={c._id} className={`border-t border-slate-100 ${i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
-                      <td className="px-3 py-2 font-black text-slate-900">{c.commissionNumber}</td>
-                      <td className="px-3 py-2 text-slate-700">{c.agent?.fullName || "—"}</td>
-                      <td className="px-3 py-2 font-bold text-slate-700">{c.deal?.dealNumber || "—"}</td>
-                      <td className="px-3 py-2 text-slate-500">{c.deal?.listing?.title || "—"}</td>
-                      <td className="px-3 py-2 text-right font-bold text-[#027333]">
+                    <tr key={c._id} className={`border-b border-gray-100 ${i % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                      <td className="px-3 py-1 border-r border-gray-100 font-black text-slate-900">{c.commissionNumber}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{c.agent?.fullName || "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-700">{c.deal?.dealNumber || "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{c.deal?.listing?.title || "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-[#027333]">
                         {c.commissionRate}{c.commissionType === "percentage" ? "%" : " KES"}
                       </td>
-                      <td className="px-3 py-2 text-right font-black text-slate-900">{fmtKES(c.commissionAmount)}</td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">{fmtKES(c.commissionAmount)}</td>
+                      <td className="px-3 py-1 border-r border-gray-100">
                         <Badge text={c.status} cls={STATUS_BADGE[c.status]} />
                       </td>
                     </tr>

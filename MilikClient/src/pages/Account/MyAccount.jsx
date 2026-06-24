@@ -46,7 +46,7 @@ const TextInput = ({ value, onChange, placeholder, readOnly = false, type = "tex
         "w-full rounded-xl border px-4 py-3 text-sm outline-none transition",
         readOnly
           ? "border-slate-200 bg-slate-50 text-slate-500 cursor-default"
-          : "border-slate-200 bg-white text-slate-900 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-200",
+          : "border-slate-200 bg-white text-slate-900 focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/20",
         suffix ? "pr-12" : "",
       ].join(" ")}
     />

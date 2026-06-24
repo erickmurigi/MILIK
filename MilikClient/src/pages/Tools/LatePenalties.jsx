@@ -742,12 +742,12 @@ const LatePenalties = () => {
                       value={penaltySearch}
                       onChange={(e) => setPenaltySearch(e.target.value)}
                       placeholder="Batch, tenant, penalty invoice, property, unit"
-                      className="h-7 w-52 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-orange-400"
+                      className="h-7 w-52 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                     />
                     <select
                       value={penaltyStatusFilter}
                       onChange={(e) => setPenaltyStatusFilter(e.target.value)}
-                      className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-orange-400"
+                      className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                     >
                       <option value="all">All statuses</option>
                       <option value="processed">Processed</option>
@@ -757,7 +757,7 @@ const LatePenalties = () => {
                     <select
                       value={penaltyRuleFilter}
                       onChange={(e) => setPenaltyRuleFilter(e.target.value)}
-                      className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-orange-400"
+                      className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                     >
                       <option value="all">All rules</option>
                       {processedPenaltyRuleOptions.map((ruleName) => (
@@ -767,7 +767,7 @@ const LatePenalties = () => {
                     <select
                       value={penaltyPropertyFilter}
                       onChange={(e) => setPenaltyPropertyFilter(e.target.value)}
-                      className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-orange-400"
+                      className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                     >
                       <option value="all">All properties</option>
                       {processedPenaltyPropertyOptions.map((propertyName) => (
@@ -817,26 +817,26 @@ const LatePenalties = () => {
                 </div>
 
                 <div className="flex-1 min-h-0 overflow-auto">
-                  <table className="w-full min-w-[1500px] text-xs">
+                  <table className="w-full min-w-[1500px] text-[11px] border-collapse">
                     <thead className="sticky top-0 z-10 shadow-sm">
                       <tr className="bg-[#0B3B2E] text-white">
-                        <th className="px-3 py-2 text-left">
+                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">
                           <input
                             type="checkbox"
                             checked={selectableProcessedRows.length > 0 && allProcessedRowsSelected}
                             onChange={toggleAllProcessedPenaltyRows}
                           />
                         </th>
-                        <th className="px-3 py-2 text-left font-semibold">Batch</th>
-                        <th className="px-3 py-2 text-left font-semibold">Source Invoice</th>
-                        <th className="px-3 py-2 text-left font-semibold">Penalty Invoice</th>
-                        <th className="px-3 py-2 text-left font-semibold">Tenant</th>
-                        <th className="px-3 py-2 text-left font-semibold">Property</th>
-                        <th className="px-3 py-2 text-left font-semibold">Unit</th>
-                        <th className="px-3 py-2 text-right font-semibold">Penalty</th>
-                        <th className="px-3 py-2 text-center font-semibold">Run Date</th>
-                        <th className="px-3 py-2 text-center font-semibold">Status</th>
-                        <th className="px-3 py-2 text-left font-semibold">Reason</th>
+                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Batch</th>
+                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Source Invoice</th>
+                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Penalty Invoice</th>
+                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Tenant</th>
+                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
+                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Unit</th>
+                        <th className="px-3 py-1 text-right font-bold border-r border-white/10">Penalty</th>
+                        <th className="px-3 py-1 text-center font-bold border-r border-white/10">Run Date</th>
+                        <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
+                        <th className="px-3 py-1 text-left font-bold">Reason</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -853,15 +853,15 @@ const LatePenalties = () => {
                           return (
                             <tr
                               key={row._id}
-                              className={`border-b border-slate-200 transition-colors ${
+                              className={`border-b border-gray-100 transition-colors ${
                                 isSelected
                                   ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50"
                                   : index % 2 === 0
                                   ? "bg-white hover:bg-blue-50/40"
-                                  : "bg-slate-50 hover:bg-blue-50/40"
+                                  : "bg-slate-50/60 hover:bg-blue-50/40"
                               }`}
                             >
-                              <td className="px-3 py-2">
+                              <td className="px-3 py-1 border-r border-gray-100">
                                 <input
                                   type="checkbox"
                                   checked={isSelected}
@@ -869,7 +869,7 @@ const LatePenalties = () => {
                                   onChange={() => toggleProcessedPenaltyRow(String(row._id))}
                                 />
                               </td>
-                              <td className="px-3 py-2">
+                              <td className="px-3 py-1 border-r border-gray-100">
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -882,22 +882,22 @@ const LatePenalties = () => {
                                 </button>
                                 <p className="mt-1 text-[11px] text-slate-500">{row.ruleName}</p>
                               </td>
-                              <td className="px-3 py-2 font-semibold text-slate-900">{row.sourceInvoiceNumber}</td>
-                              <td className="px-3 py-2 font-semibold text-slate-900">{row.penaltyInvoiceNumber}</td>
-                              <td className="px-3 py-2">
+                              <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.sourceInvoiceNumber}</td>
+                              <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.penaltyInvoiceNumber}</td>
+                              <td className="px-3 py-1 border-r border-gray-100">
                                 <p className="font-semibold text-slate-900">{row.tenantName}</p>
-                                <p className="mt-1 text-[11px] text-slate-500">{row.tenantCode || "-"}</p>
+                                <p className="mt-0.5 text-[10px] text-slate-500">{row.tenantCode || "-"}</p>
                               </td>
-                              <td className="px-3 py-2 font-semibold text-slate-800">{row.propertyName}</td>
-                              <td className="px-3 py-2 text-slate-700">{row.unitNumber}</td>
-                              <td className="px-3 py-2 text-right font-semibold text-slate-900">{formatCurrency(row.calculatedPenalty)}</td>
-                              <td className="px-3 py-2 text-center text-slate-700">{formatDate(row.batchRunDate)}</td>
-                              <td className="px-3 py-2 text-center">
-                                <span className={`inline-flex rounded-full border px-3 py-1 font-semibold ${statusBadgeClass(row.displayStatus)}`}>
+                              <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{row.propertyName}</td>
+                              <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row.unitNumber}</td>
+                              <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-900">{formatCurrency(row.calculatedPenalty)}</td>
+                              <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-700">{formatDate(row.batchRunDate)}</td>
+                              <td className="px-3 py-1 border-r border-gray-100 text-center">
+                                <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusBadgeClass(row.displayStatus)}`}>
                                   {row.displayStatus}
                                 </span>
                               </td>
-                              <td className="px-3 py-2 text-slate-600">{row.reason || "-"}</td>
+                              <td className="px-3 py-1 text-slate-600">{row.reason || "-"}</td>
                             </tr>
                           );
                         })
@@ -945,12 +945,12 @@ const LatePenalties = () => {
                       value={batchSearch}
                       onChange={(e) => setBatchSearch(e.target.value)}
                       placeholder="Batch name, rule, status"
-                      className="h-7 w-48 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-orange-400"
+                      className="h-7 w-48 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                     />
                     <select
                       value={batchStatusFilter}
                       onChange={(e) => setBatchStatusFilter(e.target.value)}
-                      className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-orange-400"
+                      className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                     >
                       <option value="all">All batch statuses</option>
                       <option value="processed">Processed</option>
@@ -963,17 +963,17 @@ const LatePenalties = () => {
                 </div>
 
                 <div className="flex-1 min-h-0 overflow-auto">
-                  <table className="w-full min-w-[1200px] text-xs">
+                  <table className="w-full min-w-[1200px] text-[11px] border-collapse">
                     <thead className="sticky top-0 z-10 shadow-sm">
                       <tr className="bg-[#0B3B2E] text-white">
-                        <th className="px-3 py-2 text-left font-semibold">Batch</th>
-                        <th className="px-3 py-2 text-left font-semibold">Rule</th>
-                        <th className="px-3 py-2 text-center font-semibold">Run Date</th>
-                        <th className="px-3 py-2 text-right font-semibold">Invoices</th>
-                        <th className="px-3 py-2 text-right font-semibold">Amount</th>
-                        <th className="px-3 py-2 text-center font-semibold">Status</th>
-                        <th className="px-3 py-2 text-left font-semibold">Delete Rule</th>
-                        <th className="px-3 py-2 text-right font-semibold">Action</th>
+                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Batch</th>
+                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Rule</th>
+                        <th className="px-3 py-1 text-center font-bold border-r border-white/10">Run Date</th>
+                        <th className="px-3 py-1 text-right font-bold border-r border-white/10">Invoices</th>
+                        <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount</th>
+                        <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
+                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Delete Rule</th>
+                        <th className="px-3 py-1 text-right font-bold">Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -987,34 +987,34 @@ const LatePenalties = () => {
                         currentProcessedBatchRows.map((batch, index) => (
                           <tr
                             key={batch._id}
-                            className={`cursor-pointer border-b border-slate-200 transition-colors ${
-                              index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50 hover:bg-blue-50/40"
+                            className={`cursor-pointer border-b border-gray-100 transition-colors ${
+                              index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"
                             }`}
                             onClick={() => openBatch(batch._id)}
                           >
-                            <td className="px-3 py-2">
+                            <td className="px-3 py-1 border-r border-gray-100">
                               <p className="font-bold text-blue-700">{batch.batchName}</p>
-                              <p className="mt-1 text-[11px] text-slate-500">
+                              <p className="mt-0.5 text-[10px] text-slate-500">
                                 {(Array.isArray(batch?.items) ? batch.items.length : 0).toLocaleString()} penalty rows
                               </p>
                             </td>
-                            <td className="px-3 py-2 font-semibold text-slate-900">{batch.ruleName || batch.rule?.ruleName || "-"}</td>
-                            <td className="px-3 py-2 text-center text-slate-700">{formatDate(batch.runDate)}</td>
-                            <td className="px-3 py-2 text-right font-semibold text-slate-800">{Number(batch.invoicesCreatedCount || 0)}</td>
-                            <td className="px-3 py-2 text-right font-semibold text-slate-900">{formatCurrency(batch.totalPenaltyAmount)}</td>
-                            <td className="px-3 py-2 text-center">
-                              <span className={`inline-flex rounded-full border px-3 py-1 font-semibold ${statusBadgeClass(batch.status)}`}>
+                            <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{batch.ruleName || batch.rule?.ruleName || "-"}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-700">{formatDate(batch.runDate)}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-800">{Number(batch.invoicesCreatedCount || 0)}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-900">{formatCurrency(batch.totalPenaltyAmount)}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-center">
+                              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusBadgeClass(batch.status)}`}>
                                 {batch.status || "processed"}
                               </span>
                             </td>
-                            <td className="px-3 py-2 text-slate-600">
+                            <td className="px-3 py-1 border-r border-gray-100 text-slate-600">
                               {batch?.canDeleteBatch ? (
                                 <span className="font-medium text-emerald-700">Ready to delete</span>
                               ) : (
                                 <span className="text-amber-700">{batchDeleteSummary(batch) || "Clear linked invoices first."}</span>
                               )}
                             </td>
-                            <td className="px-3 py-2 text-right">
+                            <td className="px-3 py-1 text-right">
                               <button
                                 type="button"
                                 onClick={(event) => {
@@ -1185,10 +1185,10 @@ const LatePenalties = () => {
                   </div>
 
                   <div className="flex-1 min-h-0 overflow-auto">
-                    <table className="w-full min-w-[1400px] text-xs">
+                    <table className="w-full min-w-[1400px] text-[11px] border-collapse">
                       <thead className="sticky top-0 z-10 shadow-sm">
                         <tr className="bg-[#0B3B2E] text-white">
-                          <th className="px-3 py-2 text-left">
+                          <th className="px-3 py-1 text-left font-bold border-r border-white/10">
                             <input
                               type="checkbox"
                               checked={allPreviewRowsSelected}
@@ -1208,14 +1208,14 @@ const LatePenalties = () => {
                               }}
                             />
                           </th>
-                          <th className="px-3 py-2 text-left font-semibold">Source Invoice</th>
-                          <th className="px-3 py-2 text-left font-semibold">Tenant</th>
-                          <th className="px-3 py-2 text-left font-semibold">Property</th>
-                          <th className="px-3 py-2 text-left font-semibold">Unit</th>
-                          <th className="px-3 py-2 text-center font-semibold">Overdue Days</th>
-                          <th className="px-3 py-2 text-right font-semibold">Outstanding</th>
-                          <th className="px-3 py-2 text-right font-semibold">Penalty</th>
-                          <th className="px-3 py-2 text-left font-semibold">Status / Reason</th>
+                          <th className="px-3 py-1 text-left font-bold border-r border-white/10">Source Invoice</th>
+                          <th className="px-3 py-1 text-left font-bold border-r border-white/10">Tenant</th>
+                          <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
+                          <th className="px-3 py-1 text-left font-bold border-r border-white/10">Unit</th>
+                          <th className="px-3 py-1 text-center font-bold border-r border-white/10">Overdue Days</th>
+                          <th className="px-3 py-1 text-right font-bold border-r border-white/10">Outstanding</th>
+                          <th className="px-3 py-1 text-right font-bold border-r border-white/10">Penalty</th>
+                          <th className="px-3 py-1 text-left font-bold">Status / Reason</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1225,15 +1225,15 @@ const LatePenalties = () => {
                             return (
                               <tr
                                 key={`${row.sourceInvoiceId}-${index}`}
-                                className={`border-b border-slate-200 transition-colors ${
+                                className={`border-b border-gray-100 transition-colors ${
                                   selected
                                     ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E]"
                                     : index % 2 === 0
                                     ? "bg-white hover:bg-blue-50/40"
-                                    : "bg-slate-50 hover:bg-blue-50/40"
+                                    : "bg-slate-50/60 hover:bg-blue-50/40"
                                 }`}
                               >
-                                <td className="px-3 py-2">
+                                <td className="px-3 py-1 border-r border-gray-100">
                                   <input
                                     type="checkbox"
                                     checked={selected}
@@ -1241,23 +1241,23 @@ const LatePenalties = () => {
                                     onChange={() => togglePreviewRow(row.sourceInvoiceId)}
                                   />
                                 </td>
-                                <td className="px-3 py-2 font-semibold text-slate-900">{row.sourceInvoiceNumber}</td>
-                                <td className="px-3 py-2">
+                                <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.sourceInvoiceNumber}</td>
+                                <td className="px-3 py-1 border-r border-gray-100">
                                   <p className="font-semibold text-slate-900">{row.tenantName}</p>
-                                  <p className="mt-1 text-[11px] text-slate-500">{row.tenantCode || "-"}</p>
+                                  <p className="mt-0.5 text-[10px] text-slate-500">{row.tenantCode || "-"}</p>
                                 </td>
-                                <td className="px-3 py-2 font-semibold text-slate-800">{row.propertyName}</td>
-                                <td className="px-3 py-2 text-slate-700">{row.unitNumber}</td>
-                                <td className="px-3 py-2 text-center text-slate-700">{row.overdueDays}</td>
-                                <td className="px-3 py-2 text-right font-semibold text-slate-900">{formatCurrency(row.outstandingBalance)}</td>
-                                <td className="px-3 py-2 text-right font-semibold text-slate-900">{formatCurrency(row.calculatedPenalty)}</td>
-                                <td className="px-3 py-2">
+                                <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{row.propertyName}</td>
+                                <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row.unitNumber}</td>
+                                <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-700">{row.overdueDays}</td>
+                                <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-900">{formatCurrency(row.outstandingBalance)}</td>
+                                <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-900">{formatCurrency(row.calculatedPenalty)}</td>
+                                <td className="px-3 py-1">
                                   {row.skippedReason ? (
-                                    <span className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 font-semibold text-amber-800">
-                                      <FaExclamationTriangle /> {row.skippedReason}
+                                    <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                                      <FaExclamationTriangle size={8} /> {row.skippedReason}
                                     </span>
                                   ) : (
-                                    <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 font-semibold text-emerald-700">
+                                    <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
                                       Ready
                                     </span>
                                   )}
@@ -1364,24 +1364,24 @@ const LatePenalties = () => {
             </div>
 
             <div className="max-h-[52vh] overflow-auto">
-              <table className="w-full min-w-[1450px] text-xs">
+              <table className="w-full min-w-[1450px] text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className="bg-[#0B3B2E] text-white">
-                    <th className="px-3 py-2 text-left">
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">
                       <input
                         type="checkbox"
                         checked={selectableBatchItems.length > 0 && allModalBatchRowsSelected}
                         onChange={toggleAllModalBatchRows}
                       />
                     </th>
-                    <th className="px-3 py-2 text-left font-semibold">Source Invoice</th>
-                    <th className="px-3 py-2 text-left font-semibold">Tenant</th>
-                    <th className="px-3 py-2 text-left font-semibold">Property</th>
-                    <th className="px-3 py-2 text-left font-semibold">Penalty Invoice</th>
-                    <th className="px-3 py-2 text-right font-semibold">Penalty</th>
-                    <th className="px-3 py-2 text-center font-semibold">Status</th>
-                    <th className="px-3 py-2 text-left font-semibold">Reason</th>
-                    <th className="px-3 py-2 text-right font-semibold">Communication</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Source Invoice</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Tenant</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Penalty Invoice</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Penalty</th>
+                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Reason</th>
+                    <th className="px-3 py-1 text-right font-bold">Communication</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1399,15 +1399,15 @@ const LatePenalties = () => {
                       return (
                         <tr
                           key={item._id}
-                          className={`border-b border-slate-200 transition-colors ${
+                          className={`border-b border-gray-100 transition-colors ${
                             isSelected
                               ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E]"
                               : index % 2 === 0
                               ? "bg-white hover:bg-blue-50/40"
-                              : "bg-slate-50 hover:bg-blue-50/40"
+                              : "bg-slate-50/60 hover:bg-blue-50/40"
                           }`}
                         >
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-1 border-r border-gray-100">
                             <input
                               type="checkbox"
                               checked={isSelected}
@@ -1415,21 +1415,21 @@ const LatePenalties = () => {
                               onChange={() => toggleProcessedPenaltyRow(String(item._id))}
                             />
                           </td>
-                          <td className="px-3 py-2 font-semibold text-slate-900">{item.sourceInvoiceNumber || item?.sourceInvoice?.invoiceNumber || "-"}</td>
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{item.sourceInvoiceNumber || item?.sourceInvoice?.invoiceNumber || "-"}</td>
+                          <td className="px-3 py-1 border-r border-gray-100">
                             <p className="font-semibold text-slate-900">{item.tenant?.name || item.tenantName || "-"}</p>
-                            <p className="mt-1 text-[11px] text-slate-500">{item.property?.propertyName || "-"} / {item.unit?.unitNumber || "-"}</p>
+                            <p className="mt-0.5 text-[10px] text-slate-500">{item.property?.propertyName || "-"} / {item.unit?.unitNumber || "-"}</p>
                           </td>
-                          <td className="px-3 py-2 font-semibold text-slate-800">{item.property?.propertyName || "-"}</td>
-                          <td className="px-3 py-2 font-semibold text-slate-900">{item?.penaltyInvoice?.invoiceNumber || "-"}</td>
-                          <td className="px-3 py-2 text-right font-semibold text-slate-900">{formatCurrency(item.calculatedPenalty)}</td>
-                          <td className="px-3 py-2 text-center">
-                            <span className={`inline-flex rounded-full border px-3 py-1 font-semibold ${statusBadgeClass(normalizedStatus)}`}>
+                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{item.property?.propertyName || "-"}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{item?.penaltyInvoice?.invoiceNumber || "-"}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-900">{formatCurrency(item.calculatedPenalty)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-center">
+                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusBadgeClass(normalizedStatus)}`}>
                               {normalizedStatus}
                             </span>
                           </td>
-                          <td className="px-3 py-2 text-slate-600">{item.reason || "-"}</td>
-                          <td className="px-3 py-2 text-right">
+                          <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{item.reason || "-"}</td>
+                          <td className="px-3 py-1 text-right">
                             {item?.penaltyInvoice?._id ? (
                               <div className="flex justify-end gap-2">
                                 <button

@@ -86,6 +86,7 @@ const ProcessedStatements = () => {
   const [showCommissionModal, setShowCommissionModal] = useState(null);
   const [commModalStatement, setCommModalStatement] = useState(null);
   const [cashbookOptions, setCashbookOptions] = useState([]);
+  const [reversalModal, setReversalModal] = useState({ open: false, statement: null, reason: "", loading: false });
 
   const businessId = useMemo(
     () => currentCompany?._id || currentUser?.company?._id || currentUser?.company || currentUser?.businessId || "",
@@ -289,16 +290,17 @@ const ProcessedStatements = () => {
     }
   };
 
-  const handleReverseStatement = async (statement) => {
+  const handleReverseStatement = (statement) => {
     if (!canReverseProcessedStatement) {
       toast.warning("You do not have permission to reverse processed statements");
       return;
     }
-    const defaultReason = statement?.reversalReason || "Processed statement reversed";
-    const reasonInput = window.prompt("Enter reversal reason", defaultReason);
-    if (reasonInput === null) return;
+    setReversalModal({ open: true, statement, reason: statement?.reversalReason || "Processed statement reversed", loading: false });
+  };
 
-    const reason = reasonInput.trim() || defaultReason;
+  const handleReversalConfirm = async () => {
+    const { statement, reason } = reversalModal;
+    const finalReason = reason.trim() || "Processed statement reversed";
     const reopenDraftContext = {
       propertyId: statement?.property?._id || statement?.property || "",
       landlordId: statement?.landlord?._id || statement?.landlord || "",
@@ -312,19 +314,15 @@ const ProcessedStatements = () => {
         statement?.reversedSourceStatement ||
         "",
     };
-
+    setReversalModal((prev) => ({ ...prev, loading: true }));
     try {
-      await dispatch(reverseStatement({ statementId: statement._id, reason })).unwrap();
-      toast.success(
-        "Processed statement reversed successfully. Reopening the statement workspace with the same period so you can regenerate a fresh draft."
-      );
-      navigate("/landlord/statements", {
-        state: {
-          reopenDraftContext,
-        },
-      });
+      await dispatch(reverseStatement({ statementId: statement._id, reason: finalReason })).unwrap();
+      toast.success("Processed statement reversed successfully. Reopening the statement workspace with the same period so you can regenerate a fresh draft.");
+      setReversalModal({ open: false, statement: null, reason: "", loading: false });
+      navigate("/landlord/statements", { state: { reopenDraftContext } });
     } catch (error) {
       toast.error(error || "Failed to reverse statement");
+      setReversalModal((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -542,7 +540,7 @@ const ProcessedStatements = () => {
                 <button onClick={() => setActiveTab("outstanding")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "outstanding" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaHourglass /> Outstanding ({stats.totalUnpaid})</button>
                 <button onClick={() => setActiveTab("recoveries")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "recoveries" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaHourglass /> Recoveries ({stats.totalRecoveries})</button>
                 <button onClick={() => setActiveTab("paid")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "paid" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaCheckCircle /> Paid ({stats.totalPaid})</button>
-                <input type="text" placeholder="Search landlord, property…" value={searchText} onChange={(e) => setSearchText(e.target.value)} className="h-7 w-44 shrink-0 rounded border border-orange-300 bg-orange-50 px-2 text-xs outline-none focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]" />
+                <input type="text" placeholder="Search landlord, property…" value={searchText} onChange={(e) => setSearchText(e.target.value)} className="h-7 w-44 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="date-desc">Newest First</option>
                   <option value="date-asc">Oldest First</option>
@@ -563,43 +561,43 @@ const ProcessedStatements = () => {
                 <div className="flex flex-1 items-center justify-center p-12 text-center"><p className="text-lg text-gray-500">No {activeTab} statements found</p></div>
               ) : (
                 <div className="flex-1 min-h-0 overflow-auto">
-                  <table className="w-full min-w-[1160px] text-sm">
+                  <table className="w-full min-w-[1160px] text-[11px] border-collapse">
                     <thead className="sticky top-0 z-10 shadow-sm">
-                      <tr className="border-b bg-[#0B3B2E] text-white">
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-white">STMT #</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-white">LANDLORD</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-white">PROPERTY</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-white">PERIOD</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-white">NET POSITION</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-white">SETTLED</th>
-                        <th className="px-4 py-3 text-center text-sm font-semibold text-white">STATUS</th>
-                        <th className="px-4 py-3 text-center text-sm font-semibold text-white">ACTIONS</th>
+                      <tr className="bg-[#0B3B2E] text-white">
+                        <th className="px-3 py-2 text-left font-bold border-r border-white/10">STMT #</th>
+                        <th className="px-3 py-2 text-left font-bold border-r border-white/10">LANDLORD</th>
+                        <th className="px-3 py-2 text-left font-bold border-r border-white/10">PROPERTY</th>
+                        <th className="px-3 py-2 text-left font-bold border-r border-white/10">PERIOD</th>
+                        <th className="px-3 py-2 text-right font-bold border-r border-white/10">NET POSITION</th>
+                        <th className="px-3 py-2 text-right font-bold border-r border-white/10">SETTLED</th>
+                        <th className="px-3 py-2 text-center font-bold border-r border-white/10">STATUS</th>
+                        <th className="px-3 py-2 text-center font-bold">ACTIONS</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {paginatedStatements.map((statement) => {
+                      {paginatedStatements.map((statement, stmtIdx) => {
                         const isNegative = isNegativeProcessedStatement(statement);
                         const outstandingRecovery = getOutstandingRecoveryBalance(statement);
                         return (
                           <React.Fragment key={statement._id}>
-                            <tr className="border-b transition hover:bg-gray-50">
-                              <td className="px-4 py-3 text-xs font-mono text-slate-500">
+                            <tr className={`border-b border-gray-100 transition-colors ${stmtIdx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                              <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-500">
                                 {statement.sourceStatementNumber || '—'}
                               </td>
-                              <td className="px-4 py-3">{statement.landlord?.landlordName || "N/A"}</td>
-                              <td className="px-4 py-3">
+                              <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{statement.landlord?.landlordName || "N/A"}</td>
+                              <td className="px-3 py-1 border-r border-gray-100">
                                 <div>
-                                  <p className="font-semibold">{statement.property?.propertyCode}</p>
-                                  <p className="text-sm text-gray-600">{statement.property?.propertyName || statement.property?.name}</p>
+                                  <p className="font-semibold text-slate-900">{statement.property?.propertyCode}</p>
+                                  <p className="text-[10px] text-gray-500">{statement.property?.propertyName || statement.property?.name}</p>
                                 </div>
                               </td>
-                              <td className="px-4 py-3 text-sm">{formatPeriodRange(statement)}</td>
-                              <td className="px-4 py-3 text-right font-semibold">{displayMoney(getStatementDisplayAmount(statement))}</td>
-                              <td className="px-4 py-3 text-right">
+                              <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{formatPeriodRange(statement)}</td>
+                              <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{displayMoney(getStatementDisplayAmount(statement))}</td>
+                              <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-700">
                                 {displayMoney(isNegative ? statement.amountRecovered || 0 : statement.amountPaid || 0)}
                               </td>
-                              <td className="px-4 py-3 text-center">{getStatusBadge(statement)}</td>
-                              <td className="px-4 py-3 text-center">
+                              <td className="px-3 py-1 border-r border-gray-100 text-center">{getStatusBadge(statement)}</td>
+                              <td className="px-3 py-1 text-center">
                                 <button
                                   onClick={() => setExpandedRow(expandedRow === statement._id ? null : statement._id)}
                                   className="text-gray-600 transition hover:text-gray-900"
@@ -684,24 +682,24 @@ const ProcessedStatements = () => {
                                       <div>
                                         <p className="mb-2 text-sm font-semibold text-slate-700">Payment History</p>
                                         <div className="overflow-hidden rounded border border-slate-200">
-                                          <table className="w-full text-xs">
-                                            <thead className="bg-slate-100 text-slate-600">
+                                          <table className="w-full text-[11px] border-collapse">
+                                            <thead className="bg-[#0B3B2E] text-white">
                                               <tr>
-                                                <th className="px-3 py-2 text-left font-semibold">Date</th>
-                                                <th className="px-3 py-2 text-left font-semibold">Method</th>
-                                                <th className="px-3 py-2 text-left font-semibold">Reference</th>
-                                                <th className="px-3 py-2 text-right font-semibold">Amount</th>
-                                                <th className="px-3 py-2 text-left font-semibold">Notes</th>
+                                                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date</th>
+                                                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Method</th>
+                                                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Reference</th>
+                                                <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount</th>
+                                                <th className="px-3 py-1 text-left font-bold">Notes</th>
                                               </tr>
                                             </thead>
                                             <tbody>
                                               {statement.paymentHistory.map((ph, i) => (
-                                                <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                                                  <td className="px-3 py-2">{formatDate(ph.paymentDate)}</td>
-                                                  <td className="px-3 py-2">{formatPaymentMethod(ph.paymentMethod)}</td>
-                                                  <td className="px-3 py-2 font-mono text-slate-500">{ph.paymentReference || '—'}</td>
-                                                  <td className="px-3 py-2 text-right font-semibold text-emerald-700">{displayMoney(ph.amount)}</td>
-                                                  <td className="px-3 py-2 text-slate-500">{ph.notes || '—'}</td>
+                                                <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                                                  <td className="px-3 py-1 border-r border-gray-100">{formatDate(ph.paymentDate)}</td>
+                                                  <td className="px-3 py-1 border-r border-gray-100">{formatPaymentMethod(ph.paymentMethod)}</td>
+                                                  <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-500">{ph.paymentReference || '—'}</td>
+                                                  <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-emerald-700">{displayMoney(ph.amount)}</td>
+                                                  <td className="px-3 py-1 text-slate-500">{ph.notes || '—'}</td>
                                                 </tr>
                                               ))}
                                             </tbody>
@@ -714,24 +712,24 @@ const ProcessedStatements = () => {
                                       <div>
                                         <p className="mb-2 text-sm font-semibold text-slate-700">Recovery History</p>
                                         <div className="overflow-hidden rounded border border-red-200">
-                                          <table className="w-full text-xs">
-                                            <thead className="bg-red-50 text-red-700">
+                                          <table className="w-full text-[11px] border-collapse">
+                                            <thead className="bg-red-700 text-white">
                                               <tr>
-                                                <th className="px-3 py-2 text-left font-semibold">Date</th>
-                                                <th className="px-3 py-2 text-left font-semibold">Method</th>
-                                                <th className="px-3 py-2 text-left font-semibold">Reference</th>
-                                                <th className="px-3 py-2 text-right font-semibold">Amount Recovered</th>
-                                                <th className="px-3 py-2 text-left font-semibold">Notes</th>
+                                                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date</th>
+                                                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Method</th>
+                                                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Reference</th>
+                                                <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount Recovered</th>
+                                                <th className="px-3 py-1 text-left font-bold">Notes</th>
                                               </tr>
                                             </thead>
                                             <tbody>
                                               {statement.recoveryHistory.map((rh, i) => (
-                                                <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-red-50/40'}>
-                                                  <td className="px-3 py-2">{formatDate(rh.paymentDate)}</td>
-                                                  <td className="px-3 py-2">{formatPaymentMethod(rh.paymentMethod)}</td>
-                                                  <td className="px-3 py-2 font-mono text-slate-500">{rh.paymentReference || '—'}</td>
-                                                  <td className="px-3 py-2 text-right font-semibold text-red-700">{displayMoney(rh.amount)}</td>
-                                                  <td className="px-3 py-2 text-slate-500">{rh.notes || '—'}</td>
+                                                <tr key={i} className={`border-b border-red-100 ${i % 2 === 0 ? 'bg-white' : 'bg-red-50/40'}`}>
+                                                  <td className="px-3 py-1 border-r border-red-100">{formatDate(rh.paymentDate)}</td>
+                                                  <td className="px-3 py-1 border-r border-red-100">{formatPaymentMethod(rh.paymentMethod)}</td>
+                                                  <td className="px-3 py-1 border-r border-red-100 font-mono text-slate-500">{rh.paymentReference || '—'}</td>
+                                                  <td className="px-3 py-1 border-r border-red-100 text-right font-semibold text-red-700">{displayMoney(rh.amount)}</td>
+                                                  <td className="px-3 py-1 text-slate-500">{rh.notes || '—'}</td>
                                                 </tr>
                                               ))}
                                             </tbody>
@@ -898,6 +896,46 @@ const ProcessedStatements = () => {
           subtitle={`${commModalStatement.property?.propertyCode || ""} · ${formatPeriodRange(commModalStatement)}`}
           onSent={() => setCommModalStatement(null)}
         />
+      )}
+
+      {reversalModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="bg-[#0B3B2E] px-6 py-4 flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15">
+                <FaUndo className="text-white text-sm" />
+              </div>
+              <div>
+                <h2 className="text-white font-semibold text-base leading-tight">Reverse Processed Statement</h2>
+                <p className="text-white/60 text-xs mt-0.5">{reversalModal.statement?.property?.propertyCode || ""} {reversalModal.statement ? `· ${formatPeriodRange(reversalModal.statement)}` : ""}</p>
+              </div>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div className="flex items-start gap-3 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3">
+                <FaUndo className="text-amber-500 mt-0.5 shrink-0" />
+                <p className="text-sm text-amber-800">This will reverse the processed statement and reopen the draft workspace for the same period. This action cannot be undone.</p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide">Reversal Reason</label>
+                <textarea
+                  rows={3}
+                  autoFocus
+                  className="w-full resize-none rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  value={reversalModal.reason}
+                  onChange={(e) => setReversalModal((prev) => ({ ...prev, reason: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleReversalConfirm(); } }}
+                  disabled={reversalModal.loading}
+                />
+              </div>
+            </div>
+            <div className="px-6 pb-5 flex justify-end gap-3">
+              <button onClick={() => setReversalModal({ open: false, statement: null, reason: "", loading: false })} disabled={reversalModal.loading} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50">Cancel</button>
+              <button onClick={handleReversalConfirm} disabled={reversalModal.loading} className="rounded-lg bg-red-600 hover:bg-red-700 px-5 py-2 text-sm font-semibold text-white transition-colors disabled:opacity-60 flex items-center gap-2">
+                {reversalModal.loading ? <><svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg>Reversing…</> : <><FaUndo className="text-xs" />Confirm Reversal</>}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

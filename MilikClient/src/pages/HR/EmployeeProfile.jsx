@@ -632,27 +632,27 @@ export default function EmployeeProfile() {
                       {emp.salaryComponents?.length > 0 && (
                         <div className="mt-3">
                           <div className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Allowances & Deductions</div>
-                          <table className="w-full text-xs">
+                          <table className="w-full text-[11px] border-collapse">
                             <thead>
-                              <tr className="border-b border-slate-100">
-                                <th className="pb-1 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">Component</th>
-                                <th className="pb-1 text-left text-[10px] font-black uppercase tracking-widest text-slate-400">Type</th>
-                                <th className="pb-1 text-right text-[10px] font-black uppercase tracking-widest text-slate-400">Amount</th>
+                              <tr className="bg-[#0B3B2E] text-white">
+                                <th className="py-1 px-2 text-left font-bold border-r border-white/10">Component</th>
+                                <th className="py-1 px-2 text-left font-bold border-r border-white/10">Type</th>
+                                <th className="py-1 px-2 text-right font-bold">Amount</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-50">
+                            <tbody>
                               {emp.salaryComponents.map((c, i) => {
                                 const basic = Number(emp.basicSalary) || 0;
                                 const amt = c.isPercentage ? (basic * Number(c.amount)) / 100 : Number(c.amount);
                                 return (
-                                  <tr key={i}>
-                                    <td className="py-1.5 font-semibold text-slate-700">{c.name}</td>
-                                    <td className="py-1.5">
-                                      <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${c.type === 'Allowance' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                                  <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}>
+                                    <td className="py-1 px-2 border-r border-gray-100 font-semibold text-slate-700">{c.name}</td>
+                                    <td className="py-1 px-2 border-r border-gray-100">
+                                      <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[9px] font-black ${c.type === 'Allowance' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
                                         {c.type}
                                       </span>
                                     </td>
-                                    <td className="py-1.5 text-right font-semibold">
+                                    <td className="py-1 px-2 text-right font-semibold">
                                       {c.isPercentage && <span className="text-slate-400">{c.amount}% · </span>}
                                       <span className={c.type === 'Deduction' ? 'text-rose-600' : 'text-emerald-700'}>
                                         {c.type === 'Deduction' ? '−' : '+'}{fmtCurrency(amt)}
@@ -715,7 +715,7 @@ export default function EmployeeProfile() {
                         placeholder="Min 6 characters"
                         value={essForm.password}
                         onChange={(e) => setEssForm((p) => ({ ...p, password: e.target.value }))}
-                        className="w-48 rounded-lg border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-green-600"
+                        className="w-48 rounded-lg border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-[#0B3B2E]"
                       />
                     </div>
 

@@ -55,56 +55,56 @@ const AgingTable = ({ rows, totals, type }) => {
 
   return (
     <div className="min-w-full overflow-x-auto">
-      <table className="min-w-full text-xs">
+      <table className="min-w-full text-[11px] border-collapse">
         <thead>
-          <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
+          <tr className="bg-[#0B3B2E] text-white">
             {isAR ? (
               <>
-                <th className="px-3 py-2 text-left">Invoice #</th>
-                <th className="px-3 py-2 text-left">Tenant</th>
-                <th className="px-3 py-2 text-left">Property / Unit</th>
+                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Invoice #</th>
+                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Tenant</th>
+                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property / Unit</th>
               </>
             ) : (
               <>
-                <th className="px-3 py-2 text-left">Reference</th>
-                <th className="px-3 py-2 text-left">Narration</th>
-                <th className="px-3 py-2 text-left">Property / Landlord</th>
+                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Reference</th>
+                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Narration</th>
+                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property / Landlord</th>
               </>
             )}
-            <th className="px-3 py-2 text-right">Due Date</th>
-            <th className="px-3 py-2 text-right">Days Over</th>
-            <th className="px-3 py-2 text-right">Bucket</th>
-            <th className="px-3 py-2 text-right">Amount (KES)</th>
+            <th className="px-3 py-1 text-right font-bold border-r border-white/10">Due Date</th>
+            <th className="px-3 py-1 text-right font-bold border-r border-white/10">Days Over</th>
+            <th className="px-3 py-1 text-right font-bold border-r border-white/10">Bucket</th>
+            <th className="px-3 py-1 text-right font-bold">Amount (KES)</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">
+        <tbody>
           {rows.map((row, i) => (
-            <tr key={i} className="hover:bg-slate-50/60">
+            <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
               {isAR ? (
                 <>
-                  <td className="px-3 py-2 font-mono text-slate-700">{row.invoiceNumber}</td>
-                  <td className="px-3 py-2 text-slate-700">{row.tenantName}</td>
-                  <td className="px-3 py-2 text-slate-500">{row.propertyName} / {row.unitName}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-700">{row.invoiceNumber}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row.tenantName}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{row.propertyName} / {row.unitName}</td>
                 </>
               ) : (
                 <>
-                  <td className="px-3 py-2 font-mono text-slate-700">{row.reference}</td>
-                  <td className="max-w-[200px] truncate px-3 py-2 text-slate-700">{row.narration}</td>
-                  <td className="px-3 py-2 text-slate-500">{row.propertyName} / {row.landlordName}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-700">{row.reference}</td>
+                  <td className="max-w-[200px] truncate px-3 py-1 border-r border-gray-100 text-slate-700">{row.narration}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{row.propertyName} / {row.landlordName}</td>
                 </>
               )}
-              <td className="px-3 py-2 text-right text-slate-500">
+              <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-500">
                 {new Date(row.dueDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" })}
               </td>
-              <td className="px-3 py-2 text-right font-medium text-slate-700">
+              <td className="px-3 py-1 border-r border-gray-100 text-right font-medium text-slate-700">
                 {row.daysOverdue <= 0 ? "—" : row.daysOverdue}
               </td>
-              <td className="px-3 py-2 text-right">
+              <td className="px-3 py-1 border-r border-gray-100 text-right">
                 <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${BUCKET_COLORS[row.bucket]}`}>
                   {BUCKETS.find((b) => b.key === row.bucket)?.label}
                 </span>
               </td>
-              <td className="px-3 py-2 text-right font-mono font-semibold text-slate-800">
+              <td className="px-3 py-1 text-right font-mono font-semibold text-slate-800">
                 {fmt(isAR ? row.outstanding : row.amount)}
               </td>
             </tr>
@@ -289,7 +289,7 @@ const ARAPAgingReport = () => {
             type="date"
             value={asOf}
             onChange={(e) => setAsOf(e.target.value)}
-            className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
           />
 
           <button

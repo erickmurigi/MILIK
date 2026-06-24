@@ -1003,12 +1003,12 @@ const MeterReadings = () => {
                 <div className="max-h-[calc(92vh-82px)] overflow-y-auto p-5">
                   <form className="space-y-5" onSubmit={handleSubmit}>
                     <div className="grid gap-4 md:grid-cols-2">
-                      <label className="space-y-1 text-sm font-medium text-slate-700">
+                      <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
                         <span>Property</span>
                         <select
                           value={form.property}
                           onChange={(e) => handleFormChange("property", e.target.value)}
-                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         >
                           <option value="">Select property</option>
                           {properties.map((property) => (
@@ -1019,12 +1019,12 @@ const MeterReadings = () => {
                         </select>
                       </label>
 
-                      <label className="space-y-1 text-sm font-medium text-slate-700">
+                      <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
                         <span>Unit</span>
                         <select
                           value={form.unit}
                           onChange={(e) => handleFormChange("unit", e.target.value)}
-                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         >
                           <option value="">Select unit</option>
                           {filteredUnits.map((unit) => (
@@ -1035,12 +1035,12 @@ const MeterReadings = () => {
                         </select>
                       </label>
 
-                      <label className="space-y-1 text-sm font-medium text-slate-700">
+                      <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
                         <span>Tenant / occupant</span>
                         <select
                           value={form.tenant}
                           onChange={(e) => handleFormChange("tenant", e.target.value)}
-                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         >
                           <option value="">Auto-detect active tenant</option>
                           {filteredTenants.map((tenant) => (
@@ -1056,12 +1056,12 @@ const MeterReadings = () => {
                         )}
                       </label>
 
-                      <label className="space-y-1 text-sm font-medium text-slate-700">
+                      <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
                         <span>Utility type</span>
                         <select
                           value={form.utilityType}
                           onChange={(e) => handleFormChange("utilityType", e.target.value)}
-                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         >
                           <option value="">Select utility</option>
                           {selectedUnitUtilityOptions.map((utility) => (
@@ -1072,77 +1072,77 @@ const MeterReadings = () => {
                         </select>
                       </label>
 
-                      <label className="space-y-1 text-sm font-medium text-slate-700">
+                      <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
                         <span>Billing period</span>
                         <input
                           type="month"
                           value={form.billingPeriod}
                           onChange={(e) => handleFormChange("billingPeriod", e.target.value)}
-                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </label>
 
-                      <label className="space-y-1 text-sm font-medium text-slate-700">
+                      <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
                         <span>Reading date</span>
                         <input
                           type="date"
                           value={form.readingDate}
                           onChange={(e) => handleFormChange("readingDate", e.target.value)}
-                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </label>
 
-                      <label className="space-y-1 text-sm font-medium text-slate-700">
+                      <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
                         <span>Previous reading</span>
                         <input
                           type="text"
                           inputMode="decimal"
                           value={form.previousReading === "" ? (inferredPreviousReading > 0 ? String(inferredPreviousReading) : "") : form.previousReading}
                           onChange={(e) => handleFormChange("previousReading", e.target.value)}
-                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                           placeholder="0"
                         />
                       </label>
 
-                      <label className="space-y-1 text-sm font-medium text-slate-700">
+                      <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
                         <span>Current reading</span>
                         <input
                           type="text"
                           inputMode="decimal"
                           value={form.currentReading}
                           onChange={(e) => handleFormChange("currentReading", e.target.value)}
-                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </label>
 
-                      <label className="space-y-1 text-sm font-medium text-slate-700">
+                      <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
                         <span>Rate per unit</span>
                         <input
                           type="text"
                           inputMode="decimal"
                           value={form.rate}
                           onChange={(e) => handleFormChange("rate", e.target.value)}
-                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </label>
 
-                      <label className="space-y-1 text-sm font-medium text-slate-700 md:col-span-2">
+                      <label className="space-y-0.5 block text-xs font-semibold text-slate-700 md:col-span-2">
                         <span>Meter number</span>
                         <input
                           type="text"
                           value={form.meterNumber}
                           onChange={(e) => handleFormChange("meterNumber", e.target.value)}
-                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </label>
 
-                      <label className="space-y-1 text-sm font-medium text-slate-700 md:col-span-2">
+                      <label className="space-y-0.5 block text-xs font-semibold text-slate-700 md:col-span-2">
                         <span>Notes</span>
                         <textarea
                           rows={4}
                           value={form.notes}
                           onChange={(e) => handleFormChange("notes", e.target.value)}
-                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </label>
                     </div>
@@ -1188,17 +1188,17 @@ const MeterReadings = () => {
                           resetForm();
                           setShowAddModal(false);
                         }}
-                        className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                        className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
                       >
                         Cancel
                       </button>
                       <button
                         type="submit"
                         disabled={saving || (!editingId && !canCreateReading) || (editingId && !canUpdateReading)}
-                        className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm ${
+                        className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-black text-white ${
                           saving || (!editingId && !canCreateReading) || (editingId && !canUpdateReading)
-                            ? "bg-gray-400 cursor-not-allowed"
-                            : `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`
+                            ? "cursor-not-allowed bg-gray-400"
+                            : `${MILIK_GREEN} hover:bg-[#0A3127]`
                         }`}
                       >
                         <FaSave /> {saving ? "Saving..." : editingId ? "Update Reading" : "Save Reading"}
@@ -1218,66 +1218,66 @@ const MeterReadings = () => {
                 ))}
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 <input type="text" value={draftFilters.search} onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Search…" className="h-7 w-44 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <select value={draftFilters.property} onChange={(e) => setDraftFilters((prev) => ({ ...prev, property: e.target.value, unit: "any" }))} className="h-7 shrink-0 rounded border border-gray-300 bg-[#DDEFE1] px-2 text-xs text-gray-800 appearance-none">
+                <select value={draftFilters.property} onChange={(e) => setDraftFilters((prev) => ({ ...prev, property: e.target.value, unit: "any" }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs text-gray-800 appearance-none">
                   <option value="any">Property</option>
                   {properties.map((property) => (<option key={property._id} value={property._id}>{property.propertyName || property.name || property.propertyCode}</option>))}
                 </select>
-                <select value={draftFilters.unit} onChange={(e) => setDraftFilters((prev) => ({ ...prev, unit: e.target.value }))} className="h-7 shrink-0 rounded border border-gray-300 bg-[#DDEFE1] px-2 text-xs text-gray-800 appearance-none">
+                <select value={draftFilters.unit} onChange={(e) => setDraftFilters((prev) => ({ ...prev, unit: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs text-gray-800 appearance-none">
                   <option value="any">Unit</option>
                   {unitsForSelectedProperty.map((unit) => (<option key={unit._id} value={unit._id}>{unit.unitNumber}</option>))}
                 </select>
-                <select value={draftFilters.utilityType} onChange={(e) => setDraftFilters((prev) => ({ ...prev, utilityType: e.target.value }))} className="h-7 shrink-0 rounded border border-gray-300 bg-[#DDEFE1] px-2 text-xs text-gray-800 appearance-none">
+                <select value={draftFilters.utilityType} onChange={(e) => setDraftFilters((prev) => ({ ...prev, utilityType: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs text-gray-800 appearance-none">
                   <option value="any">Utility</option>
                   {utilityOptions.map((utility) => (<option key={utility} value={utility}>{utility}</option>))}
                 </select>
                 <input type="month" value={draftFilters.billingPeriod} onChange={(e) => setDraftFilters((prev) => ({ ...prev, billingPeriod: e.target.value }))} className="h-7 w-28 shrink-0 rounded border border-gray-300 px-2 text-xs" />
-                <button onClick={applySearch} className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaSearch size={10} /></button>
-                <button onClick={resetFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={10} /></button>
-                <button onClick={handleEditSelected} disabled={!canEditSelected} className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${canEditSelected ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaEdit size={10} /></button>
-                <button onClick={handleDeleteSelected} disabled={selectedDeletableRows.length === 0 || bulkDeleting || !canDeleteReading} className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${selectedDeletableRows.length > 0 && !bulkDeleting && canDeleteReading ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}><FaTrash size={10} /></button>
-                <button onClick={handleBulkBill} disabled={selectedDraftCount === 0 || bulkBilling || !canProcessReading} className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${selectedDraftCount > 0 && !bulkBilling && canProcessReading ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaFileInvoice size={10} /> {bulkBilling ? "…" : "Bill"}</button>
+                <button onClick={applySearch} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaSearch size={10} /></button>
+                <button onClick={resetFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={10} /></button>
+                <button onClick={handleEditSelected} disabled={!canEditSelected} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs text-white shadow-sm ${canEditSelected ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaEdit size={10} /></button>
+                <button onClick={handleDeleteSelected} disabled={selectedDeletableRows.length === 0 || bulkDeleting || !canDeleteReading} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs text-white shadow-sm ${selectedDeletableRows.length > 0 && !bulkDeleting && canDeleteReading ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}><FaTrash size={10} /></button>
+                <button onClick={handleBulkBill} disabled={selectedDraftCount === 0 || bulkBilling || !canProcessReading} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs text-white shadow-sm ${selectedDraftCount > 0 && !bulkBilling && canProcessReading ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaFileInvoice size={10} /> {bulkBilling ? "…" : "Bill"}</button>
                 <button
                   onClick={() => setCommunicationModal({ contextType: "meter_reading", recordIds: selectedReadingIds, title: `Notify ${selectedCount} Tenant${selectedCount !== 1 ? "s" : ""}`, subtitle: "Send meter reading notification via SMS.", allowedChannels: ["sms", "email"], defaultChannel: "sms" })}
                   disabled={selectedCount === 0}
                   title={selectedCount === 0 ? "Select readings to SMS tenants" : `SMS ${selectedCount} tenant${selectedCount !== 1 ? "s" : ""}`}
-                  className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${selectedCount > 0 ? "bg-teal-600 hover:bg-teal-700" : "bg-gray-400 cursor-not-allowed"}`}
+                  className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs text-white shadow-sm ${selectedCount > 0 ? "bg-teal-600 hover:bg-teal-700" : "bg-gray-400 cursor-not-allowed"}`}
                 ><FaSms size={10} /></button>
                 <button
                   onClick={() => setCommunicationModal({ contextType: "meter_reading", recordIds: selectedReadingIds, title: `Email ${selectedCount} Tenant${selectedCount !== 1 ? "s" : ""}`, subtitle: "Send meter reading notification via email.", allowedChannels: ["email"], defaultChannel: "email" })}
                   disabled={selectedCount === 0}
                   title={selectedCount === 0 ? "Select readings to email tenants" : `Email ${selectedCount} tenant${selectedCount !== 1 ? "s" : ""}`}
-                  className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${selectedCount > 0 ? "bg-blue-600 hover:bg-blue-700" : "bg-gray-400 cursor-not-allowed"}`}
+                  className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs text-white shadow-sm ${selectedCount > 0 ? "bg-blue-600 hover:bg-blue-700" : "bg-gray-400 cursor-not-allowed"}`}
                 ><FaEnvelope size={10} /></button>
-                <button onClick={handlePrintList} disabled={filteredReadings.length === 0} className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${filteredReadings.length > 0 ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaPrint size={10} /></button>
-                <button onClick={loadPageData} className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSync size={10} /></button>
-                <button onClick={openAddSectionForNew} disabled={!canCreateReading} className={`h-7 shrink-0 flex items-center gap-1 rounded-lg px-2.5 text-xs text-white shadow-sm ${canCreateReading ? `${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaPlus size={10} /> Add</button>
+                <button onClick={handlePrintList} disabled={filteredReadings.length === 0} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs text-white shadow-sm ${filteredReadings.length > 0 ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaPrint size={10} /></button>
+                <button onClick={loadPageData} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSync size={10} /></button>
+                <button onClick={openAddSectionForNew} disabled={!canCreateReading} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs text-white shadow-sm ${canCreateReading ? `${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaPlus size={10} /> Add</button>
               </div>
             </div>
 
             <div className="flex-1 min-h-0 overflow-auto">
-              <table className="w-full min-w-[1540px] text-xs">
+              <table className="w-full min-w-[1540px] text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className={`${MILIK_GREEN} text-white`}>
-                    <th className="px-3 py-2 text-left">
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">
                       <input
                         type="checkbox"
                         checked={currentPageReadings.length > 0 && selectAll}
                         onChange={toggleSelectAll}
                       />
                     </th>
-                    <th className="px-3 py-2 text-left font-semibold">Period</th>
-                    <th className="px-3 py-2 text-left font-semibold">Tenant</th>
-                    <th className="px-3 py-2 text-left font-semibold">Property</th>
-                    <th className="px-3 py-2 text-left font-semibold">Unit</th>
-                    <th className="px-3 py-2 text-left font-semibold">Utility</th>
-                    <th className="px-3 py-2 text-right font-semibold">Previous</th>
-                    <th className="px-3 py-2 text-right font-semibold">Current</th>
-                    <th className="px-3 py-2 text-right font-semibold">Consumed</th>
-                    <th className="px-3 py-2 text-right font-semibold">Rate</th>
-                    <th className="px-3 py-2 text-right font-semibold">Amount</th>
-                    <th className="px-3 py-2 text-center font-semibold">Status</th>
-                    <th className="px-3 py-2 text-center font-semibold">Created</th>
-                    <th className="px-3 py-2 text-right font-semibold">Actions</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Period</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Tenant</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Unit</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Utility</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Previous</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Current</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Consumed</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Rate</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount</th>
+                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
+                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Created</th>
+                    <th className="px-3 py-1 text-right font-bold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1310,16 +1310,16 @@ const MeterReadings = () => {
                       return (
                         <tr
                           key={reading._id}
-                          className={`border-b border-slate-200 transition-colors ${
+                          className={`border-b border-gray-100 transition-colors ${
                             isSelected
                               ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50"
                               : idx % 2 === 0
                               ? "bg-white hover:bg-blue-50/40"
-                              : "bg-slate-50 hover:bg-blue-50/40"
+                              : "bg-slate-50/60 hover:bg-blue-50/40"
                           }`}
                           onClick={() => handleRowClick(reading)}
                         >
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-1 border-r border-gray-100">
                             <input
                               type="checkbox"
                               checked={isSelected}
@@ -1328,58 +1328,56 @@ const MeterReadings = () => {
                               disabled={reading.status === "deleted"}
                             />
                           </td>
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-1 border-r border-gray-100">
                             <div className="font-bold text-blue-700">{reading.billingPeriod || "-"}</div>
-                            <div className="text-[11px] text-slate-500">{formatDate(reading.readingDate)}</div>
+                            <div className="text-[10px] text-slate-500">{formatDate(reading.readingDate)}</div>
                           </td>
-                          <td className="px-3 py-2 font-bold text-slate-900">
+                          <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900">
                             {reading?.tenant?.name || "Auto / Not linked"}
-                            <div className="text-[11px] font-normal text-slate-500">
+                            <div className="text-[10px] font-normal text-slate-500">
                               {reading?.tenant?.tenantCode || "No tenant code"}
                             </div>
                           </td>
-                          <td className="px-3 py-2 font-semibold text-slate-900">
+                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">
                             {reading?.property?.propertyName || "-"}
                           </td>
-                          <td className="px-3 py-2 font-semibold text-slate-900">
+                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">
                             {reading?.unit?.unitNumber || "-"}
                           </td>
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-1 border-r border-gray-100">
                             <div className="font-semibold text-orange-700">{reading.utilityType || "-"}</div>
-                            <div className="text-[11px] text-slate-500">
+                            <div className="text-[10px] text-slate-500">
                               Meter {reading.meterNumber || "-"}
                             </div>
                           </td>
-                          <td className="px-3 py-2 text-right text-slate-700">
+                          <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-700">
                             {formatNumber(reading.previousReading)}
                           </td>
-                          <td className="px-3 py-2 text-right text-slate-700">
+                          <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-700">
                             {formatNumber(reading.currentReading)}
                           </td>
-                          <td className="px-3 py-2 text-right font-semibold text-slate-900">
+                          <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-900">
                             {formatNumber(reading.unitsConsumed)}
                           </td>
-                          <td className="px-3 py-2 text-right text-slate-700">
+                          <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-700">
                             {formatNumber(reading.rate)}
                           </td>
-                          <td className="px-3 py-2 text-right font-bold text-slate-900">
+                          <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">
                             {formatMoney(reading.amount)}
                             {reading?.billedInvoice?.invoiceNumber && (
-                              <div className="text-[11px] font-semibold text-emerald-700">
+                              <div className="text-[10px] font-semibold text-emerald-700">
                                 Invoice {reading.billedInvoice.invoiceNumber}
                               </div>
                             )}
                           </td>
-                          <td className="px-3 py-2 text-center">
-                            <span
-                              className={`inline-flex rounded px-2 py-0.5 text-[10px] font-semibold ${
+                          <td className="px-3 py-1 border-r border-gray-100 text-center">
+                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${
                                 statusBadgeClass[reading.status] || statusBadgeClass.draft
-                              }`}
-                            >
+                              }`}>
                               {getStatusLabel(reading.status)}
                             </span>
                             {reading.isMeterReset && (
-                              <div className="mt-1 text-[10px] font-semibold text-purple-700">Reset</div>
+                              <div className="mt-0.5 text-[10px] font-semibold text-purple-700">Reset</div>
                             )}
                           </td>
                           <td className="px-3 py-2 text-center text-gray-600">

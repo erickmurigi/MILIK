@@ -4,7 +4,7 @@ import { useSelector } from "react-redux";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import {
   FaArrowLeft, FaExchangeAlt, FaFilter, FaRedoAlt,
-  FaSyncAlt, FaTrashAlt, FaTimes,
+  FaSyncAlt, FaTrashAlt, FaTimes, FaUndo, FaInfoCircle,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -89,6 +89,7 @@ const LedgerAccountActivity = () => {
     includeReversed: false,
   });
   const [moveModal, setMoveModal] = useState({ open: false, entry: null, newAccountId: "", reason: "" });
+  const [reverseModal, setReverseModal] = useState({ open: false, entry: null, reason: "", loading: false });
 
   const businessId  = currentCompany?._id || "";
   const canManage   =
@@ -174,8 +175,15 @@ const LedgerAccountActivity = () => {
     const type     = String(entry?.sourceTransactionType || "").toLowerCase();
     const sourceId = entry?.sourceTransactionId;
     if (!sourceId) { toast.info("No linked source document."); return; }
-    const reason = window.prompt("Provide reason", `Correction from ledger ${account?.code || ""}`);
-    if (!reason) return;
+    setReverseModal({ open: true, entry, reason: `Correction from ledger ${account?.code || ""}`, loading: false });
+  };
+
+  const handleReverseConfirm = async () => {
+    const { entry } = reverseModal;
+    const type     = String(entry?.sourceTransactionType || "").toLowerCase();
+    const sourceId = entry?.sourceTransactionId;
+    const reason = (reverseModal.reason || "").trim() || `Correction from ledger ${account?.code || ""}`;
+    setReverseModal((prev) => ({ ...prev, loading: true }));
     setActingKey(`${entry._id}:reverse`);
     try {
       if (type === "rent_payment") {
@@ -190,8 +198,10 @@ const LedgerAccountActivity = () => {
       }
       await loadActivity();
       window.dispatchEvent(new Event("invoicesUpdated"));
+      setReverseModal({ open: false, entry: null, reason: "", loading: false });
     } catch (error) {
       toast.error(error?.response?.data?.error || error?.message || "Failed to reverse");
+      setReverseModal((prev) => ({ ...prev, loading: false }));
     } finally {
       setActingKey("");
     }
@@ -252,7 +262,7 @@ const LedgerAccountActivity = () => {
     return listLabels[type] ? `→ ${listLabels[type]}` : "Source";
   };
 
-  const inputCls  = "h-7 border border-slate-300 px-2.5 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none bg-white";
+  const inputCls  = "h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
   const labelCls  = "block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1";
   const panelInputCls = "w-full border border-slate-300 px-2.5 py-1.5 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 
@@ -357,18 +367,18 @@ const LedgerAccountActivity = () => {
             </div>
           ) : (
             <div className="flex-1 overflow-auto">
-              <table className="w-full min-w-[1100px] text-xs">
+              <table className="w-full min-w-[1100px] text-[11px] border-collapse">
                 <thead>
                   <tr className="bg-[#0B3B2E] text-white">
-                    <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Date</th>
-                    <th className="px-3 py-2 text-left font-semibold">Ref</th>
-                    <th className="px-3 py-2 text-left font-semibold">Transaction</th>
-                    <th className="px-3 py-2 text-left font-semibold">Narration</th>
-                    <th className="px-3 py-2 text-right font-semibold">Debit</th>
-                    <th className="px-3 py-2 text-right font-semibold">Credit</th>
-                    <th className="px-3 py-2 text-right font-semibold">Running Balance</th>
-                    <th className="px-3 py-2 text-left font-semibold">Status</th>
-                    <th className="px-3 py-2 text-right font-semibold">Actions</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10 whitespace-nowrap">Date</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Ref</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Transaction</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Narration</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Debit</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Credit</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Running Balance</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
+                    <th className="px-3 py-1 text-right font-bold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -395,30 +405,30 @@ const LedgerAccountActivity = () => {
                     return (
                       <tr
                         key={entry._id}
-                        className={`border-b border-slate-100 hover:bg-slate-50 ${
+                        className={`border-b border-gray-100 hover:bg-blue-50/40 ${
                           entry?.isReversalEntry   ? "bg-blue-50/40" :
                           entry?.isReversedOriginal ? "bg-amber-50/40" : ""
                         }`}
                       >
                         {/* Date */}
-                        <td className="px-3 py-2 whitespace-nowrap text-slate-700 font-medium">
+                        <td className="px-3 py-1 border-r border-gray-100 whitespace-nowrap text-slate-700 font-medium">
                           {formatDate(entry.transactionDate)}
                         </td>
 
                         {/* Ref */}
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-1 border-r border-gray-100">
                           <span className="font-mono text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5">
                             {shortRef(entry.sourceTransactionId || entry._id)}
                           </span>
                         </td>
 
                         {/* Transaction type */}
-                        <td className="px-3 py-2 text-slate-700 whitespace-nowrap">
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700 whitespace-nowrap">
                           {sourceLabel(entry)}
                         </td>
 
                         {/* Narration */}
-                        <td className="px-3 py-2 max-w-xs text-slate-600">
+                        <td className="px-3 py-1 border-r border-gray-100 max-w-xs text-slate-600">
                           <p className="truncate">{entry.notes || entry.category || "—"}</p>
                           {(entry?.reversalOf || entry?.reversedByEntry) && (
                             <p className="text-[10px] text-slate-400 font-mono truncate">
@@ -428,7 +438,7 @@ const LedgerAccountActivity = () => {
                         </td>
 
                         {/* Debit */}
-                        <td className="px-3 py-2 text-right tabular-nums font-semibold">
+                        <td className="px-3 py-1 border-r border-gray-100 text-right tabular-nums font-semibold">
                           {isDebit
                             ? <span className="text-emerald-700">{formatMoney(entry.amount)}</span>
                             : <span className="text-slate-300">—</span>
@@ -436,7 +446,7 @@ const LedgerAccountActivity = () => {
                         </td>
 
                         {/* Credit */}
-                        <td className="px-3 py-2 text-right tabular-nums font-semibold">
+                        <td className="px-3 py-1 border-r border-gray-100 text-right tabular-nums font-semibold">
                           {isCredit
                             ? <span className="text-rose-600">{formatMoney(entry.amount)}</span>
                             : <span className="text-slate-300">—</span>
@@ -444,21 +454,21 @@ const LedgerAccountActivity = () => {
                         </td>
 
                         {/* Running balance */}
-                        <td className={`px-3 py-2 text-right tabular-nums font-bold ${
+                        <td className={`px-3 py-1 border-r border-gray-100 text-right tabular-nums font-bold ${
                           balance < 0 ? "text-rose-600" : "text-slate-800"
                         }`}>
                           {formatMoney(balance)}
                         </td>
 
                         {/* Status badge */}
-                        <td className="px-3 py-2">
-                          <span className={`px-1.5 py-0.5 text-[9px] font-bold uppercase ${badge.cls}`}>
+                        <td className="px-3 py-1 border-r border-gray-100">
+                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${badge.cls}`}>
                             {badge.label}
                           </span>
                         </td>
 
                         {/* Actions */}
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-1">
                           <div className="flex items-center justify-end gap-1.5">
                             {entry.sourceTransactionId && (
                               <button
@@ -628,6 +638,46 @@ const LedgerAccountActivity = () => {
           </div>
         )}
       </div>
+
+      {reverseModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="bg-[#0B3B2E] px-6 py-4 flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15">
+                <FaUndo className="text-white text-sm" />
+              </div>
+              <div>
+                <h2 className="text-white font-semibold text-base leading-tight">Reverse Ledger Entry</h2>
+                <p className="text-white/60 text-xs mt-0.5">{sourceLabel(reverseModal.entry)}</p>
+              </div>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div className="flex items-start gap-3 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3">
+                <FaInfoCircle className="text-amber-500 mt-0.5 shrink-0" />
+                <p className="text-sm text-amber-800">This will reverse the source document and post an offsetting ledger entry. This action cannot be undone.</p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide">Reason</label>
+                <textarea
+                  rows={3}
+                  autoFocus
+                  className="w-full resize-none rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  value={reverseModal.reason}
+                  onChange={(e) => setReverseModal((prev) => ({ ...prev, reason: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleReverseConfirm(); } }}
+                  disabled={reverseModal.loading}
+                />
+              </div>
+            </div>
+            <div className="px-6 pb-5 flex justify-end gap-3">
+              <button onClick={() => setReverseModal({ open: false, entry: null, reason: "", loading: false })} disabled={reverseModal.loading} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50">Cancel</button>
+              <button onClick={handleReverseConfirm} disabled={reverseModal.loading} className="rounded-lg bg-red-600 hover:bg-red-700 px-5 py-2 text-sm font-semibold text-white transition-colors disabled:opacity-60 flex items-center gap-2">
+                {reverseModal.loading ? <><svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg>Reversing…</> : <><FaUndo className="text-xs" />Confirm Reversal</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 };

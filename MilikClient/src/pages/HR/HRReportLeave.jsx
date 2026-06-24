@@ -218,25 +218,25 @@ export default function HRReportLeave() {
                   {data.byType.length === 0 ? (
                     <div className="flex h-24 items-center justify-center text-sm text-slate-400">No data</div>
                   ) : (
-                    <table className="min-w-full text-xs">
+                    <table className="min-w-full text-[11px] border-collapse">
                       <thead>
-                        <tr className="bg-slate-50 border-b border-slate-200">
-                          <th className="px-4 py-2 text-left text-[10px] font-black uppercase tracking-widest text-slate-500">Leave Type</th>
-                          <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-slate-500">Applications</th>
-                          <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-slate-500">Days</th>
+                        <tr className="bg-[#0B3B2E] text-white">
+                          <th className="px-3 py-1 text-left font-bold border-r border-white/10">Leave Type</th>
+                          <th className="px-3 py-1 text-right font-bold border-r border-white/10">Applications</th>
+                          <th className="px-3 py-1 text-right font-bold">Days</th>
                         </tr>
                       </thead>
                       <tbody>
                         {data.byType.map((t, i) => (
-                          <tr key={i} className={`border-t border-slate-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
-                            <td className="px-4 py-2.5">
+                          <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                            <td className="px-3 py-1 border-r border-gray-100">
                               <div className="font-black text-slate-900">{t.name}</div>
                               <span className={`text-[9px] font-black ${t.isPaid ? 'text-emerald-600' : 'text-rose-500'}`}>
                                 {t.isPaid ? 'Paid' : 'Unpaid'}
                               </span>
                             </td>
-                            <td className="px-3 py-2.5 text-right font-semibold text-slate-700">{t.count}</td>
-                            <td className="px-3 py-2.5 text-right font-black text-slate-900">{t.totalDays}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-700">{t.count}</td>
+                            <td className="px-3 py-1 text-right font-black text-slate-900">{t.totalDays}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -253,23 +253,23 @@ export default function HRReportLeave() {
                   {data.byEmployee.length === 0 ? (
                     <div className="flex h-24 items-center justify-center text-sm text-slate-400">No data</div>
                   ) : (
-                    <table className="min-w-full text-xs">
+                    <table className="min-w-full text-[11px] border-collapse">
                       <thead>
-                        <tr className="bg-slate-50 border-b border-slate-200">
-                          <th className="px-4 py-2 text-left text-[10px] font-black uppercase tracking-widest text-slate-500">Employee</th>
-                          <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-slate-500">Applications</th>
-                          <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-slate-500">Days</th>
+                        <tr className="bg-[#0B3B2E] text-white">
+                          <th className="px-3 py-1 text-left font-bold border-r border-white/10">Employee</th>
+                          <th className="px-3 py-1 text-right font-bold border-r border-white/10">Applications</th>
+                          <th className="px-3 py-1 text-right font-bold">Days</th>
                         </tr>
                       </thead>
                       <tbody>
                         {data.byEmployee.slice(0, 20).map((e, i) => (
-                          <tr key={i} className={`border-t border-slate-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
-                            <td className="px-4 py-2.5">
+                          <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                            <td className="px-3 py-1 border-r border-gray-100">
                               <div className="font-black text-slate-900">{e.name}</div>
                               <div className="text-[10px] text-slate-400">{e.employeeNumber} · {e.department}</div>
                             </td>
-                            <td className="px-3 py-2.5 text-right font-semibold text-slate-700">{e.count}</td>
-                            <td className="px-3 py-2.5 text-right font-black text-emerald-700">{e.totalDays}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-700">{e.count}</td>
+                            <td className="px-3 py-1 text-right font-black text-emerald-700">{e.totalDays}</td>
                           </tr>
                         ))}
                       </tbody>

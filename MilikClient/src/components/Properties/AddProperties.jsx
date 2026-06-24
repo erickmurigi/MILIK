@@ -18,6 +18,7 @@ import {
   FaSpinner,
   FaChevronDown,
   FaCog,
+  FaArrowLeft,
 } from "react-icons/fa";
 import { createProperty } from "../../redux/propertyRedux";
 import { getLandlords, createLandlord } from "../../redux/apiCalls";
@@ -28,10 +29,10 @@ import MilikConfirmDialog from "../Modals/MilikConfirmDialog";
 import { getCompanyOperatingModeLabel, isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
 
-const MILIK_ORANGE_BG = "bg-orange-600";
-const MILIK_ORANGE_BG_HOVER = "hover:bg-orange-700";
-const MILIK_ORANGE_RING = "focus:ring-orange-500/30";
-const MILIK_ORANGE_BORDER_FOCUS = "focus:border-orange-700";
+const MILIK_ORANGE_BG = "bg-[#0B3B2E]";
+const MILIK_ORANGE_BG_HOVER = "hover:bg-[#0A3127]";
+const MILIK_ORANGE_RING = "";
+const MILIK_ORANGE_BORDER_FOCUS = "";
 
 const normalizePropertyServiceMode = (value = "Managing") => {
   const normalized = String(value || "").trim().toLowerCase();
@@ -131,7 +132,7 @@ function MilikSelect({
   return (
     <div className={`${className} relative`} ref={wrapRef}>
       {label ? (
-        <label className="block text-sm font-bold text-slate-800 mb-1 tracking-tight">
+        <label className="mb-0.5 block text-xs font-semibold text-slate-700">
           {label} {required ? <span className="text-red-600">*</span> : null}
         </label>
       ) : null}
@@ -141,17 +142,16 @@ function MilikSelect({
         disabled={disabled}
         onClick={() => setOpen((s) => !s)}
         className={[
-          "w-full h-10 px-3 rounded-md bg-white text-slate-900 shadow-sm border border-slate-300",
-          "transition-all duration-200 ease-out hover:border-slate-400",
-          "focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-700",
+          "w-full h-8 px-3 rounded border border-slate-200 bg-white text-slate-900",
+          "transition focus:outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20",
           "flex items-center justify-between gap-2",
           disabled ? "opacity-50 cursor-not-allowed" : "",
         ].join(" ")}
       >
-        <span className="text-sm font-semibold truncate">
+        <span className="text-xs font-semibold truncate">
           {selectedItem ? getLabel(selectedItem) : <span className="text-slate-400">{placeholder}</span>}
         </span>
-        <FaChevronDown className="text-slate-600" />
+        <FaChevronDown className="text-slate-600" size={10} />
       </button>
 
       {open && !disabled && (
@@ -172,8 +172,8 @@ function MilikSelect({
                       setOpen(false);
                     }}
                     className={[
-                      "w-full text-left px-3 py-2 text-sm font-semibold transition-colors",
-                      isSelected ? `${MILIK_ORANGE_BG} text-white` : "text-slate-800 hover:bg-orange-50",
+                      "w-full text-left px-3 py-1.5 text-xs font-semibold transition-colors",
+                      isSelected ? `${MILIK_ORANGE_BG} text-white` : "text-slate-800 hover:bg-slate-50",
                     ].join(" ")}
                   >
                     {getLabel(it)}
@@ -350,21 +350,14 @@ const AddProperty = () => {
     "Eldoret",
   ];
 
-  const labelClass = "block text-sm font-bold text-slate-800 mb-1 tracking-tight";
+  const labelClass = "mb-0.5 block text-xs font-semibold text-slate-700";
   const helperLabelClass = "block text-xs font-medium text-slate-600 mb-1";
 
-  const baseField =
-    "w-full rounded-md bg-white text-slate-900 placeholder:text-slate-400 " +
-    "border border-slate-300 shadow-sm " +
-    "transition-all duration-200 ease-out " +
-    `focus:outline-none focus:border-slate-700 focus:ring-2 ${MILIK_ORANGE_RING} ` +
-    "hover:border-slate-400";
+  const inputClass = "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+  const textareaClass = "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 min-h-[80px]";
 
-  const inputClass = `${baseField} h-10 px-3 text-sm font-semibold`;
-  const textareaClass = `${baseField} min-h-[96px] px-3 py-2 text-sm font-semibold`;
-
-  const sectionCard = "bg-white border border-slate-200 rounded-lg shadow-sm";
-  const sectionHeader = "text-sm font-bold text-slate-900 tracking-tight";
+  const sectionCard = "overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm";
+  const sectionHeader = "text-[11px] font-bold uppercase tracking-wide text-slate-700";
 
   const uppercasePropertyFields = new Set(["propertyCode", "propertyName", "zoneRegion", "roadStreet", "estateArea", "townCityState", "invoicePrefix", "specificContactInfo"]);
 
@@ -779,7 +772,7 @@ const AddProperty = () => {
       <div className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           <div>
-            <label className={labelClass}>Date Acquired *</label>
+            <label className={labelClass}>Date Acquired <span className="text-red-500">*</span></label>
             <input
               type="date"
               name="dateAcquired"
@@ -848,7 +841,7 @@ const AddProperty = () => {
           )}
 
           <div>
-            <label className={labelClass}>Property Code <span className="text-red-600">*</span></label>
+            <label className={labelClass}>Property Code <span className="text-red-500">*</span></label>
             <input
               type="text"
               name="propertyCode"
@@ -860,7 +853,7 @@ const AddProperty = () => {
           </div>
 
           <div className="md:col-span-2">
-            <label className={labelClass}>Property Name <span className="text-red-600">*</span></label>
+            <label className={labelClass}>Property Name <span className="text-red-500">*</span></label>
             <input
               type="text"
               name="propertyName"
@@ -1074,7 +1067,7 @@ const AddProperty = () => {
         >
           <div className="space-y-3">
             <div>
-              <label className={labelClass}>Full Name *</label>
+              <label className={labelClass}>Full Name <span className="text-red-500">*</span></label>
               <input
                 value={newLandlord.fullName}
                 onChange={(e) => setNewLandlord((p) => ({ ...p, fullName: e.target.value }))}
@@ -1094,7 +1087,7 @@ const AddProperty = () => {
             </div>
 
             <div>
-              <label className={labelClass}>Phone *</label>
+              <label className={labelClass}>Phone <span className="text-red-500">*</span></label>
               <input
                 value={newLandlord.phone}
                 onChange={(e) => setNewLandlord((p) => ({ ...p, phone: e.target.value }))}
@@ -1894,117 +1887,31 @@ const AddProperty = () => {
     </div>
   );
 
-  const renderContent = () => {
-    switch (activeTab) {
-      case "general":
-        return renderGeneralInfo();
-      case "space":
-        return renderSpaceUnits();
-      case "accounting":
-        return renderAccountingBilling();
-      case "utilityRates":
-        return renderUtilityRates();
-      case "banking":
-        return renderBanking();
-      case "notes":
-        return renderNotes();
-      default:
-        return (
-          <div className={`${sectionCard} p-10 text-center`}>
-            <FaBuilding className="text-4xl mx-auto mb-3 text-slate-300" />
-            <p className="text-sm font-semibold text-slate-700">This section is under development</p>
-            <p className="text-xs mt-1 text-slate-500">Coming soon...</p>
-          </div>
-        );
-    }
-  };
 
   return (
     <>
-      <DashboardLayout>
-        <style>{`
-          select {
-            accent-color: #ea580c;
-          }
-
-          input[type="checkbox"] {
-            accent-color: #ea580c;
-            width: 18px;
-            height: 18px;
-            cursor: pointer;
-          }
-
-          select option {
-            background-color: white;
-            color: #1e293b;
-          }
-
-          select option:hover,
-          select option:focus,
-          select option:active,
-          select option:checked {
-            background-color: #ea580c !important;
-            background: #ea580c !important;
-            color: white !important;
-            outline: none !important;
-          }
-
-          select option:hover {
-            background-color: #ea580c !important;
-            background: #ea580c;
-            color: white;
-          }
-
-          select option:checked,
-          select option:checked:hover {
-            background: linear-gradient(#ea580c, #ea580c) !important;
-            background-color: #ea580c !important;
-            color: white !important;
-          }
-
-          select:focus option:hover,
-          select:active option:hover,
-          select option[selected],
-          select option:not(:checked):hover {
-            background: #ea580c !important;
-            background-color: #ea580c !important;
-            color: white !important;
-          }
-        `}</style>
-
-        <div className="p-3 w-full h-full overflow-y-auto bg-slate-50">
-          <div className="flex justify-between items-center mb-3">
-            <div>
-              <h1 className="text-lg font-extrabold text-slate-900 tracking-tight">
-                Add New Property
-              </h1>
-              <p className="text-sm text-slate-600">
-                {isSelfManagingLandlordMode
-                  ? "Set up a property that belongs directly to your landlord workspace."
-                  : "Fill in the property details below"}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="hidden sm:inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">
-                {operatingModeLabel}
-              </span>
-              <button
-                onClick={() => {
-                  clearDraftState();
-                  navigate(-1);
-                }}
-                className="h-10 px-4 text-sm font-semibold border border-slate-300 rounded-md bg-white hover:bg-slate-50 transition-colors"
-                disabled={loading}
-              >
-                <FaTimes className="inline-block mr-2" />
-                Cancel
-              </button>
+      <DashboardLayout lockContentScroll>
+        <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
+          {/* Sticky dark header */}
+          <div className="flex-shrink-0 bg-[#0B3B2E] px-4 py-2.5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={() => { clearDraftState(); navigate(-1); }} disabled={loading} className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#B7C9C0] hover:text-white transition disabled:opacity-50">
+                  <FaArrowLeft /> Back
+                </button>
+                <div className="h-4 w-px bg-[#2A5C4A]" />
+                <div>
+                  <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B7C9C0]">Properties</div>
+                  <h1 className="text-sm font-black text-white leading-none">Add New Property</h1>
+                </div>
+              </div>
+              <span className="rounded-lg border border-[#2A5C4A] bg-[#0A3127] px-2.5 py-1 text-[10px] font-bold text-[#B7C9C0]">{operatingModeLabel}</span>
             </div>
           </div>
 
-          <div className="border-b border-slate-200 mb-3">
-            <div className="flex flex-wrap gap-2">
+          {/* Tab navigation */}
+          <div className="flex-shrink-0 border-b border-slate-200 bg-white px-3">
+            <div className="flex flex-wrap gap-0.5">
               {tabs.map((tab) => {
                 const isActive = activeTab === tab.id;
                 return (
@@ -2013,14 +1920,12 @@ const AddProperty = () => {
                     onClick={() => setActiveTab(tab.id)}
                     disabled={loading}
                     className={[
-                      "h-10 px-4 text-sm font-bold flex items-center gap-2 rounded-t-md transition-all duration-200",
-                      isActive
-                        ? `${MILIK_ORANGE_BG} text-white shadow-sm border-b-2 border-orange-700`
-                        : "text-slate-700 hover:bg-slate-100",
+                      "h-9 px-3 text-xs font-bold flex items-center gap-1.5 border-b-2 transition-all",
+                      isActive ? "border-[#0B3B2E] text-[#0B3B2E]" : "border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50",
                       loading ? "opacity-50 cursor-not-allowed" : "",
                     ].join(" ")}
                   >
-                    <span className="text-base">{tab.icon}</span>
+                    <span>{tab.icon}</span>
                     {tab.label}
                   </button>
                 );
@@ -2028,51 +1933,41 @@ const AddProperty = () => {
             </div>
           </div>
 
+          {/* Scrollable content */}
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
           <div className={`${sectionCard}`}>
-            <div className="p-4">
-              <form id="add-property-form" onSubmit={handleSubmit}>
-                {renderContent()}
-              </form>
-            </div>
+            <form id="add-property-form" onSubmit={handleSubmit}>
+              <div className="p-3">
+                <div className={activeTab === "general" ? "" : "hidden"}>{renderGeneralInfo()}</div>
+                <div className={activeTab === "space" ? "" : "hidden"}>{renderSpaceUnits()}</div>
+                <div className={activeTab === "accounting" ? "" : "hidden"}>{renderAccountingBilling()}</div>
+                <div className={activeTab === "utilityRates" ? "" : "hidden"}>{renderUtilityRates()}</div>
+                <div className={activeTab === "banking" ? "" : "hidden"}>{renderBanking()}</div>
+                <div className={activeTab === "notes" ? "" : "hidden"}>{renderNotes()}</div>
+              </div>
+            </form>
           </div>
 
           {fieldErrors.business && (
-            <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
               {fieldErrors.business}
             </div>
           )}
+          </div>
 
-          <div className="flex justify-between items-center mt-4">
-            <div className="text-xs text-slate-500">Fields marked with * are required</div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  clearDraftState();
-                  navigate(-1);
-                }}
-                disabled={loading}
-                className="h-10 px-5 text-sm font-semibold border border-slate-300 rounded-md bg-white hover:bg-slate-50 transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                onClick={handleReset}
-                disabled={loading}
-                className="h-10 px-5 text-sm font-semibold border border-slate-300 rounded-md bg-white hover:bg-slate-50 transition-colors disabled:opacity-50"
-              >
-                Reset
-              </button>
-
+          {/* Sticky footer */}
+          <div className="flex-shrink-0 border-t border-slate-200 bg-[#F6FAF8] px-4 py-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-xs text-slate-500">Fields marked with * are required</div>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => { clearDraftState(); navigate(-1); }} disabled={loading} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Cancel</button>
+                <button type="button" onClick={handleReset} disabled={loading} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Reset</button>
               {!isFirstTab && (
                 <button
                   type="button"
                   onClick={handlePreviousTab}
                   disabled={loading}
-                  className="h-10 px-5 text-sm font-semibold border border-slate-300 rounded-md bg-white hover:bg-slate-50 transition-colors disabled:opacity-50"
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                 >
                   Previous
                 </button>
@@ -2083,7 +1978,7 @@ const AddProperty = () => {
                   type="button"
                   onClick={handleNextTab}
                   disabled={loading}
-                  className={`h-10 px-5 text-sm font-semibold ${MILIK_ORANGE_BG} text-white rounded-md ${MILIK_ORANGE_BG_HOVER} transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-2 text-xs font-black text-white transition hover:bg-[#0A3127] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Next
                 </button>
@@ -2092,21 +1987,12 @@ const AddProperty = () => {
                   type="submit"
                   form="add-property-form"
                   disabled={loading}
-                  className="h-10 px-5 text-sm font-semibold bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-2 text-xs font-black text-white transition hover:bg-[#0A3127] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? (
-                    <>
-                      <FaSpinner className="inline-block mr-2 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <FaSave className="inline-block mr-2" />
-                      Save Property
-                    </>
-                  )}
+                  {loading ? <><FaSpinner className="animate-spin" /> Saving…</> : <><FaSave /> Save Property</>}
                 </button>
               )}
+              </div>
             </div>
           </div>
         </div>

@@ -34,6 +34,7 @@ import { getProperties } from "../../redux/propertyRedux";
 import { propertyBelongsToLandlord } from "./propertyUtils";
 import { selectCurrentCompany, selectCurrentUser, selectAllLandlords, selectAllProperties } from "../../redux/selectors";
 import { hasCompanyPermission } from "../../utils/permissions";
+import AppSelect from "../../components/common/AppSelect";
 
 const ITEMS_PER_PAGE = 50;
 const todayIso = () => new Date().toISOString().split("T")[0];
@@ -586,7 +587,7 @@ const LandlordStandingOrders = () => {
               <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
                 <div className="relative shrink-0">
                   <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]" />
-                  <input value={filters.search} onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Search order, title…" className="h-7 w-40 rounded border border-orange-300 bg-orange-50 pl-6 pr-2 text-xs outline-none focus:border-[#FF8C00] focus:ring-1 focus:ring-[#FF8C00]" />
+                  <input value={filters.search} onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Search order, title…" className="h-7 w-40 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </div>
                 <select value={filters.landlordId} onChange={(e) => setFilters((prev) => ({ ...prev, landlordId: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="all">All Landlords</option>
@@ -616,25 +617,25 @@ const LandlordStandingOrders = () => {
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto">
-              <table className="w-full min-w-[1340px] text-xs">
+              <table className="w-full min-w-[1340px] text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className="bg-[#0B3B2E] text-white">
-                    <th className="px-3 py-2 text-left font-semibold">
+                    <th className="w-9 px-3 py-2 text-center font-bold border-r border-white/10">
                       <input
                         type="checkbox"
                         checked={allSelectableChecked}
                         onChange={toggleSelectAll}
                         disabled={selectableRowIds.length === 0}
-                        className="h-4 w-4 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
+                        className="h-3.5 w-3.5 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
                       />
                     </th>
-                    <th className="px-3 py-2 text-left font-semibold">Order</th>
-                    <th className="px-3 py-2 text-left font-semibold">Landlord / Property</th>
-                    <th className="px-3 py-2 text-left font-semibold">Schedule</th>
-                    <th className="px-3 py-2 text-left font-semibold">Payment Setup</th>
-                    <th className="px-3 py-2 text-right font-semibold">Amount</th>
-                    <th className="px-3 py-2 text-left font-semibold">Status</th>
-                    <th className="px-3 py-2 text-right font-semibold">Actions</th>
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Order</th>
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Landlord / Property</th>
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Schedule</th>
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Payment Setup</th>
+                    <th className="px-3 py-2 text-right font-bold border-r border-white/10">Amount</th>
+                    <th className="px-3 py-2 text-left font-bold border-r border-white/10">Status</th>
+                    <th className="px-3 py-2 text-right font-bold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -650,71 +651,74 @@ const LandlordStandingOrders = () => {
                     const runnable = row.status === "active" && (row.eligiblePeriods || []).length > 0;
                     return (
                       <React.Fragment key={row._id}>
-                        <tr className={`border-t border-slate-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
-                          <td className="px-3 py-2 align-top">
+                        <tr className={`border-b border-gray-100 transition-colors ${index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                          <td className="w-9 px-3 py-1 text-center align-top border-r border-gray-100">
                             <input
                               type="checkbox"
                               checked={selectedIds.includes(String(row._id))}
                               onChange={() => toggleRowSelection(row._id)}
                               disabled={!runnable}
-                              className="mt-1 h-4 w-4 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E] disabled:cursor-not-allowed disabled:opacity-50"
+                              className="mt-1 h-3.5 w-3.5 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E] disabled:cursor-not-allowed disabled:opacity-50"
                               title={!runnable ? "Only active standing orders with eligible periods can be bulk run" : "Select this standing order for bulk run"}
                             />
                           </td>
-                          <td className="px-3 py-2 align-top">
+                          <td className="px-3 py-1 align-top border-r border-gray-100">
                             <div className="font-black text-slate-900">{row.standingOrderNo || row.referenceNo}</div>
-                            <div className="text-xs text-slate-500">{row.title}</div>
+                            <div className="text-[10px] text-slate-500">{row.title}</div>
                             <button
                               type="button"
                               onClick={() => setExpandedId((prev) => (prev === row._id ? "" : row._id))}
-                              className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-[#0B3B2E]"
+                              className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-[#0B3B2E]"
                             >
                               <FaChevronDown className={`transition ${expanded ? "rotate-180" : ""}`} />
-                              {expanded ? "Hide schedule and history" : "View schedule and history"}
+                              {expanded ? "Hide" : "Details"}
                             </button>
                           </td>
-                          <td className="px-3 py-2 align-top text-slate-700">
-                            <div>{getLandlordLabel(row.landlord)}</div>
-                            <div className="text-xs text-slate-500">{row.property?.propertyName || row.property?.name || "No property"}</div>
+                          <td className="px-3 py-1 align-top border-r border-gray-100 text-slate-700">
+                            <div className="font-semibold text-slate-900">{getLandlordLabel(row.landlord)}</div>
+                            <div className="text-[10px] text-slate-500">{row.property?.propertyName || row.property?.name || "No property"}</div>
                           </td>
-                          <td className="px-3 py-2 align-top text-slate-700">
+                          <td className="px-3 py-1 align-top border-r border-gray-100 text-slate-700">
                             <div className="font-semibold">{frequencyLabel(row.frequency)}</div>
-                            <div className="text-xs text-slate-500">
+                            <div className="text-[10px] text-slate-500">
                               Runs {canUseDayOfMonth(row.frequency) ? `on day ${row.dayOfMonth || new Date(row.startDate || Date.now()).getDate()}` : "every week"}
                             </div>
-                            <div className="text-xs text-slate-500">Next eligible: {row.nextEligiblePeriod?.periodLabel || "No open period"}</div>
-                            <div className="text-xs text-slate-500">
-                              Processed {row.processedPeriodsCount || 0}
-                              {row.cancelledPeriodsCount ? ` • Reversed ${row.cancelledPeriodsCount}` : ""}
-                              {` • Pending ${row.unprocessedPeriodsCount || 0}`}
+                            <div className="text-[10px] text-slate-500">Next: {row.nextEligiblePeriod?.periodLabel || "No open period"}</div>
+                            <div className="text-[10px] text-slate-500">
+                              Done {row.processedPeriodsCount || 0} • Pending {row.unprocessedPeriodsCount || 0}
                             </div>
                           </td>
-                          <td className="px-3 py-2 align-top text-slate-700">
+                          <td className="px-3 py-1 align-top border-r border-gray-100 text-slate-700">
                             <div className="font-semibold">
                               {paymentMethodOptions.find((item) => item.value === normalizePaymentMethod(row.paymentMethod))?.label || frequencyLabel(row.paymentMethod)}
                             </div>
-                            <div className="text-xs text-slate-500">Cashbook: {getCashbookLabel(row.cashbook)}</div>
-                            <div className="text-xs text-slate-500">{getPaymentDestinationSummary(row)}</div>
+                            <div className="text-[10px] text-slate-500">{getCashbookLabel(row.cashbook)}</div>
+                            <div className="text-[10px] text-slate-500">{getPaymentDestinationSummary(row)}</div>
                           </td>
-                          <td className="px-3 py-2 text-right align-top font-black text-slate-900">{money(row.amount)}</td>
-                          <td className="px-3 py-2 align-top">
-                            <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-black ${statusPills[row.status] || statusPills.draft}`}>
+                          <td className="px-3 py-1 text-right align-top border-r border-gray-100 font-black text-slate-900">{money(row.amount)}</td>
+                          <td className="px-3 py-1 align-top border-r border-gray-100">
+                            <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold border ${
+                              row.status === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : row.status === "paused" ? "bg-amber-50 text-amber-700 border-amber-200"
+                              : row.status === "stopped" ? "bg-red-50 text-red-700 border-red-200"
+                              : "bg-slate-100 text-slate-600 border-slate-200"
+                            }`}>
                               {row.status}
                             </span>
                           </td>
-                          <td className="px-3 py-2 text-right align-top">
+                          <td className="px-3 py-1 text-right align-top">
                             <div className="inline-flex flex-wrap justify-end gap-2">
                               <button
                                 onClick={() => openEdit(row)}
                                 disabled={!canWrite}
-                                className="inline-flex h-7 items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-2.5 text-[11px] font-bold text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                className="inline-flex h-7 items-center gap-1 rounded border border-blue-300 bg-blue-50 px-2.5 text-[11px] font-bold text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                               >
                                 <FaEdit /> Edit
                               </button>
                               {row.status !== "active" && (
                                 <button
                                   onClick={() => handleStatus(row, "active")}
-                                  className="inline-flex h-7 items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 text-[11px] font-bold text-emerald-700"
+                                  className="inline-flex h-7 items-center gap-1 rounded border border-emerald-300 bg-emerald-50 px-2.5 text-[11px] font-bold text-emerald-700"
                                 >
                                   <FaPlay /> Activate
                                 </button>
@@ -722,7 +726,7 @@ const LandlordStandingOrders = () => {
                               {row.status === "active" && (
                                 <button
                                   onClick={() => handleStatus(row, "paused")}
-                                  className="inline-flex h-7 items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2.5 text-[11px] font-bold text-amber-700"
+                                  className="inline-flex h-7 items-center gap-1 rounded border border-amber-300 bg-amber-50 px-2.5 text-[11px] font-bold text-amber-700"
                                 >
                                   <FaPause /> Pause
                                 </button>
@@ -730,14 +734,14 @@ const LandlordStandingOrders = () => {
                               {row.status !== "stopped" && (
                                 <button
                                   onClick={() => handleStatus(row, "stopped")}
-                                  className="inline-flex h-7 items-center gap-1 rounded-lg border border-slate-300 bg-slate-100 px-2.5 text-[11px] font-bold text-slate-700"
+                                  className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-slate-100 px-2.5 text-[11px] font-bold text-slate-700"
                                 >
                                   <FaStop /> Stop
                                 </button>
                               )}
                               <button
                                 onClick={() => openRunModal(row)}
-                                className={`inline-flex h-7 items-center gap-1 rounded-lg border px-2.5 text-[11px] font-bold ${
+                                className={`inline-flex h-7 items-center gap-1 rounded border px-2.5 text-[11px] font-bold ${
                                   runnable
                                     ? "border-indigo-300 bg-indigo-50 text-indigo-700"
                                     : "border-slate-300 bg-slate-100 text-slate-400"
@@ -748,7 +752,7 @@ const LandlordStandingOrders = () => {
                               <button
                                 onClick={() => handleDelete(row)}
                                 disabled={!canWrite}
-                                className="inline-flex h-7 items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-2.5 text-[11px] font-bold text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                className="inline-flex h-7 items-center gap-1 rounded border border-rose-300 bg-rose-50 px-2.5 text-[11px] font-bold text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
                               >
                                 <FaTrash /> Delete
                               </button>
@@ -756,7 +760,7 @@ const LandlordStandingOrders = () => {
                           </td>
                         </tr>
                         {expanded && (
-                          <tr className="border-t border-slate-100 bg-slate-50">
+                          <tr className="border-b border-gray-100 bg-slate-50/80">
                             <td colSpan={8} className="px-3 py-3">
                               <div className="mb-4 grid gap-4 xl:grid-cols-3">
                                 <div className="rounded-xl border border-slate-200 bg-white p-3">
@@ -920,56 +924,49 @@ const LandlordStandingOrders = () => {
                 <FaTimes />
               </button>
             </div>
-            <div className="grid gap-4 p-6 md:grid-cols-2 xl:grid-cols-4">
-              <label className="block">
-                <span className="text-sm font-bold text-slate-700">Landlord</span>
-                <select
+            <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-4">
+              <div>
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Landlord</span>
+                <AppSelect
                   value={form.landlord}
-                  onChange={(e) => setForm((prev) => ({ ...prev, landlord: e.target.value, property: "" }))}
-                  className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-                >
-                  <option value="">Select landlord</option>
-                  {activeLandlords.map((landlord) => (
-                    <option key={landlord._id} value={landlord._id}>
-                      {getLandlordLabel(landlord)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  onChange={(v) => setForm((prev) => ({ ...prev, landlord: v ?? "", property: "" }))}
+                  options={activeLandlords.map((l) => ({ value: l._id, label: getLandlordLabel(l) }))}
+                  placeholder="Select landlord…"
+                  searchable
+                  clearable
+                  size="sm"
+                />
+              </div>
 
-              <label className="block">
-                <span className="text-sm font-bold text-slate-700">Property</span>
-                <select
+              <div>
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Property</span>
+                <AppSelect
                   value={form.property}
-                  onChange={(e) => setForm((prev) => ({ ...prev, property: e.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-                >
-                  <option value="">Select property</option>
-                  {filteredProperties.map((property) => (
-                    <option key={property._id} value={property._id}>
-                      {property.propertyCode ? `[${property.propertyCode}] ` : ""}
-                      {property.propertyName || property.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  onChange={(v) => setForm((prev) => ({ ...prev, property: v ?? "" }))}
+                  options={filteredProperties.map((p) => ({ value: p._id, label: `${p.propertyCode ? `[${p.propertyCode}] ` : ""}${p.propertyName || p.name}` }))}
+                  placeholder="Select property…"
+                  searchable
+                  clearable
+                  size="sm"
+                />
+              </div>
 
               <label className="block">
-                <span className="text-sm font-bold text-slate-700">Amount</span>
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Amount</span>
                 <input
                   type="number"
                   value={form.amount}
                   onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                 />
               </label>
 
               <label className="block">
-                <span className="text-sm font-bold text-slate-700">Initial Status</span>
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Initial Status</span>
                 <select
                   value={form.status}
                   onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                 >
                   <option value="draft">Draft</option>
                   <option value="active">Active</option>
@@ -978,20 +975,20 @@ const LandlordStandingOrders = () => {
               </label>
 
               <label className="block xl:col-span-2">
-                <span className="text-sm font-bold text-slate-700">Title</span>
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Title</span>
                 <input
                   value={form.title}
                   onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                 />
               </label>
 
               <label className="block">
-                <span className="text-sm font-bold text-slate-700">Frequency</span>
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Frequency</span>
                 <select
                   value={form.frequency}
                   onChange={(e) => setForm((prev) => ({ ...prev, frequency: e.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                 >
                   {frequencyOptions.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -1002,45 +999,45 @@ const LandlordStandingOrders = () => {
               </label>
 
               <label className="block">
-                <span className="text-sm font-bold text-slate-700">Start Date</span>
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Start Date</span>
                 <input
                   type="date"
                   value={form.startDate}
                   onChange={(e) => setForm((prev) => ({ ...prev, startDate: e.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                 />
               </label>
 
               <label className="block">
-                <span className="text-sm font-bold text-slate-700">End Date</span>
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">End Date</span>
                 <input
                   type="date"
                   value={form.endDate}
                   onChange={(e) => setForm((prev) => ({ ...prev, endDate: e.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                 />
               </label>
 
               {canUseDayOfMonth(form.frequency) && (
                 <label className="block">
-                  <span className="text-sm font-bold text-slate-700">Run Day</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Run Day</span>
                   <input
                     type="number"
                     min="1"
                     max="31"
                     value={form.dayOfMonth}
                     onChange={(e) => setForm((prev) => ({ ...prev, dayOfMonth: e.target.value }))}
-                    className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </label>
               )}
 
               <label className="block">
-                <span className="text-sm font-bold text-slate-700">Payment Method</span>
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Payment Method</span>
                 <select
                   value={form.paymentMethod}
                   onChange={(e) => setForm((prev) => ({ ...prev, paymentMethod: e.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                 >
                   {paymentMethodOptions.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -1051,11 +1048,11 @@ const LandlordStandingOrders = () => {
               </label>
 
               <label className="block">
-                <span className="text-sm font-bold text-slate-700">Cashbook</span>
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Cashbook</span>
                 <select
                   value={form.cashbook}
                   onChange={(e) => setForm((prev) => ({ ...prev, cashbook: e.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                 >
                   <option value="">Auto-resolve from payment method</option>
                   {cashbooks.map((account) => (
@@ -1067,22 +1064,22 @@ const LandlordStandingOrders = () => {
               </label>
 
               <label className="block xl:col-span-2">
-                <span className="text-sm font-bold text-slate-700">Narration</span>
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Narration</span>
                 <textarea
                   rows={3}
                   value={form.narration}
                   onChange={(e) => setForm((prev) => ({ ...prev, narration: e.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                 />
               </label>
 
               <label className="block xl:col-span-2">
-                <span className="text-sm font-bold text-slate-700">Internal Notes</span>
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Internal Notes</span>
                 <textarea
                   rows={3}
                   value={form.notes}
                   onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                 />
               </label>
 
@@ -1091,11 +1088,11 @@ const LandlordStandingOrders = () => {
                 <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   {normalizePaymentMethod(form.paymentMethod) !== "mpesa" && (
                     <label className="block">
-                      <span className="text-sm font-bold text-slate-700">Payee / Account Name</span>
+                      <span className="mb-0.5 block text-xs font-semibold text-slate-700">Payee / Account Name</span>
                       <input
                         value={form.accountName}
                         onChange={(e) => setForm((prev) => ({ ...prev, accountName: e.target.value }))}
-                        className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                        className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                       />
                     </label>
                   )}
@@ -1104,27 +1101,27 @@ const LandlordStandingOrders = () => {
                     normalizePaymentMethod(form.paymentMethod) === "cheque") && (
                     <>
                       <label className="block">
-                        <span className="text-sm font-bold text-slate-700">Account Number</span>
+                        <span className="mb-0.5 block text-xs font-semibold text-slate-700">Account Number</span>
                         <input
                           value={form.accountNumber}
                           onChange={(e) => setForm((prev) => ({ ...prev, accountNumber: e.target.value }))}
-                          className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                          className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </label>
                       <label className="block">
-                        <span className="text-sm font-bold text-slate-700">Bank Name</span>
+                        <span className="mb-0.5 block text-xs font-semibold text-slate-700">Bank Name</span>
                         <input
                           value={form.bankName}
                           onChange={(e) => setForm((prev) => ({ ...prev, bankName: e.target.value }))}
-                          className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                          className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </label>
                       <label className="block">
-                        <span className="text-sm font-bold text-slate-700">Branch Name</span>
+                        <span className="mb-0.5 block text-xs font-semibold text-slate-700">Branch Name</span>
                         <input
                           value={form.branchName}
                           onChange={(e) => setForm((prev) => ({ ...prev, branchName: e.target.value }))}
-                          className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                          className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </label>
                     </>
@@ -1132,11 +1129,11 @@ const LandlordStandingOrders = () => {
 
                   {normalizePaymentMethod(form.paymentMethod) === "mpesa" && (
                     <label className="block">
-                      <span className="text-sm font-bold text-slate-700">Destination Mobile Number</span>
+                      <span className="mb-0.5 block text-xs font-semibold text-slate-700">Destination Mobile Number</span>
                       <input
                         value={form.mobileNumber}
                         onChange={(e) => setForm((prev) => ({ ...prev, mobileNumber: e.target.value }))}
-                        className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                        className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                       />
                     </label>
                   )}
@@ -1144,13 +1141,13 @@ const LandlordStandingOrders = () => {
               </div>
             </div>
             <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
-              <button onClick={closeModal} className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-black text-slate-700">
+              <button onClick={closeModal} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
                 Cancel
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-3 text-sm font-black text-white disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60"
               >
                 <FaSave /> {saving ? "Saving..." : editingId ? "Update Order" : "Save Order"}
               </button>
@@ -1179,11 +1176,11 @@ const LandlordStandingOrders = () => {
                 </div>
               </div>
               <label className="block">
-                <span className="text-sm font-bold text-slate-700">Eligible period</span>
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Eligible period</span>
                 <select
                   value={runModal.periodKey}
                   onChange={(e) => setRunModal((prev) => ({ ...prev, periodKey: e.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                 >
                   {(runModal.row?.eligiblePeriods || []).map((item) => (
                     <option key={item.periodKey} value={item.periodKey}>
@@ -1194,12 +1191,12 @@ const LandlordStandingOrders = () => {
               </label>
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="block">
-                  <span className="text-sm font-bold text-slate-700">Amount</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Amount</span>
                   <input
                     type="number"
                     value={runModal.amount}
                     onChange={(e) => setRunModal((prev) => ({ ...prev, amount: e.target.value }))}
-                    className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </label>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
@@ -1211,20 +1208,20 @@ const LandlordStandingOrders = () => {
                 </div>
               </div>
               <label className="block">
-                <span className="text-sm font-bold text-slate-700">Narration</span>
+                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Narration</span>
                 <textarea
                   rows={3}
                   value={runModal.note}
                   onChange={(e) => setRunModal((prev) => ({ ...prev, note: e.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                 />
               </label>
             </div>
             <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
-              <button onClick={() => setRunModal({ open: false, row: null, periodKey: "", amount: "", note: "" })} className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-black text-slate-700">
+              <button onClick={() => setRunModal({ open: false, row: null, periodKey: "", amount: "", note: "" })} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
                 Cancel
               </button>
-              <button onClick={handleRun} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-black text-white">
+              <button onClick={handleRun} className="inline-flex items-center gap-2 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
                 <FaCheck /> Run selected period
               </button>
             </div>

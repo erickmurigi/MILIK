@@ -80,8 +80,8 @@ const fmtDate = (d) => {
 };
 
 const inputCls =
-  "w-full px-3 py-1.5 text-xs border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] focus:border-[#0B3B2E]";
-const labelCls = "block text-xs font-semibold text-slate-600 mb-1";
+  "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+const labelCls = "mb-0.5 block text-xs font-semibold text-slate-700";
 
 // ─── Modal ────────────────────────────────────────────────────────────────────
 const Modal = ({ open, title, onClose, children, wide }) => {
@@ -89,9 +89,9 @@ const Modal = ({ open, title, onClose, children, wide }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
       <div className={`w-full ${wide ? "max-w-2xl" : "max-w-lg"} rounded-2xl bg-white shadow-2xl`}>
-        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-          <h2 className="text-sm font-bold text-slate-800">{title}</h2>
-          <button onClick={onClose} className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+        <div className="flex items-center justify-between bg-[#0B3B2E] px-4 py-3 text-white">
+          <h2 className="text-sm font-black">{title}</h2>
+          <button onClick={onClose} className="rounded-full border border-white/30 p-1.5 hover:bg-white/10">
             <FaTimes size={12} />
           </button>
         </div>
@@ -595,21 +595,21 @@ const PettyCash = () => {
               ) : activeTab === "disbursements" ? (
 
                 /* ── Disbursements table */
-                <table className="min-w-full text-xs">
+                <table className="min-w-full text-[11px] border-collapse">
                   <thead className="sticky top-0 z-10">
-                    <tr className="bg-[#0B3B2E]">
-                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-white/90">Voucher No.</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-white/90">Date</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-white/90">Description</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-white/90">Category</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-white/90">Property</th>
-                      <th className="px-4 py-2.5 text-right text-[10px] font-bold uppercase tracking-wider text-white/90">Amount (KES)</th>
-                      <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-white/90">Receipt</th>
-                      <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-white/90">Status</th>
-                      <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-white/90">Action</th>
+                    <tr className="bg-[#0B3B2E] text-white">
+                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Voucher No.</th>
+                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date</th>
+                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Description</th>
+                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Category</th>
+                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
+                      <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount (KES)</th>
+                      <th className="px-3 py-1 text-center font-bold border-r border-white/10">Receipt</th>
+                      <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
+                      <th className="px-3 py-1 text-center font-bold">Action</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody>
                     {loading ? (
                       <tr><td colSpan={9} className="py-16 text-center text-xs text-slate-400">Loading…</td></tr>
                     ) : filteredDisbursements.length === 0 ? (
@@ -619,35 +619,35 @@ const PettyCash = () => {
                           <p className="text-xs text-slate-400">No disbursements found</p>
                         </td>
                       </tr>
-                    ) : pagedDisbursements.map((row) => (
+                    ) : pagedDisbursements.map((row, idx) => (
                       <tr
                         key={row._id}
-                        className={`cursor-default border-b border-slate-100 transition-colors hover:bg-slate-50 ${row.status === "void" ? "opacity-40" : ""}`}
+                        className={`border-b border-gray-100 transition-colors hover:bg-blue-50/40 ${row.status === "void" ? "opacity-40" : idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"}`}
                       >
-                        <td className="px-4 py-2.5 font-mono font-semibold text-slate-700">{row.voucherNumber}</td>
-                        <td className="px-4 py-2.5 text-slate-600">{fmtDate(row.date)}</td>
-                        <td className="max-w-[220px] px-4 py-2.5 text-slate-700">
+                        <td className="px-3 py-1 border-r border-gray-100 font-mono font-semibold text-slate-700">{row.voucherNumber}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{fmtDate(row.date)}</td>
+                        <td className="max-w-[220px] px-3 py-1 border-r border-gray-100 text-slate-700">
                           <span className="line-clamp-2">{row.description}</span>
                         </td>
-                        <td className="px-4 py-2.5">
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${CATEGORY_COLORS[row.category] || "bg-gray-100 text-gray-700"}`}>
+                        <td className="px-3 py-1 border-r border-gray-100">
+                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${CATEGORY_COLORS[row.category] || "bg-gray-100 text-gray-700 border-gray-200"}`}>
                             {CATEGORY_LABELS[row.category] || row.category}
                           </span>
                         </td>
-                        <td className="px-4 py-2.5 text-slate-600">{row.property?.propertyName || "—"}</td>
-                        <td className="px-4 py-2.5 text-right font-mono font-semibold text-slate-800">{fmt(row.amount)}</td>
-                        <td className="px-4 py-2.5 text-center">
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{row.property?.propertyName || "—"}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold text-slate-800">{fmt(row.amount)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-center">
                           {row.receiptAttached
                             ? <FaCheck className="mx-auto text-emerald-600" size={10} />
                             : <span className="text-[10px] text-slate-400">{row.receiptNote ? "Noted" : "—"}</span>
                           }
                         </td>
-                        <td className="px-4 py-2.5 text-center">
-                          <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${STATUS_COLORS[row.status] || "bg-gray-100 text-gray-600"}`}>
+                        <td className="px-3 py-1 border-r border-gray-100 text-center">
+                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLORS[row.status] || "bg-gray-100 text-gray-600 border-gray-200"}`}>
                             {row.status}
                           </span>
                         </td>
-                        <td className="px-4 py-2.5 text-center">
+                        <td className="px-3 py-1 text-center">
                           <div className="flex items-center justify-center gap-2">
                             <button
                               onClick={() => printPettyCashVoucher({ disbursement: row, account: selectedAccount, company: currentCompany, user: currentUser })}
@@ -687,20 +687,20 @@ const PettyCash = () => {
               ) : (
 
                 /* ── Replenishments table */
-                <table className="min-w-full text-xs">
+                <table className="min-w-full text-[11px] border-collapse">
                   <thead className="sticky top-0 z-10">
-                    <tr className="bg-[#0B3B2E]">
-                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-white/90">Ref No.</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-white/90">Request Date</th>
-                      <th className="px-4 py-2.5 text-right text-[10px] font-bold uppercase tracking-wider text-white/90">Balance Before</th>
-                      <th className="px-4 py-2.5 text-right text-[10px] font-bold uppercase tracking-wider text-white/90">Amount (KES)</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-white/90">Bank Account</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-white/90">Requested By</th>
-                      <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-white/90">Status</th>
-                      <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-white/90">Actions</th>
+                    <tr className="bg-[#0B3B2E] text-white">
+                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Ref No.</th>
+                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Request Date</th>
+                      <th className="px-3 py-1 text-right font-bold border-r border-white/10">Balance Before</th>
+                      <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount (KES)</th>
+                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Bank Account</th>
+                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Requested By</th>
+                      <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
+                      <th className="px-3 py-1 text-center font-bold">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody>
                     {loading ? (
                       <tr><td colSpan={8} className="py-16 text-center text-xs text-slate-400">Loading…</td></tr>
                     ) : filteredReplenishments.length === 0 ? (
@@ -710,24 +710,24 @@ const PettyCash = () => {
                           <p className="text-xs text-slate-400">No replenishments yet</p>
                         </td>
                       </tr>
-                    ) : pagedReplenishments.map((row) => (
-                      <tr key={row._id} className="border-b border-slate-100 transition-colors hover:bg-slate-50">
-                        <td className="px-4 py-2.5 font-mono font-semibold text-slate-700">{row.replenishmentNumber}</td>
-                        <td className="px-4 py-2.5 text-slate-600">{fmtDate(row.requestDate)}</td>
-                        <td className="px-4 py-2.5 text-right font-mono text-slate-600">{fmt(row.balanceBeforeReplenishment)}</td>
-                        <td className="px-4 py-2.5 text-right font-mono font-semibold text-slate-800">{fmt(row.amount)}</td>
-                        <td className="px-4 py-2.5 text-slate-600">
+                    ) : pagedReplenishments.map((row, idx) => (
+                      <tr key={row._id} className={`border-b border-gray-100 transition-colors hover:bg-blue-50/40 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"}`}>
+                        <td className="px-3 py-1 border-r border-gray-100 font-mono font-semibold text-slate-700">{row.replenishmentNumber}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{fmtDate(row.requestDate)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-600">{fmt(row.balanceBeforeReplenishment)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold text-slate-800">{fmt(row.amount)}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-600">
                           {row.bankAccountId
                             ? `${row.bankAccountId.code ? row.bankAccountId.code + " — " : ""}${row.bankAccountId.name}`
                             : "—"}
                         </td>
-                        <td className="px-4 py-2.5 text-slate-600">{row.requestedBy?.name || "—"}</td>
-                        <td className="px-4 py-2.5 text-center">
-                          <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${STATUS_COLORS[row.status] || "bg-gray-100 text-gray-600"}`}>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{row.requestedBy?.name || "—"}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-center">
+                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLORS[row.status] || "bg-gray-100 text-gray-600 border-gray-200"}`}>
                             {row.status}
                           </span>
                         </td>
-                        <td className="px-4 py-2.5">
+                        <td className="px-3 py-1">
                           <div className="flex items-center justify-center gap-2">
                             <button
                               onClick={() => printReplenishmentSummary({ replenishment: row, disbursements, account: selectedAccount, company: currentCompany, user: currentUser })}
@@ -789,7 +789,7 @@ const PettyCash = () => {
                     <select
                       value={pageSize}
                       onChange={(e) => { setPageSize(Number(e.target.value)); setDisbPage(1); setRepPage(1); }}
-                      className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition"
+                      className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition"
                     >
                       {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
                     </select>
@@ -816,7 +816,7 @@ const PettyCash = () => {
                     <select
                       value={pageSize}
                       onChange={(e) => { setPageSize(Number(e.target.value)); setDisbPage(1); setRepPage(1); }}
-                      className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition"
+                      className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition"
                     >
                       {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
                     </select>
@@ -866,7 +866,7 @@ const PettyCash = () => {
             <textarea className={inputCls} rows={2} value={accountForm.notes} onChange={(e) => setAccountForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Optional notes" />
           </div>
           <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={() => closeAccountModal()} className="rounded-lg border border-slate-300 px-4 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
+            <button type="button" onClick={() => closeAccountModal()} className="rounded-lg border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
             <button type="submit" disabled={submitting} className={`rounded-lg px-5 py-1.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER} disabled:opacity-50`}>
               {submitting ? "Saving…" : "Create Account"}
             </button>
@@ -924,7 +924,7 @@ const PettyCash = () => {
             </div>
           )}
           <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={() => closeDisbModal()} className="rounded-lg border border-slate-300 px-4 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
+            <button type="button" onClick={() => closeDisbModal()} className="rounded-lg border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
             <button type="submit" disabled={submitting} className={`rounded-lg px-5 py-1.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER} disabled:opacity-50`}>
               {submitting ? "Saving…" : "Record Disbursement"}
             </button>
@@ -958,7 +958,7 @@ const PettyCash = () => {
             <textarea className={inputCls} rows={2} value={repForm.notes} onChange={(e) => setRepForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Optional notes for approver" />
           </div>
           <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={() => closeRepModal()} className="rounded-lg border border-slate-300 px-4 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
+            <button type="button" onClick={() => closeRepModal()} className="rounded-lg border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
             <button type="submit" disabled={submitting} className="rounded-lg bg-amber-600 px-5 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50 shadow-sm">
               {submitting ? "Submitting…" : "Submit Request"}
             </button>
@@ -980,7 +980,7 @@ const PettyCash = () => {
               <input className={inputCls} value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="Reason for voiding" />
             </div>
             <div className="flex justify-end gap-2">
-              <button onClick={() => { setShowVoidModal(null); setVoidReason(""); }} className="rounded-lg border border-slate-300 px-4 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button onClick={() => { setShowVoidModal(null); setVoidReason(""); }} className="rounded-lg border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
               <button onClick={handleVoid} disabled={submitting} className="rounded-lg bg-red-600 px-5 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50 shadow-sm">
                 {submitting ? "Voiding…" : "Void"}
               </button>
@@ -1001,7 +1001,7 @@ const PettyCash = () => {
               <input className={inputCls} value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Why is this being rejected?" />
             </div>
             <div className="flex justify-end gap-2">
-              <button onClick={() => { setShowRejectModal(null); setRejectReason(""); }} className="rounded-lg border border-slate-300 px-4 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button onClick={() => { setShowRejectModal(null); setRejectReason(""); }} className="rounded-lg border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
               <button onClick={handleReject} disabled={submitting} className="rounded-lg bg-red-600 px-5 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50 shadow-sm">
                 {submitting ? "Rejecting…" : "Reject"}
               </button>

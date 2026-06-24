@@ -7,6 +7,7 @@ import {
   FaChevronDown,
   FaChevronUp,
   FaEye,
+  FaEyeSlash,
   FaKey,
   FaSave,
   FaShieldAlt,
@@ -167,6 +168,8 @@ export default function AddUserPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [branchesByCompany, setBranchesByCompany] = useState({});
   const [openSections, setOpenSections] = useState(() => new Set(ACCESS_SECTIONS.map((s) => s.id)));
+  const [showPw, setShowPw] = useState(false);
+  const [showCpw, setShowCpw] = useState(false);
 
   const toggleSection = (sectionId) =>
     setOpenSections((prev) => {
@@ -472,24 +475,34 @@ export default function AddUserPage() {
                       </label>
                       {(isEditing || !form.autoGeneratePassword) && (
                         <>
-                          <label className="text-xs font-semibold text-slate-700">
+                          <div className="text-xs font-semibold text-slate-700">
                             <span className="mb-0.5 block">Password {isEditing ? '(optional)' : '*'}</span>
-                            <input
-                              type="password"
-                              value={form.password}
-                              onChange={(e) => updateForm('password', e.target.value)}
-                              className="h-8 w-full rounded-lg border border-slate-200 px-3 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                            />
-                          </label>
-                          <label className="text-xs font-semibold text-slate-700">
+                            <div className="relative">
+                              <input
+                                type={showPw ? 'text' : 'password'}
+                                value={form.password}
+                                onChange={(e) => updateForm('password', e.target.value)}
+                                className="h-8 w-full rounded-lg border border-slate-200 px-3 pr-8 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                              />
+                              <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                {showPw ? <FaEyeSlash size={10} /> : <FaEye size={10} />}
+                              </button>
+                            </div>
+                          </div>
+                          <div className="text-xs font-semibold text-slate-700">
                             <span className="mb-0.5 block">Confirm password</span>
-                            <input
-                              type="password"
-                              value={form.confirmPassword}
-                              onChange={(e) => updateForm('confirmPassword', e.target.value)}
-                              className="h-8 w-full rounded-lg border border-slate-200 px-3 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                            />
-                          </label>
+                            <div className="relative">
+                              <input
+                                type={showCpw ? 'text' : 'password'}
+                                value={form.confirmPassword}
+                                onChange={(e) => updateForm('confirmPassword', e.target.value)}
+                                className="h-8 w-full rounded-lg border border-slate-200 px-3 pr-8 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                              />
+                              <button type="button" onClick={() => setShowCpw(!showCpw)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                {showCpw ? <FaEyeSlash size={10} /> : <FaEye size={10} />}
+                              </button>
+                            </div>
+                          </div>
                         </>
                       )}
                     </div>
@@ -996,7 +1009,7 @@ export default function AddUserPage() {
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#FF8C00] px-4 py-2 text-xs font-black text-white hover:bg-[#E67E00] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <FaSave />
                   {isSaving ? 'Saving...' : isEditing ? 'Update user access' : 'Create user'}

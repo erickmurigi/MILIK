@@ -330,6 +330,15 @@ const syncTenantLeaseRecord = async ({
     return saveLeaseWithUniqueAgreementNumber(activeLease, { businessId });
   }
 
+  // On restore, re-activate the terminated lease rather than creating a duplicate record
+  if (action === "restore") {
+    const terminatedLease = await Lease.findOne({ business: businessId, tenant: tenantId, status: "terminated" }).sort({ createdAt: -1 });
+    if (terminatedLease) {
+      Object.assign(terminatedLease, { ...payload, terminatedAt: null, terminationReason: "" });
+      return saveLeaseWithUniqueAgreementNumber(terminatedLease, { businessId });
+    }
+  }
+
   const newLease = new Lease(payload);
   return saveLeaseWithUniqueAgreementNumber(newLease, { businessId, dateValue: startDate });
 };
@@ -1539,6 +1548,7 @@ export const updateTenantStatus = async (req, res, next) => {
 
       updateData.terminationDate = null;
       updateData.terminationReason = "";
+      updateData.moveOutDate = null;
     }
 
     const updatedTenantDoc = await populateTenantQuery(
@@ -1562,9 +1572,10 @@ export const updateTenantStatus = async (req, res, next) => {
       });
     }
 
+    const isRestore = shouldTenantOccupyUnits(status) && !shouldTenantOccupyUnits(tenant);
     await syncTenantLeaseRecord({
       tenantDoc: updatedTenantDoc,
-      action: status === "terminated" ? "terminate" : "upsert",
+      action: status === "terminated" ? "terminate" : isRestore ? "restore" : "upsert",
       effectiveDate: updateData.terminationDate || updateData.moveOutDate || null,
       terminationReason,
     });
@@ -1761,6 +1772,7 @@ export const transferTenantUnit = async (req, res, next) => {
     const keepPreviousUnitAssigned = Boolean(req.body?.keepPreviousUnitAssigned);
     const reason = normalizeString(req.body?.reason) || "Tenant transferred to a new unit";
     const effectiveDate = req.body?.effectiveDate ? new Date(req.body.effectiveDate) : new Date();
+    const depositTopUpAmount = Math.max(0, Number(req.body?.depositTopUpAmount || 0));
     const previousPrimaryUnitId = toObjectIdString(tenant.unit);
     const previousAdditionalUnitIds = uniqueUnitIds(tenant.additionalUnits || []);
 
@@ -1794,6 +1806,9 @@ export const transferTenantUnit = async (req, res, next) => {
             additionalUnits: requestedUnits.additional,
             rent: calculateTenantAssignedRent(requestedUnitDocs, tenant.rent || 0),
             utilities: deriveAssignedUtilitiesFromUnitDocs(requestedUnitDocs),
+            ...(depositTopUpAmount > 0 && {
+              depositAmount: Number(tenant.depositAmount || 0) + depositTopUpAmount,
+            }),
           },
           $push: {
             unitTransferHistory: {
@@ -1838,6 +1853,7 @@ export const transferTenantUnit = async (req, res, next) => {
         nextAdditionalUnits: getTenantAssignedUnitIds(updatedTenant).filter((id) => id !== nextPrimaryUnitId),
         effectiveDate,
         reason,
+        depositTopUpAmount: depositTopUpAmount || 0,
       },
     });
 

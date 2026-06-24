@@ -426,27 +426,27 @@ const CommissionReports = () => {
                 type="month"
                 value={draftFilters.monthFrom}
                 onChange={(e) => setDraftFilters((prev) => ({ ...prev, monthFrom: e.target.value }))}
-                className="rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-xs text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                className="rounded border border-slate-200 bg-white px-3 py-1 text-xs text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
 
               <input
                 type="month"
                 value={draftFilters.monthTo}
                 onChange={(e) => setDraftFilters((prev) => ({ ...prev, monthTo: e.target.value }))}
-                className="rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-xs text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                className="rounded border border-slate-200 bg-white px-3 py-1 text-xs text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
 
               <select
                 value={draftFilters.status}
                 onChange={(e) => setDraftFilters((prev) => ({ ...prev, status: e.target.value }))}
-                className="rounded border border-orange-300 bg-orange-50 px-3 py-1 text-xs font-semibold text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#FF8C00]"
+                className="rounded border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
               >
                 <option value="recognized">Recognized only</option>
                 <option value="reversed">Reversed only</option>
                 <option value="all">All statuses</option>
               </select>
 
-              <div className="flex min-w-[240px] flex-1 items-center gap-2 rounded border border-gray-300 bg-[#DDEFE1] px-3 py-1 text-xs text-gray-800 shadow-sm transition-colors hover:bg-white focus-within:ring-1 focus-within:ring-[#0B3B2E]">
+              <div className="flex min-w-[240px] flex-1 items-center gap-2 rounded border border-slate-200 bg-white px-3 py-1 text-xs text-gray-800 shadow-sm transition-colors hover:bg-white focus-within:ring-1 focus-within:ring-[#0B3B2E]">
                 <FaSearch className="text-[11px]" />
                 <input
                   value={draftFilters.search}

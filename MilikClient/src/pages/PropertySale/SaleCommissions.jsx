@@ -203,18 +203,18 @@ ${c.payoutReference ? `<div class="row"><span class="lbl">Reference:</span><span
         {/* Table */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="min-h-0 flex-1 overflow-auto">
-            <table className="min-w-full text-xs">
+            <table className="min-w-full text-[11px] border-collapse">
               <thead className="sticky top-0 z-10 bg-[#027333] text-white">
                 <tr>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Comm. No.</th>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Agent</th>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Deal</th>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Property</th>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Rate</th>
-                  <th className="px-3 py-2.5 text-right font-black tracking-wide">Amount</th>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Payout Date</th>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Status</th>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Actions</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Comm. No.</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Agent</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Deal</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Rate</th>
+                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Payout Date</th>
+                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
+                  <th className="px-3 py-1 text-left font-bold">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -222,25 +222,25 @@ ${c.payoutReference ? `<div class="row"><span class="lbl">Reference:</span><span
                   <tr><td colSpan={9} className="px-3 py-8 text-center text-slate-400">Loading...</td></tr>
                 ) : commissions.length === 0 ? (
                   <tr><td colSpan={9} className="px-3 py-8 text-center text-slate-400">No commissions found.</td></tr>
-                ) : commissions.map((c) => (
-                  <tr key={c._id} className="border-t border-slate-100 bg-white transition hover:bg-slate-50">
-                    <td className="px-3 py-2 font-black text-slate-900">{c.commissionNumber}</td>
-                    <td className="px-3 py-2 text-slate-700">{c.agent?.fullName || "—"}</td>
-                    <td className="px-3 py-2 font-bold text-slate-700">{c.deal?.dealNumber || "—"}</td>
-                    <td className="px-3 py-2 text-slate-500">{c.deal?.listing?.title || c.deal?.listing?.listingNumber || "—"}</td>
-                    <td className="px-3 py-2 font-bold text-[#027333]">
+                ) : commissions.map((c, idx) => (
+                  <tr key={c._id} className={`border-b border-gray-100 transition ${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                    <td className="px-3 py-1 border-r border-gray-100 font-black text-slate-900">{c.commissionNumber}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{c.agent?.fullName || "—"}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-700">{c.deal?.dealNumber || "—"}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{c.deal?.listing?.title || c.deal?.listing?.listingNumber || "—"}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 font-bold text-[#027333]">
                       {c.commissionRate}{c.commissionType === "percentage" ? "%" : " KES"}
                     </td>
-                    <td className="px-3 py-2 text-right font-black text-slate-900">{fmtKES(c.commissionAmount)}</td>
-                    <td className="px-3 py-2 text-slate-500">
+                    <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">{fmtKES(c.commissionAmount)}</td>
+                    <td className="px-3 py-1 border-r border-gray-100 text-slate-500">
                       {c.payoutDate ? new Date(c.payoutDate).toLocaleDateString("en-KE") : "—"}
                     </td>
-                    <td className="px-3 py-2">
-                      <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[10px] font-black ${STATUS_BADGE[c.status] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
+                    <td className="px-3 py-1 border-r border-gray-100">
+                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${STATUS_BADGE[c.status] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
                         {c.status}
                       </span>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-1">
                       <div className="flex items-center gap-1">
                         {c.status === "pending" && (
                           <button

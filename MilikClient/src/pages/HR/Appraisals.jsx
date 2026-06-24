@@ -176,21 +176,21 @@ export default function Appraisals() {
 
         {/* ── Table ── */}
         <div className="flex-1 overflow-auto">
-          <table className="min-w-full text-xs">
+          <table className="min-w-full text-[11px] border-collapse">
             <thead className="sticky top-0 z-10 shadow-sm">
-              <tr className="border-b border-slate-200 bg-[#f0f4f2] text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                <th className="px-3 py-1.5 text-left w-8">#</th>
-                <th className="px-3 py-1.5 text-left">Employee</th>
-                <th className="px-3 py-1.5 text-left w-36">Department</th>
-                <th className="px-3 py-1.5 text-left w-40">Designation</th>
-                <th className="px-3 py-1.5 text-left w-44">Cycle</th>
-                <th className="px-3 py-1.5 text-center w-28">Score</th>
-                <th className="px-3 py-1.5 text-center w-24">Status</th>
-                <th className="px-3 py-1.5 text-center w-24">Submitted</th>
-                <th className="px-3 py-1.5 w-6" />
+              <tr className="bg-[#0B3B2E] text-white">
+                <th className="px-3 py-1 text-left font-bold w-8 border-r border-white/10">#</th>
+                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Employee</th>
+                <th className="px-3 py-1 text-left font-bold w-36 border-r border-white/10">Department</th>
+                <th className="px-3 py-1 text-left font-bold w-40 border-r border-white/10">Designation</th>
+                <th className="px-3 py-1 text-left font-bold w-44 border-r border-white/10">Cycle</th>
+                <th className="px-3 py-1 text-center font-bold w-28 border-r border-white/10">Score</th>
+                <th className="px-3 py-1 text-center font-bold w-24 border-r border-white/10">Status</th>
+                <th className="px-3 py-1 text-center font-bold w-24 border-r border-white/10">Submitted</th>
+                <th className="px-3 py-1 w-6" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
+            <tbody>
               {loading && <tr><td colSpan={9} className="py-8 text-center text-[11px] text-slate-400">Loading…</td></tr>}
               {!loading && !appraisals.length && (
                 <tr><td colSpan={9} className="py-10 text-center text-[11px] text-slate-400">
@@ -198,25 +198,25 @@ export default function Appraisals() {
                 </td></tr>
               )}
               {!loading && appraisals.map((a, idx) => (
-                <tr key={a._id} onClick={() => openScoring(a)} className="cursor-pointer hover:bg-[#0B3B2E]/[0.03]">
-                  <td className="px-3 py-1.5 text-slate-400 tabular-nums">{(page - 1) * PAGE_SIZE + idx + 1}</td>
-                  <td className="px-3 py-1.5">
+                <tr key={a._id} onClick={() => openScoring(a)} className={`cursor-pointer border-b border-gray-100 ${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                  <td className="px-3 py-1 text-slate-400 tabular-nums border-r border-gray-100">{(page - 1) * PAGE_SIZE + idx + 1}</td>
+                  <td className="px-3 py-1 border-r border-gray-100">
                     <span className="font-semibold text-slate-800">{a.snapshot.name}</span>
                     <span className="ml-1.5 text-[10px] text-slate-400 tabular-nums">{a.snapshot.employeeNumber}</span>
                   </td>
-                  <td className="px-3 py-1.5 text-slate-600">{a.snapshot.department || '—'}</td>
-                  <td className="px-3 py-1.5 text-slate-500">{a.snapshot.designation || '—'}</td>
-                  <td className="px-3 py-1.5 text-slate-600">
+                  <td className="px-3 py-1 text-slate-600 border-r border-gray-100">{a.snapshot.department || '—'}</td>
+                  <td className="px-3 py-1 text-slate-500 border-r border-gray-100">{a.snapshot.designation || '—'}</td>
+                  <td className="px-3 py-1 text-slate-600 border-r border-gray-100">
                     {a.cycle?.name} <span className="text-slate-400">({a.cycle?.year})</span>
                   </td>
-                  <td className="px-3 py-1.5"><div className="flex justify-center"><MiniBar score={a.overallScore} maxScore={100} /></div></td>
-                  <td className="px-3 py-1.5 text-center">
-                    <span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap ${STATUS_PILL[a.status]}`}>
+                  <td className="px-3 py-1 border-r border-gray-100"><div className="flex justify-center"><MiniBar score={a.overallScore} maxScore={100} /></div></td>
+                  <td className="px-3 py-1 text-center border-r border-gray-100">
+                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold whitespace-nowrap ${STATUS_PILL[a.status]}`}>
                       {a.status === 'InProgress' ? 'In Progress' : a.status}
                     </span>
                   </td>
-                  <td className="px-3 py-1.5 text-center text-[10px] text-slate-400 tabular-nums">{fmtDate(a.submittedAt)}</td>
-                  <td className="px-3 py-1.5 text-center"><FaChevronRight size={8} className="text-slate-300" /></td>
+                  <td className="px-3 py-1 text-center text-[10px] text-slate-400 tabular-nums border-r border-gray-100">{fmtDate(a.submittedAt)}</td>
+                  <td className="px-3 py-1 text-center"><FaChevronRight size={8} className="text-slate-300" /></td>
                 </tr>
               ))}
             </tbody>

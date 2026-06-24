@@ -942,7 +942,7 @@ const TakeOnBalances = () => {
               <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
                 <span className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">Rows <span className="text-slate-900 normal-case">{filteredRows.length}</span></span>
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                <input value={draftFilters.search} onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Search…" className="h-7 w-40 shrink-0 rounded border border-slate-300 bg-white px-2 text-[10px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <input value={draftFilters.search} onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Search…" className="h-7 w-40 shrink-0 rounded border border-slate-200 bg-white px-2 text-[10px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
                 <select value={draftFilters.propertyId} onChange={(e) => setDraftFilters((prev) => ({ ...prev, propertyId: e.target.value, tenant: "" }))} className="h-7 shrink-0 rounded border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="">Property</option>
                   {propertyOptions.map((property) => (<option key={property._id || property.id} value={normalizeId(property._id || property.id)}>{getPropertyDisplay(property)}</option>))}
@@ -967,26 +967,26 @@ const TakeOnBalances = () => {
                   <option value="fully_allocated">Fully Allocated</option>
                 </select>
                 <button type="button" onClick={() => setAppliedFilters(draftFilters)} className={`h-7 shrink-0 rounded px-2 text-[10px] font-semibold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}>Apply</button>
-                <button type="button" onClick={() => { setDraftFilters(emptyFilters); setAppliedFilters(emptyFilters); }} className="h-7 shrink-0 rounded border border-slate-300 bg-white px-2 text-[10px] font-semibold text-slate-700 shadow-sm hover:bg-slate-100">Reset</button>
-                <button type="button" onClick={loadRows} className={`h-7 shrink-0 flex items-center gap-1 rounded border border-slate-300 bg-white px-2 text-[10px] font-bold text-slate-700 shadow-sm hover:bg-slate-50`}><FaRedoAlt size={9} /></button>
+                <button type="button" onClick={() => { setDraftFilters(emptyFilters); setAppliedFilters(emptyFilters); }} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-700 shadow-sm hover:bg-slate-100">Reset</button>
+                <button type="button" onClick={loadRows} className={`h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-700 shadow-sm hover:bg-slate-50`}><FaRedoAlt size={9} /></button>
                 <button type="button" onClick={openCreateModal} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2 text-[10px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaPlus size={9} /> Add Take-On</button>
               </div>
             </div>
 
             <div className="flex-1 min-h-0 overflow-auto">
-              <table className="w-full min-w-[1120px] table-fixed text-[10px]">
+              <table className="w-full min-w-[1120px] table-fixed text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className={`${MILIK_GREEN} text-white`}>
-                    <th className="px-1.5 py-1 text-left text-[9px] font-black uppercase tracking-[0.1em]">Tenant</th>
-                    <th className="px-1.5 py-1 text-left text-[9px] font-black uppercase tracking-[0.1em]">Property</th>
-                    <th className="px-1.5 py-1 text-left text-[9px] font-black uppercase tracking-[0.1em]">Unit</th>
-                    <th className="px-1.5 py-1 text-left text-[9px] font-black uppercase tracking-[0.1em]">Bill Item</th>
-                    <th className="px-1.5 py-1 text-left text-[9px] font-black uppercase tracking-[0.1em]">Type</th>
-                    <th className="px-1.5 py-1 text-right text-[9px] font-black uppercase tracking-[0.1em]">Amount</th>
-                    <th className="px-1.5 py-1 text-right text-[9px] font-black uppercase tracking-[0.1em]">Allocated</th>
-                    <th className="px-1.5 py-1 text-right text-[9px] font-black uppercase tracking-[0.1em]">Balance</th>
-                    <th className="px-1.5 py-1 text-left text-[9px] font-black uppercase tracking-[0.1em]">Effective Date</th>
-                    <th className="px-1.5 py-1 text-right text-[9px] font-black uppercase tracking-[0.1em]">Actions</th>
+                    <th className="px-2 py-1 text-left font-bold border-r border-white/10">Tenant</th>
+                    <th className="px-2 py-1 text-left font-bold border-r border-white/10">Property</th>
+                    <th className="px-2 py-1 text-left font-bold border-r border-white/10">Unit</th>
+                    <th className="px-2 py-1 text-left font-bold border-r border-white/10">Bill Item</th>
+                    <th className="px-2 py-1 text-left font-bold border-r border-white/10">Type</th>
+                    <th className="px-2 py-1 text-right font-bold border-r border-white/10">Amount</th>
+                    <th className="px-2 py-1 text-right font-bold border-r border-white/10">Allocated</th>
+                    <th className="px-2 py-1 text-right font-bold border-r border-white/10">Balance</th>
+                    <th className="px-2 py-1 text-left font-bold border-r border-white/10">Effective Date</th>
+                    <th className="px-2 py-1 text-right font-bold">Actions</th>
                   </tr>
                 </thead>
 
@@ -1012,26 +1012,26 @@ const TakeOnBalances = () => {
                         <React.Fragment key={rowKey}>
                         <tr
                           onClick={() => setExpandedBalanceId((prev) => (prev === rowKey ? null : rowKey))}
-                          className={`cursor-pointer border-t border-slate-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/40"} hover:bg-slate-50`}
+                          className={`cursor-pointer border-b border-gray-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/60"} hover:bg-blue-50/40`}
                         >
-                          <td className="min-w-[220px] px-1.5 py-1 text-[10px]">
+                          <td className="min-w-[220px] px-2 py-1 border-r border-gray-100">
                             <div className="font-semibold text-slate-900">{getTenantDisplayName(row.tenant)}</div>
                           </td>
-                          <td className="whitespace-nowrap px-1.5 py-1 text-[10px] text-slate-700">{getRowPropertyName(row)}</td>
-                          <td className="whitespace-nowrap px-1.5 py-1 text-[10px] text-slate-700">{getUnitDisplay(row.unit)}</td>
-                          <td className="min-w-[220px] px-1.5 py-1 text-[10px] text-slate-700">
+                          <td className="whitespace-nowrap px-2 py-1 border-r border-gray-100 text-slate-700">{getRowPropertyName(row)}</td>
+                          <td className="whitespace-nowrap px-2 py-1 border-r border-gray-100 text-slate-700">{getUnitDisplay(row.unit)}</td>
+                          <td className="min-w-[220px] px-2 py-1 border-r border-gray-100 text-slate-700">
                             <div className="font-semibold text-slate-900">{row.billItemLabel}</div>
-                            <div className="mt-1 text-xs text-slate-500">{row.invoiceNumber || "No invoice number"}</div>
+                            <div className="mt-1 text-[10px] text-slate-500">{row.invoiceNumber || "No invoice number"}</div>
                           </td>
-                          <td className="whitespace-nowrap px-1.5 py-1 text-[10px] text-slate-700">{row.type}</td>
-                          <td className="whitespace-nowrap px-1.5 py-1 text-right text-[10px] font-semibold text-slate-900">{formatCurrency(row.amount)}</td>
-                          <td className="whitespace-nowrap px-1.5 py-1 text-right text-[10px] text-slate-700">{formatCurrency(row.allocated)}</td>
-                          <td className="whitespace-nowrap px-1.5 py-1 text-right text-[10px]">
+                          <td className="whitespace-nowrap px-2 py-1 border-r border-gray-100 text-slate-700">{row.type}</td>
+                          <td className="whitespace-nowrap px-2 py-1 border-r border-gray-100 text-right font-semibold text-slate-900">{formatCurrency(row.amount)}</td>
+                          <td className="whitespace-nowrap px-2 py-1 border-r border-gray-100 text-right text-slate-700">{formatCurrency(row.allocated)}</td>
+                          <td className="whitespace-nowrap px-2 py-1 border-r border-gray-100 text-right">
                             <div className="font-semibold text-slate-900">{formatCurrency(row.balance)}</div>
-                            <span className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold ${meta.classes}`}>{meta.label}</span>
+                            <span className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${meta.classes}`}>{meta.label}</span>
                           </td>
-                          <td className="whitespace-nowrap px-1.5 py-1 text-[10px] text-slate-700">{formatDate(row.effectiveDate)}</td>
-                          <td className="whitespace-nowrap px-1.5 py-1 text-right text-[10px]">
+                          <td className="whitespace-nowrap px-2 py-1 border-r border-gray-100 text-slate-700">{formatDate(row.effectiveDate)}</td>
+                          <td className="whitespace-nowrap px-2 py-1 text-right">
                             <div className="inline-flex flex-wrap justify-end gap-2 action-buttons">
                               <button
                                 type="button"

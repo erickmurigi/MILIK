@@ -80,6 +80,7 @@ const ExpenseRequisition = () => {
   const [filters, setFilters] = useState({ search: "", status: "all", propertyId: "all" });
   const debouncedSearch = useDebounce(filters.search, 400);
   const [form, setForm] = useState(blankForm);
+  const [statusModal, setStatusModal] = useState({ open: false, row: null, status: "", reason: "", loading: false });
 
   const canCreate  = hasCompanyPermission(currentUser, currentCompany, "expenses", "create", "accounts");
   const canUpdate  = hasCompanyPermission(currentUser, currentCompany, "expenses", "update", "accounts");
@@ -276,41 +277,38 @@ const ExpenseRequisition = () => {
     }
   };
 
-  const handleStatus = async (row, status) => {
+  const handleStatus = (row, status) => {
+    if (status === "draft") {
+      updateExpenseRequisitionStatus(row._id, { status, business: currentCompany?._id, company: currentCompany?._id })
+        .then((saved) => {
+          setRows((prev) => prev.map((item) => (item._id === row._id ? saved : item)));
+          toast.success("Expense requisition moved back to draft");
+        })
+        .catch((error) => toast.error(error?.response?.data?.message || "Failed to update requisition"));
+      return;
+    }
+    const defaultReason = status === "approved" ? (row?.approvalNote || "") : status === "rejected" ? (row?.rejectionReason || "") : (row?.cancellationReason || "Cancelled");
+    setStatusModal({ open: true, row, status, reason: defaultReason, loading: false });
+  };
+
+  const handleStatusConfirm = async () => {
+    const { row, status, reason } = statusModal;
+    if (status === "rejected" && !String(reason || "").trim()) {
+      toast.warning("Rejection reason is required");
+      return;
+    }
+    const payload = { status, business: currentCompany?._id, company: currentCompany?._id };
+    if (status === "approved") payload.approvalNote = reason;
+    else payload.reason = reason;
+    setStatusModal((prev) => ({ ...prev, loading: true }));
     try {
-      let payload = { status, business: currentCompany?._id, company: currentCompany?._id };
-
-      if (status === "approved") {
-        const approvalNote = window.prompt("Approval note (optional)", row?.approvalNote || "");
-        if (approvalNote === null) return;
-        payload = { ...payload, approvalNote };
-      }
-
-      if (status === "rejected") {
-        const reason = window.prompt("Enter rejection reason", row?.rejectionReason || "");
-        if (reason === null) return;
-        if (!String(reason || "").trim()) {
-          toast.warning("Rejection reason is required");
-          return;
-        }
-        payload = { ...payload, reason };
-      }
-
-      if (status === "cancelled") {
-        const reason = window.prompt("Enter cancellation reason", row?.cancellationReason || "Cancelled");
-        if (reason === null) return;
-        payload = { ...payload, reason };
-      }
-
       const saved = await updateExpenseRequisitionStatus(row._id, payload);
       setRows((prev) => prev.map((item) => (item._id === row._id ? saved : item)));
-      toast.success(
-        status === "draft"
-          ? "Expense requisition moved back to draft"
-          : `Requisition ${status}`
-      );
+      toast.success(`Requisition ${status}`);
+      setStatusModal({ open: false, row: null, status: "", reason: "", loading: false });
     } catch (error) {
       toast.error(error?.response?.data?.message || `Failed to mark requisition ${status}`);
+      setStatusModal((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -496,16 +494,16 @@ const ExpenseRequisition = () => {
             </div>
 
             <div className="flex-1 min-h-0 overflow-auto">
-              <table className="w-full min-w-[1120px] text-xs">
+              <table className="w-full min-w-[1120px] text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className="bg-[#0B3B2E] text-white">
-                    <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]"><button type="button" onClick={toggleSelectAll}>{selectedIds.length === rows.length && rows.length > 0 ? <FaCheck className="text-white" /> : <FaSquare className="text-white/80" />}</button></th>
-                    <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Requisition</th>
-                    <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Property / Provider</th>
-                    <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Needed By</th>
-                    <th className="px-3 py-2 text-right text-[11px] font-black uppercase tracking-[0.16em]">Amount</th>
-                    <th className="px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.16em]">Status</th>
-                    <th className="px-3 py-2 text-right text-[11px] font-black uppercase tracking-[0.16em]">Actions</th>
+                    <th className="px-3 py-1 text-left font-black border-r border-white/10"><button type="button" onClick={toggleSelectAll}>{selectedIds.length === rows.length && rows.length > 0 ? <FaCheck className="text-white" /> : <FaSquare className="text-white/80" />}</button></th>
+                    <th className="px-3 py-1 text-left font-black border-r border-white/10">Requisition</th>
+                    <th className="px-3 py-1 text-left font-black border-r border-white/10">Property / Provider</th>
+                    <th className="px-3 py-1 text-left font-black border-r border-white/10">Needed By</th>
+                    <th className="px-3 py-1 text-right font-black border-r border-white/10">Amount</th>
+                    <th className="px-3 py-1 text-left font-black border-r border-white/10">Status</th>
+                    <th className="px-3 py-1 text-right font-black">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -515,14 +513,14 @@ const ExpenseRequisition = () => {
                     <tr><td colSpan="7" className="px-4 py-10 text-center text-slate-500">No expense requisitions found.</td></tr>
                   ) : (
                     currentPageRows.map((row, index) => (
-                      <tr key={row._id} className={`border-t border-slate-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/40"} hover:bg-slate-50`}>
-                        <td className="px-3 py-1.5"><button type="button" onClick={() => toggleSelect(row._id)}>{selectedIds.includes(row._id) ? <FaCheck className="text-[#0B3B2E]" /> : <FaSquare className="text-slate-400" />}</button></td>
-                        <td className="px-3 py-1.5"><div className="font-black text-slate-900">{row.requisitionNo}</div><div className="text-xs text-slate-500">{row.title}</div>{row.linkedVoucher?.voucherNo ? <div className="mt-1 text-[11px] font-bold text-violet-600">Voucher: {row.linkedVoucher.voucherNo}</div> : null}</td>
-                        <td className="px-3 py-1.5 text-slate-700"><div className="font-medium text-slate-900">{row.property?.propertyName || row.property?.name || "No property"}</div><div className="text-xs text-slate-500">{row.serviceProvider?.name || row.vendorName || "No provider"}</div></td>
-                        <td className="px-3 py-1.5 text-slate-700">{row.neededBy ? new Date(row.neededBy).toLocaleDateString() : "-"}</td>
-                        <td className="px-3 py-1.5 text-right font-black text-slate-900">KES {Number(row.amount || 0).toLocaleString()}</td>
-                        <td className="px-3 py-1.5"><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${statusPill[row.status] || statusPill.draft}`}>{row.status}</span></td>
-                        <td className="px-3 py-1.5 text-right">{renderActions(row)}</td>
+                      <tr key={row._id} className={`border-b border-gray-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/60"} hover:bg-blue-50/40`}>
+                        <td className="px-3 py-1 border-r border-gray-100"><button type="button" onClick={() => toggleSelect(row._id)}>{selectedIds.includes(row._id) ? <FaCheck className="text-[#0B3B2E]" /> : <FaSquare className="text-slate-400" />}</button></td>
+                        <td className="px-3 py-1 border-r border-gray-100"><div className="font-black text-slate-900">{row.requisitionNo}</div><div className="text-[10px] text-slate-500">{row.title}</div>{row.linkedVoucher?.voucherNo ? <div className="mt-1 text-[10px] font-bold text-violet-600">Voucher: {row.linkedVoucher.voucherNo}</div> : null}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700"><div className="font-medium text-slate-900">{row.property?.propertyName || row.property?.name || "No property"}</div><div className="text-[10px] text-slate-500">{row.serviceProvider?.name || row.vendorName || "No provider"}</div></td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row.neededBy ? new Date(row.neededBy).toLocaleDateString() : "-"}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">KES {Number(row.amount || 0).toLocaleString()}</td>
+                        <td className="px-3 py-1 border-r border-gray-100"><span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${statusPill[row.status] || statusPill.draft}`}>{row.status}</span></td>
+                        <td className="px-3 py-1 text-right">{renderActions(row)}</td>
                       </tr>
                     ))
                   )}
@@ -539,7 +537,7 @@ const ExpenseRequisition = () => {
                   <select
                     value={pageSize}
                     onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                    className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition"
+                    className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition"
                   >
                     {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
                   </select>
@@ -564,25 +562,78 @@ const ExpenseRequisition = () => {
               <button onClick={closeModal} className="rounded-full border border-white/30 p-2 hover:bg-white/10"><FaTimes /></button>
             </div>
             <div className="grid gap-2 p-6 md:grid-cols-2 xl:grid-cols-3">
-              <label className="block xl:col-span-2"><span className="text-xs font-bold text-slate-700">Title</span><input value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Amount</span><input type="number" value={form.amount} onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Property</span><select value={form.property} onChange={(e) => setForm((prev) => ({ ...prev, property: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">Select property</option>{properties.map((property) => <option key={property._id} value={property._id}>{property.propertyCode ? `[${property.propertyCode}] ` : ""}{property.propertyName || property.name}</option>)}</select></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Service Provider</span><select value={form.serviceProvider} onChange={(e) => setForm((prev) => ({ ...prev, serviceProvider: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="">Select provider</option>{providers.map((provider) => <option key={provider._id} value={provider._id}>{provider.providerCode} - {provider.name}</option>)}</select></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Priority</span><select value={form.priority} onChange={(e) => setForm((prev) => ({ ...prev, priority: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></select></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Category</span><select value={form.category} onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"><option value="general">General</option><option value="maintenance">Maintenance</option><option value="repair">Repair</option><option value="utility">Utility</option><option value="tax">Tax</option><option value="insurance">Insurance</option><option value="supplies">Supplies</option><option value="other">Other</option></select></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Request Date</span><input type="date" value={form.requestDate} onChange={(e) => setForm((prev) => ({ ...prev, requestDate: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
-              <label className="block"><span className="text-xs font-bold text-slate-700">Needed By</span><input type="date" value={form.neededBy} onChange={(e) => setForm((prev) => ({ ...prev, neededBy: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
-              <label className="block xl:col-span-3"><span className="text-xs font-bold text-slate-700">Description</span><textarea rows={3} value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
-              <label className="block xl:col-span-3"><span className="text-xs font-bold text-slate-700">Internal Notes</span><textarea rows={2} value={form.notes} onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20" /></label>
+              <label className="block xl:col-span-2"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Title <span className="text-red-500">*</span></span><input value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" /></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Amount <span className="text-red-500">*</span></span><input type="number" value={form.amount} onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" /></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Property</span><select value={form.property} onChange={(e) => setForm((prev) => ({ ...prev, property: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"><option value="">Select property</option>{properties.map((property) => <option key={property._id} value={property._id}>{property.propertyCode ? `[${property.propertyCode}] ` : ""}{property.propertyName || property.name}</option>)}</select></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Service Provider</span><select value={form.serviceProvider} onChange={(e) => setForm((prev) => ({ ...prev, serviceProvider: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"><option value="">Select provider</option>{providers.map((provider) => <option key={provider._id} value={provider._id}>{provider.providerCode} - {provider.name}</option>)}</select></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Priority</span><select value={form.priority} onChange={(e) => setForm((prev) => ({ ...prev, priority: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></select></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Category</span><select value={form.category} onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"><option value="general">General</option><option value="maintenance">Maintenance</option><option value="repair">Repair</option><option value="utility">Utility</option><option value="tax">Tax</option><option value="insurance">Insurance</option><option value="supplies">Supplies</option><option value="other">Other</option></select></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Request Date</span><input type="date" value={form.requestDate} onChange={(e) => setForm((prev) => ({ ...prev, requestDate: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" /></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Needed By</span><input type="date" value={form.neededBy} onChange={(e) => setForm((prev) => ({ ...prev, neededBy: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" /></label>
+              <label className="block xl:col-span-3"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Description</span><textarea rows={3} value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" /></label>
+              <label className="block xl:col-span-3"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Internal Notes</span><textarea rows={2} value={form.notes} onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" /></label>
             </div>
             <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 bg-white/95 px-6 py-4 backdrop-blur-sm">
-              <button onClick={closeModal} className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-black text-slate-700">Cancel</button>
-              <button onClick={() => handleSave("draft")} disabled={saving} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-700 disabled:opacity-60"><FaSave /> {saving ? "Saving..." : editingId ? "Update Draft" : "Save Draft"}</button>
-              <button onClick={() => handleSave("submitted")} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-3 py-2 text-xs font-black text-white disabled:opacity-60"><FaCheck /> {saving ? "Saving..." : editingId ? "Update & Submit" : "Save & Submit"}</button>
+              <button onClick={closeModal} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button onClick={() => handleSave("draft")} disabled={saving} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"><FaSave /> {saving ? "Saving..." : editingId ? "Update Draft" : "Save Draft"}</button>
+              <button onClick={() => handleSave("submitted")} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60"><FaCheck /> {saving ? "Saving..." : editingId ? "Update & Submit" : "Save & Submit"}</button>
             </div>
           </div>
         </div>
       )}
+
+      {statusModal.open && (() => {
+        const isApprove  = statusModal.status === "approved";
+        const isReject   = statusModal.status === "rejected";
+        const headerCls  = isApprove ? "bg-emerald-700" : isReject ? "bg-red-700" : "bg-amber-700";
+        const btnCls     = isApprove ? "bg-emerald-600 hover:bg-emerald-700" : isReject ? "bg-red-600 hover:bg-red-700" : "bg-amber-600 hover:bg-amber-700";
+        const bannerCls  = isApprove ? "bg-emerald-50 border-emerald-200 text-emerald-800" : isReject ? "bg-red-50 border-red-200 text-red-800" : "bg-amber-50 border-amber-200 text-amber-800";
+        const iconCls    = isApprove ? "text-emerald-500" : isReject ? "text-red-500" : "text-amber-500";
+        const Icon       = isApprove ? FaCheck : FaUndo;
+        const label      = isApprove ? "Approve Requisition" : isReject ? "Reject Requisition" : "Cancel Requisition";
+        const fieldLabel = isApprove ? "Approval Note (optional)" : isReject ? "Rejection Reason *" : "Cancellation Reason";
+        const btnLabel   = isApprove ? "Approve" : isReject ? "Reject" : "Cancel Requisition";
+        const banner     = isApprove ? "Approving clears this requisition for payment settlement." : isReject ? "Rejecting will notify the requester. A reason is required." : "This will cancel the requisition. This action cannot be undone.";
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+              <div className={`${headerCls} px-6 py-4 flex items-center gap-3`}>
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15">
+                  <Icon className="text-white text-sm" />
+                </div>
+                <div>
+                  <h2 className="text-white font-semibold text-base leading-tight">{label}</h2>
+                  <p className="text-white/60 text-xs mt-0.5">{statusModal.row?.requisitionNumber || ""}</p>
+                </div>
+              </div>
+              <div className="px-6 py-5 space-y-4">
+                <div className={`flex items-start gap-3 rounded-lg border px-4 py-3 ${bannerCls}`}>
+                  <FaRedoAlt className={`mt-0.5 shrink-0 ${iconCls}`} />
+                  <p className="text-sm">{banner}</p>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide">{fieldLabel}</label>
+                  <textarea
+                    rows={3}
+                    autoFocus
+                    className="w-full resize-none rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                    placeholder={isApprove ? "Optional approval note…" : isReject ? "Required — reason for rejection…" : "Reason for cancellation…"}
+                    value={statusModal.reason}
+                    onChange={(e) => setStatusModal((prev) => ({ ...prev, reason: e.target.value }))}
+                    disabled={statusModal.loading}
+                  />
+                </div>
+              </div>
+              <div className="px-6 pb-5 flex justify-end gap-3">
+                <button onClick={() => setStatusModal({ open: false, row: null, status: "", reason: "", loading: false })} disabled={statusModal.loading} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50">Cancel</button>
+                <button onClick={handleStatusConfirm} disabled={statusModal.loading} className={`rounded-lg ${btnCls} px-5 py-2 text-sm font-semibold text-white transition-colors disabled:opacity-60 flex items-center gap-2`}>
+                  {statusModal.loading ? <><svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg>Saving…</> : <><Icon className="text-xs" />{btnLabel}</>}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </DashboardLayout>
   );
 };
