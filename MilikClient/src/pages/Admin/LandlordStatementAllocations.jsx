@@ -8,7 +8,7 @@ import {
   FaSearch, FaCalendarAlt, FaExchangeAlt, FaHistory, FaShieldAlt,
   FaTimes, FaCheck, FaInfoCircle, FaMoneyBillWave, FaFileInvoice,
   FaReceipt, FaFileAlt, FaChevronLeft, FaChevronRight, FaRedoAlt,
-  FaUser, FaPlus, FaChevronDown, FaChevronUp,
+  FaUser, FaPlus, FaChevronDown, FaChevronUp, FaWrench,
 } from "react-icons/fa";
 
 const ITEMS_PER_PAGE = 50;
@@ -19,6 +19,12 @@ const _dateFmt = new Intl.DateTimeFormat("en-KE", { day: "2-digit", month: "shor
 const fmtKES  = (n) => _numFmt.format(Number(n || 0));
 const fmtDate = (d) => d ? _dateFmt.format(new Date(d)) : "-";
 const toInput  = (d) => d ? new Date(d).toISOString().slice(0, 10) : "";
+// "Water meter reading for 2026-06 (...)" → "Water Rdg"
+// "Electricity meter reading…"           → "Electricity Rdg"
+const parseMeterUtilityLabel = (desc) => {
+  const m = (desc || "").match(/^(.+?)\s+meter\s+reading/i);
+  return m ? `${m[1]} Rdg` : null;
+};
 const round2     = (n) => Math.round(Number(n || 0) * 100) / 100;
 const fmtPeriod  = (d) => { if (!d) return "—"; const dt = new Date(d); return `${dt.toLocaleString("en", { month: "short" })}/${dt.getFullYear()}`; };
 
@@ -143,6 +149,7 @@ export default function LandlordStatementAllocations() {
   const [reallocPanel,   setReallocPanel]   = useState(null);
   const [availInvoices,  setAvailInvoices]  = useState([]);
   const [invLoading,     setInvLoading]     = useState(false);
+  const [repairing,      setRepairing]      = useState(false);
   const [invFilter,      setInvFilter]      = useState("");
   const [reallocRows,    setReallocRows]    = useState([]);
   const [reallocReason,  setReallocReason]  = useState("");
@@ -234,24 +241,28 @@ export default function LandlordStatementAllocations() {
       if (tx.type === "payment") {
         const allocs = tx.allocations || [];
         if (allocs.length > 0) {
-          allocs.forEach((a, ai) => rows.push({
-            _rowKey: `${tx._id}-a${ai}`,
-            _kind: "paid",
-            _tx: tx,
-            _isFirst: ai === 0,
-            category: a.category,
-            period: a.invoiceDate || tx.transactionDate,
-            narration: a.description || CAT_LABEL[a.category] || "",
-            invoiceNumber: a.invoiceNumber || null,
-            txnNo: tx.refNumber,
-            refAlt: tx.refAlt,
-            txDate: tx.transactionDate,
-            bankingDate: tx.bookingDate || tx.transactionDate,
-            bill: 0,
-            paid: round2(Number(a.appliedAmount || 0)),
-            status: tx.status,
-            isUnapplied: !a.invoice,
-          }));
+          allocs.forEach((a, ai) => {
+            const allocMeterLabel = parseMeterUtilityLabel(a.description || "");
+            rows.push({
+              _rowKey: `${tx._id}-a${ai}`,
+              _kind: "paid",
+              _tx: tx,
+              _isFirst: ai === 0,
+              category: allocMeterLabel ? "METER_READING" : a.category,
+              _meterLabel: allocMeterLabel || null,
+              period: a.invoiceDate || tx.transactionDate,
+              narration: a.description || CAT_LABEL[a.category] || "",
+              invoiceNumber: a.invoiceNumber || null,
+              txnNo: tx.refNumber,
+              refAlt: tx.refAlt,
+              txDate: tx.transactionDate,
+              bankingDate: tx.bookingDate || tx.transactionDate,
+              bill: 0,
+              paid: round2(Number(a.appliedAmount || 0)),
+              status: tx.status,
+              isUnapplied: !a.invoice,
+            });
+          });
         } else {
           rows.push({
             _rowKey: `${tx._id}-p`,
@@ -275,27 +286,27 @@ export default function LandlordStatementAllocations() {
       } else {
         const isCreditNote = tx.type === "credit_note";
         const isMeterReading = tx.type === "meter_reading";
-        const isBilledReading = isMeterReading && tx.status === "billed";
+        // Billed readings: no separate row — their label/info is merged into the invoice row.
+        // Unbilled (draft) readings: show as a bill row so the user sees a pending charge.
+        if (isMeterReading && tx.status === "billed") continue;
+        const meterLabel = !isCreditNote && !isMeterReading
+          ? parseMeterUtilityLabel(tx.description)
+          : null;
         rows.push({
           _rowKey: `${tx._id}-b`,
           _kind: isCreditNote ? "credit" : "bill",
           _tx: tx,
           _isFirst: true,
-          category: isMeterReading ? "METER_READING" : tx.subType,
+          category: meterLabel ? "METER_READING" : (isMeterReading ? "METER_READING" : tx.subType),
+          _meterLabel: meterLabel || (isMeterReading ? parseMeterUtilityLabel(tx.description) || "Meter Rdg" : null),
           period: tx.transactionDate,
-          narration: isMeterReading
-            ? (isBilledReading
-                ? `Reading → ${tx.linkedInvoiceNumber || "Invoiced"}`
-                : (tx.description || "Pending billing"))
-            : (tx.description || ""),
-          invoiceNumber: isMeterReading ? (tx.linkedInvoiceNumber || null) : tx.refNumber,
+          narration: tx.description || "",
+          invoiceNumber: tx.refNumber,
           txnNo: null,
           refAlt: null,
           txDate: tx.transactionDate,
           bankingDate: tx.bookingDate,
-          // Billed readings show bill=0 — the invoice row already carries the amount.
-          // Unbilled (draft) readings show the projected charge.
-          bill: isCreditNote ? 0 : isBilledReading ? 0 : round2(Number(tx.amount || 0)),
+          bill: isCreditNote ? 0 : round2(Number(tx.amount || 0)),
           paid: isCreditNote ? round2(Number(tx.amount || 0)) : 0,
           status: tx.status,
           outstanding: tx.outstanding,
@@ -454,6 +465,23 @@ export default function LandlordStatementAllocations() {
   const closeReallocPanel = useCallback(() => {
     setReallocPanel(null); setReallocRows([]); setAvailInvoices([]); setReallocReason(""); setInvFilter("");
   }, []);
+
+  const runRepair = useCallback(async () => {
+    if (!reallocPanel?.tenantId || repairing) return;
+    setRepairing(true);
+    try {
+      await adminRequests.post("/admin/statement-allocations/recompute", {
+        tenantId: reallocPanel.tenantId, business: bizId,
+      });
+      setInvLoading(true);
+      const { data } = await adminRequests.get("/admin/statement-allocations/invoices", {
+        params: { tenantId: reallocPanel.tenantId, paymentId: reallocPanel._id, business: bizId },
+      });
+      setAvailInvoices(data.data || []);
+    } catch (e) {
+      toast.error(e.response?.data?.error || "Repair failed");
+    } finally { setRepairing(false); setInvLoading(false); }
+  }, [reallocPanel, bizId, repairing]);
 
   const reallocTotal  = useMemo(() => round2(reallocRows.reduce((s, r) => s + Number(r.amount || 0), 0)), [reallocRows]);
   const reallocAmt    = useMemo(() => round2(reallocPanel?.amount || 0), [reallocPanel]);
@@ -808,8 +836,8 @@ export default function LandlordStatementAllocations() {
                         const isPaid = row._kind === "paid";
                         const isBill = row._kind === "bill";
                         const hasOverride = row.bankingDate && toInput(row.bankingDate) !== toInput(row.txDate);
-                        const catLabel = CAT_LABEL[row.category] || row.category || (row.isUnapplied ? "Unapplied" : isPaid ? "Payment" : "—");
-                        const badgeCls = CAT_BADGE[row.category] || (row.isUnapplied ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600");
+                        const catLabel = row._meterLabel || CAT_LABEL[row.category] || row.category || (row.isUnapplied ? "Unapplied" : isPaid ? "Payment" : "—");
+                        const badgeCls = (row._meterLabel ? CAT_BADGE.METER_READING : CAT_BADGE[row.category]) || (row.isUnapplied ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600");
                         const isReversed = row.status === "reversed";
                         const rowBg = isReversed
                           ? "bg-slate-50/80 opacity-60"
@@ -1166,7 +1194,7 @@ export default function LandlordStatementAllocations() {
 
               {/* Open invoices picker */}
               <div>
-                <div className="mb-2 flex items-center gap-2">
+                <div className="mb-2 flex items-center gap-2 flex-wrap">
                   <p className="text-xs font-black uppercase tracking-wider text-slate-700">
                     Open Invoices
                     {invLoading && <span className="ml-1 text-[10px] font-normal normal-case text-slate-400">Loading…</span>}
@@ -1177,6 +1205,11 @@ export default function LandlordStatementAllocations() {
                       Ksh {fmtKES(remaining)} to allocate
                     </span>
                   )}
+                  <button onClick={runRepair} disabled={repairing || invLoading}
+                    title="Recompute all invoice balances for this tenant from scratch — fixes stale outstanding figures"
+                    className="ml-auto inline-flex items-center gap-1 rounded border border-rose-300 bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700 hover:bg-rose-600 hover:text-white hover:border-rose-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                    <FaWrench size={8} /> {repairing ? "Repairing…" : "Repair Balances"}
+                  </button>
                 </div>
 
                 {/* Filter for invoices */}
@@ -1223,7 +1256,7 @@ export default function LandlordStatementAllocations() {
                               <div className="flex items-center gap-1 mt-px">
                                 <p className="text-[10px] text-slate-400">{CAT_LABEL[inv.category] || inv.category}</p>
                                 {inv._currentlyAllocated && <span className="text-[9px] font-bold text-blue-600 bg-blue-50 border border-blue-200 rounded px-1 leading-tight">Currently allocated</span>}
-                                {noOutstanding && <span className="text-[9px] font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded px-1 leading-tight">Balance unclear — run Repair</span>}
+                                {noOutstanding && <span className="text-[9px] font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded px-1 leading-tight">Balance unclear — click Repair Balances above</span>}
                               </div>
                             </div>
                             <span className="shrink-0 text-[10px] text-slate-400">{fmtDate(inv.invoiceDate)}</span>

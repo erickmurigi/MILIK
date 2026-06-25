@@ -528,11 +528,19 @@ export const reallocatePayment = async (req, res) => {
     );
 
     await session.commitTransaction();
+
+    // Full snapshot recompute after commit. The in-memory Step 1/2 outstanding
+    // calculation starts from the DB value, which already embeds other receipts
+    // applied to the same invoices — only a full replay gives the correct result.
+    await recomputeTenantFinancialState({
+      businessId,
+      tenantId: String(payment.tenant),
+    }).catch((e) => console.error("[reallocatePayment] post-commit recompute:", e.message));
+
     res.json({
       success: true,
       allocationSummary: payment.allocationSummary,
       allocations: payment.allocations,
-      // Frontend must display this warning so the user knows to regenerate the landlord statement
       statementWarning: "Payment allocation changed. Regenerate the landlord statement for the affected period to reflect updated figures.",
     });
   } catch (err) {
@@ -602,6 +610,20 @@ export const getTenantInvoicesForRealloc = async (req, res) => {
         ...currentlyAllocated.map(applyComputedOutstanding),
       ],
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message || "Server error" });
+  }
+};
+
+// ─── RECOMPUTE TENANT INVOICE BALANCES ──────────────────────────────────────────
+export const recomputeTenantState = async (req, res) => {
+  try {
+    if (!isAdmin(req.user)) return res.status(403).json({ error: "Milik Admin access required" });
+    const businessId = getBizId(req);
+    const { tenantId } = req.body;
+    if (!isOid(businessId) || !isOid(tenantId)) return res.status(400).json({ error: "Valid business and tenantId required" });
+    await recomputeTenantFinancialState({ businessId, tenantId });
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message || "Server error" });
   }

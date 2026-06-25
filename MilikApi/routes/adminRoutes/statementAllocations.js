@@ -6,6 +6,7 @@ import {
   reallocatePayment,
   getTenantInvoicesForRealloc,
   getAdjustmentHistory,
+  recomputeTenantState,
 } from "../../controllers/adminController/statementAllocations.js";
 
 const router = express.Router();
@@ -15,5 +16,6 @@ router.get("/invoices",        verifyUser, getTenantInvoicesForRealloc);
 router.get("/history",         verifyUser, getAdjustmentHistory);
 router.patch("/booking-date",         verifyUser, adjustBookingDate);
 router.patch("/reallocate",           verifyUser, reallocatePayment);
+router.post("/recompute",             verifyUser, recomputeTenantState);
 
 export default router;
