@@ -57,6 +57,7 @@ import landlordAdvancementsRoutes from "./routes/propertyRoutes/landlordAdvancem
 import landlordReceiptsRoutes from "./routes/propertyRoutes/landlordReceipts.js";
 import pettyCashRoutes from "./routes/propertyRoutes/pettyCash.js";
 import auditLogRoutes from "./routes/auditLogs.js";
+import statementAllocationsRoutes from "./routes/adminRoutes/statementAllocations.js";
 import invLocationRoutes      from "./modules/inventory/routes/locations.js";
 import invCategoryRoutes      from "./modules/inventory/routes/categories.js";
 import invProductRoutes       from "./modules/inventory/routes/products.js";
@@ -564,6 +565,7 @@ app.use("/api/fixed-assets", fixedAssetsRoutes);
 app.use("/api/budgets", budgetRoutes);
 app.use("/api/petty-cash", pettyCashRoutes);
 app.use("/api/audit-logs", auditLogRoutes);
+app.use("/api/admin/statement-allocations", statementAllocationsRoutes);
 app.use("/api/carwash/services", carWashServiceRoutes);
 app.use("/api/carwash/jobs", carWashJobRoutes);
 app.use("/api/carwash/payments", carWashPaymentRoutes);

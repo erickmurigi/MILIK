@@ -73,6 +73,7 @@ const LandlordCommissionsStatement   = lazy(() => import("./pages/Landlord/Landl
 const LandlordStandingOrders         = lazy(() => import("./pages/Landlord/LandlordStandingOrders"));
 const LandlordAdvancements           = lazy(() => import("./pages/Landlord/LandlordAdvancements"));
 const ProcessedStatements            = lazy(() => import("./pages/Landlord/ProcessedStatements"));
+const LandlordStatementAllocations   = lazy(() => import("./pages/Admin/LandlordStatementAllocations"));
 
 // Properties & Units
 const Properties                  = lazy(() => import("./pages/Properties/Properties"));
@@ -746,6 +747,7 @@ function App() {
             <Route path="/landlord/statements"          element={<Guard companyMode={{ allowLandlord: false }} resource="statements" moduleKey="propertyManagement"><LandlordCommissionsStatement /></Guard>} />
             <Route path="/landlords/standing-orders"    element={<Guard companyMode={{ allowLandlord: false }} resource="standingOrders" moduleKey="accounts"><LandlordStandingOrders /></Guard>} />
             <Route path="/landlords/advancement"        element={<Guard companyMode={{ allowLandlord: false }} resource="landlordAdvancements" moduleKey="accounts"><LandlordAdvancements /></Guard>} />
+            <Route path="/landlord/statement-allocations" element={<SuperAdminRoute><LandlordStatementAllocations /></SuperAdminRoute>} />
 
             {/* ── Properties & Units ────────────────────────────────────── */}
             <Route path="/properties"                     element={<Guard resource="properties" moduleKey="propertyManagement"><Properties /></Guard>} />

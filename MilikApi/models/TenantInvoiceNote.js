@@ -76,6 +76,11 @@ const TenantInvoiceNoteSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    bookingDate: {
+      type: Date,
+      default: null,
+      index: true,
+    },
     status: {
       type: String,
       enum: TENANT_NOTE_STATUSES,

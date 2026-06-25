@@ -995,11 +995,19 @@ const summarizeTenantSnapshotState = ({ invoiceSnapshots = [], receiptAllocation
 
 const buildInvoiceStatusBulkOps = (invoiceSnapshots = []) =>
   invoiceSnapshots
-    .filter((snapshot) => snapshot.computedStatus && snapshot.computedStatus !== snapshot.status)
+    .filter((snapshot) => snapshot._id)
     .map((snapshot) => ({
       updateOne: {
         filter: { _id: snapshot._id },
-        update: { $set: { status: snapshot.computedStatus } },
+        update: {
+          $set: {
+            status: snapshot.computedStatus || snapshot.status,
+            // Write computed outstanding back so DB stays in sync with the snapshot engine.
+            // Previously only status was written — reversed payments left invoices with
+            // stale outstanding=0 because the recomputed value was never persisted.
+            outstanding: round2(Math.max(0, snapshot.outstanding ?? 0)),
+          },
+        },
       },
     }));
 

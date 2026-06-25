@@ -63,6 +63,7 @@ const MENU_PERMISSION_MAP = {
   "chart-of-accounts": { resource: "chartOfAccounts", action: "view", moduleKey: "accounts" },
   journals: { resource: "journals", action: "view", moduleKey: "accounts" },
   "landlord-statements": { resource: "statements", action: "view", moduleKey: "propertyManagement" },
+  "statement-allocations": { resource: "statements", action: "view", moduleKey: "propertyManagement" },
   "processed-statements": { resource: "processedStatements", action: "view", moduleKey: "accounts" },
   "rental-collection": { resource: "financialReports", action: "view", moduleKey: ["accounts", "propertyManagement"] },
   "paid-balance": { resource: "financialReports", action: "view", moduleKey: ["accounts", "propertyManagement"] },
@@ -885,6 +886,7 @@ const TopToolbar = ({
       "commission-landlord-statement": "/financial/landlord-statement",
       "processed-statements": "/landlord/processed-statements",
       "landlord-statements": "/landlord/statements",
+      "statement-allocations": "/landlord/statement-allocations",
       "rental-collection": "/reports/rental-collection",
       "paid-balance": "/reports/paid-balance",
       "aged-analysis": "/reports/aged-analysis",
@@ -1553,6 +1555,9 @@ const TopToolbar = ({
         { id: "landlord-standing-orders", label: "Landlord Standing Orders", icon: FaCalendarAlt },
         { id: "landlord-advancement", label: "Landlord Advancement", icon: FaMoneyBillWave },
         { id: "processed-statements", label: "Processed Statements (Legacy)", icon: FaCheckCircle },
+        ...(currentUser?.isSystemAdmin || currentUser?.superAdminAccess
+          ? [{ id: "statement-allocations", label: "Statement Allocations", icon: FaExchangeAlt }]
+          : []),
       ],
     };
 

@@ -6,6 +6,7 @@ import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
 import SequenceCounter from "../../models/SequenceCounter.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
+import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
 
 const numberOrZero = (v) => {
   const n = Number(v);
@@ -82,6 +83,10 @@ async function postDisbursementLedger({ disbursement, account, userId }) {
   if (entries.length === 0) return [];
 
   await FinancialLedgerEntry.insertMany(entries);
+
+  const touchedIds = [toId(disbursement.expenseAccountId), toId(account.glAccountId)].filter(Boolean);
+  if (touchedIds.length) await aggregateChartOfAccountBalances(businessId, touchedIds).catch(() => {});
+
   return entries.map((e) => e._id);
 }
 
@@ -122,6 +127,10 @@ async function reverseDisbursementLedger({ disbursement, userId }) {
     { _id: { $in: existing.map((e) => e._id) } },
     { $set: { status: "reversed" } }
   );
+
+  const businessId = String(existing[0].business);
+  const touchedIds = [...new Set(existing.map((e) => String(e.accountId)))];
+  if (businessId && touchedIds.length) await aggregateChartOfAccountBalances(businessId, touchedIds).catch(() => {});
 }
 
 async function postReplenishmentLedger({ replenishment, account, userId }) {
@@ -175,6 +184,10 @@ async function postReplenishmentLedger({ replenishment, account, userId }) {
   if (entries.length === 0) return [];
 
   await FinancialLedgerEntry.insertMany(entries);
+
+  const touchedIds = [toId(account.glAccountId), toId(replenishment.bankAccountId)].filter(Boolean);
+  if (touchedIds.length) await aggregateChartOfAccountBalances(businessId, touchedIds).catch(() => {});
+
   return entries.map((e) => e._id);
 }
 

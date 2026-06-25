@@ -33,6 +33,11 @@ const RentPaymentSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    bookingDate: {
+      type: Date,
+      default: null,
+      index: true,
+    },
     recordDate: {
       type: Date,
       default: Date.now,

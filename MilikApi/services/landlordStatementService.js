@@ -154,14 +154,18 @@ const resolveSameDayRecognitionDate = (datedValue = null, auditValue = null) => 
   return null;
 };
 
-const getNoteStatementDate = (note = {}) =>
-  resolveSameDayRecognitionDate(note?.noteDate || null, note?.createdAt || note?.updatedAt || null);
+const getNoteStatementDate = (note = {}) => {
+  if (note?.bookingDate) return new Date(note.bookingDate);
+  return resolveSameDayRecognitionDate(note?.noteDate || null, note?.createdAt || note?.updatedAt || null);
+};
 
-const getReceiptStatementDate = (receipt = {}) =>
-  resolveSameDayRecognitionDate(
+const getReceiptStatementDate = (receipt = {}) => {
+  if (receipt?.bookingDate) return new Date(receipt.bookingDate);
+  return resolveSameDayRecognitionDate(
     receipt?.paymentDate || null,
     receipt?.confirmedAt || receipt?.recordDate || receipt?.createdAt || null
   );
+};
 
 const capDateToNow = (value) => {
   const date = toDate(value);
@@ -1419,12 +1423,14 @@ export const generateLandlordStatement = async ({
   // All payment types fetched in a single RentPayment query and split in memory.
   const dateOrFilter = snapshotDate
     ? [
+        { bookingDate: { $gte: snapshotDate, $lte: periodEnd } },
         { paymentDate: { $gte: snapshotDate, $lte: periodEnd } },
         { confirmedAt: { $gte: snapshotDate, $lte: periodEnd } },
         { recordDate:  { $gte: snapshotDate, $lte: periodEnd } },
         { createdAt:   { $gte: snapshotDate, $lte: periodEnd } },
       ]
     : [
+        { bookingDate: { $lte: periodEnd } },
         { paymentDate: { $lte: periodEnd } },
         { confirmedAt: { $lte: periodEnd } },
         { recordDate:  { $lte: periodEnd } },
