@@ -59,9 +59,18 @@ const useCases = [
 ];
 
 const highlights = [
-  "Purchase orders auto-update stock on receipt",
-  "POS sessions linked to your accounting layer",
-  "Full stock movement audit trail",
+  "Stock levels updated on every purchase receipt",
+  "Purchase orders tracked from creation to delivery",
+  "POS sessions linked directly to live inventory",
+  "Till reconciliation at end of every shift",
+  "Reorder alerts when stock hits minimum level",
+  "Full accounting — COGS, margins, financial reports",
+];
+
+const stats = [
+  { value: "Real-time", label: "Stock level updates" },
+  { value: "Auto", label: "POS to accounting" },
+  { value: "Full audit", label: "Stock movement trail" },
 ];
 
 const otherModules = [
@@ -91,49 +100,52 @@ export default function InventoryPage() {
       {(openTrialModal) => (
         <>
           {/* Hero */}
-          <section className="relative overflow-hidden bg-gradient-to-br from-orange-50 via-white to-white">
-            <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
-              <div className="grid gap-12 lg:grid-cols-2 lg:items-center lg:gap-16">
-                <div>
+          <section className="relative overflow-hidden bg-gradient-to-br from-orange-50 via-white to-white lg:h-[calc(100vh-92px)]">
+            <div className="mx-auto h-full max-w-[1700px] px-4 py-16 sm:px-6 lg:flex lg:items-center lg:px-8 lg:py-0">
+              <div className="grid w-full gap-12 lg:h-full lg:grid-cols-2 lg:items-stretch lg:gap-16">
+                <div className="lg:self-center">
                   <div className="inline-flex items-center gap-3 rounded-full border border-orange-200 bg-white px-4 py-2 text-xs font-bold uppercase tracking-[0.24em] text-orange-700 shadow-sm">
                     <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-orange-50 text-orange-700">
                       <FaWarehouse className="text-[10px]" />
                     </span>
                     Inventory & POS
                   </div>
-                  <h1 className="mt-6 text-4xl font-extrabold leading-tight tracking-[-0.03em] text-slate-950 sm:text-5xl lg:text-[3.5rem]">
-                    Inventory and point-of-sale management for Kenyan businesses — stock, orders and POS in one place.
+                  <h1 className="mt-5 text-4xl font-extrabold leading-tight tracking-[-0.03em] text-slate-950 sm:text-5xl lg:text-[3.25rem]">
+                    Stock management and point of sale — from purchase order to till close, all in one system.
                   </h1>
-                  <p className="mt-5 text-lg leading-8 text-slate-600">
+                  <p className="mt-4 text-base leading-7 text-slate-600">
                     Milik gives retail and wholesale businesses a complete inventory system — manage stock, raise purchase orders, receive from suppliers, run POS sessions and reconcile tills at end of day.
                   </p>
-                  <div className="mt-8 flex flex-wrap gap-4">
-                    <button
-                      type="button"
-                      onClick={() => openTrialModal("property_manager")}
-                      className="inline-flex items-center gap-2 rounded-full bg-orange-700 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-orange-700/20 transition hover:bg-orange-800"
-                    >
+                  <div className="mt-6 flex flex-wrap items-center gap-x-8 gap-y-3 border-y border-slate-200 py-4">
+                    {stats.map((s) => (
+                      <div key={s.label}>
+                        <p className="text-xl font-extrabold text-orange-700">{s.value}</p>
+                        <p className="mt-0.5 text-xs font-semibold text-slate-500">{s.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-6 flex flex-wrap gap-3">
+                    <button type="button" onClick={() => openTrialModal("property_manager")}
+                      className="inline-flex items-center gap-2 rounded-full bg-orange-700 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-orange-700/20 transition hover:bg-orange-800">
                       Get Free Trial <FaArrowRight />
                     </button>
-                    <Link
-                      to="/#pricing"
-                      className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-6 py-3.5 text-sm font-bold text-slate-800 transition hover:border-orange-700 hover:text-orange-700"
-                    >
+                    <Link to="/#pricing"
+                      className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-6 py-3 text-sm font-bold text-slate-800 transition hover:border-orange-700 hover:text-orange-700">
                       View Pricing
                     </Link>
                   </div>
-                  <div className="mt-8 grid gap-3 sm:grid-cols-3">
+                  <div className="mt-5 grid gap-2.5 sm:grid-cols-2">
                     {highlights.map((h) => (
-                      <div key={h} className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                      <div key={h} className="flex items-start gap-2.5 rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5 shadow-sm">
                         <FaCheckCircle className="mt-0.5 shrink-0 text-orange-700" />
-                        <span className="text-sm font-semibold text-slate-700">{h}</span>
+                        <span className="text-xs font-semibold leading-5 text-slate-700">{h}</span>
                       </div>
                     ))}
                   </div>
                 </div>
-                <div className="module-hero-img-shell">
-                  <div className="module-hero-img-frame">
-                    <img src={inventoryImg} alt="Inventory manager using Milik POS system" loading="eager" />
+                <div className="module-hero-img-shell lg:h-full">
+                  <div className="module-hero-img-frame lg:h-full">
+                    <img src={inventoryImg} alt="Inventory manager using Milik POS system" loading="eager" className="lg:h-full lg:object-cover" />
                     <div className="absolute inset-0 bg-gradient-to-t from-orange-900/45 via-transparent to-transparent" />
                     <div className="module-hero-badge bg-orange-700/90 text-white">
                       <div>
@@ -153,8 +165,8 @@ export default function InventoryPage() {
           <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
             <div className="max-w-2xl">
               <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">What it does</p>
-              <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">A complete inventory and POS system — from purchase order to till reconciliation.</h2>
-              <p className="mt-4 text-base leading-7 text-slate-600">Everything a retail or wholesale business needs to manage stock and sales professionally, connected to the same accounting layer.</p>
+              <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">From purchase order to till close — what the inventory module handles.</h2>
+              <p className="mt-4 text-base leading-7 text-slate-600">Raise a purchase order, receive stock, sell at the counter, close the till — the whole flow in one system, all posting to the same accounting layer.</p>
             </div>
             <div className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
               {features.map((f) => (
@@ -172,7 +184,7 @@ export default function InventoryPage() {
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
               <div className="max-w-2xl">
                 <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Who uses it</p>
-                <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Built for Kenyan retail and wholesale businesses.</h2>
+                <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Retail shops, wholesalers and service businesses with stock.</h2>
               </div>
               <div className="mt-10 grid gap-6 lg:grid-cols-3">
                 {useCases.map((uc) => (
@@ -189,8 +201,8 @@ export default function InventoryPage() {
           <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
             <div className="max-w-2xl">
               <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Other modules</p>
-              <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Each module activates independently — accounting always included.</h2>
-              <p className="mt-4 text-base leading-7 text-slate-600">Take any module your business needs today. Every module comes with the full accounting backbone — Chart of Accounts, Trial Balance and financial reports — at no extra cost.</p>
+              <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Also managing rental property, HR or a car wash? Milik handles all of it.</h2>
+              <p className="mt-4 text-base leading-7 text-slate-600">Each module runs on its own but shares the same accounting layer and the same login. Add more when your business needs them — no data migration, no separate subscriptions for each tool.</p>
             </div>
             <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
               {otherModules.map((mod) => (

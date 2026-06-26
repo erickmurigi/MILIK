@@ -59,9 +59,18 @@ const useCases = [
 ];
 
 const highlights = [
-  "Loyalty stamps auto-tracked per plate",
-  "Staff commission per job, auto-calculated",
-  "SMS notifications for rewards and jobs",
+  "Job queue — real-time status on every vehicle",
+  "Loyalty stamps auto-tracked per plate number",
+  "Staff commission per job, calculated automatically",
+  "SMS alerts to customers when their car is ready",
+  "Daily till close and shift cashbook reconciliation",
+  "Full accounting included — income, expenses, reports",
+];
+
+const stats = [
+  { value: "Real-time", label: "Job queue updates" },
+  { value: "Auto", label: "Commission calculation" },
+  { value: "Instant", label: "Customer SMS alerts" },
 ];
 
 const otherModules = [
@@ -91,49 +100,57 @@ export default function CarWashPage() {
       {(openTrialModal) => (
         <>
           {/* Hero */}
-          <section className="relative overflow-hidden bg-gradient-to-br from-sky-50 via-white to-white">
-            <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
-              <div className="grid gap-12 lg:grid-cols-2 lg:items-center lg:gap-16">
-                <div>
+          <section className="relative overflow-hidden bg-gradient-to-br from-sky-50 via-white to-white lg:h-[calc(100vh-92px)]">
+            <div className="mx-auto h-full max-w-[1700px] px-4 py-16 sm:px-6 lg:flex lg:items-center lg:px-8 lg:py-0">
+              <div className="grid w-full gap-12 lg:h-full lg:grid-cols-2 lg:items-stretch lg:gap-16">
+                <div className="lg:self-center">
                   <div className="inline-flex items-center gap-3 rounded-full border border-sky-200 bg-white px-4 py-2 text-xs font-bold uppercase tracking-[0.24em] text-sky-700 shadow-sm">
                     <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-sky-50 text-sky-700">
                       <FaCar className="text-[10px]" />
                     </span>
-                    Car Wash
+                    Car Wash Management
                   </div>
-                  <h1 className="mt-6 text-4xl font-extrabold leading-tight tracking-[-0.03em] text-slate-950 sm:text-5xl lg:text-[3.5rem]">
-                    Car wash management system — jobs, loyalty programs and staff commissions in one place.
+                  <h1 className="mt-5 text-4xl font-extrabold leading-tight tracking-[-0.03em] text-slate-950 sm:text-5xl lg:text-[3.25rem]">
+                    Track every job, reward loyal customers and pay your staff fairly — all in one system.
                   </h1>
-                  <p className="mt-5 text-lg leading-8 text-slate-600">
-                    Milik gives car wash businesses a complete operational system — track every job by vehicle plate, auto-enrol customers in your loyalty program, calculate staff commissions and manage daily cashbooks without spreadsheets.
+                  <p className="mt-4 text-base leading-7 text-slate-600">
+                    No more paper job cards, manual stamp counting or guessing who's owed what at end of month. Milik tracks everything from the moment a car pulls in to when the till closes.
                   </p>
-                  <div className="mt-8 flex flex-wrap gap-4">
+                  <div className="mt-6 flex flex-wrap items-center gap-x-8 gap-y-3 border-y border-slate-200 py-4">
+                    {stats.map((s) => (
+                      <div key={s.label}>
+                        <p className="text-xl font-extrabold text-sky-700">{s.value}</p>
+                        <p className="mt-0.5 text-xs font-semibold text-slate-500">{s.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-6 flex flex-wrap gap-3">
                     <button
                       type="button"
                       onClick={() => openTrialModal("property_manager")}
-                      className="inline-flex items-center gap-2 rounded-full bg-sky-700 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-sky-700/20 transition hover:bg-sky-800"
+                      className="inline-flex items-center gap-2 rounded-full bg-sky-700 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-sky-700/20 transition hover:bg-sky-800"
                     >
                       Get Free Trial <FaArrowRight />
                     </button>
                     <Link
                       to="/#pricing"
-                      className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-6 py-3.5 text-sm font-bold text-slate-800 transition hover:border-sky-700 hover:text-sky-700"
+                      className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-6 py-3 text-sm font-bold text-slate-800 transition hover:border-sky-700 hover:text-sky-700"
                     >
                       View Pricing
                     </Link>
                   </div>
-                  <div className="mt-8 grid gap-3 sm:grid-cols-3">
+                  <div className="mt-5 grid gap-2.5 sm:grid-cols-2">
                     {highlights.map((h) => (
-                      <div key={h} className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                      <div key={h} className="flex items-start gap-2.5 rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5 shadow-sm">
                         <FaCheckCircle className="mt-0.5 shrink-0 text-sky-700" />
-                        <span className="text-sm font-semibold text-slate-700">{h}</span>
+                        <span className="text-xs font-semibold leading-5 text-slate-700">{h}</span>
                       </div>
                     ))}
                   </div>
                 </div>
-                <div className="module-hero-img-shell">
-                  <div className="module-hero-img-frame">
-                    <img src={carWashImg} alt="Car wash staff using Milik management system" loading="eager" />
+                <div className="module-hero-img-shell lg:h-full">
+                  <div className="module-hero-img-frame lg:h-full">
+                    <img src={carWashImg} alt="Car wash staff using Milik management system" loading="eager" className="lg:h-full lg:object-cover" />
                     <div className="absolute inset-0 bg-gradient-to-t from-sky-900/45 via-transparent to-transparent" />
                     <div className="module-hero-badge bg-sky-700/90 text-white">
                       <div>
@@ -153,8 +170,8 @@ export default function CarWashPage() {
           <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
             <div className="max-w-2xl">
               <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">What it does</p>
-              <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">A complete car wash management system — from job to cashbook.</h2>
-              <p className="mt-4 text-base leading-7 text-slate-600">Every tool a car wash owner needs to run efficiently, retain customers and pay staff fairly.</p>
+              <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">What the car wash module handles — from first job to end-of-day close.</h2>
+              <p className="mt-4 text-base leading-7 text-slate-600">The tools your team actually needs, without the ones they don't. Straightforward to learn, reliable in daily use.</p>
             </div>
             <div className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
               {features.map((f) => (
@@ -172,7 +189,7 @@ export default function CarWashPage() {
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
               <div className="max-w-2xl">
                 <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Who uses it</p>
-                <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Built for Kenyan car wash operators.</h2>
+                <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Right for single locations and multi-branch operators alike.</h2>
               </div>
               <div className="mt-10 grid gap-6 lg:grid-cols-3">
                 {useCases.map((uc) => (
@@ -189,8 +206,8 @@ export default function CarWashPage() {
           <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
             <div className="max-w-2xl">
               <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Other modules</p>
-              <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Each module activates independently — accounting always included.</h2>
-              <p className="mt-4 text-base leading-7 text-slate-600">Take any module your business needs today. Every module comes with the full accounting backbone — Chart of Accounts, Trial Balance and financial reports — at no extra cost.</p>
+              <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Also managing property, staff or stock? Milik handles those too.</h2>
+              <p className="mt-4 text-base leading-7 text-slate-600">Milik modules stack onto each other. Add property management, payroll, inventory or property sales to the same workspace — same login, same accounting, no extra setup.</p>
             </div>
             <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
               {otherModules.map((mod) => (

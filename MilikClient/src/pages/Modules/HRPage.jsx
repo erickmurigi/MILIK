@@ -59,9 +59,18 @@ const useCases = [
 ];
 
 const highlights = [
-  "Full payroll cycle with payslip generation",
-  "Leave apply, approve and balance tracking",
-  "KPI targets, actuals and appraisal records",
+  "Payroll processed accurately every pay cycle",
+  "Payslips generated and ready for distribution",
+  "Leave requests approved or declined in the system",
+  "Leave balances tracked per employee automatically",
+  "KPI targets, actuals and appraisal records logged",
+  "Full accounting — payroll expenses, reports",
+];
+
+const stats = [
+  { value: "Accurate", label: "Payroll every cycle" },
+  { value: "Structured", label: "Leave management" },
+  { value: "Tracked", label: "KPI appraisals" },
 ];
 
 const otherModules = [
@@ -91,49 +100,52 @@ export default function HRPage() {
       {(openTrialModal) => (
         <>
           {/* Hero */}
-          <section className="relative overflow-hidden bg-gradient-to-br from-violet-50 via-white to-white">
-            <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
-              <div className="grid gap-12 lg:grid-cols-2 lg:items-center lg:gap-16">
-                <div>
+          <section className="relative overflow-hidden bg-gradient-to-br from-violet-50 via-white to-white lg:h-[calc(100vh-92px)]">
+            <div className="mx-auto h-full max-w-[1700px] px-4 py-16 sm:px-6 lg:flex lg:items-center lg:px-8 lg:py-0">
+              <div className="grid w-full gap-12 lg:h-full lg:grid-cols-2 lg:items-stretch lg:gap-16">
+                <div className="lg:self-center">
                   <div className="inline-flex items-center gap-3 rounded-full border border-violet-200 bg-white px-4 py-2 text-xs font-bold uppercase tracking-[0.24em] text-violet-700 shadow-sm">
                     <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-violet-50 text-violet-700">
                       <FaUsers className="text-[10px]" />
                     </span>
                     Human Resources
                   </div>
-                  <h1 className="mt-6 text-4xl font-extrabold leading-tight tracking-[-0.03em] text-slate-950 sm:text-5xl lg:text-[3.5rem]">
-                    HR and payroll management software built for Kenyan businesses.
+                  <h1 className="mt-5 text-4xl font-extrabold leading-tight tracking-[-0.03em] text-slate-950 sm:text-5xl lg:text-[3.25rem]">
+                    Manage your team properly — payroll, leave, appraisals and records all in one place.
                   </h1>
-                  <p className="mt-5 text-lg leading-8 text-slate-600">
-                    Milik gives business owners and HR managers a structured, professional way to manage employees — from onboarding and payroll to leave approvals, KPI tracking and performance appraisals.
+                  <p className="mt-4 text-base leading-7 text-slate-600">
+                    Growing businesses lose too many HR hours to spreadsheets and WhatsApp threads. Milik gives your HR team a structured workspace — contracts, payroll cycles, leave approvals and performance reviews handled cleanly.
                   </p>
-                  <div className="mt-8 flex flex-wrap gap-4">
-                    <button
-                      type="button"
-                      onClick={() => openTrialModal("property_manager")}
-                      className="inline-flex items-center gap-2 rounded-full bg-violet-700 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-violet-700/20 transition hover:bg-violet-800"
-                    >
+                  <div className="mt-6 flex flex-wrap items-center gap-x-8 gap-y-3 border-y border-slate-200 py-4">
+                    {stats.map((s) => (
+                      <div key={s.label}>
+                        <p className="text-xl font-extrabold text-violet-700">{s.value}</p>
+                        <p className="mt-0.5 text-xs font-semibold text-slate-500">{s.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-6 flex flex-wrap gap-3">
+                    <button type="button" onClick={() => openTrialModal("property_manager")}
+                      className="inline-flex items-center gap-2 rounded-full bg-violet-700 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-violet-700/20 transition hover:bg-violet-800">
                       Get Free Trial <FaArrowRight />
                     </button>
-                    <Link
-                      to="/#pricing"
-                      className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-6 py-3.5 text-sm font-bold text-slate-800 transition hover:border-violet-700 hover:text-violet-700"
-                    >
+                    <Link to="/#pricing"
+                      className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-6 py-3 text-sm font-bold text-slate-800 transition hover:border-violet-700 hover:text-violet-700">
                       View Pricing
                     </Link>
                   </div>
-                  <div className="mt-8 grid gap-3 sm:grid-cols-3">
+                  <div className="mt-5 grid gap-2.5 sm:grid-cols-2">
                     {highlights.map((h) => (
-                      <div key={h} className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                      <div key={h} className="flex items-start gap-2.5 rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5 shadow-sm">
                         <FaCheckCircle className="mt-0.5 shrink-0 text-violet-700" />
-                        <span className="text-sm font-semibold text-slate-700">{h}</span>
+                        <span className="text-xs font-semibold leading-5 text-slate-700">{h}</span>
                       </div>
                     ))}
                   </div>
                 </div>
-                <div className="module-hero-img-shell">
-                  <div className="module-hero-img-frame">
-                    <img src={hrImg} alt="HR manager using Milik payroll software" loading="eager" />
+                <div className="module-hero-img-shell lg:h-full">
+                  <div className="module-hero-img-frame lg:h-full">
+                    <img src={hrImg} alt="HR manager using Milik payroll software" loading="eager" className="lg:h-full lg:object-cover" />
                     <div className="absolute inset-0 bg-gradient-to-t from-violet-900/45 via-transparent to-transparent" />
                     <div className="module-hero-badge bg-violet-700/90 text-white">
                       <div>
@@ -153,8 +165,8 @@ export default function HRPage() {
           <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
             <div className="max-w-2xl">
               <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">What it does</p>
-              <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">A complete HR system — from employee records to payroll and appraisals.</h2>
-              <p className="mt-4 text-base leading-7 text-slate-600">Manage your full employee lifecycle in one workspace — professionally, without scattered spreadsheets.</p>
+              <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">What the HR module handles — from onboarding to year-end appraisals.</h2>
+              <p className="mt-4 text-base leading-7 text-slate-600">Manage your full employee lifecycle in one place. No scattered spreadsheets, no shared drives, no missed leave balances.</p>
             </div>
             <div className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
               {features.map((f) => (
@@ -172,7 +184,7 @@ export default function HRPage() {
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
               <div className="max-w-2xl">
                 <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Who uses it</p>
-                <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Built for any Kenyan business with a team.</h2>
+                <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Works for any business that has people to manage.</h2>
               </div>
               <div className="mt-10 grid gap-6 lg:grid-cols-3">
                 {useCases.map((uc) => (
@@ -189,8 +201,8 @@ export default function HRPage() {
           <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
             <div className="max-w-2xl">
               <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Other modules</p>
-              <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Each module activates independently — accounting always included.</h2>
-              <p className="mt-4 text-base leading-7 text-slate-600">Take any module your business needs today. Every module comes with the full accounting backbone — Chart of Accounts, Trial Balance and financial reports — at no extra cost.</p>
+              <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Property to manage? Stock to track? Car wash to run? Milik covers those too.</h2>
+              <p className="mt-4 text-base leading-7 text-slate-600">HR is one module in a wider system. Activate what your business needs — every module shares the same accounting core and user management. One login, one system.</p>
             </div>
             <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
               {otherModules.map((mod) => (

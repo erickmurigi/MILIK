@@ -102,7 +102,13 @@
       "Bash(xargs grep -l \"useState.*show\\\\|useState.*open\")",
       "Bash(grep -A 15 'paymentDate.*$gte.*snapshotDate' 'c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikApi\\\\services\\\\landlordStatementService.js')",
       "Bash(xargs grep -l \"carwash/display\\\\|queue.*display\\\\|display.*queue\")",
-      "Bash(xargs grep -l \"carwash/display\\\\|display.*businessId.*queue\")"
+      "Bash(xargs grep -l \"carwash/display\\\\|display.*businessId.*queue\")",
+      "Bash(ls \"c:/Users/murig/OneDrive/Desktop/MILIKPMS/\")",
+      "Read(//c/Users/murig/OneDrive/Desktop/MILIKPMS/**)",
+      "Bash(ls \"c:/Users/murig/OneDrive/Desktop/\" | grep -i milik)",
+      "Read(//c/Users/murig/OneDrive/Desktop/**)",
+      "Read(//c/Users/murig/OneDrive/Desktop/MilikLite/frontend/src/**)",
+      "Read(//c/Users/murig/OneDrive/Desktop/MilikLite/frontend/**)"
     ]
   }
 }

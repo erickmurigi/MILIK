@@ -33,12 +33,12 @@ import landingPageImg from "../../assets/landing/LANDING PAGE.png";
 import "./home.css";
 
 const heroHighlights = [
-  "PROPERTY management — billing, M-PESA and landlord reports",
-  "CAR WASH — jobs, loyalty programs and staff commissions",
-  "HR & PAYROLL — employees, leave and appraisals",
-  "INVENTORY & POS — stock, purchase orders and point of sale",
-  "ACCOUNTING — Chart of Accounts, Trial Balance and reports included with every module",
-  "PROPERTY SALES — listings, buyers and agent commissions",
+  "PROPERTY — rent invoices, M-PESA matching and landlord statements",
+  "CAR WASH — job queue, loyalty cards and staff commissions",
+  "HR & PAYROLL — contracts, leave approvals and payslip cycles",
+  "INVENTORY & POS — stock levels, purchase orders and till close",
+  "ACCOUNTING — Chart of Accounts and Trial Balance in every module",
+  "PROPERTY SALES — listings, buyers, deals and agent commissions",
 ];
 
 const modules = [
@@ -87,95 +87,95 @@ const modules = [
 const features = [
   {
     icon: <FaBuilding />,
-    title: "Portfolio control",
-    description: "Manage properties, units, occupancy and owner relationships in one polished workspace.",
+    title: "Full property portfolio control",
+    description: "Properties, units, occupancy and all your landlords in one place. No spreadsheets, no WhatsApp confusion.",
   },
   {
     icon: <FaFileInvoice />,
     title: "Automated tenant billing",
-    description: "Create invoices, manage recurring charges, record receipts and keep tenant balances clean.",
+    description: "Rent invoices go out on schedule. When a tenant pays via M-PESA Paybill, the receipt and balance update automatically.",
   },
   {
     icon: <FaCoins />,
-    title: "Landlord reporting",
-    description: "Prepare owner statements, commissions, remittances and reconciled reporting from one controlled flow.",
+    title: "Landlord statements and remittances",
+    description: "Generate per-landlord statements, deduct management fees and record remittances without manual calculations.",
   },
   {
     icon: <FaBook />,
-    title: "Finance backbone",
-    description: "See ledgers, journals, Trial Balance and Income Statement from the same accounting source of truth.",
+    title: "Accounting built in, not bolted on",
+    description: "Every transaction posts to a proper Chart of Accounts. Trial Balance and Income Statement are always up to date.",
   },
   {
     icon: <FaMobileAlt />,
-    title: "Anywhere access",
-    description: "Use Milik from the office, in the field, or abroad with a responsive browser-based experience.",
+    title: "Access from anywhere",
+    description: "Browser-based and mobile-ready. Your team can work from the site office, on the road or at home — same system.",
   },
   {
     icon: <FaShieldAlt />,
-    title: "Operational trust",
-    description: "Clear roles, controlled workflows and professional reports that build confidence with clients and teams.",
+    title: "Role-based user control",
+    description: "Set who sees what. Managers, accountants and field agents each get the access level their role actually needs.",
   },
 ];
 
 const steps = [
   {
-    title: "1. Request demo access",
-    description: "Fill the form, choose your role, and enter the guided workspace instantly.",
+    title: "1. Pick your role and get in",
+    description: "Choose Property Manager or Landlord, fill a short form and the demo workspace opens immediately — no sales call required.",
   },
   {
-    title: "2. Explore real workflows",
-    description: "Inspect properties, tenants, billing, receipts, owner statements and accounting reports using sample data.",
+    title: "2. Walk through the real system",
+    description: "Properties, tenants, rent receipts, landlord statements, car wash jobs, payroll — all loaded with sample data so you can explore properly.",
   },
   {
-    title: "3. Subscribe when ready",
-    description: "Move from demo preview workspace to your own live workspace once you are ready to onboard real company data.",
+    title: "3. Move to your live workspace",
+    description: "When you're ready, we onboard your real data. Your live workspace is separate from the demo — nothing carries over that shouldn't.",
   },
 ];
 
 const faqs = [
   {
     question: "What is Milik?",
-    answer: "Milik is a cloud-based business management platform built for Kenya. It brings property management, car wash operations, HR, inventory and property sales into one workspace — all sharing a single accounting backbone, user management system and reporting layer.",
+    answer: "Milik is a business management system built specifically for Kenya. It handles property management, car wash operations, HR, inventory and property sales — all in one workspace, with a proper accounting layer underneath every module. 50+ businesses are already running on it.",
   },
   {
-    question: "What modules does Milik include?",
-    answer: "Milik includes five modules: Property Management (tenant billing, M-PESA, landlord statements), Car Wash (jobs, payments, loyalty, commissions), Human Resources (payroll, leave, appraisals), Inventory & POS (stock, purchase orders, point of sale) and Property Sales (listings, buyers, agents, deals). Modules are activated based on your business needs.",
+    question: "Which modules does Milik include?",
+    answer: "Five modules: Property Management (tenant billing, M-PESA collections, landlord statements), Car Wash (job tracking, loyalty stamps, staff commissions), HR (payroll, leave, appraisals), Inventory & POS (stock, purchase orders, point of sale) and Property Sales (listings, buyers, agents, deal pipeline). You only activate what your business needs.",
   },
   {
-    question: "Does Milik support M-PESA for rent collection?",
-    answer: "Yes. Milik integrates with M-PESA Paybill numbers so tenants can pay rent directly. Collections are automatically matched to invoices and receipts are generated instantly, keeping tenant balances accurate without manual entry.",
+    question: "Does Milik work with M-PESA for rent collection?",
+    answer: "Yes — and it's one of the most-used features. Tenants pay rent to your M-PESA Paybill number. Milik picks up the payment, matches it to the right invoice and generates a receipt automatically. No manual entry, no chasing confirmations on WhatsApp.",
   },
   {
     question: "How much does Milik cost?",
-    answer: "Milik starts at KES 3,500 per month for up to 60 rental units. The Growth plan is KES 7,500/month for 61–250 units and Portfolio Plus is KES 9,000/month for 251–800 units. Enterprise custom pricing is available for 800+ units. Contact us for current bundle pricing when combining multiple modules.",
+    answer: "Property Management starts at KES 3,500/month for up to 60 units. The Growth plan (61–250 units) is KES 7,500/month and Portfolio Plus (251–800 units) is KES 9,000/month. Enterprise pricing is available for 800+ units. Car Wash, HR, Inventory and Property Sales are priced per business — contact us for a tailored quote.",
   },
   {
-    question: "Can I manage multiple properties and landlords in Milik?",
-    answer: "Yes. Milik supports unlimited properties and landlords in a single workspace. You can manage bedsitters, apartments, commercial units and mixed-use portfolios with per-landlord statements and remittances generated automatically.",
+    question: "Can I manage multiple landlords and properties in one workspace?",
+    answer: "Yes. There's no limit on landlords or properties. You can mix bedsitters, apartments, commercial units and mixed-use properties under one login. Each landlord gets their own statement, commission deduction and remittance record.",
   },
   {
-    question: "Does the car wash module support loyalty programs?",
-    answer: "Yes. The car wash module includes a built-in customer loyalty program — track stamps per vehicle plate, set reward thresholds, and send automated SMS notifications when customers earn stamps or unlock rewards.",
+    question: "Does the car wash module have a loyalty program?",
+    answer: "Yes. Customers are tracked by vehicle plate. Stamps are awarded per job and when they hit your set threshold, the system marks the reward automatically and can send an SMS to the customer. The whole loyalty cycle runs without any manual tracking.",
   },
   {
-    question: "What financial reports does Milik generate?",
-    answer: "Milik generates Trial Balance, Income Statement, Balance Sheet, landlord remittance statements, rental collection reports, aged receivables analysis, paid balance reports and MRI tax summaries — all from the system's accounting core without manual exports.",
+    question: "What financial reports does Milik produce?",
+    answer: "Trial Balance, Income Statement, Balance Sheet, landlord remittance statements, rental collection summaries, aged receivables, paid balance reports and MRI tax reports. They all come from the same accounting data — not separate exports.",
   },
   {
-    question: "Does Milik work for bedsitters, apartments and commercial properties?",
-    answer: "Yes. Milik handles bedsitters, single-rooms, apartments, commercial units, gated communities and mixed-use properties. It supports multiple unit types, utility billing (water, electricity) and variable charge structures per tenant.",
+    question: "Does Milik handle bedsitters and mixed-use properties?",
+    answer: "Yes. Bedsitters, single rooms, apartments, commercial units, gated estates — Milik handles all of them. You can set different charge structures per unit and include utility billing (water, electricity) per tenant.",
   },
   {
-    question: "Can multiple users access the same Milik workspace?",
-    answer: "Yes. Milik supports multiple user accounts per company with role-based access control. You can assign roles like Administrator, Manager, Accountant, Agent and Viewer — each with their own permission levels across modules.",
+    question: "How many users can access the same Milik workspace?",
+    answer: "As many as your plan supports. Each user gets their own login with a role — Administrator, Manager, Accountant, Agent or Viewer. Permissions are set per module, so users only see what their role requires.",
   },
   {
-    question: "Can I enter my own records during the Milik trial?",
-    answer: "The demo is read-only so visitors can explore safely without altering the shared demo workspace. Once you subscribe, your own live workspace is provisioned with full access.",
+    question: "Can I use Milik during the demo to enter my own records?",
+    answer: "The demo workspace is shared and read-only, so you can explore safely without anyone's data getting mixed in. Once you subscribe, you get your own separate live workspace with full write access from day one.",
   },
   {
-    question: "How long does the Milik demo last?",
-    answer: "Demo access lasts for 3 days from the moment the workspace is activated. You can contact Milik to extend the demo or move directly to a paid subscription.",
+    question: "How long does the demo last?",
+    answer: "3 days from when it's activated. If you need more time before deciding, reach out on WhatsApp or email and we can extend it.",
   },
 ];
 
@@ -634,9 +634,9 @@ function Home() {
 
       {/* Nav */}
       <nav className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-2 sm:px-6 lg:px-8">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
           <div className="relative">
-            <img src="/logo.png" alt="Milik" className="h-20 w-20 object-contain" />
+            <img src="/logo.png" alt="Milik" className="h-11 w-auto object-contain" style={{ maxWidth: "160px" }} />
             <span className="nav-logo-live-dot" title="System live" />
           </div>
           <div className="hidden items-center gap-8 md:flex">
@@ -668,20 +668,20 @@ function Home() {
       </nav>
 
       {/* Hero */}
-      <section className="relative overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(11,59,46,0.18),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgba(255,140,0,0.15),_transparent_26%),linear-gradient(135deg,#ffffff_0%,#f7fbf8_45%,#eef5f1_100%)]">
+      <section className="relative overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(11,59,46,0.18),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgba(255,140,0,0.15),_transparent_26%),linear-gradient(135deg,#ffffff_0%,#f7fbf8_45%,#eef5f1_100%)] lg:h-[calc(100vh-56px)] lg:min-h-[600px]">
         <div className="hero-gridlines" aria-hidden="true" />
         <div className="hero-orb hero-orb-left" aria-hidden="true" />
         <div className="hero-orb hero-orb-right" aria-hidden="true" />
-        <div className="mx-auto grid max-w-[1720px] gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[0.94fr_1.06fr] lg:items-center xl:gap-16 2xl:gap-20 lg:px-8 xl:px-10 2xl:px-14 lg:py-20">
+        <div className="mx-auto grid max-w-[1720px] gap-12 px-4 pt-8 pb-16 sm:px-6 lg:grid-cols-[0.94fr_1.06fr] lg:h-full lg:items-center lg:gap-0 xl:gap-12 2xl:gap-16 lg:px-8 xl:px-10 2xl:px-14 lg:pt-0 lg:pb-0">
           <div className="relative z-10 max-w-[760px]">
             <div className="inline-flex items-center gap-2 rounded-full border border-[#0B3B2E]/10 bg-white px-4 py-2 text-xs font-bold uppercase tracking-[0.28em] text-[#0B3B2E] shadow-sm">
-              <FaBolt className="text-[#FF8C00]" /> Built for Kenyan businesses
+              <FaBolt className="text-[#FF8C00]" /> Business management suite
             </div>
             <h1 className="mt-6 max-w-4xl text-4xl font-extrabold leading-[0.98] tracking-[-0.04em] text-slate-950 sm:text-5xl lg:text-[4.7rem] xl:text-[5.2rem]">
-              One business management platform — property, car wash, HR and inventory in one workspace.
+              Run your entire business from one system — property, car wash, HR and inventory.
             </h1>
             <p className="mt-6 max-w-3xl text-lg leading-8 text-slate-600 xl:text-[1.15rem]">
-              Choose the module your business needs — property management, car wash, HR, inventory or property sales. Every module activates independently and includes a full accounting backbone — Chart of Accounts, Trial Balance and financial reports — at no extra cost.
+              Take the module your business needs today. Property management, car wash, HR, inventory or property sales — each one runs independently, each one ships with a full Chart of Accounts, Trial Balance and financial reports. No add-ons, no surprises.
             </p>
 
             <div className="mt-8 flex flex-wrap gap-4">
@@ -732,8 +732,8 @@ function Home() {
             </div>
           </div>
 
-          <div className="relative z-10">
-            <div className="erp-hero-shell">
+          <div className="relative z-10 lg:h-full lg:overflow-hidden">
+            <div className="erp-hero-shell lg:h-full">
               <HeroWorkspaceVisual />
             </div>
           </div>
@@ -802,7 +802,7 @@ function Home() {
         <div className="rounded-[34px] border border-slate-200 bg-white px-6 py-8 shadow-sm sm:px-8">
           <div className="max-w-2xl reveal">
             <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">What every module shares</p>
-            <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">One accounting core underneath every module you activate.</h2>
+            <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">One accounting layer under everything — not an optional extra.</h2>
           </div>
           <div className="mt-8 grid gap-5 lg:grid-cols-3">
             {erpSnapshots.map((snapshot, index) => (
@@ -824,8 +824,8 @@ function Home() {
       <section id="modules" className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
         <div className="max-w-2xl reveal">
           <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Choose your module</p>
-          <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Pick the module your business needs. Accounting is always included.</h2>
-          <p className="mt-4 text-base leading-7 text-slate-600">Each module activates independently — take property management, car wash, HR, inventory or property sales on its own. Every module ships with a complete accounting layer: Chart of Accounts, journals, Trial Balance and financial reports.</p>
+          <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Pick the module that fits your business. Accounting comes with it.</h2>
+          <p className="mt-4 text-base leading-7 text-slate-600">Take one module or stack multiple — property, car wash, HR, inventory, property sales. Each runs independently and each includes a full accounting layer: Chart of Accounts, journals, Trial Balance and financial reports. Standard.</p>
         </div>
         <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 reveal">
           {modules.map((mod, idx) => (
@@ -849,7 +849,7 @@ function Home() {
       <section id="features" className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
         <div className="max-w-2xl reveal">
           <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">What every module includes</p>
-          <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Every module ships with a full accounting backbone — not as an add-on.</h2>
+          <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Every module ships with a full accounting backbone. It's not an add-on — it's built in.</h2>
         </div>
         <div className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           {features.map((feature, idx) => (
@@ -991,7 +991,7 @@ function Home() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="max-w-2xl">
             <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">How the demo works</p>
-            <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">A simple path from curiosity to confident buying.</h2>
+            <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">From first look to live workspace — here's how it works.</h2>
           </div>
           <div className="mt-10 grid gap-6 lg:grid-cols-3">
             {steps.map((step) => (
@@ -1010,9 +1010,9 @@ function Home() {
           <div className="grid gap-8 lg:grid-cols-[1fr_0.8fr] lg:items-center">
             <div>
               <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#F8C471]">Built to convert</p>
-              <h2 className="mt-3 text-3xl font-extrabold sm:text-4xl">Let prospects inspect the workflow, not just hear the pitch.</h2>
+              <h2 className="mt-3 text-3xl font-extrabold sm:text-4xl">See the real system before you buy — not a slide deck.</h2>
               <p className="mt-4 max-w-2xl text-sm leading-7 text-white/85 sm:text-base">
-                The guided demo workspace is designed to build trust fast: sample properties, tenant flows, owner statements and finance reports, all in one environment.
+                The demo workspace has sample properties, tenants, receipts, landlord statements and finance reports — everything you'd actually use, so you can judge it honestly.
               </p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -1099,10 +1099,10 @@ function Home() {
                 <img src="/logo.png" alt="Milik" className="h-10 w-10 object-contain" />
                 <div>
                   <p className="font-extrabold text-white">Milik Business Suite</p>
-                  <p className="text-xs uppercase tracking-[0.2em] text-white/50">Built for Kenya</p>
+                  <p className="text-xs uppercase tracking-[0.2em] text-white/50">Property · Car Wash · HR · Inventory</p>
                 </div>
               </div>
-              <p className="mt-4 max-w-xs text-sm leading-7 text-white/60">Kenya's business management platform — property, car wash, HR, inventory and property sales in one professional workspace.</p>
+              <p className="mt-4 max-w-xs text-sm leading-7 text-white/60">One platform for property, car wash, HR, inventory and property sales — with a full accounting layer built into every module.</p>
               <div className="mt-5 flex gap-3">
                 <a href="tel:+254141455841" className="inline-flex items-center gap-2 rounded-full border border-white/20 px-4 py-2 text-xs font-bold text-white/80 transition hover:border-white/50 hover:text-white">
                   <FaPhoneAlt className="text-[10px]" /> 0141 455 841

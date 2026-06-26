@@ -885,6 +885,30 @@ body {
   background: linear-gradient(180deg, #e8f0ec 0%, #d4e3d9 100%);
 }
 
+/* On desktop: hero fills exactly one screen — constrain the frame to fit */
+@media (min-width: 1024px) {
+  .erp-hero-shell,
+  .hero-workspace-visual,
+  .hero-device-stage {
+    min-height: 0;
+    height: 100%;
+  }
+  .hero-person-shell {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 16px 34px 16px 10px;
+  }
+  .hero-person-frame {
+    aspect-ratio: unset;
+    flex: 1;
+    min-height: 0;
+    max-height: calc(100vh - 100px);
+  }
+}
+
 .hero-person-img {
   display: block;
   width: 100%;
@@ -1015,9 +1039,9 @@ body {
 .module-hero-img-frame {
   position: relative;
   overflow: hidden;
-  border-radius: 34px;
+  border-radius: 38px;
   box-shadow:
-    0 42px 96px rgba(15, 23, 42, 0.2),
+    0 48px 110px rgba(15, 23, 42, 0.2),
     0 8px 24px rgba(15, 23, 42, 0.08);
 }
 
@@ -1027,6 +1051,12 @@ body {
   height: 500px;
   object-fit: cover;
   object-position: center;
+}
+
+@media (min-width: 1024px) {
+  .module-hero-img-shell { height: 100%; }
+  .module-hero-img-frame { height: 100%; }
+  .module-hero-img-frame img { height: 100%; max-height: none; }
 }
 
 .module-hero-badge {

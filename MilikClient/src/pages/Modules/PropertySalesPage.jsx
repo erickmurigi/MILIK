@@ -59,9 +59,18 @@ const useCases = [
 ];
 
 const highlights = [
-  "Deal pipeline from offer to closed",
-  "Agent commissions auto-calculated at close",
-  "Buyer matching and follow-up tracking",
+  "Listings managed with full property details",
+  "Buyer leads tracked from first contact to close",
+  "Deals progressed through defined pipeline stages",
+  "Agent commissions calculated automatically at close",
+  "Sales performance reports by agent and period",
+  "Full accounting — revenue, commissions, reports",
+];
+
+const stats = [
+  { value: "Pipeline", label: "Offer to deal closed" },
+  { value: "Auto", label: "Commission at close" },
+  { value: "Full history", label: "Every buyer lead" },
 ];
 
 const otherModules = [
@@ -91,49 +100,52 @@ export default function PropertySalesPage() {
       {(openTrialModal) => (
         <>
           {/* Hero */}
-          <section className="relative overflow-hidden bg-gradient-to-br from-emerald-50 via-white to-white">
-            <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
-              <div className="grid gap-12 lg:grid-cols-2 lg:items-center lg:gap-16">
-                <div>
+          <section className="relative overflow-hidden bg-gradient-to-br from-emerald-50 via-white to-white lg:h-[calc(100vh-92px)]">
+            <div className="mx-auto h-full max-w-[1700px] px-4 py-16 sm:px-6 lg:flex lg:items-center lg:px-8 lg:py-0">
+              <div className="grid w-full gap-12 lg:h-full lg:grid-cols-2 lg:items-stretch lg:gap-16">
+                <div className="lg:self-center">
                   <div className="inline-flex items-center gap-3 rounded-full border border-emerald-200 bg-white px-4 py-2 text-xs font-bold uppercase tracking-[0.24em] text-emerald-700 shadow-sm">
                     <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
                       <FaHandshake className="text-[10px]" />
                     </span>
                     Property Sales
                   </div>
-                  <h1 className="mt-6 text-4xl font-extrabold leading-tight tracking-[-0.03em] text-slate-950 sm:text-5xl lg:text-[3.5rem]">
+                  <h1 className="mt-5 text-4xl font-extrabold leading-tight tracking-[-0.03em] text-slate-950 sm:text-5xl lg:text-[3.25rem]">
                     Property sales management — listings, buyers and agent commissions in one place.
                   </h1>
-                  <p className="mt-5 text-lg leading-8 text-slate-600">
-                    Milik gives real estate agencies and property developers a structured sales system — manage listings, track buyer leads, progress deals through stages, calculate agent commissions and report on pipeline performance.
+                  <p className="mt-4 text-base leading-7 text-slate-600">
+                    Milik gives real estate agencies and property developers a structured sales system — manage listings, track buyer leads, progress deals through stages, calculate commissions and report on pipeline performance.
                   </p>
-                  <div className="mt-8 flex flex-wrap gap-4">
-                    <button
-                      type="button"
-                      onClick={() => openTrialModal("property_manager")}
-                      className="inline-flex items-center gap-2 rounded-full bg-emerald-700 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-700/20 transition hover:bg-emerald-800"
-                    >
+                  <div className="mt-6 flex flex-wrap items-center gap-x-8 gap-y-3 border-y border-slate-200 py-4">
+                    {stats.map((s) => (
+                      <div key={s.label}>
+                        <p className="text-xl font-extrabold text-emerald-700">{s.value}</p>
+                        <p className="mt-0.5 text-xs font-semibold text-slate-500">{s.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-6 flex flex-wrap gap-3">
+                    <button type="button" onClick={() => openTrialModal("property_manager")}
+                      className="inline-flex items-center gap-2 rounded-full bg-emerald-700 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-700/20 transition hover:bg-emerald-800">
                       Get Free Trial <FaArrowRight />
                     </button>
-                    <Link
-                      to="/#pricing"
-                      className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-6 py-3.5 text-sm font-bold text-slate-800 transition hover:border-emerald-700 hover:text-emerald-700"
-                    >
+                    <Link to="/#pricing"
+                      className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-6 py-3 text-sm font-bold text-slate-800 transition hover:border-emerald-700 hover:text-emerald-700">
                       View Pricing
                     </Link>
                   </div>
-                  <div className="mt-8 grid gap-3 sm:grid-cols-3">
+                  <div className="mt-5 grid gap-2.5 sm:grid-cols-2">
                     {highlights.map((h) => (
-                      <div key={h} className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                      <div key={h} className="flex items-start gap-2.5 rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5 shadow-sm">
                         <FaCheckCircle className="mt-0.5 shrink-0 text-emerald-700" />
-                        <span className="text-sm font-semibold text-slate-700">{h}</span>
+                        <span className="text-xs font-semibold leading-5 text-slate-700">{h}</span>
                       </div>
                     ))}
                   </div>
                 </div>
-                <div className="module-hero-img-shell">
-                  <div className="module-hero-img-frame">
-                    <img src={propertySalesImg} alt="Property sales agent using Milik" loading="eager" />
+                <div className="module-hero-img-shell lg:h-full">
+                  <div className="module-hero-img-frame lg:h-full">
+                    <img src={propertySalesImg} alt="Property sales agent using Milik" loading="eager" className="lg:h-full lg:object-cover" />
                     <div className="absolute inset-0 bg-gradient-to-t from-emerald-900/45 via-transparent to-transparent" />
                     <div className="module-hero-badge bg-emerald-700/90 text-white">
                       <div>
@@ -153,8 +165,8 @@ export default function PropertySalesPage() {
           <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
             <div className="max-w-2xl">
               <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">What it does</p>
-              <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">A complete property sales system — from listing to closed deal.</h2>
-              <p className="mt-4 text-base leading-7 text-slate-600">Every tool a Kenyan property agency needs to manage deals, agents and buyers professionally from one controlled workspace.</p>
+              <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">From listing to closed deal — what the property sales module handles.</h2>
+              <p className="mt-4 text-base leading-7 text-slate-600">Every tool your agency needs to manage the pipeline, assign agents, progress deals and calculate commissions — from one controlled workspace.</p>
             </div>
             <div className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
               {features.map((f) => (
@@ -172,7 +184,7 @@ export default function PropertySalesPage() {
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
               <div className="max-w-2xl">
                 <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Who uses it</p>
-                <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Built for Kenyan property sales professionals.</h2>
+                <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Real estate agencies, developers and independent brokers.</h2>
               </div>
               <div className="mt-10 grid gap-6 lg:grid-cols-3">
                 {useCases.map((uc) => (
@@ -189,8 +201,8 @@ export default function PropertySalesPage() {
           <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
             <div className="max-w-2xl">
               <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Other modules</p>
-              <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Each module activates independently — accounting always included.</h2>
-              <p className="mt-4 text-base leading-7 text-slate-600">Take any module your business needs today. Every module comes with the full accounting backbone — Chart of Accounts, Trial Balance and financial reports — at no extra cost.</p>
+              <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Also managing rentals, a team or a retail operation? Add those to your workspace.</h2>
+              <p className="mt-4 text-base leading-7 text-slate-600">Property Sales is one module. If your business also manages rental property, runs a car wash or needs HR, stack those on — same login, same accounting backbone, same system.</p>
             </div>
             <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
               {otherModules.map((mod) => (

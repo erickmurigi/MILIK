@@ -1,5 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import { FaCheckCircle } from "react-icons/fa";
 import FreeTrialModal from "../../components/FreeTrialModal";
 
 export default function ModulePageShell({ children }) {
@@ -16,7 +17,7 @@ export default function ModulePageShell({ children }) {
       <nav className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-2 sm:px-6 lg:px-8">
           <Link to="/" className="relative inline-block">
-            <img src="/logo.png" alt="Milik" className="h-20 w-20 object-contain" />
+            <img src="/logo.png" alt="Milik" className="h-11 w-auto object-contain" style={{ maxWidth: "160px" }} />
           </Link>
           <div className="hidden items-center gap-8 md:flex">
             <Link to="/" className="text-sm font-semibold text-slate-600 transition hover:text-[#0B3B2E]">Home</Link>
@@ -47,6 +48,16 @@ export default function ModulePageShell({ children }) {
           </div>
         </div>
       </nav>
+
+      {/* Accounting included callout — shown on every module page */}
+      <div className="border-b border-[#0B3B2E]/10 bg-[#0B3B2E]">
+        <div className="mx-auto max-w-7xl px-4 py-2.5 sm:px-6 lg:px-8">
+          <p className="flex items-center justify-center gap-2 text-center text-xs font-bold tracking-wide text-white">
+            <FaCheckCircle className="shrink-0 text-emerald-300" />
+            Accounting included with every module — Chart of Accounts, Trial Balance, Income Statement and financial reports. No extra cost.
+          </p>
+        </div>
+      </div>
 
       <main>{children(openTrialModal)}</main>
 

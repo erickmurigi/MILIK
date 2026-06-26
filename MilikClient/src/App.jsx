@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import ScrollToTop from "./components/common/ScrollToTop";
 import { useDispatch, useSelector } from "react-redux";
 import { clearCurrentCompany, getCompanySuccess, setCurrentCompany } from "./redux/companiesRedux";
 import { initializeAuth } from "./redux/authSlice";
@@ -568,6 +569,7 @@ function App() {
     <ESSContextProvider>
     <ConfirmProvider>
       <BrowserRouter>
+        <ScrollToTop />
         <AppDocumentTitleGuard />
         <Suspense fallback={<PageLoader />}>
           <Routes>
