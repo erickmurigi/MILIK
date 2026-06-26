@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   FaCheckCircle, FaMoneyBillWave, FaPiggyBank,
   FaRedoAlt, FaSms, FaToggleOff, FaToggleOn,
-  FaChevronDown, FaChevronUp, FaExclamationCircle, FaInfoCircle, FaTv, FaTag, FaTools,
+  FaChevronDown, FaChevronUp, FaExclamationCircle, FaInfoCircle, FaTv, FaTag, FaTools, FaImage, FaTrash,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, normalizeListPayload } from "../../services/carWashApi";
@@ -34,6 +34,8 @@ export default function CarWashSettings() {
   const [savingsEnabled, setSavingsEnabled]       = useState(true);
   const [savingsAmount, setSavingsAmount]         = useState(100);
   const [queueDisplayName, setQueueDisplayName]   = useState("");
+  const [queueBgImage,     setQueueBgImage]       = useState("");
+  const [bgUploading,      setBgUploading]         = useState(false);
   const [discountMinJobPrice, setDiscountMinJobPrice] = useState("");
   const [discountMaxPercent,  setDiscountMaxPercent]  = useState("");
   const [dmgDeductionMode,  setDmgDeductionMode]  = useState("full");
@@ -59,6 +61,7 @@ export default function CarWashSettings() {
       setSavingsAmount(Number(settingsRes?.savingsDeductionPerJob ?? 100));
       setSmsTemplates(Array.isArray(settingsRes?.smsTemplates) ? settingsRes.smsTemplates : []);
       setQueueDisplayName(settingsRes?.queueDisplayName || "");
+      setQueueBgImage(settingsRes?.queueBgImage || "");
       setDiscountMinJobPrice(String(settingsRes?.discountMinJobPrice ?? 0));
       setDiscountMaxPercent(String(settingsRes?.discountMaxPercent  ?? 0));
       setDmgDeductionMode(settingsRes?.damageDeductionMode || "full");
@@ -73,6 +76,24 @@ export default function CarWashSettings() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  const handleBgImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBgUploading(true);
+    try {
+      const result = await carWashApi.uploadQueueBgImage(file);
+      setQueueBgImage(result.url);
+      toast.success("Background image uploaded");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Upload failed");
+    } finally {
+      setBgUploading(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleRemoveBgImage = () => { setQueueBgImage(""); setDirty(true); };
+
   const setDefault    = (m, v)        => { setDefaults((p) => ({ ...p, [m]: v })); setDirty(true); };
   const setSmsField   = (k, f, v)     => { setSmsTemplates((p) => p.map((t) => t.key === k ? { ...t, [f]: v } : t)); setDirty(true); };
   const insertToken   = (k, token)    => { setSmsTemplates((p) => p.map((t) => t.key !== k ? t : { ...t, messageBody: (t.messageBody || "") + token })); setDirty(true); };
@@ -86,6 +107,7 @@ export default function CarWashSettings() {
         savingsDeductionPerJob: Number(savingsAmount),
         smsTemplates: smsTemplates.map(({ key, enabled, messageBody }) => ({ key, enabled, messageBody })),
         queueDisplayName,
+        queueBgImage,
         discountMinJobPrice: Number(discountMinJobPrice) || 0,
         discountMaxPercent:  Number(discountMaxPercent)  || 0,
         damageDeductionMode:  dmgDeductionMode,
@@ -153,19 +175,92 @@ export default function CarWashSettings() {
                 title="Queue Display"
                 subtitle="Name shown on the customer-facing TV screen. Leave blank to use the company name."
               />
-              <div className="p-5">
-                <label className={labelCls}>Display name (max 60 chars)</label>
-                <input
-                  className={inputCls}
-                  value={queueDisplayName}
-                  onChange={(e) => { setQueueDisplayName(e.target.value.slice(0, 60)); setDirty(true); }}
-                  placeholder="e.g. ABC CAR WASH"
-                  disabled={!canManage}
-                  maxLength={60}
-                />
-                <p className="mt-1.5 text-[10px] text-slate-400">
-                  {queueDisplayName.length}/60 · Shown as the heading on the queue display screen.
-                </p>
+              <div className="p-5 space-y-4">
+                <div>
+                  <label className={labelCls}>Display name (max 60 chars)</label>
+                  <input
+                    className={inputCls}
+                    value={queueDisplayName}
+                    onChange={(e) => { setQueueDisplayName(e.target.value.slice(0, 60)); setDirty(true); }}
+                    placeholder="e.g. ABC CAR WASH"
+                    disabled={!canManage}
+                    maxLength={60}
+                  />
+                  <p className="mt-1.5 text-[10px] text-slate-400">
+                    {queueDisplayName.length}/60 · Shown as the heading on the queue display screen.
+                  </p>
+                </div>
+
+                <div>
+                  <label className={labelCls}>Queue screen background image</label>
+
+                  {queueBgImage ? (
+                    /* ── Preview ── */
+                    <div className="relative mt-1 h-36 w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-900 shadow-sm">
+                      <img
+                        src={`${(import.meta.env.VITE_API_URL || "").replace(/\/api\/?$/, "")}${queueBgImage}`}
+                        alt="Queue background"
+                        className="h-full w-full object-cover"
+                        onError={(e) => { e.currentTarget.style.opacity = "0.3"; }}
+                      />
+                      {/* Simulated dark overlay — shows how it will look on the display */}
+                      <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.42) 50%, rgba(0,0,0,0.58) 100%)" }} />
+                      <div className="absolute inset-x-0 top-2 flex items-center justify-center">
+                        <span className="rounded-full bg-black/40 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-white/60">Display preview</span>
+                      </div>
+                      <div className="absolute inset-x-0 bottom-2 flex items-center justify-between px-3">
+                        <span className="truncate max-w-[65%] text-[9px] text-white/50">{queueBgImage.split("/").pop()}</span>
+                        <div className="flex items-center gap-1.5">
+                          {canManage && (
+                            <label className="cursor-pointer rounded border border-white/30 bg-black/50 px-2 py-1 text-[9px] font-bold text-white hover:bg-white/20 transition">
+                              <input type="file" accept="image/jpeg,image/jpg,image/png,image/webp" className="hidden" disabled={bgUploading} onChange={handleBgImageUpload} />
+                              Replace
+                            </label>
+                          )}
+                          {canManage && (
+                            <button type="button" onClick={handleRemoveBgImage} disabled={bgUploading}
+                              className="flex items-center gap-1 rounded border border-red-400/40 bg-red-600/60 px-2 py-1 text-[9px] font-bold text-white hover:bg-red-600/80 transition">
+                              <FaTrash size={8} /> Remove
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* ── Upload zone ── */
+                    <label
+                      className={`mt-1 flex h-28 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed transition ${
+                        bgUploading
+                          ? "border-blue-400 bg-blue-50/60"
+                          : "border-slate-300 bg-slate-50 hover:border-[#0B3B2E]/50 hover:bg-[#EDF5F1]/60"
+                      } ${!canManage ? "pointer-events-none opacity-50" : ""}`}
+                    >
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/jpg,image/png,image/webp"
+                        className="hidden"
+                        disabled={!canManage || bgUploading}
+                        onChange={handleBgImageUpload}
+                      />
+                      {bgUploading ? (
+                        <div className="flex flex-col items-center gap-1.5">
+                          <div className="h-5 w-5 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
+                          <span className="text-[11px] font-semibold text-blue-600">Uploading…</span>
+                        </div>
+                      ) : (
+                        <>
+                          <FaImage size={22} className="text-slate-300" />
+                          <span className="text-[11px] font-semibold text-slate-500">Click to upload a photo</span>
+                          <span className="text-[10px] text-slate-400">JPG · PNG · WebP · max 10 MB</span>
+                        </>
+                      )}
+                    </label>
+                  )}
+
+                  <p className="mt-1.5 text-[10px] text-slate-400">
+                    Shown full-bleed on the queue display screen with a dark overlay — plates and text remain clearly readable.
+                  </p>
+                </div>
               </div>
             </div>
 

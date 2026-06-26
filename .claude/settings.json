@@ -100,7 +100,9 @@
       "Read(//c/c/Users/murig/OneDrive/Desktop/MILIKPMS/Milik/MilikApi/controllers/propertyController/**)",
       "Bash(node -e ' *)",
       "Bash(xargs grep -l \"useState.*show\\\\|useState.*open\")",
-      "Bash(grep -A 15 'paymentDate.*$gte.*snapshotDate' 'c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikApi\\\\services\\\\landlordStatementService.js')"
+      "Bash(grep -A 15 'paymentDate.*$gte.*snapshotDate' 'c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikApi\\\\services\\\\landlordStatementService.js')",
+      "Bash(xargs grep -l \"carwash/display\\\\|queue.*display\\\\|display.*queue\")",
+      "Bash(xargs grep -l \"carwash/display\\\\|display.*businessId.*queue\")"
     ]
   }
 }

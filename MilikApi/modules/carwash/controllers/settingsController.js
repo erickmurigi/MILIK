@@ -3,6 +3,8 @@ import Company from "../../../models/Company.js";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import { resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { CW_SMS_TEMPLATE_DEFAULTS, invalidateSmsSettingsCache } from "../services/carwashSmsService.js";
+import fs from "fs";
+import { QUEUE_BG_BASE_URL, deleteQueueBgFile } from "../middleware/queueBgUpload.js";
 import CarWashJob from "../models/CarWashJob.js";
 import CarWashPayment from "../models/CarWashPayment.js";
 import CarWashExpense from "../models/CarWashExpense.js";
@@ -59,13 +61,14 @@ export const getCarWashSettings = async (req, res, next) => {
     const savingsEnabled = company?.carwashSettings?.savingsEnabled !== false;
     const smsTemplates = mergeSmsTemplates(company?.carwashSettings?.smsTemplates);
     const queueDisplayName    = String(company?.carwashSettings?.queueDisplayName    || "").trim();
+    const queueBgImage        = String(company?.carwashSettings?.queueBgImage        || "").trim();
     const discountMinJobPrice = Number(company?.carwashSettings?.discountMinJobPrice ?? 0);
     const discountMaxPercent  = Number(company?.carwashSettings?.discountMaxPercent  ?? 0);
     const damageDeductionMode  = company?.carwashSettings?.damageDeductionMode  || "full";
     const damageDeductionValue = company?.carwashSettings?.damageDeductionValue != null
       ? Number(company.carwashSettings.damageDeductionValue) : null;
 
-    res.json({ success: true, data: { defaultCashbooks, savingsEnabled, savingsDeductionPerJob, smsTemplates, queueDisplayName, discountMinJobPrice, discountMaxPercent, damageDeductionMode, damageDeductionValue } });
+    res.json({ success: true, data: { defaultCashbooks, savingsEnabled, savingsDeductionPerJob, smsTemplates, queueDisplayName, queueBgImage, discountMinJobPrice, discountMaxPercent, damageDeductionMode, damageDeductionValue } });
   } catch (err) {
     next(err);
   }
@@ -74,7 +77,7 @@ export const getCarWashSettings = async (req, res, next) => {
 export const updateCarWashSettings = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const { defaultCashbooks = {}, savingsEnabled, savingsDeductionPerJob, smsTemplates, queueDisplayName, discountMinJobPrice, discountMaxPercent, damageDeductionMode, damageDeductionValue } = req.body;
+    const { defaultCashbooks = {}, savingsEnabled, savingsDeductionPerJob, smsTemplates, queueDisplayName, queueBgImage, discountMinJobPrice, discountMaxPercent, damageDeductionMode, damageDeductionValue } = req.body;
 
     const update = {};
 
@@ -121,6 +124,16 @@ export const updateCarWashSettings = async (req, res, next) => {
 
     if (queueDisplayName !== undefined) {
       update["carwashSettings.queueDisplayName"] = String(queueDisplayName).trim().slice(0, 60);
+    }
+
+    if (queueBgImage !== undefined) {
+      const url = String(queueBgImage || "").trim().slice(0, 500);
+      // Delete old local file when the image is cleared or replaced with an external URL
+      if (!url) {
+        const current = await Company.findById(business).select("carwashSettings.queueBgImage").lean();
+        deleteQueueBgFile(current?.carwashSettings?.queueBgImage);
+      }
+      update["carwashSettings.queueBgImage"] = url || null;
     }
 
     if (discountMinJobPrice !== undefined) {
@@ -201,6 +214,51 @@ export const backfillBranches = async (req, res, next) => {
         staffSavings: savings.modifiedCount,
       },
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const IMAGE_MAGIC = [
+  { bytes: [0xFF, 0xD8, 0xFF],             label: "JPEG" },
+  { bytes: [0x89, 0x50, 0x4E, 0x47],       label: "PNG"  },
+  { bytes: [0x52, 0x49, 0x46, 0x46],       label: "WebP" }, // RIFF header (WebP)
+];
+
+const isValidImageFile = (filePath) => {
+  try {
+    const buf = Buffer.alloc(4);
+    const fd  = fs.openSync(filePath, "r");
+    fs.readSync(fd, buf, 0, 4, 0);
+    fs.closeSync(fd);
+    return IMAGE_MAGIC.some(({ bytes }) => bytes.every((b, i) => buf[i] === b));
+  } catch {
+    return false;
+  }
+};
+
+export const uploadQueueBgImage = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+
+    if (!req.file) {
+      return next({ status: 400, message: "No image file provided" });
+    }
+
+    // Validate actual file content — mimetype alone can be spoofed
+    if (!isValidImageFile(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+      return next({ status: 400, message: "Invalid file — must be a real JPEG, PNG, or WebP image" });
+    }
+
+    // Delete old local file before saving the new one
+    const current = await Company.findById(business).select("carwashSettings.queueBgImage").lean();
+    deleteQueueBgFile(current?.carwashSettings?.queueBgImage);
+
+    const imageUrl = `${QUEUE_BG_BASE_URL}/${req.file.filename}`;
+    await Company.updateOne({ _id: business }, { $set: { "carwashSettings.queueBgImage": imageUrl } });
+
+    res.json({ success: true, url: imageUrl });
   } catch (err) {
     next(err);
   }

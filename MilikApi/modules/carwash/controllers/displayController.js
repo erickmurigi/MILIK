@@ -46,7 +46,10 @@ export const getQueueDisplay = async (req, res, next) => {
 
     res.json({
       success:  true,
-      business: { name: company.carwashSettings?.queueDisplayName?.trim() || company.companyName },
+      business: {
+        name:       company.carwashSettings?.queueDisplayName?.trim() || company.companyName,
+        queueBgImage: company.carwashSettings?.queueBgImage?.trim() || null,
+      },
       jobs:     mapped,
     });
   } catch (error) {

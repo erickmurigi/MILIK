@@ -78,6 +78,11 @@ export const carWashApi = {
   listCashbooks: async () => unwrap(await adminRequests.get("/chart-of-accounts", { params: { type: "asset", moduleScope: "carwash", search: "Cashbooks" } })),
   getCarWashSettings: async () => unwrap(await adminRequests.get("/carwash/settings")),
   updateCarWashSettings: async (payload) => unwrap(await adminRequests.put("/carwash/settings", payload)),
+  uploadQueueBgImage: async (file) => {
+    const form = new FormData();
+    form.append("image", file);
+    return unwrap(await adminRequests.post("/carwash/settings/queue-bg-image", form, { headers: { "Content-Type": "multipart/form-data" } }));
+  },
   backfillBranches: async () => unwrap(await adminRequests.post("/carwash/settings/backfill-branches")),
   createChartAccount: async (payload) => unwrap(await adminRequests.post("/chart-of-accounts", payload)),
   updateChartAccount: async (id, payload) => unwrap(await adminRequests.put(`/chart-of-accounts/${id}`, payload)),

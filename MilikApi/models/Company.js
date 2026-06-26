@@ -578,10 +578,13 @@ const companySchema = new mongoose.Schema(
         other: { type: mongoose.Schema.Types.ObjectId, ref: 'ChartOfAccount', default: null },
       },
       queueDisplayName:       { type: String,  default: '', trim: true, maxlength: 60 },
+      queueBgImage:           { type: String,  default: null, trim: true },
       discountMinJobPrice:    { type: Number,  default: 0, min: 0 },
       discountMaxPercent:     { type: Number,  default: 0, min: 0, max: 100 },
       savingsEnabled:         { type: Boolean, default: true },
       savingsDeductionPerJob: { type: Number,  default: 100, min: 0 },
+      damageDeductionMode:    { type: String,  default: 'full', enum: ['full', 'percent', 'fixed'] },
+      damageDeductionValue:   { type: Number,  default: null },
       smsTemplates: [
         {
           key:         { type: String, required: true, trim: true },
