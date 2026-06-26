@@ -338,10 +338,9 @@ const PropertyIncomeSummaryReport = () => {
         </div>
       </div>
 
-      <div className="no-print milik-report-page flex h-full min-h-0 flex-col overflow-hidden bg-slate-100 p-1.5">
+      <div className="no-print milik-report-page flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-1.5">
         <style>{`
-          .milik-report-page select:focus, .milik-report-page input:focus { border-color: #f45b0b; box-shadow: 0 0 0 1px rgba(244, 91, 11, 0.45); outline: none; }
-          .milik-report-page select option:checked { background: #f45b0b; color: #ffffff; }
+          .milik-report-page select:focus, .milik-report-page input:focus { border-color: #0B3B2E; box-shadow: 0 0 0 1px rgba(11,59,46,0.2); outline: none; }
         `}</style>
 
         <div className="mx-auto flex w-full max-w-none min-h-0 flex-1 flex-col">
@@ -364,114 +363,101 @@ const PropertyIncomeSummaryReport = () => {
                 )}
               </div>
               <div className="mt-1.5 flex flex-wrap justify-end gap-1.5">
-                <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? 'Export CSV' : 'No export permission'} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaFileDownload /> Export CSV</button>
-                <button onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? 'Print' : 'No print permission'} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaPrint /> Print</button>
-                <button onClick={loadReport} className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] transition ${filtersChanged ? 'border border-orange-400 bg-orange-50 text-orange-700 hover:bg-orange-100' : 'border border-slate-200 bg-white text-slate-700 hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700'}`}><FaSyncAlt className={loading ? 'animate-spin' : ''} /> {filtersChanged ? 'Apply Filters' : 'Refresh'}</button>
+                <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? 'Export CSV' : 'No export permission'} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaFileDownload /> Export CSV</button>
+                <button onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? 'Print' : 'No print permission'} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaPrint /> Print</button>
+                <button onClick={loadReport} className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] transition ${filtersChanged ? 'border border-[#0B3B2E] bg-[#0B3B2E] text-white hover:bg-[#0A3127]' : 'border border-slate-200 bg-white text-slate-700 hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white'}`}><FaSyncAlt className={loading ? 'animate-spin' : ''} /> {filtersChanged ? 'Apply Filters' : 'Refresh'}</button>
               </div>
             </div>
 
-            {/* Summary metrics */}
-            <div className="grid flex-shrink-0 gap-1.5 border-b border-slate-200 bg-white p-1.5 md:grid-cols-3 xl:grid-cols-6">
-              {[
-                { label: 'Total Invoiced', value: formatMoney(summary.totalInvoiced), accent: 'text-slate-900' },
-                { label: 'Total Collected', value: formatMoney(summary.totalCollected), accent: 'text-emerald-700' },
-                { label: 'Collection Rate', value: formatPercent(summary.collectionRate), accent: 'text-slate-900' },
-                { label: 'Total Expenses', value: formatMoney(summary.totalExpenses), accent: 'text-red-700' },
-                { label: 'Net Income (Cash)', value: formatMoney(summary.netIncome), accent: Number(summary.netIncome || 0) >= 0 ? 'text-emerald-700' : 'text-red-700' },
-                { label: 'Properties', value: summary.propertyCount || 0, accent: 'text-slate-900' },
-              ].map((card) => (
-                <div key={card.label} className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500">{card.label}</div>
-                  <div className={`mt-0.5 text-base font-black ${card.accent}`}>{card.value}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Insight cards */}
-            <div className="grid flex-shrink-0 gap-1.5 border-b border-slate-200 bg-slate-50 p-1.5 md:grid-cols-3">
-              <div className="rounded-md border border-slate-200 bg-white px-2 py-1">
-                <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500">Profit Margin</div>
-                <div className="mt-0.5 text-sm font-black text-slate-900">{formatPercent(insights.profitMargin)}</div>
-                <p className="mt-0.5 text-[10px] leading-snug text-slate-600">Net income as a share of total cash collected in the period.</p>
-              </div>
-              <div className="rounded-md border border-slate-200 bg-white px-2 py-1">
-                <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500">Best Property</div>
-                <div className="mt-0.5 text-sm font-black text-slate-900">{insights.topProperty?.propertyName || '—'}</div>
-                <p className="mt-0.5 text-[10px] leading-snug text-slate-600">
-                  {insights.topProperty
-                    ? `Net income: ${formatMoney(insights.topProperty.netIncome)} (collected ${formatMoney(insights.topProperty.totalCollected)}).`
-                    : 'No property data for the selected filters.'}
-                </p>
-              </div>
-              <div className="rounded-md border border-slate-200 bg-white px-2 py-1">
-                <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500">Top Expense Category</div>
-                <div className="mt-0.5 text-sm font-black capitalize text-slate-900">{insights.topExpenseCategory ? formatCategory(insights.topExpenseCategory.category) : '—'}</div>
-                <p className="mt-0.5 text-[10px] leading-snug text-slate-600">
-                  {insights.topExpenseCategory
-                    ? `${formatMoney(insights.topExpenseCategory.total)} across ${insights.topExpenseCategory.count} transaction(s).`
-                    : 'No expense records in the selected period.'}
-                </p>
+            {/* ── Stat strip (6 core metrics) ── */}
+            <div className="flex-shrink-0 border-b border-slate-100 bg-white">
+              <div className="flex divide-x divide-slate-100">
+                {[
+                  { label: 'Total Invoiced',    value: formatMoney(summary.totalInvoiced),    accent: 'text-slate-800' },
+                  { label: 'Total Collected',   value: formatMoney(summary.totalCollected),   accent: 'text-emerald-700' },
+                  { label: 'Collection Rate',   value: formatPercent(summary.collectionRate), accent: 'text-slate-800' },
+                  { label: 'Total Expenses',    value: formatMoney(summary.totalExpenses),    accent: 'text-red-600' },
+                  { label: 'Net Income (Cash)', value: formatMoney(summary.netIncome),        accent: Number(summary.netIncome || 0) >= 0 ? 'text-emerald-700' : 'text-red-600' },
+                  { label: 'Properties',        value: summary.propertyCount || 0,            accent: 'text-slate-800' },
+                ].map((item) => (
+                  <div key={item.label} className="flex-1 px-4 py-3">
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">{item.label}</p>
+                    <p className={`mt-1 text-[15px] font-black ${item.accent}`}>{item.value}</p>
+                  </div>
+                ))}
               </div>
             </div>
 
-            {/* Tables */}
-            <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-hidden bg-white p-1.5">
-              {/* By-property table */}
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white">
-                <div className="flex-shrink-0 bg-[#0B3B2E] px-2 py-1.5 text-xs font-bold text-white">Income &amp; Expenses by Property</div>
+            {/* ── Tables ── */}
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+
+              {/* Income & Expenses by Property */}
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <div className="flex-shrink-0 border-b border-[#0B3B2E]/10 bg-[#0B3B2E] px-3 py-1.5 text-xs font-bold text-white">Income &amp; Expenses by Property</div>
                 <div className="min-h-0 flex-1 overflow-auto">
                   <table className="min-w-full text-[11px] border-collapse">
                     <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                       <tr>
                         {['Property', 'Rent Invoiced', 'Utilities Invoiced', 'Total Invoiced', 'Collected', 'Expenses', 'Net Income (Cash)', 'Collection %'].map((h, i, arr) => (
-                          <th key={h} className={`whitespace-nowrap px-2 py-1 text-left font-bold ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
+                          <th key={h} className={`whitespace-nowrap px-3 py-1.5 text-left font-bold ${i > 0 ? 'text-right' : ''} ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {(report.byProperty || []).length === 0 ? (
-                        <tr><td colSpan={8} className="px-2 py-4 text-center text-slate-500">{loading ? 'Loading…' : 'No data found for the selected filters.'}</td></tr>
+                        <tr><td colSpan={8} className="px-3 py-6 text-center text-[11px] text-slate-400">{loading ? 'Loading…' : 'No data found for the selected filters.'}</td></tr>
                       ) : (report.byProperty || []).map((row, i) => (
-                        <tr key={row.propertyId || row.propertyName} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
-                          <td className="px-2 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.propertyName}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.rentInvoiced)}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.utilitiesInvoiced)}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 text-slate-700">{formatMoney(row.totalInvoiced)}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 font-semibold text-emerald-700">{formatMoney(row.totalCollected)}</td>
-                          <td className="px-2 py-1 border-r border-gray-100 text-red-700">{formatMoney(row.totalExpenses)}</td>
-                          <td className={`px-2 py-1 border-r border-gray-100 font-semibold ${Number(row.netIncome || 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>{formatMoney(row.netIncome)}</td>
-                          <td className="px-2 py-1 text-slate-700">{formatPercent(row.collectionRate)}</td>
+                        <tr key={row.propertyId || row.propertyName} className={`border-b border-slate-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} hover:bg-emerald-50/30`}>
+                          <td className="px-3 py-1.5 border-r border-slate-100 font-semibold text-slate-900">{row.propertyName}</td>
+                          <td className="px-3 py-1.5 border-r border-slate-100 text-right text-slate-700">{formatMoney(row.rentInvoiced)}</td>
+                          <td className="px-3 py-1.5 border-r border-slate-100 text-right text-slate-700">{formatMoney(row.utilitiesInvoiced)}</td>
+                          <td className="px-3 py-1.5 border-r border-slate-100 text-right text-slate-700">{formatMoney(row.totalInvoiced)}</td>
+                          <td className="px-3 py-1.5 border-r border-slate-100 text-right font-semibold text-emerald-700">{formatMoney(row.totalCollected)}</td>
+                          <td className="px-3 py-1.5 border-r border-slate-100 text-right text-red-600">{formatMoney(row.totalExpenses)}</td>
+                          <td className={`px-3 py-1.5 border-r border-slate-100 text-right font-semibold ${Number(row.netIncome || 0) >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{formatMoney(row.netIncome)}</td>
+                          <td className="px-3 py-1.5 text-right text-slate-700">{formatPercent(row.collectionRate)}</td>
                         </tr>
                       ))}
                     </tbody>
+                    {(report.byProperty || []).length > 1 && (
+                      <tfoot className="bg-[#0B3B2E]/5 border-t-2 border-[#0B3B2E]/20 text-[11px]">
+                        <tr>
+                          <td className="px-3 py-2 font-black text-slate-700">Totals</td>
+                          <td className="px-3 py-2 text-right font-black text-slate-700">{formatMoney((report.byProperty||[]).reduce((s,r)=>s+Number(r.rentInvoiced||0),0))}</td>
+                          <td className="px-3 py-2 text-right font-black text-slate-700">{formatMoney((report.byProperty||[]).reduce((s,r)=>s+Number(r.utilitiesInvoiced||0),0))}</td>
+                          <td className="px-3 py-2 text-right font-black text-slate-700">{formatMoney(summary.totalInvoiced)}</td>
+                          <td className="px-3 py-2 text-right font-black text-emerald-700">{formatMoney(summary.totalCollected)}</td>
+                          <td className="px-3 py-2 text-right font-black text-red-600">{formatMoney(summary.totalExpenses)}</td>
+                          <td className={`px-3 py-2 text-right font-black ${Number(summary.netIncome || 0) >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{formatMoney(summary.netIncome)}</td>
+                          <td className="px-3 py-2 text-right font-black text-slate-700">{formatPercent(summary.collectionRate)}</td>
+                        </tr>
+                      </tfoot>
+                    )}
                   </table>
                 </div>
               </div>
 
-              {/* Expenses by category */}
+              {/* Expenses by Category — fixed-height footer section */}
               {(report.expensesByCategory || []).length > 0 && (
-                <div className="flex-shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-white" style={{ maxHeight: '200px' }}>
-                  <div className="flex-shrink-0 bg-[#0B3B2E] px-2 py-1.5 text-xs font-bold text-white">Expenses by Category</div>
-                  <div className="overflow-auto" style={{ maxHeight: '160px' }}>
-                    <table className="min-w-full text-[11px] border-collapse">
-                      <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
-                        <tr>
-                          {['Category', 'Total', 'Transactions'].map((h, i, arr) => (
-                            <th key={h} className={`whitespace-nowrap px-2 py-1 text-left font-bold ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
-                          ))}
+                <div className="flex-shrink-0 border-t-2 border-slate-200" style={{ maxHeight: '170px', overflowY: 'auto' }}>
+                  <table className="min-w-full text-[11px] border-collapse">
+                    <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+                      <tr>
+                        <th className="px-3 py-1.5 text-left font-bold border-r border-white/10">Expense Category</th>
+                        <th className="px-3 py-1.5 text-right font-bold border-r border-white/10">Total</th>
+                        <th className="px-3 py-1.5 text-right font-bold">Transactions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(report.expensesByCategory || []).map((row, i) => (
+                        <tr key={row.category} className={`border-b border-slate-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} hover:bg-emerald-50/30`}>
+                          <td className="px-3 py-1.5 border-r border-slate-100 capitalize font-semibold text-slate-900">{formatCategory(row.category)}</td>
+                          <td className="px-3 py-1.5 border-r border-slate-100 text-right text-red-600">{formatMoney(row.total)}</td>
+                          <td className="px-3 py-1.5 text-right text-slate-700">{row.count}</td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {(report.expensesByCategory || []).map((row, i) => (
-                          <tr key={row.category} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
-                            <td className="px-2 py-1 border-r border-gray-100 capitalize font-semibold text-slate-900">{formatCategory(row.category)}</td>
-                            <td className="px-2 py-1 border-r border-gray-100 text-red-700">{formatMoney(row.total)}</td>
-                            <td className="px-2 py-1 text-slate-700">{row.count}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>

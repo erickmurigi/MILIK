@@ -245,7 +245,7 @@ const RentalCollectionReport = () => {
     <div class="hdr"><div>${logo ? `<img src="${logo}" class="logo" alt="">` : ''}<div class="co">${name}</div><div class="ttl">Rental Collection Report</div><div class="sub">Period: ${formatDate(filters.startDate)} to ${formatDate(filters.endDate)}</div></div>
     <div class="meta"><div>Generated: ${new Date().toLocaleString()}</div><div>Prepared by: ${by}</div><div>Receipts: ${rows.length}</div></div></div>
     <div class="cards">
-      <div class="card"><div class="cl">Total Collected</div><div class="cv" style="color:#0B3B2E">${fmt(summary.totalCollected)}</div></div>
+      <div class="card"><div class="cl">Operational Income</div><div class="cv" style="color:#0B3B2E">${fmt(summary.operationalCollected ?? summary.totalCollected)}</div></div>
       <div class="card"><div class="cl">Allocated</div><div class="cv">${fmt(summary.allocatedAmount)}</div></div>
       <div class="card"><div class="cl">Unapplied</div><div class="cv" style="color:#b45309">${fmt(summary.unappliedAmount)}</div></div>
       <div class="card"><div class="cl">Payments</div><div class="cv">${Number(summary.totalPayments || rows.length)}</div></div>
@@ -316,7 +316,7 @@ const RentalCollectionReport = () => {
 
           <div className="report-print-section report-print-grid">
             {[
-              { label: 'Total Collected', value: formatMoney(summary.totalCollected) },
+              { label: 'Operational Income', value: formatMoney(summary.operationalCollected ?? summary.totalCollected) },
               { label: 'Allocated', value: formatMoney(summary.allocatedAmount) },
               { label: 'Unapplied', value: formatMoney(summary.unappliedAmount) },
               { label: 'Collection Rate', value: formatPercent(summary.collectionRate) },
@@ -442,9 +442,9 @@ const RentalCollectionReport = () => {
                 <input value={filters.cashbook} onChange={(e) => setFilters((prev) => ({ ...prev, cashbook: e.target.value }))} placeholder="Cashbook contains..." className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </div>
               <div className="mt-1.5 flex flex-wrap justify-end gap-1.5">
-                <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaFileDownload /> Export CSV</button>
-                <button onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700"><FaPrint /> Print</button>
-                <button onClick={loadReport} className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] transition ${filtersChanged ? 'border border-orange-400 bg-orange-50 text-orange-700 hover:bg-orange-100' : 'border border-slate-200 bg-white text-slate-700 hover:border-orange-500 hover:bg-orange-50 hover:text-orange-700'}`}><FaSyncAlt className={loading ? 'animate-spin' : ''} /> {filtersChanged ? 'Apply Filters' : 'Refresh'}</button>
+                <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "No export permission"} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaFileDownload /> Export CSV</button>
+                <button onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? "Print" : "No print permission"} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaPrint /> Print</button>
+                <button onClick={loadReport} className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] transition ${filtersChanged ? 'border border-[#0B3B2E] bg-[#0B3B2E] text-white hover:bg-[#0A3127]' : 'border border-slate-200 bg-white text-slate-700 hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white'}`}><FaSyncAlt className={loading ? 'animate-spin' : ''} /> {filtersChanged ? 'Apply Filters' : 'Refresh'}</button>
               </div>
             </div>
 
@@ -452,15 +452,15 @@ const RentalCollectionReport = () => {
             <div className="flex-shrink-0 overflow-x-auto border-b border-slate-100 bg-white">
               <div className="flex min-w-max divide-x divide-slate-100">
                 {[
-                  { label: 'Total Collected',    value: formatMoney(summary.totalCollected),                   accent: 'text-emerald-700',   sub: null },
-                  { label: 'Allocated',           value: formatMoney(summary.allocatedAmount),                  accent: 'text-slate-800',     sub: null },
-                  { label: 'Unapplied',           value: formatMoney(summary.unappliedAmount),                  accent: Number(summary.unappliedAmount || 0) > 0 ? 'text-amber-600' : 'text-slate-400', sub: Number(summary.unappliedAmount || 0) > 0 ? 'Needs attention' : null },
-                  { label: 'Rent Applied',        value: formatMoney(summary.rentApplied),                      accent: 'text-slate-800',     sub: null },
-                  { label: 'Utilities Applied',   value: formatMoney(summary.utilityApplied),                   accent: 'text-slate-800',     sub: null },
-                  { label: 'Collection Rate',     value: formatPercent(summary.collectionRate),                 accent: 'text-slate-800',     sub: null },
-                  { label: 'Avg Receipt',         value: formatMoney(collectionInsights.averageReceipt),        accent: 'text-slate-800',     sub: 'Per effective receipt' },
-                  { label: 'Alloc Efficiency',    value: formatPercent(collectionInsights.allocationEfficiency),accent: 'text-slate-800',     sub: 'Cash tied to invoices' },
-                  { label: 'Top Property',        value: collectionInsights.topProperty?.propertyName || '—',  accent: 'text-[#0B3B2E]',     sub: collectionInsights.topProperty ? `${formatMoney(collectionInsights.topProperty.totalCollected)} · ${collectionInsights.topProperty.paymentCount || 0} receipt(s)` : null },
+                  { label: 'Operational Income',  value: formatMoney(summary.operationalCollected ?? summary.totalCollected), accent: 'text-emerald-700', sub: Number(summary.depositCollected || 0) > 0 ? `+${formatMoney(summary.depositCollected)} deposits` : 'Rent · utility · fees' },
+                  { label: 'Allocated',            value: formatMoney(summary.allocatedAmount),  accent: 'text-slate-800',     sub: null },
+                  { label: 'Unapplied',            value: formatMoney(summary.unappliedAmount),  accent: Number(summary.unappliedAmount || 0) > 0 ? 'text-amber-600' : 'text-slate-400', sub: Number(summary.unappliedAmount || 0) > 0 ? 'Needs attention' : null },
+                  { label: 'Rent Applied',         value: formatMoney(summary.rentApplied),      accent: 'text-slate-800',     sub: null },
+                  { label: 'Utilities Applied',    value: formatMoney(summary.utilityApplied),   accent: 'text-slate-800',     sub: null },
+                  { label: 'Collection Rate',      value: formatPercent(summary.collectionRate), accent: 'text-slate-800',     sub: 'Operational vs invoiced' },
+                  { label: 'Avg Receipt',          value: formatMoney(collectionInsights.averageReceipt), accent: 'text-slate-800', sub: 'Per effective receipt' },
+                  { label: 'Alloc Efficiency',     value: formatPercent(collectionInsights.allocationEfficiency), accent: 'text-slate-800', sub: 'Cash tied to invoices' },
+                  { label: 'Top Property',         value: collectionInsights.topProperty?.propertyName || '—', accent: 'text-[#0B3B2E]', sub: collectionInsights.topProperty ? `${formatMoney(collectionInsights.topProperty.totalCollected)} · ${collectionInsights.topProperty.paymentCount || 0} receipt(s)` : null },
                 ].map((item) => (
                   <div key={item.label} className="min-w-[115px] flex-1 px-3 py-2.5">
                     <p className="whitespace-nowrap text-[9px] font-bold uppercase tracking-widest text-slate-400">{item.label}</p>

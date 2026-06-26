@@ -1787,6 +1787,14 @@ const postInvoiceJournal = async ({ invoice, createdBy, incomeAccount, receivabl
     ...(invoice.metadata || {}),
   };
 
+  const _invCatLabel = {
+    RENT_CHARGE: "Rent", UTILITY_CHARGE: "Utility", DEPOSIT_CHARGE: "Deposit",
+    SERVICE_CHARGE: "Service charge", LEASE_FEE: "Lease fee",
+    LATE_PENALTY_CHARGE: "Late penalty", OTHER_CHARGE: "Other charge",
+    DEBIT_NOTE_CHARGE: "Debit note", METER_READING_CHARGE: "Meter reading",
+  }[invoice.category] || "Invoice";
+  const invoiceNarration = (invoice.description || "").trim() || `${_invCatLabel} ${invoice.invoiceNumber}`;
+
   const receivableLeg = await postEntry({
     business: invoice.business,
     property: invoice.property,
@@ -1807,7 +1815,7 @@ const postInvoiceJournal = async ({ invoice, createdBy, incomeAccount, receivabl
     journalGroupId,
     payer: "tenant",
     receiver: "manager",
-    notes: `Invoice ${invoice.invoiceNumber}`,
+    notes: invoiceNarration,
     metadata: {
       ...commonMetadata,
       postingRole: "tenant_receivable",
@@ -1838,7 +1846,7 @@ const postInvoiceJournal = async ({ invoice, createdBy, incomeAccount, receivabl
     journalGroupId,
     payer: "tenant",
     receiver: "manager",
-    notes: `Invoice income leg ${invoice.invoiceNumber}`,
+    notes: invoiceNarration,
     metadata: {
       ...commonMetadata,
       postingRole,
@@ -1879,7 +1887,7 @@ const postInvoiceJournal = async ({ invoice, createdBy, incomeAccount, receivabl
       journalGroupId,
       payer: "tenant",
       receiver: "system",
-      notes: `Invoice output VAT ${invoice.invoiceNumber}`,
+      notes: `Output VAT — ${invoiceNarration}`,
       metadata: {
         ...commonMetadata,
         postingRole: "output_vat_payable",

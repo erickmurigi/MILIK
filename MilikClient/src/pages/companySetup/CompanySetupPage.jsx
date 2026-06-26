@@ -3401,61 +3401,58 @@ export default function CompanySetupPage() {
 
   return (
     <DashboardLayout>
-      <div className="w-full px-4 py-3 2xl:px-6">
-        {/* ── Page header ── */}
-        <div className="mb-2 flex items-center justify-between border border-slate-200 bg-[#0B3B2E] px-4 py-2.5 shadow-sm">
-          <div>
-            <div className="text-[13px] font-bold uppercase tracking-wide text-white">Company Setup</div>
-            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-[#B7C9C0]">
-              {hasPM && (
-                <span className="border border-[#2A5C4A] px-2 py-0.5">{companyOperatingModeOptions.find((option) => option.value === normalizeCompanyOperatingMode(company.companyMode))?.label || "Other"}</span>
-              )}
-              <span className="border border-[#2A5C4A] px-2 py-0.5">{Object.values(normalizeCompanyModules(company.modules || {})).filter(Boolean).length} modules assigned</span>
+      <div className="flex h-full flex-col bg-slate-50 px-4 py-3 2xl:px-6 gap-3">
+
+        {/* ── Main card ── */}
+        <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col">
+
+          {/* ── Header ── */}
+          <div className="bg-[#0B3B2E] px-4 py-3 flex items-center justify-between gap-4 shrink-0">
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#7DADA0]">Company Setup</p>
+              <h1 className="mt-0.5 text-[15px] font-black text-white leading-tight truncate">{company?.companyName || "—"}</h1>
+              {/* ── Stat strip ── */}
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                {hasPM && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-[#2A5C4A] bg-[#0D4434] px-2 py-0.5 text-[10px] font-semibold text-[#9DCFC5]">
+                    <FaBuilding size={8} />
+                    {companyOperatingModeOptions.find((o) => o.value === normalizeCompanyOperatingMode(company.companyMode))?.label || "Property Manager"}
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1 rounded-full border border-[#2A5C4A] bg-[#0D4434] px-2 py-0.5 text-[10px] font-semibold text-[#9DCFC5]">
+                  <FaServer size={8} />
+                  {Object.values(normalizeCompanyModules(company.modules || {})).filter(Boolean).length} modules
+                </span>
+                <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${paymentSummary.active > 0 ? "border-emerald-700/60 bg-emerald-900/30 text-emerald-300" : "border-[#2A5C4A] bg-[#0D4434] text-[#9DCFC5]"}`}>
+                  <FaMoneyCheckAlt size={8} />
+                  {paymentSummary.active} / {paymentSummary.total} payments
+                </span>
+                <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${emailSummary.active > 0 ? "border-emerald-700/60 bg-emerald-900/30 text-emerald-300" : "border-[#2A5C4A] bg-[#0D4434] text-[#9DCFC5]"}`}>
+                  <FaEnvelope size={8} />
+                  {emailSummary.active} / {emailSummary.total} email
+                </span>
+                {hasPM && (
+                  <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${taxSetupSummary.enabled ? "border-emerald-700/60 bg-emerald-900/30 text-emerald-300" : "border-amber-700/60 bg-amber-900/30 text-amber-300"}`}>
+                    <FaShieldAlt size={8} />
+                    Tax {taxSetupSummary.enabled ? "enabled" : "disabled"}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button type="button" onClick={handleRefreshSetup}
+                className="inline-flex h-7 items-center gap-1.5 rounded border border-[#2A5C4A] px-2.5 text-[10px] font-bold text-white hover:bg-[#0A3127] transition">
+                <FaSyncAlt size={9} /> Refresh
+              </button>
+              <button type="button" onClick={() => navigate('/settings')}
+                className="inline-flex h-7 items-center gap-1.5 rounded border border-[#0B3B2E] bg-white px-2.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-slate-50 transition">
+                Operational Settings <FaArrowRight size={9} />
+              </button>
             </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={handleRefreshSetup}
-              className="inline-flex h-7 items-center gap-1.5 border border-[#2A5C4A] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127]"
-            >
-              <FaSyncAlt size={10} /> Refresh
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('/settings')}
-              className="inline-flex h-7 items-center gap-1.5 bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#E67E00]"
-            >
-              Operational Settings <FaArrowRight size={10} />
-            </button>
-          </div>
-        </div>
 
-        {/* ── Quick-nav stat tiles ── */}
-        <div className="mb-2 grid grid-cols-2 gap-1.5 lg:grid-cols-4">
-          <button onClick={() => switchTab('details')} className="border border-slate-200 bg-white px-3 py-2 text-left hover:border-[#0B3B2E]/30 hover:bg-[#EDF5F1]">
-            <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">Profile</div>
-            <div className="mt-0.5 text-[11px] font-extrabold text-slate-900">Company details</div>
-          </button>
-          <button onClick={() => switchTab('payments')} className="border border-slate-200 bg-white px-3 py-2 text-left hover:border-[#0B3B2E]/30 hover:bg-[#EDF5F1]">
-            <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">Payments</div>
-            <div className="mt-0.5 text-[11px] font-extrabold text-slate-900">{paymentSummary.active} active / {paymentSummary.total}</div>
-          </button>
-          <button onClick={() => switchTab('email')} className="border border-slate-200 bg-white px-3 py-2 text-left hover:border-[#0B3B2E]/30 hover:bg-[#EDF5F1]">
-            <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">Email</div>
-            <div className="mt-0.5 text-[11px] font-extrabold text-slate-900">{emailSummary.active} active / {emailSummary.total}</div>
-          </button>
-          <button onClick={() => navigate('/settings')} className="border border-amber-200 bg-amber-50 px-3 py-2 text-left hover:bg-amber-100/70">
-            <div className="text-[9px] font-black uppercase tracking-wide text-amber-700">Operational</div>
-            <div className="mt-0.5 text-[11px] font-extrabold text-slate-900">
-              {hasPM ? `Tax ${taxSetupSummary.enabled ? 'enabled' : 'disabled'}` : hasHR ? 'HR & Payroll' : hasCW ? 'Car Wash' : hasSale ? 'Property Sales' : 'Settings'}
-            </div>
-          </button>
-        </div>
-
-        {/* ── Tab bar ── */}
-        <div className="mb-2 border border-slate-200 bg-white">
-          <div className="flex overflow-x-auto">
+          {/* ── Tab bar ── */}
+          <div className="flex overflow-x-auto border-b border-slate-200 bg-white shrink-0">
             {tabs.map((tab) => {
               const isActive = tab.key === activeTab;
               return (
@@ -3463,21 +3460,25 @@ export default function CompanySetupPage() {
                   key={tab.key}
                   onClick={() => switchTab(tab.key)}
                   className={[
-                    "flex shrink-0 items-center gap-1.5 border-b-2 px-4 py-2.5 text-[11px] font-bold uppercase tracking-wide transition",
+                    "flex shrink-0 items-center gap-1.5 border-b-2 px-4 py-2.5 text-[11px] font-bold uppercase tracking-wide transition whitespace-nowrap",
                     isActive
-                      ? "border-[#FF8C00] bg-[#EDF5F1] text-[#0B3B2E]"
+                      ? "border-[#0B3B2E] bg-[#0B3B2E]/5 text-[#0B3B2E]"
                       : "border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700",
                   ].join(" ")}
                 >
-                  <span>{tab.icon}</span>
+                  <span className="opacity-70">{tab.icon}</span>
                   {tab.label}
                 </button>
               );
             })}
           </div>
-        </div>
 
-        <div>{renderTab()}</div>
+          {/* ── Tab content ── */}
+          <div className="flex-1 overflow-auto p-4">
+            {renderTab()}
+          </div>
+
+        </div>
       </div>
 
       <Modal

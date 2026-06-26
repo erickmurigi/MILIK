@@ -11,7 +11,6 @@ import {
   FaUser, FaPlus, FaChevronDown, FaChevronUp, FaWrench,
 } from "react-icons/fa";
 
-const ITEMS_PER_PAGE = 50;
 
 // Cache Intl instances — creating them on every render/call is expensive
 const _numFmt  = new Intl.NumberFormat("en-KE");
@@ -121,8 +120,9 @@ export default function LandlordStatementAllocations() {
   const [loading,       setLoading]       = useState(false);
   const [searched,      setSearched]      = useState(false);
   const [currentPage,   setCurrentPage]   = useState(1);
+  const [groupsPerPage, setGroupsPerPage] = useState(20);
   const [showReversed,  setShowReversed]  = useState(false);
-  const [collapsedPayments, setCollapsedPayments] = useState(new Set());
+  const [openActionRow, setOpenActionRow] = useState(null); // rowKey of open actions dropdown
 
   // ── Tenant combobox ───────────────────────────────────────────────────────────
   const [tenantQuery,    setTenantQuery]    = useState("");
@@ -234,10 +234,10 @@ export default function LandlordStatementAllocations() {
     return filteredBase.filter((r) => r.type === activeTab);
   }, [filteredBase, activeTab]);
 
-  // Expand payment transactions into per-allocation ledger rows (flat ledger view)
-  const ledgerRows = useMemo(() => {
+  // Build ledger rows from a slice of transactions (pure, called per tenant group)
+  const buildGroupLedgerRows = useCallback((txns) => {
     const rows = [];
-    for (const tx of displayResults) {
+    for (const tx of txns) {
       if (tx.type === "payment") {
         const allocs = tx.allocations || [];
         if (allocs.length > 0) {
@@ -245,100 +245,125 @@ export default function LandlordStatementAllocations() {
             const allocMeterLabel = parseMeterUtilityLabel(a.description || "");
             rows.push({
               _rowKey: `${tx._id}-a${ai}`,
-              _kind: "paid",
-              _tx: tx,
-              _isFirst: ai === 0,
+              _kind: "paid", _tx: tx, _isFirst: ai === 0,
               category: allocMeterLabel ? "METER_READING" : a.category,
               _meterLabel: allocMeterLabel || null,
               period: a.invoiceDate || tx.transactionDate,
               narration: a.description || CAT_LABEL[a.category] || "",
               invoiceNumber: a.invoiceNumber || null,
-              txnNo: tx.refNumber,
-              refAlt: tx.refAlt,
+              txnNo: tx.refNumber, refAlt: tx.refAlt,
               txDate: tx.transactionDate,
               bankingDate: tx.bookingDate || tx.transactionDate,
-              bill: 0,
-              paid: round2(Number(a.appliedAmount || 0)),
-              status: tx.status,
-              isUnapplied: !a.invoice,
+              bill: 0, paid: round2(Number(a.appliedAmount || 0)),
+              status: tx.status, isUnapplied: !a.invoice,
             });
           });
         } else {
           rows.push({
             _rowKey: `${tx._id}-p`,
-            _kind: "paid",
-            _tx: tx,
-            _isFirst: true,
-            category: null,
-            period: tx.transactionDate,
+            _kind: "paid", _tx: tx, _isFirst: true,
+            category: null, period: tx.transactionDate,
             narration: tx.description || "Unapplied receipt",
             invoiceNumber: null,
-            txnNo: tx.refNumber,
-            refAlt: tx.refAlt,
+            txnNo: tx.refNumber, refAlt: tx.refAlt,
             txDate: tx.transactionDate,
             bankingDate: tx.bookingDate || tx.transactionDate,
-            bill: 0,
-            paid: round2(Number(tx.amount || 0)),
-            status: tx.status,
-            isUnapplied: true,
+            bill: 0, paid: round2(Number(tx.amount || 0)),
+            status: tx.status, isUnapplied: true,
           });
         }
       } else {
         const isCreditNote = tx.type === "credit_note";
         const isMeterReading = tx.type === "meter_reading";
-        // Billed readings: no separate row — their label/info is merged into the invoice row.
-        // Unbilled (draft) readings: show as a bill row so the user sees a pending charge.
         if (isMeterReading && tx.status === "billed") continue;
-        const meterLabel = !isCreditNote && !isMeterReading
-          ? parseMeterUtilityLabel(tx.description)
-          : null;
+        const meterLabel = !isCreditNote && !isMeterReading ? parseMeterUtilityLabel(tx.description) : null;
         rows.push({
           _rowKey: `${tx._id}-b`,
-          _kind: isCreditNote ? "credit" : "bill",
-          _tx: tx,
-          _isFirst: true,
+          _kind: isCreditNote ? "credit" : "bill", _tx: tx, _isFirst: true,
           category: meterLabel ? "METER_READING" : (isMeterReading ? "METER_READING" : tx.subType),
           _meterLabel: meterLabel || (isMeterReading ? parseMeterUtilityLabel(tx.description) || "Meter Rdg" : null),
           period: tx.transactionDate,
           narration: tx.description || "",
-          invoiceNumber: tx.refNumber,
-          txnNo: null,
-          refAlt: null,
-          txDate: tx.transactionDate,
-          bankingDate: tx.bookingDate,
+          invoiceNumber: tx.refNumber, txnNo: null, refAlt: null,
+          txDate: tx.transactionDate, bankingDate: tx.bookingDate,
           bill: isCreditNote ? 0 : round2(Number(tx.amount || 0)),
           paid: isCreditNote ? round2(Number(tx.amount || 0)) : 0,
-          status: tx.status,
-          outstanding: tx.outstanding,
-          taxAmount: tx.taxAmount || 0,
-          taxRate: tx.taxRate || 0,
+          status: tx.status, outstanding: tx.outstanding,
+          taxAmount: tx.taxAmount || 0, taxRate: tx.taxRate || 0,
         });
       }
     }
-    return rows;
-  }, [displayResults]);
+    // Newest transactions first within each tenant group
+    return rows.sort((a, b) => new Date(b.txDate || 0) - new Date(a.txDate || 0));
+  }, []);
+
+  // Group displayResults by tenant, sorted property → tenant name
+  const tenantGroups = useMemo(() => {
+    const groupMap = new Map();
+    for (const tx of displayResults) {
+      const key = String(tx.tenantId || `${tx.tenantName}-${tx.unitNumber}`);
+      if (!groupMap.has(key)) {
+        groupMap.set(key, {
+          key,
+          tenantId: tx.tenantId,
+          tenantName: tx.tenantName || "Unknown Tenant",
+          unitNumber: tx.unitNumber || "—",
+          propertyName: tx.propertyName || "—",
+          txns: [],
+        });
+      }
+      groupMap.get(key).txns.push(tx);
+    }
+    return Array.from(groupMap.values())
+      .sort((a, b) => {
+        const p = (a.propertyName || "").localeCompare(b.propertyName || "");
+        return p !== 0 ? p : (a.tenantName || "").localeCompare(b.tenantName || "");
+      })
+      .map((group) => {
+        const rows = buildGroupLedgerRows(group.txns);
+        const active = rows.filter((r) => r.status !== "reversed");
+        return {
+          ...group,
+          rows,
+          totals: {
+            bill: round2(active.reduce((s, r) => s + (r.bill || 0), 0)),
+            paid: round2(active.reduce((s, r) => s + (r.paid || 0), 0)),
+          },
+        };
+      });
+  }, [displayResults, buildGroupLedgerRows]);
 
   const ledgerTotals = useMemo(() => {
-    // Exclude reversed rows — their amounts are void and must not inflate totals
-    const active = ledgerRows.filter((r) => r.status !== "reversed");
+    const allActive = tenantGroups.flatMap((g) => g.rows).filter((r) => r.status !== "reversed");
     return {
-      bill: round2(active.reduce((s, r) => s + (r.bill || 0), 0)),
-      paid: round2(active.reduce((s, r) => s + (r.paid || 0), 0)),
+      bill: round2(allActive.reduce((s, r) => s + (r.bill || 0), 0)),
+      paid: round2(allActive.reduce((s, r) => s + (r.paid || 0), 0)),
     };
-  }, [ledgerRows]);
+  }, [tenantGroups]);
 
-  // All pagination derived state in one memo
-  const { totalPages, safePage, startIdx, endIdx, paginatedRows } = useMemo(() => {
-    const tp = Math.max(1, Math.ceil(ledgerRows.length / ITEMS_PER_PAGE));
+  const totalLedgerRows = useMemo(() => tenantGroups.reduce((s, g) => s + g.rows.length, 0), [tenantGroups]);
+
+  // Paginate by tenant groups
+  const { totalPages, safePage, paginatedGroups } = useMemo(() => {
+    const tp = Math.max(1, Math.ceil(tenantGroups.length / groupsPerPage));
     const sp = Math.min(currentPage, tp);
-    const si = ledgerRows.length === 0 ? 0 : (sp - 1) * ITEMS_PER_PAGE;
-    const ei = si + ITEMS_PER_PAGE;
-    return { totalPages: tp, safePage: sp, startIdx: si, endIdx: ei, paginatedRows: ledgerRows.slice(si, ei) };
-  }, [ledgerRows, currentPage]);
+    return {
+      totalPages: tp,
+      safePage: sp,
+      paginatedGroups: tenantGroups.slice((sp - 1) * groupsPerPage, sp * groupsPerPage),
+    };
+  }, [tenantGroups, currentPage, groupsPerPage]);
   const histTotalPages = Math.max(1, Math.ceil(histTotal / 50));
 
   // Reset to page 1 on tab switch or new search result; safePage already caps for shrinking result sets
-  useEffect(() => { setCurrentPage(1); }, [activeTab, results]);
+  useEffect(() => { setCurrentPage(1); }, [activeTab, results, groupsPerPage]);
+
+  useEffect(() => {
+    if (!openActionRow) return;
+    const close = () => setOpenActionRow(null);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [openActionRow]);
 
   useEffect(() => {
     if (activeTab === "history" && history.length === 0 && !histLoading) loadHistory(1);
@@ -358,7 +383,6 @@ export default function LandlordStatementAllocations() {
         },
       });
       setResults(data.data || []);
-      setCollapsedPayments(new Set()); // expand all payment allocations on fresh search
       setActiveTab("all"); // always land on All tab after search
     } catch (e) {
       toast.error(e?.response?.data?.error || "Search failed");
@@ -803,7 +827,7 @@ export default function LandlordStatementAllocations() {
                 <div className="flex flex-1 items-center justify-center p-12">
                   <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#0B3B2E] border-t-transparent" />
                 </div>
-              ) : ledgerRows.length === 0 ? (
+              ) : totalLedgerRows === 0 ? (
                 <div className="flex flex-1 items-center justify-center p-12 text-center">
                   <div>
                     <FaInfoCircle className="mx-auto mb-3 text-slate-300" size={32} />
@@ -818,7 +842,6 @@ export default function LandlordStatementAllocations() {
                       <tr className="bg-[#0B3B2E] text-white">
                         <th className="px-2 py-1.5 text-left font-bold border-r border-white/10 w-24">Type</th>
                         <th className="px-2 py-1.5 text-center font-bold border-r border-white/10 w-20 whitespace-nowrap">Period</th>
-                        <th className="px-2 py-1.5 text-left font-bold border-r border-white/10">Tenant · Unit</th>
                         <th className="px-2 py-1.5 text-left font-bold border-r border-white/10">Narration</th>
                         <th className="px-2 py-1.5 text-left font-bold border-r border-white/10 whitespace-nowrap">Txn No</th>
                         <th className="px-2 py-1.5 text-left font-bold border-r border-white/10 whitespace-nowrap">Ref No</th>
@@ -831,199 +854,247 @@ export default function LandlordStatementAllocations() {
                       </tr>
                     </thead>
                     <tbody>
-                      {paginatedRows.map((row, i) => {
-                        const tx   = row._tx;
-                        const isPaid = row._kind === "paid";
-                        const isBill = row._kind === "bill";
-                        const hasOverride = row.bankingDate && toInput(row.bankingDate) !== toInput(row.txDate);
-                        const catLabel = row._meterLabel || CAT_LABEL[row.category] || row.category || (row.isUnapplied ? "Unapplied" : isPaid ? "Payment" : "—");
-                        const badgeCls = (row._meterLabel ? CAT_BADGE.METER_READING : CAT_BADGE[row.category]) || (row.isUnapplied ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600");
-                        const isReversed = row.status === "reversed";
-                        const rowBg = isReversed
-                          ? "bg-slate-50/80 opacity-60"
-                          : isPaid
-                          ? (i % 2 === 0 ? "bg-emerald-50/30 hover:bg-emerald-50/60" : "bg-emerald-50/50 hover:bg-emerald-50/70")
-                          : (i % 2 === 0 ? "bg-white hover:bg-slate-50/80" : "bg-slate-50/40 hover:bg-slate-50/80");
-                        return (
-                          <tr key={row._rowKey} className={`border-b border-slate-100 transition-colors ${rowBg}`}>
-                        {/* ── Type ── */}
-                        <td className={`px-2 py-1.5 border-r border-slate-100 ${isPaid ? "border-l-2 border-l-emerald-400" : "border-l-2 border-l-transparent"}`}>
-                          <span className={`inline-block rounded px-1.5 py-px text-[10px] font-bold leading-tight ${badgeCls}`}>
-                            {catLabel}
-                          </span>
-                          {isPaid && (
-                            <p className="mt-0.5 text-[9px] font-semibold text-emerald-600 leading-none">Paid</p>
-                          )}
-                          {!isPaid && row._kind === "credit" && (
-                            <p className="mt-0.5 text-[9px] font-semibold text-teal-600 leading-none">Credit</p>
-                          )}
-                        </td>
+                      {paginatedGroups.flatMap((group) => {
+                        const balance = round2(group.totals.bill - group.totals.paid);
+                        return [
+                          /* ── Tenant group header ── */
+                          <tr key={`grp-${group.key}`} className="border-t-2 border-slate-200">
+                            <td colSpan={11} className="px-3 py-1.5 bg-slate-100 border-l-[3px] border-l-[#0B3B2E]">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="min-w-0 flex-1 flex items-baseline gap-2">
+                                  <span className="font-black text-[12px] text-[#0B3B2E] leading-tight">{group.tenantName}</span>
+                                  <span className="text-[11px] text-slate-500 leading-tight whitespace-nowrap">{group.unitNumber}</span>
+                                  {group.propertyName && group.propertyName !== "—" && (
+                                    <span className="text-[11px] text-slate-400 leading-tight whitespace-nowrap">· {group.propertyName}</span>
+                                  )}
+                                  <span className="ml-1 text-[10px] text-slate-400">({group.rows.length} txn{group.rows.length !== 1 ? "s" : ""})</span>
+                                </div>
+                                <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-black border whitespace-nowrap shrink-0 ${
+                                  balance > 0 ? "bg-rose-50 text-rose-700 border-rose-200"
+                                  : balance < 0 ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : "bg-slate-50 text-slate-500 border-slate-200"
+                                }`}>
+                                  {balance > 0 ? `Owes ${fmtKES(balance)}` : balance < 0 ? `Credit ${fmtKES(-balance)}` : "Settled ✓"}
+                                </span>
+                              </div>
+                            </td>
+                          </tr>,
+                          /* ── Tenant's ledger rows ── */
+                          ...group.rows.map((row, i) => {
+                            const tx = row._tx;
+                            const isPaid = row._kind === "paid";
+                            const isBill = row._kind === "bill";
+                            const hasOverride = row.bankingDate && toInput(row.bankingDate) !== toInput(row.txDate);
+                            const catLabel = row._meterLabel || CAT_LABEL[row.category] || row.category || (row.isUnapplied ? "Unapplied" : isPaid ? "Payment" : "—");
+                            const badgeCls = (row._meterLabel ? CAT_BADGE.METER_READING : CAT_BADGE[row.category]) || (row.isUnapplied ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600");
+                            const isReversed = row.status === "reversed";
+                            const rowBg = isReversed
+                              ? "bg-slate-50/80 opacity-60"
+                              : isPaid
+                              ? (i % 2 === 0 ? "bg-emerald-50/30 hover:bg-emerald-50/60" : "bg-emerald-50/50 hover:bg-emerald-50/70")
+                              : (i % 2 === 0 ? "bg-white hover:bg-slate-50/80" : "bg-slate-50/40 hover:bg-slate-50/80");
+                            return (
+                              <tr key={row._rowKey} className={`border-b border-slate-100 transition-colors ${rowBg}`}>
+                                {/* ── Type ── */}
+                                <td className={`px-2 py-1.5 border-r border-slate-100 ${isPaid ? "border-l-2 border-l-emerald-400" : "border-l-2 border-l-transparent"}`}>
+                                  <span className={`inline-block rounded px-1.5 py-px text-[10px] font-bold leading-tight ${badgeCls}`}>
+                                    {catLabel}
+                                  </span>
+                                </td>
 
-                        {/* ── Period ── */}
-                        <td className="px-2 py-1 border-r border-slate-100 text-center">
-                          <span className="text-[11px] font-bold text-slate-700 whitespace-nowrap">{fmtPeriod(row.period)}</span>
-                        </td>
+                                {/* ── Period ── */}
+                                <td className="px-2 py-1 border-r border-slate-100 text-center">
+                                  <span className="text-[11px] font-bold text-slate-700 whitespace-nowrap">{fmtPeriod(row.period)}</span>
+                                </td>
 
-                        {/* ── Tenant · Unit ── */}
-                        <td className="px-2 py-1 border-r border-slate-100">
-                          <p className="text-[11px] font-semibold text-slate-900 leading-tight">{tx.tenantName}</p>
-                          <p className="text-[10px] text-slate-400 leading-tight">
-                            {tx.unitNumber}{tx.propertyName && tx.propertyName !== "-" ? ` · ${tx.propertyName}` : ""}
-                          </p>
-                        </td>
+                                {/* ── Narration ── */}
+                                <td className="px-2 py-1 border-r border-slate-100 max-w-[200px]">
+                                  <p className="text-[11px] text-slate-700 truncate" title={row.narration}>{row.narration || "—"}</p>
+                                  {isBill && row.taxAmount > 0 && (
+                                    <p className="text-[9px] text-blue-500 font-semibold leading-tight">VAT {row.taxRate}% · Ksh {fmtKES(row.taxAmount)}</p>
+                                  )}
+                                </td>
 
-                        {/* ── Narration ── */}
-                        <td className="px-2 py-1 border-r border-slate-100 max-w-[180px]">
-                          <p className="text-[11px] text-slate-700 truncate" title={row.narration}>{row.narration || "—"}</p>
-                          {isBill && row.taxAmount > 0 && (
-                            <p className="text-[9px] text-blue-500 font-semibold leading-tight">
-                              VAT {row.taxRate}% · Ksh {fmtKES(row.taxAmount)}
-                            </p>
-                          )}
-                        </td>
+                                {/* ── Txn No ── */}
+                                <td className="px-2 py-1 border-r border-slate-100">
+                                  <p className="font-mono font-bold text-[10px] text-slate-800 whitespace-nowrap">
+                                    {isPaid ? (row.txnNo || "—") : (row.invoiceNumber || "—")}
+                                  </p>
+                                  {isPaid && row.invoiceNumber && (
+                                    <p className="text-[9px] text-slate-400 font-mono whitespace-nowrap">Inv: {row.invoiceNumber}</p>
+                                  )}
+                                </td>
 
-                        {/* ── Txn No (receipt # for paid, invoice # for bill) ── */}
-                        <td className="px-2 py-1 border-r border-slate-100">
-                          <p className="font-mono font-bold text-[10px] text-slate-800 whitespace-nowrap">
-                            {isPaid ? (row.txnNo || "—") : (row.invoiceNumber || "—")}
-                          </p>
-                          {isPaid && row.invoiceNumber && (
-                            <p className="text-[9px] text-slate-400 font-mono whitespace-nowrap">Inv: {row.invoiceNumber}</p>
-                          )}
-                        </td>
+                                {/* ── Ref No ── */}
+                                <td className="px-2 py-1 border-r border-slate-100 max-w-[110px]">
+                                  <p className="font-mono text-[10px] text-slate-500 truncate" title={row.refAlt || ""}>{row.refAlt || "—"}</p>
+                                </td>
 
-                        {/* ── Ref No (bank / mpesa ref) ── */}
-                        <td className="px-2 py-1 border-r border-slate-100 max-w-[110px]">
-                          <p className="font-mono text-[10px] text-slate-500 truncate" title={row.refAlt || ""}>{row.refAlt || "—"}</p>
-                        </td>
+                                {/* ── Txn Date ── */}
+                                <td className="px-2 py-1 border-r border-slate-100 text-center text-[11px] text-slate-500 whitespace-nowrap">
+                                  {fmtDate(row.txDate)}
+                                </td>
 
-                        {/* ── Txn Date ── */}
-                        <td className="px-2 py-1 border-r border-slate-100 text-center text-[11px] text-slate-500 whitespace-nowrap">
-                          {fmtDate(row.txDate)}
-                        </td>
+                                {/* ── Banking Date ── */}
+                                <td className="px-2 py-1 border-r border-slate-100 text-center whitespace-nowrap">
+                                  {hasOverride
+                                    ? <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-1.5 py-px text-[9px] font-bold text-amber-700 border border-amber-200">⚡ {fmtDate(row.bankingDate)}</span>
+                                    : <span className="text-[11px] text-slate-500">{fmtDate(row.bankingDate || row.txDate)}</span>}
+                                </td>
 
-                        {/* ── Banking / Booking Date ── */}
-                        <td className="px-2 py-1 border-r border-slate-100 text-center whitespace-nowrap">
-                          {hasOverride
-                            ? <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-1.5 py-px text-[9px] font-bold text-amber-700 border border-amber-200">⚡ {fmtDate(row.bankingDate)}</span>
-                            : <span className="text-[11px] text-slate-500">{fmtDate(row.bankingDate || row.txDate)}</span>}
-                        </td>
+                                {/* ── Billed ── */}
+                                <td className="px-2 py-1 border-r border-slate-100 text-right">
+                                  {row.bill > 0 ? (
+                                    <div>
+                                      <p className={`font-bold text-[12px] ${isReversed ? "line-through text-slate-400" : "text-slate-900"}`}>{fmtKES(row.bill)}</p>
+                                      {row.outstanding != null && row.outstanding > 0 && row.outstanding < row.bill && (
+                                        <p className="text-[9px] font-semibold text-orange-500 leading-tight">Due: {fmtKES(row.outstanding)}</p>
+                                      )}
+                                      {row.outstanding === 0 && <p className="text-[9px] font-semibold text-emerald-500 leading-tight">Settled ✓</p>}
+                                      {row.outstanding != null && row.outstanding >= row.bill && (
+                                        <p className="text-[9px] font-semibold text-rose-500 leading-tight">Unpaid</p>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-200 text-[12px]">—</span>
+                                  )}
+                                </td>
 
-                        {/* ── Billed ── */}
-                        <td className="px-2 py-1 border-r border-slate-100 text-right">
-                          {row.bill > 0 ? (
-                            <div>
-                              <p className={`font-bold text-[12px] ${isReversed ? "line-through text-slate-400" : "text-slate-900"}`}>
-                                {fmtKES(row.bill)}
-                              </p>
-                              {row.outstanding != null && row.outstanding > 0 && row.outstanding < row.bill && (
-                                <p className="text-[9px] font-semibold text-orange-500 leading-tight">Due: {fmtKES(row.outstanding)}</p>
-                              )}
-                              {row.outstanding === 0 && (
-                                <p className="text-[9px] font-semibold text-emerald-500 leading-tight">Settled ✓</p>
-                              )}
-                              {row.outstanding != null && row.outstanding >= row.bill && (
-                                <p className="text-[9px] font-semibold text-rose-500 leading-tight">Unpaid</p>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-slate-200 text-[12px]">—</span>
-                          )}
-                        </td>
+                                {/* ── Paid ── */}
+                                <td className="px-2 py-1 border-r border-slate-100 text-right">
+                                  {row.paid > 0 ? (
+                                    <p className={`font-bold text-[12px] ${isReversed ? "line-through text-slate-400" : "text-emerald-600"}`}>{fmtKES(row.paid)}</p>
+                                  ) : (
+                                    <span className="text-slate-200 text-[12px]">—</span>
+                                  )}
+                                </td>
 
-                        {/* ── Paid ── */}
-                        <td className="px-2 py-1 border-r border-slate-100 text-right">
-                          {row.paid > 0 ? (
-                            <p className={`font-bold text-[12px] ${isReversed ? "line-through text-slate-400" : "text-emerald-600"}`}>
-                              {fmtKES(row.paid)}
-                            </p>
-                          ) : (
-                            <span className="text-slate-200 text-[12px]">—</span>
-                          )}
-                        </td>
+                                {/* ── Status ── */}
+                                <td className="px-2 py-1 border-r border-slate-100 text-center">
+                                  <span className={`inline-block rounded-full px-1.5 py-px text-[9px] font-bold capitalize ${STATUS_CLS[row.status] || "bg-slate-50 text-slate-600 border border-slate-200"}`}>
+                                    {(row.status || "").replace(/_/g, " ")}
+                                  </span>
+                                </td>
 
-                        {/* ── Status ── */}
-                        <td className="px-2 py-1 border-r border-slate-100 text-center">
-                          <span className={`inline-block rounded-full px-1.5 py-px text-[9px] font-bold capitalize ${STATUS_CLS[row.status] || "bg-slate-50 text-slate-600 border border-slate-200"}`}>
-                            {(row.status || "").replace(/_/g, " ")}
-                          </span>
-                        </td>
+                                {/* ── Actions ── */}
+                                <td className="px-2 py-1 text-center">
+                                  {(() => {
+                                    const canEdit = !["cancelled", "reversed", "void"].includes(tx.status);
+                                    const canRealloc = isPaid && row._isFirst && !["cancelled", "reversed"].includes(tx.status);
+                                    if (!canEdit && !canRealloc) return null;
+                                    const isOpen = openActionRow === row._rowKey;
+                                    return (
+                                      <div className="relative inline-block">
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); setOpenActionRow(isOpen ? null : row._rowKey); }}
+                                          className="inline-flex items-center gap-0.5 rounded border border-slate-200 bg-white px-2 py-px text-[10px] font-black text-slate-500 hover:border-[#0B3B2E] hover:text-[#0B3B2E] transition">
+                                          •••
+                                        </button>
+                                        {isOpen && (
+                                          <div className="absolute right-0 z-20 mt-1 w-32 rounded-lg border border-slate-200 bg-white shadow-lg py-1"
+                                            onClick={(e) => e.stopPropagation()}
+                                            onMouseLeave={() => setOpenActionRow(null)}>
+                                            {canEdit && (
+                                              <button onClick={() => { setOpenActionRow(null); openDatePanel(tx); }}
+                                                className="flex w-full items-center gap-2 px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 hover:text-[#0B3B2E]">
+                                                <FaCalendarAlt size={9} /> Edit Date
+                                              </button>
+                                            )}
+                                            {canRealloc && (
+                                              <button onClick={() => { setOpenActionRow(null); openReallocPanel(tx); }}
+                                                className="flex w-full items-center gap-2 px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 hover:text-[#0B3B2E]">
+                                                <FaExchangeAlt size={9} /> Reallocate
+                                              </button>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+                                </td>
+                              </tr>
+                            );
+                          }),
+                        ];
+                      })}
 
-                        {/* ── Actions ── */}
-                        <td className="px-2 py-1 text-center">
-                          <div className="inline-flex items-center gap-1">
-                            {!["cancelled", "reversed", "void"].includes(tx.status) && (
-                              <button onClick={() => openDatePanel(tx)}
-                                className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-1.5 py-px text-[9px] font-bold text-slate-700 hover:border-[#0B3B2E] hover:text-[#0B3B2E] transition"
-                                title={isPaid ? "Adjust receipt booking date / narration — moves this receipt to a different period" : "Edit booking date or narration"}>
-                                <FaCalendarAlt size={7} /> {isPaid ? "Edit Date" : "Edit"}
-                              </button>
+                      {/* ── Grand totals row ── */}
+                      {tenantGroups.length > 0 && (
+                        <tr className="bg-[#0B3B2E]/5 border-t-2 border-[#0B3B2E]/20">
+                          <td colSpan={7} className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-wider text-[#0B3B2E]/70">
+                            {totalPages > 1 ? "Page Totals" : "Totals"} · {tenantGroups.length} tenant{tenantGroups.length !== 1 ? "s" : ""}
+                          </td>
+                          <td className="px-2 py-2 text-right">
+                            <p className="font-black text-[12px] text-slate-900">{fmtKES(ledgerTotals.bill)}</p>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Billed</p>
+                          </td>
+                          <td className="px-2 py-2 text-right">
+                            <p className="font-black text-[12px] text-emerald-700">{fmtKES(ledgerTotals.paid)}</p>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Paid</p>
+                          </td>
+                          <td colSpan={2} className="px-3 py-2">
+                            {ledgerTotals.bill > 0 && (
+                              <div className="text-center">
+                                <p className={`font-black text-[12px] ${ledgerTotals.bill > ledgerTotals.paid ? "text-rose-600" : "text-emerald-600"}`}>
+                                  {fmtKES(Math.abs(round2(ledgerTotals.bill - ledgerTotals.paid)))}
+                                </p>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">
+                                  {ledgerTotals.bill > ledgerTotals.paid ? "Outstanding" : ledgerTotals.paid > ledgerTotals.bill ? "Overpaid" : "Settled"}
+                                </p>
+                              </div>
                             )}
-                            {isPaid && row._isFirst && !["cancelled", "reversed"].includes(tx.status) && (
-                              <button onClick={() => openReallocPanel(tx)}
-                                className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-1.5 py-px text-[9px] font-bold text-slate-700 hover:border-[#0B3B2E] hover:text-[#0B3B2E] transition"
-                                title="Reallocate this receipt">
-                                <FaExchangeAlt size={7} /> Realloc
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-
-                  {/* ── Totals row ── */}
-                  {paginatedRows.length > 0 && (
-                    <tr className="bg-[#0B3B2E]/5 border-t-2 border-[#0B3B2E]/20">
-                      <td colSpan={8} className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-wider text-[#0B3B2E]/70">
-                        {ledgerRows.length > ITEMS_PER_PAGE ? "Page Totals" : "Totals"}
-                      </td>
-                      <td className="px-2 py-2 text-right">
-                        <p className="font-black text-[12px] text-slate-900">{fmtKES(ledgerTotals.bill)}</p>
-                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Billed</p>
-                      </td>
-                      <td className="px-2 py-2 text-right">
-                        <p className="font-black text-[12px] text-emerald-700">{fmtKES(ledgerTotals.paid)}</p>
-                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Paid</p>
-                      </td>
-                      <td colSpan={2} className="px-3 py-2">
-                        {ledgerTotals.bill > 0 && (
-                          <div className="text-center">
-                            <p className={`font-black text-[12px] ${ledgerTotals.bill > ledgerTotals.paid ? "text-rose-600" : "text-emerald-600"}`}>
-                              {fmtKES(Math.abs(round2(ledgerTotals.bill - ledgerTotals.paid)))}
-                            </p>
-                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">
-                              {ledgerTotals.bill > ledgerTotals.paid ? "Outstanding" : ledgerTotals.paid > ledgerTotals.bill ? "Overpaid" : "Settled"}
-                            </p>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  )}
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
               )}
 
-              {activeTab !== "history" && searched && !loading && ledgerRows.length > 0 && (
+              {activeTab !== "history" && searched && !loading && totalLedgerRows > 0 && (
                 <div className="flex-shrink-0 border-t border-slate-200 bg-white px-3 py-2">
                   <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
                     <div className="font-semibold">
-                      Showing <span className="font-bold text-slate-900">{ledgerRows.length === 0 ? 0 : startIdx + 1}</span> to{" "}
-                      <span className="font-bold text-slate-900">{Math.min(endIdx, ledgerRows.length)}</span> of{" "}
-                      <span className="font-bold text-slate-900">{ledgerRows.length}</span> ledger entries
-                      <span className="text-slate-400 ml-2">({displayResults.length} transactions)</span>
+                      Showing <span className="font-bold text-slate-900">{paginatedGroups.length === 0 ? 0 : (safePage - 1) * groupsPerPage + 1}</span> to{" "}
+                      <span className="font-bold text-slate-900">{Math.min(safePage * groupsPerPage, tenantGroups.length)}</span> of{" "}
+                      <span className="font-bold text-slate-900">{tenantGroups.length}</span> tenants ·{" "}
+                      <span className="font-bold text-slate-900">{totalLedgerRows}</span> ledger entries
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1">
+                        <span className="font-semibold text-slate-500">Per page:</span>
+                        <select
+                          value={groupsPerPage}
+                          onChange={(e) => { setGroupsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                          className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition">
+                          {[10, 20, 50, 100, 200, 500].map((n) => <option key={n} value={n}>{n}</option>)}
+                        </select>
+                      </div>
                       <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={safePage === 1}
-                        className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
-                        <FaChevronLeft size={9} /> Previous
+                        className="p-1 rounded hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition text-slate-700">
+                        <FaChevronLeft size={11} />
                       </button>
-                      <span className="font-semibold text-slate-700">Page {safePage} of {totalPages}</span>
+                      <div className="flex items-center gap-0.5">
+                        {[...Array(totalPages)].map((_, i) => {
+                          const page = i + 1;
+                          if (page === 1 || page === totalPages || (page >= safePage - 1 && page <= safePage + 1)) {
+                            return (
+                              <button key={page} onClick={() => setCurrentPage(page)}
+                                className={`px-2 py-0.5 rounded text-xs font-bold transition-colors ${
+                                  safePage === page ? "bg-[#0B3B2E] text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                                }`}>
+                                {page}
+                              </button>
+                            );
+                          } else if (page === safePage - 2 || page === safePage + 2) {
+                            return <span key={page} className="px-1 text-slate-400 text-xs">…</span>;
+                          }
+                          return null;
+                        })}
+                      </div>
                       <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}
-                        className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
-                        Next <FaChevronRight size={9} />
+                        className="p-1 rounded hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition text-slate-700">
+                        <FaChevronRight size={11} />
                       </button>
                     </div>
                   </div>

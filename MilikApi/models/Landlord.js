@@ -116,7 +116,7 @@ const LandlordSchema = new mongoose.Schema(
 
 // Indexes
 LandlordSchema.index({ company: 1, landlordCode: 1 }, { unique: true });
-LandlordSchema.index({ company: 1, regId: 1 }, { unique: true });
+LandlordSchema.index({ company: 1, regId: 1 }, { unique: true, sparse: true });
 LandlordSchema.index({ company: 1, idNumber: 1 }, { unique: true, sparse: true });
 LandlordSchema.index({ company: 1, email: 1 });
 LandlordSchema.index({ company: 1, landlordName: 1 });

@@ -1509,7 +1509,11 @@ const postReceiptJournal = async (payment, actorId) => {
       journalGroupId,
       payer: "tenant",
       receiver,
-      notes: `Receipt ${payment.receiptNumber || payment.referenceNumber || payment._id}`,
+      notes: (() => {
+        const bucketLabel = { rent: "Rent", deposit: "Deposit", deposit_landlord: "Deposit", utility: "Utility", late_penalty: "Penalty", debit_note: "Debit note", other: "Other", unapplied: "Unapplied" }[group.key] || "Payment";
+        const ref = payment.referenceNumber ? ` [${payment.referenceNumber}]` : "";
+        return `${bucketLabel} · ${payment.receiptNumber || payment.referenceNumber || "receipt"}${ref}`;
+      })(),
       metadata: {
         includeInLandlordStatement: includeInStatement && includeGroupInStatement,
         includeInCategoryTotals: includeInStatement && includeGroupInStatement,
@@ -1554,9 +1558,13 @@ const postReceiptJournal = async (payment, actorId) => {
     journalGroupId,
     payer: "tenant",
     receiver,
-    notes: payment?.paidDirectToLandlord
-      ? `Direct-to-landlord settlement leg for receipt ${payment.receiptNumber || payment.referenceNumber || payment._id}`
-      : `Cashbook leg for receipt ${payment.receiptNumber || payment.referenceNumber || payment._id}`,
+    notes: (() => {
+      const num = payment.receiptNumber || payment.referenceNumber || "receipt";
+      const ref = payment.referenceNumber ? ` [${payment.referenceNumber}]` : "";
+      return payment?.paidDirectToLandlord
+        ? `Direct payout · ${num}${ref}`
+        : `Cashbook · ${num}${ref}`;
+    })(),
     metadata: {
       includeInLandlordStatement: false,
       includeInCategoryTotals: false,

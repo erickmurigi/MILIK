@@ -230,34 +230,56 @@ const LedgerAccountActivity = () => {
   };
 
   // ── Open source document ──
-  // sourceTransactionId is the record's own _id (payment._id, expense._id, etc.), NOT always the job _id
   const openSource = (entry) => {
     const type     = String(entry?.sourceTransactionType || "").toLowerCase();
     const sourceId = entry?.sourceTransactionId;
     if (!sourceId) { toast.info("No source document linked."); return; }
 
-    // Types with a per-record detail/edit page
-    if (type === "rent_payment")               { navigate(`/receipts/${sourceId}`);           return; }
-    if (type === "tenant_invoice")             { navigate(`/invoices/rental/${sourceId}`);    return; }
-    if (type === "carwash_loyalty_redemption") { navigate(`/carwash/jobs/${sourceId}/edit`);  return; }
+    // ── Property Management — per-record detail pages ──────────────────────
+    if (type === "invoice" || type === "tenant_invoice") { navigate(`/invoices/rental/${sourceId}`);  return; }
+    if (type === "rent_payment" || type === "receipt")   { navigate(`/receipts/${sourceId}`);          return; }
 
-    // Types that only have a list page — navigate there so user can find it
-    if (type === "carwash_payment")            { navigate("/carwash/payments");                return; }
-    if (type === "carwash_expense")            { navigate("/carwash/expenses");                return; }
-    if (type === "carwash_commission")         { navigate("/carwash/commissions");             return; }
-    if (type === "carwash_commission_payout")  { navigate("/carwash/commissions/payouts");     return; }
-    if (type === "carwash_prepaid_topup")      { navigate("/carwash/customers");               return; }
+    // ── Property Management — list pages (no per-record route) ─────────────
+    if (type === "invoice_note")                { navigate("/invoices/notes");                    return; }
+    if (type === "late_penalty_batch")          { navigate("/invoices/late-penalties");           return; }
+    if (type === "payment_voucher")             { navigate("/accounts/payment-vouchers");         return; }
+    if (type === "landlord_receipt")            { navigate("/receipts/landlord");                 return; }
+    if (type === "landlord_payment")            { navigate("/landlord-payments");                 return; }
+    if (type === "processed_statement" || type === "processed_statement_payment") { navigate("/landlord/processed-statements"); return; }
+    if (type === "recurring_deduction")         { navigate("/landlords/standing-orders");         return; }
+    if (type === "tenant_take_on_balance")      { navigate("/billing/take-on");                   return; }
+    if (type === "lease_agreement_fee")         { navigate("/invoices/rental");                   return; }
+
+    // ── Carwash — per-record ───────────────────────────────────────────────
+    if (type === "carwash_loyalty_redemption")  { navigate(`/carwash/jobs/${sourceId}/edit`);    return; }
+
+    // ── Carwash — list pages ───────────────────────────────────────────────
+    if (type === "carwash_payment")             { navigate("/carwash/payments");                  return; }
+    if (type === "carwash_expense")             { navigate("/carwash/expenses");                  return; }
+    if (type === "carwash_commission")          { navigate("/carwash/commissions");               return; }
+    if (type === "carwash_commission_payout")   { navigate("/carwash/commissions/payouts");       return; }
+    if (["carwash_prepaid_topup", "carwash_credit_applied", "carwash_credit_refund", "carwash_credit_writeoff"].includes(type)) {
+      navigate("/carwash/customers"); return;
+    }
 
     toast.info(`No page configured for source type "${type}"`);
   };
 
   const sourcePageLabel = (entry) => {
     const type = String(entry?.sourceTransactionType || "").toLowerCase();
-    if (["rent_payment", "tenant_invoice", "carwash_loyalty_redemption"].includes(type)) return "Open";
+    // Types with a per-record detail page — label as "Open"
+    if (["invoice", "tenant_invoice", "rent_payment", "receipt", "carwash_loyalty_redemption"].includes(type)) return "Open";
+    // List-page destinations — label with an arrow
     const listLabels = {
+      invoice_note: "Notes", late_penalty_batch: "Penalties",
+      payment_voucher: "Vouchers", landlord_receipt: "L. Receipts",
+      landlord_payment: "L. Payments", processed_statement: "Statements",
+      processed_statement_payment: "Statements", recurring_deduction: "Standing Orders",
+      tenant_take_on_balance: "Take-on", lease_agreement_fee: "Invoices",
       carwash_payment: "Payments", carwash_expense: "Expenses",
       carwash_commission: "Commissions", carwash_commission_payout: "Payouts",
-      carwash_prepaid_topup: "Customers",
+      carwash_prepaid_topup: "Customers", carwash_credit_applied: "Customers",
+      carwash_credit_refund: "Customers", carwash_credit_writeoff: "Customers",
     };
     return listLabels[type] ? `→ ${listLabels[type]}` : "Source";
   };

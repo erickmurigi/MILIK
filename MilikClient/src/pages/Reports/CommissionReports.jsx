@@ -133,7 +133,14 @@ const CommissionReports = () => {
 
     setLoading(true);
     try {
-      const response = await adminRequests.get(`/processed-statements/business/${currentCompany._id}`);
+      // Pass month param for single-month views so the server can narrow the query.
+      // For date ranges the server returns all; client filters by monthKey string comparison.
+      const params = {};
+      if (appliedFilters.monthFrom === appliedFilters.monthTo) {
+        params.month = appliedFilters.monthFrom;
+      }
+
+      const response = await adminRequests.get(`/processed-statements/business/${currentCompany._id}`, { params });
       const statements = Array.isArray(response?.data?.statements) ? response.data.statements : [];
       setStatementRows(statements);
     } catch (error) {
@@ -142,7 +149,7 @@ const CommissionReports = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentCompany?._id]);
+  }, [currentCompany?._id, appliedFilters.monthFrom, appliedFilters.monthTo]);
 
   useEffect(() => {
     loadData();
@@ -418,180 +425,108 @@ const CommissionReports = () => {
           </table>
         </div>
       </div>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
-        <div className="sticky top-0 z-30 bg-gray-50 px-2 pt-2">
-          <div className="rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                type="month"
-                value={draftFilters.monthFrom}
-                onChange={(e) => setDraftFilters((prev) => ({ ...prev, monthFrom: e.target.value }))}
-                className="rounded border border-slate-200 bg-white px-3 py-1 text-xs text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-              />
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-1.5">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
 
-              <input
-                type="month"
-                value={draftFilters.monthTo}
-                onChange={(e) => setDraftFilters((prev) => ({ ...prev, monthTo: e.target.value }))}
-                className="rounded border border-slate-200 bg-white px-3 py-1 text-xs text-gray-800 shadow-sm transition-colors hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-              />
-
-              <select
-                value={draftFilters.status}
-                onChange={(e) => setDraftFilters((prev) => ({ ...prev, status: e.target.value }))}
-                className="rounded border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-              >
+          {/* Filter bar */}
+          <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <input type="month" value={draftFilters.monthFrom} onChange={(e) => setDraftFilters((prev) => ({ ...prev, monthFrom: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />
+              <input type="month" value={draftFilters.monthTo} onChange={(e) => setDraftFilters((prev) => ({ ...prev, monthTo: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />
+              <select value={draftFilters.status} onChange={(e) => setDraftFilters((prev) => ({ ...prev, status: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none">
                 <option value="recognized">Recognized only</option>
                 <option value="reversed">Reversed only</option>
                 <option value="all">All statuses</option>
               </select>
-
-              <div className="flex min-w-[240px] flex-1 items-center gap-2 rounded border border-slate-200 bg-white px-3 py-1 text-xs text-gray-800 shadow-sm transition-colors hover:bg-white focus-within:ring-1 focus-within:ring-[#0B3B2E]">
-                <FaSearch className="text-[11px]" />
-                <input
-                  value={draftFilters.search}
-                  onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: e.target.value }))}
-                  placeholder="Search statement, property, landlord or basis"
-                  className="w-full bg-transparent text-xs outline-none"
-                />
+              <div className="relative flex min-w-[200px] flex-1">
+                <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" size={9} />
+                <input value={draftFilters.search} onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: e.target.value }))} onKeyDown={(e) => e.key === 'Enter' && applySearch()} placeholder="Search statement, property, landlord or basis…" className="h-7 w-full rounded-md border border-slate-200 bg-white pl-6 pr-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />
               </div>
-
-              <button
-                onClick={applySearch}
-                className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
-              >
-                <FaSearch className="text-xs" /> Search
-              </button>
-
-              <button
-                onClick={resetFilters}
-                className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-              >
-                <FaRedoAlt className="text-xs" /> Reset
-              </button>
-
-              <button
-                onClick={loadData}
-                className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-              >
-                <FaRedoAlt className="text-xs" /> Reload
-              </button>
-
-              {canExportReports && (
-              <button
-                onClick={handleExportCSV}
-                className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
-              >
-                <FaFileDownload className="text-xs" /> Export
-              </button>
-              )}
-
-              {canExportReports && (
-              <button
-                onClick={handlePrint}
-                className={`flex items-center gap-2 rounded-lg px-4 py-1 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-              >
-                <FaPrint className="text-xs" /> Print
-              </button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="mb-2 grid grid-cols-1 gap-2 lg:grid-cols-4">
-            <div className="rounded-md border border-gray-200 bg-white px-2 py-1.5 shadow-sm">
-              <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-gray-500">Recognized Commission</div>
-              <div className="mt-0.5 text-[12px] font-black text-[#0B3B2E]">{formatCurrency(totals.recognizedCommission)}</div>
-            </div>
-            <div className="rounded-md border border-gray-200 bg-white px-2 py-1.5 shadow-sm">
-              <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-gray-500">Reversed Commission</div>
-              <div className="mt-0.5 text-[12px] font-black text-red-700">{formatCurrency(totals.reversedCommission)}</div>
-            </div>
-            <div className="rounded-md border border-gray-200 bg-white px-2 py-1.5 shadow-sm">
-              <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-gray-500">Statements / Months</div>
-              <div className="mt-0.5 text-[12px] font-black text-gray-900">{totals.statements} / {totals.months}</div>
-            </div>
-            <div className="rounded-md border border-gray-200 bg-white px-2 py-1.5 shadow-sm">
-              <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-gray-500">Reversed Statements</div>
-              <div className="mt-0.5 text-[12px] font-black text-[#FF8C00]">{totals.reversedStatements}</div>
+              <div className="ml-auto flex items-center gap-1.5">
+                {canExportReports && <button onClick={handleExportCSV} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"><FaFileDownload size={9} /> Export CSV</button>}
+                {canExportReports && <button onClick={handlePrint} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"><FaPrint size={9} /> Print</button>}
+                <button onClick={resetFilters} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"><FaRedoAlt size={9} /> Reset</button>
+                <button onClick={loadData} disabled={loading} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaRedoAlt size={9} className={loading ? 'animate-spin' : ''} /> Reload</button>
+                <button onClick={applySearch} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-[#0B3B2E] bg-[#0B3B2E] px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-white transition hover:bg-[#0A3127]"><FaSearch size={9} /> Apply</button>
+              </div>
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+          {/* Stat strip */}
+          <div className="flex-shrink-0 overflow-x-auto border-b border-slate-100 bg-white">
+            <div className="flex min-w-max divide-x divide-slate-100">
+              {[
+                { label: 'Recognized Commission', value: formatCurrency(totals.recognizedCommission), accent: 'text-[#0B3B2E]', sub: null },
+                { label: 'Reversed Commission',   value: formatCurrency(totals.reversedCommission),   accent: totals.reversedCommission > 0 ? 'text-red-600' : 'text-slate-400', sub: null },
+                { label: 'Net Commission',         value: formatCurrency(totals.recognizedCommission - totals.reversedCommission), accent: 'text-emerald-700', sub: null },
+                { label: 'Statements',             value: totals.statements,            accent: 'text-slate-800', sub: null },
+                { label: 'Months',                 value: totals.months,                accent: 'text-slate-800', sub: `${toMonthLabel(appliedFilters.monthFrom)} – ${toMonthLabel(appliedFilters.monthTo)}` },
+                { label: 'Reversed Statements',    value: totals.reversedStatements,    accent: totals.reversedStatements > 0 ? 'text-amber-600' : 'text-slate-400', sub: null },
+              ].map((item) => (
+                <div key={item.label} className="min-w-[130px] flex-1 px-3 py-2.5">
+                  <p className="whitespace-nowrap text-[9px] font-bold uppercase tracking-widest text-slate-400">{item.label}</p>
+                  <p className={`mt-0.5 whitespace-nowrap text-[13px] font-black ${item.accent}`}>{item.value}</p>
+                  {item.sub && <p className="mt-0.5 whitespace-nowrap text-[9px] leading-tight text-slate-400">{item.sub}</p>}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <div className="min-h-0 flex-1 overflow-auto">
-              <table className="min-w-full text-[12px]">
-                <thead className="sticky top-0 z-20 bg-[#0B3B2E] text-xs uppercase tracking-wide text-white">
+              <table className="min-w-full text-[11px] border-collapse">
+                <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                   <tr>
-                    <th className="px-3 py-2 text-left font-bold">Recognition Date</th>
-                    <th className="px-3 py-2 text-left font-bold">Statement No.</th>
-                    <th className="px-3 py-2 text-left font-bold">Property</th>
-                    <th className="px-3 py-2 text-left font-bold">Landlord</th>
-                    <th className="px-3 py-2 text-left font-bold">Recognition Basis</th>
-                    <th className="px-3 py-2 text-left font-bold">Percentage / Amount</th>
-                    <th className="px-3 py-2 text-right font-bold">Recognized</th>
-                    <th className="px-3 py-2 text-right font-bold">Reversed</th>
-                    <th className="px-3 py-2 text-left font-bold">Status</th>
+                    {['Recognition Date', 'Statement No.', 'Property', 'Landlord', 'Basis', 'Structure', 'Recognized', 'Reversed', 'Status'].map((h, i, arr) => (
+                      <th key={h} className={`whitespace-nowrap px-3 py-1.5 text-left font-bold ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
                   {!currentCompany?._id ? (
-                    <tr>
-                      <td colSpan={9} className="px-4 py-10 text-center text-[12px] text-gray-500">
-                        Select an active company to view the commission report.
-                      </td>
-                    </tr>
+                    <tr><td colSpan={9} className="px-3 py-8 text-center text-slate-400">Select an active company to view the commission report.</td></tr>
                   ) : loading ? (
-                    <tr>
-                      <td colSpan={9} className="px-4 py-10 text-center text-[12px] text-gray-500">
-                        Loading commission report...
-                      </td>
-                    </tr>
+                    <tr><td colSpan={9} className="px-3 py-8 text-center text-slate-400">Loading commission report…</td></tr>
                   ) : filteredRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="px-4 py-10 text-center text-[12px] text-gray-500">
-                        No recognized commission data found for the selected filter range.
+                    <tr><td colSpan={9} className="px-3 py-8 text-center text-slate-400">No commission data found for the selected filter range.</td></tr>
+                  ) : paginatedRows.map((row, idx) => (
+                    <tr key={row.id} className={`border-b border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'} hover:bg-emerald-50/30`}>
+                      <td className="px-3 py-1.5 border-r border-slate-100 font-semibold text-slate-900">{formatDate(row.recognitionDate)}</td>
+                      <td className="px-3 py-1.5 border-r border-slate-100 text-slate-700">{row.statementNumber}</td>
+                      <td className="px-3 py-1.5 border-r border-slate-100 text-slate-700">{row.propertyName}</td>
+                      <td className="px-3 py-1.5 border-r border-slate-100 text-slate-700">{row.landlordName}</td>
+                      <td className="px-3 py-1.5 border-r border-slate-100 text-slate-700">{row.recognitionBasis}</td>
+                      <td className="px-3 py-1.5 border-r border-slate-100 text-slate-700">{row.structureLabel}</td>
+                      <td className="px-3 py-1.5 border-r border-slate-100 text-right font-bold text-[#0B3B2E]">{formatCurrency(row.recognizedAmount)}</td>
+                      <td className="px-3 py-1.5 border-r border-slate-100 text-right font-bold text-red-600">{formatCurrency(row.reversedAmount)}</td>
+                      <td className="px-3 py-1.5">
+                        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${row.status === 'Reversed' ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+                          {row.status}
+                        </span>
                       </td>
                     </tr>
-                  ) : (
-                    paginatedRows.map((row) => (
-                      <tr key={row.id} className="border-t border-gray-200 hover:bg-gray-50/80">
-                        <td className="px-3 py-2 font-semibold text-gray-900">{formatDate(row.recognitionDate)}</td>
-                        <td className="px-3 py-2 text-gray-700">{row.statementNumber}</td>
-                        <td className="px-3 py-2 text-gray-700">{row.propertyName}</td>
-                        <td className="px-3 py-2 text-gray-700">{row.landlordName}</td>
-                        <td className="px-3 py-2 text-gray-700">{row.recognitionBasis}</td>
-                        <td className="px-3 py-2 text-gray-700">{row.structureLabel}</td>
-                        <td className="px-3 py-2 text-right font-bold text-[#0B3B2E]">{formatCurrency(row.recognizedAmount)}</td>
-                        <td className="px-3 py-2 text-right font-bold text-red-700">{formatCurrency(row.reversedAmount)}</td>
-                        <td className="px-3 py-2">
-                          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${row.status === "Reversed" ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>
-                            {row.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                  ))}
                 </tbody>
-                {filteredRows.length > 0 ? (
-                  <tfoot className="bg-gray-100 text-[12px] font-black text-gray-900">
+                {filteredRows.length > 0 && (
+                  <tfoot className="bg-[#0B3B2E]/5 border-t-2 border-[#0B3B2E]/20 text-[11px]">
                     <tr>
-                      <td colSpan={6} className="px-3 py-2">Totals</td>
-                      <td className="px-3 py-2 text-right text-[#0B3B2E]">{formatCurrency(totals.recognizedCommission)}</td>
-                      <td className="px-3 py-2 text-right text-red-700">{formatCurrency(totals.reversedCommission)}</td>
-                      <td className="px-3 py-2" />
+                      <td colSpan={6} className="px-3 py-2 text-right font-black text-slate-700">Totals</td>
+                      <td className="px-3 py-2 text-right font-black text-[#0B3B2E]">{formatCurrency(totals.recognizedCommission)}</td>
+                      <td className="px-3 py-2 text-right font-black text-red-600">{formatCurrency(totals.reversedCommission)}</td>
+                      <td />
                     </tr>
                   </tfoot>
-                ) : null}
+                )}
               </table>
             </div>
-            <div className="sticky bottom-0 z-20 flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-              <div className="font-semibold">Showing <span className="font-bold text-slate-900">{filteredRows.length ? startIndex + 1 : 0}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filteredRows.length)}</span> of <span className="font-bold text-slate-900">{filteredRows.length}</span> commission row(s)</div>
+            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600">
+              <div>Showing {filteredRows.length ? startIndex + 1 : 0}–{Math.min(endIndex, filteredRows.length)} of {filteredRows.length} commission row(s)</div>
               <div className="flex items-center gap-2">
                 <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
-                <button type="button" onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 bg-white px-3 py-1 font-semibold transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
+                <button type="button" onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-md border border-slate-300 bg-white px-2 py-1 font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
                 <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
-                <button type="button" onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 bg-white px-3 py-1 font-semibold transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+                <button type="button" onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-md border border-slate-300 bg-white px-2 py-1 font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
               </div>
             </div>
           </div>

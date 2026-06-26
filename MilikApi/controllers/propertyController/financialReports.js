@@ -724,7 +724,7 @@ export const getRentalCollectionReport = async (req, res, next) => {
     ]);
 
     const filteredRows = receipts
-      .map(buildReceiptRow)
+      .map((receipt) => ({ ...buildReceiptRow(receipt), paymentType: receipt?.paymentType || "" }))
       .filter((row) => {
         // landlordId cannot be pushed to DB (derived from property.landlords array)
         if (req.query.landlordId && String(row.landlordId) !== String(req.query.landlordId)) return false;
@@ -735,7 +735,9 @@ export const getRentalCollectionReport = async (req, res, next) => {
     const tenantSet = new Set();
     const propertySet = new Set();
     const summary = {
-      totalCollected: 0,
+      totalCollected: 0,           // ALL receipts including deposits
+      operationalCollected: 0,     // Rent + utility + penalty + other (excludes deposits)
+      depositCollected: 0,         // Deposit receipts only
       allocatedAmount: 0,
       unappliedAmount: 0,
       rentApplied: 0,
@@ -747,11 +749,14 @@ export const getRentalCollectionReport = async (req, res, next) => {
       propertyCount: 0,
       tenantCount: 0,
       periodInvoiced: 0,
-      collectionRate: null,
+      collectionRate: null,        // operationalCollected / periodInvoiced
     };
 
     filteredRows.forEach((row) => {
+      const isDeposit = row.paymentType === "deposit";
       summary.totalCollected += row.amount;
+      if (isDeposit) summary.depositCollected += row.amount;
+      else summary.operationalCollected += row.amount;
       summary.allocatedAmount += row.allocatedAmount;
       summary.unappliedAmount += row.unappliedAmount;
       summary.rentApplied += row.rentApplied;
@@ -768,6 +773,7 @@ export const getRentalCollectionReport = async (req, res, next) => {
         propertyName: row.propertyName,
         paymentCount: 0,
         totalCollected: 0,
+        operationalCollected: 0,
         allocatedAmount: 0,
         unappliedAmount: 0,
         rentApplied: 0,
@@ -778,6 +784,7 @@ export const getRentalCollectionReport = async (req, res, next) => {
       };
       bucket.paymentCount += 1;
       bucket.totalCollected += row.amount;
+      if (!isDeposit) bucket.operationalCollected += row.amount;
       bucket.allocatedAmount += row.allocatedAmount;
       bucket.unappliedAmount += row.unappliedAmount;
       bucket.rentApplied += row.rentApplied;
@@ -789,6 +796,8 @@ export const getRentalCollectionReport = async (req, res, next) => {
     });
 
     summary.totalCollected = round2(summary.totalCollected);
+    summary.operationalCollected = round2(summary.operationalCollected);
+    summary.depositCollected = round2(summary.depositCollected);
     summary.allocatedAmount = round2(summary.allocatedAmount);
     summary.unappliedAmount = round2(summary.unappliedAmount);
     summary.rentApplied = round2(summary.rentApplied);
@@ -800,7 +809,12 @@ export const getRentalCollectionReport = async (req, res, next) => {
     summary.tenantCount = tenantSet.size;
     summary.periodInvoiced = round2(periodInvoiced?.[0]?.total || 0);
 
-    summary.collectionRate = summary.periodInvoiced > 0 ? round2((summary.totalCollected / summary.periodInvoiced) * 100) : null;
+    // Collection rate = operational cash collected / operational invoices raised.
+    // Deposits are excluded from both sides: they are not billed as invoices and are
+    // not income — using totalCollected here would push the rate above 100%.
+    summary.collectionRate = summary.periodInvoiced > 0
+      ? round2((summary.operationalCollected / summary.periodInvoiced) * 100)
+      : null;
 
     const byProperty = Array.from(propertySummaryMap.values())
       .map((bucket) => ({
@@ -810,6 +824,7 @@ export const getRentalCollectionReport = async (req, res, next) => {
         tenantCount: bucket.tenantIds.size,
         unitCount: bucket.unitIds.size,
         totalCollected: round2(bucket.totalCollected),
+        operationalCollected: round2(bucket.operationalCollected),
         allocatedAmount: round2(bucket.allocatedAmount),
         unappliedAmount: round2(bucket.unappliedAmount),
         rentApplied: round2(bucket.rentApplied),
@@ -1070,7 +1085,12 @@ export const getPropertyIncomeSummaryReport = async (req, res, next) => {
     };
     if (propertyIds) invoiceMatch.property = { $in: propertyIds };
 
-    const receiptMatch = buildEffectiveReceiptQuery({ businessId, startDate, endDate, dateField: "paymentDate" });
+    // Deposits are liabilities held in trust — they are NOT operating income.
+    // Exclude them from the collected total so net income is not overstated.
+    const receiptMatch = {
+      ...buildEffectiveReceiptQuery({ businessId, startDate, endDate, dateField: "paymentDate" }),
+      paymentType: { $ne: "deposit" },
+    };
 
     const expenseMatch = { business: businessId, date: { $gte: startDate, $lte: endDate } };
     if (propertyIds) expenseMatch.property = { $in: propertyIds };
@@ -1088,7 +1108,8 @@ export const getPropertyIncomeSummaryReport = async (req, res, next) => {
           },
         },
       ]),
-      // RentPayment has no `property` field — resolve via unit lookup
+      // RentPayment has no `property` field — resolve via unit lookup.
+      // Deposits excluded: they are balance-sheet items (liabilities), not income.
       RentPayment.aggregate([
         { $match: receiptMatch },
         { $lookup: { from: "units", localField: "unit", foreignField: "_id", as: "_unit" } },
@@ -1481,7 +1502,12 @@ export const getMRITaxSummaryReport = async (req, res, next) => {
       if (pid) propertyIds = [pid];
     }
 
-    const receiptMatch = buildEffectiveReceiptQuery({ businessId, startDate, endDate, dateField: "paymentDate" });
+    // MRI = Monthly Rental Income tax — base is rental/utility income only.
+    // Deposits are liability receipts, not rental income, and must be excluded.
+    const receiptMatch = {
+      ...buildEffectiveReceiptQuery({ businessId, startDate, endDate, dateField: "paymentDate" }),
+      paymentType: { $ne: "deposit" },
+    };
 
     const byPropertyMonth = await RentPayment.aggregate([
       { $match: receiptMatch },
@@ -1601,14 +1627,15 @@ export const getARAgingReport = async (req, res, next) => {
     const asOf = req.query.asOf ? new Date(req.query.asOf) : new Date();
     asOf.setHours(23, 59, 59, 999);
 
-    // Fetch outstanding invoices with display fields (property/unit not in snapshot engine)
+    // Fetch outstanding invoices with display fields (property/unit not in snapshot engine).
+    // Unit model uses `unitNumber` (not unitName); Tenant model uses `tenantName` (not name).
     const invoices = await TenantInvoice.find({
       business: businessId,
       status: { $in: ["pending", "partially_paid"] },
     })
-      .populate("tenant", "name email phone")
-      .populate("property", "propertyName")
-      .populate("unit", "unitName")
+      .populate("tenant", "tenantName name email phone")
+      .populate("property", "propertyName name")
+      .populate("unit", "unitNumber name")
       .lean();
 
     if (!invoices.length) {
@@ -1657,9 +1684,9 @@ export const getARAgingReport = async (req, res, next) => {
         invoiceId: inv._id,
         invoiceNumber: inv.invoiceNumber,
         tenantId: inv.tenant?._id,
-        tenantName: inv.tenant?.name || "—",
-        propertyName: inv.property?.propertyName || "—",
-        unitName: inv.unit?.unitName || "—",
+        tenantName: inv.tenant?.tenantName || inv.tenant?.name || "—",
+        propertyName: inv.property?.propertyName || inv.property?.name || "—",
+        unitName: inv.unit?.unitNumber || inv.unit?.name || "—",
         invoiceDate: inv.invoiceDate,
         dueDate: inv.dueDate,
         amount: inv.amount,
@@ -1748,15 +1775,37 @@ export const getCashMonthlySummary = async (req, res, next) => {
 
     const businessOid = new mongoose.Types.ObjectId(String(businessId));
 
-    // 1100/1110/1130 = standard cash/bank; 1310/1311 = carwash and property-sale receipt control accounts
-    const cashbookAccounts = await ChartOfAccount.find(
-      { business: businessId, code: { $in: ["1100", "1110", "1130", "1310", "1311"] } },
-      { _id: 1 }
-    ).lean();
+    // Dynamic lookup: find all posting cash/bank accounts for this company.
+    // Primary: name/subGroup/group regex (same strategy as Cash Flow report).
+    // Fallback: standard account codes used during system setup.
+    const cashbookAccounts = await ChartOfAccount.find({
+      business: businessId,
+      isPosting: { $ne: false },
+      isHeader: { $ne: true },
+      type: "asset",
+      $or: [
+        { subGroup: { $regex: /cash|bank|petty/i } },
+        { name:     { $regex: /cash|bank|petty/i } },
+        { group:    { $regex: /cash|bank/i } },
+        { code:     { $in: ["1100", "1110", "1130", "1310", "1311"] } },
+      ],
+    }, { _id: 1 }).lean();
 
     if (!cashbookAccounts.length) return res.status(200).json({ success: true, data: [] });
 
     const accountIds = cashbookAccounts.map((a) => a._id);
+
+    // Use explicit debit/credit fields first; fall back to direction+amount for legacy entries.
+    const debitExpr = {
+      $cond: [{ $gt: ["$debit", 0] }, "$debit", {
+        $cond: [{ $eq: [{ $toLower: { $ifNull: ["$direction", ""] } }, "debit"] }, { $ifNull: ["$amount", 0] }, 0],
+      }],
+    };
+    const creditExpr = {
+      $cond: [{ $gt: ["$credit", 0] }, "$credit", {
+        $cond: [{ $eq: [{ $toLower: { $ifNull: ["$direction", ""] } }, "credit"] }, { $ifNull: ["$amount", 0] }, 0],
+      }],
+    };
 
     const rows = await FinancialLedgerEntry.aggregate([
       {
@@ -1764,18 +1813,15 @@ export const getCashMonthlySummary = async (req, res, next) => {
           business: businessOid,
           accountId: { $in: accountIds },
           transactionDate: { $gte: from },
-          status: "approved",
+          status: { $in: REPORT_LEDGER_STATUSES },
           category: { $ne: "REVERSAL" },
         },
       },
       {
         $group: {
-          _id: {
-            y: { $year: "$transactionDate" },
-            m: { $month: "$transactionDate" },
-            dir: "$direction",
-          },
-          total: { $sum: "$amount" },
+          _id: { y: { $year: "$transactionDate" }, m: { $month: "$transactionDate" } },
+          cashIn:  { $sum: debitExpr },
+          cashOut: { $sum: creditExpr },
         },
       },
     ]);
@@ -1784,9 +1830,7 @@ export const getCashMonthlySummary = async (req, res, next) => {
     const map = {};
     for (const row of rows) {
       const key = `${row._id.y}-${row._id.m}`;
-      if (!map[key]) map[key] = { cashIn: 0, cashOut: 0 };
-      if (row._id.dir === "debit")  map[key].cashIn  = round2(map[key].cashIn  + row.total);
-      if (row._id.dir === "credit") map[key].cashOut = round2(map[key].cashOut + row.total);
+      map[key] = { cashIn: round2(row.cashIn || 0), cashOut: round2(row.cashOut || 0) };
     }
 
     // Return one entry per month in chronological order

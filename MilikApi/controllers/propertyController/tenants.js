@@ -184,6 +184,12 @@ const resolveBusinessId = (req) => {
 
 const normalizeString = (value) => (typeof value === "string" ? value.trim() : value);
 
+const isPlaceholder = (value) => {
+  if (value === null || value === undefined) return true;
+  const s = String(value).trim().toLowerCase();
+  return s === "" || s === "-" || s === "--" || s === "n/a" || s === "na" || s === "none";
+};
+
 const normalizeLower = (value) =>
   typeof value === "string" ? value.trim().toLowerCase() : value;
 
@@ -718,25 +724,25 @@ export const createTenant = async (req, res, next) => {
       : (unit?.property?.depositHeldBy || "propertyManager");
 
     const normalizedName = normalizeString(req.body.name);
-    const normalizedPhone = normalizeString(req.body.phone);
-    const normalizedIdNumber = normalizeString(req.body.idNumber);
+    const normalizedPhone = isPlaceholder(req.body.phone) ? null : normalizeString(req.body.phone);
+    const normalizedIdNumber = isPlaceholder(req.body.idNumber) ? null : normalizeString(req.body.idNumber);
     const normalizedPaymentMethod = normalizePaymentMethod(req.body.paymentMethod);
     const normalizedTenantCode = normalizeString(req.body.tenantCode);
 
-    if (!normalizedName || !normalizedPhone || !normalizedIdNumber) {
+    if (!normalizedName) {
       return res.status(400).json({
         success: false,
-        message: "Tenant name, phone, and ID number are required",
+        message: "Tenant name is required",
       });
     }
 
-    const duplicateTenant = await Tenant.findOne({
-      business: businessId,
-      $or: [
-        { idNumber: normalizedIdNumber },
-        ...(normalizedTenantCode ? [{ tenantCode: normalizedTenantCode }] : []),
-      ],
-    }).lean();
+    const tenantDuplicateOr = [
+      ...(normalizedIdNumber ? [{ idNumber: normalizedIdNumber }] : []),
+      ...(normalizedTenantCode ? [{ tenantCode: normalizedTenantCode }] : []),
+    ];
+    const duplicateTenant = tenantDuplicateOr.length
+      ? await Tenant.findOne({ business: businessId, $or: tenantDuplicateOr }).lean()
+      : null;
 
     if (duplicateTenant) {
       if (duplicateTenant.idNumber === normalizedIdNumber) {
@@ -1117,15 +1123,16 @@ export const updateTenant = async (req, res, next) => {
     }
 
     if (normalizedPayload.phone !== undefined) {
-      normalizedPayload.phone = normalizeString(normalizedPayload.phone);
+      normalizedPayload.phone = isPlaceholder(normalizedPayload.phone) ? null : normalizeString(normalizedPayload.phone);
     }
 
     if (normalizedPayload.idNumber !== undefined) {
-      normalizedPayload.idNumber = normalizeString(normalizedPayload.idNumber);
+      normalizedPayload.idNumber = isPlaceholder(normalizedPayload.idNumber) ? null : normalizeString(normalizedPayload.idNumber);
     }
 
     if (normalizedPayload.email !== undefined) {
-      normalizedPayload.email = String(normalizedPayload.email || "").trim().toLowerCase();
+      const emailRaw = String(normalizedPayload.email || "").trim().toLowerCase();
+      normalizedPayload.email = isPlaceholder(emailRaw) ? null : emailRaw;
     }
 
     if (normalizedPayload.tenantCode !== undefined) {

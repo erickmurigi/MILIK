@@ -121,22 +121,22 @@ export const createLandlord = async (req, res, next) => {
       });
     }
 
-    const regIdValue = normalizeString(req.body.regId);
-    const idNumberValue = normalizeString(req.body.idNumber) || regIdValue;
-    const emailValue = normalizeEmail(req.body.email);
-    const taxPinValue = normalizeString(req.body.taxPin);
+    const regIdValue = isPlaceholder(req.body.regId) ? null : normalizeString(req.body.regId);
+    const idNumberValue = isPlaceholder(req.body.idNumber) ? null : (normalizeString(req.body.idNumber) || regIdValue);
+    const emailValue = isPlaceholder(req.body.email) ? null : normalizeEmail(req.body.email);
+    const taxPinValue = isPlaceholder(req.body.taxPin) ? null : normalizeString(req.body.taxPin);
     const landlordNameValue = normalizeString(req.body.landlordName);
     const landlordTypeValue = normalizeString(req.body.landlordType) || "Individual";
-    const phoneNumberValue = normalizeString(req.body.phoneNumber);
+    const phoneNumberValue = isPlaceholder(req.body.phoneNumber) ? null : normalizeString(req.body.phoneNumber);
     const postalAddressValue = normalizeString(req.body.postalAddress) || "";
     const locationValue = normalizeString(req.body.location) || "";
     const statusValue = normalizeString(req.body.status) || "Active";
     const portalAccessValue = normalizeString(req.body.portalAccess) || "Disabled";
 
-    if (!landlordNameValue || !regIdValue || !taxPinValue || !phoneNumberValue) {
+    if (!landlordNameValue) {
       return res.status(400).json({
         success: false,
-        message: "Landlord name, Reg/ID, Tax PIN, and Phone Number are required",
+        message: "Landlord name is required",
       });
     }
 
@@ -147,17 +147,13 @@ export const createLandlord = async (req, res, next) => {
 
     const duplicateQuery = {
       company: companyId,
-      $or: [
-        { landlordCode },
-        { regId: regIdValue },
-        { idNumber: idNumberValue },
-      ],
+      $or: [{ landlordCode }],
     };
 
-    // Only include email in duplicate check when a real email is provided
-    if (emailValue) {
-      duplicateQuery.$or.push({ email: emailValue });
-    }
+    // Only check real (non-placeholder) values for uniqueness
+    if (regIdValue) duplicateQuery.$or.push({ regId: regIdValue });
+    if (idNumberValue) duplicateQuery.$or.push({ idNumber: idNumberValue });
+    if (emailValue) duplicateQuery.$or.push({ email: emailValue });
 
     const existingLandlord = await Landlord.findOne(duplicateQuery).lean();
 
@@ -475,14 +471,14 @@ export const updateLandlord = async (req, res, next) => {
     } = req.body;
 
     if (updateData.regId !== undefined) {
-      updateData.regId = normalizeString(updateData.regId);
+      updateData.regId = isPlaceholder(updateData.regId) ? null : normalizeString(updateData.regId);
       updateData.idNumber = updateData.regId;
     } else if (updateData.idNumber !== undefined) {
-      updateData.idNumber = normalizeString(updateData.idNumber);
+      updateData.idNumber = isPlaceholder(updateData.idNumber) ? null : normalizeString(updateData.idNumber);
     }
 
     if (updateData.email !== undefined) {
-      updateData.email = normalizeEmail(updateData.email);
+      updateData.email = isPlaceholder(updateData.email) ? null : normalizeEmail(updateData.email);
     }
 
     if (updateData.landlordName !== undefined) {
@@ -494,11 +490,11 @@ export const updateLandlord = async (req, res, next) => {
     }
 
     if (updateData.taxPin !== undefined) {
-      updateData.taxPin = normalizeString(updateData.taxPin);
+      updateData.taxPin = isPlaceholder(updateData.taxPin) ? null : normalizeString(updateData.taxPin);
     }
 
     if (updateData.phoneNumber !== undefined) {
-      updateData.phoneNumber = normalizeString(updateData.phoneNumber);
+      updateData.phoneNumber = isPlaceholder(updateData.phoneNumber) ? null : normalizeString(updateData.phoneNumber);
     }
 
     if (updateData.postalAddress !== undefined) {
