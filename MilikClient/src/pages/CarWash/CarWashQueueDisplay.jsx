@@ -101,9 +101,9 @@ const CarWashQueueDisplay = () => {
 
   const jobs         = data?.jobs ?? [];
   const businessName = data?.business?.name ?? "Car Wash";
-  const _apiBase     = (import.meta.env.VITE_API_URL || "").replace(/\/api\/?$/, "");
-  const rawBgImage   = data?.business?.queueBgImage || null;
-  const bgImage      = rawBgImage ? `${_apiBase}${rawBgImage}` : null;
+  const bgImage      = data?.business?.queueBgImage
+    ? `/api/carwash/display/${businessId}/bg`
+    : null;
   const byStatus     = (s) => jobs.filter((j) => j.status === s);
 
   return (

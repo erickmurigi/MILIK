@@ -1,6 +1,12 @@
 import mongoose from "mongoose";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
 import CarWashJob from "../models/CarWashJob.js";
 import Company from "../../../models/Company.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const UPLOADS_ROOT = path.join(__dirname, "../../../uploads");
 
 const eatNow = () => new Date(Date.now() + 3 * 60 * 60 * 1000);
 
@@ -54,5 +60,30 @@ export const getQueueDisplay = async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+  }
+};
+
+export const getQueueBgImage = async (req, res, next) => {
+  try {
+    const { businessId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(businessId)) return res.status(404).end();
+
+    const company = await Company.findById(businessId)
+      .select("carwashSettings.queueBgImage modules.carwash")
+      .lean();
+    if (!company?.modules?.carwash || !company?.carwashSettings?.queueBgImage) {
+      return res.status(404).end();
+    }
+
+    const stored = company.carwashSettings.queueBgImage.trim();
+    const relative = stored.replace(/^\/uploads\//, "");
+    const filePath = path.join(UPLOADS_ROOT, relative);
+
+    if (!fs.existsSync(filePath)) return res.status(404).end();
+
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.sendFile(filePath);
+  } catch (err) {
+    next(err);
   }
 };
