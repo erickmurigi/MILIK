@@ -2976,3 +2976,84 @@ export const reverseLandlordPayment = async (paymentId, payload = {}) => {
   const res = await adminRequests.post(`/landlord-payments/${paymentId}/reverse`, payload);
   return res.data;
 };
+
+// ─── ACCOUNTING PERIODS ───────────────────────────────────────────────────────
+export const getAccountingPeriods = async (params = {}) => {
+  const res = await adminRequests.get("/accounting-periods", { params });
+  return res.data;
+};
+
+export const createAccountingPeriod = async (payload = {}) => {
+  const res = await adminRequests.post("/accounting-periods", payload);
+  return res.data;
+};
+
+export const updateAccountingPeriod = async (id, payload = {}) => {
+  const res = await adminRequests.put(`/accounting-periods/${id}`, payload);
+  return res.data;
+};
+
+export const closeAccountingPeriod = async (id) => {
+  const res = await adminRequests.post(`/accounting-periods/${id}/close`);
+  return res.data;
+};
+
+export const reopenAccountingPeriod = async (id) => {
+  const res = await adminRequests.post(`/accounting-periods/${id}/reopen`);
+  return res.data;
+};
+
+export const lockAccountingPeriod = async (id) => {
+  const res = await adminRequests.post(`/accounting-periods/${id}/lock`);
+  return res.data;
+};
+
+export const getAccountingPeriodStats = async (id) => {
+  const res = await adminRequests.get(`/accounting-periods/${id}/stats`);
+  return res.data;
+};
+
+// ─── JOURNAL APPROVAL ─────────────────────────────────────────────────────────
+export const submitJournalForReview = async (id) => {
+  const res = await adminRequests.post(`/journals/${id}/submit`);
+  return res.data;
+};
+
+export const reviewJournalEntry = async (id) => {
+  const res = await adminRequests.post(`/journals/${id}/review`);
+  return res.data;
+};
+
+export const approveJournalEntry = async (id) => {
+  const res = await adminRequests.post(`/journals/${id}/approve`);
+  return res.data;
+};
+
+export const rejectJournalEntry = async (id, payload = {}) => {
+  const res = await adminRequests.post(`/journals/${id}/reject`, payload);
+  return res.data;
+};
+
+// ─── GL INTEGRITY ─────────────────────────────────────────────────────────────
+export const runGLIntegrityReport = async (params = {}) => {
+  const res = await adminRequests.get("/ledger/diagnostics/integrity-report", { params });
+  return res.data;
+};
+
+// ─── TRIAL BALANCE EXCEPTIONS ─────────────────────────────────────────────────
+export const getTrialBalanceExceptions = async (params = {}) => {
+  const res = await adminRequests.get("/financial-reports/trial-balance-exceptions", { params });
+  return res.data;
+};
+
+// ─── FINANCIAL RATIOS ─────────────────────────────────────────────────────────
+export const getFinancialRatios = async (params = {}) => {
+  const res = await adminRequests.get("/financial-reports/financial-ratios", { params });
+  return res.data;
+};
+
+// ─── YEAR-END CLOSE ───────────────────────────────────────────────────────────
+export const performYearEndClose = async (payload = {}) => {
+  const res = await adminRequests.post("/financial-reports/year-end-close", payload);
+  return res.data;
+};

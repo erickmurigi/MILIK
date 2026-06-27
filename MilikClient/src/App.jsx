@@ -144,6 +144,10 @@ const FixedAssets                 = lazy(() => import("./pages/Accounts/FixedAss
 const FixedAssetsDepreciation     = lazy(() => import("./pages/Accounts/FixedAssetsDepreciation"));
 const BudgetVsActual              = lazy(() => import("./pages/Accounts/BudgetVsActual"));
 const CreditorLedger              = lazy(() => import("./pages/Accounts/CreditorLedger"));
+const GLIntegrityReport           = lazy(() => import("./pages/Accounts/GLIntegrityReport"));
+const AccountingPeriods           = lazy(() => import("./pages/Financial/AccountingPeriods"));
+const YearEndClose                = lazy(() => import("./pages/Financial/YearEndClose"));
+const FinancialRatiosDashboard    = lazy(() => import("./pages/Reports/FinancialRatiosDashboard"));
 
 // Help
 const SupportDocumentation = lazy(() => import("./pages/Help/SupportDocumentation"));
@@ -619,6 +623,10 @@ function App() {
             <Route path="/accounts/budget"                                 element={<Guard moduleKey="accounts" resource="budgets"><BudgetVsActual /></Guard>} />
             <Route path="/accounts/budget/analysis"                        element={<Guard moduleKey="accounts" resource="budgets"><BudgetVsActual /></Guard>} />
             <Route path="/accounts/creditor-ledger"                        element={<Guard moduleKey="accounts" resource="creditorLedger"><CreditorLedger /></Guard>} />
+            <Route path="/accounts/gl-integrity"                           element={<Guard moduleKey="accounts"><GLIntegrityReport /></Guard>} />
+            <Route path="/accounts/accounting-periods"                     element={<Guard moduleKey="accounts"><AccountingPeriods /></Guard>} />
+            <Route path="/accounts/year-end-close"                         element={<Guard moduleKey="accounts"><YearEndClose /></Guard>} />
+            <Route path="/accounts/financial-ratios"                       element={<Guard moduleKey="accounts"><FinancialRatiosDashboard /></Guard>} />
 
             {/* ── Car Wash module ───────────────────────────────────────── */}
             {/* Dashboard falls back to /carwash/jobs so users without dashboard access don't get ejected from the module */}

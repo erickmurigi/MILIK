@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import {
-  FaArrowLeft, FaCar, FaCamera, FaExclamationTriangle, FaGift, FaMinus, FaPlus, FaRedoAlt, FaSave,
-  FaTimesCircle, FaUser, FaExpand, FaUserCheck,
+  FaArrowLeft, FaCar, FaCamera, FaCoins, FaExclamationTriangle, FaGift, FaMinus, FaPlus, FaRedoAlt, FaSave,
+  FaTimesCircle, FaUser, FaExpand, FaUserCheck, FaTag,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, photoUrl, VEHICLE_TYPES } from "../../services/carWashApi";
@@ -52,6 +52,7 @@ const PlateLookupWidget = ({ plate, onPlateChange, onCustomerFound, onRewardData
   const customer = lookupResult?.customer;
   const program = card?.program;
   const pendingRewards = card?.pendingRewards ?? 0;
+  const creditBalance = Number(lookupResult?.creditBalance || 0);
 
   return (
     <div>
@@ -94,6 +95,15 @@ const PlateLookupWidget = ({ plate, onPlateChange, onCustomerFound, onRewardData
                 ) : (
                   <div className="mt-0.5 text-slate-500">No loyalty card yet</div>
                 )}
+                {creditBalance > 0 && (
+                  <div className="mt-1.5 flex items-center gap-1.5 border border-amber-300 bg-amber-50 px-2 py-1">
+                    <FaCoins className="shrink-0 text-amber-500" />
+                    <span className="font-black text-amber-800">
+                      KES {formatMoney(creditBalance)} credit on account
+                    </span>
+                    <span className="text-amber-700">— remind supervisor to apply before charging</span>
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -130,6 +140,7 @@ const CreditAccountBanner = ({ plate, jobTotal, onAccountDetected }) => {
   const isPrepaid = account.accountType === "prepaid";
   const walletBalance = Number(account.accountCredit || 0);
   const outstandingDebt = Number(account.currentBalance || 0);
+  const accountCredit = !isPrepaid ? Number(account.accountCredit || 0) : 0;
   const overLimit = account.overLimit;
   const sufficient = isPrepaid ? walletBalance >= (jobTotal || 0) : true;
 
@@ -144,12 +155,16 @@ const CreditAccountBanner = ({ plate, jobTotal, onAccountDetected }) => {
       ? "border-teal-300 bg-teal-50 text-teal-800"
       : "border-amber-300 bg-amber-50 text-amber-800"
     : overLimit
-      ? "border-amber-300 bg-amber-50 text-amber-800"
-      : "border-emerald-300 bg-emerald-50 text-emerald-800";
+      ? "border-red-300 bg-red-50 text-red-800"
+      : outstandingDebt > 0
+        ? "border-amber-300 bg-amber-50 text-amber-800"
+        : "border-emerald-300 bg-emerald-50 text-emerald-800";
 
   return (
     <div className={`mt-1.5 flex items-start gap-2 border px-3 py-2 text-xs ${borderBg}`}>
-      {((!sufficient && isPrepaid) || overLimit) && <FaExclamationTriangle className="mt-0.5 flex-shrink-0 text-amber-500" />}
+      {((!sufficient && isPrepaid) || overLimit || (!isPrepaid && outstandingDebt > 0)) && (
+        <FaExclamationTriangle className={`mt-0.5 flex-shrink-0 ${overLimit ? "text-red-500" : "text-amber-500"}`} />
+      )}
       <div>
         <div className="font-black">{account.accountNumber} · {account.customer?.name}</div>
         <div className="mt-0.5">
@@ -172,9 +187,17 @@ const CreditAccountBanner = ({ plate, jobTotal, onAccountDetected }) => {
                 Insufficient wallet balance — collect {formatMoney(Math.max(0, (jobTotal || 0) - walletBalance))} from customer.
               </div>
         ) : overLimit ? (
-          <div className="mt-0.5 font-bold text-amber-700">⚠ Credit limit exceeded — proceed with caution</div>
+          <div className="mt-0.5 font-bold text-red-700">Credit limit exceeded — collect payment or proceed with caution</div>
+        ) : outstandingDebt > 0 ? (
+          <div className="mt-0.5 font-bold text-amber-700">Customer has an outstanding balance — job will be added to account</div>
         ) : (
           <div className="mt-0.5 text-emerald-700">This job will be charged to the credit account.</div>
+        )}
+        {accountCredit > 0 && (
+          <div className="mt-1 flex items-center gap-1.5 text-[10px] font-bold text-teal-700">
+            <FaCoins className="shrink-0" />
+            {formatMoney(accountCredit)} account credit available — apply before charging
+          </div>
         )}
       </div>
     </div>
@@ -417,6 +440,11 @@ const CarWashAddJob = () => {
   const [dupWarning, setDupWarning]   = useState(null); // { jobNumber, customerName, plateNumber }
   const skipDupCheckRef               = React.useRef(false);
 
+  // Voucher job state
+  const [isVoucherJob, setIsVoucherJob]     = useState(false);
+  const [voucherAccount, setVoucherAccount] = useState(null); // full account object
+  const [voucherCompanies, setVoucherCompanies] = useState([]);
+
   const { read: readDraft, write: writeDraft, clear: clearDraft } = useFormDraft("cw-new-job");
 
   // Restore draft on mount (new job only)
@@ -487,17 +515,19 @@ const CarWashAddJob = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        const [svcPayload, staffPayload, branchData, settingsData, branchesPayload] = await Promise.all([
+        const [svcPayload, staffPayload, branchData, settingsData, branchesPayload, voucherPayload] = await Promise.all([
           carWashApi.listServices({ active: true }),
           carWashApi.listStaff({ active: true }),
           carWashApi.getActiveBranch().catch(() => null),
           carWashApi.getCarWashSettings().catch(() => null),
           carWashApi.listBranches({ limit: 100 }).catch(() => null),
+          carWashApi.listCreditAccounts({ accountType: "voucher", status: "active", limit: 200 }).catch(() => null),
         ]);
         setServices(normalizeListPayload(svcPayload, "services"));
         const raw = normalizeListPayload(staffPayload, "staff");
         allStaffRef.current = raw;
         setBranches(normalizeListPayload(branchesPayload, "branches"));
+        setVoucherCompanies(normalizeListPayload(voucherPayload, "accounts"));
 
         const activeBranchId = branchData?._id ? String(branchData._id) : null;
         setIsAllBranches(!activeBranchId);
@@ -697,6 +727,10 @@ const CarWashAddJob = () => {
       toast.error("Plate number is required");
       return;
     }
+    if (jobType === "vehicle" && isVoucherJob && !voucherAccount) {
+      toast.error("Select a voucher company before saving");
+      return;
+    }
     if (!serviceLines.some((l) => l.serviceName?.trim())) {
       toast.error("Add at least one service line with a name");
       return;
@@ -753,7 +787,7 @@ const CarWashAddJob = () => {
           isRewardLine: Boolean(l.isRewardLine),
         })),
       discountAmount: discountNum,
-      creditAccount: creditAccount?._id || null,
+      creditAccount: (jobType === "vehicle" && isVoucherJob) ? (voucherAccount?._id || null) : (creditAccount?._id || null),
       notes,
       branch: (isAllBranches && !isEditMode && selectedBranchId) ? selectedBranchId : undefined,
     };
@@ -775,7 +809,15 @@ const CarWashAddJob = () => {
         }
 
         clearDraft();
-        toast.success(applyReward ? "Job created and loyalty reward applied!" : creditAccount ? "Job created and charged to credit account" : "Car Wash job created");
+        toast.success(
+          isVoucherJob
+            ? `Voucher job created — billed to ${voucherAccount?.contactPerson || voucherAccount?.accountNumber || "company"}`
+            : applyReward
+              ? "Job created and loyalty reward applied!"
+              : creditAccount
+                ? "Job created and charged to credit account"
+                : "Car Wash job created"
+        );
         if (jobType === "carpet" && newId) {
           navigate(`/carwash/jobs/${newId}/edit`, { state: { openPhotos: true } });
         } else {
@@ -861,7 +903,7 @@ const CarWashAddJob = () => {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setJobType("carpet")}
+                      onClick={() => { setJobType("carpet"); setIsVoucherJob(false); setVoucherAccount(null); }}
                       className={`flex-1 border-l border-slate-300 py-2 text-xs font-bold ${jobType === "carpet" ? "bg-[#0B3B2E] text-white" : "bg-white text-slate-700 hover:bg-slate-50"}`}
                     >
                       Carpet / Textile
@@ -878,6 +920,64 @@ const CarWashAddJob = () => {
               </p>
               {jobType === "vehicle" ? (
                 <>
+                  {/* Voucher Job toggle — new jobs only */}
+                  {!isEditMode && (
+                    <div className="mb-3">
+                      <label className={labelClass}>Voucher Job</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          id="voucher-chk"
+                          type="checkbox"
+                          className="h-4 w-4 accent-[#0B3B2E]"
+                          checked={isVoucherJob}
+                          onChange={(e) => {
+                            setIsVoucherJob(e.target.checked);
+                            if (!e.target.checked) setVoucherAccount(null);
+                          }}
+                        />
+                        <label htmlFor="voucher-chk" className="cursor-pointer text-xs font-bold text-slate-700">
+                          This job is covered by a company voucher
+                        </label>
+                      </div>
+                      {isVoucherJob && (
+                        <div className="mt-2">
+                          <label className={labelClass}>Voucher Company <span className="text-red-500">*</span></label>
+                          {voucherCompanies.length === 0 ? (
+                            <p className="text-[11px] text-amber-600 font-semibold">
+                              No active voucher companies found — add one in Credit Accounts first.
+                            </p>
+                          ) : (
+                            <select
+                              className={`${inputClass} border-violet-300 focus:border-violet-600`}
+                              value={voucherAccount?._id || ""}
+                              onChange={(e) => {
+                                const acc = voucherCompanies.find((a) => a._id === e.target.value) || null;
+                                setVoucherAccount(acc);
+                              }}
+                              required={isVoucherJob}
+                            >
+                              <option value="">— Select voucher company —</option>
+                              {voucherCompanies.map((a) => (
+                                <option key={a._id} value={a._id}>
+                                  {a.contactPerson || a.accountNumber} ({a.accountNumber})
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                          {voucherAccount && (
+                            <div className="mt-1.5 flex items-center gap-2 border border-violet-300 bg-violet-50 px-3 py-2 text-xs">
+                              <FaTag className="shrink-0 text-violet-600" />
+                              <div>
+                                <span className="font-black text-violet-800">{voucherAccount.contactPerson || voucherAccount.accountNumber}</span>
+                                <span className="ml-2 text-violet-600">· Ref: {voucherAccount.accountNumber}</span>
+                                <div className="mt-0.5 text-violet-700">No payment collected — company billed via statement.</div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <PlateLookupWidget
                     plate={plateNumber}
                     onPlateChange={setPlateNumber}
@@ -897,12 +997,14 @@ const CarWashAddJob = () => {
                   {isEditMode && jobPaymentStatus !== "paid" && (
                     <p className="mt-1 text-[10px] text-amber-600">Plate can be edited — payment not yet completed</p>
                   )}
-                  <CreditAccountBanner
-                    plate={plateNumber}
-                    jobTotal={totalPrice}
-                    onAccountDetected={(acc) => setCreditAccount(acc || null)}
-                  />
-                  {!isEditMode && loyaltyCard?.pendingRewards > 0 && loyaltyCard?.program && (() => {
+                  {!isVoucherJob && (
+                    <CreditAccountBanner
+                      plate={plateNumber}
+                      jobTotal={totalPrice}
+                      onAccountDetected={(acc) => setCreditAccount(acc || null)}
+                    />
+                  )}
+                  {!isVoucherJob && !isEditMode && loyaltyCard?.pendingRewards > 0 && loyaltyCard?.program && (() => {
                     const prog = loyaltyCard.program;
                     const isFreeService = prog.rewardType === "free_service";
                     const rewardSvc = loyaltyCard.rewardService;
@@ -1427,7 +1529,16 @@ const CarWashAddJob = () => {
                   <span className="font-semibold text-slate-500 uppercase tracking-wide">Staff</span>
                   <span className="font-bold">{staffSummary.length || "None"}</span>
                 </div>
-                {creditAccount && (
+                {isVoucherJob && voucherAccount && (
+                  <div className="flex justify-between">
+                    <span className="font-semibold text-slate-500 uppercase tracking-wide">Voucher</span>
+                    <span className="font-bold text-violet-700">
+                      <FaTag className="mr-1 inline" size={9} />
+                      {voucherAccount.contactPerson || voucherAccount.accountNumber}
+                    </span>
+                  </div>
+                )}
+                {!isVoucherJob && creditAccount && (
                   <div className="flex justify-between">
                     <span className="font-semibold text-slate-500 uppercase tracking-wide">Credit Acct</span>
                     <span className="font-bold text-emerald-700">{creditAccount.accountNumber || "Yes"}</span>

@@ -44,6 +44,7 @@ export const carWashApi = {
   createJob: async (payload) => unwrap(await adminRequests.post("/carwash/jobs", bb(payload))),
   updateJob: async (id, payload) => unwrap(await adminRequests.put(`/carwash/jobs/${id}`, payload)),
   updateJobStatus: async (id, status) => unwrap(await adminRequests.patch(`/carwash/jobs/${id}/status`, { status })),
+  markPayLater:   async (id)         => unwrap(await adminRequests.patch(`/carwash/jobs/${id}/paylater`)),
   deleteJob: async (id) => unwrap(await adminRequests.delete(`/carwash/jobs/${id}`)),
   deleteJobs: async (ids) => unwrap(await adminRequests.post("/carwash/jobs/bulk-delete", { ids })),
   listServices: async (params = {}) => unwrap(await adminRequests.get("/carwash/services", { params })),

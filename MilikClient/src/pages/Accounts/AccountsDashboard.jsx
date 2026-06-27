@@ -8,9 +8,10 @@ import {
   FaBook, FaCreditCard, FaLayerGroup,
   FaFileInvoice, FaCog, FaUniversity, FaCoins, FaFileContract,
   FaPlusCircle, FaSpinner, FaExclamationTriangle, FaCheckCircle, FaCircle,
+  FaCalendarAlt, FaArchive, FaShieldAlt, FaChartPie,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
-import { getJournalEntries, getChartOfAccounts, getIncomeStatementReport, getCashMonthlySummary } from "../../redux/apiCalls";
+import { getJournalEntries, getChartOfAccounts, getIncomeStatementReport, getCashMonthlySummary, getAccountingPeriods } from "../../redux/apiCalls";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const GRN  = "#0B3B2E";
@@ -36,13 +37,23 @@ const SECTIONS = [
       { label: "Service Providers",    icon: FaCog,          route: "/accounts/service-providers",  desc: "Vendor & supplier register" },
     ],
   },
+  {
+    id: "period", label: "Period Management", accent: "#6D28D9",
+    items: [
+      { label: "Accounting Periods", icon: FaCalendarAlt, route: "/accounts/accounting-periods", desc: "Open, close & lock fiscal periods" },
+      { label: "Year-End Close",     icon: FaArchive,     route: "/accounts/year-end-close",     desc: "Close P&L to retained earnings" },
+      { label: "GL Integrity",       icon: FaShieldAlt,   route: "/accounts/gl-integrity",       desc: "Detect unbalanced & orphaned entries" },
+      { label: "Financial Ratios",   icon: FaChartPie,    route: "/accounts/financial-ratios",   desc: "Current ratio, ROA, margins & more" },
+    ],
+  },
 ];
 
 const QUICK_ACTIONS = [
-  { label: "New Journal Entry", route: "/accounts/journals",         icon: FaBook },
-  { label: "Payment Voucher",   route: "/accounts/payment-vouchers", icon: FaCreditCard },
-  { label: "Expense Request",   route: "/accounts/expenses",         icon: FaFileInvoice },
-  { label: "Petty Cash Entry",  route: "/accounts/petty-cash",       icon: FaCoins },
+  { label: "New Journal Entry", route: "/accounts/journals",            icon: FaBook },
+  { label: "Payment Voucher",   route: "/accounts/payment-vouchers",    icon: FaCreditCard },
+  { label: "Expense Request",   route: "/accounts/expenses",            icon: FaFileInvoice },
+  { label: "Petty Cash Entry",  route: "/accounts/petty-cash",          icon: FaCoins },
+  { label: "Manage Periods",    route: "/accounts/accounting-periods",  icon: FaCalendarAlt },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -132,7 +143,8 @@ const ModuleTile = ({ label, icon: Icon, route, desc, accent, navigate }) => (
 );
 
 const SectionBlock = ({ section, navigate }) => {
-  const cols = section.items.length <= 3 ? "grid-cols-3" : "grid-cols-5";
+  const n = section.items.length;
+  const cols = n <= 3 ? "grid-cols-3" : n === 4 ? "grid-cols-4" : "grid-cols-5";
   return (
     <div>
       <div className="mb-1.5 flex items-center gap-2">
@@ -170,11 +182,12 @@ const AccountsDashboard = () => {
   const navigate = useNavigate();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
 
-  const [stats, setStats]             = useState({ accounts: null, draftJournals: null, postedJournals: null });
-  const [statsLoading, setStatsLoading]   = useState(true);
-  const [cashData, setCashData]           = useState([]);
-  const [monthlyData, setMonthlyData]     = useState([]);
+  const [stats, setStats]               = useState({ accounts: null, draftJournals: null, postedJournals: null });
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [cashData, setCashData]         = useState([]);
+  const [monthlyData, setMonthlyData]   = useState([]);
   const [chartsLoading, setChartsLoading] = useState(true);
+  const [currentPeriod, setCurrentPeriod] = useState(null);
   const fetchedRef = useRef(false);
 
   const businessId = useMemo(() => currentCompany?._id || "", [currentCompany?._id]);
@@ -188,21 +201,30 @@ const AccountsDashboard = () => {
     const startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
     const endDate   = now.toISOString().split("T")[0];
 
-    // KPI stats
+    // KPI stats + current period — all in parallel
     Promise.all([
       getChartOfAccounts({ business: businessId }),
       getJournalEntries({ business: businessId, company: businessId, status: "draft",  startDate, endDate }),
       getJournalEntries({ business: businessId, company: businessId, status: "posted", startDate, endDate }),
+      getAccountingPeriods({ business: businessId }).catch(() => []),
     ])
-      .then(([coa, dr, po]) => setStats({
-        accounts:      Array.isArray(coa) ? coa.length : 0,
-        draftJournals: dr.total ?? dr.data?.length  ?? 0,
-        postedJournals:po.total ?? po.data?.length  ?? 0,
-      }))
+      .then(([coa, dr, po, periods]) => {
+        setStats({
+          accounts:      Array.isArray(coa) ? coa.length : 0,
+          draftJournals: dr.total ?? dr.data?.length  ?? 0,
+          postedJournals:po.total ?? po.data?.length  ?? 0,
+        });
+        // Find the period that contains today
+        const today = new Date();
+        const active = Array.isArray(periods)
+          ? periods.find((p) => new Date(p.startDate) <= today && new Date(p.endDate) >= today)
+          : null;
+        setCurrentPeriod(active || null);
+      })
       .catch(() => {})
       .finally(() => setStatsLoading(false));
 
-    // Chart data — both in parallel: cash summary (1 call) + income statement (6 calls)
+    // Chart data — cash summary + income statement (6 months) in parallel
     const months = getLast6Months();
     Promise.all([
       getCashMonthlySummary({ business: businessId, months: 6 })
@@ -280,7 +302,10 @@ const AccountsDashboard = () => {
                 { label: "Income Statement",   route: "/accounts/income-statement" },
                 { label: "Balance Sheet",      route: "/accounts/balance-sheet" },
                 { label: "Cash Flow",          route: "/accounts/cash-flow" },
+                { label: "Financial Ratios",   route: "/accounts/financial-ratios" },
                 { label: "Tax Reports",        route: "/accounts/tax-reports" },
+                { label: "GL Integrity",       route: "/accounts/gl-integrity" },
+                { label: "Year-End Close",     route: "/accounts/year-end-close" },
               ].map(({ label, route }) => (
                 <button key={route} onClick={() => navigate(route)}
                   className="flex w-full items-center gap-2 px-2 py-1 text-left text-[10px] text-white/40 transition hover:bg-white/10 hover:text-white/75">
@@ -296,11 +321,37 @@ const AccountsDashboard = () => {
         <div className="flex flex-1 flex-col overflow-hidden">
 
           {/* Top bar */}
-          <div className="shrink-0 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-2.5">
+          <div className="shrink-0 flex items-center gap-3 border-b border-slate-200 bg-white px-5 py-2.5">
             <span className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#0B3B2E]">
               Accounting Dashboard
             </span>
-            <div className="flex items-center gap-2">
+
+            {/* Active period pill */}
+            {!statsLoading && (
+              currentPeriod ? (
+                <button
+                  onClick={() => navigate("/accounts/accounting-periods")}
+                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-bold transition
+                    ${currentPeriod.status === "open"
+                      ? "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                      : currentPeriod.status === "closed"
+                        ? "border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                        : "border border-red-200 bg-red-50 text-red-700 hover:bg-red-100"}`}
+                >
+                  <FaCalendarAlt size={8} />
+                  {currentPeriod.name} · {currentPeriod.status.toUpperCase()}
+                </button>
+              ) : (
+                <button
+                  onClick={() => navigate("/accounts/accounting-periods")}
+                  className="inline-flex items-center gap-1.5 border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-bold text-slate-400 hover:bg-slate-100 transition"
+                >
+                  <FaCalendarAlt size={8} /> No active period
+                </button>
+              )
+            )}
+
+            <div className="ml-auto flex items-center gap-2">
               <button onClick={() => navigate("/accounts/journals")}
                 className="inline-flex items-center gap-1.5 border border-slate-300 bg-white px-3 py-1.5 text-[10px] font-bold text-slate-600 transition hover:bg-slate-50">
                 <FaPlusCircle size={9} /> Journal

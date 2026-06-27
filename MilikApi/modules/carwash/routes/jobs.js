@@ -1,6 +1,6 @@
 import express from "express";
 import { verifyUser, requireCompanyModule, requireCompanyPermission } from "../../../controllers/verifyToken.js";
-import { createJob, deleteJob, deleteJobsBulk, deleteJobPhoto, getJob, listJobs, updateJob, updateJobStatus, uploadJobPhotos, sendJobSms } from "../controllers/jobsController.js";
+import { createJob, deleteJob, deleteJobsBulk, deleteJobPhoto, getJob, listJobs, markPayLater, updateJob, updateJobStatus, uploadJobPhotos, sendJobSms } from "../controllers/jobsController.js";
 import { validateParamId } from "../middleware/validateObjectId.js";
 
 const router = express.Router();
@@ -11,7 +11,8 @@ router.post("/", requireCompanyPermission("carwash-jobs", "create", "carwash"), 
 router.post("/bulk-delete", requireCompanyPermission("carwash-jobs", "update", "carwash"), deleteJobsBulk);
 router.get("/:id", validateParamId(), requireCompanyPermission("carwash-jobs", "view", "carwash"), getJob);
 router.put("/:id", validateParamId(), requireCompanyPermission("carwash-jobs", "update", "carwash"), updateJob);
-router.patch("/:id/status", validateParamId(), requireCompanyPermission("carwash-jobs", "update", "carwash"), updateJobStatus);
+router.patch("/:id/status",    validateParamId(), requireCompanyPermission("carwash-jobs", "update", "carwash"), updateJobStatus);
+router.patch("/:id/paylater", validateParamId(), requireCompanyPermission("carwash-jobs", "update", "carwash"), markPayLater);
 router.delete("/:id", validateParamId(), requireCompanyPermission("carwash-jobs", "update", "carwash"), deleteJob);
 router.post("/:id/sms",    validateParamId(), requireCompanyPermission("carwash-jobs", "view",   "carwash"), sendJobSms);
 router.post("/:id/photos", validateParamId(), requireCompanyPermission("carwash-jobs", "update", "carwash"), uploadJobPhotos);

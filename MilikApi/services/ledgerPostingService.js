@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import FinancialLedgerEntry from "../models/FinancialLedgerEntry.js";
 import ChartOfAccount from "../models/ChartOfAccount.js";
+import AccountingPeriod from "../models/AccountingPeriod.js";
 import { resolvePropertyAccountingContext } from "./propertyAccountingService.js";
 
 const flipDirection = (direction) => (direction === "credit" ? "debit" : "credit");
@@ -112,10 +113,32 @@ const enrichPayloadFromProperty = async (payload = {}) => {
   };
 };
 
+const checkPeriodLock = async (businessId, transactionDate) => {
+  if (!businessId || !transactionDate) return;
+  const date = new Date(transactionDate);
+  const blocked = await AccountingPeriod.findOne({
+    business: businessId,
+    status: { $in: ["closed", "locked"] },
+    startDate: { $lte: date },
+    endDate: { $gte: date },
+  }).select("name status startDate endDate").lean();
+  if (blocked) {
+    throw new Error(
+      `Cannot post to a ${blocked.status} period "${blocked.name}" ` +
+      `(${blocked.startDate.toISOString().slice(0, 10)} – ${blocked.endDate.toISOString().slice(0, 10)}). ` +
+      `Reopen the period or post to a different date.`
+    );
+  }
+};
+
 export const postEntry = async (payload = {}) => {
   const { session = null, ...entryPayload } = payload || {};
   const resolvedPayload = await enrichPayloadFromProperty(entryPayload);
   validatePayload(resolvedPayload);
+  await checkPeriodLock(
+    toObjectIdString(resolvedPayload.business),
+    resolvedPayload.transactionDate
+  );
   await validatePostingAccount(resolvedPayload);
 
   const normalizedAmount = Math.abs(Number(resolvedPayload.amount || 0));

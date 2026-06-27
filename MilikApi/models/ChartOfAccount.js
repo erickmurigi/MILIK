@@ -96,6 +96,24 @@ const ChartOfAccountSchema = new mongoose.Schema(
       default: [],
       index: true,
     },
+
+    // Soft-delete — accounts with ledger history are never physically removed
+    isActive: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
+
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
+
+    deletedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
   },
   {
     timestamps: true,

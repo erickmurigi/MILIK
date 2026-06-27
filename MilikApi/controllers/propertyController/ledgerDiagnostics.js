@@ -1,7 +1,9 @@
+import mongoose from "mongoose";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import RentPayment from "../../models/RentPayment.js";
 import TenantInvoice from "../../models/TenantInvoice.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
+import JournalEntry from "../../models/JournalEntry.js";
 import Unit from "../../models/Unit.js";
 import Property from "../../models/Property.js";
 import { postEntry } from "../../services/ledgerPostingService.js";
@@ -412,5 +414,175 @@ export const checkUtilityReceiptLedgerEntries = async (req, res) => {
     return res.json({ count: entries.length, entries });
   } catch (err) {
     return res.status(500).json({ error: err.message });
+  }
+};
+
+// ─── GL INTEGRITY REPORT ────────────────────────────────────────────────────
+// Comprehensive check: unbalanced groups, orphaned entries, inactive account
+// usage, negative normal-side balances, and missing critical system accounts.
+export const runIntegrityReport = async (req, res) => {
+  try {
+    const businessId =
+      req.query?.business || req.query?.company ||
+      req.body?.business || req.body?.company ||
+      req.user?.company;
+
+    if (!businessId) return res.status(400).json({ error: "Business context required" });
+
+    const bizId = new mongoose.Types.ObjectId(String(businessId));
+    const ACTIVE_STATUSES = ["approved"];
+
+    // 1. Overall balance (debits must equal credits)
+    const [totals] = await FinancialLedgerEntry.aggregate([
+      { $match: { business: bizId, status: { $in: ACTIVE_STATUSES } } },
+      {
+        $group: {
+          _id: null,
+          totalDebit: { $sum: "$debit" },
+          totalCredit: { $sum: "$credit" },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+    const totalDebit = Number(totals?.totalDebit || 0);
+    const totalCredit = Number(totals?.totalCredit || 0);
+    const glDifference = totalDebit - totalCredit;
+    const glBalanced = Math.abs(glDifference) < 0.01;
+
+    // 2. Unbalanced journal groups (debit leg ≠ credit leg)
+    const unbalancedGroups = await FinancialLedgerEntry.aggregate([
+      { $match: { business: bizId, status: { $in: ACTIVE_STATUSES }, journalGroupId: { $ne: null } } },
+      {
+        $group: {
+          _id: "$journalGroupId",
+          debitSum: { $sum: "$debit" },
+          creditSum: { $sum: "$credit" },
+          entryCount: { $sum: 1 },
+          firstDate: { $min: "$transactionDate" },
+          sourceType: { $first: "$sourceTransactionType" },
+          sourceId: { $first: "$sourceTransactionId" },
+        },
+      },
+      { $addFields: { diff: { $subtract: ["$debitSum", "$creditSum"] } } },
+      { $match: { diff: { $not: { $gt: -0.01, $lt: 0.01 } } } },
+      { $sort: { firstDate: -1 } },
+      { $limit: 100 },
+    ]);
+
+    // 3. Orphaned ledger entries — no matching accountId in COA
+    const entryAccountIds = await FinancialLedgerEntry.distinct("accountId", {
+      business: bizId,
+      status: { $in: ACTIVE_STATUSES },
+      accountId: { $ne: null },
+    });
+    const validAccounts = await ChartOfAccount.distinct("_id", {
+      business: bizId,
+    });
+    const validSet = new Set(validAccounts.map(String));
+    const orphanedAccountIds = entryAccountIds.filter((id) => !validSet.has(String(id)));
+
+    let orphanedEntriesCount = 0;
+    if (orphanedAccountIds.length) {
+      orphanedEntriesCount = await FinancialLedgerEntry.countDocuments({
+        business: bizId,
+        status: { $in: ACTIVE_STATUSES },
+        accountId: { $in: orphanedAccountIds },
+      });
+    }
+
+    // 4. Entries posted to inactive (soft-deleted) accounts
+    const inactiveAccountIds = await ChartOfAccount.distinct("_id", {
+      business: bizId,
+      isActive: false,
+    });
+    let inactiveAccountEntries = 0;
+    if (inactiveAccountIds.length) {
+      inactiveAccountEntries = await FinancialLedgerEntry.countDocuments({
+        business: bizId,
+        status: { $in: ACTIVE_STATUSES },
+        accountId: { $in: inactiveAccountIds },
+      });
+    }
+
+    // 5. Accounts with abnormal balance sign for their type
+    // Assets & Expenses should be debit-normal; Liabilities, Equity, Income should be credit-normal
+    const accountBalances = await FinancialLedgerEntry.aggregate([
+      { $match: { business: bizId, status: { $in: ACTIVE_STATUSES }, accountId: { $ne: null } } },
+      {
+        $group: {
+          _id: "$accountId",
+          netDebit: { $sum: "$debit" },
+          netCredit: { $sum: "$credit" },
+        },
+      },
+      { $addFields: { netBalance: { $subtract: ["$netDebit", "$netCredit"] } } },
+    ]);
+
+    const accountTypeMap = await ChartOfAccount.find(
+      { business: bizId, isActive: true },
+      { _id: 1, code: 1, name: 1, type: 1 }
+    ).lean();
+    const typeIndex = new Map(accountTypeMap.map((a) => [String(a._id), a]));
+
+    const abnormalBalances = accountBalances
+      .filter((row) => {
+        const acc = typeIndex.get(String(row._id));
+        if (!acc) return false;
+        const isDebitNormal = ["asset", "expense"].includes(acc.type);
+        // Flag if net balance is on the wrong side (more than KES 1 threshold to skip rounding noise)
+        return isDebitNormal ? row.netBalance < -1 : row.netBalance > 1;
+      })
+      .map((row) => {
+        const acc = typeIndex.get(String(row._id));
+        return {
+          accountId: row._id,
+          code: acc?.code,
+          name: acc?.name,
+          type: acc?.type,
+          netBalance: row.netBalance,
+        };
+      })
+      .slice(0, 50);
+
+    // 6. Posted journal entries with no ledger entries
+    const journalsWithNoLedger = await JournalEntry.find(
+      { business: bizId, status: "posted", ledgerEntries: { $size: 0 } },
+      { journalNo: 1, date: 1 }
+    ).lean();
+
+    const issues = [];
+    if (!glBalanced) issues.push({ severity: "critical", issue: `GL is out of balance by ${glDifference.toFixed(2)}` });
+    if (unbalancedGroups.length) issues.push({ severity: "critical", issue: `${unbalancedGroups.length} journal group(s) have unequal debits/credits` });
+    if (orphanedEntriesCount > 0) issues.push({ severity: "critical", issue: `${orphanedEntriesCount} ledger entry/entries reference deleted accounts` });
+    if (inactiveAccountEntries > 0) issues.push({ severity: "warning", issue: `${inactiveAccountEntries} entry/entries posted to inactive accounts` });
+    if (abnormalBalances.length) issues.push({ severity: "warning", issue: `${abnormalBalances.length} account(s) have abnormal balance signs` });
+    if (journalsWithNoLedger.length) issues.push({ severity: "warning", issue: `${journalsWithNoLedger.length} posted journal(s) have no ledger entries` });
+
+    return res.status(200).json({
+      success: true,
+      runAt: new Date(),
+      overallStatus: issues.some((i) => i.severity === "critical") ? "critical" : issues.length ? "warnings" : "clean",
+      issues,
+      detail: {
+        glBalance: { totalDebit, totalCredit, difference: glDifference, balanced: glBalanced },
+        unbalancedGroups: unbalancedGroups.map((g) => ({
+          journalGroupId: g._id,
+          sourceType: g.sourceType,
+          sourceId: g.sourceId,
+          date: g.firstDate,
+          debit: g.debitSum,
+          credit: g.creditSum,
+          difference: g.diff,
+          entryCount: g.entryCount,
+        })),
+        orphanedEntriesCount,
+        orphanedAccountIds,
+        inactiveAccountEntries,
+        abnormalBalances,
+        journalsWithNoLedger: journalsWithNoLedger.map((j) => ({ id: j._id, journalNo: j.journalNo, date: j.date })),
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message || "Integrity report failed" });
   }
 };

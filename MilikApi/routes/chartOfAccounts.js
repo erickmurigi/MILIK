@@ -571,9 +571,20 @@ router.delete("/:id", verifyUser, requireCompanyModule("accounts"), async (req, 
       TenantInvoice.countDocuments({ chartAccount: account._id }),
     ]);
 
+    // Accounts with ledger or invoice history are soft-deleted (audit trail preserved).
+    // Clean accounts with no history are physically removed.
     if (ledgerUsage > 0 || invoiceUsage > 0) {
-      return res.status(400).json({
-        error: "This account is already used in transactions and cannot be deleted.",
+      if (account.isActive === false) {
+        return res.status(400).json({ error: "Account is already deactivated." });
+      }
+      account.isActive = false;
+      account.deletedAt = new Date();
+      account.deletedBy = req.user?._id || null;
+      await account.save();
+      return res.status(200).json({
+        success: true,
+        softDeleted: true,
+        message: "Account deactivated — it has transaction history and cannot be physically removed. It is now inactive and will not appear in posting selectors.",
       });
     }
 
@@ -581,6 +592,7 @@ router.delete("/:id", verifyUser, requireCompanyModule("accounts"), async (req, 
 
     return res.status(200).json({
       success: true,
+      softDeleted: false,
       message: "Chart account deleted successfully",
     });
   } catch (err) {

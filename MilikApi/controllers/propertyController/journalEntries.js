@@ -890,6 +890,105 @@ export const createJournalFromVoucher = async (req, res, next) => {
 export const postJournalEntryAction = postJournalEntry;
 export const reverseJournalEntryAction = reverseJournalEntry;
 
+// ─── APPROVAL WORKFLOW ────────────────────────────────────────────────────────
+// Submit draft for review (creator does this)
+export const submitJournalForReview = async (req, res, next) => {
+  try {
+    const businessId = await resolveBusinessId(req);
+    const journal = await JournalEntry.findOne({ _id: req.params.id, business: businessId });
+    if (!journal) return res.status(404).json({ message: "Journal not found" });
+    if (journal.status !== "draft")
+      return res.status(400).json({ message: "Only draft journals can be submitted for review" });
+    if (journal.approvalStatus === "approved")
+      return res.status(400).json({ message: "Journal is already approved" });
+
+    journal.approvalStatus = "pending_review";
+    await journal.save();
+
+    emitToCompany(businessId, "journal:submitted", { journalId: journal._id });
+    const populated = await populateJournalQuery(JournalEntry.findById(journal._id)).lean();
+    return res.status(200).json(populated);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Reviewer marks as reviewed (senior accountant does this)
+export const reviewJournalEntry = async (req, res, next) => {
+  try {
+    const businessId = await resolveBusinessId(req);
+    const actorUserId = await resolveActorUserId(req, businessId);
+    const journal = await JournalEntry.findOne({ _id: req.params.id, business: businessId });
+    if (!journal) return res.status(404).json({ message: "Journal not found" });
+    if (journal.approvalStatus !== "pending_review")
+      return res.status(400).json({ message: "Journal is not pending review" });
+
+    journal.approvalStatus = "reviewed";
+    journal.reviewedBy = actorUserId;
+    journal.reviewedAt = new Date();
+    await journal.save();
+
+    emitToCompany(businessId, "journal:reviewed", { journalId: journal._id });
+    const populated = await populateJournalQuery(JournalEntry.findById(journal._id)).lean();
+    return res.status(200).json(populated);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Approver signs off — after this the journal can be posted (CFO/finance manager)
+export const approveJournalEntry = async (req, res, next) => {
+  try {
+    const businessId = await resolveBusinessId(req);
+    const actorUserId = await resolveActorUserId(req, businessId);
+    const journal = await JournalEntry.findOne({ _id: req.params.id, business: businessId });
+    if (!journal) return res.status(404).json({ message: "Journal not found" });
+    if (!["pending_review", "reviewed"].includes(journal.approvalStatus))
+      return res.status(400).json({ message: "Journal must be pending review or reviewed before approval" });
+    if (journal.status !== "draft")
+      return res.status(400).json({ message: "Only draft journals can be approved" });
+
+    journal.approvalStatus = "approved";
+    journal.approvedByUser = actorUserId;
+    journal.approvedByUserAt = new Date();
+    await journal.save();
+
+    emitToCompany(businessId, "journal:approved", { journalId: journal._id });
+    const populated = await populateJournalQuery(JournalEntry.findById(journal._id)).lean();
+    return res.status(200).json(populated);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Reject — sends back to draft for correction
+export const rejectJournalEntry = async (req, res, next) => {
+  try {
+    const { reason } = req.body || {};
+    if (!reason || !String(reason).trim())
+      return res.status(400).json({ message: "A rejection reason is required" });
+
+    const businessId = await resolveBusinessId(req);
+    const actorUserId = await resolveActorUserId(req, businessId);
+    const journal = await JournalEntry.findOne({ _id: req.params.id, business: businessId });
+    if (!journal) return res.status(404).json({ message: "Journal not found" });
+    if (!["pending_review", "reviewed"].includes(journal.approvalStatus))
+      return res.status(400).json({ message: "Only journals under review can be rejected" });
+
+    journal.approvalStatus = "rejected";
+    journal.rejectedBy = actorUserId;
+    journal.rejectedAt = new Date();
+    journal.rejectionReason = String(reason).trim();
+    await journal.save();
+
+    emitToCompany(businessId, "journal:rejected", { journalId: journal._id });
+    const populated = await populateJournalQuery(JournalEntry.findById(journal._id)).lean();
+    return res.status(200).json(populated);
+  } catch (err) {
+    next(err);
+  }
+};
+
 export default {
   createJournalEntry,
   getJournalEntries,

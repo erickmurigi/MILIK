@@ -18,6 +18,7 @@ import {
   FaBuilding, FaKey, FaUserSlash, FaRedoAlt, FaCar, FaUserPlus, FaUserCheck,
   FaLayerGroup, FaStar, FaCodeBranch,
   FaBoxes, FaWarehouse, FaCashRegister, FaEnvelope, FaSms, FaUserClock, FaUserFriends,
+  FaArchive, FaShieldAlt,
 } from "react-icons/fa";
 import "./dashboard.css";
 import TabManager from "../../components/Layout/TabManager";
@@ -141,6 +142,11 @@ const MENU_PERMISSION_MAP = {
   "acc-budget":                    { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "acc-budget-analysis":           { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "acc-creditor-ledger":           { resource: "expenses",         action: "view", moduleKey: "accounts" },
+  "acc-accounting-periods":        { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "acc-gl-integrity":              { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "acc-year-end-close":            { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "acc-financial-ratios":          { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "acc-period-management":         { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "comm-sms-manager":     { resource: "sms",   action: "view"   },
   "comm-sms-templates":   { resource: "sms",   action: "manage" },
   "comm-email-manager":   { resource: "email", action: "view"   },
@@ -839,6 +845,10 @@ const TopToolbar = ({
         "acc-budget":                    "/accounts/budget",
         "acc-budget-analysis":           "/accounts/budget/analysis",
         "acc-creditor-ledger":           "/accounts/creditor-ledger",
+        "acc-accounting-periods":        "/accounts/accounting-periods",
+        "acc-gl-integrity":              "/accounts/gl-integrity",
+        "acc-year-end-close":            "/accounts/year-end-close",
+        "acc-financial-ratios":          "/accounts/financial-ratios",
         documentation: "/help/documentation",
         support:       "/help/support",
         about:         "/help/about",
@@ -1182,11 +1192,22 @@ const TopToolbar = ({
             { id: "acc-income-statement", label: "Income Statement (P&L)", icon: FaFileAlt },
             { id: "acc-balance-sheet",    label: "Balance Sheet",          icon: FaBalanceScale },
             { id: "acc-cash-flow",        label: "Cash Flow Statement",    icon: FaExchangeAlt },
+            { id: "acc-financial-ratios", label: "Financial Ratios",       icon: FaChartPie },
             ...(hasCompanyModule(activeCompanyContext, "propertyManagement")
               ? [{ id: "acc-arrears-analysis", label: "Arrears Aged Analysis", icon: FaChartBar }]
               : []),
             { id: "acc-payment-analysis", label: "Payment Aged Analysis",  icon: FaChartBar },
             { id: "acc-tax-reports",      label: "Tax Reports",            icon: FaCalculator },
+          ],
+        },
+        {
+          id: "acc-period-management",
+          label: "Period Management",
+          icon: FaCalendarAlt,
+          submenu: [
+            { id: "acc-accounting-periods", label: "Accounting Periods",  icon: FaCalendarAlt },
+            { id: "acc-year-end-close",     label: "Year-End Close",      icon: FaArchive },
+            { id: "acc-gl-integrity",       label: "GL Integrity Report", icon: FaShieldAlt },
           ],
         },
         {

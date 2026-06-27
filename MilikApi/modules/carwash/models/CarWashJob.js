@@ -55,6 +55,13 @@ const carWashJobSchema = new mongoose.Schema(
     paymentStatus: { type: String, enum: PAYMENT_STATUSES, default: "unpaid", index: true },
     rewardRedemption: { type: Boolean, default: false },
     creditAccount: { type: mongoose.Schema.Types.ObjectId, ref: "CarWashCreditAccount", default: null, index: true },
+    // Voucher job — set automatically when the linked creditAccount is of type "voucher"
+    isVoucher:         { type: Boolean, default: false, index: true },
+    voucherCompanyName:{ type: String, trim: true, default: "" },
+    // Pay-later — supervisor explicitly deferred payment collection
+    payLater:   { type: Boolean, default: false, index: true },
+    payLaterAt: { type: Date, default: null },
+    payLaterBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     notes: { type: String, trim: true, default: "" },
     // Carpet job photos — stored as relative URL paths e.g. /uploads/carwash/carpets/uuid.jpg
     photos: { type: [String], default: [] },
@@ -82,5 +89,7 @@ carWashJobSchema.index({ business: 1, plateNumber: 1, status: 1, paymentStatus: 
 carWashJobSchema.index({ business: 1, plateNumber: 1, createdAt: -1 });
 // Combined status + paymentStatus filter with sort (job list page multi-filter)
 carWashJobSchema.index({ business: 1, status: 1, paymentStatus: 1, createdAt: -1 });
+carWashJobSchema.index({ business: 1, isVoucher: 1, createdAt: -1 });
+carWashJobSchema.index({ business: 1, payLater: 1, status: 1, createdAt: -1 });
 
 export default mongoose.model("CarWashJob", carWashJobSchema);

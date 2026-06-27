@@ -8,6 +8,10 @@ import {
   postJournalEntryAction,
   reverseJournalEntryAction,
   deleteJournalEntry,
+  submitJournalForReview,
+  reviewJournalEntry,
+  approveJournalEntry,
+  rejectJournalEntry,
 } from "../../controllers/propertyController/journalEntries.js";
 
 const router = express.Router();
@@ -22,5 +26,11 @@ router.put("/:id", verifyUser, requireCompanyModule("accounts"), updateJournalEn
 router.post("/:id/post", verifyUser, requireCompanyModule("accounts"), postJournalEntryAction);
 router.post("/:id/reverse", verifyUser, requireCompanyModule("accounts"), reverseJournalEntryAction);
 router.delete("/:id", verifyUser, requireCompanyModule("accounts"), deleteJournalEntry);
+
+// Approval workflow
+router.post("/:id/submit", verifyUser, requireCompanyModule("accounts"), submitJournalForReview);
+router.post("/:id/review", verifyUser, requireCompanyModule("accounts"), reviewJournalEntry);
+router.post("/:id/approve", verifyUser, requireCompanyModule("accounts"), approveJournalEntry);
+router.post("/:id/reject", verifyUser, requireCompanyModule("accounts"), rejectJournalEntry);
 
 export default router;

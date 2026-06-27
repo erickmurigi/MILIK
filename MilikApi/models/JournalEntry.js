@@ -108,6 +108,57 @@ const JournalEntrySchema = new mongoose.Schema(
       index: true,
     },
 
+    // ── Approval workflow ─────────────────────────────────────────────────────
+    // When a company enables requireJournalApproval in settings, journals must
+    // pass through: draft → pending_review → reviewed → approved before posting.
+    // Without the setting, journals can be posted directly from draft.
+    approvalStatus: {
+      type: String,
+      enum: ["not_required", "pending_review", "reviewed", "approved", "rejected"],
+      default: "not_required",
+      index: true,
+    },
+
+    reviewedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    reviewedAt: {
+      type: Date,
+      default: null,
+    },
+
+    approvedByUser: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    approvedByUserAt: {
+      type: Date,
+      default: null,
+    },
+
+    rejectedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    rejectedAt: {
+      type: Date,
+      default: null,
+    },
+
+    rejectionReason: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 500,
+    },
+
     ledgerEntries: [
       {
         type: mongoose.Schema.Types.ObjectId,

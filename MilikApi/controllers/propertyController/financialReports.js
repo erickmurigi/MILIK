@@ -3,6 +3,8 @@ import ChartOfAccount from "../../models/ChartOfAccount.js";
 import Company from "../../models/Company.js";
 import CompanySettings from "../../models/CompanySettings.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
+import JournalEntry from "../../models/JournalEntry.js";
+import AccountingPeriod from "../../models/AccountingPeriod.js";
 import Tenant from "../../models/Tenant.js";
 import TenantInvoice from "../../models/TenantInvoice.js";
 import RentPayment from "../../models/RentPayment.js";
@@ -11,8 +13,9 @@ import Unit from "../../models/Unit.js";
 import ExpenseProperty from "../../models/ExpenseProperty.js";
 import PaymentVoucher from "../../models/PaymentVoucher.js";
 import { computeTenantInvoiceSnapshotsBatch } from "./tenantInvoices.js";
-import { ensureSystemChartOfAccounts } from "../../services/chartOfAccountsService.js";
+import { ensureSystemChartOfAccounts, findSystemAccountByCode } from "../../services/chartOfAccountsService.js";
 import { computeAccountBalance, getNormalBalanceSide } from "../../services/accountingClassificationService.js";
+import { postEntry } from "../../services/ledgerPostingService.js";
 import { escapeRegex } from "../../utils/escapeRegex.js";
 import {
   isOperatingIncomeAccount,
@@ -1847,6 +1850,337 @@ export const getCashMonthlySummary = async (req, res, next) => {
   }
 };
 
+// ─── TRIAL BALANCE EXCEPTIONS ────────────────────────────────────────────────
+// Returns accounts with unusual/flagged balance conditions. Each flag has a
+// severity so the UI can colour-code: critical / warning / info.
+export const getTrialBalanceExceptions = async (req, res, next) => {
+  try {
+    const businessId =
+      req.query?.business || req.query?.company ||
+      req.body?.business || req.body?.company ||
+      req.user?.company;
+    if (!businessId) return res.status(400).json({ message: "Business required" });
+
+    const bizId = new mongoose.Types.ObjectId(String(businessId));
+
+    // Get net balance per account from the ledger
+    const accountBalances = await FinancialLedgerEntry.aggregate([
+      { $match: { business: bizId, status: "approved" } },
+      {
+        $group: {
+          _id: "$accountId",
+          totalDebit: { $sum: "$debit" },
+          totalCredit: { $sum: "$credit" },
+          entryCount: { $sum: 1 },
+          lastEntry: { $max: "$transactionDate" },
+        },
+      },
+      { $addFields: { netBalance: { $subtract: ["$totalDebit", "$totalCredit"] } } },
+    ]);
+
+    const accounts = await ChartOfAccount.find({ business: bizId }, {
+      _id: 1, code: 1, name: 1, type: 1, group: 1, isActive: 1,
+    }).lean();
+    const accountMap = new Map(accounts.map((a) => [String(a._id), a]));
+
+    const exceptions = [];
+
+    for (const row of accountBalances) {
+      const acc = accountMap.get(String(row._id));
+      if (!acc) continue;
+
+      const isDebitNormal = ["asset", "expense"].includes(acc.type);
+      const netBal = row.netBalance;
+
+      // Abnormal sign
+      if (isDebitNormal && netBal < -1) {
+        exceptions.push({
+          severity: "warning",
+          flag: "abnormal_credit_balance",
+          message: `${acc.type} account has a credit balance (${netBal.toFixed(2)})`,
+          account: { id: row._id, code: acc.code, name: acc.name, type: acc.type },
+          netBalance: netBal,
+          entryCount: row.entryCount,
+          lastEntry: row.lastEntry,
+        });
+      }
+      if (!isDebitNormal && netBal > 1) {
+        exceptions.push({
+          severity: "warning",
+          flag: "abnormal_debit_balance",
+          message: `${acc.type} account has a debit balance (${netBal.toFixed(2)})`,
+          account: { id: row._id, code: acc.code, name: acc.name, type: acc.type },
+          netBalance: netBal,
+          entryCount: row.entryCount,
+          lastEntry: row.lastEntry,
+        });
+      }
+
+      // Zero balance accounts with prior activity (potential stale/orphaned)
+      if (Math.abs(netBal) < 0.01 && row.entryCount > 0) {
+        exceptions.push({
+          severity: "info",
+          flag: "zero_balance_with_activity",
+          message: `Account has ${row.entryCount} entries but net zero balance — may indicate matched reversal`,
+          account: { id: row._id, code: acc.code, name: acc.name, type: acc.type },
+          netBalance: netBal,
+          entryCount: row.entryCount,
+          lastEntry: row.lastEntry,
+        });
+      }
+
+      // Inactive account with recent activity
+      if (acc.isActive === false && row.entryCount > 0) {
+        exceptions.push({
+          severity: "critical",
+          flag: "inactive_account_has_entries",
+          message: `Deactivated account still has ${row.entryCount} ledger entries`,
+          account: { id: row._id, code: acc.code, name: acc.name, type: acc.type },
+          netBalance: netBal,
+          entryCount: row.entryCount,
+          lastEntry: row.lastEntry,
+        });
+      }
+    }
+
+    exceptions.sort((a, b) => {
+      const order = { critical: 0, warning: 1, info: 2 };
+      return (order[a.severity] || 3) - (order[b.severity] || 3);
+    });
+
+    return res.status(200).json({
+      success: true,
+      count: exceptions.length,
+      exceptions,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── FINANCIAL RATIOS ─────────────────────────────────────────────────────────
+export const getFinancialRatios = async (req, res, next) => {
+  try {
+    const businessId =
+      req.query?.business || req.query?.company || req.user?.company;
+    if (!businessId) return res.status(400).json({ message: "Business required" });
+
+    const bizId = new mongoose.Types.ObjectId(String(businessId));
+
+    // Get per-account net balances
+    const rows = await FinancialLedgerEntry.aggregate([
+      { $match: { business: bizId, status: "approved" } },
+      {
+        $group: {
+          _id: "$accountId",
+          totalDebit: { $sum: "$debit" },
+          totalCredit: { $sum: "$credit" },
+        },
+      },
+      { $addFields: { netBalance: { $subtract: ["$totalDebit", "$totalCredit"] } } },
+    ]);
+
+    const accounts = await ChartOfAccount.find({ business: bizId }, {
+      _id: 1, type: 1, group: 1, subGroup: 1,
+    }).lean();
+    const accMap = new Map(accounts.map((a) => [String(a._id), a]));
+
+    let currentAssets = 0, nonCurrentAssets = 0;
+    let currentLiabilities = 0, nonCurrentLiabilities = 0;
+    let totalEquity = 0, totalIncome = 0, totalExpenses = 0;
+    let totalRevenue = 0, costOfRevenue = 0;
+
+    for (const row of rows) {
+      const acc = accMap.get(String(row._id));
+      if (!acc) continue;
+      const net = row.netBalance;
+      const g = String(acc.group || "").toLowerCase();
+      const sg = String(acc.subGroup || "").toLowerCase();
+
+      if (acc.type === "asset") {
+        if (g.includes("current") || sg.includes("current")) currentAssets += net;
+        else nonCurrentAssets += net;
+      } else if (acc.type === "liability") {
+        if (g.includes("current") || sg.includes("current")) currentLiabilities += Math.abs(net);
+        else nonCurrentLiabilities += Math.abs(net);
+      } else if (acc.type === "equity") {
+        totalEquity += Math.abs(net);
+      } else if (acc.type === "income") {
+        totalIncome += Math.abs(net);
+        if (sg.includes("revenue") || sg.includes("sales") || sg === "") totalRevenue += Math.abs(net);
+        else if (sg.includes("cost") || sg.includes("cogs")) costOfRevenue += Math.abs(net);
+      } else if (acc.type === "expense") {
+        totalExpenses += Math.abs(net);
+        if (sg.includes("cost") || sg.includes("cogs")) costOfRevenue += Math.abs(net);
+      }
+    }
+
+    const totalAssets = currentAssets + nonCurrentAssets;
+    const netIncome = totalIncome - totalExpenses;
+    const grossProfit = totalRevenue - costOfRevenue;
+
+    const ratios = {
+      currentRatio: currentLiabilities > 0 ? +(currentAssets / currentLiabilities).toFixed(2) : null,
+      debtToEquity: totalEquity > 0 ? +((currentLiabilities + nonCurrentLiabilities) / totalEquity).toFixed(2) : null,
+      returnOnAssets: totalAssets > 0 ? +((netIncome / totalAssets) * 100).toFixed(2) : null,
+      grossMargin: totalRevenue > 0 ? +((grossProfit / totalRevenue) * 100).toFixed(2) : null,
+      netMargin: totalRevenue > 0 ? +((netIncome / totalRevenue) * 100).toFixed(2) : null,
+    };
+
+    return res.status(200).json({
+      success: true,
+      ratios,
+      components: {
+        currentAssets: +currentAssets.toFixed(2),
+        nonCurrentAssets: +nonCurrentAssets.toFixed(2),
+        currentLiabilities: +currentLiabilities.toFixed(2),
+        nonCurrentLiabilities: +nonCurrentLiabilities.toFixed(2),
+        totalEquity: +totalEquity.toFixed(2),
+        totalIncome: +totalIncome.toFixed(2),
+        totalExpenses: +totalExpenses.toFixed(2),
+        netIncome: +netIncome.toFixed(2),
+        totalRevenue: +totalRevenue.toFixed(2),
+        grossProfit: +grossProfit.toFixed(2),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── YEAR-END CLOSE ───────────────────────────────────────────────────────────
+// Closes all income/expense accounts for the given fiscal year into Retained
+// Earnings (account 3200). Posts a closing journal entry and locks the period.
+export const performYearEndClose = async (req, res, next) => {
+  try {
+    const businessId =
+      req.body?.business || req.body?.company || req.user?.company;
+    if (!businessId) return res.status(400).json({ message: "Business required" });
+
+    const { periodId, fiscalYear, narration } = req.body || {};
+    if (!fiscalYear) return res.status(400).json({ message: "fiscalYear (e.g. 2025) is required" });
+
+    const year = parseInt(fiscalYear, 10);
+    if (!year || year < 2000) return res.status(400).json({ message: "Invalid fiscalYear" });
+
+    const yearStart = new Date(year, 0, 1, 0, 0, 0, 0);
+    const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
+
+    // Check period exists and is closed (not open)
+    let period = null;
+    if (periodId) {
+      period = await AccountingPeriod.findOne({ _id: periodId, business: businessId });
+      if (!period) return res.status(404).json({ message: "Accounting period not found" });
+      if (period.status === "open") return res.status(400).json({ message: "Close the period before running year-end close" });
+      if (period.yearEndClosed) return res.status(400).json({ message: "Year-end close has already been run for this period" });
+    }
+
+    const bizId = new mongoose.Types.ObjectId(String(businessId));
+
+    // Sum income and expense ledger entries for the year
+    const rows = await FinancialLedgerEntry.aggregate([
+      {
+        $match: {
+          business: bizId,
+          status: "approved",
+          transactionDate: { $gte: yearStart, $lte: yearEnd },
+        },
+      },
+      {
+        $lookup: {
+          from: "chartofaccounts",
+          localField: "accountId",
+          foreignField: "_id",
+          as: "account",
+        },
+      },
+      { $unwind: "$account" },
+      { $match: { "account.type": { $in: ["income", "expense"] } } },
+      {
+        $group: {
+          _id: { accountId: "$accountId", type: "$account.type" },
+          totalDebit: { $sum: "$debit" },
+          totalCredit: { $sum: "$credit" },
+        },
+      },
+    ]);
+
+    let totalIncomeCredit = 0;
+    let totalExpenseDebit = 0;
+    for (const row of rows) {
+      if (row._id.type === "income") totalIncomeCredit += row.totalCredit - row.totalDebit;
+      if (row._id.type === "expense") totalExpenseDebit += row.totalDebit - row.totalCredit;
+    }
+
+    const netIncome = totalIncomeCredit - totalExpenseDebit;
+    if (Math.abs(netIncome) < 0.01) {
+      return res.status(400).json({
+        message: "Net income for the year is zero — nothing to close",
+        netIncome,
+      });
+    }
+
+    // Resolve retained earnings account (code 3200)
+    await ensureSystemChartOfAccounts(businessId);
+    const retainedEarningsAccount = await findSystemAccountByCode(businessId, "3200");
+    if (!retainedEarningsAccount) {
+      return res.status(400).json({ message: "Retained Earnings account (3200) not found. Ensure your chart of accounts is set up correctly." });
+    }
+
+    // Resolve an income summary account — we use retained earnings directly here
+    // (single-step close: net income → retained earnings)
+    const userId = req.user?._id || req.user?.id;
+    const closeNarration = narration || `Year-end close ${year}: net income KES ${netIncome.toFixed(2)} → Retained Earnings`;
+
+    // Post to retained earnings: debit if net loss, credit if net income
+    const direction = netIncome >= 0 ? "credit" : "debit";
+    const amount = Math.abs(netIncome);
+
+    await postEntry({
+      business: String(businessId),
+      sourceTransactionType: "year_end_close",
+      sourceTransactionId: `YEC-${year}`,
+      transactionDate: yearEnd,
+      statementPeriodStart: yearStart,
+      statementPeriodEnd: yearEnd,
+      category: "YEAR_END_CLOSE",
+      accountId: retainedEarningsAccount._id,
+      amount,
+      direction,
+      debit: direction === "debit" ? amount : 0,
+      credit: direction === "credit" ? amount : 0,
+      payer: "system",
+      receiver: "retained_earnings",
+      notes: closeNarration,
+      createdBy: userId,
+      approvedBy: userId,
+      approvedAt: new Date(),
+      status: "approved",
+      allowUnscoped: true,
+      allowNoAccount: false,
+    });
+
+    // Lock the period if provided
+    if (period) {
+      period.yearEndClosed = true;
+      period.status = "locked";
+      period.lockedBy = userId || null;
+      period.lockedAt = new Date();
+      await period.save();
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Year-end close completed for ${year}. Net ${netIncome >= 0 ? "income" : "loss"} of KES ${amount.toFixed(2)} closed to Retained Earnings.`,
+      netIncome: +netIncome.toFixed(2),
+      retainedEarningsAccountCode: retainedEarningsAccount.code,
+      periodLocked: !!period,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export default {
   getTrialBalanceReport,
   getIncomeStatementReport,
@@ -1859,4 +2193,7 @@ export default {
   getTenantPaidBalanceReport,
   getPropertyIncomeSummaryReport,
   getMRITaxSummaryReport,
+  getTrialBalanceExceptions,
+  getFinancialRatios,
+  performYearEndClose,
 };

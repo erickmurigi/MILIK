@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
-import { FaRedoAlt } from "react-icons/fa";
-import { carWashApi, normalizeListPayload } from "../../services/carWashApi";
+import { FaRedoAlt, FaClock, FaExclamationTriangle } from "react-icons/fa";
+import { carWashApi, formatMoney, normalizeListPayload } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 
 const POLL_INTERVAL = 20_000;
@@ -16,8 +17,6 @@ const elapsed = (iso) => {
   return `${hrs}h ${mins % 60}m`;
 };
 
-// Returns urgency overrides when a job lingers too long in its current status.
-// Thresholds: 20 min → orange warning, 45 min → red alert. Done jobs are exempt.
 const getUrgency = (iso, status) => {
   if (status === "done") return null;
   const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
@@ -46,7 +45,7 @@ const ADVANCE_CLS   = {
   ready:   "border-green-500  bg-green-50  text-green-700  hover:bg-green-100",
 };
 
-const JobCard = ({ job, onAdvance }) => {
+const JobCard = ({ job, onAdvance, onPayLater, payingLaterRef }) => {
   const cfg       = STATUS_CONFIG[job.status] ?? STATUS_CONFIG.waiting;
   const advanceTo = ADVANCE_MAP[job.status] ?? null;
   const elapsedIso = job.status === "waiting" ? job.createdAt : job.updatedAt;
@@ -55,6 +54,7 @@ const JobCard = ({ job, onAdvance }) => {
   const bgCls     = urgency?.bg     ?? cfg.bg;
   const timeCls   = urgency?.text   ?? "text-slate-400";
   const payStatus = job.paymentStatus || "unpaid";
+  const canPayLater = job.status === "ready" && payStatus !== "paid";
 
   return (
     <div className={`mb-1.5 border-l-4 ${borderCls} ${bgCls} rounded-sm px-2.5 py-1.5 shadow-sm`}>
@@ -84,6 +84,15 @@ const JobCard = ({ job, onAdvance }) => {
           {ADVANCE_LABEL[advanceTo]}
         </button>
       )}
+      {canPayLater && (
+        <button
+          type="button"
+          onClick={() => onPayLater(job)}
+          className="mt-1 w-full border border-slate-300 bg-slate-50 py-1 text-[10px] font-bold text-slate-600 hover:bg-slate-100"
+        >
+          ⏱ Pay Later
+        </button>
+      )}
     </div>
   );
 };
@@ -98,21 +107,64 @@ const ColHeader = ({ status, count }) => {
   );
 };
 
+const OutstandingCard = ({ job, onNavigate }) => {
+  const payStatus = job.paymentStatus || "unpaid";
+  const daysAgo = Math.floor((Date.now() - new Date(job.payLaterAt || job.updatedAt).getTime()) / 86_400_000);
+  const timeLabel = daysAgo === 0 ? "Today" : daysAgo === 1 ? "Yesterday" : `${daysAgo} days ago`;
+  const isOld = daysAgo >= 3;
+
+  return (
+    <div
+      className={`flex items-center justify-between gap-3 border-l-4 px-3 py-2 text-xs cursor-pointer hover:bg-slate-50 ${isOld ? "border-red-400 bg-red-50" : "border-amber-400 bg-amber-50"}`}
+      onClick={() => onNavigate(job._id)}
+    >
+      <div className="flex-1 min-w-0">
+        <div className="font-black text-slate-800 tracking-widest truncate">
+          {job.plateNumber || job.itemDescription || "—"}
+        </div>
+        <div className="text-[10px] text-slate-500 truncate">{job.serviceName || "Car Wash"}</div>
+        {job.customerName && <div className="text-[10px] text-slate-400 truncate">{job.customerName}</div>}
+      </div>
+      <div className="shrink-0 text-right">
+        <div className={`font-black ${isOld ? "text-red-700" : "text-amber-700"}`}>
+          {job.price > 0 ? formatMoney(job.price - (job.discountAmount || 0)) : "—"}
+        </div>
+        <div className={`text-[10px] flex items-center gap-1 justify-end ${isOld ? "text-red-500" : "text-amber-600"}`}>
+          {isOld && <FaExclamationTriangle size={8} />}
+          {timeLabel}
+        </div>
+        <span className={`rounded px-1 py-0.5 text-[9px] font-bold ${PAY_BADGE[payStatus] ?? PAY_BADGE.unpaid}`}>
+          {PAY_LABEL[payStatus] ?? "Unpaid"}
+        </span>
+      </div>
+    </div>
+  );
+};
+
 const CarWashWashboard = () => {
-  const [jobs,       setJobs]       = useState([]);
-  const [loading,    setLoading]    = useState(true);
-  const [lastLoaded, setLastLoaded] = useState(null);
-  const [,           setTick]       = useState(0);
-  const timerRef     = useRef(null);
-  const tickRef      = useRef(null);
-  const advancingRef = useRef(new Set());
-  const failCountRef = useRef(0);
+  const navigate = useNavigate();
+  const [jobs,             setJobs]             = useState([]);
+  const [outstanding,      setOutstanding]      = useState([]);
+  const [loading,          setLoading]          = useState(true);
+  const [lastLoaded,       setLastLoaded]       = useState(null);
+  const [outstandingOpen,  setOutstandingOpen]  = useState(true);
+  const [,                 setTick]             = useState(0);
+  const timerRef       = useRef(null);
+  const tickRef        = useRef(null);
+  const advancingRef   = useRef(new Set());
+  const payingLaterRef = useRef(new Set());
+  const failCountRef   = useRef(0);
 
   const load = useCallback(async () => {
     try {
-      const payload = await carWashApi.listJobs({ dateFrom: today(), dateTo: today(), limit: 200 });
-      const list = normalizeListPayload(payload, "jobs");
-      setJobs(list.filter((j) => COLUMNS.includes(j.status)));
+      const [boardPayload, outPayload] = await Promise.all([
+        carWashApi.listJobs({ dateFrom: today(), dateTo: today(), limit: 200 }),
+        carWashApi.listJobs({ payLater: "true", status: "done", limit: 200 }),
+      ]);
+      const boardList = normalizeListPayload(boardPayload, "jobs");
+      const outList   = normalizeListPayload(outPayload,   "jobs");
+      setJobs(boardList.filter((j) => COLUMNS.includes(j.status)));
+      setOutstanding(outList.filter((j) => j.paymentStatus !== "paid"));
       setLastLoaded(Date.now());
       if (failCountRef.current >= 3) toast.dismiss("washboard-offline");
       failCountRef.current = 0;
@@ -136,16 +188,34 @@ const CarWashWashboard = () => {
   const advance = useCallback(async (job, nextStatus) => {
     if (advancingRef.current.has(job._id)) return;
     advancingRef.current.add(job._id);
-    const prevStatus    = job.status;
-    const prevUpdatedAt = job.updatedAt;
+    const prev = { status: job.status, updatedAt: job.updatedAt };
     setJobs((all) => all.map((j) => (j._id === job._id ? { ...j, status: nextStatus, updatedAt: new Date().toISOString() } : j)));
     try {
       await carWashApi.updateJobStatus(job._id, nextStatus);
     } catch (err) {
-      setJobs((all) => all.map((j) => (j._id === job._id ? { ...j, status: prevStatus, updatedAt: prevUpdatedAt } : j)));
+      setJobs((all) => all.map((j) => (j._id === job._id ? { ...j, ...prev } : j)));
       toast.error(err?.response?.data?.message || "Status update failed");
     } finally {
       advancingRef.current.delete(job._id);
+    }
+  }, []);
+
+  const payLater = useCallback(async (job) => {
+    if (payingLaterRef.current.has(job._id)) return;
+    payingLaterRef.current.add(job._id);
+    // Optimistically remove from board, add to outstanding
+    setJobs((all) => all.filter((j) => j._id !== job._id));
+    setOutstanding((all) => [{ ...job, payLater: true, payLaterAt: new Date().toISOString(), status: "done" }, ...all]);
+    setOutstandingOpen(true);
+    try {
+      await carWashApi.markPayLater(job._id);
+    } catch (err) {
+      // Roll back on failure
+      setJobs((all) => [...all, job]);
+      setOutstanding((all) => all.filter((j) => j._id !== job._id));
+      toast.error(err?.response?.data?.message || "Could not mark as pay-later");
+    } finally {
+      payingLaterRef.current.delete(job._id);
     }
   }, []);
 
@@ -154,9 +224,7 @@ const CarWashWashboard = () => {
   const refreshAction = (
     <div className="flex items-center gap-3">
       {lastLoaded && (
-        <span className="text-xs text-slate-400">
-          Updated {elapsed(new Date(lastLoaded).toISOString())}
-        </span>
+        <span className="text-xs text-slate-400">Updated {elapsed(new Date(lastLoaded).toISOString())}</span>
       )}
       <button
         type="button"
@@ -173,22 +241,64 @@ const CarWashWashboard = () => {
       {loading ? (
         <div className="flex flex-1 items-center justify-center text-sm text-slate-400">Loading…</div>
       ) : (
-        <div className="flex flex-1 min-h-0 gap-2 p-2 overflow-hidden">
-          {COLUMNS.map((col) => {
-            const colJobs = byStatus(col);
-            return (
-              <div key={col} className="flex flex-1 flex-col overflow-hidden rounded border border-slate-200 bg-white p-3 shadow-sm">
-                <ColHeader status={col} count={colJobs.length} />
-                <div className="flex-1 overflow-y-auto">
-                  {colJobs.length === 0 ? (
-                    <p className="mt-4 text-center text-xs font-semibold text-slate-300 uppercase tracking-widest">None</p>
-                  ) : (
-                    colJobs.map((j) => <JobCard key={j._id} job={j} onAdvance={advance} />)
-                  )}
+        <div className="flex flex-1 min-h-0 flex-col gap-2 p-2 overflow-hidden">
+          {/* ── Active columns ── */}
+          <div className="flex flex-1 min-h-0 gap-2 overflow-hidden">
+            {COLUMNS.map((col) => {
+              const colJobs = byStatus(col);
+              return (
+                <div key={col} className="flex flex-1 flex-col overflow-hidden rounded border border-slate-200 bg-white p-3 shadow-sm">
+                  <ColHeader status={col} count={colJobs.length} />
+                  <div className="flex-1 overflow-y-auto">
+                    {colJobs.length === 0 ? (
+                      <p className="mt-4 text-center text-xs font-semibold text-slate-300 uppercase tracking-widest">None</p>
+                    ) : (
+                      colJobs.map((j) => (
+                        <JobCard key={j._id} job={j} onAdvance={advance} onPayLater={payLater} payingLaterRef={payingLaterRef} />
+                      ))
+                    )}
+                  </div>
                 </div>
+              );
+            })}
+          </div>
+
+          {/* ── Outstanding / Pay-Later strip ── */}
+          <div className="shrink-0 border border-amber-300 bg-white shadow-sm">
+            <button
+              type="button"
+              onClick={() => setOutstandingOpen((o) => !o)}
+              className="flex w-full items-center justify-between px-3 py-2"
+            >
+              <div className="flex items-center gap-2">
+                <FaClock size={11} className="text-amber-500" />
+                <span className="text-[11px] font-black uppercase tracking-widest text-amber-700">
+                  Outstanding — Pay Later
+                </span>
+                {outstanding.length > 0 && (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-700">
+                    {outstanding.length}
+                  </span>
+                )}
               </div>
-            );
-          })}
+              <span className="text-[10px] text-slate-400">{outstandingOpen ? "▲ hide" : "▼ show"}</span>
+            </button>
+            {outstandingOpen && (
+              outstanding.length === 0 ? (
+                <p className="px-3 pb-2 text-[10px] text-slate-400">No outstanding pay-later jobs.</p>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {outstanding.map((j) => (
+                    <OutstandingCard
+                      key={j._id}
+                      job={j}
+                      onNavigate={(id) => navigate(`/carwash/jobs/${id}`)}
+                    />
+                  ))}
+                </div>
+              )
+            )}
+          </div>
         </div>
       )}
     </CarWashShell>

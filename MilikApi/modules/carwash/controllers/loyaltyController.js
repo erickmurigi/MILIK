@@ -428,17 +428,29 @@ export const lookupPlate = async (req, res, next) => {
     if (!plate) return next(createError(400, 'Plate number is required'));
 
     const customer = await CarWashCustomer.findOne({ business, plates: buildPlateRegex(plate) }).lean();
-    const card = customer
-      ? await CarWashLoyaltyCard.findOne({ business, customer: customer._id })
-          .populate('program', 'name stampsRequired rewardType rewardValue rewardServiceId isActive')
-          .lean()
-      : null;
+
+    const businessOid = new mongoose.Types.ObjectId(String(business));
+    const [card, creditAgg] = await Promise.all([
+      customer
+        ? CarWashLoyaltyCard.findOne({ business, customer: customer._id })
+            .populate('program', 'name stampsRequired rewardType rewardValue rewardServiceId isActive')
+            .lean()
+        : Promise.resolve(null),
+      customer
+        ? CarWashCustomerCredit.aggregate([
+            { $match: { business: businessOid, customer: customer._id, status: 'active' } },
+            { $group: { _id: null, total: { $sum: '$amount' } } },
+          ])
+        : Promise.resolve([]),
+    ]);
 
     let rewardService = null;
     if (card?.program?.rewardType === 'free_service' && card.program.rewardServiceId) {
       const svc = await CarWashService.findById(card.program.rewardServiceId).select('name defaultPrice').lean();
       if (svc) rewardService = { _id: svc._id, name: svc.name, defaultPrice: svc.defaultPrice || 0 };
     }
+
+    const creditBalance = round2(Number(creditAgg[0]?.total || 0));
 
     res.json({
       success: true,
@@ -447,6 +459,7 @@ export const lookupPlate = async (req, res, next) => {
         customer: customer || null,
         loyaltyCard: card ? { ...card, rewardService } : null,
         registered: Boolean(customer),
+        creditBalance: creditBalance > 0 ? creditBalance : 0,
       },
     });
   } catch (err) {
@@ -487,6 +500,8 @@ export const awardLoyaltyStamp = async ({ business, job, overridePhone = null, m
 
   // Redemption visits never earn a stamp — stamps restart on the next fresh visit
   if (job.rewardRedemption) return null;
+  // Voucher jobs are paid by the issuing company — no personal stamp earned
+  if (job.isVoucher) return null;
 
   // Idempotency guard — a stamp for this exact job was already awarded (e.g. Done then Paid)
   const jobIdStr = String(job._id);

@@ -12,9 +12,11 @@ import CarWashBranch from "../models/CarWashBranch.js";
 import CarWashMpesaNotification from "../models/CarWashMpesaNotification.js";
 import CarWashCreditAccount from "../models/CarWashCreditAccount.js";
 import CarWashAccountTopup from "../models/CarWashAccountTopup.js";
+import CarWashCustomer from "../models/CarWashCustomer.js";
+import CarWashCustomerCredit from "../models/CarWashCustomerCredit.js";
 import { getRawMpesaPaybillConfigs, getPrimaryMpesaPaybillConfig, getRawSmsProfiles, getPrimarySmsProfile } from "../../../utils/companyModules.js";
 import { accrueCommissionForJob, markJobCommissionsPayable } from "../services/commissionService.js";
-import { postCarWashPaymentLedger, reverseCarWashPaymentLedger, postCarWashTopupLedger } from "../services/carwashAccountingService.js";
+import { postCarWashPaymentLedger, reverseCarWashPaymentLedger, postCarWashTopupLedger, postCarWashCustomerCreditCreationLedger } from "../services/carwashAccountingService.js";
 import { autoEnrollPlate, awardLoyaltyStamp, sendPaymentConfirmationSms, sendUnmatchedPaymentSms } from "./loyaltyController.js";
 import { sendAdHocSms, sendAdHocSmsToMasked } from "../../../services/communicationService.js";
 import { resolveCarWashSmsBody } from "../services/carwashSmsService.js";
@@ -109,6 +111,10 @@ const refreshJobPaymentStatus = async (business, jobId) => {
   const paidAmount = Number(totals?.[0]?.amount || 0);
   const price = netJobPrice(job);
   job.paymentStatus = paidAmount <= 0 ? "unpaid" : paidAmount < price ? "partial" : "paid";
+  // Fully-paid ready job → auto-advance to done so it leaves the washboard
+  if (job.paymentStatus === "paid" && job.status === "ready") {
+    job.status = "done";
+  }
   // Rollback only: legacy-paid jobs whose payment is reversed revert to done
   if (job.status === "paid" && job.paymentStatus !== "paid") {
     job.status = "done";
@@ -647,7 +653,9 @@ export const confirmCarWashCallback = async (req, res) => {
     const updatedJob = await refreshJobPaymentStatus(businessId, job._id);
     await postCarWashPaymentLedger({ businessId, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: null });
 
-    // Route M-Pesa overpayment to the customer's credit/prepaid account if any
+    // Route M-Pesa overpayment: prepaid/credit account gets wallet top-up;
+    // cash customers (no account) get a CarWashCustomerCredit so the balance
+    // shows on their next visit and is tracked in the GL.
     const overpayment = round2(paidAmount - outstanding);
     if (overpayment > 0.009 && plate) {
       (async () => {
@@ -657,20 +665,38 @@ export const confirmCarWashCallback = async (req, res) => {
             { $inc: { accountCredit: overpayment } },
             { new: true }
           );
-          if (!overpayAcc) return;
-          const topupDoc = await CarWashAccountTopup.create({
-            business: businessId,
-            account: overpayAcc._id,
-            amount: overpayment,
-            method: "mpesa",
-            reference: transactionCode || "",
-            cashbookAccount: cashbook._id,
-            paymentDate: transDate,
-            notes: `Overpayment credited from M-Pesa C2B (${senderName || "Unknown"})`,
-          });
-          postCarWashTopupLedger({ businessId, topup: topupDoc, cashbookAccountId: cashbook._id, userId: null }).catch(() => {});
+          if (overpayAcc) {
+            // Has a credit/prepaid account — top up wallet and post Dr Cashbook / Cr 4400
+            const topupDoc = await CarWashAccountTopup.create({
+              business: businessId,
+              account: overpayAcc._id,
+              amount: overpayment,
+              method: "mpesa",
+              reference: transactionCode || "",
+              cashbookAccount: cashbook._id,
+              paymentDate: transDate,
+              notes: `Overpayment credited from M-Pesa C2B (${senderName || "Unknown"})`,
+            });
+            postCarWashTopupLedger({ businessId, topup: topupDoc, cashbookAccountId: cashbook._id, userId: null }).catch(() => {});
+          } else {
+            // No credit account — save as customer credit and post Dr Cashbook / Cr 2162
+            const customer = await CarWashCustomer.findOne({ business: businessId, plates: buildPlateRegex(plate) }).lean();
+            if (!customer) return;
+            const creditDoc = await CarWashCustomerCredit.create({
+              business: businessId,
+              customer: customer._id,
+              plates: [plate],
+              amount: overpayment,
+              status: "active",
+              sourceJob: job._id,
+              sourcePayment: payment._id,
+              notes: `M-Pesa overpayment from C2B – ${transactionCode || "N/A"} (${senderName || "Unknown"})`,
+            });
+            postCarWashCustomerCreditCreationLedger({ businessId, creditDoc, cashbookAccountId: cashbook._id, userId: null })
+              .catch((e) => console.error("[C2B] Credit GL posting failed plate=%s: %s", plate, e?.message));
+          }
         } catch (e) {
-          console.error("[C2B] Overpayment credit failed plate=%s amount=%s: %s", plate, overpayment, e?.message);
+          console.error("[C2B] Overpayment handling failed plate=%s amount=%s: %s", plate, overpayment, e?.message);
         }
       })();
     }

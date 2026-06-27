@@ -82,6 +82,19 @@ const STATUS_STYLES = {
   reversed: "bg-amber-100 text-amber-700 border-amber-200",
 };
 
+const APPROVAL_STYLES = {
+  pending_review: "bg-amber-50 text-amber-700 border-amber-200",
+  reviewed:       "bg-blue-50 text-blue-700 border-blue-200",
+  approved:       "bg-emerald-50 text-emerald-700 border-emerald-200",
+  rejected:       "bg-red-50 text-red-700 border-red-200",
+};
+const APPROVAL_LABELS = {
+  pending_review: "Pending Review",
+  reviewed:       "Reviewed",
+  approved:       "Approved",
+  rejected:       "Rejected",
+};
+
 const isLandlordPayableAccountRecord = (account = {}) => {
   const code = String(account?.code || account?.accountCode || "").trim().toUpperCase();
   const name = String(account?.name || account?.accountName || account?.title || "").trim().toLowerCase();
@@ -557,7 +570,7 @@ const JournalEntries = () => {
               { label: "Posted", value: journals.filter((j) => j.status === "posted").length, sub: `KES ${totals.posted.toLocaleString()}`, cls: "bg-emerald-50 text-emerald-800 border border-emerald-200" },
               { label: "Reversed", value: journals.filter((j) => j.status === "reversed").length, sub: `KES ${totals.reversed.toLocaleString()}`, cls: "bg-rose-50 text-rose-800 border border-rose-200" },
             ].map((card) => (
-              <div key={card.label} className={`rounded-lg px-3 py-2 shadow-sm ${card.cls}`}>
+              <div key={card.label} className={`px-3 py-2 shadow-sm ${card.cls}`}>
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-bold uppercase tracking-wider opacity-75">{card.label}</span>
                   <span className="text-sm font-black">{card.value}</span>
@@ -567,7 +580,7 @@ const JournalEntries = () => {
             ))}
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">
             <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
               <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
                 <div className="relative shrink-0">
@@ -576,13 +589,13 @@ const JournalEntries = () => {
                     value={filters.search}
                     onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
                     placeholder="Journal no, reference, narration"
-                    className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                    className="h-7 w-44 border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:border-[#0B3B2E]"
                   />
                 </div>
                 <select
                   value={filters.status}
                   onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                  className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                  className="h-7 shrink-0 border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:border-[#0B3B2E]"
                 >
                   <option value="all">All Statuses</option>
                   <option value="draft">Draft</option>
@@ -592,7 +605,7 @@ const JournalEntries = () => {
                 <select
                   value={filters.journalType}
                   onChange={(e) => setFilters((prev) => ({ ...prev, journalType: e.target.value }))}
-                  className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                  className="h-7 shrink-0 border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:border-[#0B3B2E]"
                 >
                   <option value="all">All Journal Types</option>
                   {JOURNAL_TYPES.map((type) => (
@@ -604,7 +617,7 @@ const JournalEntries = () => {
                 <select
                   value={filters.propertyId}
                   onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))}
-                  className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                  className="h-7 shrink-0 border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:border-[#0B3B2E]"
                 >
                   <option value="all">All Properties</option>
                   {propertyOptions.map((item) => (
@@ -615,12 +628,12 @@ const JournalEntries = () => {
                 </select>
                 <button
                   onClick={() => setFilters({ search: "", status: "all", journalType: "all", propertyId: "all" })}
-                  className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  className="h-7 shrink-0 flex items-center gap-1 border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   <FaFilter size={9} /> Reset
                 </button>
-                <button onClick={loadJournals} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaRedoAlt size={9} /></button>
-                <button onClick={openCreateModal} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]"><FaPlus size={9} /> New Journal</button>
+                <button onClick={loadJournals} className="h-7 shrink-0 flex items-center gap-1 border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaRedoAlt size={9} /></button>
+                <button onClick={openCreateModal} className="h-7 shrink-0 flex items-center gap-1 bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]"><FaPlus size={9} /> New Journal</button>
               </div>
             </div>
 
@@ -672,9 +685,16 @@ const JournalEntries = () => {
                           <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{journal.creditAccount?.code} - {journal.creditAccount?.name}</td>
                           <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">KES {Number(journal.amount || 0).toLocaleString()}</td>
                           <td className="px-3 py-1 border-r border-gray-100">
-                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${STATUS_STYLES[journal.status] || STATUS_STYLES.draft}`}>
-                              {journal.status}
-                            </span>
+                            <div className="flex flex-col gap-0.5">
+                              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${STATUS_STYLES[journal.status] || STATUS_STYLES.draft}`}>
+                                {journal.status}
+                              </span>
+                              {journal.approvalStatus && journal.approvalStatus !== "not_required" && (
+                                <span className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-bold ${APPROVAL_STYLES[journal.approvalStatus] || ""}`}>
+                                  {APPROVAL_LABELS[journal.approvalStatus] || journal.approvalStatus}
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-3 py-1 text-right">
                             <div className="inline-flex flex-wrap justify-end gap-2">
@@ -683,21 +703,21 @@ const JournalEntries = () => {
                                   <button
                                     onClick={() => openEditModal(journal)}
                                     disabled={!canUpdateJournal || !!rowActionKey}
-                                    className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 disabled:opacity-60"
+                                    className="inline-flex items-center gap-1 border border-blue-300 bg-blue-50 px-3 py-1.5 text-[10px] font-black text-blue-700 disabled:opacity-60"
                                   >
                                     <FaEdit /> Edit
                                   </button>
                                   <button
                                     onClick={() => handlePostJournal(journal)}
                                     disabled={!canPostJournal || !!rowActionKey}
-                                    className="inline-flex items-center gap-1 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-xs font-black text-green-700 disabled:opacity-60"
+                                    className="inline-flex items-center gap-1 border border-green-300 bg-green-50 px-3 py-1.5 text-[10px] font-black text-green-700 disabled:opacity-60"
                                   >
                                     <FaCheck /> {busyPost ? "Posting..." : "Post"}
                                   </button>
                                   <button
                                     onClick={() => handleDeleteJournal(journal)}
                                     disabled={!canDeleteJournal || !!rowActionKey}
-                                    className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 disabled:opacity-60"
+                                    className="inline-flex items-center gap-1 border border-rose-300 bg-rose-50 px-3 py-1.5 text-[10px] font-black text-rose-700 disabled:opacity-60"
                                   >
                                     <FaTrash /> {busyDelete ? "Deleting..." : "Delete"}
                                   </button>
@@ -707,7 +727,7 @@ const JournalEntries = () => {
                                 <button
                                   onClick={() => handleReverseJournal(journal)}
                                   disabled={!canReverseJournal || !!rowActionKey}
-                                  className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-black text-amber-700 disabled:opacity-60"
+                                  className="inline-flex items-center gap-1 border border-amber-300 bg-amber-50 px-3 py-1.5 text-[10px] font-black text-amber-700 disabled:opacity-60"
                                 >
                                   <FaUndo /> {busyReverse ? "Reversing..." : "Reverse"}
                                 </button>
@@ -723,7 +743,7 @@ const JournalEntries = () => {
             </div>
             <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
               <div className="font-semibold">Showing <span className="font-bold text-slate-900">{journals.length === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1}</span> to <span className="font-bold text-slate-900">{Math.min(safeCurrentPage * pageSize, serverTotal)}</span> of <span className="font-bold text-slate-900">{serverTotal}</span> journal(s)</div>
-              <div className="flex items-center gap-3"><div className="flex items-center gap-1.5"><span className="font-semibold text-slate-500">Per page:</span><select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }} className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition">{[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}</select></div><button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button><span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span><button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button></div>
+              <div className="flex items-center gap-3"><div className="flex items-center gap-1.5"><span className="font-semibold text-slate-500">Per page:</span><select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }} className="h-7 border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none">{[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}</select></div><button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="border border-slate-300 px-3 py-1 font-semibold hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button><span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span><button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="border border-slate-300 px-3 py-1 font-semibold hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button></div>
             </div>
           </div>
         </div>
@@ -776,7 +796,7 @@ const JournalEntries = () => {
                       type="date"
                       value={form.date}
                       onChange={(e) => setForm((prev) => ({ ...prev, date: e.target.value }))}
-                      className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                      className="mt-1 w-full border border-slate-200 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none"
                     />
                   </label>
 
@@ -824,7 +844,7 @@ const JournalEntries = () => {
                     min="0"
                     value={form.amount}
                     onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
-                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                    className="mt-1 w-full border border-slate-200 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none"
                   />
                 </label>
 
@@ -833,7 +853,7 @@ const JournalEntries = () => {
                   <input
                     value={form.reference}
                     onChange={(e) => setForm((prev) => ({ ...prev, reference: e.target.value }))}
-                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                    className="mt-1 w-full border border-slate-200 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none"
                   />
                 </label>
 
@@ -843,7 +863,7 @@ const JournalEntries = () => {
                     rows={5}
                     value={form.narration}
                     onChange={(e) => setForm((prev) => ({ ...prev, narration: e.target.value }))}
-                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                    className="mt-1 w-full border border-slate-200 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none"
                   />
                 </label>
 
@@ -896,14 +916,14 @@ const JournalEntries = () => {
             <div className="sticky bottom-0 z-20 flex shrink-0 items-center justify-end gap-3 border-t border-slate-200 bg-white/95 px-6 py-4 backdrop-blur-sm">
               <button
                 onClick={closeCreateModal}
-                className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-black text-slate-700"
+                className="border border-slate-300 px-3 py-1.5 text-xs font-black text-slate-700"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveJournal}
                 disabled={!(editingJournalId ? canUpdateJournal : canCreateJournal) || saving}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white disabled:opacity-60"
+                className="inline-flex items-center gap-2 bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white disabled:opacity-60"
               >
                 <FaPlus /> {saving ? "Saving..." : editingJournalId ? "Update Draft Journal" : "Save Draft Journal"}
               </button>

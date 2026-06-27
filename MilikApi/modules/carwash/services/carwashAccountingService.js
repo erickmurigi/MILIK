@@ -1164,6 +1164,59 @@ const cwExpenseCategoryCode = (category = "") => {
 export const resolveExpenseAccountForCategory = (businessId, category = "") =>
   resolveCarWashAccount(businessId, cwExpenseCategoryCode(category));
 
+// ─── Customer credit created (overpayment): Dr Cashbook / Cr Liability (2162) ──
+// Called when cash/M-Pesa overpayment has no prepaid wallet to absorb it.
+// Records the liability so the supervisor sees the credit on the next visit.
+export const postCarWashCustomerCreditCreationLedger = async ({ businessId, creditDoc, cashbookAccountId, userId }) => {
+  const amount = round2(Number(creditDoc.amount || 0));
+  if (!cashbookAccountId || amount <= 0) return;
+
+  try {
+    const existingCount = await FinancialLedgerEntry.countDocuments({
+      business: new mongoose.Types.ObjectId(String(businessId)),
+      sourceTransactionType: "carwash_customer_credit_created",
+      sourceTransactionId: String(creditDoc._id),
+      status: { $ne: "reversed" },
+    });
+    if (existingCount > 0) return;
+
+    const [cashbookAccount, creditLiabilityAccount] = await Promise.all([
+      ChartOfAccount.findOne({ _id: cashbookAccountId, business: businessId }).lean(),
+      resolveCarWashAccount(businessId, "2162"),
+    ]);
+    if (!cashbookAccount) return;
+
+    const { start, end } = dayRange(new Date());
+    const actorId = userId && mongoose.Types.ObjectId.isValid(String(userId))
+      ? userId : await resolveAuditActorUserId({ req: null, businessId });
+
+    const base = {
+      business: businessId,
+      sourceTransactionType: "carwash_customer_credit_created",
+      sourceTransactionId: String(creditDoc._id),
+      transactionDate: new Date(),
+      statementPeriodStart: start,
+      statementPeriodEnd: end,
+      category: "CARWASH_CUSTOMER_CREDIT",
+      amount,
+      payer: "customer_overpayment",
+      receiver: "n/a",
+      createdBy: actorId,
+      approvedBy: actorId,
+      allowUnscoped: true,
+    };
+
+    const plate = creditDoc.plates?.[0] || "customer";
+    await postEntry({ ...base, accountId: cashbookAccount._id, direction: "debit",
+      notes: `CW M-Pesa overpayment received – credit for ${plate}` });
+    await postEntry({ ...base, accountId: creditLiabilityAccount._id, direction: "credit",
+      notes: `CW customer credit created – ${plate} KES ${amount}` });
+    await aggregateChartOfAccountBalances(businessId, [String(cashbookAccount._id), String(creditLiabilityAccount._id)]);
+  } catch (err) {
+    console.error("[CW Accounting] postCarWashCustomerCreditCreationLedger failed creditDoc=%s: %s", creditDoc._id, err?.message);
+  }
+};
+
 // ─── Customer credit applied to a job: Dr Liability (2162) / Cr Revenue (4400) ─
 export const postCarWashCreditAppliedLedger = async ({ businessId, credit, appliedToJob, userId }) => {
   const amount = round2(Number(credit.amount || 0));

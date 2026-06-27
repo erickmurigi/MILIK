@@ -231,9 +231,10 @@ const AccountModal = ({ customers, onSave, onClose }) => {
                 <option value="credit">Credit (Pay-later)</option>
                 <option value="monthly">Monthly Billing</option>
                 <option value="prepaid">Prepaid (Wallet)</option>
+                <option value="voucher">Voucher</option>
               </select>
             </div>
-            {form.accountType !== "prepaid" && (
+            {form.accountType !== "prepaid" && form.accountType !== "voucher" && (
               <div>
                 <label className={lc}>Credit Limit (KES)</label>
                 <input className={ic} type="number" min="0" value={form.creditLimit} onChange={(e) => set("creditLimit", e.target.value)} placeholder="0 = no limit" />
@@ -244,6 +245,11 @@ const AccountModal = ({ customers, onSave, onClose }) => {
             <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
               <FaWallet className="inline mr-1.5" />
               Prepaid wallets are topped up in advance. When a job is created for a plate on this account, the balance is automatically deducted.
+            </div>
+          )}
+          {form.accountType === "voucher" && (
+            <div className="border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <strong>Voucher company account.</strong> Supervisors select this company when adding a voucher job — no payment is collected from the customer and no loyalty stamp is earned. Jobs accumulate on this account and are settled via statement.
             </div>
           )}
           {form.accountType === "monthly" && (
@@ -271,11 +277,13 @@ const AccountModal = ({ customers, onSave, onClose }) => {
               <input className={ic} type="email" value={form.billingEmail} onChange={(e) => set("billingEmail", e.target.value)} placeholder="accounts@company.com" />
             </div>
           </div>
-          <div>
-            <label className={lc}>Plates (comma-separated)</label>
-            <input className={ic} value={form.plates} onChange={(e) => set("plates", e.target.value)} placeholder="KCA123A, KCB456B, KCC789C" />
-            <p className="mt-0.5 text-[10px] text-slate-400">Jobs for these plates auto-link to this account</p>
-          </div>
+          {form.accountType !== "voucher" && (
+            <div>
+              <label className={lc}>Plates (comma-separated)</label>
+              <input className={ic} value={form.plates} onChange={(e) => set("plates", e.target.value)} placeholder="KCA123A, KCB456B, KCC789C" />
+              <p className="mt-0.5 text-[10px] text-slate-400">Jobs for these plates auto-link to this account</p>
+            </div>
+          )}
           <div>
             <label className={lc}>Notes</label>
             <textarea className="w-full border border-slate-300 px-2 py-2 text-sm text-slate-800 focus:outline-none" rows={2} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
@@ -631,6 +639,7 @@ const CarWashAccounts = () => {
                 <option value="credit">Credit</option>
                 <option value="monthly">Monthly</option>
                 <option value="prepaid">Prepaid</option>
+                <option value="voucher">Voucher</option>
               </select>
               <button onClick={() => refetchAccounts()} className="flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50"><FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /></button>
               {canManage && (
@@ -712,7 +721,12 @@ const CarWashAccounts = () => {
                         </div>
                       </td>
                       <td className="px-3 py-2">
-                        <span className={`inline-flex rounded px-2 py-0.5 text-[10px] font-bold uppercase ${acc.accountType === "monthly" ? "bg-violet-100 text-violet-700" : acc.accountType === "prepaid" ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"}`}>
+                        <span className={`inline-flex rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
+                          acc.accountType === "monthly"  ? "bg-violet-100 text-violet-700"  :
+                          acc.accountType === "prepaid"  ? "bg-emerald-100 text-emerald-700" :
+                          acc.accountType === "voucher"  ? "bg-amber-100 text-amber-700"     :
+                          "bg-blue-100 text-blue-700"
+                        }`}>
                           {acc.accountType}
                         </span>
                         {acc.accountType === "monthly" && (
@@ -720,6 +734,9 @@ const CarWashAccounts = () => {
                         )}
                         {acc.accountType === "prepaid" && (
                           <div className="text-[10px] text-slate-400 mt-0.5">Wallet</div>
+                        )}
+                        {acc.accountType === "voucher" && (
+                          <div className="text-[10px] text-slate-400 mt-0.5">Company voucher</div>
                         )}
                       </td>
                       {acc.accountType === "prepaid" ? (
@@ -993,7 +1010,7 @@ const EditAccountModal = ({ account, onSave, onClose }) => {
                 <option value="closed">Closed</option>
               </select>
             </div>
-            {account.accountType !== "prepaid" && (
+            {account.accountType !== "prepaid" && account.accountType !== "voucher" && (
               <div>
                 <label className={lc}>Credit Limit (KES)</label>
                 <input className={ic} type="number" min="0" value={form.creditLimit} onChange={(e) => set("creditLimit", e.target.value)} placeholder="0 = no limit" />
@@ -1025,11 +1042,13 @@ const EditAccountModal = ({ account, onSave, onClose }) => {
               <input className={ic} type="email" value={form.billingEmail} onChange={(e) => set("billingEmail", e.target.value)} placeholder="accounts@company.com" />
             </div>
           </div>
-          <div>
-            <label className={lc}>Plates (comma-separated)</label>
-            <input className={ic} value={form.plates} onChange={(e) => set("plates", e.target.value)} placeholder="KCA123A, KCB456B" />
-            <p className="mt-0.5 text-[10px] text-slate-400">Jobs for these plates auto-link to this account</p>
-          </div>
+          {account.accountType !== "voucher" && (
+            <div>
+              <label className={lc}>Plates (comma-separated)</label>
+              <input className={ic} value={form.plates} onChange={(e) => set("plates", e.target.value)} placeholder="KCA123A, KCB456B" />
+              <p className="mt-0.5 text-[10px] text-slate-400">Jobs for these plates auto-link to this account</p>
+            </div>
+          )}
           <div>
             <label className={lc}>Notes</label>
             <textarea className="w-full border border-slate-300 px-2 py-2 text-sm text-slate-800 focus:outline-none" rows={2} value={form.notes} onChange={(e) => set("notes", e.target.value)} />

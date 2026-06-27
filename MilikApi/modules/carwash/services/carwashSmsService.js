@@ -111,6 +111,18 @@ export const CW_SMS_TEMPLATE_DEFAULTS = [
     ],
   },
   {
+    key: "carwash_voucher_completed",
+    name: "Voucher Job Completed",
+    description: "Sent to the customer when a voucher job is marked done. No payment is collected — the issuing company covers the cost.",
+    enabled: true,
+    messageBody: "Hi {{customerName}}, your {{plate}} has been washed. Compliments of {{voucherCompanyName}}. Thank you!",
+    placeholders: [
+      { token: "{{customerName}}",      hint: "Customer name" },
+      { token: "{{plate}}",             hint: "Vehicle plate number" },
+      { token: "{{voucherCompanyName}}", hint: "Name of the company that issued the voucher" },
+    ],
+  },
+  {
     key: "carwash_topup_confirmed",
     name: "Prepaid Wallet Top-Up Confirmation",
     description: "Sent when an M-Pesa payment is automatically credited to a prepaid wallet (no open job found but plate matched a prepaid account).",

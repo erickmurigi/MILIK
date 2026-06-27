@@ -9,7 +9,7 @@ import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import { createError } from "../../../utils/error.js";
 import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
 import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationService.js";
-import { postCarWashTopupLedger, reverseCarWashTopupLedger } from "../services/carwashAccountingService.js";
+import { postCarWashTopupLedger, reverseCarWashTopupLedger, postCarWashPaymentLedger } from "../services/carwashAccountingService.js";
 import { resolveCarWashSmsBody } from "../services/carwashSmsService.js";
 import { accrueCommissionForJob, markJobCommissionsPayable } from "../services/commissionService.js";
 
@@ -170,8 +170,8 @@ export const createAccount = async (req, res, next) => {
 
     const { customerId, accountType, contactPerson, billingEmail, creditLimit, billingCycle, billingDay, notes, plates } = req.body;
     if (!customerId) return next(createError(400, "Customer is required"));
-    if (!accountType || !["credit", "monthly", "prepaid"].includes(accountType)) {
-      return next(createError(400, "accountType must be 'credit', 'monthly', or 'prepaid'"));
+    if (!accountType || !["credit", "monthly", "prepaid", "voucher"].includes(accountType)) {
+      return next(createError(400, "accountType must be 'credit', 'monthly', 'prepaid', or 'voucher'"));
     }
 
     const customer = await CarWashCustomer.findOne({ _id: customerId, business }).lean();
@@ -283,6 +283,7 @@ export const lookupAccountByPlate = async (req, res, next) => {
       business,
       plates: plate,
       status: "active",
+      accountType: { $ne: "voucher" },
     }).populate("customer", "name phone plates").lean();
 
     if (!account) return res.json({ success: true, data: null });
@@ -369,7 +370,7 @@ export const recordAccountPayment = async (req, res, next) => {
       const apply = round2(Math.min(outstanding, remaining));
       remaining = round2(remaining - apply);
 
-      await CarWashPayment.create({
+      const payment = await CarWashPayment.create({
         business,
         branch: job.branch || account.branch || null,
         job: job._id,
@@ -384,8 +385,16 @@ export const recordAccountPayment = async (req, res, next) => {
         updatedBy: userId,
       });
 
+      // Post Dr Cashbook / Cr 4400 for each job settled — same entry as a direct payment.
+      // Fire-and-forget so a ledger error never blocks the payment response.
+      if (cashbookAccount) {
+        postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbookAccount, job: job.toObject(), userId })
+          .catch((e) => console.error("[CW Account] Ledger posting failed job=%s: %s", job.jobNumber, e?.message));
+      }
+
       const newPaid = round2(alreadyPaid + apply);
-      const newPaymentStatus = newPaid >= job.price - 0.009 ? "paid" : "partial";
+      const jobNetPrice = round2(job.price - (job.discountAmount || 0));
+      const newPaymentStatus = newPaid >= jobNetPrice - 0.009 ? "paid" : "partial";
       const newJobStatus = newPaymentStatus === "paid" && job.status !== "cancelled" ? "paid" : job.status;
       await CarWashJob.updateOne({ _id: job._id }, { paymentStatus: newPaymentStatus, status: newJobStatus, updatedBy: userId });
 

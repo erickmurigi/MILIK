@@ -3,875 +3,459 @@ import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
-import { FaBalanceScale, FaFileDownload, FaFilePdf, FaFilter, FaSyncAlt } from "react-icons/fa";
+import { FaChevronDown, FaChevronRight, FaFileDownload, FaFilePdf, FaSyncAlt } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getBalanceSheetReport } from "../../redux/apiCalls";
 
-const MILIK_GREEN = "#0B3B2E";
-const MILIK_ORANGE = "#FF8C00";
-const MILIK_RED = "#DC2626";
+const GRN = "#0B3B2E";
+const RED = "#DC2626";
 
-const formatMoney = (value) =>
-  Number(value || 0).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+const fmt = (v) =>
+  Number(v || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const formatSignedMoney = (value) => {
-  const amount = Number(value || 0);
-  const formatted = formatMoney(Math.abs(amount));
-  return amount < 0 ? `(${formatted})` : formatted;
+const fmtSigned = (v) => {
+  const n = Number(v || 0);
+  const s = fmt(Math.abs(n));
+  return n < 0 ? `(${s})` : s;
 };
 
-const renderSectionCard = (title, sections, total, accentClass = "text-gray-900") => (
-  <div className="bg-white rounded-lg shadow overflow-hidden">
-    <div className="bg-[#0B3B2E] text-white px-6 py-4">
-      <h3 className="text-sm font-extrabold tracking-wide">{title}</h3>
-    </div>
-    <div className="p-3 space-y-6">
-      {sections.length ? (
-        sections.map((section) => (
-          <div key={section.label}>
-            <div className="flex items-center justify-between border-b pb-2 mb-3">
-              <h4 className="text-base font-extrabold text-gray-900">{section.label}</h4>
-              <span className="text-sm font-bold text-gray-700">
-                KES {formatSignedMoney(section.total)}
+const todayString = () => new Date().toISOString().split("T")[0];
+
+const escapeHtml = (v) =>
+  String(v ?? "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+
+// ─── Section block ────────────────────────────────────────────────────────────
+const SectionBlock = ({ section, categoryTotal, accentColor }) => {
+  const [open, setOpen] = useState(true);
+  const share = categoryTotal > 0
+    ? Math.min(Math.abs(section.total / categoryTotal) * 100, 100)
+    : 0;
+  const sharePct = categoryTotal > 0
+    ? `${(Math.abs(section.total / categoryTotal) * 100).toFixed(1)}%`
+    : "—";
+
+  return (
+    <div className="mb-1.5 overflow-hidden border border-slate-200">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-2 border-l-[3px] bg-slate-50 px-3 py-2 text-left transition hover:bg-slate-100"
+        style={{ borderLeftColor: accentColor }}
+      >
+        <span className="text-slate-400">
+          {open ? <FaChevronDown size={7} /> : <FaChevronRight size={7} />}
+        </span>
+        <span className="flex-1 text-[10px] font-black uppercase tracking-[0.1em] text-slate-600">{section.label}</span>
+        <span className="mr-3 text-[9px] font-semibold" style={{ color: accentColor, opacity: 0.7 }}>{sharePct}</span>
+        <span className="w-28 text-right font-mono text-[11px] font-black tabular-nums" style={{ color: accentColor }}>
+          KES {fmtSigned(section.total)}
+        </span>
+      </button>
+
+      {/* Proportion bar */}
+      <div className="h-0.5 bg-slate-100">
+        <div className="h-full transition-all duration-700" style={{ width: `${share}%`, backgroundColor: accentColor, opacity: 0.3 }} />
+      </div>
+
+      {open && (
+        <div className="bg-white">
+          {/* Column header */}
+          <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/50 px-3 py-1">
+            <span className="w-10 shrink-0 text-[8px] font-bold uppercase tracking-[0.12em] text-slate-300">Code</span>
+            <span className="flex-1 text-[8px] font-bold uppercase tracking-[0.12em] text-slate-300">Account</span>
+            <span className="w-28 shrink-0 text-right text-[8px] font-bold uppercase tracking-[0.12em] text-slate-300">Amount</span>
+          </div>
+          {section.rows.map((row) => (
+            <div
+              key={row._id || `${row.code}-${row.name}`}
+              className="flex items-center gap-2 border-b border-slate-50 px-3 py-1.5 last:border-0 hover:bg-slate-50"
+            >
+              <span className="w-10 shrink-0 font-mono text-[9px] font-semibold text-slate-400">{row.code}</span>
+              <span className="flex-1 min-w-0 truncate text-[11px] text-slate-700" title={row.name}>{row.name}</span>
+              <span className="w-28 shrink-0 text-right font-mono text-[11px] font-bold tabular-nums text-slate-800">
+                KES {fmtSigned(row.amount)}
               </span>
             </div>
-            <div className="space-y-2">
-              {section.rows.map((row) => (
-                <div key={row._id || `${row.code}-${row.name}`} className="flex items-center justify-between gap-4 text-sm">
-                  <div className="text-gray-800 font-semibold">
-                    <span className="font-bold mr-2">{row.code}</span>
-                    {row.name}
-                  </div>
-                  <div className="font-bold text-gray-900 whitespace-nowrap">
-                    KES {formatSignedMoney(row.amount)}
-                  </div>
-                </div>
-              ))}
-            </div>
+          ))}
+          {/* Subtotal */}
+          <div className="flex items-center justify-between bg-slate-50 px-3 py-1.5 border-t border-slate-100">
+            <span className="text-[9px] font-bold uppercase tracking-[0.1em]" style={{ color: accentColor, opacity: 0.7 }}>
+              Subtotal · {section.label}
+            </span>
+            <span className="font-mono text-[11px] font-black tabular-nums" style={{ color: accentColor }}>
+              KES {fmtSigned(section.total)}
+            </span>
           </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── Column card ──────────────────────────────────────────────────────────────
+const ColumnCard = ({ title, sections, total, totalColor, accentColor, categoryTotal }) => (
+  <div className="flex flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">
+    <div className="flex items-center justify-between px-4 py-2.5" style={{ background: GRN }}>
+      <span className="text-[10px] font-black uppercase tracking-[0.12em] text-white">{title}</span>
+      <span className="font-mono text-[11px] font-black tabular-nums text-white">KES {fmtSigned(total)}</span>
+    </div>
+    <div className="flex-1 p-2">
+      {sections.length ? (
+        sections.map((s) => (
+          <SectionBlock
+            key={s.label}
+            section={s}
+            categoryTotal={Math.abs(categoryTotal || total)}
+            accentColor={accentColor}
+          />
         ))
       ) : (
-        <div className="text-sm font-medium text-gray-600">No balances found for this section.</div>
+        <div className="border border-dashed border-slate-200 py-8 text-center text-[11px] text-slate-400">
+          No accounts found
+        </div>
       )}
-      <div className="border-t pt-4 flex items-center justify-between">
-        <span className={`text-lg font-extrabold ${accentClass}`}>Total {title}</span>
-        <span className={`text-lg font-extrabold ${accentClass}`}>KES {formatSignedMoney(total)}</span>
-      </div>
+    </div>
+    {/* Total row */}
+    <div className="flex items-center justify-between border-t border-slate-200 px-4 py-2.5">
+      <span className="text-[10px] font-black uppercase tracking-[0.12em]" style={{ color: totalColor }}>
+        Total {title}
+      </span>
+      <span className="font-mono text-[13px] font-black tabular-nums" style={{ color: totalColor }}>
+        KES {fmtSigned(total)}
+      </span>
     </div>
   </div>
 );
 
-const todayString = () => new Date().toISOString().split("T")[0];
-
-const escapeHtml = (value) =>
-  String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-
+// ─── Main ─────────────────────────────────────────────────────────────────────
 const BalanceSheetReport = () => {
-  const currentUser = useSelector(selectCurrentUser);
+  const currentUser    = useSelector(selectCurrentUser);
   const currentCompany = useSelector(selectCurrentCompany);
-  const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
+  const canExport      = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
 
   const businessId = useMemo(() => {
-    const activeCompanyId = localStorage.getItem("milik_active_company_id");
-    const storedUser = (() => {
-      try {
-        return JSON.parse(localStorage.getItem("milik_user") || "null");
-      } catch {
-        return null;
-      }
-    })();
-
+    const activeId   = localStorage.getItem("milik_active_company_id");
+    const storedUser = (() => { try { return JSON.parse(localStorage.getItem("milik_user") || "null"); } catch { return null; } })();
     return (
-      currentCompany?._id ||
-      currentUser?.company?._id ||
-      currentUser?.company ||
-      currentUser?.businessId ||
-      activeCompanyId ||
-      storedUser?.company?._id ||
-      storedUser?.company ||
-      storedUser?.businessId ||
-      ""
+      currentCompany?._id || currentUser?.company?._id || currentUser?.company ||
+      currentUser?.businessId || activeId || storedUser?.company?._id ||
+      storedUser?.company || storedUser?.businessId || ""
     );
   }, [currentCompany?._id, currentUser?.company, currentUser?.businessId]);
 
-  const businessName =
-    currentCompany?.companyName || currentUser?.company?.companyName || "Active company";
+  const businessName = currentCompany?.companyName || currentUser?.company?.companyName || "Active company";
 
   const [loading, setLoading] = useState(false);
-  const [filters, setFilters] = useState({
-    asOfDate: todayString(),
-    includeZeroBalances: false,
-  });
-  const [report, setReport] = useState({
-    assets: { sections: [], total: 0, count: 0 },
+  const [filters, setFilters] = useState({ asOfDate: todayString(), includeZeroBalances: false });
+  const [report, setReport]   = useState({
+    assets:      { sections: [], total: 0, count: 0 },
     liabilities: { sections: [], total: 0, count: 0 },
-    equity: { sections: [], total: 0, count: 0, currentPeriodEarnings: 0 },
+    equity:      { sections: [], total: 0, count: 0 },
     summary: {
-      totalAssets: 0,
-      totalLiabilities: 0,
-      totalEquity: 0,
-      totalLiabilitiesAndEquity: 0,
-      difference: 0,
-      balanced: true,
+      totalAssets: 0, totalLiabilities: 0, totalEquity: 0,
+      totalLiabilitiesAndEquity: 0, difference: 0, balanced: true,
     },
-    asOfDate: new Date().toISOString(),
     reportBasis: "",
   });
 
   const loadReport = useCallback(async () => {
-    if (!businessId) {
-      setReport((prev) => ({
-        ...prev,
-        assets: { sections: [], total: 0, count: 0 },
-        liabilities: { sections: [], total: 0, count: 0 },
-        equity: { sections: [], total: 0, count: 0, currentPeriodEarnings: 0 },
-        summary: {
-          totalAssets: 0,
-          totalLiabilities: 0,
-          totalEquity: 0,
-          totalLiabilitiesAndEquity: 0,
-          difference: 0,
-          balanced: true,
-        },
-      }));
-      return;
-    }
-
+    if (!businessId) return;
     setLoading(true);
     try {
-      const data = await getBalanceSheetReport({
+      setReport(await getBalanceSheetReport({
         business: businessId,
         asOfDate: filters.asOfDate,
         includeZeroBalances: filters.includeZeroBalances,
-      });
-      setReport(data);
-    } catch (error) {
-      console.error("Failed to load balance sheet", error);
-      toast.error(error?.response?.data?.error || error?.message || "Failed to load balance sheet");
+      }));
+    } catch (err) {
+      toast.error(err?.response?.data?.error || err?.message || "Failed to load balance sheet");
     } finally {
       setLoading(false);
     }
   }, [businessId, filters.asOfDate, filters.includeZeroBalances]);
 
-  useEffect(() => {
-    loadReport();
-  }, [loadReport]);
+  useEffect(() => { loadReport(); }, [loadReport]);
 
+  // ── Export CSV ────────────────────────────────────────────────────────────
   const handleExportCSV = () => {
-    if (!canExportReports) {
-      toast.warning("You do not have permission to export reports");
-      return;
-    }
-    const lines = [
-      ["BALANCE SHEET"].join(","),
-      ["As At", filters.asOfDate].join(","),
-      [""].join(","),
-      ["ASSETS"].join(","),
-    ];
-
-    const appendSections = (sections = []) => {
-      sections.forEach((section) => {
-        lines.push([section.label].join(","));
-        section.rows.forEach((row) => {
-          lines.push([
-            row.code,
-            `"${String(row.name || "").replaceAll('"', '""')}"`,
-            Number(row.amount || 0).toFixed(2),
-          ].join(","));
-        });
-        lines.push(["", `Subtotal ${section.label}`, Number(section.total || 0).toFixed(2)].join(","));
+    if (!canExport) return toast.warning("You do not have permission to export reports");
+    const lines = ["BALANCE SHEET", `As At,${filters.asOfDate}`, "", "ASSETS"];
+    const addSections = (secs = []) =>
+      secs.forEach((s) => {
+        lines.push(s.label);
+        s.rows.forEach((r) =>
+          lines.push(`${r.code},"${String(r.name || "").replaceAll('"', '""')}",${Number(r.amount || 0).toFixed(2)}`)
+        );
+        lines.push(`,"Subtotal ${s.label}",${Number(s.total || 0).toFixed(2)}`);
       });
-    };
-
-    appendSections(report.assets?.sections || []);
-    lines.push(["", "Total Assets", Number(report.summary?.totalAssets || 0).toFixed(2)].join(","));
-    lines.push([""].join(","));
-    lines.push(["LIABILITIES"].join(","));
-    appendSections(report.liabilities?.sections || []);
-    lines.push(["", "Total Liabilities", Number(report.summary?.totalLiabilities || 0).toFixed(2)].join(","));
-    lines.push([""].join(","));
-    lines.push(["EQUITY"].join(","));
-    appendSections(report.equity?.sections || []);
-    lines.push(["", "Total Equity", Number(report.summary?.totalEquity || 0).toFixed(2)].join(","));
-    lines.push(["", "Total Liabilities and Equity", Number(report.summary?.totalLiabilitiesAndEquity || 0).toFixed(2)].join(","));
-    lines.push(["", "Difference", Number(report.summary?.difference || 0).toFixed(2)].join(","));
-
+    addSections(report.assets?.sections);
+    lines.push(`,"Total Assets",${Number(report.summary?.totalAssets || 0).toFixed(2)}`, "", "LIABILITIES");
+    addSections(report.liabilities?.sections);
+    lines.push(`,"Total Liabilities",${Number(report.summary?.totalLiabilities || 0).toFixed(2)}`, "", "EQUITY");
+    addSections(report.equity?.sections);
+    lines.push(
+      `,"Total Equity",${Number(report.summary?.totalEquity || 0).toFixed(2)}`,
+      `,"Total Liabilities + Equity",${Number(report.summary?.totalLiabilitiesAndEquity || 0).toFixed(2)}`,
+      `,"Difference",${Number(report.summary?.difference || 0).toFixed(2)}`
+    );
     const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", `balance_sheet_${filters.asOfDate}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const url  = URL.createObjectURL(blob);
+    const a    = Object.assign(document.createElement("a"), { href: url });
+    a.setAttribute("download", `balance_sheet_${filters.asOfDate}.csv`);
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    toast.success("Balance sheet exported successfully");
+    toast.success("Exported successfully");
   };
 
-  const buildPrintableSection = (title, sections = [], total = 0, totalClassName = "") => {
-    const content = sections.length
-      ? sections
-          .map(
-            (section) => `
-              <div class="print-section-block">
-                <div class="section-heading-row">
-                  <div class="section-heading">${escapeHtml(section.label)}</div>
-                  <div class="section-heading amount">KES ${escapeHtml(formatSignedMoney(section.total))}</div>
-                </div>
-                ${(section.rows || [])
-                  .map(
-                    (row) => `
-                      <div class="item-row">
-                        <div class="item-name">
-                          <span class="item-code">${escapeHtml(row.code)}</span>
-                          ${escapeHtml(row.name)}
-                        </div>
-                        <div class="item-amount">KES ${escapeHtml(formatSignedMoney(row.amount))}</div>
-                      </div>
-                    `
-                  )
-                  .join("")}
-              </div>
-            `
-          )
-          .join("")
-      : `<div class="empty-note">No balances found for this section.</div>`;
+  // ── Print PDF ─────────────────────────────────────────────────────────────
+  const handlePrintPDF = () => {
+    if (!canExport) return toast.warning("You do not have permission to print reports");
+    if (loading)   return toast.info("Please wait for the report to finish loading.");
+    const win = window.open("", "_blank", "width=1200,height=900");
+    if (!win) return toast.error("Popup blocked. Allow popups to print.");
 
-    return `
-      <div class="print-card">
-        <div class="card-header">${escapeHtml(title)}</div>
-        <div class="card-body">
-          ${content}
-          <div class="total-row ${totalClassName}">
-            <div>Total ${escapeHtml(title)}</div>
-            <div>KES ${escapeHtml(formatSignedMoney(total))}</div>
-          </div>
+    const buildCard = (title, sections = [], total = 0, totalColor = "#111") => {
+      const content = sections.length
+        ? sections.map((s) => `
+            <div class="s-block">
+              <div class="s-head"><span>${escapeHtml(s.label)}</span><span>KES ${escapeHtml(fmtSigned(s.total))}</span></div>
+              ${s.rows.map((r) => `
+                <div class="s-row">
+                  <span><span class="code">${escapeHtml(r.code)}</span>${escapeHtml(r.name)}</span>
+                  <span class="amt">KES ${escapeHtml(fmtSigned(r.amount))}</span>
+                </div>`).join("")}
+            </div>`).join("")
+        : `<div class="empty">No accounts found.</div>`;
+      return `<div class="card"><div class="card-hdr">${escapeHtml(title)}</div><div class="card-body">${content}
+        <div class="total-row" style="color:${totalColor}"><span>Total ${escapeHtml(title)}</span><span>KES ${escapeHtml(fmtSigned(total))}</span></div>
+      </div></div>`;
+    };
+
+    const bal = report.summary?.balanced;
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Balance Sheet</title>
+      <style>
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:Arial,sans-serif;color:#111;padding:20px;font-size:11px}
+        h1{font-size:20px;font-weight:900;color:${GRN};margin-bottom:2px}
+        .sub{font-size:10px;color:#6b7280;margin-bottom:12px}
+        .kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+        .kpi-box{border-left:3px solid;padding:8px 10px}
+        .kpi-box .lbl{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#9ca3af;margin-bottom:3px}
+        .kpi-box .val{font-size:15px;font-weight:900}
+        .two{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+        .stack{display:flex;flex-direction:column;gap:12px}
+        .card{border:1px solid #e5e7eb;overflow:hidden}
+        .card-hdr{background:${GRN};color:#fff;padding:8px 10px;font-size:11px;font-weight:800;letter-spacing:.06em}
+        .card-body{padding:10px}
+        .s-block{margin-bottom:10px}
+        .s-head{display:flex;justify-content:space-between;border-bottom:1px solid #f3f4f6;padding-bottom:3px;margin-bottom:4px;font-size:10px;font-weight:800;color:#374151}
+        .s-row{display:flex;justify-content:space-between;align-items:baseline;font-size:9.5px;padding:2px 0 2px 8px;color:#4b5563;border-bottom:1px solid #f9fafb}
+        .code{font-family:monospace;color:#9ca3af;margin-right:6px;font-weight:700}
+        .amt{font-family:monospace;font-weight:700;white-space:nowrap}
+        .total-row{display:flex;justify-content:space-between;border-top:2px solid #e5e7eb;margin-top:8px;padding-top:7px;font-size:12px;font-weight:800}
+        .empty{font-size:10px;color:#9ca3af;font-style:italic}
+        .summary{border:1px solid #e5e7eb;overflow:hidden}
+        .summary .hdr{background:#374151;color:#fff;padding:8px 10px;font-size:11px;font-weight:800}
+        .summary .row{display:flex;justify-content:space-between;padding:5px 10px;font-size:11px;border-bottom:1px solid #f3f4f6}
+        .summary .diff{font-weight:900;border-top:2px solid #d1d5db;border-bottom:none;padding-top:8px;font-size:12px}
+        @media print{body{padding:8px}@page{size:A4 portrait;margin:8mm}}
+      </style></head><body>
+      <h1>Balance Sheet</h1>
+      <p class="sub">${escapeHtml(businessName)} · As at ${escapeHtml(filters.asOfDate)} · ${escapeHtml(report.reportBasis || "Accrual basis")}</p>
+      <div class="kpi">
+        <div class="kpi-box" style="border-color:${GRN}"><div class="lbl">Total Assets</div><div class="val" style="color:${GRN}">KES ${escapeHtml(fmtSigned(report.summary?.totalAssets))}</div></div>
+        <div class="kpi-box" style="border-color:${RED}"><div class="lbl">Total Liabilities</div><div class="val" style="color:${RED}">KES ${escapeHtml(fmtSigned(report.summary?.totalLiabilities))}</div></div>
+        <div class="kpi-box" style="border-color:#15803d"><div class="lbl">Total Equity</div><div class="val" style="color:#15803d">KES ${escapeHtml(fmtSigned(report.summary?.totalEquity))}</div></div>
+        <div class="kpi-box" style="border-color:${bal ? GRN : RED}"><div class="lbl">Status</div><div class="val" style="color:${bal ? GRN : RED}">${bal ? "Balanced" : "Out of Balance"}</div></div>
+      </div>
+      <div class="two">
+        ${buildCard("Assets", report.assets?.sections || [], report.summary?.totalAssets || 0, GRN)}
+        <div class="stack">
+          ${buildCard("Liabilities", report.liabilities?.sections || [], report.summary?.totalLiabilities || 0, RED)}
+          ${buildCard("Equity", report.equity?.sections || [], report.summary?.totalEquity || 0, "#15803d")}
         </div>
       </div>
-    `;
+      <div class="summary">
+        <div class="hdr">Statement Summary</div>
+        <div class="row"><span>Total Assets</span><span style="color:${GRN}">KES ${escapeHtml(fmtSigned(report.summary?.totalAssets))}</span></div>
+        <div class="row"><span>Total Liabilities</span><span style="color:${RED}">KES ${escapeHtml(fmtSigned(report.summary?.totalLiabilities))}</span></div>
+        <div class="row"><span>Total Equity</span><span style="color:#15803d">KES ${escapeHtml(fmtSigned(report.summary?.totalEquity))}</span></div>
+        <div class="row"><span>Liabilities + Equity</span><span>KES ${escapeHtml(fmtSigned(report.summary?.totalLiabilitiesAndEquity))}</span></div>
+        <div class="row diff" style="color:${bal ? GRN : RED}"><span>Difference</span><span>KES ${escapeHtml(fmtSigned(report.summary?.difference))}</span></div>
+      </div>
+    </body></html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 400);
   };
 
-  const handlePrintPDF = () => {
-    if (!canExportReports) {
-      toast.warning("You do not have permission to print reports");
-      return;
-    }
-    if (loading) {
-      toast.info("Please wait for the report to finish loading.");
-      return;
-    }
-
-    const printWindow = window.open("", "_blank", "width=1200,height=900");
-    if (!printWindow) {
-      toast.error("Popup blocked. Please allow popups to print the report.");
-      return;
-    }
-
-    const printableHtml = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Balance Sheet - ${escapeHtml(filters.asOfDate)}</title>
-          <meta charset="utf-8" />
-          <style>
-            * { box-sizing: border-box; }
-            body {
-              font-family: Arial, Helvetica, sans-serif;
-              margin: 0;
-              padding: 24px;
-              color: #111827;
-              background: #ffffff;
-            }
-            .report-wrap {
-              width: 100%;
-              max-width: 1100px;
-              margin: 0 auto;
-            }
-            .report-header {
-              margin-bottom: 20px;
-              border-bottom: 2px solid ${MILIK_GREEN};
-              padding-bottom: 12px;
-            }
-            .report-title {
-              font-size: 30px;
-              font-weight: 800;
-              color: ${MILIK_GREEN};
-              margin: 0 0 6px 0;
-            }
-            .report-subtitle {
-              font-size: 14px;
-              font-weight: 600;
-              color: #4b5563;
-              margin: 0;
-            }
-            .meta-grid {
-              display: grid;
-              grid-template-columns: repeat(3, 1fr);
-              gap: 12px;
-              margin: 18px 0 20px 0;
-            }
-            .meta-box {
-              border: 1px solid #d1d5db;
-              border-radius: 8px;
-              padding: 12px 14px;
-              background: #f9fafb;
-            }
-            .meta-label {
-              font-size: 12px;
-              font-weight: 700;
-              color: #4b5563;
-              margin-bottom: 4px;
-              text-transform: uppercase;
-            }
-            .meta-value {
-              font-size: 16px;
-              font-weight: 800;
-              color: #111827;
-            }
-            .summary-grid {
-              display: grid;
-              grid-template-columns: repeat(4, 1fr);
-              gap: 12px;
-              margin-bottom: 20px;
-            }
-            .summary-card {
-              border: 1px solid #d1d5db;
-              border-radius: 8px;
-              padding: 12px 14px;
-              background: #ffffff;
-            }
-            .summary-label {
-              font-size: 12px;
-              font-weight: 700;
-              color: #4b5563;
-              margin-bottom: 4px;
-              text-transform: uppercase;
-            }
-            .summary-value {
-              font-size: 18px;
-              font-weight: 800;
-              color: #111827;
-            }
-            .summary-status-ok { color: ${MILIK_GREEN}; }
-            .summary-status-bad { color: ${MILIK_RED}; }
-
-            .two-col {
-              display: grid;
-              grid-template-columns: 1fr 1fr;
-              gap: 18px;
-              align-items: start;
-              margin-bottom: 20px;
-            }
-            .stack {
-              display: grid;
-              gap: 18px;
-            }
-            .print-card {
-              border: 1px solid #d1d5db;
-              border-radius: 8px;
-              overflow: hidden;
-              background: #ffffff;
-            }
-            .card-header {
-              background: ${MILIK_GREEN};
-              color: #ffffff;
-              padding: 12px 14px;
-              font-size: 16px;
-              font-weight: 800;
-            }
-            .card-body {
-              padding: 14px;
-            }
-            .print-section-block + .print-section-block {
-              margin-top: 18px;
-            }
-            .section-heading-row,
-            .item-row,
-            .total-row,
-            .summary-row {
-              display: flex;
-              justify-content: space-between;
-              gap: 12px;
-            }
-            .section-heading-row {
-              border-bottom: 1px solid #d1d5db;
-              padding-bottom: 6px;
-              margin-bottom: 8px;
-            }
-            .section-heading {
-              font-size: 14px;
-              font-weight: 800;
-              color: #111827;
-            }
-            .item-row {
-              padding: 4px 0;
-              font-size: 13px;
-            }
-            .item-name {
-              font-weight: 600;
-              color: #374151;
-            }
-            .item-code {
-              font-weight: 800;
-              margin-right: 8px;
-            }
-            .item-amount,
-            .amount {
-              font-weight: 800;
-              white-space: nowrap;
-            }
-            .empty-note {
-              font-size: 13px;
-              color: #6b7280;
-              font-weight: 600;
-            }
-            .total-row {
-              border-top: 2px solid #d1d5db;
-              margin-top: 14px;
-              padding-top: 10px;
-              font-size: 15px;
-              font-weight: 800;
-              color: #111827;
-            }
-            .total-liabilities { color: ${MILIK_RED}; }
-            .total-equity { color: ${MILIK_GREEN}; }
-
-            .summary-card-wide {
-              border: 1px solid #d1d5db;
-              border-radius: 8px;
-              overflow: hidden;
-              background: #ffffff;
-            }
-            .summary-card-wide .body {
-              padding: 14px;
-            }
-            .summary-row {
-              padding: 6px 0;
-              font-size: 14px;
-            }
-            .summary-row .label {
-              font-weight: 700;
-              color: #374151;
-            }
-            .summary-row .value {
-              font-weight: 800;
-            }
-            .difference-row {
-              border-top: 2px solid #d1d5db;
-              margin-top: 12px;
-              padding-top: 10px;
-              font-size: 16px;
-              font-weight: 800;
-            }
-
-            @media print {
-              body {
-                padding: 0;
-              }
-              .report-wrap {
-                max-width: none;
-              }
-              @page {
-                size: A4 portrait;
-                margin: 12mm;
-              }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="report-wrap">
-            <div class="report-header">
-              <h1 class="report-title">Balance Sheet</h1>
-              <p class="report-subtitle">Statement of financial position as at the selected date.</p>
-            </div>
-
-            <div class="meta-grid">
-              <div class="meta-box">
-                <div class="meta-label">Business</div>
-                <div class="meta-value">${escapeHtml(businessName)}</div>
-              </div>
-              <div class="meta-box">
-                <div class="meta-label">As At Date</div>
-                <div class="meta-value">${escapeHtml(filters.asOfDate)}</div>
-              </div>
-              <div class="meta-box">
-                <div class="meta-label">Basis</div>
-                <div class="meta-value">${escapeHtml(
-                  report.reportBasis || "Statement of financial position"
-                )}</div>
-              </div>
-            </div>
-
-            <div class="summary-grid">
-              <div class="summary-card">
-                <div class="summary-label">Total Assets</div>
-                <div class="summary-value">KES ${escapeHtml(formatSignedMoney(report.summary?.totalAssets))}</div>
-              </div>
-              <div class="summary-card">
-                <div class="summary-label">Total Liabilities</div>
-                <div class="summary-value">KES ${escapeHtml(formatSignedMoney(report.summary?.totalLiabilities))}</div>
-              </div>
-              <div class="summary-card">
-                <div class="summary-label">Total Equity</div>
-                <div class="summary-value">KES ${escapeHtml(formatSignedMoney(report.summary?.totalEquity))}</div>
-              </div>
-              <div class="summary-card">
-                <div class="summary-label">Status</div>
-                <div class="summary-value ${report.summary?.balanced ? "summary-status-ok" : "summary-status-bad"}">
-                  ${escapeHtml(report.summary?.balanced ? "Balanced" : "Out of Balance")}
-                </div>
-              </div>
-            </div>
-
-            <div class="two-col">
-              ${buildPrintableSection(
-                "Assets",
-                report.assets?.sections || [],
-                report.summary?.totalAssets || 0
-              )}
-              <div class="stack">
-                ${buildPrintableSection(
-                  "Liabilities",
-                  report.liabilities?.sections || [],
-                  report.summary?.totalLiabilities || 0,
-                  "total-liabilities"
-                )}
-                ${buildPrintableSection(
-                  "Equity",
-                  report.equity?.sections || [],
-                  report.summary?.totalEquity || 0,
-                  "total-equity"
-                )}
-              </div>
-            </div>
-
-            <div class="summary-card-wide">
-              <div class="card-header">Statement Summary</div>
-              <div class="body">
-                <div class="summary-row">
-                  <div class="label">Total Assets</div>
-                  <div class="value">KES ${escapeHtml(formatSignedMoney(report.summary?.totalAssets))}</div>
-                </div>
-                <div class="summary-row">
-                  <div class="label">Total Liabilities</div>
-                  <div class="value" style="color:${MILIK_RED};">KES ${escapeHtml(
-                    formatSignedMoney(report.summary?.totalLiabilities)
-                  )}</div>
-                </div>
-                <div class="summary-row">
-                  <div class="label">Total Equity</div>
-                  <div class="value" style="color:${MILIK_GREEN};">KES ${escapeHtml(
-                    formatSignedMoney(report.summary?.totalEquity)
-                  )}</div>
-                </div>
-                <div class="summary-row">
-                  <div class="label">Liabilities + Equity</div>
-                  <div class="value">KES ${escapeHtml(
-                    formatSignedMoney(report.summary?.totalLiabilitiesAndEquity)
-                  )}</div>
-                </div>
-                <div class="summary-row difference-row">
-                  <div class="label">Difference</div>
-                  <div class="value" style="color:${report.summary?.balanced ? MILIK_GREEN : MILIK_RED};">
-                    KES ${escapeHtml(formatSignedMoney(report.summary?.difference))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
-
-    printWindow.document.open();
-    printWindow.document.write(printableHtml);
-    printWindow.document.close();
-    printWindow.focus();
-
-    const triggerPrint = () => {
-      printWindow.print();
-    };
-
-    if (printWindow.document.readyState === "complete") {
-      setTimeout(triggerPrint, 300);
-    } else {
-      printWindow.onload = () => setTimeout(triggerPrint, 300);
-    }
-  };
-
-  const preparedBy = currentUser?.name || currentUser?.username || currentUser?.email || "System";
+  const { summary = {} } = report;
+  const isBalanced = summary.balanced !== false;
 
   return (
     <DashboardLayout lockContentScroll>
-      {/* ── Native print (Ctrl+P) fallback ─────────────────────────── */}
-      <div className="print-only-wrapper">
-        <style>{`
-          .bs-print-header { border-bottom: 3px solid #0B3B2E; padding-bottom: 10px; margin-bottom: 16px; }
-          .bs-print-company { font-size: 18px; font-weight: 900; color: #0B3B2E; margin: 0 0 2px; }
-          .bs-print-title { font-size: 14px; font-weight: 700; color: #374151; margin: 0 0 2px; }
-          .bs-print-meta { font-size: 11px; color: #6b7280; margin: 0; }
-          .bs-print-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
-          .bs-print-metric { border: 1px solid #d1d5db; border-radius: 6px; padding: 8px 10px; background: #f9fafb; }
-          .bs-print-metric-label { font-size: 9px; font-weight: 700; color: #6b7280; text-transform: uppercase; margin-bottom: 2px; }
-          .bs-print-metric-value { font-size: 13px; font-weight: 900; color: #111827; }
-          .bs-print-metric-value.bad { color: #DC2626; }
-          .bs-print-metric-value.ok { color: #0B3B2E; }
-          .bs-print-metric-value.liab { color: #b91c1c; }
-          .bs-print-metric-value.eq { color: #15803d; }
-          .bs-print-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
-          .bs-print-right-col { display: flex; flex-direction: column; gap: 12px; }
-          .bs-print-card { border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; margin-bottom: 0; }
-          .bs-print-card-header { background: #0B3B2E; color: #fff; padding: 7px 10px; font-size: 11px; font-weight: 900; text-transform: uppercase; }
-          .bs-print-section-label { font-size: 10px; font-weight: 800; color: #374151; padding: 6px 10px 3px; border-bottom: 1px solid #f3f4f6; display: flex; justify-content: space-between; }
-          .bs-print-row { display: flex; justify-content: space-between; padding: 3px 10px 3px 18px; font-size: 10px; color: #374151; font-weight: 600; }
-          .bs-print-total-row { display: flex; justify-content: space-between; padding: 6px 10px; font-size: 11px; font-weight: 900; border-top: 2px solid #e5e7eb; background: #f9fafb; }
-          .bs-print-summary { border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; }
-          .bs-print-summary-header { background: #374151; color: #fff; padding: 7px 10px; font-size: 11px; font-weight: 900; text-transform: uppercase; }
-          .bs-print-summary-row { display: flex; justify-content: space-between; padding: 5px 10px; font-size: 11px; border-bottom: 1px solid #f3f4f6; }
-          .bs-print-summary-row.diff { font-weight: 900; border-top: 2px solid #e5e7eb; border-bottom: none; }
-          .bs-print-footer { margin-top: 10px; font-size: 9px; color: #6b7280; border-top: 1px solid #e5e7eb; padding-top: 6px; display: flex; justify-content: space-between; }
-        `}</style>
+      {/* overflow-y-auto lives on the body div — toolbar + KPI are always visible */}
+      <div className="flex h-full flex-col overflow-hidden bg-slate-100">
 
-        <div className="bs-print-header">
-          <p className="bs-print-company">{businessName}</p>
-          <p className="bs-print-title">Balance Sheet (Statement of Financial Position)</p>
-          <p className="bs-print-meta">As at {filters.asOfDate} &nbsp;|&nbsp; Generated: {new Date().toLocaleDateString()}</p>
-        </div>
-
-        <div className="bs-print-metrics">
-          <div className="bs-print-metric">
-            <div className="bs-print-metric-label">Total Assets</div>
-            <div className="bs-print-metric-value ok">KES {formatSignedMoney(report.summary?.totalAssets)}</div>
-          </div>
-          <div className="bs-print-metric">
-            <div className="bs-print-metric-label">Total Liabilities</div>
-            <div className="bs-print-metric-value liab">KES {formatSignedMoney(report.summary?.totalLiabilities)}</div>
-          </div>
-          <div className="bs-print-metric">
-            <div className="bs-print-metric-label">Total Equity</div>
-            <div className="bs-print-metric-value eq">KES {formatSignedMoney(report.summary?.totalEquity)}</div>
-          </div>
-          <div className="bs-print-metric">
-            <div className="bs-print-metric-label">Status</div>
-            <div className={`bs-print-metric-value ${report.summary?.balanced ? "ok" : "bad"}`}>
-              {report.summary?.balanced ? "Balanced" : "Out of Balance"}
-            </div>
-          </div>
-        </div>
-
-        <div className="bs-print-cols">
-          {/* Assets */}
-          <div className="bs-print-card">
-            <div className="bs-print-card-header">Assets</div>
-            {(report.assets?.sections || []).map((section) => (
-              <div key={section.label}>
-                <div className="bs-print-section-label">
-                  <span>{section.label}</span>
-                  <span>KES {formatSignedMoney(section.total)}</span>
-                </div>
-                {(section.rows || []).map((row) => (
-                  <div key={row._id || row.code} className="bs-print-row">
-                    <span><strong>{row.code}</strong> {row.name}</span>
-                    <span>KES {formatSignedMoney(row.amount)}</span>
-                  </div>
-                ))}
-              </div>
-            ))}
-            <div className="bs-print-total-row">
-              <span>Total Assets</span>
-              <span>KES {formatSignedMoney(report.summary?.totalAssets)}</span>
-            </div>
-          </div>
-
-          {/* Liabilities + Equity */}
-          <div className="bs-print-right-col">
-            <div className="bs-print-card">
-              <div className="bs-print-card-header">Liabilities</div>
-              {(report.liabilities?.sections || []).map((section) => (
-                <div key={section.label}>
-                  <div className="bs-print-section-label">
-                    <span>{section.label}</span>
-                    <span>KES {formatSignedMoney(section.total)}</span>
-                  </div>
-                  {(section.rows || []).map((row) => (
-                    <div key={row._id || row.code} className="bs-print-row">
-                      <span><strong>{row.code}</strong> {row.name}</span>
-                      <span>KES {formatSignedMoney(row.amount)}</span>
-                    </div>
-                  ))}
-                </div>
-              ))}
-              <div className="bs-print-total-row" style={{ color: "#b91c1c" }}>
-                <span>Total Liabilities</span>
-                <span>KES {formatSignedMoney(report.summary?.totalLiabilities)}</span>
-              </div>
-            </div>
-
-            <div className="bs-print-card">
-              <div className="bs-print-card-header">Equity</div>
-              {(report.equity?.sections || []).map((section) => (
-                <div key={section.label}>
-                  <div className="bs-print-section-label">
-                    <span>{section.label}</span>
-                    <span>KES {formatSignedMoney(section.total)}</span>
-                  </div>
-                  {(section.rows || []).map((row) => (
-                    <div key={row._id || row.code} className="bs-print-row">
-                      <span><strong>{row.code}</strong> {row.name}</span>
-                      <span>KES {formatSignedMoney(row.amount)}</span>
-                    </div>
-                  ))}
-                </div>
-              ))}
-              <div className="bs-print-total-row" style={{ color: "#15803d" }}>
-                <span>Total Equity</span>
-                <span>KES {formatSignedMoney(report.summary?.totalEquity)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bs-print-summary">
-          <div className="bs-print-summary-header">Statement Summary</div>
-          <div className="bs-print-summary-row"><span>Total Assets</span><span>KES {formatSignedMoney(report.summary?.totalAssets)}</span></div>
-          <div className="bs-print-summary-row"><span>Total Liabilities</span><span>KES {formatSignedMoney(report.summary?.totalLiabilities)}</span></div>
-          <div className="bs-print-summary-row"><span>Total Equity</span><span>KES {formatSignedMoney(report.summary?.totalEquity)}</span></div>
-          <div className="bs-print-summary-row"><span>Liabilities + Equity</span><span>KES {formatSignedMoney(report.summary?.totalLiabilitiesAndEquity)}</span></div>
-          <div className={`bs-print-summary-row diff`} style={{ color: report.summary?.balanced ? "#0B3B2E" : "#DC2626" }}>
-            <span>Difference</span>
-            <span>KES {formatSignedMoney(report.summary?.difference)}</span>
-          </div>
-        </div>
-
-        <div className="bs-print-footer">
-          <span>Basis: {report.reportBasis || "Statement of financial position"}</span>
-          <span>Prepared by: {preparedBy}</span>
-        </div>
-      </div>
-
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-100 p-2">
-        <div className="flex w-full max-w-full min-h-0 flex-1 flex-col overflow-hidden gap-2">
-          <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur print:hidden">
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto_auto_auto_auto]">
-              <input type="date" value={filters.asOfDate} onChange={(e) => setFilters((prev) => ({ ...prev, asOfDate: e.target.value }))} className="h-8 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#0B3B2E] focus:bg-white focus:ring-1 focus:ring-[#0B3B2E]/20" />
-              <label className="inline-flex h-8 items-center gap-2 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800"><input type="checkbox" checked={filters.includeZeroBalances} onChange={(e) => setFilters((prev) => ({ ...prev, includeZeroBalances: e.target.checked }))} /> Include zero balances</label>
-              <button onClick={loadReport} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-[11px] font-bold text-white hover:bg-blue-700"><FaSyncAlt /> Refresh</button>
-              <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00] disabled:opacity-50"><FaFileDownload /> Export CSV</button>
-              <button onClick={handlePrintPDF} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127] disabled:opacity-50"><FaFilePdf /> Print PDF</button>
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <span className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600">Business: <span className="text-slate-900">{businessName}</span></span>
-              <span className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600">Basis: <span className="text-slate-900">{report.reportBasis || "Statement of financial position"}</span></span>
-            </div>
-          </div>
-
-          <div className="grid flex-shrink-0 grid-cols-2 gap-2 md:grid-cols-4">
-            <div className="rounded-md border border-slate-200 bg-white p-2 shadow-sm">
-              <div className="text-sm font-bold text-gray-700 mb-1">Total Assets</div>
-              <div className="text-sm font-black tracking-tight text-gray-900">
-                KES {formatSignedMoney(report.summary?.totalAssets)}
-              </div>
-            </div>
-            <div className="rounded-md border border-slate-200 bg-white p-2 shadow-sm">
-              <div className="text-sm font-bold text-gray-700 mb-1">Total Liabilities</div>
-              <div className="text-sm font-black tracking-tight text-gray-900">
-                KES {formatSignedMoney(report.summary?.totalLiabilities)}
-              </div>
-            </div>
-            <div className="rounded-md border border-slate-200 bg-white p-2 shadow-sm">
-              <div className="text-sm font-bold text-gray-700 mb-1">Total Equity</div>
-              <div className="text-sm font-black tracking-tight text-gray-900">
-                KES {formatSignedMoney(report.summary?.totalEquity)}
-              </div>
-            </div>
-            <div className="rounded-md border border-slate-200 bg-white p-2 shadow-sm">
-              <div className="text-sm font-bold text-gray-700 mb-1">Status</div>
-              <div
-                className="text-sm font-black tracking-tight"
-                style={{ color: report.summary?.balanced ? MILIK_GREEN : MILIK_RED }}
+        {/* ── Sticky toolbar ──────────────────────────────────────────────── */}
+        <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-2 shadow-sm">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-black uppercase tracking-[0.15em]" style={{ color: GRN }}>
+              Balance Sheet
+            </span>
+            <div className="mx-1 h-4 w-px bg-slate-200" />
+            <input
+              type="date"
+              value={filters.asOfDate}
+              onChange={(e) => setFilters((p) => ({ ...p, asOfDate: e.target.value }))}
+              className="h-7 border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+            />
+            <label className="inline-flex h-7 cursor-pointer items-center gap-1.5 border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-50">
+              <input
+                type="checkbox"
+                checked={filters.includeZeroBalances}
+                onChange={(e) => setFilters((p) => ({ ...p, includeZeroBalances: e.target.checked }))}
+                className="h-3 w-3"
+              />
+              Zero balances
+            </label>
+            <span className="border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-semibold text-slate-500">
+              {businessName}
+            </span>
+            <span className="border border-slate-100 bg-slate-50 px-2 py-0.5 text-[9px] text-slate-400">
+              {report.reportBasis || "Accrual basis · chart accounts + posted ledger balances"}
+            </span>
+            <div className="ml-auto flex items-center gap-1.5">
+              <button
+                onClick={loadReport} disabled={loading}
+                className="flex h-7 items-center gap-1.5 bg-blue-600 px-3 text-[11px] font-bold text-white hover:bg-blue-700 disabled:opacity-50"
               >
-                {report.summary?.balanced ? "Balanced" : "Out of Balance"}
-              </div>
+                <FaSyncAlt size={9} className={loading ? "animate-spin" : ""} />
+                {loading ? "Loading…" : "Refresh"}
+              </button>
+              <button
+                onClick={handleExportCSV} disabled={!canExport}
+                className="flex h-7 items-center gap-1.5 border border-[#FF8C00] bg-white px-3 text-[11px] font-bold text-[#FF8C00] hover:bg-orange-50 disabled:opacity-50"
+              >
+                <FaFileDownload size={9} /> CSV
+              </button>
+              <button
+                onClick={handlePrintPDF} disabled={!canExport}
+                className="flex h-7 items-center gap-1.5 bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127] disabled:opacity-50"
+              >
+                <FaFilePdf size={9} /> Print
+              </button>
             </div>
           </div>
+        </div>
 
+        {/* ── KPI strip ─────────────────────────────────────────────────────── */}
+        <div className="flex shrink-0 overflow-hidden border-b border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-1 flex-col border-r border-slate-200 bg-emerald-50 px-5 py-3">
+            <div className="mb-0.5 text-[9px] font-black uppercase tracking-[0.12em] text-emerald-700/60">Total Assets</div>
+            <div className="text-lg font-black tabular-nums text-emerald-700">KES {fmtSigned(summary.totalAssets)}</div>
+            <div className="mt-0.5 text-[10px] text-emerald-600/60">{report.assets?.count || 0} account(s)</div>
+          </div>
+          <div className="flex flex-1 flex-col border-r border-slate-200 bg-red-50 px-5 py-3">
+            <div className="mb-0.5 text-[9px] font-black uppercase tracking-[0.12em] text-red-700/60">Total Liabilities</div>
+            <div className="text-lg font-black tabular-nums text-red-700">KES {fmtSigned(summary.totalLiabilities)}</div>
+            <div className="mt-0.5 text-[10px] text-red-600/60">{report.liabilities?.count || 0} account(s)</div>
+          </div>
+          <div className="flex flex-1 flex-col border-r border-slate-200 bg-green-50 px-5 py-3">
+            <div className="mb-0.5 text-[9px] font-black uppercase tracking-[0.12em] text-green-700/60">Total Equity</div>
+            <div className="text-lg font-black tabular-nums text-green-700">KES {fmtSigned(summary.totalEquity)}</div>
+            <div className="mt-0.5 text-[10px] text-green-600/60">{report.equity?.count || 0} account(s)</div>
+          </div>
+          <div className={`flex flex-1 flex-col px-5 py-3 ${isBalanced ? "bg-emerald-50" : "bg-red-50"}`}>
+            <div className="mb-0.5 text-[9px] font-black uppercase tracking-[0.12em]" style={{ color: isBalanced ? "#166534" : RED, opacity: 0.6 }}>
+              Status
+            </div>
+            <div className="text-lg font-black" style={{ color: isBalanced ? "#166534" : RED }}>
+              {isBalanced ? "Balanced" : "Out of Balance"}
+            </div>
+            <div className="mt-0.5 text-[10px]" style={{ color: isBalanced ? "#166534" : RED, opacity: 0.6 }}>
+              Diff: KES {fmtSigned(summary.difference)}
+            </div>
+          </div>
+        </div>
+
+        {/* scroll happens here — toolbar + KPI strip always visible above */}
+        <div className="flex-1 overflow-y-auto p-3 space-y-3">
           {loading ? (
-            <div className="bg-white rounded-lg shadow p-10 text-center text-gray-600 font-medium">
-              Loading balance sheet...
+            <div className="flex h-40 items-center justify-center text-[11px] font-semibold text-slate-400">
+              Loading balance sheet…
             </div>
           ) : (
-            <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 overflow-auto xl:grid-cols-2">
-              {renderSectionCard(
-                "Assets",
-                report.assets?.sections || [],
-                report.summary?.totalAssets || 0,
-                "text-gray-900"
-              )}
-              <div className="space-y-2">
-                {renderSectionCard(
-                  "Liabilities",
-                  report.liabilities?.sections || [],
-                  report.summary?.totalLiabilities || 0,
-                  "text-red-700"
-                )}
-                {renderSectionCard(
-                  "Equity",
-                  report.equity?.sections || [],
-                  report.summary?.totalEquity || 0,
-                  "text-green-700"
-                )}
-              </div>
-            </div>
-          )}
+            <>
+              {/* Two-column layout — stacks to single column below lg */}
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                {/* Assets */}
+                <ColumnCard
+                  title="Assets"
+                  sections={report.assets?.sections || []}
+                  total={summary.totalAssets || 0}
+                  totalColor={GRN}
+                  accentColor="#166534"
+                  categoryTotal={Math.abs(summary.totalAssets || 1)}
+                />
 
-          <div className="flex-shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="bg-[#0B3B2E] text-white px-6 py-4">
-              <h3 className="text-sm font-extrabold tracking-wide">Statement Summary</h3>
-            </div>
-            <div className="p-3 space-y-4">
-              <div className="flex items-center justify-between text-base">
-                <span className="font-bold text-gray-800">Total Assets</span>
-                <span className="font-extrabold text-gray-900">
-                  KES {formatSignedMoney(report.summary?.totalAssets)}
-                </span>
+                {/* Liabilities + Equity stacked */}
+                <div className="space-y-3">
+                  <ColumnCard
+                    title="Liabilities"
+                    sections={report.liabilities?.sections || []}
+                    total={summary.totalLiabilities || 0}
+                    totalColor={RED}
+                    accentColor="#991B1B"
+                    categoryTotal={Math.abs(summary.totalLiabilities || 1)}
+                  />
+                  <ColumnCard
+                    title="Equity"
+                    sections={report.equity?.sections || []}
+                    total={summary.totalEquity || 0}
+                    totalColor="#15803d"
+                    accentColor="#15803d"
+                    categoryTotal={Math.abs(summary.totalEquity || 1)}
+                  />
+                </div>
               </div>
-              <div className="flex items-center justify-between text-base">
-                <span className="font-bold text-gray-800">Total Liabilities</span>
-                <span className="font-extrabold text-red-700">
-                  KES {formatSignedMoney(report.summary?.totalLiabilities)}
-                </span>
+
+              {/* Statement Summary strip */}
+              <div className="overflow-hidden border border-slate-200 bg-white shadow-sm">
+                <div className="px-4 py-2.5" style={{ background: GRN }}>
+                  <span className="text-[10px] font-black uppercase tracking-[0.15em] text-white">Statement Summary</span>
+                </div>
+                <div className="divide-y divide-slate-100">
+                  {[
+                    { label: "Total Assets",         value: summary.totalAssets,             color: "#166534"  },
+                    { label: "Total Liabilities",     value: summary.totalLiabilities,        color: RED        },
+                    { label: "Total Equity",          value: summary.totalEquity,             color: "#15803d"  },
+                    { label: "Liabilities + Equity",  value: summary.totalLiabilitiesAndEquity, color: "#111"   },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="flex items-center justify-between px-5 py-2">
+                      <span className="text-[11px] font-semibold text-slate-600">{label}</span>
+                      <span className="font-mono text-[12px] font-bold tabular-nums" style={{ color }}>
+                        KES {fmtSigned(value)}
+                      </span>
+                    </div>
+                  ))}
+                  <div
+                    className="flex items-center justify-between border-t-2 px-5 py-3"
+                    style={{ borderTopColor: isBalanced ? "#bbf7d0" : "#fecaca" }}
+                  >
+                    <span className="text-[12px] font-black text-slate-800">Difference</span>
+                    <span
+                      className="font-mono text-[14px] font-black tabular-nums"
+                      style={{ color: isBalanced ? "#166534" : RED }}
+                    >
+                      KES {fmtSigned(summary.difference)}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center justify-between text-base">
-                <span className="font-bold text-gray-800">Total Equity</span>
-                <span className="font-extrabold text-green-700">
-                  KES {formatSignedMoney(report.summary?.totalEquity)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-base">
-                <span className="font-bold text-gray-800">Liabilities + Equity</span>
-                <span className="font-extrabold text-gray-900">
-                  KES {formatSignedMoney(report.summary?.totalLiabilitiesAndEquity)}
-                </span>
-              </div>
-              <div className="border-t pt-4 flex items-center justify-between text-lg">
-                <span className="font-extrabold text-gray-900">Difference</span>
-                <span
-                  className="font-extrabold"
-                  style={{ color: report.summary?.balanced ? MILIK_GREEN : MILIK_RED }}
-                >
-                  KES {formatSignedMoney(report.summary?.difference)}
-                </span>
-              </div>
-            </div>
-          </div>
+            </>
+          )}
         </div>
       </div>
     </DashboardLayout>

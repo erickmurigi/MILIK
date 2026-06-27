@@ -14,6 +14,7 @@ import { carpetUpload, fileUrlFromName, deletePhotoFile } from "../middleware/ca
 import { autoEnrollPlate, awardLoyaltyStamp } from "./loyaltyController.js";
 import { normalizePlate } from "../utils/plateUtils.js";
 import { sendAdHocSms, sendAdHocSmsToMasked } from "../../../services/communicationService.js";
+import { resolveCarWashSmsBody } from "../services/carwashSmsService.js";
 
 const JOB_STATUSES = new Set(["waiting", "washing", "drying", "ready", "done", "cancelled"]);
 const JOB_TYPES = new Set(["vehicle", "carpet", "balance_bf"]);
@@ -182,6 +183,7 @@ export const listJobs = async (req, res, next) => {
         : [{ $or: customerOr }];
       delete filter.$or;
     }
+    if (req.query.payLater !== undefined) filter.payLater = req.query.payLater === "true";
     if (req.query.search) {
       const search = escapeRegex(String(req.query.search).trim());
       const plateSearch = escapeRegex(normalizePlate(String(req.query.search)));
@@ -303,22 +305,33 @@ export const createJob = async (req, res, next) => {
 
     // Credit account validation
     let resolvedCreditAccount = null;
+    let resolvedCreditAccountType = null;
+    let resolvedCreditAccountCompanyName = "";
     const rawAccountId = req.body.creditAccount;
     if (rawAccountId && mongoose.Types.ObjectId.isValid(String(rawAccountId))) {
-      const acc = await CarWashCreditAccount.findOne({ _id: String(rawAccountId), business, status: "active" }).lean();
+      const acc = await CarWashCreditAccount.findOne({ _id: String(rawAccountId), business, status: "active" })
+        .select("_id accountType contactPerson accountNumber")
+        .lean();
       if (!acc) return next(createError(400, "Credit account not found or not active"));
       resolvedCreditAccount = acc._id;
+      resolvedCreditAccountType = acc.accountType;
+      resolvedCreditAccountCompanyName = acc.contactPerson || acc.accountNumber || "";
     }
 
     // Auto-detect account by plate — covers prepaid, credit, and monthly accounts.
+    // Voucher accounts are excluded: they are always selected manually by the supervisor.
     // Prepaid is prioritised so the wallet auto-deduction below still fires first.
     if (!resolvedCreditAccount && plateNumber && jobType === "vehicle") {
       const autoAcc = await CarWashCreditAccount.findOne({
         business,
         plates: plateNumber,
         status: "active",
+        accountType: { $ne: "voucher" },
       }).sort({ accountType: -1 }).select("_id accountType").lean(); // prepaid > monthly > credit alphabetically desc
-      if (autoAcc) resolvedCreditAccount = autoAcc._id;
+      if (autoAcc) {
+        resolvedCreditAccount = autoAcc._id;
+        resolvedCreditAccountType = autoAcc.accountType;
+      }
     }
 
     const manualJobNumber = String(req.body.jobNumber || "").trim();
@@ -343,6 +356,8 @@ export const createJob = async (req, res, next) => {
       status: JOB_STATUSES.has(String(req.body.status || "").toLowerCase()) ? String(req.body.status).toLowerCase() : "waiting",
       assignedStaff,
       creditAccount: resolvedCreditAccount,
+      isVoucher: resolvedCreditAccountType === "voucher",
+      voucherCompanyName: resolvedCreditAccountType === "voucher" ? resolvedCreditAccountCompanyName : "",
       paymentStatus: "unpaid",
       notes: String(req.body.notes || "").trim(),
       createdBy: userId,
@@ -373,6 +388,7 @@ export const createJob = async (req, res, next) => {
       // For done status: only credit account jobs earn the stamp here (cash/M-Pesa stamp fires on payment).
       const shouldStampOnCreate =
         job.jobType === "vehicle" &&
+        !job.isVoucher &&
         (job.status === "paid" || (job.status === "done" && job.creditAccount));
       if (shouldStampOnCreate) {
         try {
@@ -382,7 +398,8 @@ export const createJob = async (req, res, next) => {
         }
       }
 
-      if (resolvedCreditAccount && job.plateNumber) {
+      // Register plate on the credit account — but not for voucher accounts (any plate can use any voucher)
+      if (resolvedCreditAccount && job.plateNumber && resolvedCreditAccountType !== "voucher") {
         CarWashCreditAccount.updateOne(
           { _id: resolvedCreditAccount },
           { $addToSet: { plates: job.plateNumber } }
@@ -393,7 +410,7 @@ export const createJob = async (req, res, next) => {
     // Auto-apply prepaid credit — atomically deduct min(accountCredit, netPrice) with no race condition.
     // Uses a MongoDB 4.2+ aggregation-pipeline update so the read-modify-write is a single atomic op.
     const netPrice = round2(Math.max(0, totalPrice - discountAmount));
-    if (resolvedCreditAccount && netPrice > 0) {
+    if (resolvedCreditAccount && netPrice > 0 && resolvedCreditAccountType !== "voucher") {
       try {
         // Atomically floor accountCredit at 0 while returning the pre-update value.
         // The $max ensures we never store a negative balance even under concurrent requests.
@@ -631,16 +648,62 @@ export const updateJobStatus = async (req, res, next) => {
       await cancelJobCommissions({ req, business, jobId: job._id, reason: "Car Wash job was cancelled." });
     } else {
       if (effectiveStatus === "done") {
-        try {
-          await awardLoyaltyStamp({ business, job });
-        } catch (err) {
-          console.error("[CW Loyalty] Stamp award failed job=%s: %s", job.jobNumber, err?.message || err);
+        if (job.isVoucher) {
+          // Voucher job — courtesy SMS to customer, no stamp
+          resolveCarWashSmsBody(business, "carwash_voucher_completed", {
+            customerName: job.customerName || "Customer",
+            plate: job.plateNumber || "",
+            voucherCompanyName: job.voucherCompanyName || "our partner",
+          }).then((body) => {
+            if (!body) return;
+            const dest = job.maskedMsisdn || job.phone;
+            if (!dest) return;
+            const sender = job.maskedMsisdn
+              ? sendAdHocSmsToMasked({ businessId: business, maskedNumber: job.maskedMsisdn, body, templateKey: "carwash_voucher_completed", recipientName: job.customerName || "" })
+              : sendAdHocSms({ businessId: business, phone: dest, body, templateKey: "carwash_voucher_completed", recipientName: job.customerName || "" });
+            sender.catch(() => {});
+          }).catch(() => {});
+        } else {
+          try {
+            await awardLoyaltyStamp({ business, job });
+          } catch (err) {
+            console.error("[CW Loyalty] Stamp award failed job=%s: %s", job.jobNumber, err?.message || err);
+          }
         }
       }
     }
     res.status(200).json({ success: true, data: job, job, message: "Car Wash job status updated" });
   } catch (error) {
     next(error);
+  }
+};
+
+export const markPayLater = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const job = await CarWashJob.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        business,
+        paymentStatus: { $in: ["unpaid", "partial"] },
+        status: "ready",
+        payLater: { $ne: true },
+      },
+      {
+        $set: {
+          payLater: true,
+          payLaterAt: new Date(),
+          payLaterBy: currentUserId(req),
+          status: "done",
+          updatedBy: currentUserId(req),
+        },
+      },
+      { new: true }
+    );
+    if (!job) return next(createError(400, "Job not found, already paid, or already marked pay-later"));
+    res.json({ success: true, data: job, job, message: "Job marked as pay-later" });
+  } catch (err) {
+    next(err);
   }
 };
 

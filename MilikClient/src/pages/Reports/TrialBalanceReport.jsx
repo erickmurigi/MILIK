@@ -3,9 +3,9 @@ import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
-import { FaBalanceScale, FaFileDownload, FaFilePdf, FaFilter, FaSyncAlt } from "react-icons/fa";
+import { FaExclamationCircle, FaExclamationTriangle, FaFileDownload, FaFilePdf, FaInfoCircle, FaSyncAlt, FaTimes } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
-import { getTrialBalanceReport } from "../../redux/apiCalls";
+import { getTrialBalanceExceptions, getTrialBalanceReport } from "../../redux/apiCalls";
 
 const MILIK_GREEN = "#0B3B2E";
 const MILIK_ORANGE = "#FF8C00";
@@ -107,6 +107,25 @@ const TrialBalanceReport = () => {
   useEffect(() => {
     loadReport();
   }, [loadReport]);
+
+  const [exceptions, setExceptions] = useState(null);
+  const [exceptionsLoading, setExceptionsLoading] = useState(false);
+  const [showExceptions, setShowExceptions] = useState(false);
+
+  const checkExceptions = useCallback(async () => {
+    if (!businessId) return;
+    setExceptionsLoading(true);
+    setShowExceptions(true);
+    try {
+      const data = await getTrialBalanceExceptions({ business: businessId });
+      setExceptions(data);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to check exceptions");
+      setShowExceptions(false);
+    } finally {
+      setExceptionsLoading(false);
+    }
+  }, [businessId]);
 
   const handleExportCSV = () => {
     if (!canExportReports) {
@@ -543,56 +562,163 @@ const TrialBalanceReport = () => {
 
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-100 p-2">
         <div className="flex w-full max-w-full min-h-0 flex-1 flex-col overflow-hidden gap-2">
-          <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur print:hidden">
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto_auto_auto]">
+          <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-2 pt-2 pb-1.5 shadow-sm backdrop-blur print:hidden">
+            {/* Controls row — filters left, actions right */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {/* Filters */}
               <input
                 type="date"
                 value={filters.asOfDate}
                 onChange={(e) => setFilters((prev) => ({ ...prev, asOfDate: e.target.value }))}
-                className="h-8 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#0B3B2E] focus:bg-white focus:ring-1 focus:ring-[#0B3B2E]/20"
+                className="h-8 border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#0B3B2E] focus:bg-white"
               />
-              <label className="inline-flex h-8 items-center gap-2 rounded-md border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800">
+              <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800">
                 <input
                   type="checkbox"
                   checked={filters.includeZeroBalances}
                   onChange={(e) => setFilters((prev) => ({ ...prev, includeZeroBalances: e.target.checked }))}
                 />
-                Include zero balances
+                Zero balances
               </label>
-              <button onClick={loadReport} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-[11px] font-bold text-white hover:bg-blue-700"><FaSyncAlt /> Refresh</button>
-              <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#e67e00] disabled:opacity-50"><FaFileDownload /> Export CSV</button>
-              <button onClick={handlePrintPDF} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127] disabled:opacity-50"><FaFilePdf /> Print PDF</button>
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <span className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600">Business: <span className="text-slate-900">{businessName}</span></span>
-              <span className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600">Rows: <span className="text-slate-900">{report.count || 0}</span></span>
+
+              {/* Meta chips */}
+              <span className="hidden border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600 sm:inline-flex">
+                {businessName}
+              </span>
+              <span className="border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600">
+                {report.count || 0} rows
+              </span>
+
+              {/* Balance status pill */}
+              <span className={`inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[10px] font-bold uppercase tracking-wide ${report.totals?.balanced ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+                {report.totals?.balanced ? "✓ Balanced" : "✗ Out of Balance"}
+              </span>
+
+              {/* Action buttons — pushed to far right */}
+              <div className="ml-auto flex items-center gap-1.5">
+                <button
+                  onClick={loadReport}
+                  disabled={loading}
+                  className="inline-flex h-8 items-center gap-1.5 bg-blue-600 px-3 text-[11px] font-bold text-white hover:bg-blue-700 disabled:opacity-60"
+                >
+                  <FaSyncAlt className={loading ? "animate-spin" : ""} /> Refresh
+                </button>
+                <button
+                  onClick={checkExceptions}
+                  disabled={exceptionsLoading}
+                  className="inline-flex h-8 items-center gap-1.5 bg-amber-500 px-3 text-[11px] font-bold text-white hover:bg-amber-600 disabled:opacity-60"
+                  title="Scan for accounts with abnormal balances or other issues"
+                >
+                  <FaExclamationTriangle /> {exceptionsLoading ? "Scanning…" : "Exceptions"}
+                </button>
+                <button
+                  onClick={handleExportCSV}
+                  disabled={!canExportReports}
+                  title={canExportReports ? "Export to CSV" : "No permission"}
+                  className="inline-flex h-8 items-center gap-1.5 border border-[#FF8C00] bg-white px-3 text-[11px] font-bold text-[#FF8C00] hover:bg-orange-50 disabled:opacity-50"
+                >
+                  <FaFileDownload /> CSV
+                </button>
+                <button
+                  onClick={handlePrintPDF}
+                  disabled={!canExportReports}
+                  title={canExportReports ? "Print PDF" : "No permission"}
+                  className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0A3127] disabled:opacity-50"
+                >
+                  <FaFilePdf /> Print
+                </button>
+              </div>
             </div>
           </div>
 
-          <div className="grid flex-shrink-0 grid-cols-2 gap-1.5 md:grid-cols-4">
-            <div className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm">
-              <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-gray-500">Total Debits</div>
-              <div className="text-xs font-black tracking-tight text-gray-900">KES {formatMoney(report.totals?.debit)}</div>
-            </div>
-            <div className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm">
-              <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-gray-500">Total Credits</div>
-              <div className="text-xs font-black tracking-tight text-gray-900">KES {formatMoney(report.totals?.credit)}</div>
-            </div>
-            <div className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm">
-              <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-gray-500">Difference</div>
-              <div className="text-xs font-black tracking-tight" style={{ color: Math.abs(Number(report.totals?.difference || 0)) < 0.005 ? MILIK_GREEN : MILIK_RED }}>
-                KES {formatMoney(report.totals?.difference)}
+          {/* ── Summary strip ────────────────────────────────────────── */}
+          <div className="flex-shrink-0 flex flex-wrap items-center gap-px border border-slate-200 bg-white shadow-sm overflow-hidden">
+            {[
+              { label: "Total Debits",   val: `KES ${formatMoney(report.totals?.debit)}`,       color: "text-gray-900" },
+              { label: "Total Credits",  val: `KES ${formatMoney(report.totals?.credit)}`,      color: "text-gray-900" },
+              { label: "Difference",     val: `KES ${formatMoney(report.totals?.difference)}`,  color: Math.abs(Number(report.totals?.difference || 0)) < 0.005 ? "text-emerald-700" : "text-red-600" },
+            ].map((item, i) => (
+              <div key={i} className="flex flex-1 items-center gap-3 border-r border-slate-100 px-4 py-2 last:border-r-0">
+                <div>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400">{item.label}</div>
+                  <div className={`mt-0.5 text-sm font-black tracking-tight ${item.color}`}>{item.val}</div>
+                </div>
               </div>
-            </div>
-            <div className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm">
-              <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-gray-500">Status</div>
-              <div className="text-xs font-black tracking-tight" style={{ color: report.totals?.balanced ? MILIK_GREEN : MILIK_RED }}>
+            ))}
+            <div className={`flex items-center gap-2 px-4 py-2 ${report.totals?.balanced ? "bg-emerald-50" : "bg-red-50"}`}>
+              <div className={`h-2 w-2 rounded-full ${report.totals?.balanced ? "bg-emerald-500" : "bg-red-500"}`} />
+              <span className={`text-xs font-bold ${report.totals?.balanced ? "text-emerald-700" : "text-red-700"}`}>
                 {report.totals?.balanced ? "Balanced" : "Out of Balance"}
-              </div>
+              </span>
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          {/* ── Exceptions Panel ─────────────────────────────────────── */}
+          {showExceptions && (
+            <div className="flex-shrink-0 border border-amber-200 bg-amber-50 shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between bg-amber-500 px-3 py-2">
+                <div className="flex items-center gap-2 text-white">
+                  <FaExclamationTriangle className="text-sm" />
+                  <span className="text-[11px] font-extrabold tracking-wide uppercase">
+                    Exceptions Report
+                    {exceptions && !exceptionsLoading && (
+                      <span className="ml-2 rounded-full bg-white/20 px-2 py-0.5 text-[10px]">
+                        {exceptions.count ?? 0} flag{(exceptions.count ?? 0) !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <button onClick={() => { setShowExceptions(false); setExceptions(null); }} className="text-white/80 hover:text-white">
+                  <FaTimes className="text-sm" />
+                </button>
+              </div>
+
+              {exceptionsLoading && (
+                <div className="px-4 py-6 text-center text-xs text-amber-700">Scanning accounts…</div>
+              )}
+
+              {!exceptionsLoading && exceptions && exceptions.count === 0 && (
+                <div className="flex items-center gap-2 px-4 py-4 text-sm font-semibold text-emerald-700">
+                  <span className="text-lg">✓</span> No exceptions found — all account balances look normal.
+                </div>
+              )}
+
+              {!exceptionsLoading && exceptions && exceptions.count > 0 && (
+                <div className="divide-y divide-amber-200 max-h-64 overflow-y-auto">
+                  {exceptions.exceptions.map((ex, i) => {
+                    const Icon = ex.severity === "critical" ? FaExclamationCircle : ex.severity === "warning" ? FaExclamationTriangle : FaInfoCircle;
+                    const colMap = { critical: "text-red-600", warning: "text-amber-600", info: "text-blue-600" };
+                    return (
+                      <div key={i} className="flex items-start gap-3 px-4 py-3">
+                        <Icon className={`mt-0.5 shrink-0 ${colMap[ex.severity] || "text-gray-500"}`} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[11px] font-bold text-gray-800">
+                              {ex.account?.code} — {ex.account?.name}
+                            </span>
+                            <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase ${ex.severity === "critical" ? "bg-red-100 text-red-700" : ex.severity === "warning" ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"}`}>
+                              {ex.severity}
+                            </span>
+                            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[9px] font-semibold capitalize text-gray-600">
+                              {ex.account?.type}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 text-[11px] text-gray-600">{ex.message}</p>
+                          {ex.netBalance !== undefined && (
+                            <p className="mt-0.5 text-[10px] font-bold text-gray-500">
+                              Net balance: KES {formatMoney(ex.netBalance)} · {ex.entryCount} entr{ex.entryCount === 1 ? "y" : "ies"}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">
             <div className="flex-shrink-0 bg-[#0B3B2E] px-3 py-2 text-white flex items-center justify-between">
               <h3 className="text-sm font-extrabold tracking-wide">Trial Balance Details</h3>
               <div className="text-sm font-semibold opacity-95">
