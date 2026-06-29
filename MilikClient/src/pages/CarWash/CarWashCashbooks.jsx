@@ -6,6 +6,7 @@ import { FaExternalLinkAlt, FaRedoAlt, FaSearch } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
+import PaginationBar from "../../components/PaginationBar";
 
 const PAGE_SIZE = 30;
 const defaultFilters = { search: "" };
@@ -113,14 +114,12 @@ const CarWashCashbooks = () => {
             )}
           </tbody>
         </table>
-        <div className="flex min-h-9 items-center justify-between border-t border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
-          <span>Rows per page: {PAGE_SIZE}</span>
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setPage((prev) => Math.max(prev - 1, 1))} disabled={page <= 1} className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45">Previous</button>
-            <span>Page {page} of {pageCount}</span>
-            <button type="button" onClick={() => setPage((prev) => Math.min(prev + 1, pageCount))} disabled={page >= pageCount} className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45">Next</button>
-          </div>
-        </div>
+        <PaginationBar
+          page={page}
+          pages={pageCount}
+          total={rows.length}
+          onPageChange={setPage}
+        />
       </div>
     </CarWashShell>
   );

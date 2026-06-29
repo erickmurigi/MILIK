@@ -27,6 +27,8 @@ import { createError } from "../../../utils/error.js";
 const normalizeText = (v = "") => String(v || "").trim();
 const normalizeUpper = (v = "") => normalizeText(v).toUpperCase();
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
+// Strips hyphens/spaces so "CWAC-20260628-0001" == "CWAC202606280001"
+const normalizeAccountNumber = (s) => String(s || "").replace(/[-\s]/g, "").toUpperCase();
 const netJobPrice = (job) => Math.max(0, Number(job?.price || 0) - Number(job?.discountAmount || 0));
 
 
@@ -374,7 +376,7 @@ export const handleStkCallback = async (req, res) => {
       .catch(() => {});
 
     const updatedJob = await refreshJobPaymentStatus(businessId, job._id);
-    await postCarWashPaymentLedger({ businessId, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: null });
+    await postCarWashPaymentLedger({ businessId, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: null, taxAmount: Number((updatedJob || job)?.taxAmount || 0), jobPrice: Number((updatedJob || job)?.price || 0) });
     if (updatedJob) {
       await accrueCommissionForJob({ req: null, job: updatedJob });
       const remaining = round2(Math.max(0, outstanding - payAmount));
@@ -435,6 +437,14 @@ export const validateCarWashCallback = async (req, res) => {
     }).lean();
 
     if (!openJob) {
+      // Also accept if billRef matches a voucher account number (company bulk payment)
+      const normalizedRef = normalizeAccountNumber(billRef);
+      const voucherAccs = await CarWashCreditAccount.find({
+        business: resolved.company._id, accountType: "voucher", status: "active",
+      }).select("accountNumber").lean();
+      const isVoucherAccRef = voucherAccs.some(a => normalizeAccountNumber(a.accountNumber) === normalizedRef);
+      if (isVoucherAccRef) return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
+
       return res.status(200).json({
         ResultCode: 1,
         ResultDesc: `No open job found for plate ${plate}. Confirm your plate with the attendant, then try again.`,
@@ -574,6 +584,121 @@ export const confirmCarWashCallback = async (req, res) => {
         return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted – prepaid wallet topped up" });
       }
 
+      // Voucher account: company pays with their account number as bill ref.
+      // Full amount is credited to the wallet, then FIFO-allocated to open jobs (oldest first).
+      // Any remainder stays as account credit — auto-deducted as new jobs come in.
+      const allVoucherAccs = await CarWashCreditAccount.find({
+        business: businessId, accountType: "voucher", status: "active",
+      }).select("_id accountNumber accountCredit").lean();
+      const normalizedBillRef = normalizeAccountNumber(billRefNumber);
+      const voucherAcc = allVoucherAccs.find(a => normalizeAccountNumber(a.accountNumber) === normalizedBillRef) || null;
+
+      if (voucherAcc) {
+        const vCashbookId = config?.defaultCashbookAccountId;
+        const vCashbook = vCashbookId && mongoose.Types.ObjectId.isValid(String(vCashbookId))
+          ? await ChartOfAccount.findOne({ _id: vCashbookId, business: businessId, type: "asset", isPosting: true }).lean()
+          : null;
+
+        // 1. Credit the full M-Pesa amount to the voucher wallet
+        await CarWashCreditAccount.updateOne({ _id: voucherAcc._id }, { $inc: { accountCredit: amount } });
+
+        // 2. Create topup doc + GL: Dr Cashbook / Cr Revenue 4400 for the full received amount
+        const vTopup = await CarWashAccountTopup.create({
+          business: businessId,
+          account: voucherAcc._id,
+          amount,
+          method: "mpesa",
+          reference: transactionCode || "",
+          cashbookAccount: vCashbook?._id || null,
+          paymentDate: transDate,
+          notes: `Voucher top-up via M-Pesa C2B (${senderName || "Unknown"})`,
+        });
+        if (vCashbook) {
+          postCarWashTopupLedger({ businessId, topup: vTopup, cashbookAccountId: vCashbook._id, userId: null }).catch(() => {});
+        }
+
+        // 3. FIFO allocate from the credit to oldest open jobs
+        const openVoucherJobs = await CarWashJob.find({
+          business: businessId,
+          creditAccount: voucherAcc._id,
+          status: { $nin: ["cancelled", "paid"] },
+          paymentStatus: { $in: ["unpaid", "partial"] },
+        }).sort({ createdAt: 1 }).lean();
+
+        const allocatedJobNumbers = [];
+        let creditRemaining = amount;
+
+        if (openVoucherJobs.length > 0) {
+          const vJobIds = openVoucherJobs.map(j => j._id);
+          const vPaidAggs = await CarWashPayment.aggregate([
+            { $match: { business: new mongoose.Types.ObjectId(String(businessId)), job: { $in: vJobIds } } },
+            { $group: { _id: "$job", paid: { $sum: "$amount" } } },
+          ]);
+          const paidByJob = new Map(vPaidAggs.map(r => [String(r._id), Number(r.paid)]));
+
+          for (const vJob of openVoucherJobs) {
+            if (creditRemaining <= 0.009) break;
+            const jobNet = round2(Number(vJob.price || 0) - Number(vJob.discountAmount || 0));
+            const alreadyPaid = paidByJob.get(String(vJob._id)) || 0;
+            const outstanding = round2(Math.max(jobNet - alreadyPaid, 0));
+            if (outstanding <= 0.009) continue;
+
+            const payAmount = round2(Math.min(creditRemaining, outstanding));
+            try {
+              await CarWashPayment.create({
+                business: businessId,
+                branch: vJob.branch || null,
+                job: vJob._id,
+                amount: payAmount,
+                method: "prepaid",
+                cashbookAccount: null,
+                paymentDate: transDate,
+              });
+              await CarWashCreditAccount.updateOne({ _id: voucherAcc._id }, { $inc: { accountCredit: -payAmount } });
+              const allocatedJob = await refreshJobPaymentStatus(businessId, vJob._id);
+              if (allocatedJob) {
+                accrueCommissionForJob({ req: null, job: allocatedJob }).catch(() => {});
+                if (allocatedJob.paymentStatus === "paid") {
+                  markJobCommissionsPayable({ business: businessId, jobId: allocatedJob._id }).catch(() => {});
+                }
+              }
+              creditRemaining = round2(creditRemaining - payAmount);
+              allocatedJobNumbers.push(vJob.jobNumber || String(vJob._id));
+            } catch (_allocErr) {
+              // Skip on per-job error — credit stays on wallet, staff can allocate manually
+            }
+          }
+        }
+
+        const allocNote = allocatedJobNumbers.length > 0
+          ? `Allocated to ${allocatedJobNumbers.join(", ")}${creditRemaining > 0.009 ? `; KES ${round2(creditRemaining)} as credit` : ""}`
+          : `No open jobs — KES ${amount} stored as credit`;
+        await saveNotif({ status: "matched", resultCode: 0, resultDesc: `Voucher FIFO – ${allocNote}` });
+
+        // SMS confirmation fire-and-forget
+        (async () => {
+          try {
+            const freshAcc = await CarWashCreditAccount.findById(voucherAcc._id).select("accountCredit").lean();
+            const body = await resolveCarWashSmsBody(businessId, "carwash_topup_confirmed", {
+              payerName:    senderName || "Valued Customer",
+              accountNumber: voucherAcc.accountNumber,
+              amount:       Number(amount).toLocaleString(),
+              balance:      Number(freshAcc?.accountCredit || 0).toLocaleString(),
+              businessName: company.name || "Car Wash",
+            });
+            if (body) {
+              if (normalizedMsisdn) {
+                await sendAdHocSms({ businessId, phone: normalizedMsisdn, body, templateKey: "carwash_topup_confirmed" });
+              } else if (maskedMsisdn) {
+                sendAdHocSmsToMasked({ businessId, maskedNumber: maskedMsisdn, body, templateKey: "carwash_topup_confirmed", recipientName: senderName || "" }).catch(() => {});
+              }
+            }
+          } catch (_err) {}
+        })();
+
+        return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted – voucher allocation complete" });
+      }
+
       await saveNotif({ status: "unmatched", resultCode: 0, resultDesc: `No open job found for plate ${plate}` });
       sendUnmatchedPaymentSms({ business: businessId, businessName: company.name, senderName, amount, phone: normalizedMsisdn, maskedMsisdn }).catch(() => {});
       return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted – no open job found for plate" });
@@ -638,20 +763,29 @@ export const confirmCarWashCallback = async (req, res) => {
     }
 
     const jobUpdates = { ...(branchId && !job.branch ? { branch: branchId } : {}) };
-    // M-Pesa number is Safaricom-verified — always overwrite job & customer phone
-    if (normalizedMsisdn) jobUpdates.phone = normalizedMsisdn;
-    // Store masked MSISDN on job so SMS icon shows even without a real phone
-    if (!normalizedMsisdn && msisdn) jobUpdates.maskedMsisdn = msisdn;
-    // M-Pesa sender name (Safaricom-verified) always overrides job customerName
-    if (senderName) jobUpdates.customerName = senderName;
+    if (!job.isVoucher) {
+      // Normal jobs: M-Pesa payer is the customer — overwrite phone & name with verified Safaricom data
+      if (normalizedMsisdn) jobUpdates.phone = normalizedMsisdn;
+      if (!normalizedMsisdn && msisdn) jobUpdates.maskedMsisdn = msisdn;
+      if (senderName) jobUpdates.customerName = senderName;
+    }
+    // Voucher jobs: phone & customerName were set at job creation (the actual customer's details).
+    // The M-Pesa payer is the car wash cashier — do NOT overwrite the customer's contact.
     if (Object.keys(jobUpdates).length) {
       await CarWashJob.updateOne({ _id: job._id, business: businessId }, { $set: jobUpdates });
     }
-    await autoEnrollPlate({ business: businessId, plate: job.plateNumber, customerName: job.customerName, phone: normalizedMsisdn, maskedMsisdn: !normalizedMsisdn && msisdn ? msisdn : null, payerName: senderName })
-      .catch((err) => console.error('[CW M-Pesa] autoEnroll failed:', err?.message));
+    // For voucher jobs enroll the customer (job.phone), not the car wash cashier
+    await autoEnrollPlate({
+      business: businessId,
+      plate: job.plateNumber,
+      customerName: job.isVoucher ? (job.customerName || senderName) : job.customerName,
+      phone: job.isVoucher ? (job.phone || null) : normalizedMsisdn,
+      maskedMsisdn: job.isVoucher ? null : (!normalizedMsisdn && msisdn ? msisdn : null),
+      payerName: job.isVoucher ? (job.customerName || senderName) : senderName,
+    }).catch((err) => console.error('[CW M-Pesa] autoEnroll failed:', err?.message));
 
     const updatedJob = await refreshJobPaymentStatus(businessId, job._id);
-    await postCarWashPaymentLedger({ businessId, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: null });
+    await postCarWashPaymentLedger({ businessId, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: null, taxAmount: Number((updatedJob || job)?.taxAmount || 0), jobPrice: Number((updatedJob || job)?.price || 0) });
 
     // Route M-Pesa overpayment: prepaid/credit account gets wallet top-up;
     // cash customers (no account) get a CarWashCustomerCredit so the balance
@@ -704,18 +838,23 @@ export const confirmCarWashCallback = async (req, res) => {
     if (updatedJob) {
       await accrueCommissionForJob({ req: null, job: updatedJob });
       const remainingBalance = round2(Math.max(0, outstanding - appliedAmount));
-      const mpesaMasked1 = !normalizedMsisdn && msisdn && !tsqWillFire ? msisdn : null;
+
+      // Voucher jobs: SMS recipient is the customer (phone stored on job at creation).
+      // Normal jobs: SMS recipient is the M-Pesa payer (Safaricom-verified number).
+      const smsPhone   = updatedJob.isVoucher ? (updatedJob.phone || null) : normalizedMsisdn;
+      const smsMasked  = updatedJob.isVoucher ? null : (!normalizedMsisdn && msisdn && !tsqWillFire ? msisdn : null);
+      const smsName    = updatedJob.isVoucher ? (updatedJob.customerName || senderName) : senderName;
+
       let loyaltySmsBody = null;
       if (["paid", "partial"].includes(updatedJob.paymentStatus)) {
         try {
-          const stampResult = await awardLoyaltyStamp({ business: businessId, job: updatedJob, overridePhone: normalizedMsisdn, maskedMsisdn: mpesaMasked1, suppressSms: true, payerName: senderName });
+          const stampResult = await awardLoyaltyStamp({ business: businessId, job: updatedJob, overridePhone: smsPhone, maskedMsisdn: smsMasked, suppressSms: true, payerName: smsName });
           loyaltySmsBody = stampResult?.smsBody || null;
         } catch (err) {
           console.error("[C2B] Stamp failed job=%s: %s", updatedJob.jobNumber, err?.message || err);
         }
       }
-      await sendPaymentConfirmationSms({ business: businessId, job: updatedJob, amount: paidAmount, remaining: remainingBalance, overridePhone: normalizedMsisdn, maskedMsisdn: mpesaMasked1, loyaltySmsBody, payerName: senderName });
-      // When TSQ defers delivery, stash the stamp body so the TSQ handler can include it
+      await sendPaymentConfirmationSms({ business: businessId, job: updatedJob, amount: paidAmount, remaining: remainingBalance, overridePhone: smsPhone, maskedMsisdn: smsMasked, loyaltySmsBody, payerName: smsName });
       if (tsqWillFire && loyaltySmsBody && savedNotif?._id) {
         CarWashMpesaNotification.findByIdAndUpdate(savedNotif._id, { $set: { pendingStampSmsBody: loyaltySmsBody } }).catch(() => {});
       }
@@ -900,7 +1039,7 @@ export const reassignMpesaNotification = async (req, res, next) => {
     await notif.save();
 
     const updatedJob = await refreshJobPaymentStatus(business, job._id);
-    await postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: req.user?._id || null });
+    await postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: req.user?._id || null, taxAmount: Number((updatedJob || job)?.taxAmount || 0), jobPrice: Number((updatedJob || job)?.price || 0) });
 
     // Update job + customer with payer's M-Pesa identity (Safaricom-verified)
     const jobContactUpdates = {};
@@ -1040,7 +1179,7 @@ export const allocateNotification = async (req, res, next) => {
       });
 
       const updatedJob = await refreshJobPaymentStatus(business, job._id);
-      postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: req.user?._id || null }).catch(() => {});
+      postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: req.user?._id || null, taxAmount: Number((updatedJob || job)?.taxAmount || 0), jobPrice: Number((updatedJob || job)?.price || 0) }).catch(() => {});
 
       if (updatedJob) {
         accrueCommissionForJob({ req, job: updatedJob }).catch(() => {});
@@ -1432,7 +1571,7 @@ export const bulkUploadMpesaStatement = async (req, res, next) => {
       }
 
       const updatedJob = await refreshJobPaymentStatus(business, job._id);
-      postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: req.user?._id || null }).catch(() => {});
+      postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbook._id, job: updatedJob || job, userId: req.user?._id || null, taxAmount: Number((updatedJob || job)?.taxAmount || 0), jobPrice: Number((updatedJob || job)?.price || 0) }).catch(() => {});
 
       if (updatedJob) {
         accrueCommissionForJob({ req, job: updatedJob }).catch(() => {});

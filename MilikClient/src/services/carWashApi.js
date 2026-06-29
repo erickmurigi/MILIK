@@ -41,6 +41,7 @@ export const carWashApi = {
   repairLedger: async () => unwrap(await adminRequests.post("/carwash/reports/ledger/repair")),
   listJobs: async (params = {}) => unwrap(await adminRequests.get("/carwash/jobs", { params: bp(params) })),
   getJob: async (id) => unwrap(await adminRequests.get(`/carwash/jobs/${id}`)),
+  downloadJobPdf: async (id) => (await adminRequests.get(`/carwash/jobs/${id}/pdf`, { responseType: "arraybuffer" })).data,
   createJob: async (payload) => unwrap(await adminRequests.post("/carwash/jobs", bb(payload))),
   updateJob: async (id, payload) => unwrap(await adminRequests.put(`/carwash/jobs/${id}`, payload)),
   updateJobStatus: async (id, status) => unwrap(await adminRequests.patch(`/carwash/jobs/${id}/status`, { status })),

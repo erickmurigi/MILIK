@@ -10,6 +10,7 @@ import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggr
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import {
   ensureSystemChartOfAccounts,
+  findSystemAccountByCode,
 } from "../../services/chartOfAccountsService.js";
 import {
   resolvePropertyAccountingContext,
@@ -864,8 +865,10 @@ const ensureVoucherSettlementPosting = async ({ voucher, actorUserId, paidDate =
   const journalGroupId = voucher.journalGroupId || new mongoose.Types.ObjectId();
   const narration = String(voucher.narration || voucher.reference || `Payment voucher ${voucher.voucherNo}`).trim();
   const amount = Math.abs(Number(voucher.amount || 0));
+  const whtAmount = Math.max(0, Math.round(Number(voucher.whtAmount || 0) * 100) / 100);
+  const netCashAmount = Math.max(0, Math.round((amount - whtAmount) * 100) / 100);
 
-  const debitLeg = await postEntry({
+  const baseEntry = {
     business: accountingContext.businessId,
     property: accountingContext.propertyId || null,
     landlord: accountingContext.landlordId || null,
@@ -876,43 +879,35 @@ const ensureVoucherSettlementPosting = async ({ voucher, actorUserId, paidDate =
     statementPeriodStart: start,
     statementPeriodEnd: end,
     category: voucher.category === "petty_cash_float" ? "ADJUSTMENT" : "EXPENSE_DEDUCTION",
-    amount,
-    direction: "debit",
-    accountId: liabilityAccount._id,
     journalGroupId,
     payer: "manager",
     receiver: "vendor",
     notes: narration,
+    createdBy: actorUserId,
+    approvedBy: actorUserId,
+    approvedAt: new Date(),
+    status: "approved",
+  };
+
+  const debitLeg = await postEntry({
+    ...baseEntry,
+    amount,
+    direction: "debit",
+    accountId: liabilityAccount._id,
     metadata: {
       voucherNo: voucher.voucherNo,
       voucherCategory: voucher.category,
       postingRole: "liability_settlement",
       includeInLandlordStatement: false,
     },
-    createdBy: actorUserId,
-    approvedBy: actorUserId,
-    approvedAt: new Date(),
-    status: "approved",
   });
 
+  // Cr Cashbook — net cash paid to vendor (gross - WHT if applicable)
   const creditLeg = await postEntry({
-    business: accountingContext.businessId,
-    property: accountingContext.propertyId || null,
-    landlord: accountingContext.landlordId || null,
-    allowUnscoped: Boolean(accountingContext.unscoped),
-    sourceTransactionType: "payment_voucher",
-    sourceTransactionId: String(voucher._id),
-    transactionDate: txDate,
-    statementPeriodStart: start,
-    statementPeriodEnd: end,
-    category: voucher.category === "petty_cash_float" ? "ADJUSTMENT" : "EXPENSE_DEDUCTION",
-    amount,
+    ...baseEntry,
+    amount: whtAmount > 0 ? netCashAmount : amount,
     direction: "credit",
     accountId: settlementAccount._id,
-    journalGroupId,
-    payer: "manager",
-    receiver: "vendor",
-    notes: narration,
     metadata: {
       voucherNo: voucher.voucherNo,
       voucherCategory: voucher.category,
@@ -920,28 +915,49 @@ const ensureVoucherSettlementPosting = async ({ voucher, actorUserId, paidDate =
       includeInLandlordStatement: false,
       offsetOfEntryId: String(debitLeg._id),
     },
-    createdBy: actorUserId,
-    approvedBy: actorUserId,
-    approvedAt: new Date(),
-    status: "approved",
   });
+
+  // Cr WHT Payable — tax withheld from vendor
+  let whtLeg = null;
+  const touchedAccounts = [String(liabilityAccount._id), String(settlementAccount._id)];
+  if (whtAmount > 0) {
+    const whtAccount = voucher.whtAccountId
+      ? await ChartOfAccount.findById(voucher.whtAccountId).lean()
+      : await findSystemAccountByCode(String(accountingContext.businessId), "2141").catch(() => null);
+
+    if (whtAccount) {
+      whtLeg = await postEntry({
+        ...baseEntry,
+        amount: whtAmount,
+        direction: "credit",
+        accountId: whtAccount._id,
+        metadata: {
+          voucherNo: voucher.voucherNo,
+          voucherCategory: voucher.category,
+          postingRole: "wht_payable",
+          includeInLandlordStatement: false,
+        },
+      });
+      touchedAccounts.push(String(whtAccount._id));
+    } else {
+      console.warn("[PaymentVoucher] WHT Payable account (2141) not found for business=%s — WHT leg skipped", accountingContext.businessId);
+    }
+  }
 
   voucher.journalGroupId = journalGroupId;
   voucher.ledgerEntries = Array.from(new Set([
     ...(Array.isArray(voucher.ledgerEntries) ? voucher.ledgerEntries.map((entry) => String(entry)) : []),
     String(debitLeg._id),
     String(creditLeg._id),
+    ...(whtLeg ? [String(whtLeg._id)] : []),
   ]));
   await voucher.save();
 
-  await aggregateChartOfAccountBalances(voucher.business, [
-    String(liabilityAccount._id),
-    String(settlementAccount._id),
-  ]);
+  await aggregateChartOfAccountBalances(voucher.business, touchedAccounts);
 
   return {
     voucher,
-    entries: [debitLeg, creditLeg],
+    entries: [debitLeg, creditLeg, ...(whtLeg ? [whtLeg] : [])],
     journalGroupId,
     reused: false,
   };
@@ -994,6 +1010,7 @@ export const createPaymentVoucher = async (req, res, next) => {
       voucherCategory,
     });
 
+    const whtAmt = Math.max(0, Math.round(Number(req.body?.whtAmount || 0) * 100) / 100);
     const payload = {
       category: voucherCategory,
       property: req.body?.property || null,
@@ -1002,6 +1019,10 @@ export const createPaymentVoucher = async (req, res, next) => {
       debitAccount: req.body?.debitAccount || null,
       settlementAccount: req.body?.settlementAccount || null,
       amount,
+      whtAmount:    whtAmt,
+      whtNetAmount: Math.max(0, Math.round((amount - whtAmt) * 100) / 100),
+      whtAccountId: req.body?.whtAccountId || null,
+      serviceProvider: req.body?.serviceProvider && isValidObjectId(req.body.serviceProvider) ? req.body.serviceProvider : null,
       dueDate: req.body.dueDate,
       paidDate: req.body.paidDate || null,
       reference: req.body.reference,

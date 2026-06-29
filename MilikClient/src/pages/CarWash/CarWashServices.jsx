@@ -6,9 +6,10 @@ import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, VEHICLE_TYPES } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
+import PaginationBar from "../../components/PaginationBar";
 
-const emptyForm = { name: "", category: "", jobType: "both", pricingType: "flat", defaultPrice: "", pricingTiers: [], active: true };
-const normalizeForm = (f) => ({ ...emptyForm, ...f, pricingTiers: Array.isArray(f?.pricingTiers) ? f.pricingTiers : [] });
+const emptyForm = { name: "", category: "", jobType: "both", pricingType: "flat", defaultPrice: "", pricingTiers: [], active: true, isTaxable: false, taxRate: "" };
+const normalizeForm = (f) => ({ ...emptyForm, ...f, pricingTiers: Array.isArray(f?.pricingTiers) ? f.pricingTiers : [], isTaxable: Boolean(f?.isTaxable), taxRate: f?.taxRate !== undefined ? String(f.taxRate) : "" });
 const inputClass  = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelClass  = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 const selectClass = "h-9 w-full border border-slate-300 bg-white px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
@@ -117,7 +118,9 @@ const CarWashServices = () => {
               return { vehicleType: match ?? t.vehicleType, price: String(t.price) };
             })
         : [],
-      active: row.active !== false,
+      active:     row.active !== false,
+      isTaxable:  Boolean(row.isTaxable),
+      taxRate:    row.taxRate !== undefined ? String(row.taxRate) : "",
     };
     const catExists = categories.includes(fromRow.category || "");
     setForm(normalizeForm(fromRow));
@@ -168,6 +171,8 @@ const CarWashServices = () => {
       pricingType:  String(form.pricingType || "flat"),
       defaultPrice: Number(form.defaultPrice || 0),
       active:       Boolean(form.active),
+      isTaxable:    Boolean(form.isTaxable),
+      taxRate:      Number(form.taxRate || 0),
       pricingTiers: (form.pricingTiers || [])
         .filter((t) => t.vehicleType && t.price !== "")
         .map((t) => ({ vehicleType: String(t.vehicleType), price: Number(t.price) })),
@@ -423,23 +428,14 @@ const CarWashServices = () => {
         </table>
         </div>{/* end scroll */}
         </div>{/* end desktop table */}
-        <div className="flex-shrink-0 flex min-h-9 items-center justify-between border-t border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
-          <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-slate-500 normal-case">Per page:</span>
-            <select
-              value={pageSize}
-              onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-              className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition normal-case"
-            >
-              {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setPage((p) => Math.max(p - 1, 1))} disabled={page <= 1 || loading} className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45">Previous</button>
-            <span>Page {pagination.page} of {pagination.pages}</span>
-            <button type="button" onClick={() => setPage((p) => Math.min(p + 1, pagination.pages))} disabled={page >= pagination.pages || loading} className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45">Next</button>
-          </div>
-        </div>
+        <PaginationBar
+          page={pagination.page}
+          pages={pagination.pages}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          loading={loading}
+        />
       </div>
 
       {showModal && (
@@ -553,6 +549,41 @@ const CarWashServices = () => {
                   <input type="checkbox" checked={form.active} onChange={(e) => setForm((p) => ({ ...p, active: e.target.checked }))} />
                   Active
                 </label>
+              </div>
+              <div className="md:col-span-2">
+                <div className="border border-slate-200">
+                  <div className="flex items-center gap-3 border-b border-slate-200 bg-[#EDF5F1] px-3 py-2">
+                    <p className="text-[11px] font-extrabold uppercase tracking-wide text-[#0B3B2E]">VAT / Tax Settings</p>
+                  </div>
+                  <div className="grid gap-3 p-3 md:grid-cols-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        id="svc-taxable"
+                        type="checkbox"
+                        checked={form.isTaxable}
+                        onChange={(e) => setForm((p) => ({ ...p, isTaxable: e.target.checked, taxRate: e.target.checked ? (p.taxRate || "16") : "" }))}
+                        className="h-4 w-4"
+                      />
+                      <label htmlFor="svc-taxable" className="text-sm font-bold text-slate-700">Subject to VAT (Inclusive)</label>
+                    </div>
+                    {form.isTaxable && (
+                      <div>
+                        <label className={labelClass}>VAT Rate (%)</label>
+                        <input
+                          className={inputClass}
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          value={form.taxRate}
+                          onChange={(e) => setForm((p) => ({ ...p, taxRate: e.target.value }))}
+                          placeholder="16"
+                        />
+                        <p className="mt-0.5 text-[10px] text-slate-400">VAT is inclusive — price already includes tax. VAT = price × rate/(100+rate)</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 

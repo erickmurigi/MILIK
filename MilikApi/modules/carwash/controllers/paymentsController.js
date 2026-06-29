@@ -12,10 +12,11 @@ import axios from "axios";
 import Company from "../../../models/Company.js";
 import CarWashMpesaNotification from "../models/CarWashMpesaNotification.js";
 import CarWashCreditAccount from "../models/CarWashCreditAccount.js";
+import CarWashAccountTopup from "../models/CarWashAccountTopup.js";
 import { getRawMpesaPaybillConfigs, getPrimaryMpesaPaybillConfig } from "../../../utils/companyModules.js";
 import CarWashBranch from "../models/CarWashBranch.js";
 import { sendAdHocSms } from "../../../services/communicationService.js";
-import { postCarWashPaymentLedger, reverseCarWashPaymentLedger } from "../services/carwashAccountingService.js";
+import { postCarWashPaymentLedger, reverseCarWashPaymentLedger, reverseCarWashTopupLedger, reverseCarWashCustomerCreditCreationLedger } from "../services/carwashAccountingService.js";
 import { resolveCarWashSmsBody } from "../services/carwashSmsService.js";
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
@@ -146,8 +147,11 @@ export const recordPayment = async (req, res, next) => {
     const alreadyPaid = Number(paidRows?.[0]?.paid || 0);
     const outstanding = Math.max(netJobPrice(job) - alreadyPaid, 0);
     if (outstanding <= 0) return next(createError(400, "Car Wash job is already fully paid"));
-    // Credit amount = excess paid above what is owed (overpayment)
-    const creditAmount = effectiveAmount > outstanding + AMOUNT_TOLERANCE ? round2(effectiveAmount - outstanding) : 0;
+    // Credit amount = excess paid above what is owed (overpayment).
+    // Only tracked when job has a plate — without a plate we cannot look up a customer,
+    // and CarWashCustomerCredit.customer is required. Carpet-job overpayments are kept as revenue.
+    const creditAmount = effectiveAmount > outstanding + AMOUNT_TOLERANCE && job.plateNumber
+      ? round2(effectiveAmount - outstanding) : 0;
 
     const method = String(req.body.method || "cash").trim().toLowerCase();
     if (!PAYMENT_METHODS.has(method)) return next(createError(400, "Invalid Car Wash payment method"));
@@ -224,7 +228,7 @@ export const recordPayment = async (req, res, next) => {
       const cashMasked = !receivedFromPhone ? (updatedJob.maskedMsisdn || null) : null;
       await sendPaymentConfirmationSms({ business, job: updatedJob, amount, overridePhone: receivedFromPhone || null, maskedMsisdn: cashMasked, loyaltySmsBody });
     })().catch((err) => console.error("[CW Payment] SMS failed job=%s: %s", updatedJob.jobNumber, err?.message || err));
-    await postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbookAccount, job: updatedJob, userId, creditAmount });
+    await postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbookAccount, job: updatedJob, userId, creditAmount, taxAmount: Number(job.taxAmount || 0), jobPrice: Number(job.price || 0) });
 
     // If customer overpaid, create the credit document synchronously so ledger + document stay in sync.
     // SMS notification is still fire-and-forget (it cannot block the payment response).
@@ -310,7 +314,34 @@ export const deletePayment = async (req, res, next) => {
       await revokeStampForJob({ business, jobId: jobBeforeDelete._id, plate: jobBeforeDelete.plateNumber });
     }
     const deletedPaymentId = payment._id;
+    const deletedPaymentRef = payment.reference;
+    const deletedPaymentMethod = payment.method;
     await payment.deleteOne();
+
+    // Clean up overpayment artifacts so no phantom credits remain after deletion
+    // 1. CarWashCustomerCredit — created when payment exceeded outstanding (manual OR M-Pesa cash-customer overpayment)
+    const linkedCredit = await CarWashCustomerCredit.findOneAndDelete({ business, sourcePayment: deletedPaymentId });
+    if (linkedCredit) {
+      // M-Pesa overpayment credits have a separate GL entry type — must be reversed explicitly.
+      // Manual overpayment credits share the payment's GL entry, already reversed above.
+      await reverseCarWashCustomerCreditCreationLedger({ businessId: business, creditDocId: linkedCredit._id, req });
+    }
+    // 2. CarWashAccountTopup — created when M-Pesa overpayment was routed to a prepaid/credit wallet
+    if (deletedPaymentMethod === "mpesa" && deletedPaymentRef) {
+      const linkedTopup = await CarWashAccountTopup.findOneAndUpdate(
+        { business, reference: deletedPaymentRef, isVoided: false },
+        { $set: { isVoided: true, voidedAt: new Date(), voidReason: "Source payment deleted" } },
+        { new: true }
+      );
+      if (linkedTopup) {
+        await reverseCarWashTopupLedger({ businessId: business, topupId: linkedTopup._id, reason: "Source M-Pesa payment deleted", req });
+        await CarWashCreditAccount.updateOne(
+          { _id: linkedTopup.account, business },
+          { $inc: { accountCredit: -round2(Number(linkedTopup.amount || 0)) } }
+        );
+      }
+    }
+
     // If this payment was linked to an M-Pesa notification, return it to unmatched
     CarWashMpesaNotification.findOneAndUpdate(
       { business, matchedPayment: deletedPaymentId },

@@ -68,7 +68,10 @@ const resolveServiceLines = async (business, rawLines) => {
     const lineStaff = Array.isArray(raw.lineStaff)
       ? raw.lineStaff.map(s => String(s)).filter(id => mongoose.Types.ObjectId.isValid(id))
       : (raw.lineStaff && mongoose.Types.ObjectId.isValid(String(raw.lineStaff)) ? [String(raw.lineStaff)] : []);
-    lines.push({ service: serviceId, serviceName, vehicleType, price, lineStaff, isRewardLine: Boolean(raw.isRewardLine) });
+    const svc = svcMap.get(String(serviceId || ""));
+    const lineTaxRate  = (svc?.isTaxable && Number(svc?.taxRate) > 0) ? Number(svc.taxRate) : 0;
+    const lineTaxAmount = lineTaxRate > 0 ? Math.round((price * lineTaxRate / (100 + lineTaxRate)) * 100) / 100 : 0;
+    lines.push({ service: serviceId, serviceName, vehicleType, price, lineStaff, isRewardLine: Boolean(raw.isRewardLine), taxRate: lineTaxRate, taxAmount: lineTaxAmount });
   }
   return lines;
 };
@@ -87,11 +90,16 @@ const resolveServiceSnapshot = async (business, body = {}) => {
   const service = await CarWashService.findOne({ _id: body.service, business }).lean();
   if (!service) throw createError(400, "Selected Car Wash service is invalid for this company");
 
+  const resolvedPrice  = Number(body.price ?? service.defaultPrice ?? 0);
+  const snapshotTaxRate   = (service.isTaxable && Number(service.taxRate) > 0) ? Number(service.taxRate) : 0;
+  const snapshotTaxAmount = snapshotTaxRate > 0 ? Math.round((resolvedPrice * snapshotTaxRate / (100 + snapshotTaxRate)) * 100) / 100 : 0;
   return {
     service: service._id,
     serviceName: String(body.serviceName || service.name || "").trim(),
     vehicleType: String(body.vehicleType || service.vehicleType || "").trim(),
-    price: Number(body.price ?? service.defaultPrice ?? 0),
+    price: resolvedPrice,
+    taxRate:   snapshotTaxRate,
+    taxAmount: snapshotTaxAmount,
   };
 };
 
@@ -244,11 +252,12 @@ export const createJob = async (req, res, next) => {
 
     // Resolve service lines — new multi-line format takes priority
     let serviceLines = null;
-    let rootService = null, rootServiceName = "", rootVehicleType = "", totalPrice = 0;
+    let rootService = null, rootServiceName = "", rootVehicleType = "", totalPrice = 0, totalTaxAmount = 0;
 
     if (Array.isArray(req.body.serviceLines) && req.body.serviceLines.length) {
       serviceLines = await resolveServiceLines(business, req.body.serviceLines);
       totalPrice = round2(serviceLines.reduce((s, l) => s + Number(l.price || 0), 0));
+      totalTaxAmount = round2(serviceLines.reduce((s, l) => s + Number(l.taxAmount || 0), 0));
       // Keep root fields pointing to first line for backward compat with reports/filters
       rootService = serviceLines[0].service;
       rootServiceName = serviceLines.length === 1 ? serviceLines[0].serviceName : `${serviceLines[0].serviceName} +${serviceLines.length - 1} more`;
@@ -260,6 +269,7 @@ export const createJob = async (req, res, next) => {
       if (!Number.isFinite(snapshot.price) || snapshot.price < 0) return next(createError(400, "Price must be a valid amount"));
       serviceLines = [{ service: snapshot.service, serviceName: snapshot.serviceName, vehicleType: snapshot.vehicleType, price: snapshot.price }];
       totalPrice = snapshot.price;
+      totalTaxAmount = round2(Number(snapshot.taxAmount || 0));
       rootService = snapshot.service;
       rootServiceName = snapshot.serviceName;
       rootVehicleType = snapshot.vehicleType;
@@ -351,6 +361,7 @@ export const createJob = async (req, res, next) => {
       // Multi-line
       serviceLines,
       price: totalPrice,
+      taxAmount: totalTaxAmount,
       rewardRedemption: hasRewardLine,
       discountAmount,
       status: JOB_STATUSES.has(String(req.body.status || "").toLowerCase()) ? String(req.body.status).toLowerCase() : "waiting",

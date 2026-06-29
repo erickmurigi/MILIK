@@ -38,6 +38,7 @@ const LEDGER_CATEGORIES = [
   "DEPRECIATION",
   "DISPOSAL",
   "JOURNAL_ENTRY",
+  "TAX_REMITTANCE",
 ];
 
 const SOURCE_TYPES = [
@@ -74,6 +75,7 @@ const SOURCE_TYPES = [
   "fixed_asset_depreciation",
   "fixed_asset_disposal",
   "journal_entry",
+  "tax_remittance",
   "other",
 ];
 

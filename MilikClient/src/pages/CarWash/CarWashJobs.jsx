@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
-import { FaCamera, FaChevronDown, FaChevronRight, FaEdit, FaExpand, FaMobileAlt, FaMoneyBillWave, FaPlus, FaPrint, FaRedoAlt, FaSearch, FaSms, FaTimes, FaTimesCircle, FaTrashAlt, FaUndoAlt } from "react-icons/fa";
+import { FaCamera, FaChevronDown, FaChevronRight, FaEdit, FaExpand, FaFilePdf, FaMobileAlt, FaMoneyBillWave, FaPlus, FaPrint, FaRedoAlt, FaSearch, FaSms, FaTimes, FaTimesCircle, FaTrashAlt, FaUndoAlt } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, photoUrl, todayISO } from "../../services/carWashApi";
 import CarpetCameraModal from "../../components/common/CarpetCameraModal";
@@ -12,6 +12,7 @@ import CarWashShell from "./CarWashShell";
 import { useConfirm } from "../../context/ConfirmContext";
 import CwSmsModal from "./CwSmsModal";
 import { clearDraft, readDraft, writeDraft } from "../../hooks/useFormDraft";
+import PaginationBar from "../../components/PaginationBar";
 
 const Lightbox = ({ src, onClose }) => (
   <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 p-4" onClick={onClose}>
@@ -161,7 +162,7 @@ const PhoneDisplay = ({ phone, maskedMsisdn }) =>
 const MobileJobCard = React.memo(({
   job, expanded, selected, jobPaymentsEntry,
   canUpdateJob, canRecordPayment,
-  onToggleExpand, onToggleSelect, onUpdateStatus, onOpenPayment, onOpenSms, onReversePayment, onNavigateEdit, onPrint,
+  onToggleExpand, onToggleSelect, onUpdateStatus, onOpenPayment, onOpenSms, onReversePayment, onNavigateEdit, onPrint, onDownloadPdf,
 }) => {
   const canDelete = job.paymentStatus === "unpaid" && job.status !== "paid";
   return (
@@ -258,6 +259,9 @@ const MobileJobCard = React.memo(({
         <button type="button" onClick={() => onPrint(job)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
           <FaPrint className="text-[9px]" /> Print
         </button>
+        <button type="button" onClick={() => onDownloadPdf(job)} className="inline-flex items-center gap-1 border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-bold text-red-700 hover:bg-red-100">
+          <FaFilePdf className="text-[9px]" /> PDF
+        </button>
         <button type="button" onClick={() => onToggleExpand(job._id)} className="ml-auto inline-flex items-center gap-1 border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-500">
           {expanded ? <FaChevronDown className="text-[9px]" /> : <FaChevronRight className="text-[9px]" />} Details
         </button>
@@ -295,7 +299,7 @@ const DesktopJobRow = React.memo(({
   job, expanded, selected, jobPaymentsEntry, jobPhotosList, isCameraOpen,
   isConsolidated, canUpdateJob, canRecordPayment,
   onToggleExpand, onToggleSelect, onUpdateStatus, onOpenPayment, onOpenSms, onReversePayment, onNavigateEdit,
-  onSetPhotos, onSetCameraJobId, onSetLightboxSrc, onPrint,
+  onSetPhotos, onSetCameraJobId, onSetLightboxSrc, onPrint, onDownloadPdf,
 }) => {
   const canDelete = job.paymentStatus === "unpaid" && job.status !== "paid";
   return (
@@ -450,6 +454,14 @@ const DesktopJobRow = React.memo(({
               title="Print receipt"
             >
               <FaPrint className="text-[9px]" /> Print
+            </button>
+            <button
+              type="button"
+              onClick={() => onDownloadPdf(job)}
+              className="inline-flex items-center gap-1 border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-bold text-red-700 hover:bg-red-100"
+              title="Download PDF receipt"
+            >
+              <FaFilePdf className="text-[9px]" /> PDF
             </button>
           </div>
         </td>
@@ -1028,6 +1040,7 @@ const CarWashJobs = () => {
     const price = Number(job.price || 0);
     const discount = Number(job.discountAmount || 0);
     const total = Math.max(0, price - discount);
+    const taxAmt = Number(job.taxAmount || 0);
     const staff = Array.isArray(job.assignedStaff) && job.assignedStaff.length
       ? job.assignedStaff.map((s) => s?.name || s).join(", ")
       : "—";
@@ -1049,7 +1062,7 @@ table{width:100%;border-collapse:collapse;margin:4px 0}
 th{text-align:left;font-size:11px;color:#555;border-bottom:1px solid #ccc;padding:3px 4px}
 td{padding:3px 4px}.amt{text-align:right}
 .tot td{font-weight:bold;border-top:2px solid #111;padding-top:5px}
-.dis td{color:#b45309}
+.dis td{color:#b45309}.vat td{color:#1d4ed8;font-size:11px}
 .badge{display:inline-block;padding:2px 8px;font-size:11px;font-weight:bold;border-radius:2px}
 .paid{background:#d1fae5;color:#065f46}.unpaid{background:#fee2e2;color:#991b1b}
 .ft{text-align:center;font-size:10px;color:#888;margin-top:12px}
@@ -1065,6 +1078,7 @@ ${job.phone ? `<div class="row"><span class="lbl">Phone:</span><span>${esc(job.p
 <table><thead><tr><th>Service</th><th class="amt">KES</th></tr></thead><tbody>
 ${serviceRows}
 ${discount > 0 ? `<tr class="dis"><td>Discount</td><td class="amt">- ${fmtAmt(discount)}</td></tr>` : ""}
+${taxAmt > 0 ? `<tr class="vat"><td>VAT (incl.)</td><td class="amt">${fmtAmt(taxAmt)}</td></tr>` : ""}
 <tr class="tot"><td>TOTAL</td><td class="amt">${fmtAmt(total)}</td></tr>
 </tbody></table>
 <hr class="s"/>
@@ -1079,6 +1093,22 @@ ${discount > 0 ? `<tr class="dis"><td>Discount</td><td class="amt">- ${fmtAmt(di
     w.document.write(html);
     w.document.close();
   }, [currentCompany, settingsAndBranch]);
+
+  const downloadJobPdf = useCallback(async (job) => {
+    try {
+      const response = await carWashApi.downloadJobPdf(job._id);
+      const url = window.URL.createObjectURL(new Blob([response], { type: "application/pdf" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `receipt-${job.plateNumber || job.jobNumber || job._id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Failed to download PDF receipt");
+    }
+  }, []);
 
   const onSetPhotos = useCallback((jobId, photos) => {
     setJobPhotos((prev) => ({ ...prev, [jobId]: photos }));
@@ -1284,6 +1314,7 @@ ${discount > 0 ? `<tr class="dis"><td>Discount</td><td class="amt">- ${fmtAmt(di
               onReversePayment={reversePayment}
               onNavigateEdit={handleNavigateEdit}
               onPrint={printJobReceipt}
+              onDownloadPdf={downloadJobPdf}
             />
           )) : (
             <div className="py-10 text-center text-xs font-semibold text-slate-500">No Car Wash jobs recorded for this date.</div>
@@ -1343,6 +1374,7 @@ ${discount > 0 ? `<tr class="dis"><td>Discount</td><td class="amt">- ${fmtAmt(di
                   onSetCameraJobId={setCameraJobId}
                   onSetLightboxSrc={setLightboxSrc}
                   onPrint={printJobReceipt}
+                  onDownloadPdf={downloadJobPdf}
                 />
               ))
             ) : (
@@ -1352,37 +1384,14 @@ ${discount > 0 ? `<tr class="dis"><td>Discount</td><td class="amt">- ${fmtAmt(di
         </table>
         </div>{/* end scroll */}
         </div>{/* end desktop table wrapper */}
-        <div className="flex-shrink-0 flex min-h-9 items-center justify-between border-t border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
-          <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-slate-500 normal-case">Per page:</span>
-            <select
-              value={pageSize}
-              onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-              className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition normal-case"
-            >
-              {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
-              disabled={page <= 1 || loading}
-              className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              Previous
-            </button>
-            <span>Page {pagination.page} of {pagination.pages}</span>
-            <button
-              type="button"
-              onClick={() => setPage((prev) => Math.min(prev + 1, pagination.pages))}
-              disabled={page >= pagination.pages || loading}
-              className="border border-[#B7C9C0] bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+        <PaginationBar
+          page={pagination.page}
+          pages={pagination.pages}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          loading={loading}
+        />
       </div>
 
       {showPaymentModal && (

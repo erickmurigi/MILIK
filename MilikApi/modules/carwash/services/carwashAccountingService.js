@@ -12,6 +12,7 @@ import CarWashStaffCommission from "../models/CarWashStaffCommission.js";
 import { postEntry, postReversal } from "../../../services/ledgerPostingService.js";
 import { aggregateChartOfAccountBalances } from "../../../services/chartAccountAggregationService.js";
 import { resolveAuditActorUserId } from "../../../utils/systemActor.js";
+import { findSystemAccountByCode } from "../../../services/chartOfAccountsService.js";
 import mongoose from "mongoose";
 
 // ─── Account templates ────────────────────────────────────────────────────────
@@ -159,7 +160,8 @@ export const reverseCarWashTopupLedger = async ({ businessId, topupId, reason, r
  * Never throws — logs on failure so the caller is never blocked.
  */
 // creditAmount — optional excess paid above the job price; split into liability instead of revenue
-export const postCarWashPaymentLedger = async ({ businessId, payment, cashbookAccountId, job, userId, creditAmount = 0 }) => {
+// taxAmount, jobPrice — optional VAT fields from the job; if provided, VAT is split out of revenue
+export const postCarWashPaymentLedger = async ({ businessId, payment, cashbookAccountId, job, userId, creditAmount = 0, taxAmount = 0, jobPrice = 0 }) => {
   if (!cashbookAccountId) return;
   const amount = round2(Number(payment.amount || 0));
   if (amount <= 0) return;
@@ -175,11 +177,23 @@ export const postCarWashPaymentLedger = async ({ businessId, payment, cashbookAc
     if (existingCount > 0) return;
 
     const credit = round2(Math.max(0, Number(creditAmount || 0)));
-    const revenueAmount = round2(amount - credit);
+    // Revenue-attributable portion (before VAT split)
+    const serviceAmount = round2(amount - credit);
+
+    // Inclusive VAT split: VAT is embedded in price — split proportionally per payment
+    const jobTax  = round2(Number(taxAmount  || 0));
+    const jobGross = round2(Number(jobPrice   || 0));
+    const vatFraction = jobTax > 0 && jobGross > 0 ? jobTax / jobGross : 0;
+    const vatForPayment = vatFraction > 0 ? round2(serviceAmount * vatFraction) : 0;
+    const revenueAmount = round2(serviceAmount - vatForPayment);
 
     const accountsToResolve = [resolveCarWashAccount(businessId, "4400")];
     if (credit > 0) accountsToResolve.push(resolveCarWashAccount(businessId, "2162"));
-    const [revenueAccount, creditLiabilityAccount] = await Promise.all(accountsToResolve);
+    if (vatForPayment > 0) accountsToResolve.push(findSystemAccountByCode(businessId, "2140").catch(() => null));
+    const [revenueAccount, creditLiabilityAccountOrVat, vatAccountOrUndef] = await Promise.all(accountsToResolve);
+    // Resolve correctly when credit > 0 and vatForPayment > 0
+    const creditLiabilityAccount = credit > 0 ? creditLiabilityAccountOrVat : null;
+    const vatAccount = vatForPayment > 0 ? (credit > 0 ? vatAccountOrUndef : creditLiabilityAccountOrVat) : null;
 
     const actorId = userId && mongoose.Types.ObjectId.isValid(String(userId))
       ? userId
@@ -204,10 +218,20 @@ export const postCarWashPaymentLedger = async ({ businessId, payment, cashbookAc
     await postEntry({ ...base, accountId: cashbookAccountId, amount, direction: "debit",
       notes: `CW payment received – Job #${job?.jobNumber || ""} (${payment.method || ""})` });
 
-    // Cr Revenue — earned portion only
+    // Cr Revenue — net of VAT
     if (revenueAmount > 0) {
       await postEntry({ ...base, accountId: revenueAccount._id, amount: revenueAmount, direction: "credit",
         notes: `CW service income – Job #${job?.jobNumber || ""}` });
+    }
+
+    // Cr VAT Payable (2140) — VAT portion collected
+    if (vatForPayment > 0 && vatAccount) {
+      await postEntry({ ...base, accountId: vatAccount._id, amount: vatForPayment, direction: "credit",
+        notes: `CW output VAT – Job #${job?.jobNumber || ""}` });
+    } else if (vatForPayment > 0 && !vatAccount) {
+      // VAT account not found — post all to revenue as fallback (no silent loss)
+      await postEntry({ ...base, accountId: revenueAccount._id, amount: vatForPayment, direction: "credit",
+        notes: `CW output VAT (no VAT acct) – Job #${job?.jobNumber || ""}` });
     }
 
     // Cr Customer Credit Liability — excess held for customer
@@ -217,6 +241,7 @@ export const postCarWashPaymentLedger = async ({ businessId, payment, cashbookAc
     }
 
     const touchedIds = [String(cashbookAccountId), String(revenueAccount._id)];
+    if (vatAccount) touchedIds.push(String(vatAccount._id));
     if (creditLiabilityAccount) touchedIds.push(String(creditLiabilityAccount._id));
     await aggregateChartOfAccountBalances(businessId, touchedIds);
   } catch (err) {
@@ -1163,6 +1188,32 @@ const cwExpenseCategoryCode = (category = "") => {
 
 export const resolveExpenseAccountForCategory = (businessId, category = "") =>
   resolveCarWashAccount(businessId, cwExpenseCategoryCode(category));
+
+// ─── Reverse a customer credit creation GL entry ─────────────────────────────
+// Called when a payment is deleted and its linked CarWashCustomerCredit must be voided.
+// Only applies to M-Pesa overpayment credits (GL type "carwash_customer_credit_created").
+// Manual overpayment credits are already covered by reverseCarWashPaymentLedger.
+export const reverseCarWashCustomerCreditCreationLedger = async ({ businessId, creditDocId, req = null }) => {
+  try {
+    const { default: FinancialLedgerEntry } = await import("../../../models/FinancialLedgerEntry.js");
+    const entries = await FinancialLedgerEntry.find({
+      business: new mongoose.Types.ObjectId(String(businessId)),
+      sourceTransactionType: "carwash_customer_credit_created",
+      sourceTransactionId: String(creditDocId),
+      status: { $ne: "reversed" },
+    }).lean();
+    if (!entries.length) return;
+    const actorId = await resolveAuditActorUserId({ req, businessId });
+    const touchedIds = new Set();
+    for (const entry of entries) {
+      await reverseCwEntry(entry, actorId, "Customer credit reversed — source payment deleted");
+      touchedIds.add(String(entry.accountId));
+    }
+    if (touchedIds.size) await aggregateChartOfAccountBalances(businessId, [...touchedIds]);
+  } catch (err) {
+    console.error("[CW Accounting] Customer credit GL reversal error creditDoc=%s: %s", creditDocId, err?.message || err);
+  }
+};
 
 // ─── Customer credit created (overpayment): Dr Cashbook / Cr Liability (2162) ──
 // Called when cash/M-Pesa overpayment has no prepaid wallet to absorb it.

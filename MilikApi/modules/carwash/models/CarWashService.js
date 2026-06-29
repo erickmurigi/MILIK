@@ -18,6 +18,8 @@ const carWashServiceSchema = new mongoose.Schema(
       price:       { type: Number, required: true, min: 0 },
       _id: false,
     }],
+    isTaxable: { type: Boolean, default: false },
+    taxRate:   { type: Number, min: 0, max: 100, default: 0 },
     active: { type: Boolean, default: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },

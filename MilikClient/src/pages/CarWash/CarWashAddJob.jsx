@@ -477,6 +477,15 @@ const CarWashAddJob = () => {
     () => serviceLines.reduce((sum, l) => sum + (Number(l.price) || 0), 0),
     [serviceLines]
   );
+
+  const totalTaxAmount = useMemo(() => {
+    return Math.round(serviceLines.reduce((sum, l) => {
+      const svc = services.find((s) => s._id === l.service);
+      if (!svc?.isTaxable || !svc?.taxRate) return sum;
+      const p = Number(l.price) || 0;
+      return sum + (p * Number(svc.taxRate) / (100 + Number(svc.taxRate)));
+    }, 0) * 100) / 100;
+  }, [serviceLines, services]);
   const discountNum = Math.max(0, Number(discountAmount) || 0);
 
   const { minPrice: discountMinPrice, maxPct: discountMaxPct } = discountSettings;
@@ -1090,15 +1099,24 @@ const CarWashAddJob = () => {
                 </div>
                 <div>
                   <label className={labelClass}>
-                    Phone
-                    <span className="ml-1 font-normal normal-case text-slate-400">(optional)</span>
+                    {isVoucherJob ? (
+                      <>Customer Phone <span className="text-red-500">*</span></>
+                    ) : (
+                      <>Phone <span className="ml-1 font-normal normal-case text-slate-400">(optional)</span></>
+                    )}
                   </label>
                   <input
-                    className={inputClass}
+                    className={`${inputClass} ${isVoucherJob ? "border-violet-400 focus:border-violet-600" : ""}`}
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    placeholder="Captured from M-Pesa on payment"
+                    placeholder={isVoucherJob ? "Customer's phone — SMS sent here" : "Captured from M-Pesa on payment"}
+                    required={isVoucherJob}
                   />
+                  {isVoucherJob && (
+                    <p className="mt-1 text-[10px] font-semibold text-violet-700">
+                      Payment confirmation &amp; loyalty SMS go to this number, not the car wash cashier.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -1214,6 +1232,12 @@ const CarWashAddJob = () => {
                     </div>
                   );
                 })}
+                {totalTaxAmount > 0 && (
+                  <div className="border-t border-slate-200 bg-blue-50 px-4 py-1.5 flex items-center justify-between">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wide text-blue-700">VAT Included</span>
+                    <span className="text-[11px] font-black text-blue-700">{formatMoney(totalTaxAmount)}</span>
+                  </div>
+                )}
                 <div className="border-t-2 border-slate-200 bg-[#EDF5F1] px-4 py-2 flex items-center justify-between">
                   <span className="text-xs font-extrabold uppercase tracking-wide text-slate-600">Total</span>
                   <span className="text-sm font-black text-[#0B3B2E]">{formatMoney(totalPrice)}</span>
@@ -1441,8 +1465,19 @@ const CarWashAddJob = () => {
                     );
                     })}
                   </tbody>
-                  <tfoot className="border-t-2 border-slate-200 bg-[#EDF5F1]">
-                    <tr>
+                  <tfoot>
+                    {totalTaxAmount > 0 && (
+                      <tr className="border-t border-slate-200 bg-blue-50">
+                        <td colSpan={jobType === "vehicle" ? 3 : 2} className="px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wide text-blue-700">
+                          VAT Included
+                        </td>
+                        <td className="px-3 py-1.5 text-right text-[11px] font-black text-blue-700">
+                          {formatMoney(totalTaxAmount)}
+                        </td>
+                        <td colSpan={2} />
+                      </tr>
+                    )}
+                    <tr className="border-t-2 border-slate-200 bg-[#EDF5F1]">
                       <td colSpan={jobType === "vehicle" ? 3 : 2} className="px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-slate-600">
                         Total
                       </td>

@@ -16,6 +16,7 @@ const SYSTEM_CHART_TEMPLATE = [
   { code: "2120", name: "Accrued Expenses", type: "liability", group: "liabilities", subGroup: "Current Liabilities", isSystem: true, isHeader: false, isPosting: true },
   { code: "2130", name: "Unallocated Receipts", type: "liability", group: "liabilities", subGroup: "Current Liabilities", isSystem: true, isHeader: false, isPosting: true },
   { code: "2140", name: "Tax Payables", type: "liability", group: "liabilities", subGroup: "Current Liabilities", isSystem: true, isHeader: false, isPosting: true },
+  { code: "2141", name: "Withholding Tax Payable", type: "liability", group: "liabilities", subGroup: "Current Liabilities", isSystem: true, isHeader: false, isPosting: true },
   { code: "2150", name: "Landlord Funds Held", type: "liability", group: "liabilities", subGroup: "Current Liabilities", isSystem: true, isHeader: false, isPosting: true },
   { code: "2160", name: "Car Wash Staff Commissions Payable", type: "liability", group: "liabilities", subGroup: "Car Wash Liabilities", isSystem: true, isHeader: false, isPosting: true },
   { code: "2161", name: "Car Wash Staff Savings Payable",     type: "liability", group: "liabilities", subGroup: "Car Wash Liabilities", isSystem: true, isHeader: false, isPosting: true },

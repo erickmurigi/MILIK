@@ -33,6 +33,7 @@ export const createServiceProvider = async (req, res, next) => {
     const name = String(req.body?.name || "").trim();
     if (!name) return res.status(400).json({ success: false, message: "Service provider name is required" });
 
+    const whtRate = Math.min(30, Math.max(0, Number(req.body?.whtRate || 0)));
     const doc = await ServiceProvider.create({
       business: businessId,
       providerCode: await generateProviderCode(businessId),
@@ -46,6 +47,9 @@ export const createServiceProvider = async (req, res, next) => {
       paybillNumber: req.body?.paybillNumber || "",
       bankName: req.body?.bankName || "",
       accountName: req.body?.accountName || "",
+      subjectToWht: Boolean(req.body?.subjectToWht) && whtRate > 0,
+      whtRate:      Boolean(req.body?.subjectToWht) && whtRate > 0 ? whtRate : 0,
+      whtCategory:  String(req.body?.whtCategory || "").trim(),
       isActive: req.body?.isActive !== false,
       notes: req.body?.notes || "",
     });
@@ -108,7 +112,7 @@ export const updateServiceProvider = async (req, res, next) => {
     const row = await ServiceProvider.findOne({ _id: req.params.id, business: businessId });
     if (!row) return res.status(404).json({ success: false, message: "Service provider not found" });
 
-    const allowed = ["name", "contactPerson", "email", "phone", "category", "kraPin", "accountNumber", "paybillNumber", "bankName", "accountName", "isActive", "notes"];
+    const allowed = ["name", "contactPerson", "email", "phone", "category", "kraPin", "accountNumber", "paybillNumber", "bankName", "accountName", "subjectToWht", "whtRate", "whtCategory", "isActive", "notes"];
     allowed.forEach((field) => {
       if (!Object.prototype.hasOwnProperty.call(req.body || {}, field)) return;
       if (field === "name") {

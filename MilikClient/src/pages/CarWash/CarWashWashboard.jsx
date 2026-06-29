@@ -116,7 +116,7 @@ const OutstandingCard = ({ job, onNavigate }) => {
   return (
     <div
       className={`flex items-center justify-between gap-3 border-l-4 px-3 py-2 text-xs cursor-pointer hover:bg-slate-50 ${isOld ? "border-red-400 bg-red-50" : "border-amber-400 bg-amber-50"}`}
-      onClick={() => onNavigate(job._id)}
+      onClick={() => onNavigate(job._id, job.plateNumber || job.itemDescription)}
     >
       <div className="flex-1 min-w-0">
         <div className="font-black text-slate-800 tracking-widest truncate">
@@ -292,7 +292,7 @@ const CarWashWashboard = () => {
                     <OutstandingCard
                       key={j._id}
                       job={j}
-                      onNavigate={(id) => navigate(`/carwash/jobs/${id}`)}
+                      onNavigate={(id, plate) => navigate(`/carwash/jobs?plate=${encodeURIComponent(plate || "")}`)}
                     />
                   ))}
                 </div>

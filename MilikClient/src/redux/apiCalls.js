@@ -2896,6 +2896,32 @@ export const getTenantPaidBalanceReport = async (params = {}, signal) => {
   const res = await adminRequests.get(`/financial-reports/tenant-paid-balance${query ? `?${query}` : ""}`, { timeout: 120_000, signal });
   return res.data;
 };
+export const getVatReturnSummary = async (params = {}) => {
+  const query = new URLSearchParams(
+    Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== "")
+  ).toString();
+  const res = await adminRequests.get(`/vat-remittance/summary${query ? `?${query}` : ""}`);
+  return res.data;
+};
+
+export const getVatRemittanceHistory = async (params = {}) => {
+  const query = new URLSearchParams(
+    Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== "")
+  ).toString();
+  const res = await adminRequests.get(`/vat-remittance${query ? `?${query}` : ""}`);
+  return res.data;
+};
+
+export const remitVat = async (data) => {
+  const res = await adminRequests.post("/vat-remittance/remit", data);
+  return res.data;
+};
+
+export const voidVatRemittance = async (id, data) => {
+  const res = await adminRequests.patch(`/vat-remittance/${id}/void`, data);
+  return res.data;
+};
+
 export const getMRITaxSummaryReport = async (params = {}) => {
   const search = new URLSearchParams();
 

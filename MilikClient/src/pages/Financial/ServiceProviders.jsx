@@ -24,6 +24,9 @@ const blankForm = {
   paybillNumber: "",
   bankName: "",
   accountName: "",
+  subjectToWht: false,
+  whtRate: "",
+  whtCategory: "",
   isActive: true,
   notes: "",
 };
@@ -166,6 +169,9 @@ const ServiceProviders = () => {
       paybillNumber: row.paybillNumber || "",
       bankName: row.bankName || "",
       accountName: row.accountName || "",
+      subjectToWht: Boolean(row.subjectToWht),
+      whtRate:      row.whtRate ? String(row.whtRate) : "",
+      whtCategory:  row.whtCategory || "",
       isActive: row.isActive !== false,
       notes: row.notes || "",
     });
@@ -344,6 +350,51 @@ const ServiceProviders = () => {
                 />
                 <span className="text-xs font-semibold text-slate-700">Active provider</span>
               </label>
+              <div className="md:col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
+                <p className="text-xs font-black uppercase tracking-wide text-slate-700">Withholding Tax (WHT)</p>
+                <label className="inline-flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={form.subjectToWht}
+                    onChange={(e) => setForm((prev) => ({ ...prev, subjectToWht: e.target.checked, whtRate: e.target.checked ? (prev.whtRate || "5") : "" }))}
+                    className="h-4 w-4 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
+                  />
+                  <span className="text-xs font-semibold text-slate-700">Subject to WHT deduction on payments</span>
+                </label>
+                {form.subjectToWht && (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <label className="block">
+                      <span className="mb-0.5 block text-xs font-semibold text-slate-700">WHT Rate (%)</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="30"
+                        step="0.01"
+                        value={form.whtRate}
+                        onChange={(e) => setForm((prev) => ({ ...prev, whtRate: e.target.value }))}
+                        placeholder="e.g. 5"
+                        className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E]"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-0.5 block text-xs font-semibold text-slate-700">WHT Category</span>
+                      <select
+                        value={form.whtCategory}
+                        onChange={(e) => setForm((prev) => ({ ...prev, whtCategory: e.target.value }))}
+                        className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E]"
+                      >
+                        <option value="">— Select category —</option>
+                        <option value="professional_services">Professional Services (5%)</option>
+                        <option value="management_fees">Management Fees (5%)</option>
+                        <option value="rent">Rent (5%)</option>
+                        <option value="contractors">Contractors (3%)</option>
+                        <option value="dividends">Dividends (5%)</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </label>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="sticky bottom-0 z-20 flex shrink-0 items-center justify-end gap-3 border-t border-slate-200 bg-white/95 px-6 py-4 backdrop-blur-sm">
               <button

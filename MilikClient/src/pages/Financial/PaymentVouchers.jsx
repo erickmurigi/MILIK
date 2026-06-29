@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import AppSelect from "../../components/common/AppSelect";
+import { adminRequests } from "../../utils/requestMethods";
 import useDebounce from "../../hooks/useDebounce";
 import {
   FaCheck,
   FaEdit,
   FaFileInvoiceDollar,
+  FaFilePdf,
   FaFilter,
   FaPlus,
   FaPrint,
@@ -28,6 +30,7 @@ import {
   deletePaymentVoucher,
   getChartOfAccounts,
   getPaymentVouchers,
+  getServiceProviders,
   updatePaymentVoucher,
   updatePaymentVoucherStatus,
 } from "../../redux/apiCalls";
@@ -67,6 +70,8 @@ const blankForm = {
   debitAccountId: "",
   settlementAccountId: "",
   amount: "",
+  whtAmount: "",
+  serviceProviderId: "",
   dueDate: new Date().toISOString().split("T")[0],
   narration: "",
   status: "draft",
@@ -121,6 +126,7 @@ const PaymentVouchers = () => {
   const [liabilityAccounts, setLiabilityAccounts] = useState([]);
   const [debitAccounts, setDebitAccounts] = useState([]);
   const [settlementAccounts, setSettlementAccounts] = useState([]);
+  const [serviceProvidersList, setServiceProvidersList] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [currentPage, setCurrentPage] = useState(1);
@@ -141,6 +147,13 @@ const PaymentVouchers = () => {
   const selectedLiabilityAcc  = useMemo(() => liabilityAccounts.find((a) => String(a._id) === form.liabilityAccountId),  [liabilityAccounts,  form.liabilityAccountId]);
   const selectedDebitAcc      = useMemo(() => debitAccounts.find((a)     => String(a._id) === form.debitAccountId),      [debitAccounts,      form.debitAccountId]);
   const selectedSettlementAcc = useMemo(() => settlementAccounts.find((a) => String(a._id) === form.settlementAccountId), [settlementAccounts, form.settlementAccountId]);
+  const selectedServiceProvider = useMemo(() => serviceProvidersList.find((sp) => String(sp._id) === form.serviceProviderId), [serviceProvidersList, form.serviceProviderId]);
+  const autoWhtAmount = useMemo(() => {
+    if (!selectedServiceProvider?.subjectToWht || !selectedServiceProvider?.whtRate) return 0;
+    const gross = Number(form.amount || 0);
+    if (!gross) return 0;
+    return Math.round(gross * Number(selectedServiceProvider.whtRate) / 100 * 100) / 100;
+  }, [selectedServiceProvider, form.amount]);
 
   const normalizeVoucher = (voucher) => ({
     ...voucher,
@@ -155,6 +168,8 @@ const PaymentVouchers = () => {
     settlementAccountName: voucher?.settlementAccount?.name || voucher?.settlementAccountName || "N/A",
     sourceRequisitionId: voucher?.sourceRequisition?._id || voucher?.sourceRequisition || voucher?.sourceRequisitionId || "",
     sourceRequisitionNo: voucher?.sourceRequisition?.requisitionNo || voucher?.sourceRequisition?.referenceNo || voucher?.sourceRequisitionNo || "",
+    serviceProviderId: voucher?.serviceProvider?._id || voucher?.serviceProvider || voucher?.serviceProviderId || "",
+    whtAmount: voucher?.whtAmount != null ? String(voucher.whtAmount) : "",
   });
 
   useEffect(() => {
@@ -187,7 +202,10 @@ const PaymentVouchers = () => {
     const loadAccounts = async () => {
       if (!currentCompany?._id) return;
       try {
-        const rows = await getChartOfAccounts({ business: currentCompany._id });
+        const [rows, spData] = await Promise.all([
+          getChartOfAccounts({ business: currentCompany._id }),
+          getServiceProviders({ business: currentCompany._id, active: "true", limit: 200 }).catch(() => null),
+        ]);
         const postingAccounts = Array.isArray(rows) ? rows.filter((row) => row?.isPosting !== false) : [];
         setLiabilityAccounts(postingAccounts.filter((row) => String(row?.type || "").toLowerCase() === "liability"));
         setDebitAccounts(
@@ -198,6 +216,8 @@ const PaymentVouchers = () => {
           )
         );
         setSettlementAccounts(postingAccounts.filter((row) => isCashbookLikeAccount(row)));
+        const spRows = Array.isArray(spData?.data) ? spData.data : Array.isArray(spData) ? spData : [];
+        setServiceProvidersList(spRows);
       } catch (error) {
         toast.error(error?.response?.data?.message || "Failed to load chart of accounts");
       }
@@ -290,6 +310,8 @@ const PaymentVouchers = () => {
       debitAccountId: voucher.debitAccountId || "",
       settlementAccountId: voucher.settlementAccountId || "",
       amount: voucher.amount || "",
+      whtAmount: voucher.whtAmount != null ? String(voucher.whtAmount) : "",
+      serviceProviderId: voucher.serviceProviderId || "",
       dueDate: voucher.dueDate ? new Date(voucher.dueDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
       narration: voucher.narration || "",
       status: voucher.status || "draft",
@@ -325,6 +347,8 @@ const PaymentVouchers = () => {
       debitAccount: form.debitAccountId || undefined,
       settlementAccount: form.settlementAccountId || undefined,
       amount: Number(form.amount),
+      whtAmount: Number(form.whtAmount || 0),
+      serviceProvider: form.serviceProviderId || undefined,
       dueDate: form.dueDate,
       narration: form.narration,
       status: form.status,
@@ -534,6 +558,25 @@ const PaymentVouchers = () => {
     setTimeout(() => { win.focus(); win.print(); }, 450);
   };
 
+  const downloadVoucherPdf = async (voucher) => {
+    try {
+      const response = await adminRequests.get(`/payment-vouchers/${voucher._id}/pdf`, {
+        params: { business: currentCompany?._id, company: currentCompany?._id },
+        responseType: "arraybuffer",
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: "application/pdf" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `voucher-${voucher.voucherNo || voucher._id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Failed to download PDF");
+    }
+  };
+
   const toggleSelect = (id) => setSelectedIds((prev) => prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]);
   const toggleSelectAll = () => setSelectedIds((prev) => prev.length === filtered.length ? [] : filtered.map((voucher) => voucher._id));
 
@@ -669,6 +712,7 @@ const PaymentVouchers = () => {
                         <td className="px-3 py-1 text-right">
                           <div className="inline-flex flex-wrap justify-end gap-2">
                             <button onClick={() => handlePrintVoucher(voucher)} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50"><FaPrint /> Print</button>
+                            <button onClick={() => downloadVoucherPdf(voucher)} className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100"><FaFilePdf /> PDF</button>
                             {voucher.status === "draft" && canUpdateVoucher && <button onClick={() => openEdit(voucher)} className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700"><FaEdit /> Edit</button>}
                             {voucher.status === "draft" && canApproveVoucher && <button onClick={() => updateStatus(voucher, "approved")} disabled={!!rowActionKey} className="inline-flex items-center gap-1 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-black text-indigo-700 disabled:opacity-60"><FaCheck /> {isBusy("approved") ? "Working..." : "Approve"}</button>}
                             {(voucher.status === "draft" || voucher.status === "approved") && canUpdateVoucher && <button onClick={() => updateStatus(voucher, "paid")} disabled={!!rowActionKey} className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 disabled:opacity-60"><FaCheck /> {isBusy("paid") ? "Working..." : "Mark Paid"}</button>}
@@ -939,6 +983,31 @@ const PaymentVouchers = () => {
                   <h2 className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Amount & Notes</h2>
                 </div>
                 <div className="space-y-4">
+                  {/* Service Provider */}
+                  {serviceProvidersList.length > 0 && (
+                    <label className="block">
+                      <span className="text-xs font-bold text-slate-600">Service Provider (optional)</span>
+                      <select
+                        value={form.serviceProviderId}
+                        onChange={(e) => {
+                          const spId = e.target.value;
+                          const sp = serviceProvidersList.find((s) => String(s._id) === spId);
+                          const newWht = sp?.subjectToWht && sp?.whtRate && Number(form.amount || 0) > 0
+                            ? String(Math.round(Number(form.amount) * sp.whtRate / 100 * 100) / 100)
+                            : "";
+                          setForm((prev) => ({ ...prev, serviceProviderId: spId, whtAmount: newWht }));
+                        }}
+                        className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E]"
+                      >
+                        <option value="">— None —</option>
+                        {serviceProvidersList.map((sp) => (
+                          <option key={sp._id} value={sp._id}>
+                            {sp.name}{sp.subjectToWht ? ` (WHT ${sp.whtRate}%)` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                   <label className="block">
                     <span className="text-xs font-bold text-slate-600">Amount (KES) *</span>
                     <div className="relative mt-1">
@@ -948,12 +1017,43 @@ const PaymentVouchers = () => {
                         min="0"
                         step="0.01"
                         value={form.amount}
-                        onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
+                        onChange={(e) => {
+                          const gross = Number(e.target.value || 0);
+                          const sp = selectedServiceProvider;
+                          const newWht = sp?.subjectToWht && sp?.whtRate && gross > 0
+                            ? String(Math.round(gross * sp.whtRate / 100 * 100) / 100)
+                            : form.whtAmount;
+                          setForm((prev) => ({ ...prev, amount: e.target.value, whtAmount: newWht }));
+                        }}
                         placeholder="0.00"
                         className="w-full rounded-xl border-2 border-slate-200 pl-14 pr-4 py-3.5 text-2xl font-black text-slate-900 placeholder:text-slate-200 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10"
                       />
                     </div>
                   </label>
+                  {/* WHT */}
+                  {(selectedServiceProvider?.subjectToWht || Number(form.whtAmount || 0) > 0) && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
+                      <p className="text-[10px] font-black uppercase tracking-wide text-amber-700">Withholding Tax Deduction</p>
+                      <label className="block">
+                        <span className="text-xs font-semibold text-amber-800">WHT Amount (KES)</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={form.whtAmount}
+                          onChange={(e) => setForm((prev) => ({ ...prev, whtAmount: e.target.value }))}
+                          placeholder={autoWhtAmount > 0 ? String(autoWhtAmount) : "0.00"}
+                          className="mt-1 w-full rounded border border-amber-200 bg-white px-3 py-1.5 text-sm font-bold text-amber-900 outline-none transition focus:border-amber-500"
+                        />
+                      </label>
+                      {Number(form.amount || 0) > 0 && Number(form.whtAmount || 0) > 0 && (
+                        <div className="flex justify-between text-[10px] font-semibold text-amber-700">
+                          <span>Gross: KES {Number(form.amount).toLocaleString("en-KE", { minimumFractionDigits: 2 })}</span>
+                          <span>Net paid: KES {(Number(form.amount) - Number(form.whtAmount)).toLocaleString("en-KE", { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <label className="block">
                     <span className="text-xs font-bold text-slate-600">Narration / Description</span>
                     <textarea
@@ -1034,8 +1134,24 @@ const PaymentVouchers = () => {
                         <span className="mt-0.5 shrink-0 rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-black text-emerald-700">CR</span>
                         <span className="min-w-0 flex-1 text-[10px] font-semibold text-slate-700 break-words">
                           {selectedSettlementAcc.code} – {selectedSettlementAcc.name}
+                          {Number(form.whtAmount || 0) > 0 && (
+                            <span className="block text-[9px] text-slate-400 font-normal">
+                              Net: KES {(Number(form.amount || 0) - Number(form.whtAmount)).toLocaleString("en-KE", { minimumFractionDigits: 2 })}
+                            </span>
+                          )}
                         </span>
                       </div>
+                      {Number(form.whtAmount || 0) > 0 && (
+                        <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-100 px-2.5 py-2">
+                          <span className="mt-0.5 shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-black text-amber-700">CR</span>
+                          <span className="min-w-0 flex-1 text-[10px] font-semibold text-amber-800 break-words">
+                            2141 – WHT Payable
+                            <span className="block text-[9px] text-amber-600 font-normal">
+                              KES {Number(form.whtAmount).toLocaleString("en-KE", { minimumFractionDigits: 2 })}
+                            </span>
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </>
                 )}

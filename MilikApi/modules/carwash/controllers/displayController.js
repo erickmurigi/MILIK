@@ -77,8 +77,12 @@ export const getQueueBgImage = async (req, res, next) => {
 
     const stored = company.carwashSettings.queueBgImage.trim();
     const relative = stored.replace(/^\/uploads\//, "");
-    const filePath = path.join(UPLOADS_ROOT, relative);
+    const filePath = path.resolve(UPLOADS_ROOT, relative);
 
+    // Path traversal guard — resolved path must stay inside uploads root
+    if (!filePath.startsWith(UPLOADS_ROOT + path.sep) && filePath !== UPLOADS_ROOT) {
+      return res.status(400).end();
+    }
     if (!fs.existsSync(filePath)) return res.status(404).end();
 
     res.setHeader("Cache-Control", "public, max-age=86400");

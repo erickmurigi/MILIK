@@ -46,6 +46,7 @@ const carWashJobSchema = new mongoose.Schema(
     serviceLines: { type: [serviceLineSchema], default: [] },
 
     price:          { type: Number, required: true, min: 0, default: 0 },
+    taxAmount:      { type: Number, min: 0, default: 0 },
     discountAmount: { type: Number, min: 0, default: 0 },
     status: { type: String, enum: JOB_STATUSES, default: "waiting", index: true },
 

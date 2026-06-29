@@ -325,6 +325,18 @@ export const recordAccountPayment = async (req, res, next) => {
       cashbookAccount = cb._id;
     }
 
+    // Wallet accounts (prepaid / voucher): revenue was already recognised at top-up time.
+    // Force no cashbook (prevents double GL) and deduct from accountCredit balance.
+    const isWalletAccount = ["prepaid", "voucher"].includes(account.accountType);
+    if (isWalletAccount) {
+      cashbookAccount = null;
+      const walletBalance = round2(account.accountCredit || 0);
+      if (amount > walletBalance + 0.009) {
+        return next(createError(400, `Insufficient wallet balance. Available: KES ${walletBalance.toLocaleString()}`));
+      }
+    }
+    const effectiveMethod = isWalletAccount ? "prepaid" : method;
+
     // ── FIFO allocation ──────────────────────────────────────────────────────
     // Link any plate-matched jobs that are missing the creditAccount ref — this
     // prevents a permanent phantom debt where the balance includes jobs that can
@@ -375,10 +387,10 @@ export const recordAccountPayment = async (req, res, next) => {
         branch: job.branch || account.branch || null,
         job: job._id,
         amount: apply,
-        method,
+        method: effectiveMethod,
         cashbookAccount,
-        reference,
-        receivedFromPhone,
+        reference: isWalletAccount ? "" : reference,
+        receivedFromPhone: isWalletAccount ? null : receivedFromPhone,
         paymentDate,
         receivedBy: userId,
         createdBy: userId,
@@ -388,7 +400,7 @@ export const recordAccountPayment = async (req, res, next) => {
       // Post Dr Cashbook / Cr 4400 for each job settled — same entry as a direct payment.
       // Fire-and-forget so a ledger error never blocks the payment response.
       if (cashbookAccount) {
-        postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbookAccount, job: job.toObject(), userId })
+        postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbookAccount, job: job.toObject(), userId, taxAmount: Number(job.taxAmount || 0), jobPrice: Number(job.price || 0) })
           .catch((e) => console.error("[CW Account] Ledger posting failed job=%s: %s", job.jobNumber, e?.message));
       }
 
@@ -408,12 +420,17 @@ export const recordAccountPayment = async (req, res, next) => {
       allocations.push({ jobId: job._id, jobNumber: job.jobNumber, plateNumber: job.plateNumber, applied: apply });
     }
 
-    // Apply excess as account credit
     const excessCredit = round2(remaining);
     const newBalance = await computeAccountBalance(business, account._id);
     account.currentBalance = newBalance;
-    account.accountCredit = round2((account.accountCredit || 0) + excessCredit);
     account.updatedBy = userId;
+    if (isWalletAccount) {
+      // Deduct only what was actually allocated — unallocated remainder stays in the wallet
+      const allocated = round2(amount - remaining);
+      account.accountCredit = round2((account.accountCredit || 0) - allocated);
+    } else {
+      account.accountCredit = round2((account.accountCredit || 0) + excessCredit);
+    }
     await account.save();
 
     // Update statement status if any statement covers these jobs
