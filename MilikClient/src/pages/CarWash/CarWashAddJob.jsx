@@ -525,7 +525,7 @@ const CarWashAddJob = () => {
     const load = async () => {
       try {
         const [svcPayload, staffPayload, branchData, settingsData, branchesPayload, voucherPayload] = await Promise.all([
-          carWashApi.listServices({ active: true }),
+          carWashApi.listServices({ active: true, limit: 500 }),
           carWashApi.listStaff({ active: true }),
           carWashApi.getActiveBranch().catch(() => null),
           carWashApi.getCarWashSettings().catch(() => null),

@@ -94,6 +94,9 @@ export const selectAllUnits = createSelector(
   (units) => (Array.isArray(units) ? units : EMPTY_ARRAY)
 );
 
+export const selectUnitPagination = (state) =>
+  state.unit?.pagination ?? { total: 0, page: 1, pages: 1, limit: 100 };
+
 export const selectVacantUnits = createSelector(
   selectAllUnits,
   (units) =>

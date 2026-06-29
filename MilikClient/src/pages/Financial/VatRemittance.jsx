@@ -7,7 +7,8 @@ import {
   FaReceipt, FaRedoAlt, FaTimes,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
-import { selectCurrentCompany } from "../../redux/selectors";
+import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
+import { hasCompanyPermission } from "../../utils/permissions";
 import {
   getVatReturnSummary,
   getVatRemittanceHistory,
@@ -127,7 +128,7 @@ const Field = ({ label, required, children }) => (
 );
 
 // ── RemittanceTable ───────────────────────────────────────────────────────────
-const RemittanceTable = ({ rows, showPeriod, voidingId, onVoid }) => {
+const RemittanceTable = ({ rows, showPeriod, voidingId, onVoid, canVoid }) => {
   const colSpan = showPeriod ? 6 : 5;
   if (!rows.length) {
     return (
@@ -164,7 +165,7 @@ const RemittanceTable = ({ rows, showPeriod, voidingId, onVoid }) => {
               <td className="px-2 py-1.5 text-right font-extrabold text-slate-800">{fmtKES(r.amountRemitted)}</td>
               <td className="px-2 py-1.5"><StatusBadge voided={isVoided} /></td>
               <td className="px-2 py-1.5 text-right">
-                {!isVoided && (
+                {!isVoided && canVoid && (
                   <button
                     type="button"
                     onClick={() => onVoid(r)}
@@ -187,6 +188,10 @@ const RemittanceTable = ({ rows, showPeriod, voidingId, onVoid }) => {
 // ── main component ────────────────────────────────────────────────────────────
 export default function VatRemittance() {
   const company     = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
+
+  const canProcess = hasCompanyPermission(currentUser, company, "financialReports", "process", "accounts");
+  const canReverse = hasCompanyPermission(currentUser, company, "financialReports", "reverse", "accounts");
   const { confirm } = useConfirm();
 
   const now = new Date();
@@ -377,7 +382,9 @@ export default function VatRemittance() {
                 <button
                   type="button"
                   onClick={openForm}
-                  className="flex w-full items-center justify-center gap-2 border border-slate-200 bg-white px-4 py-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-600 shadow-sm hover:border-[#0B3B2E] hover:text-[#0B3B2E]"
+                  disabled={!canProcess}
+                  title={!canProcess ? "Full Access required" : undefined}
+                  className="flex w-full items-center justify-center gap-2 border border-slate-200 bg-white px-4 py-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-600 shadow-sm hover:border-[#0B3B2E] hover:text-[#0B3B2E] disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <FaPlus size={10} /> Record Remittance
                 </button>
@@ -433,6 +440,7 @@ export default function VatRemittance() {
                   showPeriod={false}
                   voidingId={voidingId}
                   onVoid={handleVoid}
+                  canVoid={canReverse}
                 />
               </div>
             )}
@@ -473,7 +481,8 @@ export default function VatRemittance() {
               <button
                 type="submit"
                 form="vat-remit-form"
-                disabled={submitting}
+                disabled={submitting || !canProcess}
+                title={!canProcess ? "Full Access required" : undefined}
                 className="px-5 py-1.5 text-xs font-extrabold uppercase tracking-wide text-white disabled:opacity-50"
                 style={{ background: GRN }}
               >

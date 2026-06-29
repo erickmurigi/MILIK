@@ -298,7 +298,9 @@ const ProcessedStatementSchema = new mongoose.Schema(
 
 ProcessedStatementSchema.index({ business: 1, landlord: 1, property: 1, periodStart: 1 });
 ProcessedStatementSchema.index({ business: 1, landlord: 1, property: 1, cutoffAt: -1 });
+ProcessedStatementSchema.index({ business: 1, landlord: 1, status: 1 });
 ProcessedStatementSchema.index({ business: 1, status: 1 });
+ProcessedStatementSchema.index({ business: 1, isNegativeStatement: 1, status: 1 });
 ProcessedStatementSchema.index({ business: 1, closedAt: -1 });
 ProcessedStatementSchema.index(
   { business: 1, sourceStatement: 1 },

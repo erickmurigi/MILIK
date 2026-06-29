@@ -510,7 +510,7 @@ export const createUnit = async (req, res, next) => {
 // GET ALL UNITS
 export const getUnits = async (req, res, next) => {
   try {
-    const { property, status, page = 1, limit = 5000 } = req.query;
+    const { property, status, unitType, unitNumber, tenantName, page = 1, limit = 500 } = req.query;
     const businessId = resolveBusinessId(req);
 
     if (!businessId) {
@@ -538,9 +538,32 @@ export const getUnits = async (req, res, next) => {
     }
 
     if (status) filter.status = status;
+    if (unitType) filter.unitType = unitType;
+    if (unitNumber) filter.unitNumber = { $regex: unitNumber, $options: "i" };
+
+    // tenant name search: resolve matching unit IDs first
+    if (tenantName) {
+      const tenantRegex = { $regex: tenantName, $options: "i" };
+      const matchingTenants = await Tenant.find({
+        business: businessId,
+        name: tenantRegex,
+        status: { $in: OCCUPYING_TENANT_STATUSES },
+      })
+        .select("unit additionalUnits")
+        .lean();
+
+      const unitIds = new Set();
+      for (const t of matchingTenants) {
+        if (t.unit) unitIds.add(String(t.unit));
+        if (Array.isArray(t.additionalUnits)) {
+          t.additionalUnits.forEach((u) => u && unitIds.add(String(u)));
+        }
+      }
+      filter._id = { $in: [...unitIds] };
+    }
 
     const pageNum = Math.max(parseInt(page, 10) || 1, 1);
-    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 5000, 1), 5000);
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 500, 1), 5000);
 
     const [units, total] = await Promise.all([
       Unit.find(filter)

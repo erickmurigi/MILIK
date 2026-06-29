@@ -45,7 +45,7 @@ const CarWashCommissionRules = () => {
 
   const { data: servicesRaw } = useQuery({
     queryKey: ["cw-services-ref"],
-    queryFn: () => carWashApi.listServices({ active: true }),
+    queryFn: () => carWashApi.listServices({ active: true, limit: 500 }),
     staleTime: 5 * 60_000,
     select: (data) => normalizeListPayload(data, "services"),
   });

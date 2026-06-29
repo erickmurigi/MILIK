@@ -7,7 +7,8 @@ import {
   FaReceipt, FaRedoAlt, FaTimes,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
-import { selectCurrentCompany } from "../../redux/selectors";
+import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
+import { hasCompanyPermission } from "../../utils/permissions";
 import {
   getWhtReturnSummary,
   getWhtRemittanceHistory,
@@ -112,7 +113,7 @@ const Field = ({ label, required, children }) => (
   </div>
 );
 
-const RemittanceTable = ({ rows, showPeriod, voidingId, onVoid }) => {
+const RemittanceTable = ({ rows, showPeriod, voidingId, onVoid, canVoid }) => {
   const colSpan = showPeriod ? 6 : 5;
   if (!rows.length) {
     return <table className="w-full text-xs"><tbody><EmptyRows colSpan={colSpan} text="No WHT remittances recorded" /></tbody></table>;
@@ -144,7 +145,7 @@ const RemittanceTable = ({ rows, showPeriod, voidingId, onVoid }) => {
               <td className="px-2 py-1.5 text-right font-extrabold text-slate-800">{fmtKES(r.amountRemitted)}</td>
               <td className="px-2 py-1.5"><StatusBadge voided={isVoided} /></td>
               <td className="px-2 py-1.5 text-right">
-                {!isVoided && (
+                {!isVoided && canVoid && (
                   <button type="button" onClick={() => onVoid(r)} disabled={voidingId === r._id}
                     className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wide text-slate-400 hover:text-red-600 disabled:opacity-40">
                     <FaBan size={9} />{voidingId === r._id ? "Voiding…" : "Void"}
@@ -161,7 +162,11 @@ const RemittanceTable = ({ rows, showPeriod, voidingId, onVoid }) => {
 
 export default function WhtRemittance() {
   const company     = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
   const { confirm } = useConfirm();
+
+  const canProcess = hasCompanyPermission(currentUser, company, "financialReports", "process", "accounts");
+  const canReverse = hasCompanyPermission(currentUser, company, "financialReports", "reverse", "accounts");
 
   const now = new Date();
   const [year,  setYear]  = useState(now.getFullYear());
@@ -344,8 +349,9 @@ export default function WhtRemittance() {
                 iconBg={bd > 0 ? "#DC2626" : "#059669"}
               />
               <div className="flex">
-                <button type="button" onClick={openForm}
-                  className="flex w-full items-center justify-center gap-2 border border-slate-200 bg-white px-4 py-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-600 shadow-sm hover:border-[#0B3B2E] hover:text-[#0B3B2E]">
+                <button type="button" onClick={openForm} disabled={!canProcess}
+                  title={!canProcess ? "Full Access required" : undefined}
+                  className="flex w-full items-center justify-center gap-2 border border-slate-200 bg-white px-4 py-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-600 shadow-sm hover:border-[#0B3B2E] hover:text-[#0B3B2E] disabled:opacity-40 disabled:cursor-not-allowed">
                   <FaPlus size={10} /> Record Remittance
                 </button>
               </div>
@@ -421,7 +427,7 @@ export default function WhtRemittance() {
             {periodRemit.length > 0 && (
               <div className="mb-4 overflow-x-auto border border-slate-200 bg-white shadow-sm">
                 <SectionHeader title={`Remittances — ${periodLabel}`} />
-                <RemittanceTable rows={periodRemit} showPeriod={false} voidingId={voidingId} onVoid={handleVoid} />
+                <RemittanceTable rows={periodRemit} showPeriod={false} voidingId={voidingId} onVoid={handleVoid} canVoid={canReverse} />
               </div>
             )}
           </>
@@ -433,7 +439,7 @@ export default function WhtRemittance() {
           {loading ? (
             <div className="py-8 text-center text-xs text-slate-400 animate-pulse">Loading…</div>
           ) : (
-            <RemittanceTable rows={history} showPeriod voidingId={voidingId} onVoid={handleVoid} />
+            <RemittanceTable rows={history} showPeriod voidingId={voidingId} onVoid={handleVoid} canVoid={canReverse} />
           )}
         </div>
       </div>
@@ -450,7 +456,8 @@ export default function WhtRemittance() {
                 className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-extrabold uppercase tracking-wide text-slate-600 hover:bg-slate-50">
                 Cancel
               </button>
-              <button type="submit" form="wht-remit-form" disabled={submitting}
+              <button type="submit" form="wht-remit-form" disabled={submitting || !canProcess}
+                title={!canProcess ? "Full Access required" : undefined}
                 className="px-5 py-1.5 text-xs font-extrabold uppercase tracking-wide text-white disabled:opacity-50"
                 style={{ background: GRN }}>
                 {submitting ? "Recording…" : "Record Remittance"}

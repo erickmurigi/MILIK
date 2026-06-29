@@ -631,6 +631,8 @@ export const getLandlords = (query = {}) => async (dispatch, getState) => {
 
     if (query.search) params.append('search', query.search);
     if (query.status) params.append('status', query.status);
+    if (query.portal) params.append('portal', query.portal);
+    if (query.location) params.append('location', query.location);
     if (query.page) params.append('page', query.page);
     if (query.limit) params.append('limit', query.limit);
 

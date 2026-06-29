@@ -6,7 +6,8 @@ import {
   FaHistory, FaInfoCircle, FaShieldAlt, FaSyncAlt, FaTools, FaWrench,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
-import { selectCurrentCompany } from "../../redux/selectors";
+import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
+import { hasCompanyPermission } from "../../utils/permissions";
 import {
   getChartOfAccounts,
   getGLHealthHistory,
@@ -180,8 +181,12 @@ function BalanceGroupModal({ group, accounts, businessId, healthRunId, onClose, 
 // ─── Main Component ────────────────────────────────────────────────────────────
 export default function GLIntegrityReport() {
   const company      = useSelector(selectCurrentCompany);
+  const currentUser  = useSelector(selectCurrentUser);
   const businessId   = company?._id;
   const { confirm }  = useConfirm();
+
+  // Repair actions are write operations — require Full Access on accounts module
+  const canRepair = hasCompanyPermission(currentUser, company, "financialReports", "process", "accounts");
 
   const [activeTab,  setActiveTab]  = useState("check");
   const [loading,    setLoading]    = useState(false);
@@ -379,7 +384,7 @@ export default function GLIntegrityReport() {
                             {issues.length === 0 && "No issues found"}
                           </div>
                         </div>
-                        {issues.length > 0 && (
+                        {issues.length > 0 && canRepair && (
                           <button
                             onClick={() => setActiveTab("repair")}
                             className="ml-auto flex h-7 items-center gap-1.5 border border-current px-3 text-[10px] font-bold"
@@ -534,6 +539,16 @@ export default function GLIntegrityReport() {
               ) : (
                 <div className="space-y-3">
 
+                  {/* Read-only notice for view-only users */}
+                  {!canRepair && (
+                    <div className="flex items-center gap-2 border border-amber-200 bg-amber-50 px-4 py-2.5">
+                      <FaInfoCircle size={11} className="text-amber-500 shrink-0" />
+                      <span className="text-[10px] text-amber-700">
+                        You have view-only access. Contact your administrator to perform repairs.
+                      </span>
+                    </div>
+                  )}
+
                   {/* ── Safe Maintenance ── */}
                   <div className="border border-slate-200 bg-white shadow-sm overflow-hidden">
                     <div className="border-b border-slate-100 px-4 py-2.5" style={{ borderLeftWidth: 3, borderLeftColor: GRN }}>
@@ -554,8 +569,9 @@ export default function GLIntegrityReport() {
                         </div>
                         <button
                           onClick={doRecompute}
-                          disabled={repairing.has("recompute")}
-                          className="shrink-0 flex h-7 items-center gap-1.5 border border-slate-200 px-3 text-[10px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                          disabled={!canRepair || repairing.has("recompute")}
+                          title={!canRepair ? "Full Access required" : undefined}
+                          className="shrink-0 flex h-7 items-center gap-1.5 border border-slate-200 px-3 text-[10px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                           {repairing.has("recompute") ? <><FaSyncAlt size={8} className="animate-spin" /> Running…</> : "Recompute"}
                         </button>
@@ -579,8 +595,9 @@ export default function GLIntegrityReport() {
                         </div>
                         <button
                           onClick={doRepostInvoices}
-                          disabled={repairing.has("invoices")}
-                          className="shrink-0 flex h-7 items-center gap-1.5 border border-slate-200 px-3 text-[10px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                          disabled={!canRepair || repairing.has("invoices")}
+                          title={!canRepair ? "Full Access required" : undefined}
+                          className="shrink-0 flex h-7 items-center gap-1.5 border border-slate-200 px-3 text-[10px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                           {repairing.has("invoices") ? <><FaSyncAlt size={8} className="animate-spin" /> Running…</> : "Repost"}
                         </button>
@@ -614,12 +631,16 @@ export default function GLIntegrityReport() {
                                 {" · "}{g.difference > 0 ? "missing credit leg" : "missing debit leg"}
                               </div>
                             </div>
-                            <button
-                              onClick={() => setGroupModal(g)}
-                              className="shrink-0 flex h-7 items-center gap-1.5 border border-red-200 bg-red-50 px-3 text-[10px] font-bold text-red-700 hover:bg-red-100"
-                            >
-                              <FaWrench size={8} /> Fix
-                            </button>
+                            {canRepair ? (
+                              <button
+                                onClick={() => setGroupModal(g)}
+                                className="shrink-0 flex h-7 items-center gap-1.5 border border-red-200 bg-red-50 px-3 text-[10px] font-bold text-red-700 hover:bg-red-100"
+                              >
+                                <FaWrench size={8} /> Fix
+                              </button>
+                            ) : (
+                              <span className="shrink-0 text-[9px] text-slate-400 italic self-center">View Only</span>
+                            )}
                           </div>
                         ))}
                       </div>

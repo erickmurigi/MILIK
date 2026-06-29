@@ -267,13 +267,21 @@ export const createLandlord = async (req, res, next) => {
 // Get all landlords
 export const getLandlords = async (req, res, next) => {
   try {
-    const { search: rawSearch, status, page = 1, limit = 5000 } = req.query;
+    const { search: rawSearch, status, portal, location, page = 1, limit = 100 } = req.query;
     const search = escapeRegex(rawSearch);
     const companyId = resolveCompanyId(req);
 
     const query = {};
     if (companyId) query.company = companyId;
     if (status) query.status = status;
+
+    if (portal && ["Enabled", "Disabled"].includes(portal)) {
+      query.portalAccess = portal;
+    }
+
+    if (location && location.trim()) {
+      query.location = { $regex: escapeRegex(location), $options: "i" };
+    }
 
     if (search) {
       query.$or = [
@@ -282,11 +290,12 @@ export const getLandlords = async (req, res, next) => {
         { email: { $regex: search, $options: "i" } },
         { phoneNumber: { $regex: search, $options: "i" } },
         { regId: { $regex: search, $options: "i" } },
+        { taxPin: { $regex: search, $options: "i" } },
       ];
     }
 
     const pageNum = Math.max(parseInt(page, 10) || 1, 1);
-    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 5000, 1), 5000);
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 100, 1), 500);
 
     const [landlords, total] = await Promise.all([
       Landlord.find(query)

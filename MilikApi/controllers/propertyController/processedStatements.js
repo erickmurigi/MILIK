@@ -1016,11 +1016,13 @@ export const closeStatement = async (req, res) => {
 export const getStatementsByBusiness = async (req, res) => {
   try {
     const { businessId } = req.params;
-    const { status, landlord, property, month } = req.query;
+    const { status, landlord, property, month, tab, search, sortBy, page = 1, limit = 50 } = req.query;
     const scopedBusinessId = resolveScopedBusinessId(req, businessId);
     const query = { business: scopedBusinessId };
 
-    if (status && ["paid", "unpaid", "processed", "part_paid", "reversed"].includes(status)) query.status = status;
+    if (status && ["paid", "unpaid", "processed", "part_paid", "reversed"].includes(status)) {
+      query.status = status;
+    }
     if (landlord) query.landlord = landlord;
     if (property) query.property = property;
     if (month) {
@@ -1031,19 +1033,59 @@ export const getStatementsByBusiness = async (req, res) => {
       };
     }
 
-    const statements = await ProcessedStatement.find(query)
-      .populate([
-        { path: "landlord", select: "landlordName firstName lastName" },
-        { path: "property", select: "propertyCode propertyName name commissionPaymentMode commissionFixedAmount commissionPercentage commissionRecognitionBasis" },
-        { path: "business", select: "companyName name" },
-        { path: "sourceStatement", select: "statementNumber status approvedAt" },
-        { path: "reversedSourceStatement", select: "statementNumber status approvedAt" },
-        { path: "reversedBy", select: "username email surname otherNames" },
-      ])
-      .sort({ closedAt: -1 })
-      .lean();
+    // Tab-based filtering pushed to DB (overrides any status param)
+    if (tab === "outstanding") {
+      query.status = { $in: ["unpaid", "part_paid"] };
+      query.isNegativeStatement = { $ne: true };
+    } else if (tab === "recoveries") {
+      query.isNegativeStatement = true;
+      query.status = { $ne: "reversed" };
+    } else if (tab === "paid") {
+      query.status = "paid";
+      query.isNegativeStatement = { $ne: true };
+    }
 
-    res.status(200).json({ success: true, count: statements.length, statements });
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 500);
+    const sortOrder = sortBy === "date-asc" ? { closedAt: 1 } : { closedAt: -1 };
+
+    const [statements, total] = await Promise.all([
+      ProcessedStatement.find(query)
+        .populate([
+          { path: "landlord", select: "landlordName firstName lastName" },
+          { path: "property", select: "propertyCode propertyName name commissionPaymentMode commissionFixedAmount commissionPercentage commissionRecognitionBasis" },
+          { path: "business", select: "companyName name" },
+          { path: "sourceStatement", select: "statementNumber status approvedAt" },
+          { path: "reversedSourceStatement", select: "statementNumber status approvedAt" },
+          { path: "reversedBy", select: "username email surname otherNames" },
+        ])
+        .sort(sortOrder)
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+        .lean(),
+      ProcessedStatement.countDocuments(query),
+    ]);
+
+    // Apply text search post-populate (landlord name, property code/name)
+    const filtered = search
+      ? statements.filter((s) => {
+          const q = String(search).toLowerCase();
+          return (
+            String(s.landlord?.landlordName || "").toLowerCase().includes(q) ||
+            String(s.property?.propertyCode || "").toLowerCase().includes(q) ||
+            String(s.property?.propertyName || s.property?.name || "").toLowerCase().includes(q)
+          );
+        })
+      : statements;
+
+    res.status(200).json({
+      success: true,
+      statements: filtered,
+      total,
+      page: pageNum,
+      pages: Math.ceil(total / limitNum),
+      limit: limitNum,
+    });
   } catch (error) {
     console.error("Get statements error:", error);
     res.status(500).json({ message: "Error fetching statements", error: error.message });

@@ -1,5 +1,5 @@
 // pages/Units.js
-import React, { useMemo, useRef, useState, useEffect } from "react";
+import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -26,7 +26,7 @@ import {
 } from "react-icons/fa";
 import { getUnits, deleteUnit, updateUnit } from "../../redux/unitRedux";
 import { getProperties } from "../../redux/propertyRedux";
-import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "../../redux/selectors";
+import { selectCurrentCompany, selectCurrentUser, selectAllProperties, selectUnitPagination } from "../../redux/selectors";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { toast } from "react-toastify";
 import MilikConfirmDialog from "../../components/Modals/MilikConfirmDialog";
@@ -45,7 +45,7 @@ const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
 const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
 
-const ITEMS_PER_PAGE = 50;
+const ITEMS_PER_PAGE = 500;
 
 const DEFAULT_COMPANY_UNIT_TYPES = ["studio", "1bed", "2bed", "3bed", "4bed", "commercial"];
 
@@ -95,6 +95,7 @@ const Units = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
   const { units: unitsData, isFetching } = useSelector((state) => state.unit);
+  const unitPagination = useSelector(selectUnitPagination);
   const properties = useSelector(selectAllProperties);
 
   const canCreateUnit = hasCompanyPermission(currentUser || {}, currentCompany, "units", "create", "propertyManagement");
@@ -192,16 +193,29 @@ const Units = () => {
   const [draftFilters, setDraftFilters] = useState(emptyFilters);
   const [appliedFilters, setAppliedFilters] = useState(emptyFilters);
 
+  const buildUnitParams = useCallback((overridePage = 1, overrideFilters = null) => {
+    const f = overrideFilters || appliedFilters;
+    const params = { business: currentCompany?._id, page: overridePage, limit: ITEMS_PER_PAGE };
+    if (f.property && f.property !== "any") params.property = f.property;
+    if (f.status && f.status !== "active" && f.status !== "any") params.status = f.status;
+    if (f.unitType && f.unitType !== "any") params.unitType = f.unitType;
+    if (f.unitNo) params.unitNumber = f.unitNo.trim();
+    if (f.tenant) params.tenantName = f.tenant.trim();
+    return params;
+  }, [appliedFilters, currentCompany?._id]);
+
   const applySearch = () => {
-    setAppliedFilters({
+    const newFilters = {
       ...draftFilters,
       unitNo: draftFilters.unitNo.trim(),
       tenant: draftFilters.tenant.trim(),
-    });
+    };
+    setAppliedFilters(newFilters);
     setCurrentPage(1);
     setSelectAll(false);
     setSelectedUnits([]);
     setExpandedUnits([]);
+    if (currentCompany?._id) dispatch(getUnits(buildUnitParams(1, newFilters)));
   };
 
   const resetFilters = () => {
@@ -212,6 +226,7 @@ const Units = () => {
     setSelectAll(false);
     setSelectedUnits([]);
     setActionMenuOpen(false);
+    if (currentCompany?._id) dispatch(getUnits({ business: currentCompany._id, page: 1, limit: ITEMS_PER_PAGE }));
   };
 
   const onFilterEnter = (e) => {
@@ -237,7 +252,7 @@ const Units = () => {
   // Fetch units on mount
   useEffect(() => {
     if (currentCompany?._id) {
-      dispatch(getUnits({ business: currentCompany._id }));
+      dispatch(getUnits({ business: currentCompany._id, page: 1, limit: ITEMS_PER_PAGE }));
       dispatch(getProperties({ business: currentCompany._id }));
     }
   }, [dispatch, currentCompany]);
@@ -336,61 +351,18 @@ const Units = () => {
   }, [properties]);
 
   // ---------------------------
-  // FILTER + GROUP (Units under Property)
+  // GROUP + PAGINATION (server already filters — we just group visible rows)
   // ---------------------------
-  const normalize = (v) => String(v ?? "").toLowerCase().trim();
-
-  const filteredUnits = useMemo(() => {
-    const sortByPropertyThenUnit = (a, b) => {
-      const propertyCompare = String(a.propertyName || "").localeCompare(String(b.propertyName || ""), undefined, {
-        numeric: true,
-        sensitivity: "base",
-      });
-      if (propertyCompare !== 0) return propertyCompare;
-
-      const unitCompare = String(a.unitNo || "").localeCompare(String(b.unitNo || ""), undefined, {
-        numeric: true,
-        sensitivity: "base",
-      });
-      if (unitCompare !== 0) return unitCompare;
-
-      return String(a.unitCode || "").localeCompare(String(b.unitCode || ""), undefined, {
-        numeric: true,
-        sensitivity: "base",
-      });
-    };
-
-    return transformedUnits
-      .filter((u) => {
-        if (appliedFilters.property !== "any" && u.property !== appliedFilters.property) return false;
-        if (appliedFilters.status === "active" && u.status === "archived") return false;
-        if (
-          appliedFilters.status !== "any" &&
-          appliedFilters.status !== "active" &&
-          u.status !== appliedFilters.status
-        ) {
-          return false;
-        }
-        if (appliedFilters.unitType !== "any" && u.unitType !== appliedFilters.unitType) return false;
-
-        const unitNoOk = appliedFilters.unitNo ? normalize(u.unitNo).includes(normalize(appliedFilters.unitNo)) : true;
-        const tenantOk = appliedFilters.tenant ? normalize(u.tenant).includes(normalize(appliedFilters.tenant)) : true;
-
-        return unitNoOk && tenantOk;
-      })
-      .sort(sortByPropertyThenUnit);
-  }, [transformedUnits, appliedFilters]);
-
   const propertiesGrouped = useMemo(() => {
     const map = new Map();
 
-    filteredUnits.forEach((u) => {
+    transformedUnits.forEach((u) => {
       const key = u.propertyId || u.property;
       if (!map.has(key)) {
         map.set(key, {
           propertyId: u.propertyId || key,
-          propertyName: u.propertyName, // Use the actual property name
-          propertyCode: u.propertyCode, // Store property code too
+          propertyName: u.propertyName,
+          propertyCode: u.propertyCode,
           units: [],
         });
       }
@@ -404,23 +376,21 @@ const Units = () => {
 
       return {
         ...p,
-        totals: {
-          total: p.units.length,
-          occupied,
-          vacant,
-          maintenance,
-        },
+        totals: { total: p.units.length, occupied, vacant, maintenance },
       };
     });
 
-    // sort by property name
     arr.sort((a, b) => String(a.propertyName).localeCompare(String(b.propertyName)));
     return arr;
-  }, [filteredUnits]);
+  }, [transformedUnits]);
 
-  // Pagination is per UNIT row (max 50 entries per page)
-  const totalPages = Math.max(1, Math.ceil(filteredUnits.length / ITEMS_PER_PAGE));
+  // Pagination driven by server response
+  const totalPages = Math.max(1, unitPagination.pages || 1);
   const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  // Server returns exactly the current page — no client slicing needed
+  const currentUnits = transformedUnits;
 
   const visiblePages = useMemo(() => {
     if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
@@ -433,9 +403,6 @@ const Units = () => {
     items.push(totalPages);
     return items;
   }, [safeCurrentPage, totalPages]);
-  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
-  const currentUnits = filteredUnits.slice(startIndex, endIndex);
 
   const propertyUnitCounts = useMemo(() => {
     const map = {};
@@ -443,10 +410,13 @@ const Units = () => {
     return map;
   }, [currentUnits]);
 
-  useEffect(() => {
-    if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [totalPages]);
+  const handlePageChange = useCallback((page) => {
+    const target = Math.max(1, Math.min(totalPages, page));
+    setCurrentPage(target);
+    setSelectAll(false);
+    setSelectedUnits([]);
+    if (currentCompany?._id) dispatch(getUnits(buildUnitParams(target)));
+  }, [totalPages, currentCompany?._id, dispatch, buildUnitParams]);
 
   // Visible unit IDs on current page (for selectAll)
   const visibleUnitIds = useMemo(() => {
@@ -558,7 +528,7 @@ const Units = () => {
             ).unwrap();
           }
 
-          await dispatch(getUnits({ business: currentCompany._id }));
+          await dispatch(getUnits(buildUnitParams(safeCurrentPage)));
           setSelectedUnits([]);
           setSelectAll(false);
           toast.success(`${archiveCount} unit(s) archived successfully`);
@@ -612,7 +582,7 @@ const Units = () => {
             ).unwrap();
           }
 
-          await dispatch(getUnits({ business: currentCompany._id }));
+          await dispatch(getUnits(buildUnitParams(safeCurrentPage)));
           setSelectedUnits([]);
           setSelectAll(false);
           toast.success(`${restoreCount} unit(s) restored successfully`);
@@ -655,7 +625,7 @@ const Units = () => {
             // eslint-disable-next-line no-await-in-loop
             await dispatch(deleteUnit(unit.id)).unwrap();
           }
-          await dispatch(getUnits({ business: currentCompany._id }));
+          await dispatch(getUnits(buildUnitParams(safeCurrentPage)));
           setSelectedUnits([]);
           setSelectAll(false);
           toast.success(`${deleteCount} unit(s) deleted successfully`);
@@ -688,7 +658,7 @@ const Units = () => {
       }, { timeout: 0 });
 
       // Refresh units list
-      await dispatch(getUnits({ business: currentCompany._id }));
+      await dispatch(getUnits(buildUnitParams(safeCurrentPage)));
       
       return response.data;
     } catch (error) {
@@ -698,7 +668,7 @@ const Units = () => {
   };
 
   const handlePrintList = () => {
-    if (!filteredUnits.length) {
+    if (!currentUnits.length) {
       toast.warning("No units to print");
       return;
     }
@@ -707,7 +677,7 @@ const Units = () => {
       title: "Units List",
       subtitle: "Current filtered units register",
       company: currentCompany || {},
-      summary: `Records: ${filteredUnits.length} • Printed on ${new Date().toLocaleString()}`,
+      summary: `Records: ${unitPagination.total} • Printed on ${new Date().toLocaleString()}`,
       columns: [
         { label: "Unit", value: (row) => row?.unitNumber || row?.unitName || "-" },
         { label: "Property", value: (row) => row?.property?.propertyName || row?.propertyName || "-" },
@@ -716,7 +686,7 @@ const Units = () => {
         { label: "Deposit", value: (row) => Number(row?.deposit || 0).toLocaleString(), align: "right" },
         { label: "Status", value: (row) => row?.status || (row?.isVacant ? "vacant" : "occupied") },
       ],
-      rows: filteredUnits,
+      rows: currentUnits,
     });
   };
 
@@ -920,8 +890,8 @@ const Units = () => {
             <button onClick={resetFilters} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]">
               <FaRedoAlt size={9} /> Reset
             </button>
-            <button onClick={allUnitsExpanded ? collapseAllUnits : expandAllUnits} disabled={!filteredUnits || filteredUnits.length === 0}
-              className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${filteredUnits && filteredUnits.length > 0 ? allUnitsExpanded ? "bg-orange-600 hover:bg-orange-700" : "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
+            <button onClick={allUnitsExpanded ? collapseAllUnits : expandAllUnits} disabled={currentUnits.length === 0}
+              className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${currentUnits.length > 0 ? allUnitsExpanded ? "bg-orange-600 hover:bg-orange-700" : "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
               {allUnitsExpanded ? <><FaCompressAlt size={9} /> Collapse</> : <><FaExpandAlt size={9} /> Expand</>}
             </button>
             {canUpdateUnit && (
@@ -1215,7 +1185,7 @@ const Units = () => {
               <div className="flex items-center justify-between px-3 py-1">
                 <div className="text-xs text-gray-600 flex items-center gap-4">
                   <span className="font-bold">
-                    Showing <span className="text-slate-900">{currentUnits.length > 0 ? startIndex + 1 : 0}</span> to <span className="text-slate-900">{Math.min(endIndex, filteredUnits.length)}</span> of <span className="text-slate-900">{filteredUnits.length}</span> unit(s) across <span className="text-slate-900">{propertiesGrouped.length}</span> propert{propertiesGrouped.length === 1 ? "y" : "ies"}
+                    Showing <span className="text-slate-900">{currentUnits.length > 0 ? startIndex + 1 : 0}</span> to <span className="text-slate-900">{Math.min(endIndex, unitPagination.total)}</span> of <span className="text-slate-900">{unitPagination.total}</span> unit(s) across <span className="text-slate-900">{propertiesGrouped.length}</span> propert{propertiesGrouped.length === 1 ? "y" : "ies"}
                   </span>
                   {selectedUnits.length > 0 && (
                     <span className="bg-[#DDEFE1] text-gray-900 px-2 py-0.5 rounded-full text-xs font-bold border border-[#0B3B2E]/30">
@@ -1230,16 +1200,16 @@ const Units = () => {
                     disabled
                     className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:outline-none"
                   >
-                    <option value={50}>50</option>
+                    <option value={500}>500</option>
                   </select>
-                  <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={safeCurrentPage === 1}
+                  <button onClick={() => handlePageChange(safeCurrentPage - 1)} disabled={safeCurrentPage === 1}
                     className="px-2.5 py-0.5 text-xs border border-gray-300 rounded flex items-center gap-1 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed font-bold">
                     <FaChevronLeft size={10} /> Previous
                   </button>
                   <div className="flex items-center gap-1">
                     {visiblePages.map((item) =>
                       typeof item === 'number' ? (
-                        <button key={item} onClick={() => setCurrentPage(item)}
+                        <button key={item} onClick={() => handlePageChange(item)}
                           className={`px-2 py-0.5 min-w-[24px] text-xs rounded border transition-colors font-bold ${
                             safeCurrentPage === item ? "bg-[#0B3B2E] text-white border-[#0B3B2E]" : "border-gray-300 hover:bg-gray-50"
                           }`}>
@@ -1250,7 +1220,7 @@ const Units = () => {
                       )
                     )}
                   </div>
-                  <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={safeCurrentPage === totalPages}
+                  <button onClick={() => handlePageChange(safeCurrentPage + 1)} disabled={safeCurrentPage === totalPages}
                     className="px-2.5 py-0.5 text-xs border border-gray-300 rounded flex items-center gap-1 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed font-bold">
                     Next <FaChevronRight size={10} />
                   </button>

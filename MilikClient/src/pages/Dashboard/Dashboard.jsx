@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { selectCurrentUser, selectCurrentCompany } from '../../redux/selectors';
-import { hasCompanyPermission } from '../../utils/permissions';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import MetricsGrid from '../../components/Dashboard/MetricsGrid';
 import PropertiesOverview from '../../components/Dashboard/PropertiesOverview';
@@ -14,10 +13,8 @@ import { getUnits } from '../../redux/unitRedux';
 import { getTenants } from '../../redux/tenantsRedux';
 import {
   getExpenseProperties,
-  getLeases,
   getMaintenances,
   getNotifications,
-  getRentPayments
 } from '../../redux/apiCalls';
 import { adminRequests } from '../../utils/requestMethods';
 import './dashboard.css';
@@ -38,8 +35,7 @@ const Dashboard = ({ darkMode }) => {
   const currentUser = useSelector(selectCurrentUser);
 
   const [invoices, setInvoices] = useState([]);
-  const [paymentVouchers, setPaymentVouchers] = useState([]);
-  const [processedStatements, setProcessedStatements] = useState([]);
+  const [summaryData, setSummaryData] = useState({});
   const [operationalLoading, setOperationalLoading] = useState(false);
   const [dashboardError, setDashboardError] = useState(null);
 
@@ -55,9 +51,7 @@ const Dashboard = ({ darkMode }) => {
 
     let active = true;
 
-    const hasAccountsAccess = hasCompanyPermission(currentUser || {}, currentCompany, 'paymentVouchers', 'view', 'accounts');
-
-    const refreshDashboardData = async () => {
+    const loadDashboardData = async () => {
       setOperationalLoading(true);
       setDashboardError(null);
 
@@ -65,22 +59,26 @@ const Dashboard = ({ darkMode }) => {
       dispatch(getUnits({ business: businessId }));
       dispatch(getTenants({ business: businessId }));
 
+      const year = new Date().getFullYear();
+      const fromDate = `${year}-01-01`;
+      const toDate = `${year}-12-31`;
+
       try {
         const results = await Promise.allSettled([
-          adminRequests.get(`/tenant-invoices?business=${businessId}&includeSnapshots=true`),
-          hasAccountsAccess ? adminRequests.get(`/payment-vouchers?business=${businessId}`) : Promise.resolve({ data: [] }),
-          hasAccountsAccess ? adminRequests.get(`/processed-statements/business/${businessId}`) : Promise.resolve({ data: [] }),
-          getRentPayments(dispatch, businessId),
+          // Current-year active invoices only — enough for the 12-month chart and month tables
+          adminRequests.get(`/tenant-invoices?business=${businessId}&includeSnapshots=true&status=ACTIVE&fromDate=${fromDate}&toDate=${toDate}`),
+          // Single summary call replaces vouchers + statements + leases fetches
+          adminRequests.get('/dashboard/summary'),
           getMaintenances(dispatch, businessId),
-          getLeases(dispatch, businessId),
           getNotifications(dispatch, businessId),
           getExpenseProperties(dispatch, businessId),
         ]);
 
         if (!active) return;
         setInvoices(normalizeArr(results[0], 'invoices', 'data'));
-        setPaymentVouchers(normalizeArr(results[1], 'vouchers', 'paymentVouchers', 'data'));
-        setProcessedStatements(normalizeArr(results[2], 'statements', 'data'));
+        if (results[1].status === 'fulfilled') {
+          setSummaryData(results[1].value?.data || {});
+        }
       } catch (err) {
         if (active) setDashboardError(err?.response?.data?.message || err?.message || 'Failed to load dashboard data');
       } finally {
@@ -88,12 +86,9 @@ const Dashboard = ({ darkMode }) => {
       }
     };
 
-    refreshDashboardData();
-    const intervalId = setInterval(refreshDashboardData, 300000);
-    return () => {
-      active = false;
-      clearInterval(intervalId);
-    };
+    loadDashboardData();
+    // Socket events (payment:new, maintenance:new, etc.) handle real-time updates — no polling needed
+    return () => { active = false; };
   }, [dispatch, currentCompany?._id, currentUser?.company, currentUser?._id]);
 
   useEffect(() => {
@@ -107,20 +102,14 @@ const Dashboard = ({ darkMode }) => {
     socket.emit('joinCompany', { companyId: businessId, userId: currentUser?._id });
 
     const handleNewNotification = () => getNotifications(dispatch, businessId);
-    const handleNewPayment = () => getRentPayments(dispatch, businessId);
     const handleNewMaintenance = () => getMaintenances(dispatch, businessId);
-    const handleNewLease = () => getLeases(dispatch, businessId);
 
     socket.on('notification:new', handleNewNotification);
-    socket.on('payment:new', handleNewPayment);
     socket.on('maintenance:new', handleNewMaintenance);
-    socket.on('lease:new', handleNewLease);
 
     return () => {
       socket.off('notification:new', handleNewNotification);
-      socket.off('payment:new', handleNewPayment);
       socket.off('maintenance:new', handleNewMaintenance);
-      socket.off('lease:new', handleNewLease);
     };
   }, [socket, currentCompany?._id, currentUser?._id, currentUser?.company, dispatch]);
 
@@ -138,9 +127,7 @@ const Dashboard = ({ darkMode }) => {
           <div className="dashboard-main-grid gap-2">
             <QuickActions
               darkMode={darkMode}
-              invoices={invoices}
-              paymentVouchers={paymentVouchers}
-              processedStatements={processedStatements}
+              summaryData={summaryData}
               loading={operationalLoading}
             />
             <PropertiesOverview darkMode={darkMode} invoices={invoices} />

@@ -260,12 +260,9 @@ const PettyCash = () => {
   // Replenishments still filtered client-side (low volume, no server-side filter params yet)
   const filteredReplenishments = replenishments;
 
-  // Server already paginates — these are just aliases
+  // Server already paginates — these are direct aliases
   const pagedDisbursements = filteredDisbursements;
-  const pagedReplenishments = useMemo(
-    () => filteredReplenishments.slice((repPage - 1) * pageSize, repPage * pageSize),
-    [filteredReplenishments, repPage, pageSize]
-  );
+  const pagedReplenishments = filteredReplenishments;
 
   // ── Account helpers
   const bankAccounts = useMemo(
@@ -703,7 +700,7 @@ const PettyCash = () => {
                   <tbody>
                     {loading ? (
                       <tr><td colSpan={8} className="py-16 text-center text-xs text-slate-400">Loading…</td></tr>
-                    ) : filteredReplenishments.length === 0 ? (
+                    ) : replenishments.length === 0 ? (
                       <tr>
                         <td colSpan={8} className="py-20 text-center">
                           <FaBoxOpen className="mx-auto mb-2 text-3xl text-slate-300" />
@@ -800,15 +797,15 @@ const PettyCash = () => {
                 </div>
               </div>
             )}
-            {activeTab === "replenishments" && filteredReplenishments.length > 0 && (
+            {activeTab === "replenishments" && repTotal > 0 && (
               <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
                 <div className="font-semibold">
                   Showing{" "}
-                  <span className="font-bold text-slate-900">{filteredReplenishments.length === 0 ? 0 : (repPage - 1) * pageSize + 1}</span>
+                  <span className="font-bold text-slate-900">{repTotal === 0 ? 0 : (repPage - 1) * pageSize + 1}</span>
                   {" "}to{" "}
-                  <span className="font-bold text-slate-900">{Math.min(repPage * pageSize, filteredReplenishments.length)}</span>
+                  <span className="font-bold text-slate-900">{Math.min(repPage * pageSize, repTotal)}</span>
                   {" "}of{" "}
-                  <span className="font-bold text-slate-900">{filteredReplenishments.length}</span>
+                  <span className="font-bold text-slate-900">{repTotal}</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-1.5">

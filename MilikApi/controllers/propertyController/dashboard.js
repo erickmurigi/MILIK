@@ -8,6 +8,10 @@ import Unit from "../../models/Unit.js";
 import Landlord from "../../models/Landlord.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
+import TenantInvoice from "../../models/TenantInvoice.js";
+import PaymentVoucher from "../../models/PaymentVoucher.js";
+import ProcessedStatement from "../../models/ProcessedStatement.js";
+import Lease from "../../models/Lease.js";
 import { verifyUser } from "../verifyToken.js";
 import { isManagerIncomeAccount, isManagerExpenseAccount } from "../../utils/accountClassifiers.js";
 
@@ -73,6 +77,9 @@ router.get("/summary", verifyUser, async (req, res) => {
       receiptNumber: { $type: "string", $ne: "" },
     };
 
+    const in30Days = new Date(now);
+    in30Days.setDate(in30Days.getDate() + 30);
+
     // ── Phase 1: counts + chart accounts (all parallel) ──────────────────────
     const [
       totalUnits,
@@ -86,6 +93,11 @@ router.get("/summary", verifyUser, async (req, res) => {
       totalMonthlyRentDueAgg,
       totalDepositsAgg,
       chartAccounts,
+      overdueInvoiceCount,
+      draftVoucherCount,
+      pendingStatementCount,
+      unpostedReceiptCount,
+      leasesExpiringSoonCount,
     ] = await Promise.all([
       Unit.countDocuments({ business }),
       Unit.countDocuments({
@@ -109,6 +121,34 @@ router.get("/summary", verifyUser, async (req, res) => {
       ChartOfAccount.find({ business, isPosting: { $ne: false }, isHeader: { $ne: true } })
         .select("_id code name type subGroup")
         .lean(),
+      // Action-centre counts (used by frontend QuickActions without fetching full collections)
+      TenantInvoice.countDocuments({
+        business,
+        status: { $in: ["pending", "partially_paid", "part_paid"] },
+        dueDate: { $lt: now },
+      }),
+      PaymentVoucher.countDocuments({ business, status: "draft" }),
+      ProcessedStatement.countDocuments({
+        business,
+        status: { $ne: "reversed" },
+        $or: [
+          { status: { $in: ["processed", "unpaid", "part_paid"] } },
+          { balanceDue: { $gt: 0 } },
+          { recoveryBalance: { $gt: 0 } },
+        ],
+      }),
+      RentPayment.countDocuments({
+        business,
+        reversalOf: { $exists: false },
+        isReversed: { $ne: true },
+        isCancelled: { $ne: true },
+        $or: [{ postingStatus: "unposted" }, { isConfirmed: { $ne: true } }],
+      }),
+      Lease.countDocuments({
+        business,
+        status: { $nin: ["inactive", "terminated", "expired", "cancelled"] },
+        endDate: { $gte: now, $lte: in30Days },
+      }),
     ]);
 
     // ── Phase 2: targeted ledger aggregations using known account IDs ─────────
@@ -194,6 +234,12 @@ router.get("/summary", verifyUser, async (req, res) => {
       collectionRate,
       currentMonthExpenses,
       netProfit,
+      // Action-centre counts
+      overdueInvoiceCount,
+      draftVoucherCount,
+      pendingStatementCount,
+      unpostedReceiptCount,
+      leasesExpiringSoonCount,
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });

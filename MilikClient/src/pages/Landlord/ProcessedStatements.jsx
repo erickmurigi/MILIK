@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import {
@@ -17,7 +17,6 @@ import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import {
-  getProcessedStatements,
   reverseStatement,
   updateStatement,
 } from "../../redux/processedStatementsRedux";
@@ -74,13 +73,20 @@ const ProcessedStatements = () => {
   const canReverseProcessedStatement = hasCompanyPermission(currentUser || {}, currentCompany, "processedStatements", "reverse", "accounts");
   const canExportProcessedStatement = hasCompanyPermission(currentUser || {}, currentCompany, "processedStatements", "export", "accounts");
   const canSendCommunications = hasCompanyPermission(currentUser || {}, currentCompany, "processedStatements", "send", "accounts");
-  const { statements, loading } = useSelector((state) => state.processedStatements);
+  const [statements, setStatements] = useState([]);
+  const [pagination, setPagination] = useState({ total: 0, page: 1, pages: 1, limit: ITEMS_PER_PAGE });
+  const [loading, setLoading] = useState(false);
 
   const [activeTab, setActiveTab] = useState("outstanding");
   const [expandedRow, setExpandedRow] = useState(null);
   const [searchText, setSearchText] = useState("");
   const [sortBy, setSortBy] = useState("date-desc");
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Refs so loadStatements always reads current values without stale closure
+  const tabRef = useRef("outstanding");
+  const sortByRef = useRef("date-desc");
+  const searchRef = useRef("");
   const [showPayModal, setShowPayModal] = useState(null);
   const [showRecoveryModal, setShowRecoveryModal] = useState(null);
   const [showCommissionModal, setShowCommissionModal] = useState(null);
@@ -93,83 +99,87 @@ const ProcessedStatements = () => {
     [currentCompany?._id, currentUser?.company, currentUser?.businessId]
   );
 
+  const loadStatements = useCallback(async (page = 1) => {
+    if (!businessId) return;
+    setLoading(true);
+    try {
+      const params = { tab: tabRef.current, page, limit: ITEMS_PER_PAGE, sortBy: sortByRef.current };
+      if (searchRef.current) params.search = searchRef.current;
+      const res = await adminRequests.get(`/processed-statements/business/${businessId}`, { params });
+      setStatements(res.data.statements || []);
+      setPagination({
+        total: res.data.total ?? 0,
+        page: res.data.page ?? page,
+        pages: res.data.pages ?? 1,
+        limit: ITEMS_PER_PAGE,
+      });
+      setCurrentPage(res.data.page ?? page);
+    } catch {
+      toast.error("Failed to load processed statements");
+    } finally {
+      setLoading(false);
+    }
+  }, [businessId]);
+
+  useEffect(() => { loadStatements(1); }, [businessId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!businessId) return;
-
-    const loadStatements = async () => {
-      try {
-        await dispatch(getProcessedStatements({ businessId, status: null })).unwrap();
-        const chartAccounts = await getChartOfAccounts({ business: businessId, type: "asset" });
-        const options = (Array.isArray(chartAccounts) ? chartAccounts : []).filter((account) => {
-          const name = String(account?.name || "").toLowerCase();
-          const code = String(account?.code || "");
-          return (
-            String(account?.type || "").toLowerCase() === "asset" &&
-            account?.isPosting !== false &&
-            !account?.isHeader &&
-            (/^11/.test(code) || /(cash|bank|mpesa|m-pesa|mobile money|wallet|collection)/i.test(name))
-          );
-        });
-        setCashbookOptions(options);
-      } catch (error) {
-        toast.error("Failed to load processed statements");
-      }
-    };
-
-    loadStatements();
-  }, [businessId, dispatch]);
-
-  const filteredStatements = useMemo(() => {
-    let filtered = statements.filter((statement) => {
-      const isNegative = isNegativeProcessedStatement(statement);
-      const isReversed = statement?.status === "reversed";
-
-      if (activeTab === "outstanding") {
-        return !isReversed && !isNegative && ["unpaid", "part_paid"].includes(statement.status);
-      }
-
-      if (activeTab === "recoveries") {
-        return !isReversed && isNegative;
-      }
-
-      if (activeTab === "paid") {
-        return !isReversed && !isNegative && statement.status === "paid";
-      }
-
-      return false;
-    });
-
-    if (searchText) {
-      const search = searchText.toLowerCase();
-      filtered = filtered.filter((s) => {
-        const landlordName = String(s.landlord?.landlordName || "").toLowerCase();
-        const propertyCode = String(s.property?.propertyCode || "").toLowerCase();
-        const propertyName = String(s.property?.propertyName || s.property?.name || "").toLowerCase();
-        return landlordName.includes(search) || propertyCode.includes(search) || propertyName.includes(search);
+    getChartOfAccounts({ business: businessId, type: "asset" }).then((chartAccounts) => {
+      const options = (Array.isArray(chartAccounts) ? chartAccounts : []).filter((account) => {
+        const name = String(account?.name || "").toLowerCase();
+        const code = String(account?.code || "");
+        return (
+          String(account?.type || "").toLowerCase() === "asset" &&
+          account?.isPosting !== false &&
+          !account?.isHeader &&
+          (/^11/.test(code) || /(cash|bank|mpesa|m-pesa|mobile money|wallet|collection)/i.test(name))
+        );
       });
-    }
+      setCashbookOptions(options);
+    }).catch(() => {});
+  }, [businessId]);
 
-    filtered.sort((a, b) =>
-      sortBy === "date-asc" ? new Date(a.closedAt) - new Date(b.closedAt) : new Date(b.closedAt) - new Date(a.closedAt)
-    );
-
-    return filtered;
-  }, [statements, activeTab, searchText, sortBy]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredStatements.length / ITEMS_PER_PAGE));
+  // Server handles all filtering/sorting — statements is the current page
+  const filteredStatements = statements; // alias for JSX references
+  const paginatedStatements = statements;
+  const totalPages = Math.max(1, pagination.pages);
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = filteredStatements.length === 0 ? 0 : (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const startIndex = pagination.total === 0 ? 0 : (safeCurrentPage - 1) * ITEMS_PER_PAGE;
   const endIndex = startIndex + ITEMS_PER_PAGE;
-  const paginatedStatements = filteredStatements.slice(startIndex, endIndex);
 
-  useEffect(() => {
+  const handleTabChange = (tab) => {
+    tabRef.current = tab;
+    setActiveTab(tab);
     setCurrentPage(1);
     setExpandedRow(null);
-  }, [activeTab, searchText, sortBy]);
+    loadStatements(1);
+  };
 
-  useEffect(() => {
-    if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
-  }, [currentPage, safeCurrentPage]);
+  const handleSearchChange = (val) => {
+    searchRef.current = val;
+    setSearchText(val);
+  };
+
+  const applySearch = () => {
+    setCurrentPage(1);
+    setExpandedRow(null);
+    loadStatements(1);
+  };
+
+  const handleSortChange = (val) => {
+    sortByRef.current = val;
+    setSortBy(val);
+    setCurrentPage(1);
+    loadStatements(1);
+  };
+
+  const handlePageChange = (page) => {
+    const target = Math.max(1, Math.min(totalPages, page));
+    setCurrentPage(target);
+    loadStatements(target);
+  };
 
   const stats = useMemo(() => {
     let totalPaid = 0, totalUnpaid = 0, totalRecoveries = 0, totalReversed = 0;
@@ -197,11 +207,7 @@ const ProcessedStatements = () => {
     return { totalPaid, totalUnpaid, totalRecoveries, totalReversed, totalAmountPaid, totalAmountUnpaid, totalRecoveryAmount };
   }, [statements]);
 
-  const reloadStatements = () => {
-    if (businessId) {
-      dispatch(getProcessedStatements({ businessId, status: null }));
-    }
-  };
+  const reloadStatements = () => loadStatements(safeCurrentPage);
 
   const handleMarkAsPaid = async (statementId) => {
     if (!canProcessLandlordPayments) {
@@ -537,18 +543,18 @@ const ProcessedStatements = () => {
           <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col overflow-hidden gap-2">
             <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
               <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-                <button onClick={() => setActiveTab("outstanding")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "outstanding" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaHourglass /> Outstanding ({stats.totalUnpaid})</button>
-                <button onClick={() => setActiveTab("recoveries")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "recoveries" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaHourglass /> Recoveries ({stats.totalRecoveries})</button>
-                <button onClick={() => setActiveTab("paid")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "paid" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaCheckCircle /> Paid ({stats.totalPaid})</button>
-                <input type="text" placeholder="Search landlord, property…" value={searchText} onChange={(e) => setSearchText(e.target.value)} className="h-7 w-44 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                <button onClick={() => handleTabChange("outstanding")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "outstanding" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaHourglass /> Outstanding {activeTab === "outstanding" ? `(${pagination.total})` : ""}</button>
+                <button onClick={() => handleTabChange("recoveries")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "recoveries" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaHourglass /> Recoveries {activeTab === "recoveries" ? `(${pagination.total})` : ""}</button>
+                <button onClick={() => handleTabChange("paid")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "paid" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaCheckCircle /> Paid {activeTab === "paid" ? `(${pagination.total})` : ""}</button>
+                <input type="text" placeholder="Search landlord, property…" value={searchText} onChange={(e) => handleSearchChange(e.target.value)} onBlur={applySearch} onKeyDown={(e) => e.key === "Enter" && applySearch()} className="h-7 w-44 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                <select value={sortBy} onChange={(e) => handleSortChange(e.target.value)} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="date-desc">Newest First</option>
                   <option value="date-asc">Oldest First</option>
                 </select>
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                <span className="shrink-0 rounded border border-yellow-200 bg-yellow-50 px-2 py-0.5 text-[10px] font-bold text-yellow-700">Outstanding: {stats.totalUnpaid} • {money(stats.totalAmountUnpaid)}</span>
-                <span className="shrink-0 rounded border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-700">Recoveries: {stats.totalRecoveries} • {money(stats.totalRecoveryAmount)}</span>
-                <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Paid: {stats.totalPaid} • {money(stats.totalAmountPaid)}</span>
+                <span className="shrink-0 rounded border border-yellow-200 bg-yellow-50 px-2 py-0.5 text-[10px] font-bold text-yellow-700">Outstanding: {activeTab === "outstanding" ? pagination.total : "—"} • {activeTab === "outstanding" ? money(stats.totalAmountUnpaid) : "—"}</span>
+                <span className="shrink-0 rounded border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-700">Recoveries: {activeTab === "recoveries" ? pagination.total : "—"} • {activeTab === "recoveries" ? money(stats.totalRecoveryAmount) : "—"}</span>
+                <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Paid: {activeTab === "paid" ? pagination.total : "—"} • {activeTab === "paid" ? money(stats.totalAmountPaid) : "—"}</span>
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 <button onClick={() => navigate(-1)} className="h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white bg-slate-600 hover:bg-slate-700"><FaArrowLeft /> Back</button>
               </div>
@@ -843,12 +849,12 @@ const ProcessedStatements = () => {
               )}
               <div className="flex-shrink-0 border-t border-slate-200 bg-white px-3 py-2">
                 <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
-                  <div className="font-semibold">Showing <span className="font-bold text-slate-900">{filteredStatements.length === 0 ? 0 : startIndex + 1}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, filteredStatements.length)}</span> of <span className="font-bold text-slate-900">{filteredStatements.length}</span> processed statements</div>
+                  <div className="font-semibold">Showing <span className="font-bold text-slate-900">{pagination.total === 0 ? 0 : startIndex + 1}</span> to <span className="font-bold text-slate-900">{Math.min(endIndex, pagination.total)}</span> of <span className="font-bold text-slate-900">{pagination.total}</span> processed statements</div>
                   <div className="flex items-center gap-2">
                     <span className="font-semibold">Per page: {ITEMS_PER_PAGE}</span>
-                    <button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
+                    <button onClick={() => handlePageChange(safeCurrentPage - 1)} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
                     <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
-                    <button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+                    <button onClick={() => handlePageChange(safeCurrentPage + 1)} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button>
                   </div>
                 </div>
               </div>

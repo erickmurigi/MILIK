@@ -6,7 +6,7 @@ import {
   selectCurrentUser,
   selectCurrentCompany,
   selectAllTenants,
-  selectAllRentPayments,
+  selectAllProperties,
 } from "../../redux/selectors";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
@@ -44,7 +44,7 @@ import {
   confirmRentPayment,
   createRentPayment,
   deleteRentPayment,
-  getRentPayments,
+  listRentPaymentsPage,
   reverseRentPayment,
   updateRentPayment,
   unconfirmRentPayment,
@@ -54,6 +54,7 @@ import {
   updateReceiptAllocations,
   downloadReceiptPdf,
 } from "../../redux/apiCalls";
+import { getProperties } from "../../redux/propertyRedux";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { printTabularList } from "../../utils/printList";
 
@@ -328,10 +329,12 @@ const Receipts = ({ viewMode = "tenant" }) => {
   const pageLabel = isLandlordReceiptView ? "Landlord Receipts" : "Rental Receipts";
   const pageCreateLabel = isLandlordReceiptView ? "New Landlord Receipt" : "New Receipt";
   const rawTenants = useSelector(selectAllTenants);
-  const rawRentPayments = useSelector(selectAllRentPayments);
+  const properties = useSelector(selectAllProperties);
 
   const tenants = ensureArray(rawTenants);
-  const rentPayments = ensureArray(rawRentPayments);
+
+  const [receipts, setReceipts] = useState([]);
+  const [recPagination, setRecPagination] = useState({ totalItems: 0, totalPages: 1, page: 1, limit: ITEMS_PER_PAGE });
 
   const initialFilters = {
     search: "",
@@ -391,6 +394,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
     lockedAllocatedTotal: 0,
     currentUnapplied: 0,
   });
+  const [formPayments, setFormPayments] = useState([]);
   const requestedReceiptId = useMemo(() => new URLSearchParams(location.search).get("receipt") || "", [location.search]);
   const [autoOpenedReceiptId, setAutoOpenedReceiptId] = useState("");
   const [reversalModal, setReversalModal] = useState({ open: false, isBatch: false, receipt: null, receipts: [], reason: "", loading: false });
@@ -399,7 +403,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
     if (!currentCompany?._id) return;
     try {
       const [invoiceRows, chartRows] = await Promise.all([
-        getTenantInvoices({ business: currentCompany._id }),
+        getTenantInvoices({ business: currentCompany._id, status: "ACTIVE" }),
         getChartOfAccounts({ business: currentCompany._id, type: "asset" }),
       ]);
 
@@ -414,145 +418,94 @@ const Receipts = ({ viewMode = "tenant" }) => {
     }
   }, [currentCompany?._id]);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (page = 1, filters = {}) => {
     if (!currentCompany?._id) return;
+    const params = { business: currentCompany._id, page, limit: ITEMS_PER_PAGE };
+    if (filters.status && filters.status !== "all") params.status = filters.status;
+    if (filters.paymentType && filters.paymentType !== "all") params.paymentType = filters.paymentType;
+    if (filters.tenant && filters.tenant !== "all") params.tenant = filters.tenant;
+    if (filters.property && filters.property !== "all") params.property = filters.property;
+    if (filters.unit && filters.unit !== "all") params.unit = filters.unit;
+    if (filters.search) params.search = filters.search;
+    if (filters.tenantSearch) params.tenantSearch = filters.tenantSearch;
+    if (filters.from) params.from = filters.from;
+    if (filters.to) params.to = filters.to;
+    if (!isCompanyLandlordMode) {
+      params.paidDirectToLandlord = isLandlordReceiptView;
+    }
     try {
-      await Promise.all([
+      const [receiptResult] = await Promise.all([
+        listRentPaymentsPage(params),
         getTenants(dispatch, currentCompany._id),
-        getRentPayments(dispatch, currentCompany._id, appliedFilters.tenant !== "all" ? appliedFilters.tenant : null),
+        dispatch(getProperties({ business: currentCompany._id })),
         loadInvoices(),
       ]);
+      setReceipts(receiptResult.items);
+      setRecPagination(receiptResult.pagination);
     } catch {
       toast.error("Failed to load receipts");
     }
-  }, [currentCompany?._id, appliedFilters.tenant, dispatch, loadInvoices]);
+  }, [currentCompany?._id, dispatch, loadInvoices, isLandlordReceiptView, isCompanyLandlordMode]);
 
   useEffect(() => {
     if (!currentCompany?._id) return;
-    loadData();
-  }, [currentCompany?._id, appliedFilters.tenant, loadData]);
+    loadData(1, initialFilters);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentCompany?._id]);
+
+  // Load payments for the selected tenant when the receipt form opens (for balance calc)
+  useEffect(() => {
+    if (!showForm || !formData.tenantId || !currentCompany?._id) { setFormPayments([]); return; }
+    listRentPaymentsPage({
+      business: currentCompany._id,
+      tenant: formData.tenantId,
+      status: "active",
+      limit: 500,
+      page: 1,
+    }).then(({ items }) => setFormPayments(items ?? [])).catch(() => {});
+  }, [showForm, formData.tenantId, currentCompany?._id]);
 
   const propertyOptions = useMemo(() => {
-    return [
-      "all",
-      ...Array.from(
-        new Set(
-          rentPayments
-            .filter((p) => p?.ledgerType === "receipts")
-            .map((p) => getPropertyName(p, tenants))
-            .filter(Boolean)
-        )
-      ).sort((a, b) => String(a).localeCompare(String(b))),
-    ];
-  }, [rentPayments, tenants]);
+    const names = (properties || [])
+      .map((p) => p?.propertyName)
+      .filter(Boolean)
+      .sort((a, b) => String(a).localeCompare(String(b)));
+    return ["all", ...names];
+  }, [properties]);
 
-  const unitOptions = useMemo(() => {
-    const scoped = rentPayments.filter((p) => {
-      if (p?.ledgerType !== "receipts") return false;
-      if (draftFilters.property === "all") return true;
-      return getPropertyName(p, tenants) === draftFilters.property;
-    });
+  // unitOptions removed — unit filter is now a text-search passed to the backend
 
-    return [
-      "all",
-      ...Array.from(new Set(scoped.map((p) => getUnitName(p, tenants)).filter(Boolean))).sort(
-        (a, b) => String(a).localeCompare(String(b))
-      ),
-    ];
-  }, [rentPayments, tenants, draftFilters.property]);
+  // Server handles all filtering — receipts is the current page
+  const currentPageReceipts = receipts;
+  const totalPages = Math.max(1, recPagination.totalPages);
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = recPagination.totalItems === 0 ? 0 : (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
 
-  const filteredReceipts = useMemo(() => {
-    return rentPayments.filter((payment) => {
-      if (payment?.ledgerType !== "receipts") return false;
-      if (payment?.reversalOf) return false;
-      if (payment?.isCancelled === true) return false;
-      if (!isCompanyLandlordMode && isLandlordReceiptView && payment?.paidDirectToLandlord !== true) return false;
-      if (!isCompanyLandlordMode && isDefaultTenantView && payment?.paidDirectToLandlord === true) return false;
+  const visibleReceiptIds = useMemo(
+    () => currentPageReceipts.map((receipt) => receipt._id),
+    [currentPageReceipts]
+  );
 
-      const isReversedReceipt =
-        payment?.isReversed === true ||
-        String(payment?.postingStatus || "").toLowerCase() === "reversed";
-
-      const tenantName = getTenantName(payment, tenants).toLowerCase();
-      const unitName = getUnitName(payment, tenants).toLowerCase();
-      const propertyName = getPropertyName(payment, tenants);
-      const receiptNo = String(payment.receiptNumber || "").toLowerCase();
-      const referenceNo = String(payment.referenceNumber || "").toLowerCase();
-      const searchTerm = appliedFilters.search.toLowerCase().trim();
-      const tenantSearch = appliedFilters.tenantSearch.toLowerCase().trim();
-
-      if (searchTerm) {
-        const hasMatch =
-          tenantName.includes(searchTerm) ||
-          propertyName.toLowerCase().includes(searchTerm) ||
-          unitName.includes(searchTerm) ||
-          receiptNo.includes(searchTerm) ||
-          referenceNo.includes(searchTerm);
-
-        if (!hasMatch) return false;
-      }
-
-      if (appliedFilters.status === "active" && isReversedReceipt) return false;
-      if (appliedFilters.status === "confirmed" && (!payment.isConfirmed || isReversedReceipt)) return false;
-      if (appliedFilters.status === "pending" && (payment.isConfirmed || isReversedReceipt)) return false;
-      if (appliedFilters.status === "reversed" && !isReversedReceipt) return false;
-      if (appliedFilters.paymentType !== "all" && payment.paymentType !== appliedFilters.paymentType) return false;
-      if (tenantSearch && !tenantName.includes(tenantSearch)) return false;
-
-      const thisTenantId = safeId(payment?.tenant);
-      if (appliedFilters.tenant !== "all" && thisTenantId !== String(appliedFilters.tenant)) return false;
-
-      if (appliedFilters.property !== "all" && propertyName !== appliedFilters.property) return false;
-      if (appliedFilters.unit !== "all" && getUnitName(payment, tenants) !== appliedFilters.unit) return false;
-
-      if (appliedFilters.ledger === "receipts" && payment.ledgerType !== "receipts") return false;
-      if (appliedFilters.ledger === "cashbook") return false;
-
-      if (appliedFilters.from) {
-        const fromDate = new Date(appliedFilters.from);
-        const paymentDate = new Date(payment.paymentDate || payment.createdAt);
-        if (paymentDate < fromDate) return false;
-      }
-
-      if (appliedFilters.to) {
-        const toDate = new Date(appliedFilters.to);
-        toDate.setHours(23, 59, 59, 999);
-        const paymentDate = new Date(payment.paymentDate || payment.createdAt);
-        if (paymentDate > toDate) return false;
-      }
-
-      return true;
-    });
-  }, [rentPayments, appliedFilters, tenants, isLandlordReceiptView, isDefaultTenantView]);
-
-
-const totalPages = Math.max(1, Math.ceil(filteredReceipts.length / ITEMS_PER_PAGE));
-const safeCurrentPage = Math.min(currentPage, totalPages);
-const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
-const endIndex = startIndex + ITEMS_PER_PAGE;
-const currentPageReceipts = filteredReceipts.slice(startIndex, endIndex);
-
-useEffect(() => {
-  if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
-}, [currentPage, safeCurrentPage]);
-
-const visibleReceiptIds = useMemo(
-  () => currentPageReceipts.map((receipt) => receipt._id),
-  [currentPageReceipts]
-);
+  const handlePageChange = useCallback((page) => {
+    const target = Math.max(1, Math.min(totalPages, page));
+    setCurrentPage(target);
+    setSelectedIds([]);
+    loadData(target, appliedFilters);
+  }, [totalPages, loadData, appliedFilters]);
 
   const stats = useMemo(() => {
-    const total = filteredReceipts.reduce((sum, item) => sum + Math.abs(Number(item.amount) || 0), 0);
-    const confirmedCount = filteredReceipts.filter((item) => item.isConfirmed).length;
-    const pendingCount = filteredReceipts.length - confirmedCount;
+    const total = currentPageReceipts.reduce((sum, item) => sum + Math.abs(Number(item.amount) || 0), 0);
+    const confirmedCount = currentPageReceipts.filter((item) => item.isConfirmed).length;
+    const pendingCount = currentPageReceipts.length - confirmedCount;
 
     return {
-      count: filteredReceipts.length,
+      count: recPagination.totalItems,
       total,
       confirmedCount,
       pendingCount,
     };
-  }, [filteredReceipts]);
+  }, [currentPageReceipts, recPagination.totalItems]);
 
   const selectedTenant = useMemo(() => {
     return tenants.find((tenant) => safeId(tenant) === String(formData.tenantId));
@@ -579,7 +532,7 @@ const visibleReceiptIds = useMemo(
 
       const tenantIdStr = String(targetTenantId);
 
-      const tenantPayments = rentPayments.filter((p) => {
+      const tenantPayments = formPayments.filter((p) => {
         const paymentTenantId = safeId(p?.tenant);
         return (
           p?.ledgerType === "receipts" &&
@@ -606,7 +559,7 @@ const visibleReceiptIds = useMemo(
 
       return { totalOwed, totalPaid, balance };
     },
-    [rentPayments, getCreatedInvoicesForTenant]
+    [formPayments, getCreatedInvoicesForTenant]
   );
 
   const getOutstandingInvoices = useCallback(
@@ -633,7 +586,7 @@ const visibleReceiptIds = useMemo(
           return aTime - bTime;
         });
 
-      const appliedByInvoice = buildAppliedAmountsByInvoice(rentPayments, targetTenantId);
+      const appliedByInvoice = buildAppliedAmountsByInvoice(formPayments, targetTenantId);
 
       return invoices
         .map((inv) => {
@@ -657,7 +610,7 @@ const visibleReceiptIds = useMemo(
         })
         .filter((inv) => inv.outstanding > 0 || inv.paid > 0);
     },
-    [getCreatedInvoicesForTenant, rentPayments]
+    [getCreatedInvoicesForTenant, formPayments]
   );
 
   const resetForm = () => {
@@ -779,7 +732,7 @@ const visibleReceiptIds = useMemo(
         toast.success("Receipt created successfully");
       }
       resetForm();
-      await loadData();
+      await loadData(safeCurrentPage, appliedFilters);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to save receipt");
     }
@@ -794,7 +747,7 @@ const visibleReceiptIds = useMemo(
       await deleteRentPayment(dispatch, receiptId);
       toast.success("Receipt deleted");
       setSelectedIds((prev) => prev.filter((id) => id !== receiptId));
-      await loadData();
+      await loadData(safeCurrentPage, appliedFilters);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to delete receipt");
     }
@@ -814,7 +767,7 @@ const visibleReceiptIds = useMemo(
       await Promise.all(selectedIds.map((receiptId) => deleteRentPayment(dispatch, receiptId)));
       toast.success(`${selectedIds.length} receipt(s) deleted`);
       setSelectedIds([]);
-      await loadData();
+      await loadData(safeCurrentPage, appliedFilters);
     } catch {
       toast.error("Failed to delete selected receipts");
     }
@@ -848,7 +801,7 @@ const visibleReceiptIds = useMemo(
       return;
     }
 
-    const selectedReceipts = filteredReceipts.filter((r) => selectedIds.includes(r._id));
+    const selectedReceipts = receipts.filter((r) => selectedIds.includes(r._id));
     const eligible = selectedReceipts.filter((r) => r.isConfirmed && !r.isReversed);
 
     if (eligible.length === 0) {
@@ -872,7 +825,7 @@ const visibleReceiptIds = useMemo(
         toast.success("Receipt reversed successfully");
       }
       setReversalModal({ open: false, isBatch: false, receipt: null, receipts: [], reason: "", loading: false });
-      await loadData();
+      await loadData(safeCurrentPage, appliedFilters);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to reverse receipt");
       setReversalModal((prev) => ({ ...prev, loading: false }));
@@ -888,19 +841,20 @@ const visibleReceiptIds = useMemo(
   };
 
   const applySearchFilters = () => {
-    setAppliedFilters({ ...draftFilters });
+    const newFilters = { ...draftFilters };
+    setAppliedFilters(newFilters);
     setSelectedIds([]);
     setCurrentPage(1);
+    loadData(1, newFilters);
   };
 
   const resetSearchFilters = () => {
-    const reset = {
-      ...initialFilters,
-      tenant: tenantId || "all",
-    };
+    const reset = { ...initialFilters, tenant: tenantId || "all" };
     setDraftFilters(reset);
     setAppliedFilters(reset);
     setSelectedIds([]);
+    setCurrentPage(1);
+    loadData(1, reset);
   };
 
   const applyDatePreset = (preset) => {
@@ -976,7 +930,11 @@ const visibleReceiptIds = useMemo(
     else if (preset === "lastQuarter") { const q = Math.floor(today.getMonth() / 3) - 1; const yr = q < 0 ? today.getFullYear() - 1 : today.getFullYear(); const qq = (q + 4) % 4; from = toInputDate(new Date(yr, qq * 3, 1)); to = toInputDate(new Date(yr, qq * 3 + 3, 0)); }
     else if (preset === "thisYear") { from = toInputDate(new Date(today.getFullYear(), 0, 1)); to = toInputDate(new Date(today.getFullYear(), 11, 31)); }
     else if (preset === "lastYear") { from = toInputDate(new Date(today.getFullYear() - 1, 0, 1)); to = toInputDate(new Date(today.getFullYear() - 1, 11, 31)); }
-    setAppliedFilters((prev) => ({ ...prev, from, to }));
+    setAppliedFilters((prev) => {
+      const newFilters = { ...prev, from, to };
+      loadData(1, newFilters);
+      return newFilters;
+    });
     setDraftFilters((prev) => ({ ...prev, from, to }));
     setSelectedIds([]);
     setCurrentPage(1);
@@ -997,7 +955,7 @@ const visibleReceiptIds = useMemo(
         confirmedBy: currentUser?._id || currentUser?.id || null,
       });
       toast.success("Receipt confirmed");
-      await loadData();
+      await loadData(safeCurrentPage, appliedFilters);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to confirm receipt");
     }
@@ -1011,7 +969,7 @@ const visibleReceiptIds = useMemo(
 
     try {
       const toConfirm = selectedIds.filter((id) => {
-        const receipt = filteredReceipts.find((item) => item._id === id);
+        const receipt = receipts.find((item) => item._id === id);
         return receipt && !receipt.isConfirmed;
       });
       await Promise.all(
@@ -1021,7 +979,7 @@ const visibleReceiptIds = useMemo(
       );
       toast.success("Selected receipts confirmed");
       setSelectedIds([]);
-      await loadData();
+      await loadData(safeCurrentPage, appliedFilters);
     } catch {
       toast.error("Failed to confirm selected receipts");
     }
@@ -1040,7 +998,7 @@ const visibleReceiptIds = useMemo(
     try {
       await unconfirmRentPayment(dispatch, receipt._id);
       toast.success("Receipt unconfirmed.");
-      await loadData();
+      await loadData(safeCurrentPage, appliedFilters);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to unconfirm receipt");
     }
@@ -1053,10 +1011,10 @@ const visibleReceiptIds = useMemo(
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.length === filteredReceipts.length) {
+    if (selectedIds.length === receipts.length) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(filteredReceipts.map((item) => item._id));
+      setSelectedIds(receipts.map((item) => item._id));
     }
   };
 
@@ -1336,12 +1294,12 @@ const visibleReceiptIds = useMemo(
 
   useEffect(() => {
     if (!requestedReceiptId || allocationDrawerOpen || autoOpenedReceiptId === requestedReceiptId) return;
-    const requestedReceipt = rentPayments.find((payment) => String(payment?._id || "") === requestedReceiptId);
+    const requestedReceipt = receipts.find((payment) => String(payment?._id || "") === requestedReceiptId);
     if (!requestedReceipt) return;
     setAutoOpenedReceiptId(requestedReceiptId);
     setActiveReceipt(requestedReceipt);
     openAllocationDrawer(requestedReceipt);
-  }, [requestedReceiptId, allocationDrawerOpen, autoOpenedReceiptId, rentPayments, openAllocationDrawer]);
+  }, [requestedReceiptId, allocationDrawerOpen, autoOpenedReceiptId, receipts, openAllocationDrawer]);
 
   const allocationOptionMap = useMemo(
     () => new Map((allocationOptions || []).map((option) => [String(option.invoiceId || ""), option])),
@@ -1616,7 +1574,7 @@ const visibleReceiptIds = useMemo(
       toast.success("Receipt allocations updated");
       syncActiveReceipt(updated);
       setAllocationTarget(updated);
-      await loadData();
+      await loadData(safeCurrentPage, appliedFilters);
       closeAllocationDrawer();
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to update receipt allocations");
@@ -1643,10 +1601,10 @@ const visibleReceiptIds = useMemo(
       toast.warning("You do not have permission to print receipt lists");
       return;
     }
-    const totalAmt = filteredReceipts.reduce((s, r) => s + Math.abs(Number(r.amount || 0)), 0);
+    const totalAmt = receipts.reduce((s, r) => s + Math.abs(Number(r.amount || 0)), 0);
     printTabularList({
       title: "Receipts Register",
-      subtitle: `${filteredReceipts.length} record${filteredReceipts.length !== 1 ? "s" : ""} · Total KES ${totalAmt.toLocaleString()}`,
+      subtitle: `${receipts.length} record${receipts.length !== 1 ? "s" : ""} · Total KES ${totalAmt.toLocaleString()}`,
       company: currentCompany,
       columns: [
         { label: "#", key: "_idx", value: (_, i) => i + 1 },
@@ -1660,7 +1618,7 @@ const visibleReceiptIds = useMemo(
         { label: "Amount (KES)", key: "amount", align: "right", value: (r) => Math.abs(Number(r.amount || 0)).toLocaleString() },
         { label: "Status", key: "_status", value: (r) => (r.isConfirmed ? "Confirmed" : "Pending") },
       ],
-      rows: filteredReceipts,
+      rows: receipts,
     });
   };
 
@@ -1705,9 +1663,12 @@ const visibleReceiptIds = useMemo(
               <select value={draftFilters.property} onChange={(e) => setDraftFilters((prev) => ({ ...prev, property: e.target.value, unit: "all" }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                 {propertyOptions.map((p) => (<option key={p} value={p}>{p === "all" ? "Property" : p}</option>))}
               </select>
-              <select value={draftFilters.unit} onChange={(e) => setDraftFilters((prev) => ({ ...prev, unit: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                {unitOptions.map((u) => (<option key={u} value={u}>{u === "all" ? "Unit" : u}</option>))}
-              </select>
+              <input
+                value={draftFilters.unit === "all" ? "" : draftFilters.unit}
+                onChange={(e) => setDraftFilters((prev) => ({ ...prev, unit: e.target.value || "all" }))}
+                placeholder="Unit"
+                className="h-7 w-20 shrink-0 rounded border border-slate-200 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+              />
               <select value={draftFilters.ledger} onChange={(e) => setDraftFilters((prev) => ({ ...prev, ledger: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                 <option value="all">Ledger</option>
                 <option value="receipts">Receipts</option>
@@ -1808,7 +1769,7 @@ const visibleReceiptIds = useMemo(
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredReceipts.length === 0 ? (
+                  {receipts.length === 0 ? (
                     <tr>
                       <td colSpan="16" className="px-3 py-10 text-center text-slate-500">
                         No receipts found.
@@ -1921,14 +1882,14 @@ const visibleReceiptIds = useMemo(
             </div>
             <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-1 text-xs text-slate-700">
               <p>
-                <span className="font-semibold">Showing:</span> {filteredReceipts.length === 0 ? 0 : startIndex + 1}
+                <span className="font-semibold">Showing:</span> {recPagination.totalItems === 0 ? 0 : startIndex + 1}
                 {" - "}
-                {Math.min(endIndex, filteredReceipts.length)} of {filteredReceipts.length} receipt(s)
+                {Math.min(endIndex, recPagination.totalItems)} of {recPagination.totalItems} receipt(s)
               </p>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  onClick={() => handlePageChange(safeCurrentPage - 1)}
                   disabled={safeCurrentPage === 1}
                   className="rounded-md border border-slate-300 px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -1939,7 +1900,7 @@ const visibleReceiptIds = useMemo(
                 </span>
                 <button
                   type="button"
-                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                  onClick={() => handlePageChange(safeCurrentPage + 1)}
                   disabled={safeCurrentPage === totalPages}
                   className="rounded-md border border-slate-300 px-3 py-1 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >

@@ -28,6 +28,7 @@ const LandlordPaymentSchema = new mongoose.Schema(
 );
 
 LandlordPaymentSchema.index({ business: 1, landlord: 1, date: -1 });
+LandlordPaymentSchema.index({ business: 1, landlord: 1, status: 1 });
 LandlordPaymentSchema.index({ business: 1, reference: 1 }, { sparse: true });
 
 export default mongoose.model("LandlordPayment", LandlordPaymentSchema);

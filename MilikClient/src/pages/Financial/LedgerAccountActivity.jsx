@@ -137,6 +137,15 @@ const LedgerAccountActivity = () => {
     loadActivity();
   }, [loadActivity]); // eslint-disable-line
 
+  // ── Update tab title once account name is known ──
+  useEffect(() => {
+    if (!account?.code || !account?.name) return;
+    navigate(location.pathname, {
+      state: { tabTitle: `${account.code} — ${account.name}` },
+      replace: true,
+    });
+  }, [account?.code, account?.name]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Load accounts for Move dropdown ──
   useEffect(() => {
     if (!businessId) return;
@@ -451,7 +460,7 @@ const LedgerAccountActivity = () => {
 
                         {/* Narration */}
                         <td className="px-3 py-1 border-r border-gray-100 max-w-xs text-slate-600">
-                          <p className="truncate">{entry.notes || entry.category || "—"}</p>
+                          <p className="truncate">{entry.displayNarration || entry.notes || entry.category || "—"}</p>
                           {(entry?.reversalOf || entry?.reversedByEntry) && (
                             <p className="text-[10px] text-slate-400 font-mono truncate">
                               {entry?.reversalOf ? `↩ reversal of ${shortRef(entry.reversalOf)}` : `↩ reversed by ${entry?.reversedByUserName || shortRef(entry.reversedByEntry)}`}

@@ -40,7 +40,7 @@ export const listServices = async (req, res, next) => {
       ];
     }
 
-    const limit = Math.min(Math.max(Number(req.query.limit || 30), 1), 100);
+    const limit = Math.min(Math.max(Number(req.query.limit || 30), 1), 500);
     const page = Math.max(Number(req.query.page || 1), 1);
     const skip = (page - 1) * limit;
     const [services, total] = await Promise.all([

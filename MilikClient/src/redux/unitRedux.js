@@ -54,6 +54,7 @@ export const deleteUnit = createAsyncThunk(
 
 const initialState = {
   units: [],
+  pagination: { total: 0, page: 1, pages: 1, limit: 500 },
   isFetching: false,
   error: false,
 };
@@ -69,7 +70,16 @@ export const unitSlice = createSlice({
     },
     getUnitsSuccess: (state, action) => {
       state.isFetching = false;
-      state.units = Array.isArray(action.payload) ? action.payload : (action.payload?.data ?? []);
+      const p = action.payload;
+      state.units = Array.isArray(p) ? p : (p?.data ?? []);
+      if (p && typeof p === "object" && !Array.isArray(p)) {
+        state.pagination = {
+          total: p.total ?? state.pagination.total,
+          page: p.page ?? state.pagination.page,
+          pages: p.pages ?? state.pagination.pages,
+          limit: p.limit ?? state.pagination.limit,
+        };
+      }
     },
     getUnitsFailure: (state) => {
       state.isFetching = false;
@@ -191,7 +201,16 @@ export const unitSlice = createSlice({
       })
       .addCase(getUnits.fulfilled, (state, action) => {
         state.isFetching = false;
-        state.units = Array.isArray(action.payload) ? action.payload : (action.payload?.data ?? []);
+        const p = action.payload;
+        state.units = Array.isArray(p) ? p : (p?.data ?? []);
+        if (p && typeof p === "object" && !Array.isArray(p)) {
+          state.pagination = {
+            total: p.total ?? state.pagination.total,
+            page: p.page ?? state.pagination.page,
+            pages: p.pages ?? state.pagination.pages,
+            limit: p.limit ?? state.pagination.limit,
+          };
+        }
       })
       .addCase(getUnits.rejected, (state) => {
         state.isFetching = false;

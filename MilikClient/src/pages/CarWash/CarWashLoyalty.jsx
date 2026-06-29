@@ -64,7 +64,7 @@ const ProgramPanel = ({ program, onSaved }) => {
   const canManage = useCarWashPermission("carwash-loyalty", "manage");
 
   useEffect(() => {
-    carWashApi.listServices({ active: true })
+    carWashApi.listServices({ active: true, limit: 500 })
       .then((d) => setServices(Array.isArray(d) ? d : d?.services ?? []))
       .catch(() => {});
   }, []);

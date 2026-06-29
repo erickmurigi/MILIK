@@ -78,11 +78,9 @@ const Landlords = () => {
 
   // ---- NEW: Draft filters (typed) + Applied filters (used for searching) ----
   const emptyFilters = {
-    status: "Active", // Active default
-    portal: "any", // any | Enabled | Disabled
-    propsCount: "any", // any | 1-5 | 6-10 | 10+
-    location: "any",
-
+    status: "Active",
+    portal: "any",
+    location: "",
     code: "",
     name: "",
     regId: "",
@@ -142,20 +140,25 @@ const Landlords = () => {
     []
   );
 
-  const buildLandlordParams = useCallback((overridePage) => {
-    const page = overridePage ?? currentPage;
+  const buildLandlordParams = useCallback((page = 1) => {
     const params = { page, limit: pageSize };
     if (currentCompany?._id) params.company = currentCompany._id;
     if (appliedFilters.status !== "any") params.status = appliedFilters.status;
-    const textSearch = appliedFilters.name.trim() || appliedFilters.code.trim();
+    if (appliedFilters.portal !== "any") params.portal = appliedFilters.portal;
+    if (appliedFilters.location.trim()) params.location = appliedFilters.location.trim();
+    const textSearch = [
+      appliedFilters.name, appliedFilters.code, appliedFilters.regId,
+      appliedFilters.pin, appliedFilters.email, appliedFilters.phone,
+    ].map((v) => v.trim()).find(Boolean);
     if (textSearch) params.search = textSearch;
     return params;
-  }, [currentPage, pageSize, currentCompany?._id, appliedFilters]);
+  }, [currentCompany?._id, appliedFilters, pageSize]);
 
-  // Fetch landlords on mount, company change, page change, or filter apply
+  // Fetch landlords whenever company, applied filters, or pageSize changes (always page 1)
   useEffect(() => {
     if (!currentCompany?._id) return;
-    dispatch(getLandlords(buildLandlordParams()));
+    setCurrentPage(1);
+    dispatch(getLandlords(buildLandlordParams(1)));
   }, [dispatch, buildLandlordParams, currentCompany?._id]);
 
   // Close dropdown on outside click
@@ -179,15 +182,6 @@ const Landlords = () => {
     setSelectedLandlords((prev) => prev.filter((id) => validIds.has(id)));
   }, [landlords]);
 
-  const normalize = (v) => String(v ?? "").toLowerCase().trim();
-
-  const uniqueLocations = useMemo(() => {
-    const set = new Set();
-    landlords.forEach((l) => {
-      if (l.location) set.add(l.location);
-    });
-    return ["any", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
-  }, [landlords]);
 
   // --- APPLY SEARCH (button) ---
   const applySearch = () => {
@@ -221,63 +215,8 @@ const Landlords = () => {
     }
   };
 
-  // --- FILTER LOGIC (uses appliedFilters only) ---
-  const matchesText = (fieldValue, query) => {
-    const q = normalize(query);
-    if (!q) return true;
-    return normalize(fieldValue).includes(q);
-  };
-
-  const matchesPortal = (l) => {
-    if (appliedFilters.portal === "any") return true;
-    return String(l.portalAccess) === appliedFilters.portal;
-  };
-
-  const matchesLocation = (l) => {
-    if (appliedFilters.location === "any") return true;
-    return String(l.location) === appliedFilters.location;
-  };
-
-  const matchesStatus = (l) => {
-    if (appliedFilters.status === "any") return true;
-    return String(l.status || "Active") === appliedFilters.status;
-  };
-
-  const matchesPropertiesCount = (l) => {
-    if (appliedFilters.propsCount === "any") return true;
-    const n = Number(l.activeProperties || 0);
-    if (Number.isNaN(n)) return false;
-
-    if (appliedFilters.propsCount === "1-5") return n >= 1 && n <= 5;
-    if (appliedFilters.propsCount === "6-10") return n >= 6 && n <= 10;
-    if (appliedFilters.propsCount === "10+") return n >= 11;
-    return true;
-  };
-
-  const matchesTypedFields = (l) => {
-    return (
-      matchesText(l.landlordCode || l.code, appliedFilters.code) &&
-      matchesText(l.landlordName || l.name, appliedFilters.name) &&
-      matchesText(l.regId, appliedFilters.regId) &&
-      matchesText(l.taxPin || l.pin, appliedFilters.pin) &&
-      matchesText(l.email, appliedFilters.email) &&
-      matchesText(l.phoneNumber || l.phone, appliedFilters.phone)
-    );
-  };
-
-  const filteredLandlords = useMemo(() => {
-    return landlords.filter(
-      (l) =>
-        matchesTypedFields(l) &&
-        matchesPortal(l) &&
-        matchesLocation(l) &&
-        matchesPropertiesCount(l)
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [landlords, appliedFilters]);
-
-  // Pagination — totalPages is driven by server count; client filters may reduce visible rows per page
-  const totalPages = Math.max(1, Math.ceil((landlordPagination.total || filteredLandlords.length) / pageSize));
+  // Server handles all filtering; client just renders the current page from Redux
+  const totalPages = Math.max(1, landlordPagination.pages ?? 1);
   const safeCurrentPage = Math.min(currentPage, totalPages);
 
   const visiblePages = useMemo(() => {
@@ -293,8 +232,7 @@ const Landlords = () => {
   }, [safeCurrentPage, totalPages]);
 
   const startIndex = (safeCurrentPage - 1) * pageSize;
-  const endIndex = startIndex + pageSize;
-  const currentLandlords = filteredLandlords.slice(0, endIndex - startIndex);
+  const currentLandlords = landlords;
 
   const countLinkedProperties = (landlord = {}) =>
     Number(landlord?.activeProperties || 0) + Number(landlord?.archivedProperties || 0);
@@ -324,11 +262,6 @@ const Landlords = () => {
     [selectedLandlordRows]
   );
 
-  // Ensure currentPage doesn't exceed totalPages after filtering
-  useEffect(() => {
-    if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [totalPages]);
 
   // Selection
   const handleSelectLandlord = (id) => {
@@ -442,7 +375,7 @@ const Landlords = () => {
             await dispatch(deleteLandlord(landlord._id));
           }
           setCurrentPage(1);
-          await dispatch(getLandlords(buildLandlordParams(1)));
+          await dispatch(getLandlords(buildLandlordParams()));
           setSelectedLandlords([]);
           setSelectAll(false);
           setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
@@ -511,7 +444,7 @@ const Landlords = () => {
             await dispatch(updateLandlord(landlord._id, { status: "Archived" }));
           }
           setCurrentPage(1);
-          await dispatch(getLandlords(buildLandlordParams(1)));
+          await dispatch(getLandlords(buildLandlordParams()));
           setSelectedLandlords([]);
           setSelectAll(false);
           setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
@@ -570,7 +503,7 @@ const Landlords = () => {
             await dispatch(updateLandlord(landlord._id, { status: "Active" }));
           }
           setCurrentPage(1);
-          await dispatch(getLandlords(buildLandlordParams(1)));
+          await dispatch(getLandlords(buildLandlordParams()));
           setSelectedLandlords([]);
           setSelectAll(false);
           setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
@@ -754,7 +687,7 @@ const Landlords = () => {
       });
 
       setCurrentPage(1);
-      await dispatch(getLandlords(buildLandlordParams(1)));
+      await dispatch(getLandlords(buildLandlordParams()));
 
       return response.data;
     } catch (error) {
@@ -764,15 +697,15 @@ const Landlords = () => {
   };
 
   const fetchAllForExport = async () => {
-    const exportParams = { ...buildLandlordParams(1), limit: 5000, page: 1 };
+    const exportParams = { ...buildLandlordParams(), limit: 5000, page: 1 };
     const qs = new URLSearchParams(exportParams).toString();
     const res = await adminRequests.get(`/landlords?${qs}`);
     const raw = res.data;
-    return Array.isArray(raw) ? raw : (Array.isArray(raw?.data) ? raw.data : filteredLandlords);
+    return Array.isArray(raw) ? raw : (Array.isArray(raw?.data) ? raw.data : landlords);
   };
 
   const handleExport = async () => {
-    if (landlordPagination.total === 0 && filteredLandlords.length === 0) {
+    if (landlordPagination.total === 0 && landlords.length === 0) {
       toast.warning('No landlords to export');
       return;
     }
@@ -781,17 +714,17 @@ const Landlords = () => {
       exportLandlordsToExcel(rows);
       toast.success(`Exported ${rows.length} landlords to Excel`);
     } catch {
-      exportLandlordsToExcel(filteredLandlords);
-      toast.success(`Exported ${filteredLandlords.length} landlords to Excel`);
+      exportLandlordsToExcel(landlords);
+      toast.success(`Exported ${landlords.length} landlords to Excel`);
     }
   };
 
   const handlePrintList = async () => {
-    if (landlordPagination.total === 0 && filteredLandlords.length === 0) {
+    if (landlordPagination.total === 0 && landlords.length === 0) {
       toast.warning("No landlords to print");
       return;
     }
-    let rows = filteredLandlords;
+    let rows = landlords;
     try { rows = await fetchAllForExport(); } catch { /* use current page */ }
 
     printTabularList({
@@ -837,26 +770,13 @@ const Landlords = () => {
               <option value="Disabled">Disabled</option>
             </select>
 
-            <select
-              value={draftFilters.propsCount}
-              onChange={(e) => setDraftFilters((p) => ({ ...p, propsCount: e.target.value }))}
-              className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
-            >
-              <option value="any">Props</option>
-              <option value="1-5">1–5</option>
-              <option value="6-10">6–10</option>
-              <option value="10+">10+</option>
-            </select>
-
-            <select
+            <input
               value={draftFilters.location}
               onChange={(e) => setDraftFilters((p) => ({ ...p, location: e.target.value }))}
-              className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
-            >
-              {uniqueLocations.map((loc) => (
-                <option key={loc} value={loc}>{loc === "any" ? "Location" : loc}</option>
-              ))}
-            </select>
+              onKeyDown={onFilterEnter}
+              placeholder="Location"
+              className="h-7 w-24 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+            />
 
             <div className="h-4 w-px shrink-0 bg-slate-200" />
 
@@ -1105,9 +1025,9 @@ const Landlords = () => {
                   <div className="flex items-center gap-4">
                     <span className="font-bold">
                       Showing{" "}
-                      <span className="font-bold">{filteredLandlords.length === 0 ? 0 : startIndex + 1}</span> to{" "}
-                      <span className="font-bold">{startIndex + filteredLandlords.length}</span> of{" "}
-                      <span className="font-bold">{landlordPagination.total || filteredLandlords.length}</span> landlords
+                      <span className="font-bold">{landlords.length === 0 ? 0 : startIndex + 1}</span> to{" "}
+                      <span className="font-bold">{startIndex + landlords.length}</span> of{" "}
+                      <span className="font-bold">{landlordPagination.total || landlords.length}</span> landlords
                     </span>
 
                     {selectedLandlords.length > 0 && (

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { FaArrowLeft, FaSave, FaSpinner } from "react-icons/fa";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -128,7 +128,6 @@ const AddReceipt = () => {
   const prefilledAmount = searchParams.get("amount") || "";
   const prefilledReference = searchParams.get("reference") || "";
   const prefilledMethod = searchParams.get("paymentMethod") || searchParams.get("method") || "";
-  const prefilledPaymentType = searchParams.get("paymentType") || "";
   const prefilledDescription = searchParams.get("description") || "";
   const prefilledCollectionId = searchParams.get("collectionId") || "";
   const prefilledAccountReference = searchParams.get("accountReference") || "";
@@ -159,7 +158,6 @@ const AddReceipt = () => {
       propertyId: "",
       tenantId: preselectedTenantId,
       amount: prefilledAmount,
-      paymentType: ["rent", "deposit", "utility", "late_fee", "other"].includes(prefilledPaymentType) ? prefilledPaymentType : "rent",
       paymentMethod: ["bank_transfer", "mobile_money", "cash", "check", "credit_card", "pesalink", "rtgs", "standing_order", "direct_debit"].includes(prefilledMethod) ? prefilledMethod : "mobile_money",
       cashbook: "Main Cashbook",
       paidDirectToLandlord: isLandlordMode,
@@ -215,6 +213,20 @@ const AddReceipt = () => {
       includeTerminatedTenants: typeof updater === "function" ? updater(Boolean(prev.includeTerminatedTenants)) : Boolean(updater),
     }));
   };
+
+  // ── Dynamic reference label based on payment method ──
+  const refRequired = ["mobile_money", "bank_transfer", "pesalink", "rtgs", "standing_order"].includes(formData.paymentMethod);
+  const refLabel = {
+    mobile_money:   "M-Pesa / Airtel Code",
+    bank_transfer:  "Bank Transfer Ref",
+    pesalink:       "PesaLink Ref",
+    rtgs:           "RTGS / Wire Ref",
+    standing_order: "Standing Order Ref",
+    direct_debit:   "Direct Debit Ref",
+    cash:           "Reference No.",
+    check:          "Cheque No.",
+    credit_card:    "Card Auth. Ref",
+  }[formData.paymentMethod] || "Reference No.";
 
   // In self-managing landlord mode, receipts are always auto-confirmed.
   // Cashbook is still required — landlords need to track which account received the payment.
@@ -491,6 +503,35 @@ const AddReceipt = () => {
     };
   }, [formData.amount, orderedOutstandingInvoices, balanceSummary.balance, manualSelectionMode, priorityInvoiceKeys]);
 
+  // ── Derive paymentType from allocations so the field can be hidden ──
+  const derivedPaymentType = useMemo(() => {
+    if (creditOnAccountMode) return "rent";
+    const lines = allocationPreview?.invoiceLines || [];
+    const totals = {};
+    for (const line of lines) {
+      if (line.apply > 0) totals[line.chargeType] = (totals[line.chargeType] || 0) + line.apply;
+    }
+    const entries = Object.entries(totals);
+    if (!entries.length) return "rent";
+    const primary = entries.sort((a, b) => b[1] - a[1])[0][0];
+    return { rent: "rent", deposit: "deposit", utility: "utility", late_fee: "late_fee", combined: "rent" }[primary] || "rent";
+  }, [creditOnAccountMode, allocationPreview]);
+
+  // ── Auto-populate description from tenant + date ──
+  const lastAutoDescRef = useRef("");
+  useEffect(() => {
+    if (!selectedTenant || !formData.paymentDate) return;
+    const tenantName = getTenantName(selectedTenant);
+    const unitNumber = selectedTenant?.unit?.unitNumber || "";
+    const d          = new Date(`${formData.paymentDate}T00:00:00`);
+    const monthYear  = Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-KE", { month: "short", year: "numeric" });
+    if (!monthYear) return;
+    const autoDesc = unitNumber ? `${monthYear} — ${tenantName} (Unit ${unitNumber})` : `${monthYear} — ${tenantName}`;
+    if (!formData.description || formData.description === lastAutoDescRef.current) {
+      lastAutoDescRef.current = autoDesc;
+      setFormData((prev) => ({ ...prev, description: autoDesc }));
+    }
+  }, [selectedTenant, formData.paymentDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onPropertyChange = (propertyId) => {
     setFormData((prev) => ({
@@ -538,9 +579,8 @@ const AddReceipt = () => {
       return;
     }
 
-    const referenceRequired = ["mobile_money", "bank_transfer", "pesalink", "rtgs", "standing_order"].includes(formData.paymentMethod);
-    if (referenceRequired && !String(formData.referenceNumber || "").trim()) {
-      toast.error("Reference number is required for this payment method");
+    if (refRequired && !String(formData.referenceNumber || "").trim()) {
+      toast.error(`${refLabel} is required for this payment method`);
       return;
     }
 
@@ -566,7 +606,7 @@ const AddReceipt = () => {
       tenant: formData.tenantId,
       unit: unitId,
       amount: Number(formData.amount),
-      paymentType: formData.paymentType,
+      paymentType: derivedPaymentType,
       paymentMethod: formData.paymentMethod,
       cashbook: isDirectToLandlord ? "" : formData.cashbook,
       paidDirectToLandlord: isDirectToLandlord,
@@ -606,7 +646,7 @@ const AddReceipt = () => {
       toast.error(error?.response?.data?.message || "Failed to create receipt");
       setIsSaving(false);
     }
-  }, [isSaving, canSaveReceipt, currentCompany, formData, isDirectToLandlord, isCompanyLandlordMode, selectedTenant, allocationPreview, manualSelectionMode, priorityInvoiceKeys, prefilledCollectionId, prefilledAccountReference, prefilledMsisdn, prefilledPayerName, isInstantMode, dispatch, clearReceiptDraft, navigate, backToPath]);
+  }, [isSaving, canSaveReceipt, currentCompany, formData, isDirectToLandlord, isCompanyLandlordMode, selectedTenant, allocationPreview, derivedPaymentType, refRequired, refLabel, manualSelectionMode, priorityInvoiceKeys, prefilledCollectionId, prefilledAccountReference, prefilledMsisdn, prefilledPayerName, isInstantMode, dispatch, clearReceiptDraft, navigate, backToPath]);
 
   const amountDueColor =
     !formData.tenantId
@@ -702,6 +742,11 @@ const AddReceipt = () => {
                       disabled={!formData.propertyId}
                       size="sm"
                     />
+                    {selectedTenant?.unit?.unitNumber && (
+                      <p className="mt-1 text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                        Unit {selectedTenant.unit.unitNumber}
+                      </p>
+                    )}
                     {selectedTenant && isTerminatedTenant(selectedTenant) && (
                       <p className="mt-1 text-[10px] font-semibold text-amber-600">
                         Arrears / recovery receipt only — occupancy is not restored.
@@ -736,10 +781,10 @@ const AddReceipt = () => {
                     </div>
                   </div>
 
-                  {/* Reference Number */}
+                  {/* Reference Number — label changes with payment method */}
                   <div>
                     <label className={labelClass}>
-                      Reference Number{["mobile_money", "bank_transfer", "pesalink", "rtgs", "standing_order"].includes(formData.paymentMethod) ? " *" : ""}
+                      {refLabel}{refRequired ? " *" : ""}
                     </label>
                     <input
                       type="text"
@@ -747,30 +792,14 @@ const AddReceipt = () => {
                       onChange={(e) => setFormData((prev) => ({ ...prev, referenceNumber: e.target.value }))}
                       className={inputClass}
                       placeholder={
-                        formData.paymentMethod === "mobile_money" ? "M-Pesa / Airtel transaction code"
-                        : formData.paymentMethod === "bank_transfer" ? "Bank EFT reference / slip no."
-                        : formData.paymentMethod === "pesalink" ? "PesaLink transaction reference"
-                        : formData.paymentMethod === "rtgs" ? "RTGS / wire transfer reference"
-                        : formData.paymentMethod === "standing_order" ? "Standing order reference"
-                        : "Optional ref / receipt no."
+                        formData.paymentMethod === "mobile_money" ? "e.g. QJZ7HK3P2T"
+                        : formData.paymentMethod === "bank_transfer" ? "EFT reference / slip no."
+                        : formData.paymentMethod === "pesalink" ? "PesaLink transaction ref"
+                        : formData.paymentMethod === "rtgs"    ? "Wire transfer ref"
+                        : formData.paymentMethod === "check"   ? "Cheque number"
+                        : "Optional"
                       }
                     />
-                  </div>
-
-                  {/* Payment Type */}
-                  <div>
-                    <label className={labelClass}>Payment Type *</label>
-                    <select
-                      value={formData.paymentType}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, paymentType: e.target.value }))}
-                      className={inputClass}
-                    >
-                      <option value="rent">Rent</option>
-                      <option value="deposit">Deposit</option>
-                      <option value="utility">Utility</option>
-                      <option value="late_fee">Late Fee</option>
-                      <option value="other">Other</option>
-                    </select>
                   </div>
 
                   {/* Payment Method */}
@@ -798,7 +827,11 @@ const AddReceipt = () => {
                     <label className={labelClass}>{isDirectToLandlord ? "Cashbook" : "Cashbook *"}</label>
                     {isDirectToLandlord ? (
                       <div className="flex h-8 items-center rounded border border-amber-200 bg-amber-50 px-3 text-xs text-amber-800">
-                        Direct-to-landlord — not posted to MILIK cashbooks.
+                        Direct-to-landlord — not posted to cashbooks.
+                      </div>
+                    ) : cashbookOptions.length === 1 ? (
+                      <div className="flex h-8 items-center rounded border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700">
+                        {cashbookOptions[0].code ? `${cashbookOptions[0].code} · ${cashbookOptions[0].name}` : cashbookOptions[0].name}
                       </div>
                     ) : (
                       <select
@@ -843,15 +876,21 @@ const AddReceipt = () => {
                     </div>
                   )}
 
-                  {/* Description */}
+                  {/* Description — feeds the GL ledger narration */}
                   <div className="col-span-2 md:col-span-4">
-                    <label className={labelClass}>Description</label>
+                    <label className={labelClass}>
+                      Description <span className="font-normal text-slate-400">(appears in ledger narration)</span>
+                    </label>
                     <textarea
                       rows={2}
                       value={formData.description}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        lastAutoDescRef.current = "";
+                        setFormData((prev) => ({ ...prev, description: val }));
+                      }}
                       className={inputClass}
-                      placeholder="Optional notes"
+                      placeholder="Auto-filled from tenant and date — edit freely"
                     />
                   </div>
 

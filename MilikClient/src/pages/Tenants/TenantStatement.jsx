@@ -3,20 +3,17 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import {
   selectCurrentCompany,
-  selectAllTenants,
   selectAllLeases,
-  selectAllRentPayments,
   selectAllMaintenances,
   selectAllUnits,
   selectAllProperties,
 } from "../../redux/selectors";
-import { getTenants } from "../../redux/tenantsRedux";
 import { getUnits } from "../../redux/unitRedux";
 import { getProperties } from "../../redux/propertyRedux";
 import {
   getLeases,
   getUtilities,
-  getRentPayments,
+  listRentPaymentsPage,
   getTenantInvoices,
   getTenantInvoiceNotes,
   createTenantInvoice,
@@ -416,9 +413,9 @@ const TenantStatement = () => {
   const [companyTaxConfig, setCompanyTaxConfig] = useState(null);
 
   const currentCompany = useSelector(selectCurrentCompany);
-  const tenantsFromStore = useSelector(selectAllTenants);
+  const [tenantData, setTenantData] = useState(null);
   const leasesFromStore = useSelector(selectAllLeases);
-  const rentPaymentsFromStore = useSelector(selectAllRentPayments);
+  const [tenantPayments, setTenantPayments] = useState([]);
   const maintenanceFromStore = useSelector(selectAllMaintenances);
   const expensesFromStore = useSelector((state) => state.expenseProperty?.expenseProperties || []);
   const utilitiesFromStore = useSelector((state) => state.utility?.utilities || []);
@@ -429,7 +426,7 @@ const TenantStatement = () => {
     [companyTaxConfig]
   );
 
-  const tenant = tenantsFromStore?.find((t) => t._id === tenantId);
+  const tenant = tenantData;
 
   useEffect(() => {
     const requestedTab = String(location.state?.initialTab || "").trim().toLowerCase();
@@ -653,12 +650,14 @@ const TenantStatement = () => {
   useEffect(() => {
     if (!currentCompany?._id) return;
 
-    dispatch(getTenants({ business: currentCompany._id }));
+    adminRequests.get(`/tenants/${tenantId}`).then((res) => setTenantData(res.data?.data || res.data)).catch(() => {});
     dispatch(getUnits({ business: currentCompany._id }));
     dispatch(getProperties({ business: currentCompany._id }));
     getLeases(dispatch, currentCompany._id, null, tenantId);
     getUtilities(dispatch, currentCompany._id);
-    getRentPayments(dispatch, currentCompany._id, tenantId);
+    listRentPaymentsPage({ business: currentCompany._id, tenant: tenantId, status: "active", limit: 500, page: 1 })
+      .then(({ items }) => setTenantPayments(items ?? []))
+      .catch(() => {});
   }, [dispatch, currentCompany?._id, tenantId]);
 
   useEffect(() => {
@@ -970,10 +969,10 @@ const TenantStatement = () => {
   }, [tenantInvoices, tenantId]);
 
   const activeTenantReceipts = useMemo(() => {
-    return rentPaymentsFromStore
+    return tenantPayments
       .filter((payment) => safeId(payment?.tenant) === String(tenantId) && isActiveReceipt(payment))
       .sort((a, b) => new Date(a.paymentDate || a.createdAt) - new Date(b.paymentDate || b.createdAt));
-  }, [rentPaymentsFromStore, tenantId]);
+  }, [tenantPayments, tenantId]);
 
   const statementData = useMemo(() => {
     const transactions = [];
@@ -1175,7 +1174,7 @@ const TenantStatement = () => {
     const query = receiptId ? `?receipt=${encodeURIComponent(receiptId)}&mode=allocate` : "";
     const receipt = receiptId
       ? activeTenantReceipts.find((item) => safeId(item) === String(receiptId)) ||
-        rentPaymentsFromStore.find((item) => safeId(item) === String(receiptId)) ||
+        tenantPayments.find((item) => safeId(item) === String(receiptId)) ||
         null
       : null;
     const receiptNumber = String(receipt?.receiptNumber || receipt?.referenceNumber || "").trim();
@@ -3252,7 +3251,7 @@ const TenantStatement = () => {
   };
 
   const renderActions = () => {
-    const tenantReceipts = rentPaymentsFromStore.filter(
+    const tenantReceipts = tenantPayments.filter(
       (p) =>
         (p.tenant === tenantId || p.tenant?._id === tenantId) &&
         p?.ledgerType === "receipts" &&

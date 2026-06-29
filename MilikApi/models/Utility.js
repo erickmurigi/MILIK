@@ -17,4 +17,7 @@ const UtilitySchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+UtilitySchema.index({ business: 1, isActive: 1 });
+UtilitySchema.index({ business: 1, createdAt: -1 });
+
 export default mongoose.model("Utility", UtilitySchema);

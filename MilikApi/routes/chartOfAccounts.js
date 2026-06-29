@@ -204,11 +204,14 @@ router.get("/:id/activity", verifyUser, requireCompanyModule(GL_ACCESS_MODULES),
         : (agg?.creditSum || 0) - (agg?.debitSum || 0);
     }
 
-    // Load entries — skip PM-specific populates (tenant/unit/property/landlord are null for carwash)
+    // Load entries with enriched context for narration display
     const entries = await FinancialLedgerEntry.find(match)
       .sort({ transactionDate: 1, createdAt: 1, _id: 1 })
-      .populate("accountId", "code name type")
-      .populate("createdBy", "firstName lastName")
+      .populate("accountId",  "code name type")
+      .populate("createdBy",  "firstName lastName")
+      .populate("tenant",     "name")
+      .populate("unit",       "unitNumber")
+      .populate("landlord",   "landlordName")
       .lean();
 
     // For reversed entries, look up the creator of the reversal entry to show a name
@@ -236,11 +239,30 @@ router.get("/:id/activity", verifyUser, requireCompanyModule(GL_ACCESS_MODULES),
       const reversedByUserName = entry.reversedByEntry
         ? reversalCreatorMap.get(String(entry.reversedByEntry)) || null
         : null;
+
+      // Build enriched narration: stored notes + tenant name + unit if available
+      const tenantName  = entry.tenant?.name     || null;
+      const unitNum     = entry.unit?.unitNumber  || null;
+      const landlordName = entry.landlord?.landlordName || null;
+      const contextParts = [
+        tenantName,
+        unitNum ? `Unit ${unitNum}` : null,
+        !tenantName && landlordName ? landlordName : null,
+      ].filter(Boolean);
+      const baseNarration = entry.notes || entry.category || "";
+      const displayNarration = contextParts.length
+        ? (baseNarration ? `${baseNarration} — ${contextParts.join(", ")}` : contextParts.join(", "))
+        : baseNarration || null;
+
       return decorateLedgerActivityEntry({
         ...entry,
+        tenant:   undefined, // strip populated object — id already on entry
+        unit:     undefined,
+        landlord: undefined,
         runningBalance,
         createdByName,
         reversedByUserName,
+        displayNarration,
       });
     });
 

@@ -110,10 +110,21 @@ const CarWashQueueDisplay = () => {
     <div
       className="relative flex h-screen flex-col overflow-hidden"
       style={bgImage
-        ? { backgroundImage: `url(${bgImage})`, backgroundSize: "cover", backgroundPosition: "center 40%", paddingTop: "18px" }
+        ? { paddingTop: "18px" }
         : { background: "linear-gradient(160deg, #050d1a 0%, #0a1120 60%, #050d1a 100%)", paddingTop: "18px" }
       }
     >
+      {/* Background image — fills screen */}
+      {bgImage && (
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            backgroundImage: `url(${bgImage})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center 40%",
+          }}
+        />
+      )}
       {/* Very light overlay — nighttime photo is already dark, just need subtle depth */}
       {bgImage && (
         <div
@@ -161,48 +172,48 @@ const CarWashQueueDisplay = () => {
         </header>
 
         {/* ── 4-column grid with horizontal margins ── */}
-        <main className="grid flex-1 grid-cols-4 overflow-hidden px-6 pb-4 pt-3 gap-3">
+        <main className="grid flex-1 grid-cols-4 overflow-hidden px-6 pb-4 pt-3 gap-3 items-start">
           {COLS.map((col) => {
             const colJobs = byStatus(col.key);
+            const hasJobs = colJobs.length > 0;
             return (
               <section
                 key={col.key}
-                className={`flex flex-col overflow-hidden rounded-lg px-4 py-3 ${
+                className={`w-full overflow-hidden rounded-lg ${
                   bgImage ? "bg-black/10 backdrop-blur-[3px]" : ""
                 }`}
                 style={bgImage ? { border: "1px solid rgba(255,255,255,0.10)" } : {}}
               >
                 {/* Column heading */}
-                <div className={`-mx-4 mb-3 border-b-4 px-4 pb-2 ${col.color} ${bgImage ? "bg-black/55" : ""}`}>
+                <div className={`border-b-4 px-4 pb-2 pt-3 ${col.color} ${bgImage ? "bg-black/55" : ""}`}>
                   <div className="flex items-center gap-2 py-1">
                     <StatusPulse color={col.pulse} />
                     <span
-                      className="text-[1.05rem] font-black uppercase tracking-widest text-white"
+                      className="text-[1.16rem] font-black uppercase tracking-widest text-white"
                       style={{ textShadow: "0 1px 6px rgba(0,0,0,0.9)" }}
                     >
                       {col.label}
                     </span>
-                    <span className="text-[1.05rem] font-black text-white/70" style={{ textShadow: "0 1px 4px rgba(0,0,0,0.9)" }}>
+                    <span className="text-[1.16rem] font-black text-white/70" style={{ textShadow: "0 1px 4px rgba(0,0,0,0.9)" }}>
                       {colJobs.length}
                     </span>
                   </div>
                 </div>
 
-                {/* Cards */}
-                <div className="flex-1 overflow-y-auto pr-1">
-                  {colJobs.length === 0
-                    ? <p className="mt-4 text-center text-xs font-semibold text-white/25">—</p>
-                    : colJobs.map((j, i) => (
-                        <JobCard
-                          key={j._id}
-                          job={j}
-                          colCfg={col}
-                          position={col.key === "waiting" ? i + 1 : null}
-                          hasBg={!!bgImage}
-                        />
-                      ))
-                  }
-                </div>
+                {/* Cards — glass height ends after last card */}
+                {hasJobs && (
+                  <div className="px-4 py-3">
+                    {colJobs.map((j, i) => (
+                      <JobCard
+                        key={j._id}
+                        job={j}
+                        colCfg={col}
+                        position={col.key === "waiting" ? i + 1 : null}
+                        hasBg={!!bgImage}
+                      />
+                    ))}
+                  </div>
+                )}
               </section>
             );
           })}

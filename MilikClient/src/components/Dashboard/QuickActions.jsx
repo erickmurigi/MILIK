@@ -19,22 +19,9 @@ import {
   selectCurrentCompany,
   selectAllUnits,
   selectAllTenants,
-  selectAllLeases,
   selectAllMaintenances,
-  selectAllRentPayments,
   selectAllExpenseProperties,
 } from '../../redux/selectors';
-
-const normalizeArray = (value) => {
-  if (Array.isArray(value)) return value;
-  if (Array.isArray(value?.data)) return value.data;
-  if (Array.isArray(value?.items)) return value.items;
-  if (Array.isArray(value?.invoices)) return value.invoices;
-  if (Array.isArray(value?.vouchers)) return value.vouchers;
-  if (Array.isArray(value?.paymentVouchers)) return value.paymentVouchers;
-  if (Array.isArray(value?.statements)) return value.statements;
-  return [];
-};
 
 const normalizeId = (value) => {
   if (!value) return '';
@@ -51,7 +38,6 @@ const parseDate = (value) => {
 
 const isOpenMaintenanceStatus = (status) => !['completed', 'cancelled', 'resolved', 'closed'].includes(normalizeText(status));
 const isOperationalTenant = (tenant) => !['inactive', 'terminated', 'evicted', 'moved_out'].includes(normalizeText(tenant?.status));
-const isOperationalLease = (lease) => !['inactive', 'terminated', 'expired', 'cancelled'].includes(normalizeText(lease?.status));
 const isOffMarketUnitStatus = (status) => ['off_market', 'inactive', 'archived', 'disabled'].includes(normalizeText(status));
 const isReservedUnitStatus = (status) => normalizeText(status) === 'reserved';
 const isMaintenanceUnitStatus = (status) => ['maintenance', 'under_maintenance'].includes(normalizeText(status));
@@ -62,9 +48,7 @@ const hasFutureMoveOut = (tenant, today) => {
 
 const QuickActions = ({
   darkMode,
-  invoices = [],
-  paymentVouchers = [],
-  processedStatements = [],
+  summaryData = {},
   loading = false,
 }) => {
   const navigate = useNavigate();
@@ -72,9 +56,7 @@ const QuickActions = ({
   const currentUser = useSelector(selectCurrentUser);
   const units = useSelector(selectAllUnits);
   const tenants = useSelector(selectAllTenants);
-  const leases = useSelector(selectAllLeases);
   const maintenances = useSelector(selectAllMaintenances);
-  const rentPayments = useSelector(selectAllRentPayments);
   const expenseProperties = useSelector(selectAllExpenseProperties);
 
   const activeCompanyContext = currentCompany || currentUser?.company || null;
@@ -90,11 +72,6 @@ const QuickActions = ({
     now.setHours(0, 0, 0, 0);
     return now;
   }, []);
-  const in30Days = useMemo(() => {
-    const next = new Date(today);
-    next.setDate(next.getDate() + 30);
-    return next;
-  }, [today]);
 
   const tenantAssignmentsByUnit = useMemo(() => {
     const byUnit = new Map();
@@ -163,66 +140,21 @@ const QuickActions = ({
     );
   }, [maintenanceAssignmentsByUnit, tenantAssignmentsByUnit, today, units]);
 
-  const overdueInvoices = useMemo(
-    () =>
-      invoices.filter((invoice) => {
-        const dueDate = parseDate(invoice?.dueDate);
-        const status = normalizeText(invoice?.status);
-        return dueDate && dueDate < today && ['pending', 'partially_paid', 'part_paid'].includes(status);
-      }).length,
-    [invoices, today]
-  );
+  const overdueInvoices = summaryData?.overdueInvoiceCount ?? 0;
 
   const vacantUnits = availabilitySummary.vacant;
 
-  const leasesExpiringSoon = useMemo(() => {
-    const leaseDrivenCount = leases.filter((lease) => {
-      if (!isOperationalLease(lease)) return false;
-      const endDate = parseDate(lease?.endDate || lease?.leaseEndDate || lease?.expiryDate);
-      return Boolean(endDate && endDate >= today && endDate <= in30Days);
-    }).length;
+  const leasesExpiringSoon = summaryData?.leasesExpiringSoonCount ?? 0;
 
-    if (leaseDrivenCount > 0) return leaseDrivenCount;
-
-    return tenants.filter((tenant) => {
-      if (!isOperationalTenant(tenant)) return false;
-      const moveOutDate = parseDate(tenant?.moveOutDate || tenant?.terminationDate || tenant?.noticeDate);
-      return Boolean(moveOutDate && moveOutDate >= today && moveOutDate <= in30Days);
-    }).length;
-  }, [in30Days, leases, tenants, today]);
-
-  const unpostedReceipts = useMemo(
-    () =>
-      rentPayments.filter(
-        (payment) =>
-          !payment?.reversalOf &&
-          !payment?.isReversed &&
-          !payment?.isCancelled &&
-          (normalizeText(payment?.postingStatus) === 'unposted' || payment?.isConfirmed !== true)
-      ).length,
-    [rentPayments]
-  );
+  const unpostedReceipts = summaryData?.unpostedReceiptCount ?? 0;
 
   const pendingMaintenance = useMemo(
     () => maintenances.filter((item) => ['pending', 'open', 'in_progress'].includes(normalizeText(item?.status))).length,
     [maintenances]
   );
 
-  const pendingStatements = useMemo(
-    () =>
-      processedStatements.filter((item) => {
-        if (normalizeText(item?.status) === 'reversed') return false;
-        const positiveOutstanding = Math.max(Number(item?.balanceDue || 0), 0);
-        const negativeOutstanding = Math.max(Number(item?.recoveryBalance ?? 0), 0);
-        return ['processed', 'unpaid', 'part_paid'].includes(normalizeText(item?.status)) || positiveOutstanding > 0 || negativeOutstanding > 0;
-      }).length,
-    [processedStatements]
-  );
-
-  const pendingVoucherApprovals = useMemo(
-    () => paymentVouchers.filter((item) => normalizeText(item?.status) === 'draft').length,
-    [paymentVouchers]
-  );
+  const pendingStatements = summaryData?.pendingStatementCount ?? 0;
+  const pendingVoucherApprovals = summaryData?.draftVoucherCount ?? 0;
 
   const thisMonthExpenseCount = useMemo(() => {
     if (!isLandlordMode) return 0;
@@ -330,7 +262,7 @@ const QuickActions = ({
     }
 
     return baseItems;
-  }, [canViewInvoices, canViewProcessedStatements, canViewReceipts, canViewVouchers, isLandlordMode, leasesExpiringSoon, overdueInvoices, pendingMaintenance, pendingStatements, pendingVoucherApprovals, thisMonthExpenseCount, unpostedReceipts, vacantUnits]);
+  }, [canViewInvoices, canViewProcessedStatements, canViewReceipts, canViewVouchers, isLandlordMode, leasesExpiringSoon, overdueInvoices, pendingMaintenance, pendingStatements, pendingVoucherApprovals, summaryData, thisMonthExpenseCount, unpostedReceipts, vacantUnits]);
 
   const getToneClasses = (tone) => {
     const tones = {

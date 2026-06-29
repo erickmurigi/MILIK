@@ -6,7 +6,6 @@ import {
   selectAllProperties,
   selectAllTenants,
   selectAllUnits,
-  selectAllRentPayments,
   selectAllLeases,
   selectTenantPagination,
 } from "../../redux/selectors";
@@ -59,9 +58,7 @@ import {
   getChartOfAccounts,
   getCreditableTenantInvoices,
   getLeases,
-  getRentPayments,
   getTenantInvoices,
-  getTenantInvoiceNotes,
 } from "../../redux/apiCalls";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
@@ -212,7 +209,6 @@ const Tenants = ({ listingMode = "active" }) => {
   const tenantsData = useSelector(selectAllTenants);
   const units = useSelector(selectAllUnits);
   const properties = useSelector(selectAllProperties);
-  const rentPayments = useSelector(selectAllRentPayments);
   const leases = useSelector(selectAllLeases);
 
   const tenantPagination = useSelector(selectTenantPagination);
@@ -249,11 +245,8 @@ const Tenants = ({ listingMode = "active" }) => {
   const [isRestoring, setIsRestoring] = useState(false);
   const [restoreForm, setRestoreForm] = useState({ tenantId: "", notes: "" });
   const [invoiceRefreshTick, setInvoiceRefreshTick] = useState(0);
-  const [paymentsSnapshotReady, setPaymentsSnapshotReady] = useState(false);
-
-  // Backend invoice cache
+  // Loaded per-tenant when deposit settlement modal opens
   const [tenantInvoices, setTenantInvoices] = useState([]);
-  const [tenantInvoiceNotes, setTenantInvoiceNotes] = useState([]);
 
   const [showDepositSettlementModal, setShowDepositSettlementModal] = useState(false);
   const [depositSettlementTenantId, setDepositSettlementTenantId] = useState("");
@@ -319,7 +312,7 @@ const Tenants = ({ listingMode = "active" }) => {
     if (!currentCompany?._id) return;
     dispatch(getUnits({ business: currentCompany._id }));
     dispatch(getProperties({ business: currentCompany._id }));
-    getLeases(dispatch, currentCompany._id).catch((error) => {
+    getLeases(dispatch, currentCompany._id, "active").catch((error) => {
       console.error("Failed to load leases:", error);
     });
   }, [dispatch, currentCompany?._id]);
@@ -366,30 +359,14 @@ const Tenants = ({ listingMode = "active" }) => {
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
-  const loadInvoices = useCallback(async () => {
+  const refreshTenants = useCallback(() => {
     if (!currentCompany?._id) return;
-
-    setPaymentsSnapshotReady(false);
-    try {
-      const [rows, notes] = await Promise.all([
-        getTenantInvoices({ business: currentCompany._id }),
-        getTenantInvoiceNotes({ business: currentCompany._id }),
-        getRentPayments(dispatch, currentCompany._id),
-      ]);
-      setTenantInvoices(Array.isArray(rows) ? rows : []);
-      setTenantInvoiceNotes(Array.isArray(notes) ? notes : []);
-      setPaymentsSnapshotReady(true);
-    } catch (error) {
-      console.error("Failed to load tenant invoices:", error);
-      setTenantInvoices([]);
-      setTenantInvoiceNotes([]);
-      setPaymentsSnapshotReady(false);
-    }
-  }, [currentCompany?._id, dispatch]);
+    dispatch(getTenants(buildTenantParams()));
+  }, [currentCompany?._id, dispatch, buildTenantParams]);
 
   useEffect(() => {
-    loadInvoices();
-  }, [loadInvoices, invoiceRefreshTick]);
+    if (invoiceRefreshTick > 0) refreshTenants();
+  }, [invoiceRefreshTick, refreshTenants]);
 
   // ===== TRANSFORM TENANT DATA =====
   const resolveTenantPropertyName = (tenant, unitsFromStore = [], propertiesFromStore = []) => {
@@ -490,80 +467,6 @@ const Tenants = ({ listingMode = "active" }) => {
     return { filteredUnits, destUnit, destDeposit, destRent, destPropertyName: destUnit?.property?.propertyName || "-", depositDiff: destDeposit - currentDeposit, rentDiff: destRent - currentRent };
   }, [transferBase, transferForm.filterProperty, transferForm.filterSearch, transferForm.newUnit]);
 
-  const paymentsByTenant = useMemo(() => {
-    const map = new Map();
-    rentPayments.forEach(p => {
-      const id = normalizeId(p?.tenant);
-      if (!id) return;
-      if (!map.has(id)) map.set(id, []);
-      map.get(id).push(p);
-    });
-    return map;
-  }, [rentPayments]);
-
-  const invoicesByTenant = useMemo(() => {
-    const map = new Map();
-    tenantInvoices.forEach(inv => {
-      const id = normalizeId(inv?.tenant);
-      if (!id) return;
-      if (!map.has(id)) map.set(id, []);
-      map.get(id).push(inv);
-    });
-    return map;
-  }, [tenantInvoices]);
-
-  const notesByTenant = useMemo(() => {
-    const map = new Map();
-    tenantInvoiceNotes.forEach(n => {
-      const id = normalizeId(n?.tenant);
-      if (!id) return;
-      if (!map.has(id)) map.set(id, []);
-      map.get(id).push(n);
-    });
-    return map;
-  }, [tenantInvoiceNotes]);
-
-  const calculateTenantBalance = useCallback(
-    (tenantId) => {
-      const tenantIdStr = String(tenantId);
-
-      const tenantPayments = paymentsByTenant.get(tenantIdStr) || [];
-      const confirmedReceiptTotal = tenantPayments
-        .filter(p =>
-          String(p?.ledgerType || "").toLowerCase() === "receipts" &&
-          p?.isConfirmed === true &&
-          p?.isCancelled !== true &&
-          p?.isReversed !== true &&
-          !p?.reversalOf &&
-          String(p?.postingStatus || "").toLowerCase() !== "reversed" &&
-          ["rent", "utility", "deposit", "late_fee", "other"].includes(String(p?.paymentType || "").toLowerCase())
-        )
-        .reduce((sum, p) => sum + Math.abs(Number(p?.amount || 0)), 0);
-
-      const tenantInvoiceList = invoicesByTenant.get(tenantIdStr) || [];
-      const activeInvoiceTotal = tenantInvoiceList
-        .filter(isActiveInvoice)
-        .reduce((sum, inv) => sum + Number((inv?.netAmount ?? inv?.adjustedAmount ?? inv?.amount) || 0), 0);
-
-      const tenantNoteList = notesByTenant.get(tenantIdStr) || [];
-      const activeNoteEffect = tenantNoteList
-        .filter(n => !["cancelled", "reversed"].includes(String(n?.status || "").toLowerCase()))
-        .reduce((sum, n) => {
-          const amount = Math.abs(Number(n?.amount || 0));
-          const noteType = String(n?.noteType || n?.documentType || "").toUpperCase();
-          if (noteType === "CREDIT_NOTE") return sum - amount;
-          if (noteType === "DEBIT_NOTE") return sum + amount;
-          return sum;
-        }, 0);
-
-      const effectiveInvoiceTotal = tenantInvoiceList.some(
-        inv => Number((inv?.adjustedAmount ?? inv?.netAmount ?? inv?.amount) || 0) !== Number(inv?.amount || 0)
-      ) ? activeInvoiceTotal : activeInvoiceTotal + activeNoteEffect;
-
-      return effectiveInvoiceTotal - confirmedReceiptTotal;
-    },
-    [paymentsByTenant, invoicesByTenant, notesByTenant]
-  );
 
   const transformedTenants = useMemo(() => {
     return (Array.isArray(tenantsData) ? tenantsData : []).map((tenant) => {
@@ -572,12 +475,12 @@ const Tenants = ({ listingMode = "active" }) => {
       const resolvedStartDate = tenantLease?.startDate || tenant.moveInDate;
       const resolvedEndDate = tenantLease?.endDate || tenant.moveOutDate;
       const expiryWarning = buildExpiryWarning({ tenant, lease: tenantLease });
-      const balance = paymentsSnapshotReady ? calculateTenantBalance(tenant._id) : Number(tenant?.balance || 0);
+      const balance = Number(tenant?.balance || 0);
       const tenantOperationalStatus = computeOperationalStatus({ tenant });
       const leaseCount = leaseCountByTenant.get(tenantId) || 0;
-      const invoiceCount = (invoicesByTenant.get(tenantId) || []).length;
-      const invoiceNoteCount = (notesByTenant.get(tenantId) || []).length;
-      const paymentCount = (paymentsByTenant.get(tenantId) || []).length;
+      const invoiceCount = tenant?.invoiceCount ?? 0;
+      const invoiceNoteCount = tenant?.invoiceNoteCount ?? 0;
+      const paymentCount = tenant?.paymentCount ?? 0;
       const hasBalance = Math.abs(Number(balance || 0)) > 0.009;
       const canTerminate = tenantOperationalStatus === "active";
       const canTransfer = tenantOperationalStatus === "active";
@@ -634,7 +537,7 @@ const Tenants = ({ listingMode = "active" }) => {
         deleteBlockedReason,
       };
     });
-  }, [tenantsData, units, properties, leaseByTenantId, calculateTenantBalance, paymentsSnapshotReady, leaseCountByTenant, invoicesByTenant, notesByTenant, paymentsByTenant]);
+  }, [tenantsData, units, properties, leaseByTenantId, leaseCountByTenant]);
 
   // ===== FILTER TENANTS =====
   // search/status/tenantName/tenantCode/property are now server-side; only balanceScope remains client-side
@@ -764,11 +667,8 @@ const Tenants = ({ listingMode = "active" }) => {
 
   const refreshTenantSettlementData = useCallback(async () => {
     if (!currentCompany?._id) return;
-    await Promise.all([
-      dispatch(getTenants(buildTenantParams())),
-      loadInvoices(),
-    ]);
-  }, [currentCompany?._id, dispatch, buildTenantParams, loadInvoices]);
+    dispatch(getTenants(buildTenantParams()));
+  }, [currentCompany?._id, dispatch, buildTenantParams]);
 
   const openDepositSettlementModal = useCallback(async (tenantId) => {
     if (!tenantId) return;
@@ -785,10 +685,12 @@ const Tenants = ({ listingMode = "active" }) => {
     setDepositSettlementContext({ creditableInvoices: [], chartAccounts: [], loading: true });
 
     try {
-      const [creditableInvoices, chartAccounts] = await Promise.all([
+      const [creditableInvoices, chartAccounts, allTenantInvoices] = await Promise.all([
         getCreditableTenantInvoices({ business: currentCompany?._id, tenantId }),
         getChartOfAccounts({ business: currentCompany?._id }),
+        getTenantInvoices({ business: currentCompany?._id, tenantId }),
       ]);
+      setTenantInvoices(Array.isArray(allTenantInvoices) ? allTenantInvoices : []);
       const cashbookAccount = (Array.isArray(chartAccounts) ? chartAccounts : []).find((account) => isCashbookLikeAccount(account));
       setDepositSettlementContext({
         creditableInvoices: Array.isArray(creditableInvoices) ? creditableInvoices : [],
@@ -1248,13 +1150,12 @@ const confirmTransferUnit = useCallback(async () => {
     setShowTransferModal(false);
     await dispatch(getTenants(buildTenantParams()));
     await dispatch(getUnits({ business: currentCompany._id }));
-    await loadInvoices();
   } catch (error) {
     toast.error(error?.response?.data?.message || error?.response?.data?.error || error?.message || "Failed to transfer tenant unit");
   } finally {
     setIsTransferring(false);
   }
-}, [canUpdateTenant, transferForm, transferFiltered, currentCompany, dispatch, loadInvoices, buildTenantParams]);
+}, [canUpdateTenant, transferForm, transferFiltered, currentCompany, dispatch, buildTenantParams]);
 
   const handleReviewRent = () => {
     if (!canUpdateTenant) {
@@ -1339,7 +1240,6 @@ const confirmTransferUnit = useCallback(async () => {
 
       await dispatch(getTenants(buildTenantParams()));
       await dispatch(getUnits({ business: currentCompany._id }));
-      await loadInvoices();
     } catch (error) {
       toast.error(
         error?.response?.data?.message ||
@@ -1377,8 +1277,7 @@ const confirmTransferUnit = useCallback(async () => {
       setSelectAll(false);
       await dispatch(getTenants(buildTenantParams()));
       await dispatch(getUnits({ business: currentCompany._id }));
-      await getLeases(dispatch, currentCompany._id).catch(() => {});
-      await loadInvoices();
+      await getLeases(dispatch, currentCompany._id, "active").catch(() => {});
     } catch (error) {
       toast.error(
         error?.response?.data?.message ||
@@ -1495,7 +1394,6 @@ const confirmTransferUnit = useCallback(async () => {
 
     if (currentCompany?._id) {
       dispatch(getTenants(buildTenantParams()));
-      loadInvoices();
     }
   };
 
@@ -1517,7 +1415,6 @@ const confirmTransferUnit = useCallback(async () => {
       await Promise.all([
         dispatch(getTenants(buildTenantParams(1))),
         dispatch(getUnits({ business: currentCompany._id })),
-        loadInvoices(),
       ]);
       setCurrentPage(1);
 

@@ -625,7 +625,7 @@ function App() {
             <Route path="/accounts/budget"                                 element={<Guard moduleKey="accounts" resource="budgets"><BudgetVsActual /></Guard>} />
             <Route path="/accounts/budget/analysis"                        element={<Guard moduleKey="accounts" resource="budgets"><BudgetVsActual /></Guard>} />
             <Route path="/accounts/creditor-ledger"                        element={<Guard moduleKey="accounts" resource="creditorLedger"><CreditorLedger /></Guard>} />
-            <Route path="/accounts/gl-integrity"                           element={<Guard moduleKey="accounts"><GLIntegrityReport /></Guard>} />
+            <Route path="/accounts/gl-integrity"                           element={<Guard moduleKey="accounts" resource="financialReports"><GLIntegrityReport /></Guard>} />
             <Route path="/accounts/vat-remittance"                         element={<Guard moduleKey="accounts" resource="financialReports"><VatRemittance /></Guard>} />
             <Route path="/accounts/wht-remittance"                         element={<Guard moduleKey="accounts" resource="financialReports"><WhtRemittance /></Guard>} />
             <Route path="/accounts/accounting-periods"                     element={<Guard moduleKey="accounts"><AccountingPeriods /></Guard>} />
