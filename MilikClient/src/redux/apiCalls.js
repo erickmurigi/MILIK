@@ -3082,9 +3082,25 @@ export const rejectJournalEntry = async (id, payload = {}) => {
   return res.data;
 };
 
-// ─── GL INTEGRITY ─────────────────────────────────────────────────────────────
+// ─── GL INTEGRITY & HEALTH CENTRE ────────────────────────────────────────────
 export const runGLIntegrityReport = async (params = {}) => {
   const res = await adminRequests.get("/ledger/diagnostics/integrity-report", { params });
+  return res.data;
+};
+export const getGLHealthHistory = async (params = {}) => {
+  const res = await adminRequests.get("/ledger/health-history", { params });
+  return res.data;
+};
+export const repairBalanceGroup = async (groupId, data) => {
+  const res = await adminRequests.post(`/ledger/repair/balance-group/${groupId}`, data);
+  return res.data;
+};
+export const repairRecomputeBalances = async (data) => {
+  const res = await adminRequests.post("/ledger/repair/recompute-balances", data);
+  return res.data;
+};
+export const repairRepostInvoices = async (data) => {
+  const res = await adminRequests.post("/ledger/repair/repost-invoices", data);
   return res.data;
 };
 

@@ -563,29 +563,44 @@ export const runIntegrityReport = async (req, res) => {
     ).lean();
 
     const issues = [];
-    if (!glBalanced) issues.push({ severity: "critical", issue: `GL is out of balance by ${glDifference.toFixed(2)}` });
-    if (unbalancedGroups.length) issues.push({ severity: "critical", issue: `${unbalancedGroups.length} journal group(s) have unequal debits/credits` });
-    if (orphanedEntriesCount > 0) issues.push({ severity: "critical", issue: `${orphanedEntriesCount} ledger entry/entries reference deleted accounts` });
-    if (inactiveAccountEntries > 0) issues.push({ severity: "warning", issue: `${inactiveAccountEntries} entry/entries posted to inactive accounts` });
-    if (abnormalBalances.length) issues.push({ severity: "warning", issue: `${abnormalBalances.length} account(s) have abnormal balance signs` });
+    if (!glBalanced)               issues.push({ severity: "critical", issue: `GL is out of balance by KES ${Math.abs(glDifference).toFixed(2)}` });
+    if (unbalancedGroups.length)   issues.push({ severity: "critical", issue: `${unbalancedGroups.length} journal group(s) have unequal debits/credits` });
+    if (orphanedEntriesCount > 0)  issues.push({ severity: "critical", issue: `${orphanedEntriesCount} ledger entry/entries reference deleted accounts` });
+    if (inactiveAccountEntries > 0) issues.push({ severity: "warning",  issue: `${inactiveAccountEntries} entry/entries posted to inactive accounts` });
+    if (abnormalBalances.length)   issues.push({ severity: "warning",  issue: `${abnormalBalances.length} account(s) have abnormal balance signs` });
     if (journalsWithNoLedger.length) issues.push({ severity: "warning", issue: `${journalsWithNoLedger.length} posted journal(s) have no ledger entries` });
+
+    const overallStatus = issues.some((i) => i.severity === "critical") ? "critical" : issues.length ? "warnings" : "clean";
+    const runAt = new Date();
+
+    // Save scan to history (non-blocking on failure)
+    const healthRun = await GLHealthRun.create({
+      business:      businessId,
+      ranBy:         req.user?._id || req.user?.id || null,
+      runAt,
+      overallStatus,
+      issueCount:    issues.length,
+      issues,
+      repairs:       [],
+    }).catch(() => null);
 
     return res.status(200).json({
       success: true,
-      runAt: new Date(),
-      overallStatus: issues.some((i) => i.severity === "critical") ? "critical" : issues.length ? "warnings" : "clean",
+      healthRunId: healthRun?._id || null,
+      runAt,
+      overallStatus,
       issues,
       detail: {
         glBalance: { totalDebit, totalCredit, difference: glDifference, balanced: glBalanced },
         unbalancedGroups: unbalancedGroups.map((g) => ({
           journalGroupId: g._id,
-          sourceType: g.sourceType,
-          sourceId: g.sourceId,
-          date: g.firstDate,
-          debit: g.debitSum,
-          credit: g.creditSum,
-          difference: g.diff,
-          entryCount: g.entryCount,
+          sourceType:     g.sourceType,
+          sourceId:       g.sourceId,
+          date:           g.firstDate,
+          debit:          g.debitSum,
+          credit:         g.creditSum,
+          difference:     g.diff,
+          entryCount:     g.entryCount,
         })),
         orphanedEntriesCount,
         orphanedAccountIds,
@@ -597,4 +612,175 @@ export const runIntegrityReport = async (req, res) => {
   } catch (err) {
     return res.status(500).json({ error: err.message || "Integrity report failed" });
   }
+};
+
+// ─── HEALTH HISTORY ──────────────────────────────────────────────────────────
+export const getHealthHistory = async (req, res) => {
+  try {
+    const businessId = req.query.business || req.query.company || req.user?.company;
+    if (!businessId) return res.status(400).json({ error: "Business context required" });
+
+    const runs = await GLHealthRun.find({ business: businessId })
+      .sort({ runAt: -1 })
+      .limit(50)
+      .populate("ranBy", "username name")
+      .lean();
+
+    return res.status(200).json(runs);
+  } catch (err) {
+    return res.status(500).json({ error: err.message || "Failed to load health history" });
+  }
+};
+
+// ─── REPAIR: BALANCE A JOURNAL GROUP ────────────────────────────────────────
+// Posts a single correcting entry to the caller-selected account so the
+// journal group's debits equal its credits.
+export const repairBalanceGroup = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const { business: businessId, accountId, notes, healthRunId } = req.body;
+
+    if (!groupId || !mongoose.Types.ObjectId.isValid(groupId))
+      return res.status(400).json({ error: "Valid journal group ID required" });
+    if (!businessId)
+      return res.status(400).json({ error: "Business context required" });
+    if (!accountId || !mongoose.Types.ObjectId.isValid(accountId))
+      return res.status(400).json({ error: "Select a correcting account" });
+
+    const bizId   = new mongoose.Types.ObjectId(String(businessId));
+    const groupOid = new mongoose.Types.ObjectId(String(groupId));
+
+    // Fetch all approved entries in the group
+    const entries = await FinancialLedgerEntry.find({
+      business: bizId,
+      journalGroupId: groupOid,
+      status: "approved",
+    }).lean();
+
+    if (!entries.length)
+      return res.status(404).json({ error: "No approved entries found for this journal group" });
+
+    const debitSum  = round2(entries.reduce((s, e) => s + (Number(e.debit)  || 0), 0));
+    const creditSum = round2(entries.reduce((s, e) => s + (Number(e.credit) || 0), 0));
+    const diff      = round2(debitSum - creditSum);
+
+    if (Math.abs(diff) < 0.005)
+      return res.status(400).json({ error: "This journal group is already balanced" });
+
+    const correctionDirection = diff > 0 ? "credit" : "debit";
+    const correctionAmount    = Math.abs(diff);
+    const sample              = entries[0];
+    const actorUserId         = await resolveAuditActorUserId({ req, businessId });
+
+    // Use current date to avoid closed-period lock; compute period from it
+    const now         = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    const periodEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    const correctionEntry = await postEntry({
+      business:              bizId,
+      property:              sample.property  || null,
+      landlord:              sample.landlord  || null,
+      sourceTransactionType: "manual_adjustment",
+      sourceTransactionId:   String(groupOid),
+      transactionDate:       now,
+      statementPeriodStart:  periodStart,
+      statementPeriodEnd:    periodEnd,
+      category:              "ADJUSTMENT",
+      journalGroupId:        groupOid,
+      accountId:             new mongoose.Types.ObjectId(String(accountId)),
+      amount:                correctionAmount,
+      direction:             correctionDirection,
+      payer:                 "n/a",
+      receiver:              "n/a",
+      notes:                 notes?.trim() || `GL correction – balancing entry for journal group ${String(groupOid).slice(-8)}`,
+      createdBy:             actorUserId,
+      approvedBy:            actorUserId,
+      approvedAt:            new Date(),
+      status:                "approved",
+      allowUnscoped:         true,
+      metadata:              { postingRole: "gl_correction", correctedBy: String(actorUserId), originalImbalance: diff },
+    });
+
+    aggregateChartOfAccountBalances(businessId, [String(accountId)]).catch(() => {});
+
+    await appendRepairLog(healthRunId, {
+      repairType:      "balance_group",
+      appliedAt:       new Date(),
+      appliedBy:       actorUserId,
+      description:     `Balanced group ${String(groupOid).slice(-8)} — posted ${correctionDirection} KES ${correctionAmount} to account ${accountId}`,
+      outcome:         "success",
+      recordsAffected: 1,
+    });
+
+    return res.status(200).json({
+      success: true,
+      correctionEntryId: correctionEntry._id,
+      direction:         correctionDirection,
+      amount:            correctionAmount,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message || "Repair failed" });
+  }
+};
+
+// ─── REPAIR: RECOMPUTE ALL COA BALANCES ─────────────────────────────────────
+export const repairRecomputeBalances = async (req, res) => {
+  const businessId = req.body?.business || req.query?.business || req.user?.company;
+  if (!businessId) return res.status(400).json({ error: "Business context required" });
+  const healthRunId = req.body?.healthRunId;
+
+  try {
+    const accounts = await ChartOfAccount.find({ business: businessId }).select("_id").lean();
+    const updated  = await aggregateChartOfAccountBalances(businessId, accounts.map((a) => a._id));
+    const actorId  = await resolveAuditActorUserId({ req, businessId });
+
+    await appendRepairLog(healthRunId, {
+      repairType:      "recompute_balances",
+      appliedAt:       new Date(),
+      appliedBy:       actorId,
+      description:     `Recomputed balances for ${updated?.length ?? accounts.length} accounts from ledger`,
+      outcome:         "success",
+      recordsAffected: updated?.length ?? accounts.length,
+    });
+
+    return res.status(200).json({ success: true, accountsUpdated: updated?.length ?? accounts.length });
+  } catch (err) {
+    await appendRepairLog(healthRunId, {
+      repairType: "recompute_balances", appliedAt: new Date(),
+      description: "Recompute balances failed", outcome: "failed",
+      recordsAffected: 0, errorMessage: err.message,
+    });
+    return res.status(500).json({ error: err.message || "Recompute failed" });
+  }
+};
+
+// ─── REPAIR: REPOST INVOICES WITH NO LEDGER ──────────────────────────────────
+// Delegates to the existing repostInvoicesToLedger and appends a repair log entry.
+export const repairRepostInvoices = async (req, res) => {
+  const healthRunId = req.body?.healthRunId;
+  const userId      = req.user?._id || req.user?.id;
+
+  let capturedCode = 200;
+  let capturedData;
+  const fakeRes = {
+    status: (code) => { capturedCode = code; return fakeRes; },
+    json:   (data) => { capturedData = data; return fakeRes; },
+  };
+
+  await repostInvoicesToLedger(req, fakeRes);
+
+  if (capturedData?.success) {
+    await appendRepairLog(healthRunId, {
+      repairType:      "repost_invoices",
+      appliedAt:       new Date(),
+      appliedBy:       userId,
+      description:     `Reposted ${capturedData.posted ?? 0} invoice(s); ${capturedData.skipped ?? 0} already posted`,
+      outcome:         capturedData.errors?.length && !capturedData.posted ? "failed" : "success",
+      recordsAffected: capturedData.posted ?? 0,
+      errorMessage:    (capturedData.errors || []).map((e) => e.error).join("; ").slice(0, 500),
+    });
+  }
+
+  return res.status(capturedCode).json(capturedData);
 };

@@ -1213,7 +1213,7 @@ const TopToolbar = ({
           submenu: [
             { id: "acc-accounting-periods", label: "Accounting Periods",  icon: FaCalendarAlt },
             { id: "acc-year-end-close",     label: "Year-End Close",      icon: FaArchive },
-            { id: "acc-gl-integrity",       label: "GL Integrity Report", icon: FaShieldAlt },
+            { id: "acc-gl-integrity",       label: "GL Health Centre",    icon: FaShieldAlt },
           ],
         },
         {
