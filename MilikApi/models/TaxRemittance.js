@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const TAX_TYPES = ["vat_output"];
+const TAX_TYPES = ["vat_output", "wht"];
 const STATUSES  = ["remitted", "voided"];
 
 const TaxRemittanceSchema = new mongoose.Schema(

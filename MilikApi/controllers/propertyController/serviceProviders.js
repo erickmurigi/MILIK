@@ -115,16 +115,17 @@ export const updateServiceProvider = async (req, res, next) => {
     const allowed = ["name", "contactPerson", "email", "phone", "category", "kraPin", "accountNumber", "paybillNumber", "bankName", "accountName", "subjectToWht", "whtRate", "whtCategory", "isActive", "notes"];
     allowed.forEach((field) => {
       if (!Object.prototype.hasOwnProperty.call(req.body || {}, field)) return;
-      if (field === "name") {
-        row[field] = String(req.body[field] || "").trim();
-        return;
-      }
+      if (field === "name") { row[field] = String(req.body[field] || "").trim(); return; }
       row[field] = req.body[field];
     });
 
     if (!String(row.name || "").trim()) {
       return res.status(400).json({ success: false, message: "Service provider name is required" });
     }
+    // Normalize WHT fields: clamp rate, clear subjectToWht if rate is effectively zero
+    row.whtRate = Math.min(30, Math.max(0, Number(row.whtRate || 0)));
+    if (row.subjectToWht && row.whtRate <= 0) row.subjectToWht = false;
+    if (!row.subjectToWht) row.whtRate = 0;
     await row.save();
     res.status(200).json(row);
   } catch (error) {

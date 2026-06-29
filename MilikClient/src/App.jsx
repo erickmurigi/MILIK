@@ -148,6 +148,7 @@ const GLIntegrityReport           = lazy(() => import("./pages/Accounts/GLIntegr
 const AccountingPeriods           = lazy(() => import("./pages/Financial/AccountingPeriods"));
 const YearEndClose                = lazy(() => import("./pages/Financial/YearEndClose"));
 const VatRemittance               = lazy(() => import("./pages/Financial/VatRemittance"));
+const WhtRemittance               = lazy(() => import("./pages/Financial/WhtRemittance"));
 const FinancialRatiosDashboard    = lazy(() => import("./pages/Reports/FinancialRatiosDashboard"));
 
 // Help
@@ -626,6 +627,7 @@ function App() {
             <Route path="/accounts/creditor-ledger"                        element={<Guard moduleKey="accounts" resource="creditorLedger"><CreditorLedger /></Guard>} />
             <Route path="/accounts/gl-integrity"                           element={<Guard moduleKey="accounts"><GLIntegrityReport /></Guard>} />
             <Route path="/accounts/vat-remittance"                         element={<Guard moduleKey="accounts" resource="financialReports"><VatRemittance /></Guard>} />
+            <Route path="/accounts/wht-remittance"                         element={<Guard moduleKey="accounts" resource="financialReports"><WhtRemittance /></Guard>} />
             <Route path="/accounts/accounting-periods"                     element={<Guard moduleKey="accounts"><AccountingPeriods /></Guard>} />
             <Route path="/accounts/year-end-close"                         element={<Guard moduleKey="accounts"><YearEndClose /></Guard>} />
             <Route path="/accounts/financial-ratios"                       element={<Guard moduleKey="accounts"><FinancialRatiosDashboard /></Guard>} />

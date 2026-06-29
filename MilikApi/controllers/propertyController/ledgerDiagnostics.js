@@ -6,9 +6,18 @@ import ChartOfAccount from "../../models/ChartOfAccount.js";
 import JournalEntry from "../../models/JournalEntry.js";
 import Unit from "../../models/Unit.js";
 import Property from "../../models/Property.js";
+import GLHealthRun from "../../models/GLHealthRun.js";
 import { postEntry } from "../../services/ledgerPostingService.js";
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
 import { ensureSystemChartOfAccounts, findSystemAccountByCode } from "../../services/chartOfAccountsService.js";
+import { resolveAuditActorUserId } from "../../utils/systemActor.js";
+
+const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+const appendRepairLog = async (healthRunId, repairEntry) => {
+  if (!healthRunId || !mongoose.Types.ObjectId.isValid(String(healthRunId))) return;
+  await GLHealthRun.findByIdAndUpdate(healthRunId, { $push: { repairs: repairEntry } }).catch(() => {});
+};
 
 export const checkInvoiceLedgerEntries = async (req, res) => {
   try {
@@ -505,9 +514,12 @@ export const runIntegrityReport = async (req, res) => {
     }
 
     // 5. Accounts with abnormal balance sign for their type
-    // Assets & Expenses should be debit-normal; Liabilities, Equity, Income should be credit-normal
+    // Assets & Expenses should be debit-normal; Liabilities, Equity, Income should be credit-normal.
+    // Must include "reversed" status so that original + reversal cancel to zero — otherwise every
+    // reversed transaction leaves only the reversal's opposite-direction entry in the "approved" pool
+    // and makes the account appear to have an abnormal balance (false positive).
     const accountBalances = await FinancialLedgerEntry.aggregate([
-      { $match: { business: bizId, status: { $in: ACTIVE_STATUSES }, accountId: { $ne: null } } },
+      { $match: { business: bizId, status: { $in: ["approved", "reversed"] }, accountId: { $ne: null } } },
       {
         $group: {
           _id: "$accountId",

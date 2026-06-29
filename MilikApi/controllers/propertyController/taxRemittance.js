@@ -89,6 +89,7 @@ export const getVatReturnSummary = async (req, res, next) => {
         business: businessId,
         periodYear: year,
         periodMonth: month,
+        taxType: "vat_output",
         status: { $ne: "voided" },
       }).sort({ createdAt: -1 }).lean(),
     ]);
@@ -141,7 +142,7 @@ export const getRemittanceHistory = async (req, res, next) => {
       return next(createError(400, "Valid business ID is required."));
     }
 
-    const filter = { business: businessId };
+    const filter = { business: businessId, taxType: "vat_output" };
     if (year) filter.periodYear = parseInt(year, 10);
 
     const remittances = await TaxRemittance.find(filter)
@@ -220,6 +221,7 @@ export const remitVat = async (req, res, next) => {
         business: businessId,
         periodYear:  Number(year),
         periodMonth: Number(month),
+        taxType: "vat_output",
         status: { $ne: "voided" },
       }).select("amountRemitted").lean(),
     ]);
@@ -374,8 +376,8 @@ export const voidRemittance = async (req, res, next) => {
     }
     if (!businessId) return next(createError(400, "Business ID is required."));
 
-    const remittance = await TaxRemittance.findOne({ _id: id, business: businessId });
-    if (!remittance)              return next(createError(404, "Remittance not found."));
+    const remittance = await TaxRemittance.findOne({ _id: id, business: businessId, taxType: "vat_output" });
+    if (!remittance)              return next(createError(404, "VAT remittance not found."));
     if (remittance.status === "voided") return next(createError(400, "Remittance is already voided."));
 
     const actorUserId = await resolveAuditActorUserId({ req, businessId });

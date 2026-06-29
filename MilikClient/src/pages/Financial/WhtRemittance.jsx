@@ -1,0 +1,532 @@
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useSelector } from "react-redux";
+import { toast } from "react-toastify";
+import {
+  FaBan, FaBook, FaBuilding, FaCalendarAlt, FaCheckCircle,
+  FaExclamationTriangle, FaMoneyBillWave, FaPlus,
+  FaReceipt, FaRedoAlt, FaTimes,
+} from "react-icons/fa";
+import DashboardLayout from "../../components/Layout/DashboardLayout";
+import { selectCurrentCompany } from "../../redux/selectors";
+import {
+  getWhtReturnSummary,
+  getWhtRemittanceHistory,
+  remitWht,
+  voidWhtRemittance,
+  getChartOfAccounts,
+} from "../../redux/apiCalls";
+import { useConfirm } from "../../context/ConfirmContext";
+
+const GRN    = "#0B3B2E";
+const MONTHS = [
+  "January","February","March","April","May","June",
+  "July","August","September","October","November","December",
+];
+
+const round2  = (n) => Math.round((Number(n) || 0) * 100) / 100;
+const fmtKES  = (n) => `KES ${round2(n).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+
+const EMPTY_FORM = {
+  amountRemitted:    "",
+  paymentDate:       new Date().toISOString().slice(0, 10),
+  paymentReference:  "",
+  cashbookAccountId: "",
+  notes:             "",
+};
+
+const inputCls = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
+const labelCls = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
+
+const KpiCard = ({ icon: Icon, label, value, sub, warn = false, ok = false, iconBg = GRN }) => (
+  <div className={`flex items-center gap-3 border bg-white px-4 py-3 shadow-sm ${
+    warn ? "border-red-200 bg-red-50" : ok ? "border-emerald-200 bg-emerald-50" : "border-slate-200"
+  }`}>
+    <div className="flex h-9 w-9 shrink-0 items-center justify-center text-white" style={{ backgroundColor: iconBg }}>
+      <Icon className="text-sm" />
+    </div>
+    <div className="min-w-0">
+      <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{label}</div>
+      <div className={`text-sm font-extrabold leading-tight ${warn ? "text-red-700" : ok ? "text-emerald-700" : "text-slate-900"}`}>{value}</div>
+      {sub && <div className="mt-0.5 text-[10px] text-slate-400">{sub}</div>}
+    </div>
+  </div>
+);
+
+const SectionHeader = ({ title, right }) => (
+  <div className="flex min-h-8 items-center justify-between border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5">
+    <h2 className="text-[11px] font-extrabold uppercase tracking-wide text-[#0B3B2E]">{title}</h2>
+    {right}
+  </div>
+);
+
+const ColHeader = ({ children, right }) => (
+  <th className={`px-2 py-1.5 font-bold uppercase tracking-wide text-[10px] text-slate-500 ${right ? "text-right" : "text-left"}`}>
+    {children}
+  </th>
+);
+
+const EmptyRows = ({ colSpan, text }) => (
+  <tr>
+    <td colSpan={colSpan} className="px-3 py-8 text-center">
+      <div className="flex flex-col items-center gap-2 text-slate-400">
+        <FaBook size={22} className="opacity-30" />
+        <span className="text-xs font-semibold">{text}</span>
+      </div>
+    </td>
+  </tr>
+);
+
+const StatusBadge = ({ voided }) => (
+  <span className={`inline-block border px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide ${
+    voided ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"
+  }`}>
+    {voided ? "Voided" : "Remitted"}
+  </span>
+);
+
+const Modal = ({ title, subtitle, onClose, children, footer }) => (
+  <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+    <div className="w-full max-w-lg border border-slate-200 bg-white shadow-2xl">
+      <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-3 text-white" style={{ background: GRN }}>
+        <div>
+          <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
+          {subtitle && <p className="mt-0.5 text-xs font-semibold text-emerald-200">{subtitle}</p>}
+        </div>
+        <button type="button" onClick={onClose} className="p-1 text-white/70 hover:bg-white/10"><FaTimes /></button>
+      </div>
+      <div className="p-4">{children}</div>
+      {footer && (
+        <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+          {footer}
+        </div>
+      )}
+    </div>
+  </div>
+);
+
+const Field = ({ label, required, children }) => (
+  <div>
+    <label className={labelCls}>{label}{required && <span className="ml-0.5 text-red-500">*</span>}</label>
+    {children}
+  </div>
+);
+
+const RemittanceTable = ({ rows, showPeriod, voidingId, onVoid }) => {
+  const colSpan = showPeriod ? 6 : 5;
+  if (!rows.length) {
+    return <table className="w-full text-xs"><tbody><EmptyRows colSpan={colSpan} text="No WHT remittances recorded" /></tbody></table>;
+  }
+  return (
+    <table className="w-full text-xs">
+      <thead className="bg-slate-50">
+        <tr>
+          {showPeriod && <ColHeader>Period</ColHeader>}
+          <ColHeader>Payment Date</ColHeader>
+          <ColHeader>KRA Reference (PRN)</ColHeader>
+          <ColHeader right>Amount</ColHeader>
+          <ColHeader>Status</ColHeader>
+          <ColHeader>{/* void */}</ColHeader>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => {
+          const isVoided = r.status === "voided";
+          return (
+            <tr key={r._id} className={`border-t border-slate-100 hover:bg-slate-50 ${isVoided ? "opacity-50" : ""}`}>
+              {showPeriod && (
+                <td className="px-2 py-1.5 font-semibold text-slate-700">
+                  {MONTHS[(r.periodMonth || 1) - 1]} {r.periodYear}
+                </td>
+              )}
+              <td className="px-2 py-1.5 text-slate-600">{fmtDate(r.paymentDate)}</td>
+              <td className="px-2 py-1.5 font-mono text-[10px] text-slate-500">{r.paymentReference || "—"}</td>
+              <td className="px-2 py-1.5 text-right font-extrabold text-slate-800">{fmtKES(r.amountRemitted)}</td>
+              <td className="px-2 py-1.5"><StatusBadge voided={isVoided} /></td>
+              <td className="px-2 py-1.5 text-right">
+                {!isVoided && (
+                  <button type="button" onClick={() => onVoid(r)} disabled={voidingId === r._id}
+                    className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wide text-slate-400 hover:text-red-600 disabled:opacity-40">
+                    <FaBan size={9} />{voidingId === r._id ? "Voiding…" : "Void"}
+                  </button>
+                )}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+};
+
+export default function WhtRemittance() {
+  const company     = useSelector(selectCurrentCompany);
+  const { confirm } = useConfirm();
+
+  const now = new Date();
+  const [year,  setYear]  = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
+
+  const [summary,    setSummary]    = useState(null);
+  const [history,    setHistory]    = useState([]);
+  const [cashbooks,  setCashbooks]  = useState([]);
+  const [loading,    setLoading]    = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [showForm,   setShowForm]   = useState(false);
+  const [form,       setForm]       = useState(EMPTY_FORM);
+  const [submitting, setSubmitting] = useState(false);
+  const [voidingId,  setVoidingId]  = useState(null);
+
+  const load = useCallback(async (silent = false) => {
+    if (!company?._id) return;
+    silent ? setRefreshing(true) : setLoading(true);
+    try {
+      const [sumData, histData] = await Promise.all([
+        getWhtReturnSummary({ business: company._id, year, month }),
+        getWhtRemittanceHistory({ business: company._id }),
+      ]);
+      setSummary(sumData);
+      setHistory(Array.isArray(histData) ? histData : []);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to load WHT data");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [company?._id, year, month]);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (!company?._id) return;
+    getChartOfAccounts({ business: company._id, type: "asset", isPosting: true })
+      .then((accs) => setCashbooks(Array.isArray(accs) ? accs.filter((a) => !a.isHeader) : []))
+      .catch(() => {});
+  }, [company?._id]);
+
+  const openForm = () => {
+    setForm({ ...EMPTY_FORM, amountRemitted: summary?.balanceDue > 0 ? String(round2(summary.balanceDue)) : "" });
+    setShowForm(true);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const amount = Number(form.amountRemitted);
+    if (!amount || amount <= 0)  { toast.error("Enter a valid amount"); return; }
+    if (!form.cashbookAccountId) { toast.error("Select a cashbook account"); return; }
+
+    setSubmitting(true);
+    try {
+      await remitWht({
+        business: company._id,
+        year, month,
+        amountRemitted:    amount,
+        paymentDate:       form.paymentDate,
+        paymentReference:  form.paymentReference,
+        cashbookAccountId: form.cashbookAccountId,
+        notes:             form.notes,
+      });
+      toast.success("WHT remittance recorded");
+      setShowForm(false);
+      load(true);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to record WHT remittance");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleVoid = async (record) => {
+    const ok = await confirm({
+      title:   "Void WHT Remittance",
+      message: `This will reverse the GL entries for ${fmtKES(record.amountRemitted)} remitted on ${fmtDate(record.paymentDate)}. The WHT balance will be restored.`,
+      confirmLabel: "Void",
+      danger:  true,
+    });
+    if (!ok) return;
+
+    setVoidingId(record._id);
+    try {
+      await voidWhtRemittance(record._id, { business: company._id, reason: "Voided by user" });
+      toast.success("WHT remittance voided — GL reversed");
+      load(true);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to void");
+    } finally {
+      setVoidingId(null);
+    }
+  };
+
+  const bd          = summary?.balanceDue ?? 0;
+  const periodLabel = `${MONTHS[month - 1]} ${year}`;
+  const periodRemit = useMemo(() => Array.isArray(summary?.remittances) ? summary.remittances : [], [summary]);
+  const yearOptions = useMemo(() => Array.from({ length: 5 }, (_, i) => now.getFullYear() - i), [now]);
+
+  return (
+    <DashboardLayout>
+      <div className="min-h-screen bg-slate-50 p-3 md:p-5">
+
+        {/* ── page header ──────────────────────────────────────────────────── */}
+        <div className="mb-4 flex flex-col gap-3 border border-slate-200 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-sm font-extrabold uppercase tracking-wide text-[#0B3B2E]">Withholding Tax Remittance</h1>
+            <p className="mt-0.5 text-[11px] text-slate-500">
+              Track WHT withheld from vendor payments and record monthly remittances to KRA
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <FaCalendarAlt className="shrink-0 text-slate-400" size={11} />
+            <select value={month} onChange={(e) => setMonth(Number(e.target.value))}
+              className="h-8 border border-slate-300 px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none">
+              {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+            </select>
+            <select value={year} onChange={(e) => setYear(Number(e.target.value))}
+              className="h-8 border border-slate-300 px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none">
+              {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+            </select>
+            <button type="button" onClick={() => load(true)} disabled={refreshing}
+              className="flex h-8 w-8 items-center justify-center border border-slate-300 text-slate-500 hover:border-[#0B3B2E] hover:text-[#0B3B2E] disabled:opacity-40"
+              title="Refresh">
+              <FaRedoAlt size={11} className={refreshing ? "animate-spin" : ""} />
+            </button>
+          </div>
+        </div>
+
+        {loading && (
+          <div className="flex h-36 items-center justify-center">
+            <span className="animate-pulse text-xs text-slate-400">Loading WHT data…</span>
+          </div>
+        )}
+
+        {!loading && summary && (
+          <>
+            {/* ── account missing warning ───────────────────────────────────── */}
+            {!summary.whtAccountFound && (
+              <div className="mb-4 flex items-start gap-2 border border-amber-200 bg-amber-50 px-4 py-3">
+                <FaExclamationTriangle className="mt-0.5 shrink-0 text-amber-500" size={13} />
+                <div className="text-xs text-amber-800">
+                  <strong>WHT Payable account (2141) not found.</strong>{" "}
+                  Run the chart of accounts seeder or create it manually to enable WHT tracking.
+                </div>
+              </div>
+            )}
+
+            {/* ── KPI cards ─────────────────────────────────────────────────── */}
+            <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <KpiCard
+                icon={FaMoneyBillWave}
+                label="WHT Withheld"
+                value={fmtKES(summary.totalCollected)}
+                sub={periodLabel}
+              />
+              <KpiCard
+                icon={FaReceipt}
+                label="Already Remitted"
+                value={fmtKES(summary.totalRemitted)}
+                sub="This period"
+                iconBg="#2563EB"
+              />
+              <KpiCard
+                icon={bd > 0 ? FaExclamationTriangle : FaCheckCircle}
+                label="Balance Due to KRA"
+                value={fmtKES(bd)}
+                sub={
+                  bd > 0
+                    ? "Remit by 20th of next month"
+                    : bd < 0
+                    ? "Over-remitted"
+                    : summary.totalCollected > 0
+                    ? "Fully remitted ✓"
+                    : "No WHT withheld this period"
+                }
+                warn={bd > 0}
+                ok={bd <= 0 && summary.totalCollected > 0}
+                iconBg={bd > 0 ? "#DC2626" : "#059669"}
+              />
+              <div className="flex">
+                <button type="button" onClick={openForm}
+                  className="flex w-full items-center justify-center gap-2 border border-slate-200 bg-white px-4 py-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-600 shadow-sm hover:border-[#0B3B2E] hover:text-[#0B3B2E]">
+                  <FaPlus size={10} /> Record Remittance
+                </button>
+              </div>
+            </div>
+
+            {/* ── Vendor breakdown ──────────────────────────────────────────── */}
+            {summary.breakdown?.length > 0 && (
+              <div className="mb-4 overflow-x-auto border border-slate-200 bg-white shadow-sm">
+                <SectionHeader title={`WHT by Service Provider — ${periodLabel}`} />
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <ColHeader>Provider</ColHeader>
+                      <ColHeader>KRA PIN</ColHeader>
+                      <ColHeader right>Vouchers</ColHeader>
+                      <ColHeader right>WHT Withheld</ColHeader>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {summary.breakdown.map((b) => (
+                      <tr key={b.serviceProviderId} className="border-t border-slate-100 hover:bg-slate-50">
+                        <td className="px-2 py-1.5 font-semibold text-slate-800">
+                          <div className="flex items-center gap-1.5">
+                            <FaBuilding className="shrink-0 text-slate-400" size={9} />
+                            {b.providerName}
+                            {b.providerCode && <span className="font-mono text-[10px] text-slate-400">({b.providerCode})</span>}
+                          </div>
+                        </td>
+                        <td className="px-2 py-1.5 font-mono text-[10px] text-slate-500">{b.kraPin || "—"}</td>
+                        <td className="px-2 py-1.5 text-right text-slate-600">{b.voucherCount}</td>
+                        <td className="px-2 py-1.5 text-right font-extrabold text-amber-700">{fmtKES(b.whtTotal)}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-t-2 border-slate-300 bg-slate-50">
+                      <td colSpan={3} className="px-2 py-1.5 text-[10px] font-extrabold uppercase tracking-wide text-slate-600">Total</td>
+                      <td className="px-2 py-1.5 text-right font-extrabold text-amber-800">{fmtKES(summary.totalCollected)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* ── Voucher detail ────────────────────────────────────────────── */}
+            {summary.vouchers?.length > 0 && (
+              <div className="mb-4 overflow-x-auto border border-slate-200 bg-white shadow-sm">
+                <SectionHeader title={`Paid Vouchers with WHT — ${periodLabel}`} />
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <ColHeader>Voucher No.</ColHeader>
+                      <ColHeader>Provider</ColHeader>
+                      <ColHeader>Paid Date</ColHeader>
+                      <ColHeader right>Gross</ColHeader>
+                      <ColHeader right>WHT</ColHeader>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {summary.vouchers.map((v) => (
+                      <tr key={v._id} className="border-t border-slate-100 hover:bg-slate-50">
+                        <td className="px-2 py-1.5 font-mono text-[10px] font-bold text-slate-700">{v.voucherNo}</td>
+                        <td className="px-2 py-1.5 text-slate-600">{v.providerName}</td>
+                        <td className="px-2 py-1.5 text-slate-500">{fmtDate(v.paidDate)}</td>
+                        <td className="px-2 py-1.5 text-right text-slate-700">{fmtKES(v.amount)}</td>
+                        <td className="px-2 py-1.5 text-right font-extrabold text-amber-700">{fmtKES(v.whtAmount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* ── This-period remittances ───────────────────────────────────── */}
+            {periodRemit.length > 0 && (
+              <div className="mb-4 overflow-x-auto border border-slate-200 bg-white shadow-sm">
+                <SectionHeader title={`Remittances — ${periodLabel}`} />
+                <RemittanceTable rows={periodRemit} showPeriod={false} voidingId={voidingId} onVoid={handleVoid} />
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── Full history ──────────────────────────────────────────────────── */}
+        <div className="overflow-x-auto border border-slate-200 bg-white shadow-sm">
+          <SectionHeader title="All WHT Remittances — History" />
+          {loading ? (
+            <div className="py-8 text-center text-xs text-slate-400 animate-pulse">Loading…</div>
+          ) : (
+            <RemittanceTable rows={history} showPeriod voidingId={voidingId} onVoid={handleVoid} />
+          )}
+        </div>
+      </div>
+
+      {/* ── Record remittance modal ───────────────────────────────────────── */}
+      {showForm && (
+        <Modal
+          title="Record WHT Remittance"
+          subtitle={`Filing for ${periodLabel}`}
+          onClose={() => setShowForm(false)}
+          footer={
+            <>
+              <button type="button" onClick={() => setShowForm(false)}
+                className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-extrabold uppercase tracking-wide text-slate-600 hover:bg-slate-50">
+                Cancel
+              </button>
+              <button type="submit" form="wht-remit-form" disabled={submitting}
+                className="px-5 py-1.5 text-xs font-extrabold uppercase tracking-wide text-white disabled:opacity-50"
+                style={{ background: GRN }}>
+                {submitting ? "Recording…" : "Record Remittance"}
+              </button>
+            </>
+          }
+        >
+          <div className="mb-4 flex items-start gap-2 border border-amber-200 bg-amber-50 px-3 py-2">
+            <FaExclamationTriangle className="mt-0.5 shrink-0 text-amber-500" size={11} />
+            <p className="text-[11px] text-amber-800">
+              WHT returns for <strong>{periodLabel}</strong> must be filed on{" "}
+              <strong>KRA iTax</strong> and payment made by the{" "}
+              <strong>20th of the following month</strong>. Enter the KRA Payment Registration Number (PRN) after generating it on iTax.
+            </p>
+          </div>
+
+          <form id="wht-remit-form" onSubmit={handleSubmit} className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Amount Remitted (KES)" required>
+                <input type="number" min="0.01" step="0.01" required
+                  value={form.amountRemitted}
+                  onChange={(e) => setForm((f) => ({ ...f, amountRemitted: e.target.value }))}
+                  className={inputCls} placeholder="0.00" />
+              </Field>
+              <Field label="Payment Date" required>
+                <input type="date" required
+                  value={form.paymentDate}
+                  onChange={(e) => setForm((f) => ({ ...f, paymentDate: e.target.value }))}
+                  className={inputCls} />
+              </Field>
+            </div>
+
+            <Field label="KRA PRN (Payment Registration No.)">
+              <input type="text"
+                value={form.paymentReference}
+                onChange={(e) => setForm((f) => ({ ...f, paymentReference: e.target.value }))}
+                className={inputCls} placeholder="e.g. PRN2026060012345" />
+            </Field>
+
+            <Field label="Cashbook / Bank Account" required>
+              <select required value={form.cashbookAccountId}
+                onChange={(e) => setForm((f) => ({ ...f, cashbookAccountId: e.target.value }))}
+                className={inputCls}>
+                <option value="">Select account…</option>
+                {cashbooks.map((a) => (
+                  <option key={a._id} value={a._id}>{a.code} — {a.name}</option>
+                ))}
+              </select>
+            </Field>
+
+            <Field label="Notes">
+              <textarea rows={2} value={form.notes}
+                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                className="w-full border border-slate-300 px-2 py-1.5 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none resize-none"
+                placeholder="Optional notes…" />
+            </Field>
+
+            {summary && (
+              <div className="border border-slate-200 bg-slate-50 px-3 py-2 space-y-1">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-bold uppercase tracking-wide text-slate-500">WHT Balance Due This Period</span>
+                  <span className={`font-extrabold ${bd > 0 ? "text-red-600" : "text-emerald-600"}`}>{fmtKES(bd)}</span>
+                </div>
+                {Number(form.amountRemitted) > 0 && (
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-bold uppercase tracking-wide text-slate-500">Remaining After This Payment</span>
+                    <span className={`font-extrabold ${round2(bd - Number(form.amountRemitted)) > 0.009 ? "text-red-600" : "text-emerald-600"}`}>
+                      {fmtKES(round2(bd - Number(form.amountRemitted)))}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </form>
+        </Modal>
+      )}
+    </DashboardLayout>
+  );
+}

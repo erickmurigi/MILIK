@@ -134,6 +134,7 @@ const MENU_PERMISSION_MAP = {
   "acc-balance-sheet":        { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "acc-tax-reports":          { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "acc-vat-remittance":       { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "acc-wht-remittance":       { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "acc-cash-flow":            { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "acc-arrears-analysis":     { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "acc-payment-analysis":     { resource: "financialReports", action: "view", moduleKey: "accounts" },
@@ -838,6 +839,7 @@ const TopToolbar = ({
         "acc-balance-sheet":     "/accounts/balance-sheet",
         "acc-tax-reports":       "/accounts/tax-reports",
         "acc-vat-remittance":    "/accounts/vat-remittance",
+        "acc-wht-remittance":    "/accounts/wht-remittance",
         "acc-cash-flow":         "/accounts/cash-flow",
         "acc-arrears-analysis":     "/accounts/arrears-aged-analysis",
         "acc-payment-analysis":     "/accounts/payment-aged-analysis",
@@ -1201,6 +1203,7 @@ const TopToolbar = ({
             { id: "acc-payment-analysis", label: "Payment Aged Analysis",  icon: FaChartBar },
             { id: "acc-tax-reports",      label: "Tax Reports",            icon: FaCalculator },
             { id: "acc-vat-remittance",   label: "VAT Remittance",         icon: FaReceipt },
+            { id: "acc-wht-remittance",   label: "WHT Remittance",         icon: FaReceipt },
           ],
         },
         {

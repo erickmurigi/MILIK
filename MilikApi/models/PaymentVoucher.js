@@ -90,5 +90,6 @@ PaymentVoucherSchema.index({ property: 1 });
 PaymentVoucherSchema.index({ landlord: 1 });
 PaymentVoucherSchema.index({ liabilityAccount: 1 });
 PaymentVoucherSchema.index({ business: 1, sourceRequisition: 1 });
+PaymentVoucherSchema.index({ business: 1, status: 1, whtAmount: 1, paidDate: -1 });
 
 export default mongoose.model("PaymentVoucher", PaymentVoucherSchema);
