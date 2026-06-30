@@ -58,6 +58,28 @@ export async function syncCriticalIndexes() {
     dropped.push("landlords.idNumber_1");
   }
 
+  // Landlord regId and idNumber indexes must use partialFilterExpression.
+  // sparse:true still indexes null — drop so Landlord.syncIndexes() recreates correctly.
+  if (
+    await dropStaleIndexIfNeeded(
+      Landlord,
+      "company_1_regId_1",
+      (index) => Boolean(index?.unique) && !index?.partialFilterExpression
+    )
+  ) {
+    dropped.push("landlords.company_1_regId_1");
+  }
+
+  if (
+    await dropStaleIndexIfNeeded(
+      Landlord,
+      "company_1_idNumber_1",
+      (index) => Boolean(index?.unique) && !index?.partialFilterExpression
+    )
+  ) {
+    dropped.push("landlords.company_1_idNumber_1");
+  }
+
   if (
     await dropStaleIndexIfNeeded(
       ProcessedStatement,
@@ -81,18 +103,25 @@ export async function syncCriticalIndexes() {
     dropped.push("carwashcustomers.business_1_phone_1");
   }
 
-  // Fix Tenant idNumber index — must be sparse so multiple tenants can have null.
-  // syncIndexes() does NOT detect sparse option differences, so we use raw MongoDB
-  // drop + createIndex to guarantee the correct index spec is in place.
+  // Fix Tenant idNumber index — must use partialFilterExpression so multiple tenants
+  // can have idNumber: null without conflicting. sparse:true alone still indexes null
+  // values; only partialFilterExpression truly excludes them from the index.
+  // syncIndexes() does NOT detect partialFilterExpression differences, so we use raw
+  // MongoDB drop + createIndex to guarantee the correct index spec is in place.
   try {
     const tenantCol = mongoose.connection.db.collection("tenants");
     const tenantIndexes = await tenantCol.indexes();
-    const stale = tenantIndexes.find((i) => i.name === "business_1_idNumber_1" && !i.sparse);
+    const stale = tenantIndexes.find(
+      (i) => i.name === "business_1_idNumber_1" && !i.partialFilterExpression
+    );
     if (stale) {
       await tenantCol.dropIndex("business_1_idNumber_1");
-      await tenantCol.createIndex({ business: 1, idNumber: 1 }, { unique: true, sparse: true });
-      dropped.push("tenants.business_1_idNumber_1 (rebuilt sparse)");
-      console.log("[indexMaintenance] Rebuilt tenants.business_1_idNumber_1 as sparse unique index.");
+      await tenantCol.createIndex(
+        { business: 1, idNumber: 1 },
+        { unique: true, partialFilterExpression: { idNumber: { $type: "string", $ne: "" } } }
+      );
+      dropped.push("tenants.business_1_idNumber_1 (rebuilt partialFilterExpression)");
+      console.log("[indexMaintenance] Rebuilt tenants.business_1_idNumber_1 with partialFilterExpression.");
     }
   } catch (e) {
     console.warn("[indexMaintenance] Could not fix Tenant idNumber index:", e?.message);

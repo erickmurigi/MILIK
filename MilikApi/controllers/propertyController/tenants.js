@@ -1170,11 +1170,6 @@ export const updateTenant = async (req, res, next) => {
 
     if (normalizedPayload.idNumber !== undefined) {
       normalizedPayload.idNumber = isPlaceholder(normalizedPayload.idNumber) ? null : normalizeString(normalizedPayload.idNumber);
-      // If the new value is null AND the existing value is already null/placeholder,
-      // skip the field to avoid conflicts on a non-sparse unique index.
-      if (normalizedPayload.idNumber === null && (tenant.idNumber === null || isPlaceholder(tenant.idNumber))) {
-        delete normalizedPayload.idNumber;
-      }
     }
 
     if (normalizedPayload.email !== undefined) {
@@ -2438,16 +2433,22 @@ export const fixDuplicateLeaseAgreements = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "Business context is required" });
     }
 
-    // ── Step 1: fix Tenant idNumber index — must be sparse ────────────────────
-    // syncIndexes() does NOT detect sparse option differences; use raw drop+create.
+    // ── Step 1: fix Tenant idNumber index — needs partialFilterExpression ────────
+    // sparse:true still indexes null; partialFilterExpression is required to allow
+    // multiple tenants to have idNumber: null without conflicting.
     const indexErrors = [];
     try {
       const tenantCol = mongoose.connection.db.collection("tenants");
       const tenantIndexes = await tenantCol.indexes();
-      const stale = tenantIndexes.find((i) => i.name === "business_1_idNumber_1" && !i.sparse);
+      const stale = tenantIndexes.find(
+        (i) => i.name === "business_1_idNumber_1" && !i.partialFilterExpression
+      );
       if (stale) {
         await tenantCol.dropIndex("business_1_idNumber_1");
-        await tenantCol.createIndex({ business: 1, idNumber: 1 }, { unique: true, sparse: true });
+        await tenantCol.createIndex(
+          { business: 1, idNumber: 1 },
+          { unique: true, partialFilterExpression: { idNumber: { $type: "string", $ne: "" } } }
+        );
       }
     } catch (e) {
       indexErrors.push(`Tenant idNumber index: ${e?.message}`);
