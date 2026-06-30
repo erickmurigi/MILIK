@@ -237,6 +237,7 @@ const Tenants = ({ listingMode = "active" }) => {
   const [showCommunicationModal, setShowCommunicationModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [isTransferring, setIsTransferring] = useState(false);
+  const [isFixingLeases, setIsFixingLeases] = useState(false);
   const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", effectiveDate: "", reason: "", filterProperty: "", filterSearch: "", depositTopUp: 0, depositTopUpDueDate: "" });
   const [showTerminateModal, setShowTerminateModal] = useState(false);
   const [isTerminating, setIsTerminating] = useState(false);
@@ -292,6 +293,11 @@ const Tenants = ({ listingMode = "active" }) => {
     return m;
   }, [properties]);
 
+  // Ref keeps the Map current without making buildTenantParams re-create on every
+  // properties refetch (which would trigger a redundant getTenants dispatch).
+  const propertyIdByNameRef = useRef(propertyIdByName);
+  propertyIdByNameRef.current = propertyIdByName;
+
   const buildTenantParams = useCallback((overridePage) => {
     const page = overridePage ?? currentPage;
     return {
@@ -302,11 +308,11 @@ const Tenants = ({ listingMode = "active" }) => {
       ...(appliedFilters.search ? { search: appliedFilters.search } : {}),
       ...(appliedFilters.tenantName ? { tenantName: appliedFilters.tenantName } : {}),
       ...(appliedFilters.tenantCode ? { tenantCode: appliedFilters.tenantCode } : {}),
-      ...(appliedFilters.property !== "any" && propertyIdByName.get(appliedFilters.property)
-        ? { property: propertyIdByName.get(appliedFilters.property) }
+      ...(appliedFilters.property !== "any" && propertyIdByNameRef.current.get(appliedFilters.property)
+        ? { property: propertyIdByNameRef.current.get(appliedFilters.property) }
         : {}),
     };
-  }, [currentCompany?._id, currentPage, pageSize, tenantStatusQuery, appliedFilters, propertyIdByName]);
+  }, [currentCompany?._id, currentPage, pageSize, tenantStatusQuery, appliedFilters]);
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -326,26 +332,37 @@ const Tenants = ({ listingMode = "active" }) => {
     setSelectAll(false);
   }, [currentPage]);
 
+  const lastPassiveRefreshRef = useRef(0);
+
   useEffect(() => {
+    // invoicesUpdated is an explicit in-app signal — always refresh immediately
     const handleInvoiceChange = () => {
       setInvoiceRefreshTick((prev) => prev + 1);
     };
 
+    // storage/focus/visibilitychange can all fire in quick succession on a single
+    // tab switch (e.g. both focus and visibilitychange fire together). Debounce
+    // to at most once per 5 seconds to avoid redundant fetches.
+    const handlePassiveChange = () => {
+      const now = Date.now();
+      if (now - lastPassiveRefreshRef.current < 5000) return;
+      lastPassiveRefreshRef.current = now;
+      setInvoiceRefreshTick((prev) => prev + 1);
+    };
+
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        handleInvoiceChange();
-      }
+      if (document.visibilityState === "visible") handlePassiveChange();
     };
 
     window.addEventListener("invoicesUpdated", handleInvoiceChange);
-    window.addEventListener("storage", handleInvoiceChange);
-    window.addEventListener("focus", handleInvoiceChange);
+    window.addEventListener("storage", handlePassiveChange);
+    window.addEventListener("focus", handlePassiveChange);
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       window.removeEventListener("invoicesUpdated", handleInvoiceChange);
-      window.removeEventListener("storage", handleInvoiceChange);
-      window.removeEventListener("focus", handleInvoiceChange);
+      window.removeEventListener("storage", handlePassiveChange);
+      window.removeEventListener("focus", handlePassiveChange);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
@@ -1481,6 +1498,24 @@ const confirmTransferUnit = useCallback(async () => {
     toast.info("Tenants exported successfully!");
   };
 
+  const handleFixDuplicateLeases = async () => {
+    if (!window.confirm("This will scan for duplicate lease agreement numbers and reassign unique numbers to the duplicates.\n\nProceed?")) return;
+    setIsFixingLeases(true);
+    try {
+      const res = await adminRequests.post("/tenants/fix-duplicate-agreements", { business: currentCompany?._id });
+      const data = res?.data;
+      if (data?.groups === 0) {
+        toast.success("All lease numbers are already clean — no duplicates found.");
+      } else {
+        toast.success(data?.message || "Lease numbers fixed successfully.");
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to fix lease numbers. Please try again.");
+    } finally {
+      setIsFixingLeases(false);
+    }
+  };
+
   // ===== FILTER OPTIONS =====
   const uniqueProperties = useMemo(() => {
     const propertyNames = properties
@@ -1644,6 +1679,15 @@ const confirmTransferUnit = useCallback(async () => {
                   <FaFileExport size={9} className="rotate-180" /> Import
                 </button>
               )}
+              <button
+                onClick={handleFixDuplicateLeases}
+                disabled={isFixingLeases}
+                title="Fix duplicate lease agreement numbers so tenant editing works"
+                className="h-7 shrink-0 flex items-center gap-1 rounded bg-red-700 px-2.5 text-xs font-semibold text-white hover:bg-red-800 disabled:opacity-60"
+              >
+                {isFixingLeases ? <FaSpinner size={9} className="animate-spin" /> : <FaRedoAlt size={9} />}
+                {isFixingLeases ? "Fixing..." : "Fix Leases"}
+              </button>
               <button onClick={handlePrintList} className="h-7 shrink-0 flex items-center gap-1 rounded bg-slate-700 px-2.5 text-xs font-semibold text-white hover:bg-slate-800">
                 <FaPrint size={9} /> Print
               </button>
@@ -1659,7 +1703,7 @@ const confirmTransferUnit = useCallback(async () => {
           <table className="w-full border-collapse table-fixed">
             <thead className="sticky top-0 z-10 shadow-sm">
               <tr className={`${MILIK_GREEN} text-white text-[11px]`}>
-                <th className="w-9 px-2 py-2 text-center border-r border-white/10">
+                <th className="w-9 px-2 py-1.5 text-center border-r border-white/10">
                   <input
                     type="checkbox"
                     checked={selectAll}
@@ -1668,26 +1712,26 @@ const confirmTransferUnit = useCallback(async () => {
                     className="rounded border-gray-300 text-orange-600 focus:ring-[#0B3B2E]/20 cursor-pointer"
                   />
                 </th>
-                <th className="w-7 px-1 py-2 border-r border-white/10" />
-                <th className="w-[82px] px-3 py-2 text-left font-bold border-r border-white/10">Code</th>
-                <th className="px-3 py-2 text-left font-bold border-r border-white/10">Tenant</th>
-                <th className="w-[72px] px-3 py-2 text-left font-bold border-r border-white/10">Unit</th>
+                <th className="w-7 px-1 py-1.5 border-r border-white/10" />
+                <th className="w-[82px] px-3 py-1.5 text-left font-bold border-r border-white/10">Code</th>
+                <th className="px-3 py-1.5 text-left font-bold border-r border-white/10">Tenant</th>
+                <th className="w-[72px] px-3 py-1.5 text-left font-bold border-r border-white/10">Unit</th>
                 {isTerminatedView ? (
                   <>
-                    <th className="w-[108px] px-3 py-2 text-left font-bold border-r border-white/10">Terminated</th>
-                    <th className="w-[100px] px-3 py-2 text-left font-bold border-r border-white/10">Move-out</th>
-                    <th className="w-[110px] px-3 py-2 text-right font-bold border-r border-white/10">Final Balance</th>
-                    <th className="w-[110px] px-3 py-2 text-right font-bold border-r border-white/10">Deposit Held</th>
-                    <th className="w-[110px] px-3 py-2 text-center font-bold border-r border-white/10">Settlement</th>
-                    <th className="w-[130px] px-3 py-2 text-left font-bold">Held By</th>
+                    <th className="w-[108px] px-3 py-1.5 text-left font-bold border-r border-white/10">Terminated</th>
+                    <th className="w-[100px] px-3 py-1.5 text-left font-bold border-r border-white/10">Move-out</th>
+                    <th className="w-[110px] px-3 py-1.5 text-right font-bold border-r border-white/10">Final Balance</th>
+                    <th className="w-[110px] px-3 py-1.5 text-right font-bold border-r border-white/10">Deposit Held</th>
+                    <th className="w-[110px] px-3 py-1.5 text-center font-bold border-r border-white/10">Settlement</th>
+                    <th className="w-[130px] px-3 py-1.5 text-left font-bold">Held By</th>
                   </>
                 ) : (
                   <>
-                    <th className="w-[188px] px-3 py-2 text-left font-bold border-r border-white/10">Lease Period</th>
-                    <th className="w-[100px] px-3 py-2 text-right font-bold border-r border-white/10">Rent</th>
-                    <th className="w-[112px] px-3 py-2 text-right font-bold border-r border-white/10">Balance</th>
-                    <th className="w-[92px] px-3 py-2 text-center font-bold border-r border-white/10">Status</th>
-                    <th className="w-[155px] px-3 py-2 text-left font-bold">Contact</th>
+                    <th className="w-[188px] px-3 py-1.5 text-left font-bold border-r border-white/10">Lease Period</th>
+                    <th className="w-[100px] px-3 py-1.5 text-right font-bold border-r border-white/10">Rent</th>
+                    <th className="w-[112px] px-3 py-1.5 text-right font-bold border-r border-white/10">Balance</th>
+                    <th className="w-[92px] px-3 py-1.5 text-center font-bold border-r border-white/10">Status</th>
+                    <th className="w-[155px] px-3 py-1.5 text-left font-bold">Contact</th>
                   </>
                 )}
               </tr>

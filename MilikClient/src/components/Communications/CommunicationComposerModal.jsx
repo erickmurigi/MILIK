@@ -231,7 +231,12 @@ const CommunicationComposerModal = ({
       const failed = Number(res?.summary?.failedCount || 0);
       if (sent > 0 && failed === 0) toast.success(`${sent} ${channelMeta[activeChannel]?.label || 'message'}${sent !== 1 ? 's' : ''} sent.`);
       else if (sent > 0) toast.warn(`${sent} sent, ${failed} failed.`);
-      else toast.error('No messages were sent.');
+      else {
+        const firstError = Array.isArray(res?.results)
+          ? res.results.find((r) => r.status === 'failed')?.message
+          : null;
+        toast.error(firstError ? `Send failed: ${firstError}` : 'No messages were sent.');
+      }
       if (typeof onSent === 'function') onSent(res);
     } catch (err) {
       toast.error(err?.response?.data?.message || err?.message || 'Failed to send.');

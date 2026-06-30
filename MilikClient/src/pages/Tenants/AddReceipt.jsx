@@ -760,7 +760,14 @@ const AddReceipt = () => {
                     <AppSelect
                       value={formData.tenantId}
                       onChange={(v) => setFormData((prev) => ({ ...prev, tenantId: v ?? "" }))}
-                      options={tenantOptions.map((t) => ({ value: t._id, label: `${getTenantName(t)}${isTerminatedTenant(t) ? " — Terminated" : ""}` }))}
+                      options={tenantOptions.map((t) => {
+                        const name = getTenantName(t);
+                        const unitNum = t?.unit?.unitNumber;
+                        const code = t?.tenantCode;
+                        const terminated = isTerminatedTenant(t) ? " — Terminated" : "";
+                        const suffix = [unitNum ? `Unit ${unitNum}` : "", code || ""].filter(Boolean).join(" · ");
+                        return { value: t._id, label: suffix ? `${name} — ${suffix}${terminated}` : `${name}${terminated}` };
+                      })}
                       placeholder={formData.propertyId ? "Select tenant…" : "Select property first"}
                       searchable
                       clearable

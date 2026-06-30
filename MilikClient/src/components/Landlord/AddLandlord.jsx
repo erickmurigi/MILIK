@@ -305,18 +305,6 @@ const AddLandlord = () => {
       toast.error("Landlord name is required");
       return;
     }
-    if (!formData.regId?.trim()) {
-      toast.error("Reg/ID number is required");
-      return;
-    }
-    if (!formData.taxPin?.trim()) {
-      toast.error("Tax/PIN number is required");
-      return;
-    }
-    if (!formData.phoneNumber?.trim()) {
-      toast.error("Phone number is required");
-      return;
-    }
 
     try {
       const payload = {

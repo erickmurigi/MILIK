@@ -114,7 +114,7 @@ const MetricsGrid = ({ darkMode, summaryData = {} }) => {
       },
       ...(canViewFinancials ? [{
         id: 4,
-        label: isLandlordMode ? 'Collected This Month' : 'Total Collected This Month',
+        label: isLandlordMode ? 'Collected This Month' : 'Collected This Month',
         value: formatCurrency(monthlyCollected),
         icon: <FaMoneyBillWave />,
         color: 'from-[#E85C0D] to-[#c7490a]',
@@ -172,7 +172,7 @@ const MetricsGrid = ({ darkMode, summaryData = {} }) => {
           <h3 className="mb-0.5 text-base font-extrabold tracking-tight">
             {metric.loading ? '...' : metric.value}
           </h3>
-          <p className="text-white/80 text-[10px] font-semibold uppercase tracking-wide">{metric.label}</p>
+          <p className="text-white/80 text-[10px] font-semibold uppercase tracking-normal leading-tight">{metric.label}</p>
         </div>
       ))}
     </div>

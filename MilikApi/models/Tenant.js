@@ -44,8 +44,8 @@ const TenantSchema = new mongoose.Schema(
 
     phone: {
       type: String,
-      required: true,
       trim: true,
+      default: null,
     },
 
     email: {
@@ -60,8 +60,8 @@ const TenantSchema = new mongoose.Schema(
 
     idNumber: {
       type: String,
-      required: true,
       trim: true,
+      default: null,
     },
 
     unit: {
@@ -231,6 +231,11 @@ TenantSchema.index({ business: 1, unit: 1, status: 1 });
 TenantSchema.index({ additionalUnits: 1 });
 TenantSchema.index({ moveInDate: -1 });
 
+const isTenantPlaceholder = (v) => {
+  const s = String(v ?? "").trim().toLowerCase();
+  return s === "" || s === "-" || s === "--" || s === "n/a" || s === "na" || s === "none";
+};
+
 TenantSchema.pre("validate", function (next) {
   if (typeof this.tenantCode === "string") {
     this.tenantCode = this.tenantCode.trim();
@@ -241,7 +246,8 @@ TenantSchema.pre("validate", function (next) {
   }
 
   if (typeof this.phone === "string") {
-    this.phone = this.phone.trim();
+    const trimmed = this.phone.trim();
+    this.phone = isTenantPlaceholder(trimmed) ? null : trimmed;
   }
 
   if (typeof this.email === "string") {
@@ -249,7 +255,8 @@ TenantSchema.pre("validate", function (next) {
   }
 
   if (typeof this.idNumber === "string") {
-    this.idNumber = this.idNumber.trim();
+    const trimmed = this.idNumber.trim();
+    this.idNumber = isTenantPlaceholder(trimmed) ? null : trimmed;
   }
 
   if (typeof this.terminationReason === "string") {

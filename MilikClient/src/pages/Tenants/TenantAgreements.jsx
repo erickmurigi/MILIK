@@ -180,7 +180,6 @@ const TenantAgreements = () => {
   const [includeTerminatedTenants, setIncludeTerminatedTenants] = useState(false);
   const [openDropdownId, setOpenDropdownId] = useState(null);
   const [renewModal, setRenewModal] = useState({ open: false, row: null, newEndDate: "", loading: false });
-
   useEffect(() => {
     if (!openDropdownId) return;
     const close = () => setOpenDropdownId(null);

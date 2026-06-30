@@ -1658,7 +1658,6 @@ const Receipts = ({ viewMode = "tenant" }) => {
               <span className="shrink-0 rounded border border-blue-300 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">{stats.confirmedCount} Confirmed</span>
               <span className="shrink-0 rounded border border-orange-300 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700">{stats.pendingCount} Pending</span>
               <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-              <input value={draftFilters.search} onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: normalizeUppercaseInput(e.target.value) }))} placeholder="Search…" className="h-7 w-32 shrink-0 rounded border border-slate-200 px-2 text-xs uppercase focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
               <input value={draftFilters.tenantSearch} onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenantSearch: normalizeUppercaseInput(e.target.value) }))} placeholder="Tenant" className="h-7 w-24 shrink-0 rounded border border-slate-200 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
               <select value={draftFilters.property} onChange={(e) => setDraftFilters((prev) => ({ ...prev, property: e.target.value, unit: "all" }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                 {propertyOptions.map((p) => (<option key={p} value={p}>{p === "all" ? "Property" : p}</option>))}
@@ -1712,7 +1711,6 @@ const Receipts = ({ viewMode = "tenant" }) => {
               <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
               <button onClick={applySearchFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSearch size={10} /></button>
               <button onClick={resetSearchFilters} className="h-7 shrink-0 flex items-center gap-1 rounded bg-slate-500 px-2.5 text-xs font-semibold text-white hover:bg-slate-600"><FaRedoAlt size={10} /></button>
-              <button onClick={loadData} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold hover:bg-slate-50"><FaRedoAlt size={10} /></button>
               <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
               <select
                 value=""

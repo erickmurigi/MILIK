@@ -1560,3 +1560,53 @@ export const sendAdHocEmail = async ({ businessId, to, subject, html, text } = {
     throw err;
   }
 };
+
+export const sendTestEmail = async ({ businessId, email, subject, body } = {}) => {
+  const company = await ensureCompany(businessId);
+  const profiles = getRawEmailProfiles(company.communication || {});
+  const profile  = getPrimaryEmailProfile(profiles, company.communication?.defaultEmailProfileId || null);
+
+  if (!profile?.enabled) {
+    const error = new Error('No active email profile configured. Add one in Settings → Communications.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const testSubject = String(subject || 'Test Email from Milik PMS').slice(0, 500);
+  const testBody    = String(body    || 'This is a test email from Milik PMS. If you received this, your email profile is working correctly.').slice(0, 5000);
+
+  let sendStatus = 'sent';
+  let sendError  = '';
+
+  try {
+    await dispatchEmail({ profile, to: email, subject: testSubject, text: testBody, html: testBody });
+  } catch (err) {
+    sendStatus = 'failed';
+    sendError  = err?.message || 'Dispatch failed.';
+  }
+
+  await SmsLog.create({
+    business:      businessId,
+    channel:       'email',
+    contextType:   'test',
+    templateKey:   'test',
+    templateName:  'Test Email',
+    profileName:   profile.name || '',
+    provider:      profile.provider || 'smtp',
+    to:            email,
+    recipientName: 'Test Recipient',
+    subject:       testSubject,
+    body:          testBody,
+    status:        sendStatus,
+    error:         sendError,
+    isTest:        true,
+  }).catch(() => {});
+
+  if (sendStatus === 'failed') {
+    const error = new Error(sendError || 'Test email dispatch failed.');
+    error.statusCode = 502;
+    throw error;
+  }
+
+  return { success: true, to: email };
+};

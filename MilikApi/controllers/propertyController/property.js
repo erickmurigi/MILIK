@@ -1385,11 +1385,27 @@ export const getPropertyUnits = async (req, res, next) => {
       }
     }
 
-    const units = await Unit.find({ property: req.params.id })
-      .populate("property", "propertyName address")
-      .sort({ unitNumber: 1 });
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 100));
+    const skip = (page - 1) * limit;
 
-    res.status(200).json(units);
+    const [units, total] = await Promise.all([
+      Unit.find({ property: req.params.id })
+        .populate("property", "propertyName address")
+        .sort({ unitNumber: 1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Unit.countDocuments({ property: req.params.id }),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: units,
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+    });
   } catch (err) {
     next(err);
   }
@@ -1470,7 +1486,7 @@ export const bulkImportProperties = async (req, res, next) => {
         typeof property?.propertyCode === "string" ? property.propertyCode.trim() : "",
       propertyName:
         typeof property?.propertyName === "string" ? property.propertyName.trim() : "",
-      lrNumber: typeof property?.lrNumber === "string" ? property.lrNumber.trim() : "",
+      lrNumber: (() => { const v = typeof property?.lrNumber === "string" ? property.lrNumber.trim() : ""; const s = v.toLowerCase(); return (s === "-" || s === "--" || s === "n/a" || s === "na" || s === "none") ? "" : v; })(),
       propertyType:
         typeof property?.propertyType === "string" ? property.propertyType.trim() : "",
       category: typeof property?.category === "string" ? property.category.trim() : property?.category,

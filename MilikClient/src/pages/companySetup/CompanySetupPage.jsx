@@ -1163,7 +1163,7 @@ export default function CompanySetupPage() {
     if (!currentCompany?._id) return;
     setEmailLogsLoading(true);
     getSmsLogs(currentCompany._id, { channel: "email", limit: 200, status: emailSubTab === "pending" ? "pending" : emailSubTab })
-      .then((data) => setEmailLogs(Array.isArray(data) ? data : []))
+      .then((data) => setEmailLogs(data?.logs || []))
       .catch(() => setEmailLogs([]))
       .finally(() => setEmailLogsLoading(false));
     setEmailLogsPage(1);
@@ -2672,7 +2672,7 @@ export default function CompanySetupPage() {
                   onClick={() => {
                     setEmailLogsLoading(true);
                     getSmsLogs(currentCompany._id, { channel: "email", limit: 200, status: emailSubTab === "pending" ? "pending" : emailSubTab })
-                      .then((data) => setEmailLogs(Array.isArray(data) ? data : []))
+                      .then((data) => setEmailLogs(data?.logs || []))
                       .catch(() => setEmailLogs([]))
                       .finally(() => setEmailLogsLoading(false));
                   }}

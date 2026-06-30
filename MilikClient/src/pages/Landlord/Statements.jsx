@@ -29,7 +29,7 @@ const depositMemoCurrency = (value) => currency(Math.abs(Number(value || 0)));
 const getRowPaymentStatus = (row) => {
   if (!row.tenantId || String(row.tenantName || "").toLowerCase() === "vacant") return "vacant";
   const invoiced = Number(row.invoicedRent || 0);
-  if (invoiced === 0) return "vacant";
+  if (invoiced === 0) return "nobill";
   const paid = Number(row.paidRent || 0);
   if (paid >= invoiced) return "paid";
   if (paid > 0) return "partial";
@@ -37,10 +37,11 @@ const getRowPaymentStatus = (row) => {
 };
 
 const ROW_STATUS = {
-  paid:    { border: "border-l-[3px] border-l-emerald-400", badge: "bg-emerald-100 text-emerald-700", label: "PAID",    textMuted: false },
-  partial: { border: "border-l-[3px] border-l-amber-400",   badge: "bg-amber-100 text-amber-700",   label: "PART",    textMuted: false },
-  unpaid:  { border: "border-l-[3px] border-l-red-400",     badge: "bg-red-100 text-red-700",       label: "UNPAID",  textMuted: false },
-  vacant:  { border: "border-l-[3px] border-l-slate-200",   badge: "bg-slate-100 text-slate-400",   label: "VACANT",  textMuted: true  },
+  paid:    { border: "border-l-[3px] border-l-emerald-400", badge: "bg-emerald-100 text-emerald-700", label: "PAID",   textMuted: false },
+  partial: { border: "border-l-[3px] border-l-amber-400",   badge: "bg-amber-100 text-amber-700",   label: "PART",   textMuted: false },
+  unpaid:  { border: "border-l-[3px] border-l-red-400",     badge: "bg-red-100 text-red-700",       label: "UNPAID", textMuted: false },
+  nobill:  { border: "border-l-[3px] border-l-slate-200",   badge: "",                               label: "",       textMuted: false },
+  vacant:  { border: "border-l-[3px] border-l-slate-200",   badge: "",                               label: "",       textMuted: true  },
 };
 
 const formatDate = (value) => {
@@ -516,7 +517,7 @@ const Statements = () => {
 
   const today = new Date();
   const todayIso = toIsoDate(today);
-  const initialPeriod = buildPeriod(today.getMonth() + 1, today.getFullYear());
+  const initialPeriod = { ...buildPeriod(today.getMonth() + 1, today.getFullYear()), periodEnd: todayIso };
   const statementDraftKey = buildScopedDraftKey({
     page: "landlord-statement",
     companyId: currentCompany?._id,
@@ -996,15 +997,16 @@ const Statements = () => {
     const totalCollected = Number(totals.paidRent || 0) +
       statementColumns.reduce((s, c) => s + Number(c.paid || 0), 0);
     const rate = totalInvoiced > 0 ? Math.round((totalCollected / totalInvoiced) * 100) : null;
-    let paidCount = 0, partialCount = 0, unpaidCount = 0, vacantCount = 0;
+    let paidCount = 0, partialCount = 0, unpaidCount = 0, nobillCount = 0, vacantCount = 0;
     preparedRows.forEach((row) => {
       const s = getRowPaymentStatus(row);
       if (s === "paid") paidCount++;
       else if (s === "partial") partialCount++;
       else if (s === "unpaid") unpaidCount++;
+      else if (s === "nobill") nobillCount++;
       else vacantCount++;
     });
-    return { totalInvoiced, totalCollected, rate, paid: paidCount, partial: partialCount, unpaid: unpaidCount, vacant: vacantCount, occupied: paidCount + partialCount + unpaidCount };
+    return { totalInvoiced, totalCollected, rate, paid: paidCount, partial: partialCount, unpaid: unpaidCount, nobill: nobillCount, vacant: vacantCount, occupied: paidCount + partialCount + unpaidCount + nobillCount };
   }, [draftStatement, totals, statementColumns, preparedRows]);
 
   const filteredTableRows = useMemo(() => {
@@ -1826,7 +1828,7 @@ const Statements = () => {
                           </span>
                           <span className="text-[9px] text-green-200/50">
                             {collectionStats.occupied} occ
-                            {collectionStats.vacant > 0 && ` · ${collectionStats.vacant} vac`}
+                            {collectionStats.vacant > 0 && ` · ${collectionStats.vacant} vac`}{collectionStats.nobill > 0 && ` · ${collectionStats.nobill} no bill`}
                             {collectionStats.unpaid > 0 && (
                               <span className="text-red-300/80"> · {collectionStats.unpaid} unpaid</span>
                             )}
@@ -1847,10 +1849,11 @@ const Statements = () => {
                       {draftStatement && preparedRows.length > 0 && (
                         <div className="flex items-center gap-1">
                           {[
-                            { key: "all",     label: `All·${preparedRows.length}`,               cls: "border-white/25 bg-white/10 text-white/80" },
+                            { key: "all",     label: `All·${preparedRows.length}`,                cls: "border-white/25 bg-white/10 text-white/80" },
                             { key: "unpaid",  label: `Unpaid·${collectionStats?.unpaid ?? 0}`,   cls: "border-red-400/50 bg-red-900/40 text-red-200" },
                             { key: "partial", label: `Partial·${collectionStats?.partial ?? 0}`, cls: "border-amber-400/50 bg-amber-900/40 text-amber-200" },
                             { key: "paid",    label: `Paid·${collectionStats?.paid ?? 0}`,       cls: "border-emerald-400/50 bg-emerald-900/40 text-emerald-200" },
+                            { key: "nobill",  label: `No Bill·${collectionStats?.nobill ?? 0}`,  cls: "border-white/15 bg-white/5 text-slate-300" },
                             { key: "vacant",  label: `Vacant·${collectionStats?.vacant ?? 0}`,   cls: "border-white/15 bg-white/5 text-slate-300" },
                           ].map((chip) => (
                             <button
@@ -1907,9 +1910,9 @@ const Statements = () => {
                       {
                         label: "Units",
                         value: `${collectionStats.occupied} occ`,
-                        sub: collectionStats.vacant > 0 ? `${collectionStats.vacant} vacant` : "fully occupied",
+                        sub: collectionStats.vacant > 0 ? `${collectionStats.vacant} vacant` : collectionStats.nobill > 0 ? `${collectionStats.nobill} no bill` : "fully occupied",
                         color: "text-slate-800",
-                        subColor: collectionStats.vacant > 0 ? "text-amber-500" : "text-emerald-500",
+                        subColor: collectionStats.vacant > 0 ? "text-amber-500" : collectionStats.nobill > 0 ? "text-slate-500" : "text-emerald-500",
                       },
                       { label: "Paid in Full", value: collectionStats.paid,   sub: "tenants", color: collectionStats.paid > 0    ? "text-emerald-700" : "text-slate-400", subColor: "text-slate-400" },
                       { label: "Partial",      value: collectionStats.partial, sub: "tenants", color: collectionStats.partial > 0 ? "text-amber-700"   : "text-slate-400", subColor: "text-slate-400" },
@@ -2029,15 +2032,16 @@ const Statements = () => {
                         filteredTableRows.map((row, index) => {
                           const closingBal = Number(row.closingBalance ?? row.balanceCF ?? row.balance ?? 0);
                           const status = getRowPaymentStatus(row);
-                          const st = ROW_STATUS[status];
+                          const st = ROW_STATUS[status] || ROW_STATUS.vacant;
                           const isVacant = status === "vacant";
+                          const isNoBill = status === "nobill";
                           const isOdd = index % 2 !== 0;
                           const rowBase = isOdd ? "bg-slate-50" : "bg-white";
 
                           // Helper: paid columns — only show green amount when actually > 0,
                           // otherwise show a muted dash (zero payment ≠ good, don't colour it green).
                           const paidCell = (val) => {
-                            if (isVacant) return { text: "—", cls: "text-slate-300" };
+                            if (isVacant || isNoBill) return { text: "—", cls: "text-slate-300" };
                             const n = Number(val || 0);
                             return n > 0.005
                               ? { text: currency(n), cls: "text-emerald-700 font-medium" }
@@ -2047,7 +2051,7 @@ const Statements = () => {
                           // Bal C/F: positive = tenant owes (arrears = red),
                           //          negative = tenant has credit (green),
                           //          zero = settled (muted).
-                          const balCls = isVacant ? "text-slate-300"
+                          const balCls = (isVacant || isNoBill) ? "text-slate-300"
                             : closingBal > 0.005  ? "text-red-600 font-semibold"
                             : closingBal < -0.005 ? "text-emerald-700 font-semibold"
                             : "text-slate-400";
@@ -2056,10 +2060,8 @@ const Statements = () => {
                           const paidTaxCell    = paidCell(row.paidTax);
                           const totalPaidCell  = paidCell(row.totalPaid);
 
-                          // Only show the inline badge when it adds info beyond the left-border colour.
-                          // UNPAID is the dominant status — the red border already communicates it.
-                          // Show badge for PAID, PARTIAL, VACANT to highlight exceptions.
-                          const showBadge = status !== "unpaid" || isVacant;
+                          // Only show the inline badge for PAID and PARTIAL — those are the meaningful exceptions.
+                          const showBadge = status === "paid" || status === "partial";
 
                           return (
                             <tr
@@ -2091,22 +2093,22 @@ const Statements = () => {
                               </td>
                               {/* Bal B/F — muted, context only */}
                               <td className="px-3 py-2.5 text-right text-slate-400 text-[11px]">
-                                {isVacant ? "—" : (Number(row.openingBalance ?? row.balanceBF ?? 0) !== 0 ? currency(row.openingBalance ?? row.balanceBF ?? 0) : "—")}
+                                {(isVacant || isNoBill) ? "—" : (Number(row.openingBalance ?? row.balanceBF ?? 0) !== 0 ? currency(row.openingBalance ?? row.balanceBF ?? 0) : "—")}
                               </td>
                               {/* ── INVOICED block ── */}
-                              <td className={`border-l border-slate-100 px-3 py-2.5 text-right text-xs ${isVacant ? "text-slate-300" : "text-slate-700"}`}>
-                                {isVacant ? "—" : currency(row.invoicedRent)}
+                              <td className={`border-l border-slate-100 px-3 py-2.5 text-right text-xs ${(isVacant || isNoBill) ? "text-slate-300" : "text-slate-700"}`}>
+                                {(isVacant || isNoBill) ? "—" : currency(row.invoicedRent)}
                               </td>
                               {hasInvoiceVatColumn && (
-                                <td className={`px-3 py-2.5 text-right text-[11px] ${isVacant ? "text-slate-300" : "text-slate-500"}`}>
-                                  {isVacant ? "—" : currency(row.invoicedTax ?? 0)}
+                                <td className={`px-3 py-2.5 text-right text-[11px] ${(isVacant || isNoBill) ? "text-slate-300" : "text-slate-500"}`}>
+                                  {(isVacant || isNoBill) ? "—" : currency(row.invoicedTax ?? 0)}
                                 </td>
                               )}
                               {statementColumns.map((column) => {
                                 const invVal = getPreparedStatementColumnValue(row, column.key, "invoiced");
                                 return (
-                                  <td key={`inv-${row.unitId || row.unitNumber || "row"}-${column.key}`} className={`px-3 py-2.5 text-right text-xs ${isVacant ? "text-slate-300" : "text-slate-700"}`}>
-                                    {isVacant ? "—" : currency(invVal)}
+                                  <td key={`inv-${row.unitId || row.unitNumber || "row"}-${column.key}`} className={`px-3 py-2.5 text-right text-xs ${(isVacant || isNoBill) ? "text-slate-300" : "text-slate-700"}`}>
+                                    {(isVacant || isNoBill) ? "—" : currency(invVal)}
                                   </td>
                                 );
                               })}
@@ -2125,7 +2127,7 @@ const Statements = () => {
                               <td className={`border-l border-slate-100 px-3 py-2.5 text-right text-xs ${totalPaidCell.cls}`}>{totalPaidCell.text}</td>
                               {/* Bal C/F — positive = arrears (red), negative = credit (green) */}
                               <td className={`px-3 py-2.5 text-right text-xs ${balCls}`}>
-                                {isVacant ? "—" : closingBal !== 0 ? currency(closingBal) : "—"}
+                                {(isVacant || isNoBill) ? "—" : closingBal !== 0 ? currency(closingBal) : "—"}
                               </td>
                             </tr>
                           );

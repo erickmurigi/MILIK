@@ -641,6 +641,15 @@ const ChartOfAccounts = () => {
                                       </td>
                                       <td className="px-3 py-1 text-right">
                                         <div className="inline-flex gap-1 items-center justify-end">
+                                          {canUpdateCOA && (
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); openEditModal(account); }}
+                                              title="Edit account"
+                                              className="text-slate-300 hover:text-amber-500 transition-colors"
+                                            >
+                                              <FaEdit size={11} />
+                                            </button>
+                                          )}
                                           {account.isSystem && (
                                             <span className="px-1.5 py-0.5 text-[9px] bg-slate-100 text-slate-500 font-bold uppercase">
                                               System
@@ -699,21 +708,27 @@ const ChartOfAccounts = () => {
 
                   {/* Code */}
                   <div>
-                    <label className={labelCls}>Account Code *</label>
+                    <label className={labelCls}>
+                      Account Code *
+                      {editingAccountId && (
+                        <span className="ml-1 text-slate-400 font-normal normal-case">(locked — codes cannot be changed)</span>
+                      )}
+                    </label>
                     <input
                       value={formData.code}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, code: e.target.value }))}
+                      onChange={(e) => !editingAccountId && setFormData((prev) => ({ ...prev, code: e.target.value }))}
+                      readOnly={!!editingAccountId}
                       placeholder="e.g. 1600"
-                      autoFocus
-                      className={`${inputCls} ${codeConflict ? "border-red-400 bg-red-50 text-red-700" : ""}`}
+                      autoFocus={!editingAccountId}
+                      className={`${inputCls} ${editingAccountId ? "bg-slate-100 text-slate-500 cursor-not-allowed" : codeConflict ? "border-red-400 bg-red-50 text-red-700" : ""}`}
                     />
-                    {codeConflict && (
+                    {!editingAccountId && codeConflict && (
                       <p className="mt-1 flex items-center gap-1 text-[10px] text-red-600 font-semibold">
                         <FaExclamationTriangle size={8} />
                         Code already in use — choose a different number
                       </p>
                     )}
-                    {!codeConflict && formData.code.trim() && (
+                    {!editingAccountId && !codeConflict && formData.code.trim() && (
                       <p className="mt-1 text-[10px] text-emerald-600 font-semibold">✓ Code is available</p>
                     )}
                   </div>
@@ -725,6 +740,7 @@ const ChartOfAccounts = () => {
                       value={formData.name}
                       onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
                       placeholder="e.g. Motor Vehicles"
+                      autoFocus={!!editingAccountId}
                       className={inputCls}
                     />
                   </div>

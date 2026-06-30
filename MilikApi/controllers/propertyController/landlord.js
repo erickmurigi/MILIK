@@ -776,16 +776,16 @@ export const bulkImportLandlords = async (req, res, next) => {
     });
 
     const normalizedLandlords = landlords.map((item) => {
-      const regIdRaw = normalizeString(item.regId);
-      const idNumberRaw = normalizeString(item.idNumber) || regIdRaw;
+      const regIdRaw = normalizeImportField(item.regId);
+      const idNumberRaw = normalizeImportField(item.idNumber) || regIdRaw;
       return {
         landlordName: normalizeString(item.landlordName),
         landlordType: normalizeString(item.landlordType) || "Individual",
         regId: regIdRaw,
         idNumber: idNumberRaw,
-        taxPin: normalizeString(item.taxPin),
-        email: normalizeEmail(item.email),
-        phoneNumber: normalizeString(item.phoneNumber),
+        taxPin: normalizeImportField(item.taxPin),
+        email: normalizeImportEmail(item.email),
+        phoneNumber: normalizeImportField(item.phoneNumber),
         postalAddress: normalizeString(item.postalAddress) || "",
         location: normalizeString(item.location) || "",
         status: normalizeString(item.status) || "Active",

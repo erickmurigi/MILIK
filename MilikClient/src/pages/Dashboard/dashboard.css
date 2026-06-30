@@ -35,14 +35,15 @@
   overflow-y: auto;
 }
 
-@media (min-width: 1280px) {
+/* 3-column layout fires at 960px so it appears at 150% scale on 1080p screens (1280px CSS viewport) */
+@media (min-width: 960px) {
   .dashboard-main-grid {
-    grid-template-columns: minmax(280px, 0.82fr) minmax(245px, 0.78fr) minmax(340px, 1.25fr);
+    grid-template-columns: minmax(240px, 0.82fr) minmax(210px, 0.78fr) minmax(290px, 1.25fr);
     align-items: stretch;
   }
 }
 
-@media (max-width: 1279px) {
+@media (max-width: 959px) {
   .dashboard-panel,
   .dashboard-panel-compact {
     min-height: auto;
@@ -50,6 +51,23 @@
 
   .dashboard-scroll-list {
     max-height: 24rem;
+  }
+}
+
+/* At 150% Windows scale on 1080p the CSS viewport height is ~720px — shrink panels to prevent overflow */
+@media (max-height: 800px) {
+  .dashboard-panel,
+  .dashboard-panel-compact {
+    min-height: 20rem;
+  }
+
+  .dashboard-scroll-list {
+    max-height: 14rem;
+  }
+
+  .dashboard-chart-area {
+    height: 200px !important;
+    min-height: 200px !important;
   }
 }
 

@@ -12,11 +12,12 @@ import MpesaCollection from "../../models/MpesaCollection.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import SequenceCounter from "../../models/SequenceCounter.js";
 import LandlordStatementLine from "../../models/LandlordStatementLine.js";
+import Landlord from "../../models/Landlord.js";
 import Maintenance from "../../models/Maintenance.js";
 import Inspection from "../../models/Inspection.js";
 import MeterReading from "../../models/MeterReading.js";
 import { createTenantInvoiceRecord, resolveLeaseAgreementFeeIncomeAccount } from "./tenantInvoices.js";
-import { isAgreementNumberDuplicateError, saveLeaseWithUniqueAgreementNumber } from "../../services/agreementNumberService.js";
+import { isAgreementNumberDuplicateError, saveLeaseWithUniqueAgreementNumber, generateAgreementNumber, buildAgreementNumberPrefix } from "../../services/agreementNumberService.js";
 import { logAuditEvent } from "../../utils/auditLogger.js";
 
 
@@ -617,9 +618,13 @@ const getTenantDependencySummary = async (tenant) => {
     meterReadings,
   };
 
+  // Leases are auto-created system records — not user-entered transaction data.
+  // They are cleaned up automatically on delete, so they must not block deletion.
+  const financialKeys = ["rentPayments", "receipts", "invoices", "invoiceNotes", "latePenaltyBatches", "mpesaCollections", "ledgerEntries", "landlordStatementLines"];
+
   return {
     summary,
-    hasDependencies: Object.values(summary).some((count) => Number(count || 0) > 0),
+    hasDependencies: financialKeys.some((key) => Number(summary[key] || 0) > 0),
   };
 };
 
@@ -856,11 +861,20 @@ export const createTenant = async (req, res, next) => {
       }),
     ]);
 
-    await syncTenantLeaseRecord({
-      tenantDoc: populatedTenant,
-      unitDoc: unit,
-      action: "upsert",
-    });
+    // Lease sync is isolated: if it fails the tenant is already committed and must
+    // not be rolled back. Return a warning instead of a 409 that misleads the caller
+    // into thinking the tenant was never created (which causes a re-submit loop).
+    let leaseWarning = null;
+    try {
+      await syncTenantLeaseRecord({
+        tenantDoc: populatedTenant,
+        unitDoc: unit,
+        action: "upsert",
+      });
+    } catch (leaseErr) {
+      console.error(`Auto-lease creation failed for tenant ${savedTenant._id}:`, leaseErr);
+      leaseWarning = "Tenant created but lease agreement could not be generated automatically. Please create it from the Agreements page.";
+    }
 
     if (createLeaseFeeInvoice && leaseFeeAmount > 0) {
       const landlordId = getPrimaryLandlordIdFromProperty(unit?.property);
@@ -932,7 +946,8 @@ export const createTenant = async (req, res, next) => {
     return res.status(201).json({
       success: true,
       data: populatedTenant,
-      message: "Tenant created successfully",
+      message: leaseWarning || "Tenant created successfully",
+      ...(leaseWarning ? { warning: leaseWarning } : {}),
     });
   } catch (err) {
     console.error("Create tenant error:", err);
@@ -1155,6 +1170,11 @@ export const updateTenant = async (req, res, next) => {
 
     if (normalizedPayload.idNumber !== undefined) {
       normalizedPayload.idNumber = isPlaceholder(normalizedPayload.idNumber) ? null : normalizeString(normalizedPayload.idNumber);
+      // If the new value is null AND the existing value is already null/placeholder,
+      // skip the field to avoid conflicts on a non-sparse unique index.
+      if (normalizedPayload.idNumber === null && (tenant.idNumber === null || isPlaceholder(tenant.idNumber))) {
+        delete normalizedPayload.idNumber;
+      }
     }
 
     if (normalizedPayload.email !== undefined) {
@@ -1414,7 +1434,7 @@ export const updateTenant = async (req, res, next) => {
       if (isAgreementNumberDuplicateError(err)) {
         return res.status(409).json({
           success: false,
-          message: "Tenant could not be created because the lease agreement number already exists. Please try again.",
+          message: "Tenant could not be updated because a lease agreement number conflict was detected. Please try again.",
         });
       }
 
@@ -1433,6 +1453,10 @@ export const updateTenant = async (req, res, next) => {
           message: "Tenant code already exists in this company",
         });
       }
+    }
+
+    if (err?.statusCode === 409 && String(err?.message || "").includes("agreement number")) {
+      return res.status(409).json({ success: false, message: err.message });
     }
 
     next(err);
@@ -1470,6 +1494,9 @@ export const deleteTenant = async (req, res, next) => {
       tenantId: tenant._id,
       effectiveDate: new Date(),
     });
+
+    // Clean up auto-created lease records before deleting the tenant
+    await Lease.deleteMany({ tenant: tenant._id, business: tenant.business });
 
     await Tenant.findByIdAndDelete(req.params.id);
     await logAuditEvent({
@@ -1719,16 +1746,15 @@ export const getTenantBalance = async (req, res, next) => {
 
 export const getTenantTotalDue = async (tenantId) => {
   try {
-    const tenant = await Tenant.findById(tenantId).populate("unit additionalUnits");
+    const tenant = await Tenant.findById(tenantId).populate("unit additionalUnits").lean();
     if (!tenant) return { rent: 0, utilities: [], total: 0 };
 
     const assignedUnitIds = getTenantAssignedUnitIds(tenant);
     if (!assignedUnitIds.length) return { rent: 0, utilities: [], total: 0 };
 
-    const units = await Unit.find({ _id: { $in: assignedUnitIds } }).populate(
-      "utilities.utility",
-      "name unitCost billingCycle"
-    );
+    const units = await Unit.find({ _id: { $in: assignedUnitIds } })
+      .populate("utilities.utility", "name unitCost billingCycle")
+      .lean();
 
     if (!units.length) return { rent: 0, utilities: [], total: 0 };
 
@@ -1965,8 +1991,8 @@ export const bulkImportTenants = async (req, res, next) => {
 
       try {
         const normalizedTenantName = normalizeString(record.tenantName);
-        const normalizedPhoneNumber = normalizeString(record.phoneNumber);
-        const normalizedIdNumber = normalizeString(record.idNumber);
+        const normalizedPhoneNumber = isPlaceholder(record.phoneNumber) ? null : normalizeString(record.phoneNumber);
+        const normalizedIdNumber = isPlaceholder(record.idNumber) ? null : normalizeString(record.idNumber);
 
         if (!normalizedTenantName) {
           failed.push({
@@ -2193,7 +2219,10 @@ export const bulkImportTenants = async (req, res, next) => {
 
       const unitBulkOps = [];
       const affectedPropertyIds = new Set();
-      const leaseSyncTasks = [];
+      // Deferred functions — NOT started yet. Lease syncs must run sequentially to avoid
+      // generateAgreementNumber race: parallel calls read the same max sequence and all
+      // generate the same AGR-YYYYMM-XXXX, causing 11000 duplicate key collisions.
+      const leaseSyncFns = [];
 
       for (let i = 0; i < docsToInsert.length; i++) {
         const item = docsToInsert[i];
@@ -2225,23 +2254,27 @@ export const bulkImportTenants = async (req, res, next) => {
           }
         }
 
-        leaseSyncTasks.push(
-          syncTenantLeaseRecord({ tenantDoc: savedTenant, unitDoc: item.primaryUnitDoc, action: "upsert" })
-            .then(lease => { successEntry.agreementNumber = lease?.agreementNumber || ""; })
-            .catch(err => console.error(`Lease sync failed for ${savedTenant._id}:`, err))
-        );
+        // Capture closure values now; execution is deferred until after unit writes.
+        const capturedTenant = savedTenant;
+        const capturedEntry = successEntry;
+        const capturedUnitDoc = item.primaryUnitDoc;
+        leaseSyncFns.push(async () => {
+          try {
+            const lease = await syncTenantLeaseRecord({ tenantDoc: capturedTenant, unitDoc: capturedUnitDoc, action: "upsert" });
+            capturedEntry.agreementNumber = lease?.agreementNumber || "";
+          } catch (err) {
+            console.error(`Lease sync failed for ${capturedTenant.tenantCode || capturedTenant._id}:`, err);
+          }
+        });
       }
 
-      // Unit updates → property counts run in parallel with all lease syncs
-      await Promise.all([
-        (async () => {
-          if (unitBulkOps.length > 0) await Unit.bulkWrite(unitBulkOps, { ordered: false });
-          if (affectedPropertyIds.size > 0) {
-            await Promise.all([...affectedPropertyIds].map(id => updatePropertyUnitCounts(id)));
-          }
-        })(),
-        Promise.allSettled(leaseSyncTasks),
-      ]);
+      // Unit updates and property counts run first, then lease syncs run one-by-one
+      // so each generateAgreementNumber call sees the previous lease already committed.
+      if (unitBulkOps.length > 0) await Unit.bulkWrite(unitBulkOps, { ordered: false });
+      if (affectedPropertyIds.size > 0) {
+        await Promise.all([...affectedPropertyIds].map(id => updatePropertyUnitCounts(id)));
+      }
+      for (const fn of leaseSyncFns) await fn();
     }
 
     return res.status(200).json({
@@ -2260,6 +2293,72 @@ export const bulkImportTenants = async (req, res, next) => {
       success: false,
       message: error.message || "Failed to process bulk import",
     });
+  }
+};
+
+// Backfill endpoint: Create lease agreements for tenants that don't have one
+export const backfillMissingLeases = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) {
+      return res.status(400).json({ success: false, message: "Business context is required" });
+    }
+
+    // Find tenants with no active/pending lease
+    const tenantsWithLease = await Lease.find({
+      business: businessId,
+      status: { $in: ["draft", "pending_signature", "active"] },
+    }).distinct("tenant");
+
+    const tenantIdsWithLease = new Set(tenantsWithLease.map(String));
+
+    const tenants = await Tenant.find({
+      business: businessId,
+      status: { $in: ACTIVE_TENANT_STATUSES },
+    })
+      .populate({ path: "unit", populate: { path: "property", select: "landlords depositHeldBy letManage propertyCode" } })
+      .lean();
+
+    const missing = tenants.filter((t) => !tenantIdsWithLease.has(String(t._id)));
+
+    if (missing.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: "All active tenants already have lease agreements",
+        created: 0,
+        failed: 0,
+        details: [],
+      });
+    }
+
+    const results = [];
+
+    // Sequential — avoids generateAgreementNumber race condition
+    for (const tenant of missing) {
+      try {
+        const lease = await syncTenantLeaseRecord({
+          tenantDoc: tenant,
+          unitDoc: tenant.unit || null,
+          action: "upsert",
+        });
+        results.push({ tenantCode: tenant.tenantCode, name: tenant.name, agreementNumber: lease?.agreementNumber || "", status: "created" });
+      } catch (err) {
+        results.push({ tenantCode: tenant.tenantCode, name: tenant.name, error: err.message, status: "failed" });
+      }
+    }
+
+    const created = results.filter((r) => r.status === "created").length;
+    const failed = results.filter((r) => r.status === "failed").length;
+
+    return res.status(200).json({
+      success: true,
+      message: `Backfill complete: ${created} created, ${failed} failed`,
+      created,
+      failed,
+      details: results,
+    });
+  } catch (err) {
+    next(err);
   }
 };
 
@@ -2321,6 +2420,117 @@ export const migrateTenantCodes = async (req, res, next) => {
       message: `Successfully assigned codes to ${updatedCount} tenants`,
       updated: updatedCount,
       details: updates,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Fix duplicate lease agreement numbers AND resync sparse indexes.
+// One-click repair that:
+//  1. Resyncs Tenant + Landlord indexes so idNumber/regId null values don't conflict.
+//  2. Finds duplicate lease agreementNumbers for this business, keeps the best lease
+//     per group and regenerates unique numbers for the rest.
+export const fixDuplicateLeaseAgreements = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) {
+      return res.status(400).json({ success: false, message: "Business context is required" });
+    }
+
+    // ── Step 1: fix Tenant idNumber index — must be sparse ────────────────────
+    // syncIndexes() does NOT detect sparse option differences; use raw drop+create.
+    const indexErrors = [];
+    try {
+      const tenantCol = mongoose.connection.db.collection("tenants");
+      const tenantIndexes = await tenantCol.indexes();
+      const stale = tenantIndexes.find((i) => i.name === "business_1_idNumber_1" && !i.sparse);
+      if (stale) {
+        await tenantCol.dropIndex("business_1_idNumber_1");
+        await tenantCol.createIndex({ business: 1, idNumber: 1 }, { unique: true, sparse: true });
+      }
+    } catch (e) {
+      indexErrors.push(`Tenant idNumber index: ${e?.message}`);
+    }
+
+    // ── Step 2: fix duplicate lease agreementNumbers ──────────────────────────
+    const STATUS_PRIORITY = { active: 0, draft: 1, pending_signature: 2, terminated: 3 };
+    const statusRank = (s) => STATUS_PRIORITY[s] ?? 99;
+
+    const duplicates = await Lease.aggregate([
+      {
+        $match: {
+          business: new mongoose.Types.ObjectId(String(businessId)),
+          agreementNumber: { $nin: [null, ""] },
+        },
+      },
+      { $group: { _id: "$agreementNumber", count: { $sum: 1 }, ids: { $push: "$_id" } } },
+      { $match: { count: { $gt: 1 } } },
+    ]);
+
+    let totalCleared = 0;
+    let totalReassigned = 0;
+    let totalFailed = 0;
+
+    for (const group of duplicates) {
+      const agreementNumber = group._id;
+
+      const leases = await Lease.find({ business: businessId, agreementNumber })
+        .sort({ createdAt: -1 })
+        .lean();
+
+      leases.sort((a, b) => {
+        const sr = statusRank(a.status) - statusRank(b.status);
+        return sr !== 0 ? sr : new Date(b.createdAt) - new Date(a.createdAt);
+      });
+
+      const [, ...losers] = leases;
+
+      for (const loser of losers) {
+        await Lease.updateOne({ _id: loser._id }, { $set: { agreementNumber: "" } });
+        totalCleared++;
+      }
+
+      for (const loser of losers) {
+        let reassigned = false;
+        for (let attempt = 0; attempt < 30; attempt++) {
+          const newNum = await generateAgreementNumber(businessId, {
+            dateValue: loser.createdAt || new Date(),
+          });
+          try {
+            await Lease.updateOne({ _id: loser._id }, { $set: { agreementNumber: newNum } });
+            totalReassigned++;
+            reassigned = true;
+            break;
+          } catch (err) {
+            if (err?.code !== 11000) throw err;
+          }
+        }
+        if (!reassigned) totalFailed++;
+      }
+    }
+
+    const parts = [];
+    if (indexErrors.length === 0) parts.push("Indexes resynced.");
+    else parts.push(`Index sync warnings: ${indexErrors.join("; ")}`);
+
+    if (duplicates.length === 0) {
+      parts.push("No duplicate lease numbers found.");
+    } else if (totalFailed === 0) {
+      parts.push(`${duplicates.length} duplicate group(s) fixed — ${totalReassigned} lease(s) renumbered.`);
+    } else {
+      parts.push(`${duplicates.length} group(s): ${totalReassigned} renumbered, ${totalFailed} failed — run again.`);
+    }
+    parts.push("Tenant editing should now work normally.");
+
+    return res.status(200).json({
+      success: true,
+      message: parts.join(" "),
+      groups: duplicates.length,
+      fixed: totalCleared,
+      reassigned: totalReassigned,
+      failed: totalFailed,
+      indexErrors,
     });
   } catch (err) {
     next(err);

@@ -60,7 +60,7 @@ export const isAgreementNumberDuplicateError = (error = {}) => {
 
 export const saveLeaseWithUniqueAgreementNumber = async (
   leaseDoc,
-  { businessId = null, maxAttempts = 5, dateValue = new Date() } = {}
+  { businessId = null, maxAttempts = 20, dateValue = new Date() } = {}
 ) => {
   if (!leaseDoc) {
     const error = new Error("Lease record is required before saving an agreement.");
@@ -86,12 +86,12 @@ export const saveLeaseWithUniqueAgreementNumber = async (
       if (!isAgreementNumberDuplicateError(error) || attempt >= maxAttempts) {
         throw error;
       }
-
+      // Clear so the next iteration generates a fresh number beyond all existing ones
       leaseDoc.agreementNumber = "";
     }
   }
 
-  const error = new Error("Tenant could not be created because the lease agreement number already exists. Please try again.");
+  const error = new Error("Lease agreement number conflict could not be resolved after multiple attempts. Please try again.");
   error.statusCode = 409;
   throw error;
 };

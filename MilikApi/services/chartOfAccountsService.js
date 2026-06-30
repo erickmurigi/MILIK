@@ -79,7 +79,7 @@ const SHARED_CASHBOOK_CODES = new Set(["1100", "1110", "1130"]);
 const HR_ACCOUNT_CODES = new Set(["2170", "2171", "2172", "2173", "2174", "2175", "5400", "5401", "5402", "5403"]);
 const SALE_ACCOUNT_CODES = new Set(["1240", "1250", "2180", "2181", "4500", "4510", "5500", "5501", "5502"]);
 
-const moduleScopesForAccount = (account = {}) => {
+export const moduleScopesForAccount = (account = {}) => {
   const code = String(account.code || "").trim().toUpperCase();
   const name = String(account.name || "").toLowerCase();
   const subGroup = String(account.subGroup || "").toLowerCase();
@@ -233,7 +233,16 @@ export const findChartOfAccounts = async ({
         },
       ];
     } else {
-      query.moduleScopes = { $in: scopes };
+      query.$and = [
+        ...(query.$and || []),
+        {
+          $or: [
+            { moduleScopes: { $in: scopes } },
+            { moduleScopes: { $size: 0 } },
+            { moduleScopes: { $exists: false } },
+          ],
+        },
+      ];
     }
   }
 

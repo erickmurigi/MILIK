@@ -5,10 +5,15 @@ import ChartOfAccount from "../models/ChartOfAccount.js";
 import FinancialLedgerEntry from "../models/FinancialLedgerEntry.js";
 import TenantInvoice from "../models/TenantInvoice.js";
 import Property from "../models/Property.js";
+import RentPayment from "../models/RentPayment.js";
+import LandlordReceipt from "../models/LandlordReceipt.js";
+import BankReconciliation from "../models/BankReconciliation.js";
+import Budget from "../models/Budget.js";
 import {
   ensureSystemChartOfAccounts,
   findChartOfAccounts,
   normalizeChartAccountPayload,
+  moduleScopesForAccount,
 } from "../services/chartOfAccountsService.js";
 import { aggregateChartOfAccountBalances } from "../services/chartAccountAggregationService.js";
 import { postCorrection } from "../services/ledgerPostingService.js";
@@ -438,7 +443,7 @@ router.post("/", verifyUser, requireCompanyModule("accounts"), async (req, res) 
       isHeader: payload.isHeader,
       isPosting: payload.isHeader ? false : payload.isPosting,
       isSystem: false,
-      moduleScopes: payload.moduleScopes || [],
+      moduleScopes: payload.moduleScopes?.length > 0 ? payload.moduleScopes : moduleScopesForAccount(payload),
       balance: 0,
     });
 
@@ -528,6 +533,8 @@ router.put("/:id", verifyUser, requireCompanyModule("accounts"), async (req, res
       }
     }
 
+    const previousName = account.name;
+
     account.code = payload.code;
     account.name = payload.name;
     account.type = payload.type;
@@ -542,6 +549,32 @@ router.put("/:id", verifyUser, requireCompanyModule("accounts"), async (req, res
     }
 
     await account.save();
+
+    // Cascade name change to every model that denormalises the account name as a
+    // plain string, so all transaction history always reflects the current name.
+    if (payload.name && payload.name !== previousName) {
+      await Promise.all([
+        // Keyed by name string + business
+        RentPayment.updateMany(
+          { business: account.business, cashbook: previousName },
+          { $set: { cashbook: payload.name } }
+        ),
+        LandlordReceipt.updateMany(
+          { business: account.business, cashbook: previousName },
+          { $set: { cashbook: payload.name } }
+        ),
+        // Keyed by account ObjectId (denormalized snapshot fields)
+        BankReconciliation.updateMany(
+          { business: account.business, account: account._id },
+          { $set: { accountName: payload.name } }
+        ),
+        Budget.updateMany(
+          { business: account.business, "lines.account": account._id },
+          { $set: { "lines.$[line].accountName": payload.name } },
+          { arrayFilters: [{ "line.account": account._id }] }
+        ),
+      ]);
+    }
 
     const populated = await ChartOfAccount.findById(account._id).populate("parentAccount", "code name type group subGroup").lean();
     return res.status(200).json(serializeAccount(populated));

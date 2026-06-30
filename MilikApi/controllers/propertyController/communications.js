@@ -9,6 +9,7 @@ import {
   previewCommunication,
   sendCommunication,
   sendTestSms,
+  sendTestEmail,
 } from '../../services/communicationService.js';
 import SmsLog from '../../models/SmsLog.js';
 
@@ -201,6 +202,42 @@ export const sendTestSmsController = async (req, res, next) => {
     if (!phone) return next(createError(400, 'A phone number is required for the test SMS.'));
 
     const result = await sendTestSms({ businessId, phone, message, profileId });
+    return res.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const sendTestEmailController = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) return next(createError(400, 'Business is required.'));
+
+    const email   = String(req.body?.email   || '').trim();
+    const subject = String(req.body?.subject || '').trim();
+    const body    = String(req.body?.body    || '').trim();
+
+    if (!email)   return next(createError(400, 'An email address is required.'));
+    if (!subject) return next(createError(400, 'A subject is required.'));
+
+    const result = await sendTestEmail({ businessId, email, subject, body });
+    return res.status(200).json(result);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const getEmailLogsController = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) return next(createError(400, 'Business is required.'));
+
+    const limit       = Math.min(Math.max(Number(req.query?.limit || 25), 1), 100);
+    const page        = Math.max(Number(req.query?.page || 1), 1);
+    const status      = String(req.query?.status || '').trim() || undefined;
+    const search      = String(req.query?.search || '').trim() || undefined;
+
+    const result = await getSmsLogs({ businessId, limit, page, channel: 'email', status, search });
     return res.status(200).json(result);
   } catch (error) {
     return next(error);

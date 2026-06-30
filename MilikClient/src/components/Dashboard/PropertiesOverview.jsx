@@ -280,11 +280,11 @@ const PropertiesOverview = ({ darkMode, invoices = [] }) => {
 
       <div className="mb-2 grid grid-cols-2 gap-2">
         <div className={`rounded-lg border p-2 ${darkMode ? 'border-gray-700 bg-gray-50' : 'border-[#dce9e1] bg-[#fbfdfc]'}`}>
-          <div className={`text-[10px] font-extrabold uppercase tracking-[0.16em] ${darkMode ? 'text-gray-500' : 'text-[#4a6b5e]'}`}>Portfolio occupancy</div>
+          <div className={`text-[10px] font-extrabold uppercase tracking-wide ${darkMode ? 'text-gray-500' : 'text-[#4a6b5e]'}`}>Portfolio occupancy</div>
           <div className={`mt-1 text-base font-extrabold ${darkMode ? 'text-gray-900' : 'text-slate-900'}`}>{portfolioOccupancy.toFixed(1)}%</div>
         </div>
         <div className={`rounded-lg border p-2 ${darkMode ? 'border-gray-700 bg-gray-50' : 'border-[#dce9e1] bg-[#fbfdfc]'}`}>
-          <div className={`text-[10px] font-extrabold uppercase tracking-[0.16em] ${darkMode ? 'text-gray-500' : 'text-[#4a6b5e]'}`}>Collection pace</div>
+          <div className={`text-[10px] font-extrabold uppercase tracking-wide ${darkMode ? 'text-gray-500' : 'text-[#4a6b5e]'}`}>Collection pace</div>
           <div className={`mt-1 text-base font-extrabold ${darkMode ? 'text-gray-900' : 'text-slate-900'}`}>{portfolioCollection.toFixed(1)}%</div>
         </div>
       </div>
@@ -322,18 +322,18 @@ const PropertiesOverview = ({ darkMode, invoices = [] }) => {
                 </div>
                 <div className="text-right shrink-0">
                   <div className={`text-base font-extrabold ${darkMode ? 'text-gray-900' : 'text-[#1f4a35]'}`}>{property.occupancyRate.toFixed(0)}%</div>
-                  <div className={`text-[10px] font-extrabold uppercase tracking-[0.16em] ${darkMode ? 'text-gray-500' : 'text-[#4a6b5e]'}`}>Occupied</div>
+                  <div className={`text-[10px] font-extrabold uppercase tracking-wide ${darkMode ? 'text-gray-500' : 'text-[#4a6b5e]'}`}>Occupied</div>
                 </div>
               </div>
 
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <div className="rounded-lg border border-[#dce9e1] bg-[#fbfdfc] p-2">
-                  <div className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#4a6b5e]">Units</div>
+                  <div className="text-[10px] font-extrabold uppercase tracking-wide text-[#4a6b5e]">Units</div>
                   <div className="mt-1 text-sm font-bold text-slate-900">{property.totalUnits}</div>
                   <div className="mt-1 text-[11px] text-slate-500">Occupied {property.occupiedUnits}</div>
                 </div>
                 <div className="rounded-lg border border-[#f7d3c1] bg-[#fff7f2] p-2">
-                  <div className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#c44b0b]">Vacant</div>
+                  <div className="text-[10px] font-extrabold uppercase tracking-wide text-[#c44b0b]">Vacant</div>
                   <div className="mt-1 text-sm font-bold text-[#c44b0b]">{property.vacantUnits}</div>
                   <div className="mt-1 text-[11px] text-slate-500">Availability ready</div>
                 </div>

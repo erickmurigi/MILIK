@@ -44,14 +44,14 @@ const LandlordSchema = new mongoose.Schema(
 
     regId: {
       type: String,
-      required: true,
       trim: true,
+      default: null,
     },
 
     taxPin: {
       type: String,
-      required: true,
       trim: true,
+      default: null,
     },
 
     status: {
@@ -81,8 +81,8 @@ const LandlordSchema = new mongoose.Schema(
 
     phoneNumber: {
       type: String,
-      required: true,
       trim: true,
+      default: null,
     },
 
     location: { type: String, default: "", trim: true },
@@ -123,6 +123,11 @@ LandlordSchema.index({ company: 1, landlordName: 1 });
 LandlordSchema.index({ company: 1, status: 1 });
 LandlordSchema.index({ createdAt: -1 });
 
+const isLandlordPlaceholder = (v) => {
+  const s = String(v ?? "").trim().toLowerCase();
+  return s === "" || s === "-" || s === "--" || s === "n/a" || s === "na" || s === "none";
+};
+
 LandlordSchema.pre("validate", function (next) {
   if (typeof this.landlordCode === "string") {
     this.landlordCode = this.landlordCode.trim();
@@ -137,11 +142,13 @@ LandlordSchema.pre("validate", function (next) {
   }
 
   if (typeof this.regId === "string") {
-    this.regId = this.regId.trim();
+    const trimmed = this.regId.trim();
+    this.regId = isLandlordPlaceholder(trimmed) ? null : trimmed;
   }
 
   if (typeof this.taxPin === "string") {
-    this.taxPin = this.taxPin.trim();
+    const trimmed = this.taxPin.trim();
+    this.taxPin = isLandlordPlaceholder(trimmed) ? null : trimmed;
   }
 
   if (typeof this.email === "string") {
@@ -149,7 +156,8 @@ LandlordSchema.pre("validate", function (next) {
   }
 
   if (typeof this.phoneNumber === "string") {
-    this.phoneNumber = this.phoneNumber.trim();
+    const trimmed = this.phoneNumber.trim();
+    this.phoneNumber = isLandlordPlaceholder(trimmed) ? null : trimmed;
   }
 
   if (typeof this.postalAddress === "string") {
@@ -168,10 +176,12 @@ LandlordSchema.pre("validate", function (next) {
     this.portalAccess = this.portalAccess.trim();
   }
 
+  // Sync idNumber from regId; convert placeholders to null on both
   if (this.regId) {
     this.idNumber = this.regId;
   } else if (typeof this.idNumber === "string") {
-    this.idNumber = this.idNumber.trim();
+    const trimmed = this.idNumber.trim();
+    this.idNumber = isLandlordPlaceholder(trimmed) ? null : trimmed;
   }
 
   if (Array.isArray(this.attachments)) {

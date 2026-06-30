@@ -291,7 +291,7 @@ const Units = () => {
 
       const propertyDisplayName = propertyObj?.propertyName || "Unknown Property";
       const propertyCode = propertyObj?.propertyCode || "XX";
-      const propertyId = propertyObj?._id || unit.property;
+      const propertyId = String(propertyObj?._id || unit.property || "");
       const first2Letters = propertyDisplayName.substring(0, 2).toUpperCase();
       const unitIndexInProperty = unitIndexByProperty.get(String(unit._id)) || 1;
       
@@ -334,7 +334,10 @@ const Units = () => {
         canDelete,
         blockedReason,
       };
-    });
+    }).sort((a, b) =>
+      String(a.propertyName).localeCompare(String(b.propertyName)) ||
+      String(a.unitNo).localeCompare(String(b.unitNo), undefined, { numeric: true })
+    );
   }, [unitsData, propertyById, unitIndexByProperty]);
 
   // For filter dropdown property list
@@ -357,7 +360,7 @@ const Units = () => {
     const map = new Map();
 
     transformedUnits.forEach((u) => {
-      const key = u.propertyId || u.property;
+      const key = String(u.propertyId || u.property || "");
       if (!map.has(key)) {
         map.set(key, {
           propertyId: u.propertyId || key,

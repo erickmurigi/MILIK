@@ -1870,6 +1870,11 @@ export const generateLeaseDocument = async (dispatch, id) => {
   }
 };
 
+export const backfillMissingLeases = async (business) => {
+  const res = await adminRequests.post(`/tenants/backfill-leases`, { business });
+  return res.data;
+};
+
 // Get all expense properties
 export const getExpenseProperties = async (dispatch, business, category = null, property = null, unit = null, startDate = null, endDate = null) => {
   dispatch(getExpensePropertiesStart());

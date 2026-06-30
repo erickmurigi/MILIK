@@ -32,6 +32,12 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Prevent table column headers from wrapping at any display scale or zoom level.
+   Multi-line headers make rows taller and reduce visible row count at 150% scale. */
+thead th {
+  white-space: nowrap;
+}
+
 body {
   font-family: 'Nunito Sans', system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial, sans-serif;
   color: #0f172a;

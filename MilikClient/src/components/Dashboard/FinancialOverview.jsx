@@ -232,7 +232,7 @@ const FinancialOverview = ({ darkMode, invoices = [], summaryData = {} }) => {
           </p>
         </div>
         <div
-          className={`rounded-full px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] ${
+          className={`rounded-full px-3 py-1 text-[10px] font-extrabold uppercase tracking-wide ${
             darkMode ? 'bg-[#31694E]/20 text-[#8bd1b0]' : 'bg-[#ECF6F1] text-[#1f4a35]'
           }`}
         >
@@ -257,7 +257,7 @@ const FinancialOverview = ({ darkMode, invoices = [], summaryData = {} }) => {
                   : 'border-[#dce9e1] bg-[#fbfdfc]'
               }`}
             >
-              <div className={`text-[10px] font-extrabold uppercase tracking-[0.16em] ${
+              <div className={`text-[10px] font-extrabold uppercase tracking-wide ${
                 accentGreen ? 'text-emerald-700' : accentRed ? 'text-red-700' : darkMode ? 'text-gray-400' : 'text-[#4a6b5e]'
               }`}>
                 {card.label}
@@ -270,7 +270,7 @@ const FinancialOverview = ({ darkMode, invoices = [], summaryData = {} }) => {
         })}
       </div>
 
-      <div ref={chartRef} className="h-[265px] min-h-[265px] min-w-0 w-full">
+      <div ref={chartRef} className="dashboard-chart-area h-[265px] min-h-[265px] min-w-0 w-full">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-4 text-[10px] font-extrabold uppercase tracking-[0.14em]">
             <span className={`inline-flex items-center gap-1.5 ${darkMode ? 'text-gray-300' : 'text-[#4a6b5e]'}`}>

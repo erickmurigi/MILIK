@@ -307,7 +307,7 @@ const QuickActions = ({
               : 'Alerts, exceptions and workflow items that need attention.'}
           </p>
         </div>
-        <div className={`rounded-full px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] ${darkMode ? 'bg-[#31694E]/20 text-[#8bd1b0]' : 'bg-[#ECF6F1] text-[#1f4a35]'}`}>
+        <div className={`rounded-full px-3 py-1 text-[10px] font-extrabold uppercase tracking-wide ${darkMode ? 'bg-[#31694E]/20 text-[#8bd1b0]' : 'bg-[#ECF6F1] text-[#1f4a35]'}`}>
           {items.filter((item) => item.value > 0).length} live alerts
         </div>
       </div>
