@@ -581,6 +581,11 @@ const CarWashAddJob = () => {
         setJobType(job.jobType || "vehicle");
         setPlateNumber(job.plateNumber || "");
         setJobPaymentStatus(job.paymentStatus || "unpaid");
+        setIsVoucherJob(Boolean(job.isVoucher));
+        if (job.creditAccount && typeof job.creditAccount === "object") {
+          if (job.isVoucher) setVoucherAccount(job.creditAccount);
+          else setCreditAccount(job.creditAccount);
+        }
         setItemDescription(job.itemDescription || "");
         setExpectedReadyAt(
           job.expectedReadyAt
@@ -929,8 +934,8 @@ const CarWashAddJob = () => {
               </p>
               {jobType === "vehicle" ? (
                 <>
-                  {/* Voucher Job toggle — new jobs only */}
-                  {!isEditMode && (
+                  {/* Voucher Job toggle — new jobs, or existing unpaid jobs */}
+                  {(!isEditMode || jobPaymentStatus !== "paid") && (
                     <div className="mb-3">
                       <label className={labelClass}>Voucher Job</label>
                       <div className="flex items-center gap-2">

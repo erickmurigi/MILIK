@@ -231,6 +231,7 @@ export const getJob = async (req, res, next) => {
       .populate("service", "name category vehicleType defaultPrice")
       .populate("serviceLines.service", "name category vehicleType defaultPrice")
       .populate("assignedStaff", "name phone role")
+      .populate("creditAccount", "accountType contactPerson accountNumber")
       .lean();
     if (!job) return next(createError(404, "Car Wash job not found"));
     res.status(200).json({ success: true, data: job, job });
@@ -535,6 +536,26 @@ export const updateJob = async (req, res, next) => {
       if (req.body.expectedReadyAt !== undefined) {
         const d = req.body.expectedReadyAt ? new Date(req.body.expectedReadyAt) : null;
         existing.expectedReadyAt = d && !Number.isNaN(d.getTime()) ? d : null;
+      }
+    }
+
+    if (existing.jobType === "vehicle" && req.body.creditAccount !== undefined) {
+      if (existing.paymentStatus === "paid") {
+        return next(createError(400, "Credit account cannot be changed on a paid job"));
+      }
+      const rawAccountId = req.body.creditAccount;
+      if (rawAccountId && mongoose.Types.ObjectId.isValid(String(rawAccountId))) {
+        const acc = await CarWashCreditAccount.findOne({ _id: String(rawAccountId), business, status: "active" })
+          .select("_id accountType contactPerson accountNumber")
+          .lean();
+        if (!acc) return next(createError(400, "Credit account not found or not active"));
+        existing.creditAccount = acc._id;
+        existing.isVoucher = acc.accountType === "voucher";
+        existing.voucherCompanyName = acc.accountType === "voucher" ? (acc.contactPerson || acc.accountNumber || "") : "";
+      } else {
+        existing.creditAccount = null;
+        existing.isVoucher = false;
+        existing.voucherCompanyName = "";
       }
     }
 
