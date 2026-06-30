@@ -85,7 +85,6 @@ const DEFINITIONS = [
   { resource: 'carwash-loyalty',     moduleKey: 'carwash',          actions: ['view', 'manage'] },
   { resource: 'carwash-branches',    moduleKey: 'carwash',          actions: ['view', 'manage'] },
   { resource: 'carwash-settings',    moduleKey: 'carwash',          actions: ['view', 'manage'] },
-  { resource: 'carwash-financials',  moduleKey: 'carwash',          actions: ['view', 'reverse'] },
 
   // ─── Inventory ────────────────────────────────────────────────────────────
   { resource: 'inv-dashboard',       moduleKey: 'inventory',        actions: ['view'] },

@@ -180,7 +180,6 @@ const CarWashCommissionRules     = lazy(() => import("./pages/CarWash/CarWashCom
 const CarWashStaffSavings        = lazy(() => import("./pages/CarWash/CarWashStaffSavings"));
 const CarWashStaffDamages        = lazy(() => import("./pages/CarWash/CarWashStaffDamages"));
 const CarWashLoyalty             = lazy(() => import("./pages/CarWash/CarWashLoyalty"));
-const CarWashFinancials     = lazy(() => import("./pages/CarWash/CarWashFinancials"));
 const CarWashBranches       = lazy(() => import("./pages/CarWash/CarWashBranches"));
 const CarWashSettings            = lazy(() => import("./pages/CarWash/CarWashSettings"));
 const CarWashMpesaNotifications  = lazy(() => import("./pages/CarWash/CarWashMpesaNotifications"));
@@ -650,7 +649,6 @@ function App() {
             <Route path="/carwash/cashbooks"                  element={<Guard moduleKey={GL_ACCESS_MODULES} resource="chartOfAccounts"><CarWashCashbooks /></Guard>} />
             <Route path="/carwash/chart-of-accounts"          element={<Guard moduleKey={GL_ACCESS_MODULES} resource="chartOfAccounts"><ChartOfAccounts /></Guard>} />
             <Route path="/carwash/chart-of-accounts/:accountId/activity" element={<Guard moduleKey="carwash" resource="chartOfAccounts"><LedgerAccountActivity /></Guard>} />
-            <Route path="/carwash/financials"                 element={<Guard moduleKey={GL_ACCESS_MODULES} resource="chartOfAccounts"><CarWashFinancials /></Guard>} />
             <Route path="/carwash/staff"                      element={<Guard moduleKey="carwash" resource="carwash-staff"><CarWashStaff /></Guard>} />
             <Route path="/carwash/reports"                    element={<Guard moduleKey="carwash" resource="carwash-reports"><CarWashReports /></Guard>} />
             <Route path="/carwash/reports/services"           element={<Guard moduleKey="carwash" resource="carwash-reports"><CarWashServiceReport /></Guard>} />

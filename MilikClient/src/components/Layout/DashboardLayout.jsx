@@ -107,7 +107,6 @@ const MENU_PERMISSION_MAP = {
   "carwash-mpesa-notifications":  { resource: "carwash-payments",  action: "view", moduleKey: "carwash" },
   "carwash-branches":             { resource: "carwash-branches",  action: "view", moduleKey: "carwash" },
   "carwash-settings":             { resource: "carwash-settings",  action: "view", moduleKey: "carwash" },
-  "carwash-financials": { resource: "chartOfAccounts", action: "view", moduleKey: "carwash" },
   "carwash-cashbooks": { resource: "chartOfAccounts", action: "view", moduleKey: "carwash" },
   "carwash-chart-of-accounts": { resource: "chartOfAccounts", action: "view", moduleKey: "carwash" },
   "inv-dashboard":       { resource: "inv-dashboard",       action: "view", moduleKey: "inventory" },
@@ -724,7 +723,6 @@ const TopToolbar = ({
         "carwash-accounts": "/carwash/accounts",
         "carwash-branches": "/carwash/branches",
         "carwash-settings": "/carwash/settings",
-        "carwash-financials": "/carwash/financials",
         "carwash-cashbooks": "/carwash/cashbooks",
         "carwash-chart-of-accounts": "/carwash/chart-of-accounts",
         documentation: "/help/documentation",
@@ -1268,7 +1266,6 @@ const TopToolbar = ({
           label: "Accounting",
           icon: FaLayerGroup,
           submenu: [
-            { id: "carwash-financials",         label: "Financials",         icon: FaChartBar },
             { id: "carwash-cashbooks",           label: "Cashbooks",          icon: FaCoins },
             { id: "carwash-chart-of-accounts",  label: "Chart of Accounts",  icon: FaLayerGroup },
           ],

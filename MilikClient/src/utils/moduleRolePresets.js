@@ -39,8 +39,6 @@ const CW = [
   { resource: 'carwash-branches',    action: 'manage'  },
   { resource: 'carwash-settings',    action: 'view'    },
   { resource: 'carwash-settings',    action: 'manage'  },
-  { resource: 'carwash-financials',  action: 'view'    },
-  { resource: 'carwash-financials',  action: 'reverse' },
 ];
 
 // ─── Property Management ──────────────────────────────────────────────────────
@@ -351,7 +349,6 @@ export const MODULE_ROLE_PRESETS = {
           { resource: 'carwash-loyalty',     action: 'view'   },
           { resource: 'carwash-loyalty',     action: 'manage' },
           { resource: 'carwash-branches',    action: 'view'   },
-          { resource: 'carwash-financials',  action: 'view'   },
         ],
       },
       admin: {

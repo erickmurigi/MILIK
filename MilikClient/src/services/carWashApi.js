@@ -36,9 +36,6 @@ export const carWashApi = {
   getMonthlySummary: async (month) => unwrap(await adminRequests.get("/carwash/reports/monthly-summary", { params: bp({ month }) })),
   getServiceReport: async (params = {}) => unwrap(await adminRequests.get("/carwash/reports/service-report", { params: bp(params) })),
   getStaffReport: async (params = {}) => unwrap(await adminRequests.get("/carwash/reports/staff-report", { params: bp(params) })),
-  listLedgerEntries: async (params = {}) => unwrap(await adminRequests.get("/carwash/reports/ledger", { params: bp(params) })),
-  backfillPaymentLedger: async () => unwrap(await adminRequests.post("/carwash/reports/ledger/backfill")),
-  repairLedger: async () => unwrap(await adminRequests.post("/carwash/reports/ledger/repair")),
   listJobs: async (params = {}) => unwrap(await adminRequests.get("/carwash/jobs", { params: bp(params) })),
   getJob: async (id) => unwrap(await adminRequests.get(`/carwash/jobs/${id}`)),
   downloadJobPdf: async (id) => (await adminRequests.get(`/carwash/jobs/${id}/pdf`, { responseType: "arraybuffer" })).data,
@@ -154,7 +151,6 @@ export const carWashApi = {
   refundCredit: async (id, payload) => unwrap(await adminRequests.post(`/carwash/credits/${id}/refund`, payload)),
 
   // ─── Credit accounts ─────────────────────────────────────────────────────
-  seedAccounts: async () => unwrap(await adminRequests.post("/carwash/accounts/setup/seed-accounts")),
   listCreditAccounts: async (params = {}) => unwrap(await adminRequests.get("/carwash/accounts", { params })),
   createCreditAccount: async (payload) => unwrap(await adminRequests.post("/carwash/accounts", payload)),
   getCreditAccount: async (id) => unwrap(await adminRequests.get(`/carwash/accounts/${id}`)),

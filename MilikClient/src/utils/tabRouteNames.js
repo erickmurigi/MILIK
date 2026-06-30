@@ -85,7 +85,6 @@ const routeNames = {
   '/carwash/payments': 'Payments',
   '/carwash/deposits': 'Deposits',
   '/carwash/expenses': 'Expenses',
-  '/carwash/financials': 'Financials',
   '/carwash/cashbooks': 'Cashbooks',
   '/carwash/chart-of-accounts': 'Chart of Accounts',
   '/carwash/staff': 'Staff',

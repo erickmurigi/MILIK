@@ -280,8 +280,6 @@ export const ACCESS_SECTIONS = [
       { resource: 'carwash-branches',    action: 'manage', label: 'Manage branches',                     moduleKey: 'carwash' },
       { resource: 'carwash-settings',    action: 'view',   label: 'View operational settings',           moduleKey: 'carwash' },
       { resource: 'carwash-settings',    action: 'manage', label: 'Manage operational settings',         moduleKey: 'carwash' },
-      { resource: 'carwash-financials',  action: 'view',   label: 'View Car Wash financial journal',     moduleKey: 'carwash' },
-      { resource: 'carwash-financials',  action: 'reverse', label: 'Reverse Car Wash ledger entries',    moduleKey: 'carwash' },
     ],
   },
 
@@ -436,7 +434,6 @@ export const LEGACY_PERMISSION_ALIASES = {
   'carwash-loyalty':     { view: ['carwash.loyalty.view', 'carwash.loyalty.manage'], manage: ['carwash.loyalty.manage'] },
   'carwash-branches':    { view: ['carwash.branches.view', 'carwash.branches.manage'], manage: ['carwash.branches.manage'] },
   'carwash-settings':    { view: ['carwash.settings.view', 'carwash.settings.manage'], manage: ['carwash.settings.manage'] },
-  'carwash-financials':  { view: ['carwash.financials.view'], reverse: ['carwash.financials.reverse'] },
   'inv-dashboard':       { view: ['inv.dashboard.view'] },
   'inv-locations':       { view: ['inv.locations.view'], manage: ['inv.locations.manage'] },
   'inv-categories':      { view: ['inv.categories.view'], manage: ['inv.categories.manage'] },
