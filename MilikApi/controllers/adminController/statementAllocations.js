@@ -359,10 +359,6 @@ export const reallocatePayment = async (req, res) => {
     const newIds = newAllocs.filter((a) => a.invoiceId && isOid(a.invoiceId)).map((a) => a.invoiceId);
     const allIds = [...new Set([...oldIds, ...newIds])];
 
-    // Use .lean() so MongoDB's stored 'outstanding' value is returned as-is.
-    // Mongoose strict mode silently returns undefined for fields not in the schema
-    // (outstanding is not defined in TenantInvoice schema), causing NaN propagation
-    // that makes every appliedAmount compute to 0.
     const invoiceLeanList = await TenantInvoice.find({ _id: { $in: allIds }, business: businessId })
       .select("_id amount outstanding status invoiceNumber category invoiceDate dueDate description metadata tenant")
       .session(session).lean();

@@ -163,6 +163,15 @@ const TenantInvoiceSchema = new mongoose.Schema(
       default: () => ({}),
     },
 
+    // Persisted snapshot of the outstanding balance — kept in sync by
+    // recomputeTenantFinancialState / buildInvoiceStatusBulkOps on every
+    // balance recomputation. Without this field in the schema, Mongoose strict
+    // mode returns undefined for it on non-lean queries.
+    outstanding: {
+      type: Number,
+      default: null,
+    },
+
   },
   { timestamps: true }
 );

@@ -1817,7 +1817,8 @@ export const getCashMonthlySummary = async (req, res, next) => {
           accountId: { $in: accountIds },
           transactionDate: { $gte: from },
           status: { $in: REPORT_LEDGER_STATUSES },
-          category: { $ne: "REVERSAL" },
+          // Do NOT exclude category:"REVERSAL" — omitting reversal entries leaves reversed receipts
+          // inflating cashIn and reversed vouchers inflating cashOut with no correcting offset.
         },
       },
       {

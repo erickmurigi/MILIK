@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  FaHome, FaKey, FaBoxes, FaUsers, FaFolderOpen, FaCalculator,
+  FaBoxes, FaFolderOpen,
   FaEnvelope, FaSms, FaUserCircle, FaSignOutAlt, FaThLarge,
   FaBuilding, FaCheckCircle, FaSearch, FaUserShield, FaShieldAlt,
   FaStore, FaChartLine, FaBriefcase, FaLock, FaCog, FaCar,
@@ -62,6 +62,7 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
   const [showSwitchModal, setShowSwitchModal]   = useState(false);
   const [companies, setCompanies]               = useState([]);
   const [loadingCompanies, setLoadingCompanies] = useState(false);
+  const [switchingId, setSwitchingId]           = useState(null);
   const [search, setSearch]                     = useState("");
 
   const anchorRef = useRef(null);
@@ -168,15 +169,18 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
       navigate("/moduleDashboard", { replace: true });
       return;
     }
-    if (isCompanySwitching) return;
+    if (isCompanySwitching || switchingId) return;
+    setSwitchingId(company._id);
     try {
       await dispatch(switchCompany(company._id));
       setShowSwitchModal(false); setOpen(false);
       navigate("/moduleDashboard", { replace: true });
     } catch (err) {
       toast.error(err?.response?.data?.message || err?.message || "Failed to switch company");
+    } finally {
+      setSwitchingId(null);
     }
-  }, [currentCompany?._id, currentUser?.company?._id, isCompanySwitching, dispatch, navigate]);
+  }, [currentCompany?._id, currentUser?.company?._id, isCompanySwitching, switchingId, dispatch, navigate]);
 
   const isBusy = isCompanySwitching;
 
@@ -389,47 +393,47 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
           className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/55 px-4 backdrop-blur-sm"
           onClick={(e) => { if (e.target === e.currentTarget) setShowSwitchModal(false); }}
         >
-          <div className="flex max-h-[88vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-900/10">
+          <div className="flex max-h-[88vh] w-full max-w-[420px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-900/10">
 
             {/* Header */}
-            <div className="flex-shrink-0 bg-[#0B3B2E] px-5 py-4">
+            <div className="flex-shrink-0 bg-[#0B3B2E] px-4 py-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-400">Workspace</div>
-                  <div className="mt-0.5 text-[15px] font-black text-white">Switch Company</div>
+                  <div className="text-[9px] font-black uppercase tracking-[0.22em] text-emerald-400">Workspace</div>
+                  <div className="text-[15px] font-black leading-tight text-white">Switch Company</div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="rounded-lg bg-white/10 px-2 py-1 text-[10px] font-bold text-white/80">
+                <div className="flex items-center gap-1.5">
+                  <span className="rounded-lg bg-white/10 px-2 py-1 text-[10px] font-bold tabular-nums text-white/70">
                     {filteredCompanies.length} / {companies.filter((c) => isDemoUser || !c?.isDemoWorkspace).length}
                   </span>
                   <button
                     onClick={() => openSwitchCompany({ forceRefresh: true })}
                     disabled={loadingCompanies}
-                    title="Refresh"
-                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-white/70 transition hover:bg-white/20 hover:text-white disabled:opacity-40"
+                    title="Refresh list"
+                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-white/60 transition hover:bg-white/20 hover:text-white disabled:opacity-40"
                   >
                     <FaSync className={`text-[10px] ${loadingCompanies ? "animate-spin" : ""}`} />
                   </button>
                   <button
                     onClick={() => setShowSwitchModal(false)}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-white/70 transition hover:bg-white/20 hover:text-white"
+                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-white/60 transition hover:bg-white/20 hover:text-white"
                   >
                     <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                   </button>
                 </div>
               </div>
               {/* Search */}
-              <div className="mt-3 flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2">
-                <FaSearch className="flex-shrink-0 text-[10px] text-white/50" />
+              <div className="mt-2.5 flex items-center gap-2 rounded-xl bg-white/10 px-3 py-1.5">
+                <FaSearch className="flex-shrink-0 text-[10px] text-white/45" />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search by name, code, town…"
-                  className="w-full bg-transparent text-[12px] text-white placeholder-white/40 outline-none"
+                  className="w-full bg-transparent text-[12px] text-white placeholder-white/35 outline-none"
                   autoFocus
                 />
                 {search && (
-                  <button onClick={() => setSearch("")} className="text-white/50 hover:text-white transition">
+                  <button onClick={() => setSearch("")} className="text-white/45 transition hover:text-white">
                     <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                   </button>
                 )}
@@ -439,12 +443,12 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
             {/* List */}
             <div className="min-h-0 flex-1 overflow-y-auto">
               {loadingCompanies ? (
-                <div className="flex flex-col items-center justify-center gap-3 py-16">
-                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-emerald-600" />
+                <div className="flex flex-col items-center justify-center gap-3 py-14">
+                  <div className="h-7 w-7 animate-spin rounded-full border-2 border-slate-100 border-t-emerald-600" />
                   <span className="text-[11px] text-slate-400">Loading companies…</span>
                 </div>
               ) : filteredCompanies.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-2 py-16">
+                <div className="flex flex-col items-center justify-center gap-2 py-14">
                   <FaBuilding className="text-2xl text-slate-200" />
                   <div className="text-[12px] font-semibold text-slate-400">No companies found</div>
                   {search && <div className="text-[11px] text-slate-400">Try a different search term</div>}
@@ -452,47 +456,90 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
               ) : (
                 <div className="divide-y divide-slate-100">
                   {filteredCompanies.map((company) => {
-                    const active     = String(company?._id) === String(currentCompany?._id || currentUser?.company?._id || "");
+                    const activeId   = String(currentCompany?._id || currentUser?.company?._id || "");
+                    const active     = String(company?._id) === activeId;
                     const isLocked   = Boolean(company?.locked);
-                    const clickable  = !isBusy && !isLocked;
+                    const isSwitching = switchingId === company._id;
+                    const clickable  = !isBusy && !isLocked && !switchingId;
                     const modCount   = Array.isArray(company?.enabledModules) ? company.enabledModules.length : 0;
+                    const modeLabel  = getCompanyOperatingModeLabel(company?.companyMode);
+                    const meta       = [company?.companyCode, company?.town].filter(Boolean).join(" · ");
                     return (
                       <button
                         key={company._id}
                         onClick={() => clickable && handleSwitchCompany(company)}
                         disabled={!clickable}
                         className={[
-                          "group w-full px-5 py-3.5 text-left transition",
-                          active ? "bg-emerald-50" : isLocked ? "cursor-not-allowed bg-slate-50 opacity-60" : "cursor-pointer hover:bg-slate-50",
+                          "group relative w-full text-left transition-colors",
+                          active
+                            ? "bg-emerald-50"
+                            : isLocked
+                            ? "cursor-not-allowed opacity-50"
+                            : isSwitching
+                            ? "bg-slate-50"
+                            : "cursor-pointer hover:bg-slate-50/80",
                         ].join(" ")}
                       >
-                        <div className="flex items-center gap-3">
-                          <div className={`relative flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl border text-[12px] font-black shadow-sm ${active ? "border-emerald-300 bg-emerald-700 text-white" : "border-slate-200 bg-slate-100 text-slate-600"}`}>
+                        {/* Left accent bar for active company */}
+                        {active && <span className="absolute inset-y-0 left-0 w-[3px] rounded-r bg-emerald-500" />}
+
+                        <div className="flex items-center gap-3 px-4 py-2.5 pl-[18px]">
+                          {/* Avatar */}
+                          <div className={`relative flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border text-[11px] font-black ${
+                            active ? "border-emerald-300 bg-emerald-700 text-white" : "border-slate-200 bg-slate-100 text-slate-600"
+                          }`}>
                             {company?.logo
-                              ? <img src={company.logo} alt={company.companyName} className="h-full w-full object-contain p-1" />
+                              ? <img src={company.logo} alt={company.companyName} className="h-full w-full object-contain p-0.5" />
                               : <span>{initials(company?.companyName)}</span>}
                             {isLocked && (
-                              <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-slate-900/60">
-                                <FaLock className="text-[9px] text-white" />
+                              <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-slate-900/55">
+                                <FaLock className="text-[8px] text-white" />
                               </div>
                             )}
                           </div>
+
+                          {/* Text block */}
                           <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <span className={`truncate text-[12px] font-bold ${active ? "text-emerald-800" : "text-slate-900"}`}>{company?.companyName}</span>
-                              {active && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-black text-emerald-700"><FaCheckCircle className="text-[7px]" /> Active</span>}
-                              {isLocked && <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-1.5 py-0.5 text-[9px] font-black text-rose-700"><FaLock className="text-[7px]" /> Locked</span>}
+                            {/* Row 1: name + badges */}
+                            <div className="flex flex-wrap items-center gap-1">
+                              <span className={`truncate text-[12px] font-bold leading-none ${active ? "text-emerald-800" : "text-slate-900"}`}>
+                                {company?.companyName}
+                              </span>
+                              {active && (
+                                <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-black leading-none text-emerald-700">
+                                  <FaCheckCircle className="text-[7px]" /> Active
+                                </span>
+                              )}
+                              {isLocked && (
+                                <span className="inline-flex items-center gap-0.5 rounded-full bg-rose-100 px-1.5 py-0.5 text-[9px] font-black leading-none text-rose-700">
+                                  <FaLock className="text-[7px]" /> Locked
+                                </span>
+                              )}
+                              {company?.isDemoWorkspace && (
+                                <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[9px] font-bold leading-none text-violet-700">Demo</span>
+                              )}
                             </div>
-                            <div className="mt-0.5 truncate text-[10px] text-slate-400">
-                              {[company?.companyCode, company?.town, company?.country].filter(Boolean).join(" · ") || "—"}
-                            </div>
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-500">{getCompanyOperatingModeLabel(company?.companyMode)}</span>
-                              {modCount > 0 && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-500">{modCount} module{modCount !== 1 ? "s" : ""}</span>}
-                              {company?.isDemoWorkspace && <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[9px] font-bold text-violet-700">Demo</span>}
+                            {/* Row 2: meta + mode + modules */}
+                            <div className="mt-0.5 flex items-center gap-1.5 overflow-hidden">
+                              {meta && <span className="shrink-0 text-[10px] text-slate-400">{meta}</span>}
+                              {meta && <span className="h-2.5 w-px flex-shrink-0 bg-slate-200" />}
+                              <span className="shrink-0 rounded bg-slate-100 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-slate-500">{modeLabel}</span>
+                              {modCount > 0 && (
+                                <span className="shrink-0 rounded bg-slate-100 px-1 py-px text-[9px] text-slate-400">
+                                  {modCount} module{modCount !== 1 ? "s" : ""}
+                                </span>
+                              )}
                             </div>
                           </div>
-                          {!isLocked && <FaChevronRight className={`flex-shrink-0 text-[10px] transition ${active ? "text-emerald-500" : "text-slate-300 group-hover:text-slate-500"}`} />}
+
+                          {/* Right side: spinner or chevron */}
+                          {isSwitching ? (
+                            <div className="h-3.5 w-3.5 flex-shrink-0 animate-spin rounded-full border-2 border-slate-200 border-t-emerald-600" />
+                          ) : (
+                            !isLocked && (
+                              <FaChevronRight className={`flex-shrink-0 text-[9px] transition-colors ${active ? "text-emerald-400" : "text-slate-200 group-hover:text-slate-400"}`} />
+                            )
+                          )}
                         </div>
                       </button>
                     );
@@ -502,10 +549,13 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
             </div>
 
             {/* Footer */}
-            <div className="flex-shrink-0 border-t border-slate-100 bg-slate-50 px-5 py-2.5">
+            <div className="flex flex-shrink-0 items-center justify-between border-t border-slate-100 bg-slate-50/80 px-4 py-2">
               <div className="text-[10px] text-slate-400">
-                Active: <span className="font-bold text-slate-600">{companyName}</span>
+                Active: <span className="font-bold text-slate-700">{companyName}</span>
               </div>
+              {isBusy && (
+                <span className="text-[10px] font-semibold text-emerald-700">Switching workspace…</span>
+              )}
             </div>
           </div>
         </div>

@@ -19,7 +19,7 @@ import {
   selectAllExpenseProperties,
 } from '../../redux/selectors';
 
-const MetricsGrid = ({ darkMode }) => {
+const MetricsGrid = ({ darkMode, summaryData = {} }) => {
   const properties = useSelector(selectAllProperties);
   const units = useSelector(selectAllUnits);
   const rentPayments = useSelector(selectAllRentPayments);
@@ -46,7 +46,9 @@ const MetricsGrid = ({ darkMode }) => {
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
 
-  const thisMonthPayments = rentPayments.filter((payment) => {
+  // Prefer the authoritative server-computed total; fall back to local Redux if summaryData not yet loaded
+  const serverCollected = Number(summaryData?.collectedThisMonth ?? summaryData?.monthlyRevenue ?? -1);
+  const thisMonthPayments = serverCollected >= 0 ? [] : rentPayments.filter((payment) => {
     const paymentDate = new Date(payment?.paymentDate || payment?.createdAt || 0);
     return (
       !Number.isNaN(paymentDate.getTime()) &&
@@ -60,10 +62,9 @@ const MetricsGrid = ({ darkMode }) => {
     );
   });
 
-  const monthlyCollected = thisMonthPayments.reduce(
-    (sum, payment) => sum + Math.abs(Number(payment?.amount || 0)),
-    0
-  );
+  const monthlyCollected = serverCollected >= 0
+    ? serverCollected
+    : thisMonthPayments.reduce((sum, p) => sum + Math.abs(Number(p?.amount || 0)), 0);
 
   const monthlyExpenses = useMemo(() => {
     if (!isLandlordMode) return 0;

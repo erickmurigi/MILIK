@@ -517,21 +517,46 @@ const AddReceipt = () => {
     return { rent: "rent", deposit: "deposit", utility: "utility", late_fee: "late_fee", combined: "rent" }[primary] || "rent";
   }, [creditOnAccountMode, allocationPreview]);
 
-  // ── Auto-populate description from tenant + date ──
+  // ── Auto-populate description from allocated invoices (falls back to tenant+date) ──
   const lastAutoDescRef = useRef("");
   useEffect(() => {
-    if (!selectedTenant || !formData.paymentDate) return;
-    const tenantName = getTenantName(selectedTenant);
-    const unitNumber = selectedTenant?.unit?.unitNumber || "";
-    const d          = new Date(`${formData.paymentDate}T00:00:00`);
-    const monthYear  = Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-KE", { month: "short", year: "numeric" });
-    if (!monthYear) return;
-    const autoDesc = unitNumber ? `${monthYear} — ${tenantName} (Unit ${unitNumber})` : `${monthYear} — ${tenantName}`;
+    let autoDesc = "";
+
+    // Primary: build narration from what is actually being applied
+    const activeLines = (allocationPreview?.lines || []).filter(
+      (l) => l.apply > 0 && l.invoiceId !== PREPAYMENT_OPTION_KEY
+    );
+    if (activeLines.length > 0) {
+      const byPeriod = new Map();
+      for (const line of activeLines) {
+        if (!line.period) continue;
+        if (!byPeriod.has(line.period)) byPeriod.set(line.period, new Set());
+        byPeriod.get(line.period).add(line.chargeTypeLabel || line.chargeType || "");
+      }
+      if (byPeriod.size > 0) {
+        autoDesc = Array.from(byPeriod.entries())
+          .map(([period, types]) => `${period} — ${Array.from(types).filter(Boolean).join(", ")}`)
+          .join("; ");
+      }
+    }
+
+    // Fallback: use tenant + payment month when no invoices are applied yet
+    if (!autoDesc && selectedTenant && formData.paymentDate) {
+      const tenantName = getTenantName(selectedTenant);
+      const unitNumber = selectedTenant?.unit?.unitNumber || "";
+      const d = new Date(`${formData.paymentDate}T00:00:00`);
+      const monthYear = Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-KE", { month: "short", year: "numeric" });
+      if (monthYear) {
+        autoDesc = unitNumber ? `${monthYear} — ${tenantName} (Unit ${unitNumber})` : `${monthYear} — ${tenantName}`;
+      }
+    }
+
+    if (!autoDesc) return;
     if (!formData.description || formData.description === lastAutoDescRef.current) {
       lastAutoDescRef.current = autoDesc;
       setFormData((prev) => ({ ...prev, description: autoDesc }));
     }
-  }, [selectedTenant, formData.paymentDate]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [allocationPreview, selectedTenant, formData.paymentDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onPropertyChange = (propertyId) => {
     setFormData((prev) => ({
@@ -890,7 +915,7 @@ const AddReceipt = () => {
                         setFormData((prev) => ({ ...prev, description: val }));
                       }}
                       className={inputClass}
-                      placeholder="Auto-filled from tenant and date — edit freely"
+                      placeholder="Auto-filled from allocated invoices — edit freely"
                     />
                   </div>
 

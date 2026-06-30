@@ -17,6 +17,7 @@ const RentPaymentSchema = new mongoose.Schema(
     amount: {
       type: Number,
       required: true,
+      min: [0.01, "Receipt amount must be greater than zero"],
     },
     paymentType: {
       type: String,

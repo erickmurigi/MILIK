@@ -1886,102 +1886,56 @@ export const createPayment = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     if (!businessId || !isValidObjectId(businessId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Valid business is required to create a receipt.",
-      });
+      return res.status(400).json({ success: false, message: "Valid business is required to create a receipt." });
     }
 
     const tenantId = req.body?.tenant;
     const unitId = req.body?.unit;
-
     if (!isValidObjectId(tenantId) || !isValidObjectId(unitId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Valid tenant and unit are required.",
-      });
+      return res.status(400).json({ success: false, message: "Valid tenant and unit are required." });
     }
 
-    const tenant = await Tenant.findOne({ _id: tenantId, business: businessId }).select("_id unit business depositHeldBy").lean();
-    if (!tenant) {
-      return res.status(404).json({
-        success: false,
-        message: "Tenant not found for the selected company.",
-      });
-    }
-
-    const unit = await Unit.findOne({ _id: unitId, business: businessId }).select("_id property business").lean();
-    if (!unit) {
-      return res.status(404).json({
-        success: false,
-        message: "Unit not found for the selected company.",
-      });
-    }
-
-    if (String(tenant.unit) !== String(unit._id)) {
-      return res.status(400).json({
-        success: false,
-        message: "Selected tenant does not belong to the selected unit.",
-      });
-    }
-
+    // Derive all req.body values synchronously — before any async work
     const baseMetadata = req.body?.metadata && typeof req.body.metadata === "object" ? req.body.metadata : {};
     const isTakeOnCredit = isTakeOnCreditReceipt({ metadata: baseMetadata });
     const isConfirmedOnCreate = req.body?.isConfirmed === true;
     const isDirectToLandlord = req.body?.paidDirectToLandlord === true;
     const refNumber = String(req.body?.referenceNumber || "").trim();
     const normalizedCashbook = isDirectToLandlord || isTakeOnCredit ? "" : String(req.body?.cashbook || "").trim();
+    const useManualAllocations =
+      String(req.body?.allocationMode || "").trim().toLowerCase() === "manual" ||
+      Array.isArray(req.body?.allocations);
+    const metadata = { ...baseMetadata, allocationMode: useManualAllocations ? "manual" : "auto" };
+    const providedReceiptNumber = String(req.body?.receiptNumber || "").trim();
 
+    // Non-DB validations first — fail fast before hitting the database
     if (!refNumber) {
-      return res.status(400).json({
-        success: false,
-        message: "Reference number is required for tenant receipts.",
-      });
+      return res.status(400).json({ success: false, message: "Reference number is required for tenant receipts." });
     }
-
-    const duplicateRef = await RentPayment.findOne({
-      business: businessId,
-      referenceNumber: refNumber,
-    }).lean();
-
-    if (duplicateRef) {
-      return res.status(400).json({
-        success: false,
-        message: "Reference number already exists in this company.",
-      });
-    }
-
     if (!isDirectToLandlord && !isTakeOnCredit && !normalizedCashbook) {
-      return res.status(400).json({
-        success: false,
-        message: "Cashbook is required unless this receipt was paid directly to the landlord.",
-      });
+      return res.status(400).json({ success: false, message: "Cashbook is required unless this receipt was paid directly to the landlord." });
     }
-
     if (isTakeOnCredit && !isConfirmedOnCreate) {
-      return res.status(400).json({
-        success: false,
-        message: "Credit take-on balances must be saved as confirmed receipts so the opening balance posting stays auditable.",
-      });
+      return res.status(400).json({ success: false, message: "Credit take-on balances must be saved as confirmed receipts so the opening balance posting stays auditable." });
     }
 
-    let receiptNumber = String(req.body?.receiptNumber || "").trim();
-    if (!receiptNumber) {
-      receiptNumber = await generateReceiptNumber(businessId);
-    } else {
-      const duplicateReceipt = await RentPayment.findOne({
-        business: businessId,
-        receiptNumber,
-      }).lean();
+    // Phase 1: parallel — tenant lookup, unit lookup, duplicate ref check
+    const [tenant, unit, duplicateRef] = await Promise.all([
+      Tenant.findOne({ _id: tenantId, business: businessId }).select("_id unit business depositHeldBy").lean(),
+      Unit.findOne({ _id: unitId, business: businessId }).select("_id property business").lean(),
+      RentPayment.findOne({ business: businessId, referenceNumber: refNumber }).lean(),
+    ]);
 
-      if (duplicateReceipt) {
-        return res.status(400).json({
-          success: false,
-          message: "Receipt number already exists in this company.",
-        });
-      }
+    if (!tenant) return res.status(404).json({ success: false, message: "Tenant not found for the selected company." });
+    if (!unit) return res.status(404).json({ success: false, message: "Unit not found for the selected company." });
+    if (String(tenant.unit) !== String(unit._id)) {
+      return res.status(400).json({ success: false, message: "Selected tenant does not belong to the selected unit." });
+    }
+    if (duplicateRef) {
+      return res.status(400).json({ success: false, message: "Reference number already exists in this company." });
     }
 
+    // resolveActorUserId throws with a user-facing message — keep its own try/catch
     let actorUserId = null;
     if (isConfirmedOnCreate) {
       try {
@@ -1995,38 +1949,34 @@ export const createPayment = async (req, res, next) => {
       }
     }
 
-    const useManualAllocations =
-      String(req.body?.allocationMode || "").trim().toLowerCase() === "manual" ||
-      Array.isArray(req.body?.allocations);
-    const metadata = {
-      ...baseMetadata,
-      allocationMode: useManualAllocations ? "manual" : "auto",
-    };
-
-    const allocationData = useManualAllocations
-      ? await buildManualReceiptAllocationData({
-          payment: {
-            business: businessId,
-            tenant: tenantId,
+    // Phase 2: parallel — allocation data, property fetch, receipt number generation
+    const [allocationData, property, autoReceiptNumber] = await Promise.all([
+      useManualAllocations
+        ? buildManualReceiptAllocationData({
+            payment: { business: businessId, tenant: tenantId, amount: req.body?.amount, paymentType: req.body?.paymentType, metadata, isConfirmed: false, postingStatus: "unposted" },
+            requestedAllocations: req.body?.allocations,
+          })
+        : buildReceiptAllocationData({
+            businessId,
+            tenantId,
             amount: req.body?.amount,
-            paymentType: req.body?.paymentType,
+            paymentTypeOverride: isTakeOnCredit ? (metadata?.paymentType || req.body?.paymentType || "") : "",
             metadata,
-            isConfirmed: false,
-            postingStatus: "unposted",
-          },
-          requestedAllocations: req.body?.allocations,
-        })
-      : await buildReceiptAllocationData({
-          businessId,
-          tenantId,
-          amount: req.body?.amount,
-          paymentTypeOverride: isTakeOnCredit ? (metadata?.paymentType || req.body?.paymentType || "") : "",
-          metadata,
-        });
+          }),
+      unit?.property
+        ? Property.findOne({ _id: unit.property, business: businessId }).select("_id depositHeldBy").lean()
+        : Promise.resolve(null),
+      !providedReceiptNumber ? generateReceiptNumber(businessId) : Promise.resolve(null),
+    ]);
 
-    const property = unit?.property
-      ? await Property.findOne({ _id: unit.property, business: businessId }).select("_id depositHeldBy").lean()
-      : null;
+    let receiptNumber = providedReceiptNumber || autoReceiptNumber;
+    // Provided receipt numbers are uncommon — check dup only when supplied
+    if (providedReceiptNumber) {
+      const duplicateReceipt = await RentPayment.findOne({ business: businessId, receiptNumber: providedReceiptNumber }).lean();
+      if (duplicateReceipt) {
+        return res.status(400).json({ success: false, message: "Receipt number already exists in this company." });
+      }
+    }
 
     const depositContext = buildResolvedDepositMetadata({
       tenant,
@@ -2069,15 +2019,14 @@ export const createPayment = async (req, res, next) => {
           ? await confirmNonCashDirectToLandlordReceipt(savedPayment, actorUserId)
           : await postReceiptJournal(savedPayment, actorUserId);
 
+        // Fast incremental balance update, then parallel full recompute + chart account aggregate
         await applyIncrementalBalanceDelta({ tenantId: savedPayment.tenant, businessId: savedPayment.business, delta: -Math.abs(Number(savedPayment.amount || 0)) });
-        await recomputeTenantBalance(savedPayment.tenant, savedPayment.business);
-
-        if (posting.entries?.length) {
-          await aggregateChartOfAccountBalances(
-            savedPayment.business,
-            posting.entries.map((entry) => entry.accountId)
-          );
-        }
+        await Promise.all([
+          recomputeTenantBalance(savedPayment.tenant, savedPayment.business),
+          posting.entries?.length
+            ? aggregateChartOfAccountBalances(savedPayment.business, posting.entries.map((e) => e.accountId))
+            : Promise.resolve(),
+        ]);
       } catch (postingError) {
         const rollbackEntries = await rollbackFailedReceiptPosting({
           payment: savedPayment,
@@ -2098,14 +2047,12 @@ export const createPayment = async (req, res, next) => {
         });
 
         try {
-          await recomputeTenantBalance(savedPayment.tenant, savedPayment.business);
-
-          if (rollbackEntries.length > 0) {
-            await aggregateChartOfAccountBalances(
-              savedPayment.business,
-              rollbackEntries.map((entry) => entry?.accountId).filter(Boolean)
-            );
-          }
+          await Promise.all([
+            recomputeTenantBalance(savedPayment.tenant, savedPayment.business),
+            rollbackEntries.length > 0
+              ? aggregateChartOfAccountBalances(savedPayment.business, rollbackEntries.map((e) => e?.accountId).filter(Boolean))
+              : Promise.resolve(),
+          ]);
         } catch (recoveryError) {
           console.error("Failed to recompute receipt state after create-posting rollback:", recoveryError);
         }
@@ -2124,22 +2071,13 @@ export const createPayment = async (req, res, next) => {
   } catch (err) {
     if (err?.code === 11000) {
       const duplicateFields = Object.keys(err.keyPattern || {});
-
       if (duplicateFields.includes("referenceNumber")) {
-        return res.status(400).json({
-          success: false,
-          message: "Reference number already exists in this company.",
-        });
+        return res.status(400).json({ success: false, message: "Reference number already exists in this company." });
       }
-
       if (duplicateFields.includes("receiptNumber")) {
-        return res.status(400).json({
-          success: false,
-          message: "Receipt number already exists in this company.",
-        });
+        return res.status(400).json({ success: false, message: "Receipt number already exists in this company." });
       }
     }
-
     return next(err);
   }
 };

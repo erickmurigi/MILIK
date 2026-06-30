@@ -998,6 +998,7 @@ export default function CompanySetupPage() {
   const [activityRefreshKey, setActivityRefreshKey] = useState(0);
   const [activitiesPage, setActivitiesPage] = useState(1);
   const [sessionsPage, setSessionsPage] = useState(1);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const ACTIVITIES_PAGE_SIZE = 25;
   const SESSIONS_PAGE_SIZE = 20;
 
@@ -1029,40 +1030,36 @@ export default function CompanySetupPage() {
     setCompany(normalizeForm(currentCompany));
   }, [currentCompany]);
 
+  // Audit logs — re-run on category filter change and explicit refresh
   useEffect(() => {
     if (activeTab !== "activities" || !currentCompany?._id) return undefined;
-
     let cancelled = false;
-    const loadAuditTrail = async () => {
+    const load = async () => {
       setLoadingAudit(true);
       try {
-        const [logRes, sessionRes] = await Promise.all([
-          adminRequests.get("/audit-logs", {
-            params: { companyId: currentCompany._id, category: activityCategory, limit: 200 },
-          }),
-          adminRequests.get("/audit-logs/sessions", {
-            params: { companyId: currentCompany._id },
-          }),
-        ]);
-
-        if (cancelled) return;
-        setAuditLogs(Array.isArray(logRes?.data?.logs) ? logRes.data.logs : []);
-        setUserSessions(Array.isArray(sessionRes?.data?.sessions) ? sessionRes.data.sessions : []);
+        const logRes = await adminRequests.get("/audit-logs", {
+          params: { companyId: currentCompany._id, category: activityCategory, limit: 200 },
+        });
+        if (!cancelled) setAuditLogs(Array.isArray(logRes?.data?.logs) ? logRes.data.logs : []);
       } catch (error) {
-        if (!cancelled) {
-          toast.error(error?.response?.data?.message || "Failed to load company activities");
-        }
+        if (!cancelled) toast.error(error?.response?.data?.message || "Failed to load company activities");
       } finally {
         if (!cancelled) setLoadingAudit(false);
       }
     };
-
-    loadAuditTrail();
-
-    return () => {
-      cancelled = true;
-    };
+    load();
+    return () => { cancelled = true; };
   }, [activeTab, activityCategory, activityRefreshKey, currentCompany?._id]);
+
+  // User sessions — independent of category filter; only re-run on refresh or company change
+  useEffect(() => {
+    if (activeTab !== "activities" || !currentCompany?._id) return undefined;
+    let cancelled = false;
+    adminRequests.get("/audit-logs/sessions", { params: { companyId: currentCompany._id } })
+      .then((res) => { if (!cancelled) setUserSessions(Array.isArray(res?.data?.sessions) ? res.data.sessions : []); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [activeTab, activityRefreshKey, currentCompany?._id]);
 
   useEffect(() => {
     if (activeTab !== "activities") return undefined;
@@ -1588,15 +1585,17 @@ export default function CompanySetupPage() {
   ], [hasPM]);
 
   const handleRefreshSetup = async () => {
-    if (!currentCompany?._id) return;
-
+    if (!currentCompany?._id || isRefreshing) return;
+    setIsRefreshing(true);
     try {
       await dispatch(getCompany(currentCompany._id));
       const response = await adminRequests.get(`/company-settings/${currentCompany._id}`);
       setTaxConfig(normalizeTaxConfiguration(response?.data || {}));
       toast.success("Company setup refreshed");
-    } catch (error) {
+    } catch {
       toast.error("Failed to refresh company setup");
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
@@ -2335,50 +2334,43 @@ export default function CompanySetupPage() {
 
         <div className="space-y-3 xl:col-span-2">
           <Card
-            title="Company Structure Defaults"
-            subtitle="These defaults define the active company’s working posture. They are future-facing operational defaults and must not restate historical transactions."
+            title="Enabled Modules"
+            subtitle="Turn modules on or off for this company. Disabled modules hide their navigation and features workspace-wide."
           >
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <div>
-                <label className="text-xs font-bold text-slate-700">Operating Mode</label>
-                <Select value={selectedMode} onChange={(e) => handleCompanyModeChange(e.target.value)}>
-                  <option value={COMPANY_OPERATING_MODES.PROPERTY_MANAGER}>Property Manager</option>
-                  <option value={COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD}>Self-Managing Landlord</option>
-                  <option value={COMPANY_OPERATING_MODES.OTHER}>Other</option>
-                </Select>
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-700">Operation Period Type</label>
-                <Select value={company.operationPeriodType} onChange={(e) => handleCompanyFieldChange("operationPeriodType", e.target.value)}>
-                  <option value="Monthly">Monthly</option>
-                  <option value="Quarterly">Quarterly</option>
-                  <option value="Semi Annual">Semi Annual</option>
-                  <option value="Annual">Annual</option>
-                </Select>
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-700">Fiscal Start Month</label>
-                <Select value={company.fiscalStartMonth} onChange={(e) => handleCompanyFieldChange("fiscalStartMonth", e.target.value)}>
-                  {months.map((month) => (
-                    <option key={month} value={month}>
-                      {month}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-700">Fiscal Start Year</label>
-                <Input
-                  type="number"
-                  min="2000"
-                  value={company.fiscalStartYear}
-                  onChange={(e) => handleCompanyFieldChange("fiscalStartYear", Number(e.target.value) || new Date().getFullYear())}
-                />
-              </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {Object.entries(MODULE_LABELS).map(([key, label]) => {
+                const enabled = Boolean(company.modules?.[key]);
+                return (
+                  <label
+                    key={key}
+                    className={[
+                      "flex cursor-pointer items-center justify-between gap-3 border px-3 py-2.5 transition select-none",
+                      enabled ? "border-[#0B3B2E]/25 bg-[#EDF5F1]" : "border-slate-200 bg-white hover:border-slate-300",
+                    ].join(" ")}
+                  >
+                    <div>
+                      <div className="text-[12px] font-bold text-slate-900">{label}</div>
+                      <div className="text-[10px] text-slate-500">{key}</div>
+                    </div>
+                    <div className="relative flex-shrink-0">
+                      <input
+                        type="checkbox"
+                        className="peer sr-only"
+                        checked={enabled}
+                        onChange={() =>
+                          handleCompanyFieldChange("modules", { ...company.modules, [key]: !enabled })
+                        }
+                      />
+                      <div className={`h-5 w-9 rounded-full transition-colors ${enabled ? "bg-[#0B3B2E]" : "bg-slate-200"}`} />
+                      <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${enabled ? "translate-x-4 left-0.5" : "left-0.5"}`} />
+                    </div>
+                  </label>
+                );
+              })}
             </div>
 
-            <div className="mt-4 border border-amber-200 bg-amber-50 px-4 py-3 text-[11px] text-amber-800">
-              Changes here should control future company behavior and workspace wording. They should not mutate posted invoices, receipts, statements, or ledger history.
+            <div className="mt-4 border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] text-amber-800">
+              Module changes are future-facing. They do not alter any posted history, transactions, or ledger entries.
             </div>
 
             <div className="mt-4 flex justify-end gap-2">
@@ -2836,9 +2828,14 @@ export default function CompanySetupPage() {
                         <td className="px-3 py-2.5 font-semibold text-slate-500">{idx + 1}</td>
                         <td className="px-3 py-2.5">
                           <div className="font-bold text-slate-900">{profile.name}</div>
-                          {profile.isDefault ? (
-                            <span className="mt-0.5 inline-block border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-700">Default</span>
-                          ) : null}
+                          <div className="mt-0.5 flex flex-wrap gap-1">
+                            {profile.isDefault && (
+                              <span className="inline-block border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-700">Default</span>
+                            )}
+                            {profile.useSandbox && (
+                              <span className="inline-block border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">Sandbox</span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-3 py-2.5 text-slate-700">{providerLabel}</td>
                         <td className="px-3 py-2.5 text-slate-700">{profile.senderId || <span className="text-slate-400">—</span>}</td>
@@ -3440,9 +3437,10 @@ export default function CompanySetupPage() {
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
-              <button type="button" onClick={handleRefreshSetup}
-                className="inline-flex h-7 items-center gap-1.5 rounded border border-[#2A5C4A] px-2.5 text-[10px] font-bold text-white hover:bg-[#0A3127] transition">
-                <FaSyncAlt size={9} /> Refresh
+              <button type="button" onClick={handleRefreshSetup} disabled={isRefreshing}
+                className="inline-flex h-7 items-center gap-1.5 rounded border border-[#2A5C4A] px-2.5 text-[10px] font-bold text-white hover:bg-[#0A3127] transition disabled:opacity-60">
+                <FaSyncAlt size={9} className={isRefreshing ? "animate-spin" : ""} />
+                {isRefreshing ? "Refreshing…" : "Refresh"}
               </button>
               <button type="button" onClick={() => navigate('/settings')}
                 className="inline-flex h-7 items-center gap-1.5 rounded border border-[#0B3B2E] bg-white px-2.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-slate-50 transition">

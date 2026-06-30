@@ -1,6 +1,7 @@
 // controllers/propertyController/dashboard.js
 
 import express from "express";
+import mongoose from "mongoose";
 import Tenant from "../../models/Tenant.js";
 import RentPayment from "../../models/RentPayment.js";
 import Maintenance from "../../models/Maintenance.js";
@@ -62,9 +63,14 @@ const expenseContribExpr = {
 
 router.get("/summary", verifyUser, async (req, res) => {
   try {
-    const business = req.user.company;
+    // JWT stores company as a string — aggregate $match needs an actual ObjectId to match stored values
+    const rawBusiness = req.user.company?._id || req.user.company;
+    const business = mongoose.Types.ObjectId.isValid(rawBusiness)
+      ? new mongoose.Types.ObjectId(rawBusiness)
+      : rawBusiness;
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    const yearStart  = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
 
     const receiptBaseMatch = {
       business,
@@ -72,9 +78,8 @@ router.get("/summary", verifyUser, async (req, res) => {
       isConfirmed: true,
       isCancelled: { $ne: true },
       isReversed: { $ne: true },
-      reversalOf: { $exists: false },
+      reversalOf: null, // null matches both missing field and explicit null (default value on new docs)
       postingStatus: { $ne: "reversed" },
-      receiptNumber: { $type: "string", $ne: "" },
     };
 
     const in30Days = new Date(now);
@@ -98,6 +103,8 @@ router.get("/summary", verifyUser, async (req, res) => {
       pendingStatementCount,
       unpostedReceiptCount,
       leasesExpiringSoonCount,
+      collectedThisMonthAgg,
+      collectedByMonthRaw,
     ] = await Promise.all([
       Unit.countDocuments({ business }),
       Unit.countDocuments({
@@ -139,7 +146,7 @@ router.get("/summary", verifyUser, async (req, res) => {
       }),
       RentPayment.countDocuments({
         business,
-        reversalOf: { $exists: false },
+        reversalOf: null,
         isReversed: { $ne: true },
         isCancelled: { $ne: true },
         $or: [{ postingStatus: "unposted" }, { isConfirmed: { $ne: true } }],
@@ -149,6 +156,42 @@ router.get("/summary", verifyUser, async (req, res) => {
         status: { $nin: ["inactive", "terminated", "expired", "cancelled"] },
         endDate: { $gte: now, $lte: in30Days },
       }),
+      // Direct receipt sum — authoritative "collected this month" regardless of ledger setup
+      RentPayment.aggregate([
+        {
+          $match: {
+            ...receiptBaseMatch,
+            $or: [{ paymentDate: { $gte: monthStart } }, { createdAt: { $gte: monthStart } }],
+          },
+        },
+        { $group: { _id: null, total: { $sum: { $ifNull: ["$amount", 0] } } } },
+      ]),
+      // Monthly breakdown for current year (12 buckets) — drives the FinancialOverview chart
+      RentPayment.aggregate([
+        {
+          $match: {
+            ...receiptBaseMatch,
+            $or: [
+              { paymentDate: { $gte: yearStart } },
+              { paymentDate: null, createdAt: { $gte: yearStart } },
+            ],
+          },
+        },
+        {
+          $group: {
+            _id: {
+              $month: {
+                $cond: [
+                  { $ifNull: ["$paymentDate", false] },
+                  "$paymentDate",
+                  "$createdAt",
+                ],
+              },
+            },
+            total: { $sum: { $ifNull: ["$amount", 0] } },
+          },
+        },
+      ]),
     ]);
 
     // ── Phase 2: targeted ledger aggregations using known account IDs ─────────
@@ -209,6 +252,12 @@ router.get("/summary", verifyUser, async (req, res) => {
     const totalRevenue = Number(totalRevenueAgg[0]?.total || 0);
     const monthlyRevenue = Number(monthRevenueAgg[0]?.total || 0);
     const currentMonthExpenses = Number(monthExpenseAgg[0]?.total || 0);
+    const collectedThisMonth = Number(collectedThisMonthAgg[0]?.total || 0);
+
+    // Build a 12-element array [Jan, Feb, ..., Dec] of confirmed receipt totals
+    const monthMap = {};
+    for (const row of collectedByMonthRaw) monthMap[row._id] = Number(row.total || 0);
+    const collectedByMonth = Array.from({ length: 12 }, (_, i) => monthMap[i + 1] || 0);
 
     const vacantUnits = Math.max(totalUnits - occupiedUnits, 0);
     const totalMonthlyRentDue = Number(totalMonthlyRentDueAgg?.[0]?.total || 0);
@@ -224,6 +273,8 @@ router.get("/summary", verifyUser, async (req, res) => {
       totalRevenue,
       totalDeposits,
       monthlyRevenue,
+      collectedThisMonth,
+      collectedByMonth,
       pendingPayments,
       activeTenants,
       overdueTenants,

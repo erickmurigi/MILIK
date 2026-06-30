@@ -31,7 +31,7 @@ const parseDate = (value) => {
 const getInvoiceRecognitionDate = (invoice) =>
   parseDate(invoice?.bookingDate || invoice?.invoiceDate || invoice?.createdAt);
 
-const FinancialOverview = ({ darkMode, invoices = [] }) => {
+const FinancialOverview = ({ darkMode, invoices = [], summaryData = {} }) => {
   const currentCompany      = useSelector(selectCurrentCompany);
   const currentUser         = useSelector(selectCurrentUser);
   const rentPayments        = useSelector(selectAllRentPayments);
@@ -110,6 +110,9 @@ const FinancialOverview = ({ darkMode, invoices = [] }) => {
 
   const formatChartMoneySkipZero = (value) => (Number(value) > 0 ? formatChartMoney(value) : '');
 
+  // Server-computed monthly totals (authoritative); fall back to Redux if not yet available
+  const serverByMonth = Array.isArray(summaryData?.collectedByMonth) ? summaryData.collectedByMonth : null;
+
   const chartData = useMemo(() => {
     // All 12 months of the current year in normal calendar order; future months show 0
     return MONTHS.map((monthLabel, m) => {
@@ -123,14 +126,18 @@ const FinancialOverview = ({ darkMode, invoices = [] }) => {
         expected += amountFromInvoice(invoice);
       });
 
-      rentPayments.forEach((payment) => {
-        const date = parseDate(payment?.paymentDate || payment?.createdAt);
-        if (!date || date.getFullYear() !== currentYear || date.getMonth() !== m) return;
-        if (payment?.isConfirmed !== true) return;
-        if (payment?.isReversed || payment?.isCancelled || payment?.reversalOf) return;
-        if (normalizeText(payment?.postingStatus) === 'reversed') return;
-        collected += Math.abs(Number(payment?.amount || 0));
-      });
+      if (serverByMonth) {
+        collected = serverByMonth[m] || 0;
+      } else {
+        rentPayments.forEach((payment) => {
+          const date = parseDate(payment?.paymentDate || payment?.createdAt);
+          if (!date || date.getFullYear() !== currentYear || date.getMonth() !== m) return;
+          if (payment?.isConfirmed !== true) return;
+          if (payment?.isReversed || payment?.isCancelled || payment?.reversalOf) return;
+          if (normalizeText(payment?.postingStatus) === 'reversed') return;
+          collected += Math.abs(Number(payment?.amount || 0));
+        });
+      }
 
       return {
         month: monthLabel,
@@ -139,7 +146,7 @@ const FinancialOverview = ({ darkMode, invoices = [] }) => {
         collected,
       };
     });
-  }, [currentYear, invoices, rentPayments]);
+  }, [currentYear, invoices, rentPayments, serverByMonth]);
 
   const currentMonthData = chartData[currentMonthIndex] || { expected: 0, collected: 0 };
   const currentMonthExpected = currentMonthData.expected;

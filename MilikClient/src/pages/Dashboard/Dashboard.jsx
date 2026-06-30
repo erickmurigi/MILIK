@@ -122,7 +122,7 @@ const Dashboard = ({ darkMode }) => {
               ⚠ {dashboardError}
             </div>
           )}
-          <MetricsGrid darkMode={darkMode} />
+          <MetricsGrid darkMode={darkMode} summaryData={summaryData} />
 
           <div className="dashboard-main-grid gap-2">
             <QuickActions
@@ -131,7 +131,7 @@ const Dashboard = ({ darkMode }) => {
               loading={operationalLoading}
             />
             <PropertiesOverview darkMode={darkMode} invoices={invoices} />
-            <FinancialOverview darkMode={darkMode} invoices={invoices} />
+            <FinancialOverview darkMode={darkMode} invoices={invoices} summaryData={summaryData} />
           </div>
 
           <RecentActivity darkMode={darkMode} />

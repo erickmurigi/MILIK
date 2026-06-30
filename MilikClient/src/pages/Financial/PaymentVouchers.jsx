@@ -789,10 +789,10 @@ const PaymentVouchers = () => {
       )}
 
       {showModal && (
-        <div className="absolute inset-0 z-[20] flex flex-col bg-white">
+        <div className="fixed inset-0 z-[120] flex flex-col bg-white">
 
           {/* ── Top bar ────────────────────────────────────────────────────── */}
-          <header className="shrink-0 flex items-center justify-between border-b border-[#0A3127] bg-[#0B3B2E] px-6 py-3">
+          <header className="shrink-0 flex items-center justify-between border-b border-[#0A3127] bg-[#0B3B2E] px-4 py-2.5">
             <div className="flex items-center gap-2 text-white">
               <button
                 onClick={() => setShowModal(false)}
@@ -808,14 +808,14 @@ const PaymentVouchers = () => {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowModal(false)}
-                className="rounded border border-white/20 px-4 py-1.5 text-xs font-semibold text-white/70 transition hover:bg-white/10"
+                className="rounded border border-white/20 px-3 py-1.5 text-xs font-semibold text-white/70 transition hover:bg-white/10"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving || (editingVoucherId ? !canUpdateVoucher : !canCreateVoucher)}
-                className="flex items-center gap-1.5 rounded bg-white px-5 py-1.5 text-xs font-black text-[#0B3B2E] transition hover:bg-emerald-50 disabled:opacity-50"
+                className="flex items-center gap-1.5 rounded bg-white px-4 py-1.5 text-xs font-black text-[#0B3B2E] transition hover:bg-emerald-50 disabled:opacity-50"
               >
                 <FaSave size={10} />
                 {saving ? "Saving…" : editingVoucherId ? "Update Voucher" : "Save Voucher"}
@@ -826,34 +826,35 @@ const PaymentVouchers = () => {
           {/* ── Body ───────────────────────────────────────────────────────── */}
           <div className="flex flex-1 min-h-0 overflow-hidden">
 
-            {/* ── LEFT: Form ─────────────────────────────────────────────── */}
-            <div className="flex-1 overflow-y-auto px-8 py-7 space-y-7">
+            {/* ── LEFT: Form (scrollable) ─────────────────────────────────── */}
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5 min-w-0">
 
               {/* Source requisition banner */}
               {form.sourceRequisitionNo && (
-                <div className="flex items-start gap-3 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3">
-                  <FaFileInvoiceDollar size={14} className="mt-0.5 shrink-0 text-violet-400" />
+                <div className="flex items-start gap-3 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2.5">
+                  <FaFileInvoiceDollar size={13} className="mt-0.5 shrink-0 text-violet-400" />
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-wider text-violet-500">Linked from Requisition</p>
                     <p className="mt-0.5 text-sm font-bold text-violet-800">{form.sourceRequisitionNo}</p>
-                    <p className="mt-0.5 text-xs text-violet-500">This voucher will be linked to the requisition on save.</p>
                   </div>
                 </div>
               )}
 
               {/* ── SECTION 1: Voucher Details ──────────────────────────── */}
               <section>
-                <div className="mb-4 flex items-center gap-3">
-                  <div className="h-5 w-1 rounded-full bg-[#0B3B2E]" />
-                  <h2 className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Voucher Details</h2>
+                <div className="mb-3 flex items-center gap-2">
+                  <div className="h-4 w-0.5 rounded-full bg-[#0B3B2E]" />
+                  <h2 className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Voucher Details</h2>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <AppSelect
-                    label="Category *"
-                    value={form.category}
-                    onChange={(val) => setForm((prev) => ({ ...prev, category: val ?? prev.category }))}
-                    options={categoryOptions}
-                  />
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  <div className="lg:col-span-2">
+                    <AppSelect
+                      label="Category *"
+                      value={form.category}
+                      onChange={(val) => setForm((prev) => ({ ...prev, category: val ?? prev.category }))}
+                      options={categoryOptions}
+                    />
+                  </div>
                   <label className="block">
                     <span className="mb-0.5 block text-xs font-semibold text-slate-700">Reference / Cheque No.</span>
                     <input
@@ -872,32 +873,32 @@ const PaymentVouchers = () => {
                       className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                     />
                   </label>
-                  {!editingVoucherId && (
-                    <div>
-                      <AppSelect
-                        label="Save as Status"
-                        value={form.status}
-                        onChange={(val) => setForm((prev) => ({ ...prev, status: val ?? "draft" }))}
-                        options={[
-                          { value: "draft",    label: "Draft — awaiting approval" },
-                          { value: "approved", label: "Approved — ready to pay" },
-                          { value: "paid",     label: "Paid — settle immediately" },
-                        ]}
-                      />
-                      {form.status === "paid" && (
-                        <p className="mt-1 text-[10px] font-semibold text-amber-600">Paid will immediately post both the accrual and settlement entries.</p>
-                      )}
-                    </div>
-                  )}
                 </div>
+                {!editingVoucherId && (
+                  <div className="mt-3">
+                    <AppSelect
+                      label="Save as Status"
+                      value={form.status}
+                      onChange={(val) => setForm((prev) => ({ ...prev, status: val ?? "draft" }))}
+                      options={[
+                        { value: "draft",    label: "Draft — awaiting approval" },
+                        { value: "approved", label: "Approved — ready to pay" },
+                        { value: "paid",     label: "Paid — settle immediately" },
+                      ]}
+                    />
+                    {form.status === "paid" && (
+                      <p className="mt-1 text-[10px] font-semibold text-amber-600">Paid will immediately post both the accrual and settlement entries.</p>
+                    )}
+                  </div>
+                )}
               </section>
 
               {/* ── SECTION 2: Property ─────────────────────────────────── */}
               {hasPMS && (
                 <section>
-                  <div className="mb-4 flex items-center gap-3">
-                    <div className="h-5 w-1 rounded-full bg-orange-400" />
-                    <h2 className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Property Linkage</h2>
+                  <div className="mb-3 flex items-center gap-2">
+                    <div className="h-4 w-0.5 rounded-full bg-orange-400" />
+                    <h2 className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Property Linkage</h2>
                   </div>
                   <AppSelect
                     label={selectedCategoryMeta?.propertyRequired ? "Property *" : "Property (optional)"}
@@ -908,9 +909,9 @@ const PaymentVouchers = () => {
                     searchable
                     clearable
                   />
-                  <p className="mt-1.5 text-[11px] text-slate-400">
+                  <p className="mt-1 text-[11px] text-slate-400">
                     {selectedCategoryMeta?.propertyRequired
-                      ? "Required for this category. The voucher will be linked to the property."
+                      ? "Required for this category."
                       : "Leave blank for company-wide or petty-cash activity."}
                   </p>
                 </section>
@@ -918,11 +919,11 @@ const PaymentVouchers = () => {
 
               {/* ── SECTION 3: Accounting Entries ───────────────────────── */}
               <section>
-                <div className="mb-4 flex items-center gap-3">
-                  <div className="h-5 w-1 rounded-full bg-blue-500" />
-                  <h2 className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Accounting Entries</h2>
+                <div className="mb-3 flex items-center gap-2">
+                  <div className="h-4 w-0.5 rounded-full bg-blue-500" />
+                  <h2 className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Accounting Entries</h2>
                 </div>
-                <div className="space-y-4 rounded-xl border border-blue-100 bg-blue-50/40 p-5">
+                <div className="space-y-3 rounded-lg border border-blue-100 bg-blue-50/40 p-4">
                   <div>
                     <AppSelect
                       label="Credit — Liability / Payable Account *"
@@ -932,7 +933,7 @@ const PaymentVouchers = () => {
                       placeholder="Search liability / payable account…"
                       searchable
                     />
-                    <p className="mt-1.5 text-[10px] text-slate-500">Credited on accrual. Debited when settled — clears the payable.</p>
+                    <p className="mt-1 text-[10px] text-slate-500">Credited on accrual. Debited when settled — clears the payable.</p>
                   </div>
 
                   {selectedCategoryMeta?.explicitDebitAccount && (
@@ -946,7 +947,7 @@ const PaymentVouchers = () => {
                         searchable
                         clearable
                       />
-                      <p className="mt-1.5 text-[10px] text-slate-500">
+                      <p className="mt-1 text-[10px] text-slate-500">
                         {form.category === "petty_cash_float"
                           ? "The petty cash asset account that will receive the float top-up."
                           : "The expense account debited when this voucher is approved."}
@@ -955,9 +956,9 @@ const PaymentVouchers = () => {
                   )}
 
                   {!selectedCategoryMeta?.explicitDebitAccount && (
-                    <div className="flex items-start gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-                      <FaFileInvoiceDollar size={12} className="mt-0.5 shrink-0 text-slate-400" />
-                      <p className="text-[11px] text-slate-500">Debit account is determined automatically from the selected category using standard accounts-payable posting logic.</p>
+                    <div className="flex items-start gap-2 rounded border border-slate-200 bg-white px-3 py-2">
+                      <FaFileInvoiceDollar size={11} className="mt-0.5 shrink-0 text-slate-400" />
+                      <p className="text-[11px] text-slate-500">Debit account is determined automatically from the selected category.</p>
                     </div>
                   )}
 
@@ -971,18 +972,18 @@ const PaymentVouchers = () => {
                       searchable
                       clearable
                     />
-                    <p className="mt-1.5 text-[10px] text-slate-500">The cash or bank account credited when payment is made. Required to mark as Paid.</p>
+                    <p className="mt-1 text-[10px] text-slate-500">The cash or bank account credited when payment is made. Required to mark as Paid.</p>
                   </div>
                 </div>
               </section>
 
               {/* ── SECTION 4: Amount & Notes ────────────────────────────── */}
               <section>
-                <div className="mb-4 flex items-center gap-3">
-                  <div className="h-5 w-1 rounded-full bg-emerald-500" />
-                  <h2 className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Amount & Notes</h2>
+                <div className="mb-3 flex items-center gap-2">
+                  <div className="h-4 w-0.5 rounded-full bg-emerald-500" />
+                  <h2 className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Amount & Notes</h2>
                 </div>
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {/* Service Provider */}
                   {serviceProvidersList.length > 0 && (
                     <label className="block">
@@ -1011,7 +1012,7 @@ const PaymentVouchers = () => {
                   <label className="block">
                     <span className="text-xs font-bold text-slate-600">Amount (KES) *</span>
                     <div className="relative mt-1">
-                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-base font-black text-slate-400">KES</span>
+                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-black text-slate-400">KES</span>
                       <input
                         type="number"
                         min="0"
@@ -1026,7 +1027,7 @@ const PaymentVouchers = () => {
                           setForm((prev) => ({ ...prev, amount: e.target.value, whtAmount: newWht }));
                         }}
                         placeholder="0.00"
-                        className="w-full rounded-xl border-2 border-slate-200 pl-14 pr-4 py-3.5 text-2xl font-black text-slate-900 placeholder:text-slate-200 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10"
+                        className="w-full rounded-lg border-2 border-slate-200 pl-12 pr-4 py-2.5 text-xl font-black text-slate-900 placeholder:text-slate-200 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10"
                       />
                     </div>
                   </label>
@@ -1057,7 +1058,7 @@ const PaymentVouchers = () => {
                   <label className="block">
                     <span className="text-xs font-bold text-slate-600">Narration / Description</span>
                     <textarea
-                      rows={4}
+                      rows={3}
                       value={form.narration}
                       onChange={(e) => setForm((prev) => ({ ...prev, narration: e.target.value }))}
                       placeholder="Brief description of this payment…"
@@ -1066,38 +1067,41 @@ const PaymentVouchers = () => {
                   </label>
                 </div>
               </section>
+
+              {/* bottom padding so last field clears scrollbar */}
+              <div className="h-4 shrink-0" />
             </div>
 
             {/* ── RIGHT: Live Preview ─────────────────────────────────────── */}
-            <div className="w-[300px] shrink-0 overflow-y-auto border-l border-slate-200 bg-slate-50 px-5 py-6 space-y-4">
+            <div className="w-[260px] shrink-0 overflow-y-auto border-l border-slate-200 bg-slate-50 px-4 py-4 space-y-3">
 
               {/* Amount hero */}
-              <div className="rounded-xl bg-[#0B3B2E] px-5 py-4 text-white">
+              <div className="rounded-lg bg-[#0B3B2E] px-4 py-3 text-white">
                 <p className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-400">Payment Amount</p>
-                <p className="mt-2 text-3xl font-black tabular-nums">
+                <p className="mt-1.5 text-2xl font-black tabular-nums leading-none">
                   {form.amount && Number(form.amount) > 0
                     ? `KES ${Number(form.amount).toLocaleString("en-KE", { minimumFractionDigits: 2 })}`
-                    : <span className="text-2xl text-emerald-700">KES —</span>}
+                    : <span className="text-xl text-emerald-700">KES —</span>}
                 </p>
-                <div className="mt-3 flex items-center justify-between text-[10px] text-emerald-400">
+                <div className="mt-2.5 flex items-center justify-between text-[10px] text-emerald-400">
                   <span>Due</span>
                   <span className="font-bold text-emerald-200">{form.dueDate || "—"}</span>
                 </div>
                 <div className="mt-1 flex items-center justify-between text-[10px] text-emerald-400">
                   <span>Category</span>
-                  <span className="font-bold text-emerald-200 text-right max-w-[150px] truncate">{selectedCategoryMeta?.label || "—"}</span>
+                  <span className="font-bold text-emerald-200 text-right max-w-[130px] truncate">{selectedCategoryMeta?.label || "—"}</span>
                 </div>
               </div>
 
               {/* Journal entry preview */}
-              <div className="rounded-xl border border-slate-200 bg-white p-4">
-                <p className="mb-3 text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Journal Preview</p>
+              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                <p className="mb-2 text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Journal Preview</p>
 
                 {/* Accrual entries */}
-                <p className="mb-2 text-[9px] font-bold uppercase tracking-wider text-blue-400">On Accrual / Approval</p>
+                <p className="mb-1.5 text-[9px] font-bold uppercase tracking-wider text-blue-400">On Accrual / Approval</p>
                 <div className="space-y-1 mb-1">
-                  <div className="flex items-start gap-2 rounded-lg bg-slate-50 px-2.5 py-2">
-                    <span className="mt-0.5 shrink-0 rounded bg-blue-100 px-1.5 py-0.5 text-[9px] font-black text-blue-700">DR</span>
+                  <div className="flex items-start gap-1.5 rounded bg-slate-50 px-2 py-1.5">
+                    <span className="mt-0.5 shrink-0 rounded bg-blue-100 px-1 py-0.5 text-[8px] font-black text-blue-700">DR</span>
                     <span className="min-w-0 flex-1 text-[10px] font-semibold text-slate-700 break-words">
                       {selectedDebitAcc
                         ? `${selectedDebitAcc.code} – ${selectedDebitAcc.name}`
@@ -1106,8 +1110,8 @@ const PaymentVouchers = () => {
                           : <span className="italic text-slate-400">Auto from category</span>}
                     </span>
                   </div>
-                  <div className="flex items-start gap-2 rounded-lg bg-slate-50 px-2.5 py-2">
-                    <span className="mt-0.5 shrink-0 rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-black text-emerald-700">CR</span>
+                  <div className="flex items-start gap-1.5 rounded bg-slate-50 px-2 py-1.5">
+                    <span className="mt-0.5 shrink-0 rounded bg-emerald-100 px-1 py-0.5 text-[8px] font-black text-emerald-700">CR</span>
                     <span className="min-w-0 flex-1 text-[10px] font-semibold text-slate-700 break-words">
                       {selectedLiabilityAcc
                         ? `${selectedLiabilityAcc.code} – ${selectedLiabilityAcc.name}`
@@ -1119,19 +1123,19 @@ const PaymentVouchers = () => {
                 {/* Settlement entries */}
                 {selectedSettlementAcc && (
                   <>
-                    <div className="my-3 h-px bg-slate-100" />
-                    <p className="mb-2 text-[9px] font-bold uppercase tracking-wider text-emerald-500">On Settlement / Payment</p>
+                    <div className="my-2 h-px bg-slate-100" />
+                    <p className="mb-1.5 text-[9px] font-bold uppercase tracking-wider text-emerald-500">On Settlement / Payment</p>
                     <div className="space-y-1">
-                      <div className="flex items-start gap-2 rounded-lg bg-slate-50 px-2.5 py-2">
-                        <span className="mt-0.5 shrink-0 rounded bg-blue-100 px-1.5 py-0.5 text-[9px] font-black text-blue-700">DR</span>
+                      <div className="flex items-start gap-1.5 rounded bg-slate-50 px-2 py-1.5">
+                        <span className="mt-0.5 shrink-0 rounded bg-blue-100 px-1 py-0.5 text-[8px] font-black text-blue-700">DR</span>
                         <span className="min-w-0 flex-1 text-[10px] font-semibold text-slate-700 break-words">
                           {selectedLiabilityAcc
                             ? `${selectedLiabilityAcc.code} – ${selectedLiabilityAcc.name}`
                             : <span className="italic text-slate-400">Liability account</span>}
                         </span>
                       </div>
-                      <div className="flex items-start gap-2 rounded-lg bg-slate-50 px-2.5 py-2">
-                        <span className="mt-0.5 shrink-0 rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-black text-emerald-700">CR</span>
+                      <div className="flex items-start gap-1.5 rounded bg-slate-50 px-2 py-1.5">
+                        <span className="mt-0.5 shrink-0 rounded bg-emerald-100 px-1 py-0.5 text-[8px] font-black text-emerald-700">CR</span>
                         <span className="min-w-0 flex-1 text-[10px] font-semibold text-slate-700 break-words">
                           {selectedSettlementAcc.code} – {selectedSettlementAcc.name}
                           {Number(form.whtAmount || 0) > 0 && (
@@ -1142,8 +1146,8 @@ const PaymentVouchers = () => {
                         </span>
                       </div>
                       {Number(form.whtAmount || 0) > 0 && (
-                        <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-100 px-2.5 py-2">
-                          <span className="mt-0.5 shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-black text-amber-700">CR</span>
+                        <div className="flex items-start gap-1.5 rounded bg-amber-50 border border-amber-100 px-2 py-1.5">
+                          <span className="mt-0.5 shrink-0 rounded bg-amber-100 px-1 py-0.5 text-[8px] font-black text-amber-700">CR</span>
                           <span className="min-w-0 flex-1 text-[10px] font-semibold text-amber-800 break-words">
                             2141 – WHT Payable
                             <span className="block text-[9px] text-amber-600 font-normal">
@@ -1158,9 +1162,9 @@ const PaymentVouchers = () => {
               </div>
 
               {/* Workflow indicator */}
-              <div className="rounded-xl border border-slate-200 bg-white p-4">
-                <p className="mb-3 text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Approval Workflow</p>
-                <div className="space-y-3">
+              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                <p className="mb-2 text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Approval Workflow</p>
+                <div className="space-y-2">
                   {[
                     { key: "draft",    label: "Draft",    desc: "Voucher recorded, pending review" },
                     { key: "approved", label: "Approved", desc: "Cleared for payment settlement" },
@@ -1170,13 +1174,13 @@ const PaymentVouchers = () => {
                     const currentOrder = statusOrder[form.status] ?? 0;
                     const active = i <= currentOrder;
                     return (
-                      <div key={step.key} className="flex items-start gap-3">
-                        <div className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-black transition-colors ${active ? "bg-[#0B3B2E] text-white" : "bg-slate-100 text-slate-400"}`}>
+                      <div key={step.key} className="flex items-start gap-2">
+                        <div className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[8px] font-black transition-colors ${active ? "bg-[#0B3B2E] text-white" : "bg-slate-100 text-slate-400"}`}>
                           {i + 1}
                         </div>
                         <div>
-                          <p className={`text-xs font-bold ${active ? "text-slate-800" : "text-slate-400"}`}>{step.label}</p>
-                          <p className="text-[10px] text-slate-400">{step.desc}</p>
+                          <p className={`text-[11px] font-bold leading-tight ${active ? "text-slate-800" : "text-slate-400"}`}>{step.label}</p>
+                          <p className="text-[9px] text-slate-400">{step.desc}</p>
                         </div>
                       </div>
                     );
@@ -1184,13 +1188,13 @@ const PaymentVouchers = () => {
                 </div>
               </div>
 
-              {/* Bottom save button (duplicate for right-panel convenience) */}
+              {/* Bottom save button */}
               <button
                 onClick={handleSave}
                 disabled={saving || (editingVoucherId ? !canUpdateVoucher : !canCreateVoucher)}
-                className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#0B3B2E] py-3 text-sm font-black text-white transition hover:bg-[#0A3127] disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-2 rounded-lg bg-[#0B3B2E] py-2.5 text-sm font-black text-white transition hover:bg-[#0A3127] disabled:opacity-50"
               >
-                <FaSave size={12} />
+                <FaSave size={11} />
                 {saving ? "Saving…" : editingVoucherId ? "Update Voucher" : "Save Voucher"}
               </button>
             </div>
