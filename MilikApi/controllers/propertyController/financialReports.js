@@ -1864,9 +1864,14 @@ export const getTrialBalanceExceptions = async (req, res, next) => {
 
     const bizId = new mongoose.Types.ObjectId(String(businessId));
 
-    // Get net balance per account from the ledger
+    // Get net balance per account from the ledger.
+    // Must include both "approved" and "reversed" entries so that reversed
+    // originals and their correcting entries net to zero. Using only "approved"
+    // would leave the correction debit without its original credit, triggering
+    // false-positive abnormal-balance warnings on receipts/invoices that were
+    // legitimately reversed and re-entered.
     const accountBalances = await FinancialLedgerEntry.aggregate([
-      { $match: { business: bizId, status: "approved" } },
+      { $match: { business: bizId, status: { $in: REPORT_LEDGER_STATUSES } } },
       {
         $group: {
           _id: "$accountId",
@@ -1968,9 +1973,10 @@ export const getFinancialRatios = async (req, res, next) => {
 
     const bizId = new mongoose.Types.ObjectId(String(businessId));
 
-    // Get per-account net balances
+    // Get per-account net balances — use REPORT_LEDGER_STATUSES so reversed
+    // originals and their corrections net to zero before ratio calculation.
     const rows = await FinancialLedgerEntry.aggregate([
-      { $match: { business: bizId, status: "approved" } },
+      { $match: { business: bizId, status: { $in: REPORT_LEDGER_STATUSES } } },
       {
         $group: {
           _id: "$accountId",
@@ -2078,12 +2084,16 @@ export const performYearEndClose = async (req, res, next) => {
 
     const bizId = new mongoose.Types.ObjectId(String(businessId));
 
-    // Sum income and expense ledger entries for the year
+    // Sum income and expense ledger entries for the year.
+    // Must use REPORT_LEDGER_STATUSES (approved + reversed) so that reversed
+    // originals and their correcting entries net to zero — same logic as every
+    // other financial report. Using "approved" only would double-count the
+    // debit leg of a reversal while missing the original credit, understating income.
     const rows = await FinancialLedgerEntry.aggregate([
       {
         $match: {
           business: bizId,
-          status: "approved",
+          status: { $in: REPORT_LEDGER_STATUSES },
           transactionDate: { $gte: yearStart, $lte: yearEnd },
         },
       },
