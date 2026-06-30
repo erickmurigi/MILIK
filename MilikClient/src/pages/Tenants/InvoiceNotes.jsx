@@ -679,9 +679,34 @@ const InvoiceNotes = () => {
       return;
     }
 
+    if (Number(amount) > 10_000_000) {
+      toast.error("Amount exceeds KES 10,000,000 — please verify for any typos.");
+      return;
+    }
+
+    if (!noteDate) {
+      toast.error("Note date is required.");
+      return;
+    }
+
+    if (new Date(noteDate) > new Date()) {
+      toast.error("Note date cannot be in the future.");
+      return;
+    }
+
     if (isCreditNote && !resolvedSourceInvoiceId) {
       toast.error("A source invoice is required for credit notes.");
       return;
+    }
+
+    if (isCreditNote && selectedSourceInvoice) {
+      const sourceAmount = Number(selectedSourceInvoice.amount || 0);
+      if (sourceAmount > 0 && Number(amount) > sourceAmount) {
+        toast.error(
+          `Credit note amount (${formatCurrency(amount)}) exceeds the source invoice total (${formatCurrency(sourceAmount)}). Verify the amount.`
+        );
+        return;
+      }
     }
 
     if (!isCreditNote && !selectedInvoiceItem) {

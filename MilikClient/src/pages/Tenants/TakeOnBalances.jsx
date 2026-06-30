@@ -712,6 +712,10 @@ const TakeOnBalances = () => {
   };
 
   const openEditModal = (row) => {
+    if (Number(row.allocated || 0) > 0) {
+      toast.error("This take-on balance has allocations and cannot be edited. Reverse it instead.");
+      return;
+    }
     setModalMode("edit");
     setSelectedRow(row);
     setForm({
@@ -832,11 +836,40 @@ const TakeOnBalances = () => {
       if (!form.propertyId) throw new Error("Property is required.");
       if (!form.tenantId) throw new Error("Tenant is required.");
       if (Number(form.amount || 0) <= 0) throw new Error("Amount must be greater than zero.");
+      if (Number(form.amount || 0) > 10_000_000) {
+        throw new Error("Amount exceeds KES 10,000,000 — please verify for any typos.");
+      }
+      if (!form.effectiveDate) throw new Error("Effective date is required.");
+      if (new Date(form.effectiveDate) > new Date()) {
+        throw new Error("Effective date cannot be in the future. Take-on balances are historical migration entries.");
+      }
       if (form.billItem === "utility" && !String(form.utilityLabel || "").trim()) {
         throw new Error("Enter the utility name for this take-on balance.");
       }
       if (form.type === "credit" && !form.openingBalanceAccountId) {
         throw new Error("Select the opening balance posting account for this credit take-on.");
+      }
+      if (modalMode === "edit" && Number(selectedRow?.allocated || 0) > 0) {
+        throw new Error("This take-on balance has allocations and cannot be edited.");
+      }
+      if (form.type === "debit" && modalMode === "create") {
+        const billItemKey =
+          form.billItem === "utility"
+            ? `utility:${String(form.utilityLabel || "").trim().toLowerCase().replace(/\s+/g, "_")}`
+            : form.billItem;
+        const duplicate = rows.find(
+          (row) =>
+            normalizeId(row.tenant?._id || row.tenant) === normalizeId(form.tenantId) &&
+            row.billItemKey === billItemKey &&
+            String(row.type || "").toLowerCase() === "debit"
+        );
+        if (duplicate) {
+          const label =
+            billItemOptions.find((o) => o.value === form.billItem)?.defaultLabel || form.billItem;
+          throw new Error(
+            `A debit take-on balance for "${label}" already exists for this tenant. Edit or delete the existing entry.`
+          );
+        }
       }
 
       setSaving(true);
