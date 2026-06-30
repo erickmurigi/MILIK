@@ -1968,10 +1968,10 @@ export const bulkImportTenants = async (req, res, next) => {
         const normalizedPhoneNumber = normalizeString(record.phoneNumber);
         const normalizedIdNumber = normalizeString(record.idNumber);
 
-        if (!normalizedTenantName || !normalizedPhoneNumber || !normalizedIdNumber) {
+        if (!normalizedTenantName) {
           failed.push({
             tenantName: record.tenantName,
-            error: "Tenant name, phone number, and ID number are required",
+            error: "Tenant Name is required",
             row: rowIndex,
           });
           continue;
@@ -2046,7 +2046,7 @@ export const bulkImportTenants = async (req, res, next) => {
         }
 
         const normalizedIdNumberKey = String(normalizedIdNumber || "").trim().toLowerCase();
-        if (existingIds.has(normalizedIdNumberKey)) {
+        if (normalizedIdNumberKey && existingIds.has(normalizedIdNumberKey)) {
           failed.push({
             tenantName: record.tenantName,
             error: `Duplicate ID number: ${record.idNumber}`,
@@ -2167,7 +2167,7 @@ export const bulkImportTenants = async (req, res, next) => {
 
         docsToInsert.push({ doc: newTenant, primaryUnitDoc, requestedUnitDocs, importedTenantOccupiesUnits, rowIndex, record });
 
-        existingIds.add(normalizedIdNumberKey);
+        if (normalizedIdNumberKey) existingIds.add(normalizedIdNumberKey);
         existingCodes.add(String(tenantCode).toLowerCase());
         if (importedTenantOccupiesUnits) {
           requestedUnitDocs.forEach((unitDoc) => {

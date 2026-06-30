@@ -10,10 +10,10 @@ export const generateLandlordsTemplate = () => {
     [
       'Landlord Name *',
       'Landlord Type *',
-      'Reg/ID Number *',
-      'Tax PIN *',
-      'Email *',
-      'Phone Number *',
+      'Reg/ID Number',
+      'Tax PIN',
+      'Email',
+      'Phone Number',
       'Postal Address',
       'Location',
       'Status',
@@ -42,12 +42,12 @@ export const generateLandlordsTemplate = () => {
     ['REQUIRED FIELDS (marked with *)'],
     ['• Landlord Name: Full name of the landlord or company'],
     ['• Landlord Type: Must be one of: Individual, Company, Partnership, Trust'],
-    ['• Reg/ID Number: Registration or ID number (must be unique)'],
-    ['• Tax PIN: Tax identification number (must be unique)'],
-    ['• Email: Valid email address (must be unique)'],
-    ['• Phone Number: Contact phone number (include country code if international)'],
     [''],
-    ['OPTIONAL FIELDS'],
+    ['OPTIONAL FIELDS (leave blank or use a dash - if not available)'],
+    ['• Reg/ID Number: National ID or company registration number (must be unique if provided)'],
+    ['• Tax PIN: Tax identification number (must be unique if provided)'],
+    ['• Email: Valid email address (must be unique if provided)'],
+    ['• Phone Number: Contact phone number'],
     ['• Postal Address: Mailing address'],
     ['• Location: Physical location or area'],
     ['• Status: Active or Archived (default: Active)'],
@@ -110,11 +110,12 @@ export const generateLandlordsTemplate = () => {
     [''],
     ['IMPORTANT NOTES'],
     ['• Do not modify the column headers in the Data sheet'],
-    ['• All required fields marked with * must have values'],
+    ['• Only Landlord Name and Landlord Type are required'],
+    ['• For optional fields you do not have, leave the cell blank or enter a dash (-)'],
     ['• Landlord Type must match exactly: Individual, Company, Partnership, or Trust'],
     ['• Status must be either: Active or Archived'],
     ['• Portal Access must be either: Enabled or Disabled'],
-    ['• Email, Reg/ID Number, and Tax PIN must be unique across all landlords'],
+    ['• Email, Reg/ID Number, and Tax PIN must be unique if provided — duplicates will be skipped'],
     ['• Delete these instruction rows before uploading'],
     ['• Maximum 1000 landlords per import']
   ]);
@@ -247,14 +248,20 @@ export const parseLandlordsExcel = (file) => {
             return row['Portal Access'] || row['portalAccess'] || 'Disabled';
           };
           
+          // Treat dash placeholders the same as blank — user has no data for that field
+          const stripPlaceholder = (v) => {
+            const s = String(v || "").trim();
+            return /^-+$|^n\/a$|^na$|^none$/i.test(s) ? "" : s;
+          };
+
           return {
             rowNumber: index + 2, // Excel row (1 is header)
             landlordName: getName(row).trim(),
             landlordType: getType(row).trim(),
-            regId: getRegId(row).trim(),
-            taxPin: getTaxPin(row).trim(),
-            email: getEmail(row).trim().toLowerCase(),
-            phoneNumber: getPhone(row).trim(),
+            regId: stripPlaceholder(getRegId(row)),
+            taxPin: stripPlaceholder(getTaxPin(row)),
+            email: stripPlaceholder(getEmail(row)).toLowerCase(),
+            phoneNumber: stripPlaceholder(getPhone(row)),
             postalAddress: getAddress(row).trim(),
             location: getLocation(row).trim(),
             status: getStatus(row).trim(),
@@ -278,21 +285,13 @@ export const parseLandlordsExcel = (file) => {
         mappedData.forEach((record) => {
           const rowErrors = [];
           
-          // Required field validations
+          // Required field validations — only Name is truly required
           if (!record.landlordName) {
             rowErrors.push('Landlord Name is required');
           }
-          if (!record.regId) {
-            rowErrors.push('Reg/ID Number is required');
-          }
-          if (!record.taxPin) {
-            rowErrors.push('Tax PIN is required');
-          }
+          // Optional fields: validate format only when a value is provided
           if (record.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(record.email)) {
-            rowErrors.push('Invalid email format');
-          }
-          if (!record.phoneNumber) {
-            rowErrors.push('Phone Number is required');
+            rowErrors.push('Invalid email format — leave blank or use a dash (-) if no email');
           }
           
           // Enum validations
@@ -433,10 +432,10 @@ export const generatePropertiesTemplate = () => {
     [
       'Property Name *',
       'Property Code',
-      'LR Number *',
-      'Property Type *',
+      'LR Number',
+      'Property Type',
       'Category',
-      'Town/City *',
+      'Town/City',
       'Estate/Area',
       'Road/Street',
       'Zone/Region',
@@ -468,14 +467,14 @@ export const generatePropertiesTemplate = () => {
     [''],
     ['REQUIRED FIELDS (marked with *)'],
     ['• Property Name: Full name of the property'],
-    ['• LR Number: Land Registry Number (must be unique)'],
-    ['• Property Type: Residential, Commercial, Mixed Use, Industrial, Agricultural, Special Purpose'],
-    ['• Town/City: Town or city location'],
     ['• Landlord Name: Must match an existing landlord in the system'],
     [''],
-    ['OPTIONAL FIELDS'],
+    ['OPTIONAL FIELDS (leave blank or use a dash - if not available)'],
     ['• Property Code: Unique code (e.g., PRO001, PRO002) - System auto-generates if not provided'],
+    ['• LR Number: Land Registry Number (must be unique if provided)'],
+    ['• Property Type: Residential, Commercial, Mixed Use, Industrial, Agricultural, Special Purpose (default: Residential)'],
     ['• Category: Property category (e.g., Apartment, House, Office)'],
+    ['• Town/City: Town or city location'],
     ['• Estate/Area: Estate or area name'],
     ['• Road/Street: Road or street name'],
     ['• Zone/Region: Zone or region'],
@@ -547,10 +546,10 @@ export const generatePropertiesTemplate = () => {
     [''],
     ['IMPORTANT NOTES'],
     ['• Do not modify the column headers in the Data sheet'],
-    ['• All required fields marked with * must have values'],
-    ['• Property Code is optional - if not provided, system generates automatically (PRO001, PRO002, etc.)'],
-    ['• If you provide a Property Code, it must be unique and not already in the system'],
-    ['• Property Code and LR Number must be unique'],
+    ['• Only Property Name and Landlord Name are required'],
+    ['• For optional fields you do not have, leave the cell blank or enter a dash (-)'],
+    ['• Property Code is optional - system auto-generates if left blank'],
+    ['• LR Number must be unique if provided — duplicates will be skipped'],
     ['• Property Type must match exactly: Residential, Commercial, Mixed Use, Industrial, Agricultural, or Special Purpose'],
     ['• Landlord Name must match an existing landlord in your system (first landlord will be set as primary)'],
     ['• Status must be either: active or archived (default: active if not specified)'],
@@ -663,17 +662,23 @@ export const parsePropertiesExcel = (file) => {
           };
           const getStatus = (row) => row['Status'] || row['status'] || 'active';
           
+          // Strip dash/N/A placeholders from optional text fields
+          const stripPropPlaceholder = (v) => {
+            const s = String(v || "").trim();
+            return /^-+$|^n\/a$|^na$|^none$/i.test(s) ? "" : s;
+          };
+
           return {
             rowNumber: index + 2,
             propertyName: getName(row).trim(),
             propertyCode: getCode(row).trim(), // Can be empty - system will auto-generate
-            lrNumber: getLR(row).trim(),
+            lrNumber: stripPropPlaceholder(getLR(row)),
             propertyType: getType(row).trim(),
-            category: getCategory(row).trim(),
-            townCityState: getTown(row).trim(),
-            estateArea: getEstate(row).trim(),
-            roadStreet: getRoad(row).trim(),
-            zoneRegion: getZone(row).trim(),
+            category: stripPropPlaceholder(getCategory(row)),
+            townCityState: stripPropPlaceholder(getTown(row)),
+            estateArea: stripPropPlaceholder(getEstate(row)),
+            roadStreet: stripPropPlaceholder(getRoad(row)),
+            zoneRegion: stripPropPlaceholder(getZone(row)),
             landlordName: getLandlord(row).trim(),
             totalUnits: getUnits(row),
             status: getStatus(row).trim().toLowerCase()
@@ -866,8 +871,8 @@ export const generateUnitsTemplate = (properties = []) => {
       'Unit Number *',
       'Property Code *',
       'Unit Type *',
-      'Rent *',
-      'Deposit *',
+      'Rent',
+      'Deposit',
       'Billing Frequency',
       'Amenities',
       'Utilities Included',
@@ -898,10 +903,10 @@ export const generateUnitsTemplate = (properties = []) => {
     ['• Unit Number: Unique identifier for the unit (e.g., A1, 101, UNIT-001)'],
     ['• Property Code: Must match an existing property code in the system (e.g., PRO001, PRO002)'],
     ['• Unit Type: studio, 1bed, 2bed, 3bed, 4bed, or commercial'],
-    ['• Rent: Monthly rent in Kenyan Shillings (KES)'],
-    ['• Deposit: Security deposit amount in KES'],
     [''],
-    ['OPTIONAL FIELDS'],
+    ['OPTIONAL FIELDS (leave blank or use a dash - if not available)'],
+    ['• Rent: Monthly rent in Kenyan Shillings (KES) — defaults to 0 if left blank'],
+    ['• Deposit: Security deposit amount in KES — defaults to 0 if left blank'],
     ['• Amenities: Comma-separated list (e.g., WiFi, AC, Parking, Garden)'],
     ['• Utilities Included: Comma-separated utilities (e.g., Water, Electricity, Garbage)'],
     ['• Status: vacant, occupied, maintenance, reserved, or archived (default: vacant)'],
@@ -977,11 +982,12 @@ export const generateUnitsTemplate = (properties = []) => {
     [''],
     ['IMPORTANT NOTES'],
     ['• Do not modify the column headers in the Data sheet'],
-    ['• All required fields marked with * must have values'],
+    ['• Only Unit Number, Property Code, and Unit Type are required'],
+    ['• Leave Rent and Deposit blank (or use a dash -) to default to 0 — you can update them later'],
     ['• Unit Number must be unique within the same property'],
     ['• Property Code must match exactly with existing property codes in your system'],
     ['• Unit Type must be one of: studio, 1bed, 2bed, 3bed, 4bed, commercial (case-sensitive)'],
-    ['• Rent and Deposit must be numeric values (numbers only, no currency symbols)'],
+    ['• Rent and Deposit must be numeric values when provided (numbers only, no currency symbols)'],
     ['• Status must be one of: vacant, occupied, maintenance, reserved, archived (lowercase)'],
     ['• Amenities and Utilities Included are optional - separate multiple items with commas'],
     ['• Delete these instruction rows before uploading'],
@@ -1099,15 +1105,19 @@ export const parseUnitsExcel = (file) => {
           const getUnitNumber = (row) => row['Unit Number *'] || row['Unit Number'] || row['unitNumber'] || '';
           const getPropertyCode = (row) => row['Property Code *'] || row['Property Code'] || row['propertyCode'] || '';
           const getUnitType = (row) => row['Unit Type *'] || row['Unit Type'] || row['unitType'] || 'studio';
+          const isUnitPlaceholder = (v) => {
+            const s = String(v || "").trim();
+            return /^-+$|^n\/a$|^na$|^none$/i.test(s);
+          };
           const getRent = (row) => {
             const val = row['Rent *'] || row['Rent'] || row['rent'] || '';
-            if (String(val || '').trim() === '') return undefined;
+            if (String(val || '').trim() === '' || isUnitPlaceholder(val)) return undefined;
             const num = parseFloat(val);
             return isNaN(num) ? Number.NaN : num;
           };
           const getDeposit = (row) => {
             const val = row['Deposit *'] || row['Deposit'] || row['deposit'] || '';
-            if (String(val || '').trim() === '') return undefined;
+            if (String(val || '').trim() === '' || isUnitPlaceholder(val)) return undefined;
             const num = parseFloat(val);
             return isNaN(num) ? Number.NaN : num;
           };
@@ -1293,8 +1303,8 @@ export const generateTenantsTemplate = (units = []) => {
   const headers = [
     "Tenant Code",
     "Tenant Name *",
-    "Phone Number *",
-    "ID Number *",
+    "Phone Number",
+    "ID Number",
     "Property Code *",
     "Unit Number *",
     "Additional Unit Numbers",
@@ -1340,14 +1350,14 @@ export const generateTenantsTemplate = (units = []) => {
     [""],
     ["REQUIRED FIELDS (marked with *)"],
     ["• Tenant Name: Full tenant name"],
-    ["• Phone Number: Contact number"],
-    ["• ID Number: National ID / passport number"],
     ["• Property Code: Must match an existing property code in MILIK"],
     ["• Unit Number: Primary unit number under the selected property"],
     ["• Move-in Date: Use YYYY-MM-DD for best results"],
     [""],
-    ["OPTIONAL FIELDS"],
+    ["OPTIONAL FIELDS (leave blank or use a dash - if not available)"],
     ["• Tenant Code: Leave blank to let MILIK auto-generate TT codes"],
+    ["• Phone Number: Contact number (leave blank or use - if not available)"],
+    ["• ID Number: National ID / passport number (leave blank or use - if not available)"],
     ["• Additional Unit Numbers: Separate multiple units with commas or semicolons"],
     ["• Rent: Leave blank to let MILIK use the assigned unit rent total"],
     ["• Deposit Amount: Leave blank to fall back to current unit/property defaults"],
@@ -1433,6 +1443,8 @@ export const generateTenantsTemplate = (units = []) => {
     [""],
     ["IMPORTANT NOTES"],
     ["• Do not rename the Data sheet headers"],
+    ["• Only Tenant Name, Property Code, Unit Number, and Move-in Date are required"],
+    ["• For Phone Number or ID Number you do not have, leave blank or enter a dash (-)"],
     ["• Property Code and Unit Number must already exist in MILIK"],
     ["• Additional Unit Numbers must belong to the same property as the primary unit"],
     ["• Fixed leases must include a Move-out Date after Move-in Date"],
@@ -1720,6 +1732,12 @@ export const parseTenantsExcel = (file) => {
             getTenantImportValue(row, ["Deposit Amount", "depositAmount"])
           );
 
+          // Treat dash-only values as absent for optional personal info fields
+          const stripTenantPlaceholder = (v) => {
+            const s = String(v || "").trim();
+            return /^-+$|^n\/a$|^na$|^none$/i.test(s) ? "" : s;
+          };
+
           return {
             rowNumber: index + 2,
             tenantCode: cleanImportString(
@@ -1728,11 +1746,11 @@ export const parseTenantsExcel = (file) => {
             tenantName: cleanImportString(
               getTenantImportValue(row, ["Tenant Name *", "Tenant Name", "tenantName"])
             ),
-            phoneNumber: cleanImportString(
-              getTenantImportValue(row, ["Phone Number *", "Phone Number", "phoneNumber"])
+            phoneNumber: stripTenantPlaceholder(
+              cleanImportString(getTenantImportValue(row, ["Phone Number *", "Phone Number", "phoneNumber"]))
             ),
-            idNumber: cleanImportString(
-              getTenantImportValue(row, ["ID Number *", "ID Number", "idNumber"])
+            idNumber: stripTenantPlaceholder(
+              cleanImportString(getTenantImportValue(row, ["ID Number *", "ID Number", "idNumber"]))
             ),
             propertyCode: cleanImportString(
               getTenantImportValue(row, ["Property Code *", "Property Code", "propertyCode"])
@@ -1808,8 +1826,6 @@ export const parseTenantsExcel = (file) => {
           const rowErrors = [];
 
           if (!record.tenantName) rowErrors.push("Tenant Name is required");
-          if (!record.phoneNumber) rowErrors.push("Phone Number is required");
-          if (!record.idNumber) rowErrors.push("ID Number is required");
           if (!record.propertyCode) rowErrors.push("Property Code is required");
           if (!record.unitNumber) rowErrors.push("Unit Number is required");
           if (!record.moveInDate) rowErrors.push("Move-in Date is required and must be valid");

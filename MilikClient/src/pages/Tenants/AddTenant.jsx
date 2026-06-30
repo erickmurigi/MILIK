@@ -1124,11 +1124,9 @@ useEffect(() => {
     const errors = {};
 
     if (!formData.name?.trim()) errors.name = "Tenant name is required";
-    if (!formData.phone?.trim()) errors.phone = "Phone number is required";
     if (formData.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
       errors.email = "Enter a valid email address";
     }
-    if (!formData.idNumber?.trim()) errors.idNumber = "ID number is required";
     if (!formData.property?.trim()) errors.property = "Property is required";
     if (!formData.unit?.trim()) errors.unit = "Unit is required";
     if (Array.isArray(formData.additionalUnits) && formData.additionalUnits.some((unitId) => normalizeId(unitId) === normalizeId(formData.unit))) {

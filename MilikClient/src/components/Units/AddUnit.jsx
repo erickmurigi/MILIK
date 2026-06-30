@@ -462,11 +462,11 @@ const AddUnit = () => {
     if (!formData.unitType) {
       errors.unitType = "Unit type is required";
     }
-    if (!formData.rent || parseFloat(formData.rent) <= 0) {
-      errors.rent = "Valid rent amount is required";
+    if (formData.rent && parseFloat(formData.rent) < 0) {
+      errors.rent = "Rent cannot be negative";
     }
-    if (!formData.deposit || parseFloat(formData.deposit) < 0) {
-      errors.deposit = "Valid deposit amount is required";
+    if (formData.deposit && parseFloat(formData.deposit) < 0) {
+      errors.deposit = "Deposit cannot be negative";
     }
 
     return errors;

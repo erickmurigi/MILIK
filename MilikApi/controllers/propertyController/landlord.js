@@ -834,10 +834,10 @@ export const bulkImportLandlords = async (req, res, next) => {
     for (const landlordData of normalizedLandlords) {
       results.totalProcessed++;
 
-      if (!landlordData.landlordName || !landlordData.regId || !landlordData.taxPin || !landlordData.phoneNumber) {
+      if (!landlordData.landlordName) {
         results.failed.push({
           landlord: landlordData.landlordName || "",
-          error: "Landlord name, Reg/ID, Tax PIN, and Phone Number are required",
+          error: "Landlord Name is required",
         });
         continue;
       }
