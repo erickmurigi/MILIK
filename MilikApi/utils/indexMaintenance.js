@@ -118,7 +118,7 @@ export async function syncCriticalIndexes() {
       await tenantCol.dropIndex("business_1_idNumber_1");
       await tenantCol.createIndex(
         { business: 1, idNumber: 1 },
-        { unique: true, partialFilterExpression: { idNumber: { $type: "string", $ne: "" } } }
+        { unique: true, partialFilterExpression: { idNumber: { $type: "string", $gt: "" } } }
       );
       dropped.push("tenants.business_1_idNumber_1 (rebuilt partialFilterExpression)");
       console.log("[indexMaintenance] Rebuilt tenants.business_1_idNumber_1 with partialFilterExpression.");

@@ -29,7 +29,6 @@ const LandlordStatementTenantBalanceSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "LandlordStatement",
       required: true,
-      index: true,
     },
     periodEnd: {
       type: Date,

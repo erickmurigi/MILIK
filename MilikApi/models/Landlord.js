@@ -118,11 +118,11 @@ const LandlordSchema = new mongoose.Schema(
 LandlordSchema.index({ company: 1, landlordCode: 1 }, { unique: true });
 LandlordSchema.index(
   { company: 1, regId: 1 },
-  { unique: true, partialFilterExpression: { regId: { $type: "string", $ne: "" } } }
+  { unique: true, partialFilterExpression: { regId: { $type: "string", $gt: "" } } }
 );
 LandlordSchema.index(
   { company: 1, idNumber: 1 },
-  { unique: true, partialFilterExpression: { idNumber: { $type: "string", $ne: "" } } }
+  { unique: true, partialFilterExpression: { idNumber: { $type: "string", $gt: "" } } }
 );
 LandlordSchema.index({ company: 1, email: 1 });
 LandlordSchema.index({ company: 1, landlordName: 1 });
