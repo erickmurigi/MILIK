@@ -7,6 +7,7 @@ import AuditLog from "../../models/AuditLog.js";
 import Tenant from "../../models/Tenant.js";
 import { recomputeTenantFinancialState, computeTenantInvoiceSnapshots } from "../propertyController/tenantInvoices.js";
 import { postReceiptUnappliedAllocationReleaseJournal } from "../propertyController/rentPayment.js";
+import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 
 const isAdmin = (u) => Boolean(u?.isSystemAdmin || u?.superAdminAccess);
 const isOid = (id) => mongoose.Types.ObjectId.isValid(id);
@@ -575,10 +576,15 @@ export const reallocatePayment = async (req, res) => {
         releaseRemaining = round2(releaseRemaining - take);
       }
       if (releaseRows.length > 0) {
+        const glActorId = await resolveAuditActorUserId({
+          req,
+          businessId,
+          candidateUserIds: [],
+        });
         await postReceiptUnappliedAllocationReleaseJournal({
           payment,
           releaseRows,
-          actorId: req.user._id,
+          actorId: glActorId,
           reason: reason.trim(),
           session,
         });
