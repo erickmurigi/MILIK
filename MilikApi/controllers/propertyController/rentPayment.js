@@ -1696,7 +1696,7 @@ const rollbackPostedAllocationReleaseEntries = async ({ entryIds = [], actorId =
   return reversalEntries;
 };
 
-const postReceiptUnappliedAllocationReleaseJournal = async ({
+export const postReceiptUnappliedAllocationReleaseJournal = async ({
   payment,
   releaseRows = [],
   actorId,

@@ -6,6 +6,7 @@ import MeterReading from "../../models/MeterReading.js";
 import AuditLog from "../../models/AuditLog.js";
 import Tenant from "../../models/Tenant.js";
 import { recomputeTenantFinancialState, computeTenantInvoiceSnapshots } from "../propertyController/tenantInvoices.js";
+import { postReceiptUnappliedAllocationReleaseJournal } from "../propertyController/rentPayment.js";
 
 const isAdmin = (u) => Boolean(u?.isSystemAdmin || u?.superAdminAccess);
 const isOid = (id) => mongoose.Types.ObjectId.isValid(id);
@@ -34,6 +35,54 @@ function invoiceStatus(outstanding, amount) {
   if (o <= 0) return "paid";
   if (o < round2(amount)) return "partially_paid";
   return "pending";
+}
+
+// Formalizes implicit FIFO allocations (computed by buildLegacyReceiptAllocations) into
+// persistent RentPayment.allocations[] records. Only writes if the receipt currently has
+// NO formal allocations — never overwrites manual or admin-reallocated records.
+async function autoAllocateLegacyReceipts({ businessId, tenantId, snapshotBundle }) {
+  const { receiptAllocations = [] } = snapshotBundle;
+
+  // Only process receipts whose rows came from legacy implicit matching (no formal records)
+  const toWrite = receiptAllocations.filter(
+    (ra) => ra.rows.length > 0 && ra.rows.every((r) => r.source === "legacy_payment_type")
+  );
+  if (toWrite.length === 0) return 0;
+
+  const bIdObj = new mongoose.Types.ObjectId(businessId);
+  const bulkOps = toWrite.map(({ receiptId, rows }) => {
+    const allocations = rows
+      .filter((r) => r.invoice)
+      .map((r) => ({
+        invoice: new mongoose.Types.ObjectId(r.invoice),
+        invoiceNumber: r.invoiceNumber || "",
+        category: r.category || "",
+        priorityGroup: r.priorityGroup || "",
+        appliedAmount: round2(Number(r.appliedAmount || 0)),
+        beforeOutstanding: round2(Number(r.beforeOutstanding || 0)),
+        afterOutstanding: round2(Number(r.afterOutstanding || 0)),
+        invoiceDate: r.invoiceDate || null,
+        dueDate: r.dueDate || null,
+        description: r.description || "",
+        utilityType: r.utilityType || undefined,
+        metadata: { autoAllocated: true, utilityType: r.utilityType || undefined },
+      }));
+    const allocationSummary = rebuildAllocationSummary(allocations);
+    return {
+      updateOne: {
+        filter: {
+          _id: new mongoose.Types.ObjectId(receiptId),
+          business: bIdObj,
+          // Guard: only write if no formal allocations exist yet
+          $or: [{ allocations: { $exists: false } }, { "allocations.0": { $exists: false } }],
+        },
+        update: { $set: { allocations, allocationSummary } },
+      },
+    };
+  });
+
+  const result = await RentPayment.bulkWrite(bulkOps, { ordered: false });
+  return result.modifiedCount || 0;
 }
 
 function getBizId(req) {
@@ -292,6 +341,20 @@ export const adjustBookingDate = async (req, res) => {
       },
     });
 
+    // Background: auto-allocate unallocated receipts then recompute invoice statuses
+    if (doc.tenant) {
+      const tenantId = String(doc.tenant);
+      if (type === "payment") {
+        computeTenantInvoiceSnapshots({ businessId, tenantId })
+          .then((bundle) => autoAllocateLegacyReceipts({ businessId, tenantId, snapshotBundle: bundle }))
+          .then(() => recomputeTenantFinancialState({ businessId, tenantId }))
+          .catch((e) => console.error("[adjustBookingDate] post-save recompute:", e.message));
+      } else {
+        recomputeTenantFinancialState({ businessId, tenantId })
+          .catch((e) => console.error("[adjustBookingDate] post-save recompute:", e.message));
+      }
+    }
+
     res.json({ success: true, bookingDate: newDate || undefined, docId: doc._id });
   } catch (err) {
     console.error("[statementAllocations.adjustBookingDate]", err);
@@ -397,6 +460,9 @@ export const reallocatePayment = async (req, res) => {
       }
     }
 
+    // Capture unapplied amount before any mutation — used for GL release below
+    const prevUnapplied = round2(Number(payment.allocationSummary?.unapplied || 0));
+
     // Snapshot old allocations for audit trail
     const oldAllocsSnapshot = (payment.allocations || []).map((a) => ({
       invoiceId: a.invoice ? String(a.invoice) : null,
@@ -495,6 +561,30 @@ export const reallocatePayment = async (req, res) => {
     payment.allocationSummary = rebuildAllocationSummary(builtAllocations);
     await payment.save({ session });
 
+    // Step 4b — Release unapplied balance from GL account 2130 (Unallocated Receipts)
+    // Only fires when the payment was previously posted to the GL with an unapplied balance.
+    // Atomic with the PMS update: if account 2130 is not configured the whole transaction
+    // rolls back and the admin is prompted to set up their chart of accounts first.
+    if (prevUnapplied > 0 && payment.journalGroupId) {
+      let releaseRemaining = prevUnapplied;
+      const releaseRows = [];
+      for (const a of builtAllocations.filter((x) => x.invoice)) {
+        if (releaseRemaining <= 0) break;
+        const take = round2(Math.min(a.appliedAmount, releaseRemaining));
+        releaseRows.push({ ...a, appliedAmount: take });
+        releaseRemaining = round2(releaseRemaining - take);
+      }
+      if (releaseRows.length > 0) {
+        await postReceiptUnappliedAllocationReleaseJournal({
+          payment,
+          releaseRows,
+          actorId: req.user._id,
+          reason: reason.trim(),
+          session,
+        });
+      }
+    }
+
     // Step 5 — Audit log
     await AuditLog.create(
       [{
@@ -566,7 +656,7 @@ export const getTenantInvoicesForRealloc = async (req, res) => {
     // so the picker is always correct even if the DB outstanding field is stale.
     const openInvoicesPromise = TenantInvoice.find({
       business: bId, tenant: tId,
-      status: { $in: ["pending", "partially_paid"] },
+      status: { $nin: ["cancelled", "reversed", "void"] },
     }).select(INV_SELECT).sort({ invoiceDate: -1 }).lean();
 
     const allocatedPromise = (async () => {
@@ -600,9 +690,11 @@ export const getTenantInvoicesForRealloc = async (req, res) => {
       return { ...inv, outstanding };
     };
 
+    // Exclude from openInvoices any invoice already in currentlyAllocated to prevent duplicates
+    const allocatedIdSet = new Set(currentlyAllocated.map((i) => String(i._id)));
     res.json({
       data: [
-        ...openInvoices.map(applyComputedOutstanding),
+        ...openInvoices.filter((i) => !allocatedIdSet.has(String(i._id))).map(applyComputedOutstanding),
         ...currentlyAllocated.map(applyComputedOutstanding),
       ],
     });
@@ -618,8 +710,16 @@ export const recomputeTenantState = async (req, res) => {
     const businessId = getBizId(req);
     const { tenantId } = req.body;
     if (!isOid(businessId) || !isOid(tenantId)) return res.status(400).json({ error: "Valid business and tenantId required" });
+
+    // Compute snapshots to identify receipts with only implicit (legacy) FIFO allocations,
+    // then write those as formal records so the statement panel can display them correctly.
+    const snapshotBundle = await computeTenantInvoiceSnapshots({ businessId, tenantId });
+    const autoAllocated = await autoAllocateLegacyReceipts({ businessId, tenantId, snapshotBundle });
+
+    // Full recompute after auto-allocation so invoice statuses reflect new formal allocations
     await recomputeTenantFinancialState({ businessId, tenantId });
-    res.json({ success: true });
+
+    res.json({ success: true, autoAllocated });
   } catch (err) {
     res.status(500).json({ error: err.message || "Server error" });
   }

@@ -1596,7 +1596,12 @@ const buildTenantSnapshotBundle = ({ invoices = [], receipts = [], notes = [] })
       invoiceMap,
     });
 
-    if (rows.length === 0) {
+    // Only fall back to implicit FIFO matching when there are genuinely NO formal
+    // allocation records at all. If the receipt has formal records that are purely
+    // unapplied (invoice: null — e.g. marked as prepayment), respect that intent
+    // and do NOT re-apply the receipt via FIFO.
+    const hasFormalAllocations = Array.isArray(receipt.allocations) && receipt.allocations.length > 0;
+    if (rows.length === 0 && !hasFormalAllocations) {
       rows = buildLegacyReceiptAllocations({
         receipt,
         invoiceSnapshots,

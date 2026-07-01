@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useSelector } from "react-redux";
-import { selectCurrentUser, selectCurrentCompany, selectAllProperties, selectAllTenants } from "../../redux/selectors";
+import { selectCurrentUser, selectCurrentCompany, selectAllProperties } from "../../redux/selectors";
 import { adminRequests } from "../../utils/requestMethods";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -106,7 +106,6 @@ export default function LandlordStatementAllocations() {
   const currentUser    = useSelector(selectCurrentUser);
   const currentCompany = useSelector(selectCurrentCompany);
   const properties     = useSelector(selectAllProperties);
-  const allTenants     = useSelector(selectAllTenants);
   const isMilikAdmin   = Boolean(currentUser?.isSystemAdmin || currentUser?.superAdminAccess);
   const bizId          = currentCompany?._id;
 
@@ -129,6 +128,8 @@ export default function LandlordStatementAllocations() {
   const [selectedTenant, setSelectedTenant] = useState(null);
   const [tenantDropOpen, setTenantDropOpen] = useState(false);
   const [dropPos,        setDropPos]        = useState({ top: 0, left: 0 });
+  const [localTenants,   setLocalTenants]   = useState([]);
+  const [tenantsLoading, setTenantsLoading] = useState(false);
   const tenantRef   = useRef(null); // button wrapper — for position calc
   const dropdownRef = useRef(null); // panel — for click-outside (panel is fixed, outside tenantRef)
 
@@ -155,30 +156,38 @@ export default function LandlordStatementAllocations() {
   const [reallocReason,  setReallocReason]  = useState("");
   const [reallocSaving,  setReallocSaving]  = useState(false);
 
-  // ── Tenant combobox memos ─────────────────────────────────────────────────────
-  const propertyFilteredTenants = useMemo(() => {
-    if (!property) return allTenants;
-    const pid = String(property);
-    return allTenants.filter((t) => {
-      const p = t.unit?.property?._id
-        ? String(t.unit.property._id)
-        : t.unit?.property ? String(t.unit.property)
-        : t.property?._id ? String(t.property._id)
-        : t.property ? String(t.property) : null;
-      return p === pid;
-    });
-  }, [allTenants, property]);
+  // Fetch tenants from API whenever business or property filter changes
+  useEffect(() => {
+    if (!bizId) return;
+    let cancelled = false;
+    setTenantsLoading(true);
+    const params = new URLSearchParams({ business: bizId, limit: "2000" });
+    if (property) params.set("property", property);
+    adminRequests.get(`/tenants?${params}`)
+      .then(({ data }) => { if (!cancelled) setLocalTenants(data?.data || []); })
+      .catch(() => { if (!cancelled) setLocalTenants([]); })
+      .finally(() => { if (!cancelled) setTenantsLoading(false); });
+    return () => { cancelled = true; };
+  }, [bizId, property]);
 
+  // Clear selected tenant if it's no longer in the fetched list (e.g. after property change)
+  useEffect(() => {
+    if (!selectedTenant) return;
+    const still = localTenants.find((x) => String(x._id) === String(selectedTenant._id));
+    if (!still) { setSelectedTenant(null); setTenantQuery(""); }
+  }, [localTenants]); // eslint-disable-line
+
+  // ── Tenant combobox derived data ──────────────────────────────────────────────
   const tenantDropList = useMemo(() => {
     const q = tenantQuery.trim().toLowerCase();
-    if (!q) return propertyFilteredTenants.slice(0, 60);
-    return propertyFilteredTenants.filter((t) => {
+    if (!q) return localTenants.slice(0, 60);
+    return localTenants.filter((t) => {
       const name = tName(t).toLowerCase();
       const code = (t.tenantCode || "").toLowerCase();
       const unit = (t.unit?.unitNumber || "").toLowerCase();
       return name.includes(q) || code.includes(q) || unit.includes(q);
     }).slice(0, 60);
-  }, [propertyFilteredTenants, tenantQuery]);
+  }, [localTenants, tenantQuery]);
 
   // Close tenant dropdown on outside click.
   // dropdownRef covers the fixed panel which is no longer a DOM child of tenantRef.
@@ -192,15 +201,6 @@ export default function LandlordStatementAllocations() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [tenantDropOpen]);
-
-  // Clear tenant selection when property changes and selected tenant no longer matches
-  useEffect(() => {
-    if (!selectedTenant || !property) return;
-    const t = allTenants.find((x) => String(x._id) === String(selectedTenant._id));
-    if (!t) return;
-    const p = t.unit?.property?._id ? String(t.unit.property._id) : t.unit?.property ? String(t.unit.property) : null;
-    if (p && p !== String(property)) { setSelectedTenant(null); setTenantQuery(""); }
-  }, [property]); // eslint-disable-line
 
   const selectTenant = useCallback((t) => {
     setSelectedTenant({ _id: t._id, displayName: tName(t), tenantCode: t.tenantCode, unitNumber: t.unit?.unitNumber });
@@ -519,6 +519,19 @@ export default function LandlordStatementAllocations() {
 
   const removeRow = useCallback((idx) => setReallocRows((rows) => rows.filter((_, i) => i !== idx)), []);
 
+  // Clears all allocations and parks the full receipt amount as an unapplied prepayment credit
+  const markAsPrepayment = useCallback(() => {
+    setReallocRows([{
+      invoiceId: null,
+      invoiceNumber: "",
+      category: "RENT_CHARGE",
+      description: "Prepayment — credit held for future invoice",
+      outstanding: null,
+      invoiceDate: null,
+      amount: reallocAmt,
+    }]);
+  }, [reallocAmt]);
+
   const addInvoice = useCallback((inv) => {
     setReallocRows((rows) => {
       if (rows.some((r) => r.invoiceId === String(inv._id))) return rows;
@@ -678,10 +691,13 @@ export default function LandlordStatementAllocations() {
                           <FaUser size={8} className="opacity-40 shrink-0" />
                           All tenants
                         </button>
-                        {tenantDropList.length === 0 && tenantQuery && (
+                        {tenantsLoading && (
+                          <p className="px-3 py-3 text-center text-xs text-slate-400">Loading tenants…</p>
+                        )}
+                        {!tenantsLoading && tenantDropList.length === 0 && tenantQuery && (
                           <p className="px-3 py-3 text-center text-xs text-slate-400">No tenants match "{tenantQuery}"</p>
                         )}
-                        {tenantDropList.length === 0 && !tenantQuery && (
+                        {!tenantsLoading && tenantDropList.length === 0 && !tenantQuery && (
                           <p className="px-3 py-3 text-center text-xs text-slate-400">No tenants available{property ? " for this property" : ""}</p>
                         )}
                         {tenantDropList.map((t) => {
@@ -1257,10 +1273,17 @@ export default function LandlordStatementAllocations() {
                   <span className="font-black text-slate-700">Ksh {fmtKES(reallocTotal)} / {fmtKES(reallocAmt)}</span>
                 </div>
 
-                <button onClick={() => setReallocRows((r) => [...r, { invoiceId: null, invoiceNumber: "", category: "OTHER_CHARGE", outstanding: null, invoiceDate: null, amount: round2(Math.max(0, remaining)) }])}
-                  className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 underline hover:text-[#0B3B2E]">
-                  <FaPlus size={8} /> Add unapplied / custom row
-                </button>
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <button onClick={() => setReallocRows((r) => [...r, { invoiceId: null, invoiceNumber: "", category: "RENT_CHARGE", outstanding: null, invoiceDate: null, amount: round2(Math.max(0, remaining)) }])}
+                    className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 underline hover:text-[#0B3B2E]">
+                    <FaPlus size={8} /> Add unapplied / custom row
+                  </button>
+                  <button onClick={markAsPrepayment}
+                    title="Clear all rows and park the full amount as an unallocated prepayment credit"
+                    className="inline-flex items-center gap-1 rounded border border-[#0B3B2E]/30 bg-[#0B3B2E]/5 px-2.5 py-1 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white transition-colors">
+                    <FaExchangeAlt size={8} /> Mark as Prepayment
+                  </button>
+                </div>
               </div>
 
               {/* Open invoices picker */}
@@ -1293,10 +1316,22 @@ export default function LandlordStatementAllocations() {
                   </div>
                 )}
 
-                {!invLoading && filteredAvailInvoices.length === 0 && (
+                {!invLoading && filteredAvailInvoices.length === 0 && availInvoices.length > 0 && (
                   <p className="rounded-lg border border-dashed border-slate-200 px-3 py-3 text-center text-xs text-slate-400">
-                    {availInvoices.length === 0 ? "No open invoices for this tenant" : "No invoices match the filter"}
+                    No invoices match the filter
                   </p>
+                )}
+                {!invLoading && availInvoices.length === 0 && (
+                  <div className="rounded-lg border border-dashed border-[#0B3B2E]/20 bg-[#0B3B2E]/[0.03] px-4 py-4 text-center">
+                    <FaFileInvoice className="mx-auto mb-2 text-slate-300" size={18} />
+                    <p className="text-xs font-semibold text-slate-600">No open invoices for this tenant</p>
+                    <p className="mt-0.5 text-[10px] text-slate-400">The receipt can be held as an unallocated prepayment until an invoice is raised.</p>
+                    <button onClick={markAsPrepayment}
+                      className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-1.5 text-[10px] font-black text-white hover:bg-[#0A3127] transition-colors">
+                      <FaExchangeAlt size={9} /> Mark as Prepayment
+                    </button>
+                    <p className="mt-1.5 text-[9px] text-slate-400">Credit will be auto-applied when the next invoice is raised</p>
+                  </div>
                 )}
 
                 {!invLoading && filteredAvailInvoices.length > 0 && (

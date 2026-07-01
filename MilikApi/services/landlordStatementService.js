@@ -1460,7 +1460,7 @@ export const generateLandlordStatement = async ({
       $or: dateOrFilter,
     })
       .select(
-        "_id tenant unit amount paymentType paymentDate paidDirectToLandlord description referenceNumber receiptNumber breakdown utilities allocations allocationSummary metadata depositHeldBy ledgerMode confirmedAt recordDate createdAt"
+        "_id tenant unit amount paymentType paymentDate bookingDate paidDirectToLandlord description referenceNumber receiptNumber breakdown utilities allocations allocationSummary metadata depositHeldBy ledgerMode confirmedAt recordDate createdAt"
       )
       .lean(),
   ]);
@@ -1939,6 +1939,19 @@ export const generateLandlordStatement = async ({
     }
 
     row.balanceBF = round2(row.balanceBF - Number(receipt.amount || 0));
+  }
+
+  // Receipts whose paymentDate was in a previously approved period but whose booking date
+  // was subsequently moved into the current period. The saved snapshot already reflects
+  // their credit, so reverse them out of Bal B/F to avoid double-counting.
+  if (snapshotDate) {
+    for (const receipt of receiptsInPeriod) {
+      if (!receipt.bookingDate) continue;
+      const payTime = new Date(receipt.paymentDate || 0).getTime();
+      if (payTime >= periodStart.getTime()) continue;
+      const row = ensureRow(receipt.tenant, receipt.unit);
+      row.balanceBF = round2(row.balanceBF + Number(receipt.amount || 0));
+    }
   }
 
   for (const invoice of invoicesInPeriod) {

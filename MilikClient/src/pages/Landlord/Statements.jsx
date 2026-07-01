@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useLocation, useNavigate } from "react-router-dom";
-import { FaCheckCircle, FaDownload, FaFileAlt, FaPrint, FaSyncAlt } from "react-icons/fa";
+import { FaCheckCircle, FaDownload, FaFileAlt, FaPrint, FaSyncAlt, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import {
@@ -502,6 +502,169 @@ const SearchableSelect = ({ value, onChange, options, placeholder = "Select..." 
   );
 };
 
+const PdfPreviewModal = React.memo(function PdfPreviewModal({
+  open, statementId, propertyLabel, periodStart, periodEnd, onClose,
+}) {
+  const [phase, setPhase]           = useState("idle"); // idle | loading | ready
+  const [blobUrl, setBlobUrl]       = useState(null);
+  const [filename, setFilename]     = useState("");
+  const [iframeLoaded, setIframeLoaded] = useState(false);
+  const [closing, setClosing]       = useState(false);
+  const iframeRef = useRef(null);
+
+  // Fetch PDF whenever the modal opens
+  useEffect(() => {
+    if (!open || !statementId) return;
+    let cancelled = false;
+    setPhase("loading");
+    setIframeLoaded(false);
+    adminRequests
+      .get(`/statements/${statementId}/pdf`, { responseType: "blob" })
+      .then(({ data }) => {
+        if (cancelled) return;
+        const url = window.URL.createObjectURL(new Blob([data], { type: "application/pdf" }));
+        const period = (periodStart || "").slice(0, 7);
+        setBlobUrl(url);
+        setFilename(`Statement-${(propertyLabel || "Property").replace(/\s+/g, "_")}-${period}.pdf`);
+        setPhase("ready");
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        toast.error(err?.response?.data?.message || "Failed to load statement PDF");
+        onClose();
+      });
+    return () => { cancelled = true; };
+  }, [open, statementId]); // eslint-disable-line
+
+  // Revoke blob URL when the modal closes
+  useEffect(() => {
+    if (open) return;
+    setBlobUrl((prev) => { if (prev) window.URL.revokeObjectURL(prev); return null; });
+    setFilename("");
+    setPhase("idle");
+    setIframeLoaded(false);
+    setClosing(false);
+  }, [open]);
+
+  // ESC key + body scroll lock
+  const handleClose = useCallback(() => {
+    if (closing) return;
+    setClosing(true);
+    setTimeout(onClose, 190);
+  }, [closing, onClose]);
+
+  useEffect(() => {
+    if (!open) return;
+    document.body.style.overflow = "hidden";
+    const onKey = (e) => { if (e.key === "Escape") handleClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open, handleClose]);
+
+  const handlePrint    = useCallback(() => iframeRef.current?.contentWindow?.print(), []);
+  const handleDownload = useCallback(() => {
+    if (!blobUrl) return;
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }, [blobUrl, filename]);
+
+  if (!open && !closing) return null;
+
+  const periodLabel =
+    periodStart && periodEnd
+      ? `${new Date(periodStart).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })} – ${new Date(periodEnd).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })}`
+      : "";
+
+  return (
+    <div
+      className="fixed inset-0 z-[9999] flex flex-col"
+      style={{ animation: `${closing ? "mlkPdfOut" : "mlkPdfIn"} 0.2s cubic-bezier(0.16,1,0.3,1) both` }}
+    >
+      <style>{`
+        @keyframes mlkPdfIn  { from { opacity:0; transform:scale(0.97) } to { opacity:1; transform:scale(1) } }
+        @keyframes mlkPdfOut { from { opacity:1; transform:scale(1)    } to { opacity:0; transform:scale(0.97) } }
+      `}</style>
+
+      {/* Backdrop — click to close */}
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={handleClose} aria-hidden="true" />
+
+      {/* Panel */}
+      <div className="relative z-10 flex h-full flex-col">
+
+        {/* Toolbar */}
+        <div className="flex flex-none items-center gap-3 bg-[#0B3B2E] px-5 py-3 shadow-xl">
+          <div className="flex min-w-0 flex-col">
+            <span className="text-xs font-black uppercase tracking-widest text-white">Landlord Statement</span>
+            {(propertyLabel || periodLabel) && (
+              <span className="truncate text-[10px] text-white/50">
+                {propertyLabel}{periodLabel ? ` · ${periodLabel}` : ""}
+              </span>
+            )}
+          </div>
+
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handlePrint}
+              disabled={!iframeLoaded}
+              title="Print"
+              className="inline-flex items-center gap-1.5 rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-white transition-all hover:bg-white/20 disabled:opacity-35"
+            >
+              <FaPrint size={11} /> Print
+            </button>
+            <button
+              type="button"
+              onClick={handleDownload}
+              disabled={phase !== "ready"}
+              title="Save PDF to device"
+              className="inline-flex items-center gap-1.5 rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-white transition-all hover:bg-white/20 disabled:opacity-35"
+            >
+              <FaDownload size={11} /> Save PDF
+            </button>
+            <div className="mx-1 h-5 w-px bg-white/15" />
+            <button
+              type="button"
+              onClick={handleClose}
+              title="Close (Esc)"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white/50 transition-all hover:bg-white/15 hover:text-white"
+            >
+              <FaTimes size={14} />
+            </button>
+          </div>
+        </div>
+
+        {/* PDF area */}
+        <div className="relative min-h-0 flex-1 bg-slate-900 p-3">
+          {(phase === "loading" || !iframeLoaded) && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3">
+              <div className="h-9 w-9 animate-spin rounded-full border-[3px] border-white/10 border-t-white/50" />
+              <p className="text-[11px] text-white/35">
+                {phase === "loading" ? "Generating PDF…" : "Rendering…"}
+              </p>
+            </div>
+          )}
+          {blobUrl && (
+            <iframe
+              ref={iframeRef}
+              src={blobUrl}
+              title="Statement PDF Preview"
+              onLoad={() => setIframeLoaded(true)}
+              className={`h-full w-full rounded-lg border-0 shadow-2xl transition-opacity duration-500 ${iframeLoaded ? "opacity-100" : "opacity-0"}`}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
+
 const Statements = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -560,7 +723,8 @@ const Statements = () => {
   const [processedStatements, setProcessedStatements] = useState([]);
   const [loadingProcessedContext, setLoadingProcessedContext] = useState(false);
   const [processedContextLoaded, setProcessedContextLoaded] = useState(false);
-  const [loadingPdfPreview, setLoadingPdfPreview] = useState(false);
+  const [pdfPreviewOpen, setPdfPreviewOpen]   = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const autoDraftTimerRef = useRef(null);
   const lastAutoLoadedSelectionRef = useRef("");
@@ -1274,93 +1438,37 @@ const Statements = () => {
     }
   };
 
-  const printBlobInHiddenFrame = (blobUrl) => {
-    const frame = document.createElement("iframe");
-    frame.style.position = "fixed";
-    frame.style.right = "0";
-    frame.style.bottom = "0";
-    frame.style.width = "0";
-    frame.style.height = "0";
-    frame.style.border = "0";
-    frame.setAttribute("aria-hidden", "true");
-
-    const cleanup = () => {
-      window.setTimeout(() => {
-        try {
-          frame.remove();
-        } catch {}
-        window.URL.revokeObjectURL(blobUrl);
-      }, 1500);
-    };
-
-    frame.onload = () => {
-      window.setTimeout(() => {
-        try {
-          frame.contentWindow?.focus();
-          frame.contentWindow?.print();
-        } catch {
-          cleanup();
-          return;
-        }
-
-        cleanup();
-      }, 250);
-    };
-
-    frame.src = blobUrl;
-    document.body.appendChild(frame);
-  };
-
-  const handleOpenPdf = async () => {
+  const handlePreviewPdf = () => {
     if (!canExportStatement) {
       toast.warning("You do not have permission to view landlord statements");
       return;
     }
-    if (!draftStatement?._id) return;
-    setLoadingPdfPreview(true);
-    try {
-      const response = await adminRequests.get(`/statements/${draftStatement._id}/pdf`, {
-        responseType: "blob",
-      });
-      const blob = new Blob([response.data], { type: "application/pdf" });
-      const url = window.URL.createObjectURL(blob);
-      const tab = window.open(url, "_blank");
-      // Revoke the object URL after the tab has loaded it
-      if (tab) {
-        tab.addEventListener("load", () => window.URL.revokeObjectURL(url), { once: true });
-        setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
-      } else {
-        window.URL.revokeObjectURL(url);
-        toast.warning("Pop-up blocked. Please allow pop-ups for this site to open PDFs in a new tab.");
-      }
-    } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to open statement PDF");
-    } finally {
-      setLoadingPdfPreview(false);
-    }
+    if (draftStatement?._id) setPdfPreviewOpen(true);
   };
 
-  const handlePrint = async () => {
+  const handleDownloadPdf = async () => {
     if (!canExportStatement) {
-      toast.warning("You do not have permission to print landlord statements");
+      toast.warning("You do not have permission to download landlord statements");
       return;
     }
-    if (!draftStatement?._id) return;
-
-    setLoadingPdfPreview(true);
-
+    if (!draftStatement?._id || downloadingPdf) return;
+    setDownloadingPdf(true);
     try {
-      const response = await adminRequests.get(`/statements/${draftStatement._id}/pdf`, {
-        responseType: "blob",
-      });
-
-      const blob = new Blob([response.data], { type: "application/pdf" });
-      const blobUrl = window.URL.createObjectURL(blob);
-      printBlobInHiddenFrame(blobUrl);
+      const { data } = await adminRequests.get(`/statements/${draftStatement._id}/pdf`, { responseType: "blob" });
+      const url = window.URL.createObjectURL(new Blob([data], { type: "application/pdf" }));
+      const propName = selectedProperty?.propertyName || selectedProperty?.name || "Property";
+      const period = periodStart ? periodStart.slice(0, 7) : "";
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Statement-${propName.replace(/\s+/g, "_")}-${period}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to print statement PDF");
+      toast.error(error?.response?.data?.message || "Failed to download statement PDF");
     } finally {
-      setLoadingPdfPreview(false);
+      setDownloadingPdf(false);
     }
   };
 
@@ -1564,24 +1672,25 @@ const Statements = () => {
                 <FaSyncAlt size={10} className={loadingDraft ? "animate-spin" : ""} />
               </button>
 
-              {/* Tertiary: Print + PDF */}
+              {/* Print → opens preview modal */}
               <button
                 type="button"
-                onClick={handlePrint}
-                disabled={!canExportStatement || !draftStatement?._id || loadingPdfPreview}
-                title="Print statement"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-200 hover:bg-slate-50 hover:text-slate-700 disabled:opacity-35"
+                onClick={handlePreviewPdf}
+                disabled={!canExportStatement || !draftStatement?._id || pdfPreviewOpen}
+                title="Preview & print statement"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-[#0B3B2E] disabled:opacity-35"
               >
-                <FaPrint size={10} className={loadingPdfPreview ? "animate-pulse" : ""} />
+                <FaPrint size={10} />
               </button>
+              {/* Download → saves PDF directly, no modal */}
               <button
                 type="button"
-                onClick={handleOpenPdf}
-                disabled={!canExportStatement || !draftStatement?._id || loadingPdfPreview}
-                title="Download PDF"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-200 hover:bg-slate-50 hover:text-slate-700 disabled:opacity-35"
+                onClick={handleDownloadPdf}
+                disabled={!canExportStatement || !draftStatement?._id || downloadingPdf}
+                title="Download PDF to device"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-[#0B3B2E] disabled:opacity-35"
               >
-                <FaDownload size={10} />
+                <FaDownload size={10} className={downloadingPdf ? "animate-bounce" : ""} />
               </button>
 
               <div className="mx-1 h-5 w-px bg-slate-200" />
@@ -2490,6 +2599,15 @@ const Statements = () => {
           </>
         )}
       </div>
+
+      <PdfPreviewModal
+        open={pdfPreviewOpen}
+        statementId={draftStatement?._id || ""}
+        propertyLabel={selectedProperty ? getPropertyLabel(selectedProperty) : ""}
+        periodStart={periodStart}
+        periodEnd={periodEnd}
+        onClose={() => setPdfPreviewOpen(false)}
+      />
     </DashboardLayout>
   );
 };
