@@ -1081,7 +1081,7 @@ const PaymentVouchers = () => {
                 <p className="mt-1.5 text-2xl font-black tabular-nums leading-none">
                   {form.amount && Number(form.amount) > 0
                     ? `KES ${Number(form.amount).toLocaleString("en-KE", { minimumFractionDigits: 2 })}`
-                    : <span className="text-xl text-emerald-700">KES —</span>}
+                    : <span className="text-xl text-emerald-400">KES —</span>}
                 </p>
                 <div className="mt-2.5 flex items-center justify-between text-[10px] text-emerald-400">
                   <span>Due</span>

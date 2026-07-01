@@ -534,14 +534,14 @@ const Tenants = ({ listingMode = "active" }) => {
         terminationDate: tenant.terminationDate ? new Date(tenant.terminationDate).toLocaleDateString() : "-",
         moveOutDate: tenant.moveOutDate ? new Date(tenant.moveOutDate).toLocaleDateString() : "-",
         terminationReason: tenant.terminationReason || "",
-        depositHeld: Number(tenant.depositAmount || 0),
+        depositHeld: Number(tenant.depositReceipted ?? 0),
         depositHeldBy: tenant.depositHeldBy || tenant.unit?.property?.depositHeldBy || "Management Company",
         settlementStatus:
           Number(balance || 0) > 0.009
             ? "OWES_BALANCE"
             : Number(balance || 0) < -0.009
             ? "REFUND_DUE"
-            : Number(tenant.depositAmount || 0) > 0 && String(tenant.depositRefundStatus || "").toLowerCase() === "pending"
+            : Number(tenant.depositReceipted ?? 0) > 0 && String(tenant.depositRefundStatus || "").toLowerCase() === "pending"
             ? "PENDING_SETTLEMENT"
             : "SETTLED",
         phone: tenant.phone || "-",

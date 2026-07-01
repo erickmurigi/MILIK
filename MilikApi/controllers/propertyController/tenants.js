@@ -1078,7 +1078,7 @@ export const getTenants = async (req, res, next) => {
     // Count invoices and payments for current-page tenants only
     const pageIds = tenants.map((t) => t._id);
     if (pageIds.length > 0) {
-      const [invCounts, paymentCounts, noteCounts] = await Promise.all([
+      const [invCounts, paymentCounts, noteCounts, depositReceipts] = await Promise.all([
         TenantInvoice.aggregate([
           { $match: { business: new mongoose.Types.ObjectId(String(businessId)), tenant: { $in: pageIds }, status: { $nin: ["cancelled", "reversed"] } } },
           { $group: { _id: "$tenant", count: { $sum: 1 } } },
@@ -1091,14 +1091,20 @@ export const getTenants = async (req, res, next) => {
           { $match: { business: new mongoose.Types.ObjectId(String(businessId)), tenant: { $in: pageIds }, status: { $nin: ["cancelled", "reversed"] } } },
           { $group: { _id: "$tenant", count: { $sum: 1 } } },
         ]),
+        RentPayment.aggregate([
+          { $match: { business: new mongoose.Types.ObjectId(String(businessId)), tenant: { $in: pageIds }, paymentType: "deposit", isReversed: { $ne: true }, isCancelled: { $ne: true } } },
+          { $group: { _id: "$tenant", total: { $sum: "$amount" } } },
+        ]),
       ]);
       const invCountMap = new Map(invCounts.map((r) => [String(r._id), r.count]));
       const payCountMap = new Map(paymentCounts.map((r) => [String(r._id), r.count]));
       const noteCountMap = new Map(noteCounts.map((r) => [String(r._id), r.count]));
+      const depositReceiptedMap = new Map(depositReceipts.map((r) => [String(r._id), r.total]));
       enrichedTenants.forEach((t) => {
         t.invoiceCount = invCountMap.get(String(t._id)) || 0;
         t.paymentCount = payCountMap.get(String(t._id)) || 0;
         t.invoiceNoteCount = noteCountMap.get(String(t._id)) || 0;
+        t.depositReceipted = depositReceiptedMap.get(String(t._id)) || 0;
       });
     }
 

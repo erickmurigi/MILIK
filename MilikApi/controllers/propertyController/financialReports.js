@@ -865,7 +865,7 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
     }
 
     const asOfDate = normalizeDate(req.query.asOfDate, true) || normalizeDate(null, true);
-    const tenantQuery = { business: businessId };
+    const tenantQuery = { business: businessId, status: { $nin: ["terminated", "moved_out", "evicted"] } };
     if (req.query.tenantId) tenantQuery._id = toObjectId(req.query.tenantId);
 
     const filterPropertyId = req.query.propertyId ? String(req.query.propertyId) : "";
