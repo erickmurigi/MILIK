@@ -199,6 +199,312 @@ const buildExpiryWarning = ({ tenant = {}, lease = null } = {}) => {
   };
 };
 
+// ─── Utility helpers (mirrors AddTenant.jsx) ──────────────────────────────────
+const normalizeUtilityEntry = (util = {}) => {
+  let utilityLabel = "Unknown Utility";
+  let utilityValue = "";
+  if (util.utility && typeof util.utility === "object" && !Array.isArray(util.utility)) {
+    utilityValue = util.utility._id || util.utility.name || util.utility.utilityName || "";
+    utilityLabel = util.utility.name || util.utility.utilityName || "Unknown Utility";
+  } else if (typeof util.utility === "string" && util.utility.trim() !== "") {
+    utilityValue = util.utility.trim();
+    utilityLabel = util.utilityLabel || util.utility.trim();
+  } else if (typeof util.utilityLabel === "string" && util.utilityLabel.trim() !== "") {
+    utilityLabel = util.utilityLabel.trim();
+  }
+  return { utility: utilityValue, utilityLabel, isIncluded: !!util.isIncluded, unitCharge: Number(util.unitCharge || 0) };
+};
+
+const buildUtilitySignature = (item = {}) =>
+  [String(item.utility || "").trim().toLowerCase(), String(item.utilityLabel || "").trim().toLowerCase(),
+    Number(item.unitCharge || 0).toFixed(2), item.isIncluded ? "1" : "0"].join("|");
+
+const mergeUtilityEntries = (utilities = []) => {
+  const merged = new Map();
+  (Array.isArray(utilities) ? utilities : []).forEach((entry) => {
+    const n = normalizeUtilityEntry(entry);
+    const v = String(n.utility || n.utilityLabel || "").trim();
+    const l = String(n.utilityLabel || v || "").trim();
+    if (!v && !l) return;
+    const sig = [v.toLowerCase(), l.toLowerCase(), n.isIncluded ? "1" : "0"].join("|");
+    const cur = merged.get(sig) || { utility: v || l, utilityLabel: l || v, unitCharge: 0, isIncluded: n.isIncluded };
+    cur.unitCharge = Number(cur.unitCharge || 0) + Number(n.unitCharge || 0);
+    if (!cur.utility && v) cur.utility = v;
+    if (!cur.utilityLabel && l) cur.utilityLabel = l;
+    merged.set(sig, cur);
+  });
+  return Array.from(merged.values()).map((item) => ({
+    utility: item.utility || item.utilityLabel || "",
+    utilityLabel: item.utilityLabel || item.utility || "",
+    unitCharge: Number(item.unitCharge || 0),
+    isIncluded: !!item.isIncluded,
+  }));
+};
+
+const buildUtilitiesPayload = ({ inheritedUtilities = [], customUtilities = [] } = {}) =>
+  mergeUtilityEntries([
+    ...(Array.isArray(inheritedUtilities) ? inheritedUtilities : []),
+    ...(Array.isArray(customUtilities) ? customUtilities : []).map((item) => ({
+      utility: String(item?.utility || item?.utilityLabel || "").trim(),
+      utilityLabel: String(item?.utilityLabel || item?.utility || "").trim(),
+      unitCharge: Number(item?.unitCharge || 0),
+      isIncluded: !!item?.isIncluded,
+    })),
+  ]);
+
+const STANDARD_UTILITY_OPTIONS = ["Water", "Garbage", "Electricity", "Service Charge", "Security", "Others"];
+
+// Derives additional utilities for a tenant (those not inherited from its units)
+const deriveAdditionalUtilities = (tenant, tenantUnitUtils) => {
+  const tenantUtils = (tenant?.utilities || []).map(normalizeUtilityEntry);
+  const counts = tenantUnitUtils.reduce((map, item) => {
+    const sig = buildUtilitySignature(item);
+    map.set(sig, (map.get(sig) || 0) + 1);
+    return map;
+  }, new Map());
+  const additional = [];
+  tenantUtils.forEach((item) => {
+    const sig = buildUtilitySignature(item);
+    const count = counts.get(sig) || 0;
+    if (count > 0) counts.set(sig, count - 1);
+    else additional.push({ utility: item.utility || item.utilityLabel, utilityLabel: item.utilityLabel || item.utility, unitCharge: String(item.unitCharge || ""), isIncluded: item.isIncluded });
+  });
+  return additional;
+};
+
+const getTenantUnitUtils = (tenant, allUnits) => {
+  const unitIds = [normalizeId(tenant?.unit?._id || tenant?.unit), ...(Array.isArray(tenant?.additionalUnits) ? tenant.additionalUnits : []).map((u) => normalizeId(u?._id || u))].filter(Boolean);
+  const recs = (Array.isArray(allUnits) ? allUnits : []).filter((u) => unitIds.includes(normalizeId(u?._id)));
+  return mergeUtilityEntries(recs.flatMap((u) => (u?.utilities || []).map(normalizeUtilityEntry)));
+};
+
+// ─── Add Utility Modal ────────────────────────────────────────────────────────
+function AddUtilityModal({ tenants, allUnits, company, dispatch, onClose, onSaved }) {
+  const isMulti = tenants.length > 1;
+  const singleTenant = isMulti ? null : tenants[0];
+
+  const [utilityOptions, setUtilityOptions] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  // Single-tenant: inherited unit utilities shown read-only
+  const singleUnitUtils = useMemo(() =>
+    singleTenant ? getTenantUnitUtils(singleTenant, allUnits) : [],
+  [singleTenant, allUnits]);
+
+  // Single-tenant: start with their existing additional rows + one empty; multi: just one empty
+  const [rows, setRows] = useState(() => {
+    if (!isMulti && singleTenant) {
+      const existing = deriveAdditionalUtilities(singleTenant, singleUnitUtils);
+      return [...existing, { utility: "", utilityLabel: "", unitCharge: "", isIncluded: false }];
+    }
+    return [{ utility: "", utilityLabel: "", unitCharge: "", isIncluded: false }];
+  });
+
+  useEffect(() => {
+    if (!company?._id) return;
+    adminRequests.get(`/company-settings/${company._id}`)
+      .then((res) => {
+        const names = Array.from(new Set(
+          (res?.data?.utilityTypes || []).filter((item) => item?.isActive !== false && item?.name).map((item) => String(item.name))
+        ));
+        setUtilityOptions(names);
+      })
+      .catch(() => setUtilityOptions([]));
+  }, [company?._id]);
+
+  const allOptions = useMemo(() => Array.from(new Set([...utilityOptions, ...STANDARD_UTILITY_OPTIONS])), [utilityOptions]);
+
+  const addRow = () => setRows((prev) => [...prev, { utility: "", utilityLabel: "", unitCharge: "", isIncluded: false }]);
+  const removeRow = (i) => setRows((prev) => prev.filter((_, idx) => idx !== i));
+  const updateRow = (i, field, value) => setRows((prev) => {
+    const next = [...prev];
+    next[i] = { ...next[i], [field]: value };
+    if (field === "utility") next[i].utilityLabel = value;
+    return next;
+  });
+
+  const handleSave = async () => {
+    setError("");
+    const invalid = rows.find((r) => String(r.unitCharge || "").trim() && !String(r.utility || "").trim());
+    if (invalid) { setError("Each utility must have a type selected."); return; }
+    const validRows = rows.filter((r) => String(r.utility || "").trim());
+    if (validRows.length === 0) { setError("Add at least one utility before saving."); return; }
+
+    setSaving(true);
+    let savedCount = 0;
+    let failed = 0;
+    try {
+      for (const tenant of tenants) {
+        const unitUtils = getTenantUnitUtils(tenant, allUnits);
+        const existingAdditional = deriveAdditionalUtilities(tenant, unitUtils);
+        const merged = buildUtilitiesPayload({ inheritedUtilities: unitUtils, customUtilities: [...existingAdditional, ...validRows] });
+        try {
+          await dispatch(updateTenant({ id: String(tenant._id), tenantData: { utilities: merged } })).unwrap();
+          savedCount++;
+        } catch {
+          failed++;
+        }
+      }
+      if (failed === 0) {
+        toast.success(tenants.length === 1 ? "Utilities updated successfully" : `Utilities updated for ${savedCount} tenant${savedCount !== 1 ? "s" : ""}`);
+        onSaved();
+        onClose();
+      } else {
+        toast.warning(`Updated ${savedCount} tenant${savedCount !== 1 ? "s" : ""}, ${failed} failed`);
+        if (savedCount > 0) { onSaved(); onClose(); }
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+
+        {/* Header */}
+        <div className="flex items-center justify-between bg-[#0B3B2E] px-5 py-4">
+          <div className="flex items-center gap-2.5 text-white">
+            <FaBolt size={14} />
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">
+                {isMulti ? `Adding Utilities — ${tenants.length} Tenants` : "Utilities"}
+              </p>
+              <h3 className="text-sm font-black leading-tight">
+                {isMulti
+                  ? tenants.map((t) => t.name || t.tenantCode || "Tenant").join(", ")
+                  : <>
+                      {singleTenant?.name || "Tenant"}
+                      {singleTenant?.tenantCode ? <span className="ml-2 font-normal text-white/60">({singleTenant.tenantCode})</span> : null}
+                    </>}
+              </h3>
+            </div>
+          </div>
+          <button onClick={onClose} disabled={saving}
+            className="flex h-7 w-7 items-center justify-center rounded text-white/70 hover:bg-white/10 hover:text-white transition">
+            <FaTimes size={13} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {/* Single-tenant: show inherited unit utilities read-only */}
+          {!isMulti && singleUnitUtils.length > 0 && (
+            <div className="border-b border-slate-100 bg-slate-50 px-5 py-3">
+              <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Unit Utilities (Inherited)</p>
+              <div className="flex flex-wrap gap-1.5">
+                {singleUnitUtils.map((u, i) => (
+                  <span key={i} className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                    {u.utilityLabel || u.utility}
+                    {u.isIncluded
+                      ? <span className="ml-1 text-emerald-600">incl.</span>
+                      : u.unitCharge > 0 ? <span className="ml-1 text-slate-400">Ksh {fmtKES(u.unitCharge)}</span> : null}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Multi-tenant: show selected tenant chips */}
+          {isMulti && (
+            <div className="border-b border-slate-100 bg-amber-50 px-5 py-3">
+              <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-amber-600">
+                These utilities will be added to all {tenants.length} selected tenants
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {tenants.map((t) => (
+                  <span key={String(t._id)} className="inline-flex items-center rounded border border-amber-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                    {t.name || t.tenantCode}
+                    {t.tenantCode && t.name ? <span className="ml-1 text-slate-400">({t.tenantCode})</span> : null}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Utility rows */}
+          <div className="space-y-3 px-5 py-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-wide text-slate-700">
+                  {isMulti ? "Utilities to Add" : "Additional Utilities"}
+                </p>
+                <p className="text-[10px] text-slate-400">
+                  {isMulti ? "Will be merged into each tenant's existing utilities" : "Utilities beyond the unit's defaults"}
+                </p>
+              </div>
+              <button type="button" onClick={addRow}
+                className="flex h-7 items-center gap-1.5 rounded bg-indigo-600 px-3 text-xs font-bold text-white hover:bg-indigo-700">
+                <FaPlus size={9} /> Add Utility
+              </button>
+            </div>
+
+            {rows.length === 0 ? (
+              <p className="py-8 text-center text-sm font-medium text-indigo-400">No utilities added yet</p>
+            ) : (
+              <div className="space-y-2">
+                {rows.map((row, idx) => (
+                  <div key={idx} className="grid grid-cols-[1fr_120px_auto_auto] items-end gap-2 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3">
+                    <div>
+                      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500">Utility Type</label>
+                      <select
+                        value={row.utility}
+                        onChange={(e) => updateRow(idx, "utility", e.target.value)}
+                        className="h-8 w-full border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+                      >
+                        <option value="">Select type…</option>
+                        {allOptions.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500">Charge (Ksh)</label>
+                      <input
+                        type="number" min="0" step="0.01" placeholder="0.00"
+                        value={row.unitCharge}
+                        onChange={(e) => updateRow(idx, "unitCharge", e.target.value)}
+                        className="h-8 w-full border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+                      />
+                    </div>
+                    <div className="flex h-8 items-center gap-1.5 pb-0.5">
+                      <input
+                        type="checkbox" id={`util-incl-${idx}`}
+                        checked={!!row.isIncluded}
+                        onChange={(e) => updateRow(idx, "isIncluded", e.target.checked)}
+                        className="rounded border-slate-300 text-[#0B3B2E]"
+                      />
+                      <label htmlFor={`util-incl-${idx}`} className="whitespace-nowrap text-[10px] font-semibold text-slate-600">Incl. in rent</label>
+                    </div>
+                    <button type="button" onClick={() => removeRow(idx)}
+                      className="flex h-8 w-8 items-center justify-center rounded border border-red-200 bg-red-50 text-red-600 hover:bg-red-100">
+                      <FaTrash size={10} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {error && <p className="text-xs font-medium text-red-600">{error}</p>}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+          <button onClick={onClose} disabled={saving}
+            className="h-8 rounded border border-slate-300 px-4 text-xs font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50">
+            Cancel
+          </button>
+          <button onClick={handleSave} disabled={saving}
+            className="flex h-8 items-center gap-1.5 rounded bg-[#0B3B2E] px-5 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-60">
+            {saving
+              ? <><FaSpinner size={10} className="animate-spin" /> Saving…</>
+              : isMulti ? `Save to ${tenants.length} Tenants` : "Save Utilities"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const Tenants = ({ listingMode = "active" }) => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -236,9 +542,9 @@ const Tenants = ({ listingMode = "active" }) => {
   const [showImportModal, setShowImportModal] = useState(false);
   const [showCommunicationModal, setShowCommunicationModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
+  const [showAddUtilityModal, setShowAddUtilityModal] = useState(false);
   const [isTransferring, setIsTransferring] = useState(false);
-  const [isFixingLeases, setIsFixingLeases] = useState(false);
-  const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", effectiveDate: "", reason: "", filterProperty: "", filterSearch: "", depositTopUp: 0, depositTopUpDueDate: "" });
+const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", effectiveDate: "", reason: "", filterProperty: "", filterSearch: "", depositTopUp: 0, depositTopUpDueDate: "", reduceDeposit: false });
   const [showTerminateModal, setShowTerminateModal] = useState(false);
   const [isTerminating, setIsTerminating] = useState(false);
   const [terminationForm, setTerminationForm] = useState({ tenantId: "", effectiveDate: "", reason: "" });
@@ -1088,24 +1394,10 @@ const Tenants = ({ listingMode = "active" }) => {
       return;
     }
     if (selectedTenants.length === 0) {
-      toast.warning("Please select one tenant to add a utility for");
+      toast.warning("Please select at least one tenant to add a utility for");
       return;
     }
-    if (selectedTenants.length > 1) {
-      toast.warning("Please select only one tenant to add a utility for");
-      return;
-    }
-
-    const selectedTenant = transformedTenants.find((tenant) => tenant.id === selectedTenants[0]);
-    const firstName = (selectedTenant?.tenantName || "Tenant").split(" ")[0];
-
-    navigate(`/tenant/${selectedTenants[0]}/edit`, {
-      state: {
-        tabTitle: `${firstName}-Utilities`,
-        focusSection: "additional-utilities",
-        autoAddUtility: true,
-      },
-    });
+    setShowAddUtilityModal(true);
     setActionMenuOpen(false);
   };
 
@@ -1119,7 +1411,7 @@ const handleTransferUnit = useCallback(() => {
   setTransferForm({
     tenantId: selectedTenants[0], newUnit: "", effectiveDate: new Date().toISOString().slice(0, 10),
     reason: "", filterProperty: "", filterSearch: "", depositTopUp: 0,
-    depositTopUpDueDate: due.toISOString().slice(0, 10),
+    depositTopUpDueDate: due.toISOString().slice(0, 10), reduceDeposit: false,
   });
   setShowTransferModal(true);
   setActionMenuOpen(false);
@@ -1137,6 +1429,7 @@ const confirmTransferUnit = useCallback(async () => {
       effectiveDate: transferForm.effectiveDate,
       reason: transferForm.reason,
       ...(topUp > 0 && { depositTopUpAmount: topUp }),
+      ...(transferForm.reduceDeposit && { reduceDepositToNewUnit: true }),
     });
 
     if (topUp > 0) {
@@ -1160,6 +1453,8 @@ const confirmTransferUnit = useCallback(async () => {
         toast.success("Tenant transferred successfully");
         toast.warning("Deposit top-up invoice could not be created automatically — please create it manually");
       }
+    } else if (transferForm.reduceDeposit && transferFiltered.depositDiff < 0) {
+      toast.success("Tenant transferred and deposit record reduced to match new unit");
     } else {
       toast.success("Tenant unit transferred successfully");
     }
@@ -1498,24 +1793,6 @@ const confirmTransferUnit = useCallback(async () => {
     toast.info("Tenants exported successfully!");
   };
 
-  const handleFixDuplicateLeases = async () => {
-    if (!window.confirm("This will scan for duplicate lease agreement numbers and reassign unique numbers to the duplicates.\n\nProceed?")) return;
-    setIsFixingLeases(true);
-    try {
-      const res = await adminRequests.post("/tenants/fix-duplicate-agreements", { business: currentCompany?._id });
-      const data = res?.data;
-      if (data?.groups === 0) {
-        toast.success("All lease numbers are already clean — no duplicates found.");
-      } else {
-        toast.success(data?.message || "Lease numbers fixed successfully.");
-      }
-    } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to fix lease numbers. Please try again.");
-    } finally {
-      setIsFixingLeases(false);
-    }
-  };
-
   // ===== FILTER OPTIONS =====
   const uniqueProperties = useMemo(() => {
     const propertyNames = properties
@@ -1679,16 +1956,7 @@ const confirmTransferUnit = useCallback(async () => {
                   <FaFileExport size={9} className="rotate-180" /> Import
                 </button>
               )}
-              <button
-                onClick={handleFixDuplicateLeases}
-                disabled={isFixingLeases}
-                title="Fix duplicate lease agreement numbers so tenant editing works"
-                className="h-7 shrink-0 flex items-center gap-1 rounded bg-red-700 px-2.5 text-xs font-semibold text-white hover:bg-red-800 disabled:opacity-60"
-              >
-                {isFixingLeases ? <FaSpinner size={9} className="animate-spin" /> : <FaRedoAlt size={9} />}
-                {isFixingLeases ? "Fixing..." : "Fix Leases"}
-              </button>
-              <button onClick={handlePrintList} className="h-7 shrink-0 flex items-center gap-1 rounded bg-slate-700 px-2.5 text-xs font-semibold text-white hover:bg-slate-800">
+<button onClick={handlePrintList} className="h-7 shrink-0 flex items-center gap-1 rounded bg-slate-700 px-2.5 text-xs font-semibold text-white hover:bg-slate-800">
                 <FaPrint size={9} /> Print
               </button>
               <button onClick={handleExportToExcel} className="h-7 shrink-0 flex items-center gap-1 rounded bg-gray-600 px-2.5 text-xs font-semibold text-white hover:bg-gray-700">
@@ -2236,6 +2504,7 @@ const confirmTransferUnit = useCallback(async () => {
                             ...p,
                             newUnit: uId,
                             depositTopUp: Math.max(0, uDeposit - currentDeposit),
+                            reduceDeposit: false,
                           }))}
                           className={`cursor-pointer border-t border-slate-100 transition ${isSelected ? "bg-[#0B3B2E]/5 font-semibold" : "hover:bg-slate-50"}`}>
                           <td className="px-3 py-2">
@@ -2323,8 +2592,25 @@ const confirmTransferUnit = useCallback(async () => {
                     </p>
                   </div>
                 ) : depositDiff < 0 ? (
-                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs text-emerald-800">
-                    <span className="font-semibold">No top-up needed.</span> The new unit's deposit (Ksh {fmtKES(destDeposit)}) is lower than the tenant's current deposit (Ksh {fmtKES(currentDeposit)}). The surplus of Ksh {fmtKES(Math.abs(depositDiff))} can be refunded or carried forward at your discretion.
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 space-y-2.5">
+                    <p className="text-xs font-semibold text-emerald-800">
+                      Surplus deposit — new unit requires <span className="font-black">Ksh {fmtKES(Math.abs(depositDiff))} less</span> than what's currently held.
+                    </p>
+                    <label className="flex cursor-pointer items-start gap-2.5">
+                      <input
+                        type="checkbox"
+                        checked={!!transferForm.reduceDeposit}
+                        onChange={(e) => setTransferForm((p) => ({ ...p, reduceDeposit: e.target.checked }))}
+                        className="mt-0.5 rounded border-slate-300 text-[#0B3B2E]"
+                      />
+                      <span className="text-xs text-emerald-900">
+                        <span className="font-bold">Reduce deposit record</span> from Ksh {fmtKES(currentDeposit)} → Ksh {fmtKES(destDeposit)} to match the new unit's requirement.
+                        The Ksh {fmtKES(Math.abs(depositDiff))} surplus should be refunded to the tenant separately via a payment voucher.
+                      </span>
+                    </label>
+                    {!transferForm.reduceDeposit && (
+                      <p className="text-[11px] text-emerald-700">Leave unchecked to keep the existing deposit amount — useful when the landlord retains the full deposit.</p>
+                    )}
                   </div>
                 ) : (
                   <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs text-slate-600">
@@ -2929,6 +3215,24 @@ const confirmTransferUnit = useCallback(async () => {
         onClose={() => setShowImportModal(false)}
         onImport={handleBulkImport}
       />
+
+      {/* ===== ADD UTILITY MODAL ===== */}
+      {showAddUtilityModal && selectedTenants.length > 0 && (() => {
+        const rawTenants = (Array.isArray(tenantsData) ? tenantsData : []).filter((t) =>
+          selectedTenants.includes(normalizeId(t._id))
+        );
+        if (rawTenants.length === 0) return null;
+        return (
+          <AddUtilityModal
+            tenants={rawTenants}
+            allUnits={units}
+            company={currentCompany}
+            dispatch={dispatch}
+            onClose={() => setShowAddUtilityModal(false)}
+            onSaved={() => dispatch(getTenants({ business: currentCompany?._id }))}
+          />
+        );
+      })()}
     </DashboardLayout>
   );
 };

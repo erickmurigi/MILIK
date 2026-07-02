@@ -193,7 +193,8 @@ const CONTEXT_PERMISSION_MAP = {
 };
 
 const normalizePhoneNumber = (value = '', defaultCountryCode = '+254') => {
-  const raw = String(value || '').trim();
+  // When multiple numbers are stored (e.g. "0724383809/072057558"), SMS only the first
+  const raw = String(value || '').split(/[\/,]/)[0].trim();
   if (!raw) return '';
   const compact = raw.replace(/\s+/g, '').replace(/[^\d+]/g, '');
   if (!compact) return '';

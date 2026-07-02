@@ -17,7 +17,7 @@ import Maintenance from "../../models/Maintenance.js";
 import Inspection from "../../models/Inspection.js";
 import MeterReading from "../../models/MeterReading.js";
 import { createTenantInvoiceRecord, resolveLeaseAgreementFeeIncomeAccount } from "./tenantInvoices.js";
-import { isAgreementNumberDuplicateError, saveLeaseWithUniqueAgreementNumber, generateAgreementNumber, buildAgreementNumberPrefix } from "../../services/agreementNumberService.js";
+import { isAgreementNumberDuplicateError, saveLeaseWithUniqueAgreementNumber } from "../../services/agreementNumberService.js";
 import { logAuditEvent } from "../../utils/auditLogger.js";
 
 
@@ -184,6 +184,22 @@ const resolveBusinessId = (req) => {
 };
 
 const normalizeString = (value) => (typeof value === "string" ? value.trim() : value);
+
+// Normalise Kenyan phone numbers to the local 0XXXXXXXXX (10-digit) format for storage.
+// Handles: +254712345678 / 254712345678 / 0712345678 / 712345678 (9 digits missing leading 0)
+const normalizeKenyanPhoneForStorage = (value) => {
+  // Normalize each segment so both display correctly (e.g. "79060740/0724383809" → "079060740/0724383809")
+  // SMS sending uses only the first segment — see normalizePhoneNumber in communicationService.js
+  const segments = String(value || "").trim().split(/[\/,]/).map((seg) => {
+    const raw = seg.trim().replace(/\D/g, "");
+    if (!raw) return null;
+    if (raw.startsWith("254") && raw.length === 12) return `0${raw.slice(3)}`; // 254712345678 → 0712345678
+    if (raw.startsWith("0") && raw.length === 10) return raw;                  // already correct
+    if (raw.length === 9) return `0${raw}`;                                    // 712345678 → 0712345678
+    return raw;                                                                 // unknown format — store as-is
+  }).filter(Boolean);
+  return segments.length ? segments.join("/") : null;
+};
 
 const isPlaceholder = (value) => {
   if (value === null || value === undefined) return true;
@@ -729,7 +745,7 @@ export const createTenant = async (req, res, next) => {
       : (unit?.property?.depositHeldBy || "propertyManager");
 
     const normalizedName = normalizeString(req.body.name);
-    const normalizedPhone = isPlaceholder(req.body.phone) ? null : normalizeString(req.body.phone);
+    const normalizedPhone = isPlaceholder(req.body.phone) ? null : normalizeKenyanPhoneForStorage(req.body.phone);
     const normalizedIdNumber = isPlaceholder(req.body.idNumber) ? null : normalizeString(req.body.idNumber);
     const normalizedPaymentMethod = normalizePaymentMethod(req.body.paymentMethod);
     const normalizedTenantCode = normalizeString(req.body.tenantCode);
@@ -1171,7 +1187,7 @@ export const updateTenant = async (req, res, next) => {
     }
 
     if (normalizedPayload.phone !== undefined) {
-      normalizedPayload.phone = isPlaceholder(normalizedPayload.phone) ? null : normalizeString(normalizedPayload.phone);
+      normalizedPayload.phone = isPlaceholder(normalizedPayload.phone) ? null : normalizeKenyanPhoneForStorage(normalizedPayload.phone);
     }
 
     if (normalizedPayload.idNumber !== undefined) {
@@ -1834,6 +1850,7 @@ export const transferTenantUnit = async (req, res, next) => {
     const reason = normalizeString(req.body?.reason) || "Tenant transferred to a new unit";
     const effectiveDate = req.body?.effectiveDate ? new Date(req.body.effectiveDate) : new Date();
     const depositTopUpAmount = Math.max(0, Number(req.body?.depositTopUpAmount || 0));
+    const reduceDepositToNewUnit = Boolean(req.body?.reduceDepositToNewUnit);
     const previousPrimaryUnitId = toObjectIdString(tenant.unit);
     const previousAdditionalUnitIds = uniqueUnitIds(tenant.additionalUnits || []);
 
@@ -1858,6 +1875,16 @@ export const transferTenantUnit = async (req, res, next) => {
       currentlyAssignedUnitIds: getTenantAssignedUnitIds(tenant),
     });
 
+    const newUnitDeposit = Number(requestedUnitDocs.find((u) => String(u._id) === nextPrimaryUnitId)?.deposit || 0);
+    const currentDepositAmount = Number(tenant.depositAmount || 0);
+
+    let resolvedDepositAmount;
+    if (depositTopUpAmount > 0) {
+      resolvedDepositAmount = currentDepositAmount + depositTopUpAmount;
+    } else if (reduceDepositToNewUnit && newUnitDeposit < currentDepositAmount) {
+      resolvedDepositAmount = newUnitDeposit;
+    }
+
     const updatedTenant = await populateTenantQuery(
       Tenant.findByIdAndUpdate(
         tenant._id,
@@ -1867,9 +1894,7 @@ export const transferTenantUnit = async (req, res, next) => {
             additionalUnits: requestedUnits.additional,
             rent: calculateTenantAssignedRent(requestedUnitDocs, tenant.rent || 0),
             utilities: deriveAssignedUtilitiesFromUnitDocs(requestedUnitDocs),
-            ...(depositTopUpAmount > 0 && {
-              depositAmount: Number(tenant.depositAmount || 0) + depositTopUpAmount,
-            }),
+            ...(resolvedDepositAmount !== undefined && { depositAmount: resolvedDepositAmount }),
           },
           $push: {
             unitTransferHistory: {
@@ -1888,6 +1913,11 @@ export const transferTenantUnit = async (req, res, next) => {
         },
         { new: true, runValidators: true }
       )
+    );
+
+    // Sync the lease to reflect the new unit and updated rent
+    await syncTenantLeaseRecord({ tenantDoc: updatedTenant, action: "upsert" }).catch((err) =>
+      console.error("Lease sync after unit transfer failed:", err?.message)
     );
 
     await syncTenantAssignedUnitOccupancy({
@@ -1915,6 +1945,8 @@ export const transferTenantUnit = async (req, res, next) => {
         effectiveDate,
         reason,
         depositTopUpAmount: depositTopUpAmount || 0,
+        depositReduced: reduceDepositToNewUnit && resolvedDepositAmount !== undefined && resolvedDepositAmount < currentDepositAmount,
+        newDepositAmount: resolvedDepositAmount ?? currentDepositAmount,
       },
     });
 
@@ -1992,7 +2024,7 @@ export const bulkImportTenants = async (req, res, next) => {
 
       try {
         const normalizedTenantName = normalizeString(record.tenantName);
-        const normalizedPhoneNumber = isPlaceholder(record.phoneNumber) ? null : normalizeString(record.phoneNumber);
+        const normalizedPhoneNumber = isPlaceholder(record.phoneNumber) ? null : normalizeKenyanPhoneForStorage(record.phoneNumber);
         const normalizedIdNumber = isPlaceholder(record.idNumber) ? null : normalizeString(record.idNumber);
 
         if (!normalizedTenantName) {
@@ -2427,119 +2459,3 @@ export const migrateTenantCodes = async (req, res, next) => {
   }
 };
 
-// Fix duplicate lease agreement numbers AND resync sparse indexes.
-// One-click repair that:
-//  1. Resyncs Tenant + Landlord indexes so idNumber/regId null values don't conflict.
-//  2. Finds duplicate lease agreementNumbers for this business, keeps the best lease
-//     per group and regenerates unique numbers for the rest.
-export const fixDuplicateLeaseAgreements = async (req, res, next) => {
-  try {
-    const businessId = resolveBusinessId(req);
-    if (!businessId) {
-      return res.status(400).json({ success: false, message: "Business context is required" });
-    }
-
-    // ── Step 1: fix Tenant idNumber index — needs partialFilterExpression ────────
-    // sparse:true still indexes null; partialFilterExpression is required to allow
-    // multiple tenants to have idNumber: null without conflicting.
-    const indexErrors = [];
-    try {
-      const tenantCol = mongoose.connection.db.collection("tenants");
-      const tenantIndexes = await tenantCol.indexes();
-      const stale = tenantIndexes.find(
-        (i) => i.name === "business_1_idNumber_1" && !i.partialFilterExpression
-      );
-      if (stale) {
-        await tenantCol.dropIndex("business_1_idNumber_1");
-        await tenantCol.createIndex(
-          { business: 1, idNumber: 1 },
-          { unique: true, partialFilterExpression: { idNumber: { $type: "string", $ne: "" } } }
-        );
-      }
-    } catch (e) {
-      indexErrors.push(`Tenant idNumber index: ${e?.message}`);
-    }
-
-    // ── Step 2: fix duplicate lease agreementNumbers ──────────────────────────
-    const STATUS_PRIORITY = { active: 0, draft: 1, pending_signature: 2, terminated: 3 };
-    const statusRank = (s) => STATUS_PRIORITY[s] ?? 99;
-
-    const duplicates = await Lease.aggregate([
-      {
-        $match: {
-          business: new mongoose.Types.ObjectId(String(businessId)),
-          agreementNumber: { $nin: [null, ""] },
-        },
-      },
-      { $group: { _id: "$agreementNumber", count: { $sum: 1 }, ids: { $push: "$_id" } } },
-      { $match: { count: { $gt: 1 } } },
-    ]);
-
-    let totalCleared = 0;
-    let totalReassigned = 0;
-    let totalFailed = 0;
-
-    for (const group of duplicates) {
-      const agreementNumber = group._id;
-
-      const leases = await Lease.find({ business: businessId, agreementNumber })
-        .sort({ createdAt: -1 })
-        .lean();
-
-      leases.sort((a, b) => {
-        const sr = statusRank(a.status) - statusRank(b.status);
-        return sr !== 0 ? sr : new Date(b.createdAt) - new Date(a.createdAt);
-      });
-
-      const [, ...losers] = leases;
-
-      for (const loser of losers) {
-        await Lease.updateOne({ _id: loser._id }, { $set: { agreementNumber: "" } });
-        totalCleared++;
-      }
-
-      for (const loser of losers) {
-        let reassigned = false;
-        for (let attempt = 0; attempt < 30; attempt++) {
-          const newNum = await generateAgreementNumber(businessId, {
-            dateValue: loser.createdAt || new Date(),
-          });
-          try {
-            await Lease.updateOne({ _id: loser._id }, { $set: { agreementNumber: newNum } });
-            totalReassigned++;
-            reassigned = true;
-            break;
-          } catch (err) {
-            if (err?.code !== 11000) throw err;
-          }
-        }
-        if (!reassigned) totalFailed++;
-      }
-    }
-
-    const parts = [];
-    if (indexErrors.length === 0) parts.push("Indexes resynced.");
-    else parts.push(`Index sync warnings: ${indexErrors.join("; ")}`);
-
-    if (duplicates.length === 0) {
-      parts.push("No duplicate lease numbers found.");
-    } else if (totalFailed === 0) {
-      parts.push(`${duplicates.length} duplicate group(s) fixed — ${totalReassigned} lease(s) renumbered.`);
-    } else {
-      parts.push(`${duplicates.length} group(s): ${totalReassigned} renumbered, ${totalFailed} failed — run again.`);
-    }
-    parts.push("Tenant editing should now work normally.");
-
-    return res.status(200).json({
-      success: true,
-      message: parts.join(" "),
-      groups: duplicates.length,
-      fixed: totalCleared,
-      reassigned: totalReassigned,
-      failed: totalFailed,
-      indexErrors,
-    });
-  } catch (err) {
-    next(err);
-  }
-};

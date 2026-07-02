@@ -15,7 +15,6 @@ import {
   bulkImportTenants,
   transferTenantUnit,
   backfillMissingLeases,
-  fixDuplicateLeaseAgreements,
 } from "../../controllers/propertyController/tenants.js"
 import { verifyUser } from "../../controllers/verifyToken.js"
 
@@ -56,9 +55,6 @@ router.post("/migrate-codes", verifyUser, migrateTenantCodes)
 
 // Backfill: Create lease agreements for active tenants that don't have one
 router.post("/backfill-leases", verifyUser, backfillMissingLeases)
-
-// Repair: Fix duplicate lease agreement numbers so tenant editing works
-router.post("/fix-duplicate-agreements", verifyUser, fixDuplicateLeaseAgreements)
 
 router.get('/:id/total-due', verifyUser, async (req, res, next) => {
   if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
