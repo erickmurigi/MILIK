@@ -3,6 +3,8 @@ import CarWashCustomerCredit from '../models/CarWashCustomerCredit.js';
 import CarWashCustomer from '../models/CarWashCustomer.js';
 import CarWashJob from '../models/CarWashJob.js';
 import ChartOfAccount from '../../../models/ChartOfAccount.js';
+import Company from '../../../models/Company.js';
+import FinancialLedgerEntry from '../../../models/FinancialLedgerEntry.js';
 import { createError } from '../../../utils/error.js';
 import { currentUserId, resolveActiveBusinessId } from '../services/businessScope.js';
 import {
@@ -10,7 +12,9 @@ import {
   postCarWashCreditWriteOffLedger,
   postCarWashCreditRefundLedger,
   reverseCarWashCreditWriteOffLedger,
+  postCarWashCustomerCreditCreationLedger,
 } from '../services/carwashAccountingService.js';
+import { getRawMpesaPaybillConfigs, getPrimaryMpesaPaybillConfig } from '../../../utils/companyModules.js';
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
@@ -215,6 +219,43 @@ export const refundCredit = async (req, res, next) => {
     await credit.save();
 
     res.json({ success: true, data: credit, message: `KES ${credit.amount.toLocaleString()} credit refunded` });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── Repair: re-post GL entries for M-Pesa credits that failed schema validation ─
+export const repairCreditLedgers = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const userId = currentUserId(req);
+
+    const company = await Company.findById(business).select('paymentIntegration').lean();
+    const config = getPrimaryMpesaPaybillConfig(getRawMpesaPaybillConfigs(company?.paymentIntegration));
+    const cashbookId = config?.defaultCashbookAccountId;
+    if (!cashbookId || !mongoose.Types.ObjectId.isValid(String(cashbookId))) {
+      return next(createError(422, 'M-Pesa cashbook not configured on paybill settings'));
+    }
+    const cashbook = await ChartOfAccount.findOne({ _id: cashbookId, business, type: 'asset', isPosting: true }).lean();
+    if (!cashbook) return next(createError(422, 'Cashbook account not found'));
+
+    // Find credit docs that have no posted ledger entry yet
+    const credits = await CarWashCustomerCredit.find({ business }).lean();
+    const postedIds = new Set(
+      (await FinancialLedgerEntry.distinct('sourceTransactionId', {
+        business: new mongoose.Types.ObjectId(String(business)),
+        sourceTransactionType: 'carwash_customer_credit_created',
+      })).map(String)
+    );
+
+    const pending = credits.filter((c) => !postedIds.has(String(c._id)));
+    let posted = 0;
+    for (const creditDoc of pending) {
+      await postCarWashCustomerCreditCreationLedger({ businessId: business, creditDoc, cashbookAccountId: cashbook._id, userId });
+      posted++;
+    }
+
+    res.json({ success: true, message: `Repaired ${posted} credit ledger entries (${credits.length - posted} already posted).` });
   } catch (err) {
     next(err);
   }

@@ -89,6 +89,12 @@ export default function CarWashCreditBalances() {
     onError: (err) => toast.error(err?.response?.data?.message || "Undo failed"),
   });
 
+  const repairMutation = useMutation({
+    mutationFn: () => carWashApi.repairCreditLedgers(),
+    onSuccess: (res) => toast.success(res?.message || "Ledger repair complete"),
+    onError: (err) => toast.error(err?.response?.data?.message || "Repair failed"),
+  });
+
   const handleBulkWriteOff = () => {
     const ids = [...selected];
     if (!ids.length) return toast.warn("Select at least one credit to write off");
@@ -111,15 +117,29 @@ export default function CarWashCreditBalances() {
               Overpayments held as credits. Apply, refund, or write off to Other Income (breakage).
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => queryClient.invalidateQueries({ queryKey })}
-            disabled={isLoading}
-            className="flex items-center gap-1 h-7 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-          >
-            <FaRedoAlt size={9} className={isLoading ? "animate-spin" : ""} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            {canManage && (
+              <button
+                type="button"
+                onClick={() => repairMutation.mutate()}
+                disabled={repairMutation.isPending}
+                title="Re-post GL entries for credits that failed ledger validation"
+                className="flex items-center gap-1 h-7 rounded border border-amber-300 bg-amber-50 px-2 text-xs font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+              >
+                <FaExclamationTriangle size={9} />
+                {repairMutation.isPending ? "Repairing…" : "Repair Ledgers"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => queryClient.invalidateQueries({ queryKey })}
+              disabled={isLoading}
+              className="flex items-center gap-1 h-7 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+            >
+              <FaRedoAlt size={9} className={isLoading ? "animate-spin" : ""} />
+              Refresh
+            </button>
+          </div>
         </div>
 
         {/* Tabs */}

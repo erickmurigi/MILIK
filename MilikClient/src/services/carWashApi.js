@@ -149,6 +149,7 @@ export const carWashApi = {
   writeOffCredits: async (ids) => unwrap(await adminRequests.post('/carwash/credits/write-off', { ids })),
   undoWriteOff: async (id) => unwrap(await adminRequests.post(`/carwash/credits/${id}/undo-write-off`)),
   refundCredit: async (id, payload) => unwrap(await adminRequests.post(`/carwash/credits/${id}/refund`, payload)),
+  repairCreditLedgers: async () => unwrap(await adminRequests.post('/carwash/credits/repair-ledgers')),
 
   // ─── Credit accounts ─────────────────────────────────────────────────────
   listCreditAccounts: async (params = {}) => unwrap(await adminRequests.get("/carwash/accounts", { params })),

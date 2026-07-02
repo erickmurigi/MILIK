@@ -8,6 +8,7 @@ import {
   writeOffCredit,
   undoWriteOff,
   refundCredit,
+  repairCreditLedgers,
 } from '../controllers/creditsController.js';
 
 const router = express.Router();
@@ -31,5 +32,8 @@ router.post('/:id/undo-write-off', validateParamId(), requireCompanyPermission('
 
 // Refund credit as cash
 router.post('/:id/refund', validateParamId(), requireCompanyPermission('carwash-loyalty', 'manage', 'carwash'), refundCredit);
+
+// One-time repair: re-post ledger entries for credits that failed enum validation
+router.post('/repair-ledgers', requireCompanyPermission('carwash-loyalty', 'manage', 'carwash'), repairCreditLedgers);
 
 export default router;
