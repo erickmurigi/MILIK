@@ -191,8 +191,8 @@ const UnitsImportModal = ({ isOpen, onClose, onImport }) => {
                             <td className="px-3 py-2 text-sm text-gray-900 font-semibold">{record.unitNumber}</td>
                             <td className="px-3 py-2 text-sm text-gray-700">{record.propertyCode}</td>
                             <td className="px-3 py-2 text-sm text-gray-700">{record.unitType}</td>
-                            <td className="px-3 py-2 text-sm text-gray-700 text-right">{record.rent.toLocaleString()}</td>
-                            <td className="px-3 py-2 text-sm text-gray-700 text-right">{record.deposit.toLocaleString()}</td>
+                            <td className="px-3 py-2 text-sm text-gray-700 text-right">{Number(record.rent || 0).toLocaleString()}</td>
+                            <td className="px-3 py-2 text-sm text-gray-700 text-right">{Number(record.deposit || 0).toLocaleString()}</td>
                             <td className="px-3 py-2 text-sm text-gray-700">{record.billingFrequency || 'monthly'}</td>
                             <td className="px-3 py-2 text-sm text-gray-700 capitalize">{record.status}</td>
                           </tr>
