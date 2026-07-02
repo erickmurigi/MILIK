@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSelector } from "react-redux";
 import {
   FaCheckCircle, FaCodeBranch, FaExclamationTriangle, FaMobileAlt, FaRedoAlt,
   FaSearch, FaTimesCircle, FaCopy, FaLink, FaTimes, FaCarAlt, FaUndo,
@@ -8,6 +9,7 @@ import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
+import { selectCurrentCompany } from "../../redux/selectors";
 
 const PAGE_SIZE = 50;
 
@@ -503,11 +505,12 @@ const RESULT_META = {
 };
 
 // ─── Upload Modal ─────────────────────────────────────────────────────────────
-function UploadModal({ onClose, onUploaded }) {
+function UploadModal({ onClose, onUploaded, paybills = [] }) {
   const fileInputRef              = useRef(null);
   const [file, setFile]           = useState(null);
   const [preview, setPreview]     = useState(null); // { headers, rows, total, format }
   const [sendSms, setSendSms]     = useState(false);
+  const [selectedShortCode, setSelectedShortCode] = useState("");
   const [processing, setProcessing] = useState(false);
   const [results, setResults]     = useState(null); // { summary, results[] }
   const [dragOver, setDragOver]   = useState(false);
@@ -547,6 +550,7 @@ function UploadModal({ onClose, onUploaded }) {
       const fd = new FormData();
       fd.append("file", file);
       fd.append("sendSms", String(sendSms));
+      if (selectedShortCode) fd.append("shortCode", selectedShortCode);
       const res = await carWashApi.uploadMpesaStatement(fd);
       setResults(res);
       if (res?.summary?.matched > 0) onUploaded?.();
@@ -696,6 +700,28 @@ function UploadModal({ onClose, onUploaded }) {
                 )}
               </div>
 
+              {/* Paybill selector (multi-paybill only) */}
+              {paybills.length > 1 && (
+                <div className="rounded border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <p className="mb-1.5 text-[11px] font-black uppercase tracking-wide text-slate-500">Paybill</p>
+                  <select
+                    value={selectedShortCode}
+                    onChange={(e) => setSelectedShortCode(e.target.value)}
+                    className="h-8 w-full border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+                  >
+                    <option value="">Auto-detect (primary paybill)</option>
+                    {paybills.map((pb) => (
+                      <option key={pb.shortCode} value={pb.shortCode}>
+                        {pb.name ? `${pb.name} (${pb.shortCode})` : pb.shortCode}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    Select the paybill this statement belongs to. Notifications will be tagged accordingly.
+                  </p>
+                </div>
+              )}
+
               {/* SMS toggle */}
               <button
                 type="button"
@@ -720,6 +746,14 @@ function UploadModal({ onClose, onUploaded }) {
           {/* ── Step 3: results ── */}
           {results && (
             <>
+              {selectedShortCode && paybills.length > 1 && (
+                <p className="text-[11px] font-bold text-slate-500">
+                  Paybill:{" "}
+                  <span className="text-[#0B3B2E]">
+                    {paybills.find((pb) => pb.shortCode === selectedShortCode)?.name || selectedShortCode} ({selectedShortCode})
+                  </span>
+                </p>
+              )}
               {/* Summary strip */}
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 sm:gap-1.5">
                 {[
@@ -836,19 +870,23 @@ export default function CarWashMpesaNotifications() {
   const [showUpload, setShowUpload]         = useState(false);
   const [reverseTarget, setReverseTarget]   = useState(null);
 
-  const [filters, setFilters] = useState({ status: "", plate: "", search: "", dateFrom: todayISO(), dateTo: todayISO() });
-  const [applied, setApplied] = useState({ status: "", plate: "", search: "", dateFrom: todayISO(), dateTo: todayISO() });
+  const company   = useSelector(selectCurrentCompany);
+  const paybills  = company?.paymentIntegration?.mpesaPaybills || [];
+
+  const [filters, setFilters] = useState({ status: "", shortCode: "", plate: "", search: "", dateFrom: todayISO(), dateTo: todayISO() });
+  const [applied, setApplied] = useState({ status: "", shortCode: "", plate: "", search: "", dateFrom: todayISO(), dateTo: todayISO() });
   const [page, setPage] = useState(1);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const res = await carWashApi.listMpesaNotifications({
-        status:   applied.status   || undefined,
-        plate:    applied.plate    || undefined,
-        search:   applied.search   || undefined,
-        dateFrom: applied.dateFrom || undefined,
-        dateTo:   applied.dateTo   || undefined,
+        status:    applied.status    || undefined,
+        shortCode: applied.shortCode || undefined,
+        plate:     applied.plate     || undefined,
+        search:    applied.search    || undefined,
+        dateFrom:  applied.dateFrom  || undefined,
+        dateTo:    applied.dateTo    || undefined,
         page,
         limit: PAGE_SIZE,
       });
@@ -866,7 +904,7 @@ export default function CarWashMpesaNotifications() {
 
   const apply = (e) => { e.preventDefault(); setPage(1); setApplied({ ...filters }); };
   const reset = () => {
-    const d = { status: "", plate: "", search: "", dateFrom: todayISO(), dateTo: todayISO() };
+    const d = { status: "", shortCode: "", plate: "", search: "", dateFrom: todayISO(), dateTo: todayISO() };
     setFilters(d); setApplied(d); setPage(1);
   };
 
@@ -910,6 +948,7 @@ export default function CarWashMpesaNotifications() {
         <UploadModal
           onClose={() => { setShowUpload(false); load(); }}
           onUploaded={() => load()}
+          paybills={paybills}
         />
       )}
       {reverseTarget && (
@@ -964,6 +1003,20 @@ export default function CarWashMpesaNotifications() {
           <option value="">All statuses</option>
           {Object.entries(STATUS_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
         </select>
+        {paybills.length > 1 && (
+          <select
+            className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+            value={filters.shortCode}
+            onChange={e => setFilters(p => ({ ...p, shortCode: e.target.value }))}
+          >
+            <option value="">All paybills</option>
+            {paybills.map((pb) => (
+              <option key={pb.shortCode} value={pb.shortCode}>
+                {pb.name || pb.shortCode} ({pb.shortCode})
+              </option>
+            ))}
+          </select>
+        )}
         <input
           className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none uppercase placeholder:normal-case"
           placeholder="Plate (e.g. KBY 578D)"
@@ -1041,6 +1094,11 @@ export default function CarWashMpesaNotifications() {
                       <div className="flex flex-col gap-0.5">
                         <StatusBadge status={n.status} />
                         {n.isReversed && <ReversedBadge />}
+                        {n.shortCode && paybills.length > 1 && (
+                          <span className="inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-500 tracking-wide">
+                            {paybills.find(pb => pb.shortCode === n.shortCode)?.name || n.shortCode}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-3 py-2">

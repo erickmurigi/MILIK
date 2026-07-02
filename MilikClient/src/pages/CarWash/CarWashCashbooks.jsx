@@ -117,7 +117,7 @@ const CarWashCashbooks = () => {
         <PaginationBar
           page={page}
           pages={pageCount}
-          total={rows.length}
+          total={filteredAccounts.length}
           onPageChange={setPage}
         />
       </div>

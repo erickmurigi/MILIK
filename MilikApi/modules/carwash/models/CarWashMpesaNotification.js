@@ -47,6 +47,7 @@ const carWashMpesaNotificationSchema = new mongoose.Schema(
 );
 
 carWashMpesaNotificationSchema.index({ business: 1, createdAt: -1 });
+carWashMpesaNotificationSchema.index({ business: 1, shortCode: 1, createdAt: -1 });
 carWashMpesaNotificationSchema.index({ business: 1, plate: 1 });
 carWashMpesaNotificationSchema.index({ business: 1, status: 1, createdAt: -1 });
 // Compound for duplicate check: business + transactionCode query in confirmCarWashCallback

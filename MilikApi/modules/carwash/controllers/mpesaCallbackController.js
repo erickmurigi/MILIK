@@ -901,7 +901,8 @@ export const listMpesaNotifications = async (req, res, next) => {
 
     const filter = { business };
     if (branchId) filter.branch = new mongoose.Types.ObjectId(String(branchId));
-    if (req.query.status) filter.status = req.query.status;
+    if (req.query.status)    filter.status    = req.query.status;
+    if (req.query.shortCode) filter.shortCode = String(req.query.shortCode).trim();
     if (req.query.plate) {
       const p = normalizePlate(req.query.plate);
       if (p) filter.plate = buildPlateRegex(p);
@@ -935,7 +936,8 @@ export const listMpesaNotifications = async (req, res, next) => {
     ]);
 
     const summaryMatch = { business: new mongoose.Types.ObjectId(String(business)) };
-    if (branchId) summaryMatch.branch = new mongoose.Types.ObjectId(String(branchId));
+    if (branchId)            summaryMatch.branch    = new mongoose.Types.ObjectId(String(branchId));
+    if (req.query.shortCode) summaryMatch.shortCode = String(req.query.shortCode).trim();
     const summary = await CarWashMpesaNotification.aggregate([
       { $match: summaryMatch },
       { $group: { _id: "$status", count: { $sum: 1 }, totalAmount: { $sum: "$amount" } } },
@@ -1402,9 +1404,10 @@ const extractCsvRow = (rawHeaders, cells, fmt) => {
 // ─── Bulk upload M-Pesa statement CSV ─────────────────────────────────────────
 export const bulkUploadMpesaStatement = async (req, res, next) => {
   try {
-    const business = resolveActiveBusinessId(req);
-    const branchId = resolveActiveBranchId(req);
-    const sendSms  = req.body?.sendSms === "true" || req.body?.sendSms === true;
+    const business  = resolveActiveBusinessId(req);
+    const branchId  = resolveActiveBranchId(req);
+    const sendSms   = req.body?.sendSms === "true" || req.body?.sendSms === true;
+    const reqShortCode = String(req.body?.shortCode || "").trim();
 
     if (!req.file) return next(createError(400, "No CSV file uploaded"));
 
@@ -1421,10 +1424,13 @@ export const bulkUploadMpesaStatement = async (req, res, next) => {
     else if (normHeaders.includes("transid") || normHeaders.includes("billrefnumber")) fmt = "daraja";
     if (!fmt) return next(createError(400, "Unrecognised CSV format. Expected M-Pesa Business Portal or Daraja C2B export."));
 
-    // Resolve cashbook
+    // Resolve cashbook — match by shortCode if provided, else fall back to primary
     const company    = await Company.findById(business).lean();
     const configs    = getRawMpesaPaybillConfigs(company?.paymentIntegration || {});
-    const config     = getPrimaryMpesaPaybillConfig(configs);
+    const config     = reqShortCode
+      ? (configs.find((c) => normalizeText(c?.shortCode) === normalizeText(reqShortCode)) || getPrimaryMpesaPaybillConfig(configs))
+      : getPrimaryMpesaPaybillConfig(configs);
+    const uploadShortCode = String(config?.shortCode || "").trim();
     const cashbookId = config?.defaultCashbookAccountId;
     const cashbook   = cashbookId && mongoose.Types.ObjectId.isValid(String(cashbookId))
       ? await ChartOfAccount.findOne({ _id: cashbookId, business, type: "asset", isPosting: true }).lean()
@@ -1499,7 +1505,7 @@ export const bulkUploadMpesaStatement = async (req, res, next) => {
 
       if (!job) {
         await CarWashMpesaNotification.create({
-          business, branch: branchId || null,
+          business, branch: branchId || null, shortCode: uploadShortCode,
           transactionCode, billRefNumber, plate, amount,
           msisdn: msisdn || "", senderName: senderName || "",
           transactionDate: date, status: "unmatched",
@@ -1548,7 +1554,7 @@ export const bulkUploadMpesaStatement = async (req, res, next) => {
 
       // Save matched notification
       await CarWashMpesaNotification.create({
-        business, branch: branchId || null,
+        business, branch: branchId || null, shortCode: uploadShortCode,
         transactionCode, billRefNumber, plate, amount: appliedAmount,
         msisdn: msisdn || "", senderName: senderName || "",
         transactionDate: date, status: "matched",
