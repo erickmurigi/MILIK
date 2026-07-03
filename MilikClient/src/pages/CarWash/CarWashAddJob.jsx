@@ -428,6 +428,7 @@ const CarWashAddJob = () => {
   const openPhotosOnLoad = Boolean(location.state?.openPhotos);
 
   const [services, setServices]     = useState([]);
+  const servicesById = useMemo(() => new Map(services.map((s) => [s._id, s])), [services]);
   const [staff, setStaff]           = useState([]);
   const allStaffRef                 = React.useRef([]);
   const [branches, setBranches]     = useState([]);
@@ -480,12 +481,12 @@ const CarWashAddJob = () => {
 
   const totalTaxAmount = useMemo(() => {
     return Math.round(serviceLines.reduce((sum, l) => {
-      const svc = services.find((s) => s._id === l.service);
+      const svc = servicesById.get(l.service);
       if (!svc?.isTaxable || !svc?.taxRate) return sum;
       const p = Number(l.price) || 0;
       return sum + (p * Number(svc.taxRate) / (100 + Number(svc.taxRate)));
     }, 0) * 100) / 100;
-  }, [serviceLines, services]);
+  }, [serviceLines, servicesById]);
   const discountNum = Math.max(0, Number(discountAmount) || 0);
 
   const { minPrice: discountMinPrice, maxPct: discountMaxPct } = discountSettings;
@@ -629,7 +630,7 @@ const CarWashAddJob = () => {
   }, [editId]);
 
   const handleLineServiceChange = (index, serviceId) => {
-    const svc = services.find((s) => s._id === serviceId);
+    const svc = servicesById.get(serviceId);
     const hasTiers   = svc?.pricingTiers?.length > 0;
     const isPerSqft  = svc?.pricingType === "per_sqft";
     setServiceLines((prev) =>
@@ -653,7 +654,7 @@ const CarWashAddJob = () => {
   const updateMeasurement = (index, field, value) => {
     setServiceLines((prev) => prev.map((line, i) => {
       if (i !== index) return line;
-      const svc  = services.find((s) => s._id === line.service);
+      const svc  = servicesById.get(line.service);
       const rate = Number(svc?.defaultPrice || 30);
       const m    = { ...line.measurements, [field]: value };
       let area   = 0;
@@ -671,7 +672,7 @@ const CarWashAddJob = () => {
   };
 
   const handleLineVehicleTypeChange = (index, vehicleType) => {
-    const svc = services.find((s) => s._id === serviceLines[index]?.service);
+    const svc = servicesById.get(serviceLines[index]?.service);
     const tier = svc?.pricingTiers?.find((t) => t.vehicleType === vehicleType);
     setServiceLines((prev) =>
       prev.map((line, i) =>
@@ -1142,7 +1143,7 @@ const CarWashAddJob = () => {
               {/* Mobile stacked layout */}
               <div className="sm:hidden divide-y divide-slate-200">
                 {serviceLines.map((line, index) => {
-                  const svc = services.find((s) => s._id === line.service);
+                  const svc = servicesById.get(line.service);
                   const hasTiers = svc?.pricingTiers?.length > 0;
                   const isPerSqft = svc?.pricingType === "per_sqft";
                   const isReward = Boolean(line.isRewardLine);
@@ -1305,7 +1306,7 @@ const CarWashAddJob = () => {
                         {jobType === "vehicle" && (
                           <td className="px-3 py-1.5">
                             {(() => {
-                              const svc = services.find((s) => s._id === line.service);
+                              const svc = servicesById.get(line.service);
                               const hasTiers = svc?.pricingTiers?.length > 0;
                               return hasTiers ? (
                                 <select
@@ -1396,7 +1397,7 @@ const CarWashAddJob = () => {
 
                       {/* Measurement calculator — shown for per_sqft services */}
                       {(() => {
-                        const svc = services.find((s) => s._id === line.service);
+                        const svc = servicesById.get(line.service);
                         if (svc?.pricingType !== "per_sqft") return null;
                         const m    = line.measurements || { shape: "rect", length: "", width: "", diameter: "" };
                         const rate = Number(svc.defaultPrice || 30);
