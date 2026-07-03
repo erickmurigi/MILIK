@@ -37,6 +37,7 @@ import {
   FaExchangeAlt,
   FaUserSlash,
   FaTimes,
+  FaHandshake,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { getTenants, deleteTenant, updateTenant } from "../../redux/tenantsRedux";
@@ -505,6 +506,166 @@ function AddUtilityModal({ tenants, allUnits, company, dispatch, onClose, onSave
   );
 }
 
+// ─── Remove Utility Modal ─────────────────────────────────────────────────────
+function RemoveUtilityModal({ tenants, allUnits, dispatch, onClose, onSaved }) {
+  const isMulti = tenants.length > 1;
+  const [selected, setSelected] = useState(new Set());
+  const [saving, setSaving] = useState(false);
+
+  // Union of all additional utility names across selected tenants, with per-name tenant count
+  const utilityOptions = useMemo(() => {
+    const countMap = new Map();
+    for (const tenant of tenants) {
+      const unitUtils = getTenantUnitUtils(tenant, allUnits);
+      const additional = deriveAdditionalUtilities(tenant, unitUtils);
+      const seen = new Set();
+      for (const u of additional) {
+        const name = u.utility;
+        if (name && !seen.has(name)) {
+          seen.add(name);
+          countMap.set(name, (countMap.get(name) || 0) + 1);
+        }
+      }
+    }
+    return Array.from(countMap.entries()).map(([name, count]) => ({ name, count }));
+  }, [tenants, allUnits]);
+
+  const toggle = (name) => setSelected((prev) => {
+    const next = new Set(prev);
+    if (next.has(name)) next.delete(name); else next.add(name);
+    return next;
+  });
+
+  const handleSave = async () => {
+    if (selected.size === 0) return;
+    setSaving(true);
+    let savedCount = 0;
+    let failed = 0;
+    try {
+      for (const tenant of tenants) {
+        const unitUtils = getTenantUnitUtils(tenant, allUnits);
+        const existing = deriveAdditionalUtilities(tenant, unitUtils);
+        const remaining = existing.filter((u) => !selected.has(u.utility));
+        const merged = buildUtilitiesPayload({ inheritedUtilities: unitUtils, customUtilities: remaining });
+        try {
+          await dispatch(updateTenant({ id: String(tenant._id), tenantData: { utilities: merged } })).unwrap();
+          savedCount++;
+        } catch {
+          failed++;
+        }
+      }
+      if (failed === 0) {
+        toast.success(tenants.length === 1
+          ? "Utilities removed successfully"
+          : `Utilities removed from ${savedCount} tenant${savedCount !== 1 ? "s" : ""}`);
+        onSaved();
+        onClose();
+      } else {
+        toast.warning(`Updated ${savedCount} tenant${savedCount !== 1 ? "s" : ""}, ${failed} failed`);
+        if (savedCount > 0) { onSaved(); onClose(); }
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+
+        {/* Header */}
+        <div className="flex items-center justify-between bg-[#0B3B2E] px-5 py-4">
+          <div className="flex items-center gap-2.5 text-white">
+            <FaTrash size={13} />
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">
+                {isMulti ? `Remove Utilities — ${tenants.length} Tenants` : "Remove Utilities"}
+              </p>
+              <h3 className="text-sm font-black leading-tight">
+                {isMulti
+                  ? tenants.map((t) => t.name || t.tenantCode || "Tenant").join(", ")
+                  : <>{tenants[0]?.name || "Tenant"}{tenants[0]?.tenantCode ? <span className="ml-2 font-normal text-white/60">({tenants[0].tenantCode})</span> : null}</>}
+              </h3>
+            </div>
+          </div>
+          <button onClick={onClose} disabled={saving}
+            className="flex h-7 w-7 items-center justify-center rounded text-white/70 hover:bg-white/10 hover:text-white transition">
+            <FaTimes size={13} />
+          </button>
+        </div>
+
+        {/* Multi-tenant chips */}
+        {isMulti && (
+          <div className="border-b border-slate-100 bg-red-50 px-5 py-3">
+            <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-red-600">
+              Selected utilities will be removed from all matching tenants
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {tenants.map((t) => (
+                <span key={String(t._id)} className="inline-flex items-center rounded border border-red-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                  {t.name || t.tenantCode}
+                  {t.tenantCode && t.name ? <span className="ml-1 text-slate-400">({t.tenantCode})</span> : null}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Utility checklist */}
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          <p className="mb-3 text-[11px] font-black uppercase tracking-wide text-slate-700">Additional Utilities</p>
+          {utilityOptions.length === 0 ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 py-10 text-center">
+              <p className="text-sm font-semibold text-slate-400">No additional utilities found</p>
+              <p className="mt-1 text-xs text-slate-400">These tenants only have unit-inherited utilities</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {utilityOptions.map(({ name, count }) => {
+                const checked = selected.has(name);
+                return (
+                  <label key={name}
+                    className={`flex cursor-pointer items-center justify-between rounded-lg border px-4 py-3 transition ${checked ? "border-red-400 bg-red-50" : "border-slate-200 bg-white hover:border-slate-300"}`}>
+                    <div className="flex items-center gap-3">
+                      <input type="checkbox" checked={checked} onChange={() => toggle(name)}
+                        className="h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500" />
+                      <span className="text-sm font-semibold text-slate-800">{name}</span>
+                    </div>
+                    {isMulti && (
+                      <span className={`text-[10px] font-bold ${count < tenants.length ? "text-amber-600" : "text-slate-400"}`}>
+                        {count}/{tenants.length} tenants
+                      </span>
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3">
+          <p className="text-[11px] text-slate-400">
+            {selected.size === 0 ? "Select utilities to remove" : `${selected.size} utility type${selected.size !== 1 ? "s" : ""} selected`}
+          </p>
+          <div className="flex gap-2">
+            <button onClick={onClose} disabled={saving}
+              className="h-8 rounded border border-slate-300 px-4 text-xs font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50">
+              Cancel
+            </button>
+            <button onClick={handleSave} disabled={saving || selected.size === 0}
+              className="flex h-8 items-center gap-1.5 rounded bg-red-600 px-5 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-60">
+              {saving
+                ? <><FaSpinner size={10} className="animate-spin" /> Removing…</>
+                : `Remove from ${isMulti ? `${tenants.length} Tenants` : "Tenant"}`}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const Tenants = ({ listingMode = "active" }) => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -543,6 +704,7 @@ const Tenants = ({ listingMode = "active" }) => {
   const [showCommunicationModal, setShowCommunicationModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showAddUtilityModal, setShowAddUtilityModal] = useState(false);
+  const [showRemoveUtilityModal, setShowRemoveUtilityModal] = useState(false);
   const [isTransferring, setIsTransferring] = useState(false);
 const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", effectiveDate: "", reason: "", filterProperty: "", filterSearch: "", depositTopUp: 0, depositTopUpDueDate: "", reduceDeposit: false });
   const [showTerminateModal, setShowTerminateModal] = useState(false);
@@ -924,6 +1086,15 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
     () => selectedTenantRows.filter((tenant) => tenant.canDelete),
     [selectedTenantRows]
   );
+
+  // Action-menu enable/disable flags (avoids repetitive ternaries in JSX)
+  const menuHasSel = selectedTenants.length > 0;
+  const menuHasOneSel = selectedTenants.length === 1;
+  const menuHasMulti = selectedTenants.length > 1;
+  const menuCanTransfer = menuHasOneSel && !!selectedPrimaryTenant?.canTransfer && !isTerminatedView;
+  const menuCanTerminate = menuHasOneSel && !!selectedPrimaryTenant?.canTerminate && !isTerminatedView;
+  const menuCanRestore = menuHasOneSel && !!selectedPrimaryTenant?.canRestore;
+  const menuHasDeletable = selectedDeletableTenants.length > 0;
 
   const depositSettlementDerived = useMemo(() => {
     const tenant = depositSettlementTenant;
@@ -1398,6 +1569,19 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
       return;
     }
     setShowAddUtilityModal(true);
+    setActionMenuOpen(false);
+  };
+
+  const handleRemoveUtility = () => {
+    if (!canUpdateTenant) {
+      toast.warning("You do not have permission to update tenant utilities");
+      return;
+    }
+    if (selectedTenants.length === 0) {
+      toast.warning("Please select at least one tenant");
+      return;
+    }
+    setShowRemoveUtilityModal(true);
     setActionMenuOpen(false);
   };
 
@@ -1879,64 +2063,117 @@ const confirmTransferUnit = useCallback(async () => {
                   <FaEllipsisV size={9} /> Actions
                 </button>
                 {actionMenuOpen && (
-                  <div className="absolute right-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
-                    <div className="py-1">
-                      <button onClick={handleViewStatement} className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700">
-                        <FaFileInvoiceDollar size={12} /> View Tenant Statement
-                      </button>
-                      {canUpdateTenant && (
-                        <button onClick={handleEditTenant} className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700">
-                          <FaUserEdit size={12} /> Edit Tenant Details
-                        </button>
-                      )}
-                      {canUpdateTenant && (
-                        <button onClick={handleTransferUnit}
-                          disabled={isTerminatedView || selectedTenants.length !== 1 || !selectedPrimaryTenant?.canTransfer}
-                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${selectedTenants.length === 1 && selectedPrimaryTenant?.canTransfer ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
-                          <FaExchangeAlt size={12} /> Transfer Tenant Unit
-                        </button>
-                      )}
-                      <button onClick={handleViewReceipts} className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700">
-                        <FaMoneyBillWave size={12} /> View Tenant Receipts
-                      </button>
-                      <button onClick={handleOpenAgreement} className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700">
-                        <FaFileInvoiceDollar size={12} /> Open Tenant Agreement
-                      </button>
-                      {canUpdateTenant && (
-                        <button onClick={handleAddUtility} className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700">
-                          <FaBolt size={12} /> Add Utility to Selected Tenant
-                        </button>
-                      )}
-                      {canUpdateTenant && (
-                        <button onClick={handleReviewRent} className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-700 border-t border-gray-200">
-                          <FaChartLine size={12} /> Review Rent for Selected Tenant
-                        </button>
-                      )}
-                      {canUpdateTenant && (
-                        <button onClick={handleOpenTerminateTenant}
-                          disabled={isTerminatedView || selectedTenants.length !== 1 || !selectedPrimaryTenant?.canTerminate}
-                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 border-t border-gray-200 ${selectedTenants.length === 1 && selectedPrimaryTenant?.canTerminate ? "hover:bg-amber-50 text-amber-700" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
-                          <FaUserSlash size={12} /> Terminate Tenant
-                        </button>
-                      )}
-                      {canUpdateTenant && isTerminatedView && (
-                        <button onClick={handleOpenRestoreTenant}
-                          disabled={selectedTenants.length !== 1 || !selectedPrimaryTenant?.canRestore}
-                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 border-t border-gray-200 ${selectedTenants.length === 1 && selectedPrimaryTenant?.canRestore ? "hover:bg-emerald-50 text-[#0B3B2E] font-semibold" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
-                          <FaRedoAlt size={12} /> Restore Tenant
-                        </button>
-                      )}
-                      <button onClick={() => { setActionMenuOpen(false); setShowCommunicationModal(true); }}
-                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-orange-50 flex items-center gap-2 text-orange-700 border-t border-gray-200">
-                        <FaSms size={12} /> SMS Tenants
-                      </button>
-                      {canDeleteTenant && (
-                        <button onClick={handleDeleteSelectedTenants} disabled={selectedDeletableTenants.length === 0}
-                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 border-t border-gray-200 font-semibold ${selectedDeletableTenants.length > 0 ? "hover:bg-red-50 text-red-600" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
-                          <FaTrash size={12} /> Delete Selected Tenant(s)
-                        </button>
-                      )}
+                  <div className="absolute right-0 mt-1 w-64 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg z-50">
+
+                    {/* Selection context header */}
+                    <div className="border-b border-gray-100 bg-slate-50 px-3 py-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                        {selectedTenants.length === 0
+                          ? "No tenant selected"
+                          : `${selectedTenants.length} tenant${selectedTenants.length !== 1 ? "s" : ""} selected`}
+                      </p>
                     </div>
+
+                    {/* ── VIEW ─────────────────────────────────── */}
+                    <div className="border-b border-gray-100 py-1">
+                      <button onClick={handleViewStatement} disabled={!menuHasSel}
+                        className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuHasSel ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed text-gray-300"}`}>
+                        <FaFileInvoiceDollar size={12} /> View Statement
+                        {menuHasMulti && <span className="ml-auto text-[10px] text-slate-400">1st selected</span>}
+                      </button>
+                      <button onClick={handleViewReceipts} disabled={!menuHasSel}
+                        className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuHasSel ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed text-gray-300"}`}>
+                        <FaMoneyBillWave size={12} /> View Receipts
+                        {menuHasMulti && <span className="ml-auto text-[10px] text-slate-400">1st selected</span>}
+                      </button>
+                      <button onClick={handleOpenAgreement} disabled={!menuHasOneSel}
+                        className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuHasOneSel ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed text-gray-300"}`}>
+                        <FaHandshake size={12} /> Tenant Agreement
+                        {!menuHasSel && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
+                        {menuHasMulti && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
+                      </button>
+                    </div>
+
+                    {/* ── EDIT ─────────────────────────────────── */}
+                    {canUpdateTenant && (
+                      <div className="border-b border-gray-100 py-1">
+                        <button onClick={handleEditTenant} disabled={!menuHasOneSel}
+                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuHasOneSel ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed text-gray-300"}`}>
+                          <FaUserEdit size={12} /> Edit Tenant Details
+                          {!menuHasOneSel && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
+                        </button>
+                        <button onClick={handleTransferUnit} disabled={!menuCanTransfer}
+                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuCanTransfer ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed text-gray-300"}`}>
+                          <FaExchangeAlt size={12} /> Transfer Unit
+                          {!menuHasOneSel && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
+                          {menuHasOneSel && !selectedPrimaryTenant?.canTransfer && <span className="ml-auto text-[10px] text-slate-400">not eligible</span>}
+                        </button>
+                        <button onClick={handleReviewRent} disabled={!menuHasOneSel}
+                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuHasOneSel ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed text-gray-300"}`}>
+                          <FaChartLine size={12} /> Review Rent
+                          {!menuHasOneSel && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* ── UTILITIES ────────────────────────────── */}
+                    {canUpdateTenant && (
+                      <div className="border-b border-gray-100 py-1">
+                        <button onClick={handleAddUtility} disabled={!menuHasSel}
+                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuHasSel ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed text-gray-300"}`}>
+                          <FaBolt size={12} /> Add Utility
+                          {menuHasMulti && <span className="ml-auto text-[10px] text-indigo-500">{selectedTenants.length} tenants</span>}
+                        </button>
+                        <button onClick={handleRemoveUtility} disabled={!menuHasSel}
+                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuHasSel ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed text-gray-300"}`}>
+                          <FaTrash size={12} /> Remove Utility
+                          {menuHasMulti && <span className="ml-auto text-[10px] text-indigo-500">{selectedTenants.length} tenants</span>}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* ── LIFECYCLE ────────────────────────────── */}
+                    {canUpdateTenant && (
+                      <div className="border-b border-gray-100 py-1">
+                        {!isTerminatedView && (
+                          <button onClick={handleOpenTerminateTenant} disabled={!menuCanTerminate}
+                            className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuCanTerminate ? "hover:bg-amber-50 text-amber-700 font-medium" : "cursor-not-allowed text-gray-300"}`}>
+                            <FaUserSlash size={12} /> Terminate Tenant
+                            {!menuHasOneSel && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
+                            {menuHasOneSel && !selectedPrimaryTenant?.canTerminate && <span className="ml-auto text-[10px] text-slate-400">not eligible</span>}
+                          </button>
+                        )}
+                        {isTerminatedView && (
+                          <button onClick={handleOpenRestoreTenant} disabled={!menuCanRestore}
+                            className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 font-semibold ${menuCanRestore ? "hover:bg-emerald-50 text-[#0B3B2E]" : "cursor-not-allowed text-gray-300"}`}>
+                            <FaRedoAlt size={12} /> Restore Tenant
+                            {!menuHasOneSel && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ── COMMUNICATIONS ───────────────────────── */}
+                    <div className="border-b border-gray-100 py-1">
+                      <button onClick={() => { setActionMenuOpen(false); setShowCommunicationModal(true); }}
+                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-orange-50 flex items-center gap-2 text-orange-700">
+                        <FaSms size={12} /> SMS Tenants
+                        {menuHasSel && <span className="ml-auto text-[10px] text-orange-400">{selectedTenants.length} selected</span>}
+                      </button>
+                    </div>
+
+                    {/* ── DELETE ───────────────────────────────── */}
+                    {canDeleteTenant && (
+                      <div className="py-1">
+                        <button onClick={handleDeleteSelectedTenants} disabled={!menuHasDeletable}
+                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 font-semibold ${menuHasDeletable ? "hover:bg-red-50 text-red-600" : "cursor-not-allowed text-gray-300"}`}>
+                          <FaTrash size={12} /> Delete Tenant(s)
+                          {menuHasDeletable
+                            ? <span className="ml-auto text-[10px]">{selectedDeletableTenants.length} eligible</span>
+                            : <span className="ml-auto text-[10px] text-slate-400">none eligible</span>}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -3229,6 +3466,22 @@ const confirmTransferUnit = useCallback(async () => {
             company={currentCompany}
             dispatch={dispatch}
             onClose={() => setShowAddUtilityModal(false)}
+            onSaved={() => dispatch(getTenants({ business: currentCompany?._id }))}
+          />
+        );
+      })()}
+      {/* ===== REMOVE UTILITY MODAL ===== */}
+      {showRemoveUtilityModal && selectedTenants.length > 0 && (() => {
+        const rawTenants = (Array.isArray(tenantsData) ? tenantsData : []).filter((t) =>
+          selectedTenants.includes(normalizeId(t._id))
+        );
+        if (rawTenants.length === 0) return null;
+        return (
+          <RemoveUtilityModal
+            tenants={rawTenants}
+            allUnits={units}
+            dispatch={dispatch}
+            onClose={() => setShowRemoveUtilityModal(false)}
             onSaved={() => dispatch(getTenants({ business: currentCompany?._id }))}
           />
         );

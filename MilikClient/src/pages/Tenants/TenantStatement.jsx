@@ -19,6 +19,7 @@ import {
   createTenantInvoice,
   updateLease,
   updateLeaseReviews,
+  sendCommunicationMessage,
 } from "../../redux/apiCalls";
 import { deleteTenantInvoice } from "../../redux/invoiceApi";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -46,6 +47,12 @@ import {
   FaCheck,
   FaTimes,
   FaLink,
+  FaSms,
+  FaArrowUp,
+  FaArrowDown,
+  FaLock,
+  FaSearch,
+  FaEnvelope,
 } from "react-icons/fa";
 
 const MILIK_GREEN = "bg-[#165946]";
@@ -383,12 +390,18 @@ const TenantStatement = () => {
   const [reviewRecords, setReviewRecords] = useState([]);
   const [reviewSaving, setReviewSaving] = useState(false);
   const [reviewForm, setReviewForm] = useState({
+    reviewType: "escalation",
     type: "percentage",
+    direction: "increase",
     value: 5,
     frequency: "yearly",
     effectiveDate: new Date().toISOString().split("T")[0],
     note: "",
   });
+  const [pendingNoticeReview, setPendingNoticeReview] = useState(null);
+  const [sendingNotice, setSendingNotice] = useState(false);
+  const [sendingStatementSms, setSendingStatementSms] = useState(false);
+  const [sendingStatementEmail, setSendingStatementEmail] = useState(false);
   const [selectedSchedules, setSelectedSchedules] = useState([]);
   const [showDeleteScheduleModal, setShowDeleteScheduleModal] = useState(false);
   const [showFreezeScheduleModal, setShowFreezeScheduleModal] = useState(false);
@@ -1705,6 +1718,112 @@ const TenantStatement = () => {
     handlePrint();
   };
 
+  const handleSendStatementSms = async () => {
+    if (!tenant?.phone) {
+      toast.warning("This tenant has no phone number on record.");
+      return;
+    }
+    const name = tenant?.tenantName || tenant?.name || "Tenant";
+    const companyName = currentCompany?.companyName || "Management";
+    const dateStr = new Date().toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" });
+    const charges = statementData?.totalCharges || 0;
+    const paid = statementData?.totalPayments || 0;
+    const outstanding = Math.abs(statementData?.operationalOutstanding || 0);
+    const customBody = `Dear ${name}, your rent statement as at ${dateStr}: Charges KES ${charges.toLocaleString()}, Paid KES ${paid.toLocaleString()}, Outstanding KES ${outstanding.toLocaleString()}. Contact ${companyName} for queries.`;
+
+    setSendingStatementSms(true);
+    try {
+      await sendCommunicationMessage(dispatch, {
+        contextType: "tenant_bulk",
+        channel: "sms",
+        templateKey: "tenant_notice_sms",
+        recordIds: [tenantId],
+        customBody,
+      });
+      toast.success("Statement summary sent via SMS");
+    } catch {
+      toast.error("Failed to send SMS — please try again");
+    } finally {
+      setSendingStatementSms(false);
+    }
+  };
+
+  const handleSendStatementEmail = async () => {
+    if (!tenant?.email) {
+      toast.warning("This tenant has no email address on record.");
+      return;
+    }
+    const name = tenant?.tenantName || tenant?.name || "Tenant";
+    const companyName = currentCompany?.companyName || "Management";
+    const unitNo = resolveTenantUnitNumber(tenant);
+    const property = resolveTenantPropertyName(tenant);
+    const dateStr = new Date().toLocaleDateString("en-KE", { day: "2-digit", month: "long", year: "numeric" });
+    const charges = statementData?.totalCharges || 0;
+    const paid = statementData?.totalPayments || 0;
+    const outstanding = Math.abs(statementData?.operationalOutstanding || 0);
+    const credits = statementData?.unappliedCredits || 0;
+    const rent = tenantLease?.rentAmount || tenant?.rent || 0;
+
+    // Include up to the last 15 visible transactions
+    const recentTxns = (statementData?.transactions || []).slice(-15);
+    const txnBlock = recentTxns.length > 0
+      ? [
+          `RECENT TRANSACTIONS`,
+          `${"─".repeat(52)}`,
+          ...recentTxns.map((t) => {
+            const d = new Date(t.date).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" });
+            const sign = ["CHARGE", "DEBIT_NOTE"].includes(t.type) ? "+" : "-";
+            const desc = (t.description || "—").substring(0, 32).padEnd(33);
+            return `${d}  ${desc}  ${sign}KES ${Math.abs(t.amount || 0).toLocaleString()}`;
+          }),
+        ]
+      : [];
+
+    const lines = [
+      `Dear ${name},`,
+      ``,
+      `Please find below your rent account statement from ${companyName} as at ${dateStr}.`,
+      ``,
+      `Tenant : ${name}`,
+      `Unit   : ${unitNo}  |  Property: ${property}`,
+      ``,
+      `ACCOUNT SUMMARY`,
+      `${"─".repeat(52)}`,
+      `Monthly Rent     : KES ${rent.toLocaleString()}`,
+      `Total Charges    : KES ${charges.toLocaleString()}`,
+      `Total Paid       : KES ${paid.toLocaleString()}`,
+      `Outstanding      : KES ${outstanding.toLocaleString()}`,
+      ...(credits > 0 ? [`Unapplied Credits: KES ${credits.toLocaleString()}`] : []),
+      ``,
+      ...txnBlock,
+      ``,
+      `For queries or to make payment, please contact us directly.`,
+      ``,
+      `Regards,`,
+      companyName,
+      currentCompany?.companyPhone || "",
+      currentCompany?.companyEmail || "",
+    ].filter((l) => l !== undefined);
+
+    const customBody = lines.join("\n");
+
+    setSendingStatementEmail(true);
+    try {
+      await sendCommunicationMessage(dispatch, {
+        contextType: "tenant_bulk",
+        channel: "email",
+        templateKey: "tenant_notice_email",
+        recordIds: [tenantId],
+        customBody,
+      });
+      toast.success("Statement emailed to tenant successfully");
+    } catch {
+      toast.error("Failed to send email — please try again");
+    } finally {
+      setSendingStatementEmail(false);
+    }
+  };
+
   const renderStatement = () => {
     const visibleStatementTransactions = (statementData?.transactions || [])
       .filter((t) => transactionType === "ALL" || t.type === transactionType)
@@ -1746,38 +1865,55 @@ const TenantStatement = () => {
     return (
       <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm statement-tab">
         <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm filter-section">
-          <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+          {/* ── date + type controls ── */}
+          <div className="flex items-center gap-1.5 overflow-x-auto border-b border-slate-100 px-2 py-1.5">
             <input
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
+              className="h-7 w-28 shrink-0 border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:border-[#0B3B2E]"
             />
+            <span className="shrink-0 text-[10px] text-slate-400">–</span>
             <input
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
+              className="h-7 w-28 shrink-0 border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:border-[#0B3B2E]"
             />
+            {/* Quick date presets */}
+            {[
+              { label: "Today", fn: () => { const d = new Date().toISOString().split("T")[0]; setStartDate(d); setEndDate(d); } },
+              { label: "This Month", fn: () => { const now = new Date(); setStartDate(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`); setEndDate(new Date().toISOString().split("T")[0]); } },
+              { label: "YTD", fn: () => { setStartDate(`${new Date().getFullYear()}-01-01`); setEndDate(new Date().toISOString().split("T")[0]); } },
+              { label: "All", fn: () => { setStartDate("2000-01-01"); setEndDate(new Date().toISOString().split("T")[0]); } },
+            ].map(({ label, fn }) => (
+              <button key={label} type="button" onClick={fn}
+                className="h-7 shrink-0 border border-slate-200 bg-slate-50 px-2 text-[10px] font-bold text-slate-600 hover:border-[#0B3B2E] hover:bg-[#EDF5F1] hover:text-[#0B3B2E] transition-colors">
+                {label}
+              </button>
+            ))}
+            <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
             <select
               value={transactionType}
               onChange={(e) => setTransactionType(e.target.value)}
-              className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
+              className="h-7 shrink-0 border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:border-[#0B3B2E]"
             >
-              <option value="ALL">All Transactions</option>
-              <option value="CHARGE">Invoices Only</option>
+              <option value="ALL">All Types</option>
+              <option value="CHARGE">Invoices</option>
               <option value="DEBIT_NOTE">Debit Notes</option>
               <option value="CREDIT_NOTE">Credit Notes</option>
-              <option value="PAYMENT">Receipts Only</option>
+              <option value="PAYMENT">Receipts</option>
             </select>
-            <span className="shrink-0 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-700">
-              Rows: {visibleStatementTransactions.length}
+            <span className="shrink-0 border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+              {visibleStatementTransactions.length} row{visibleStatementTransactions.length !== 1 ? "s" : ""}
             </span>
-            <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+          </div>
+          {/* ── summary strip ── */}
+          <div className="flex items-center gap-0 overflow-x-auto divide-x divide-slate-100">
             {statementSummaryChips.map((chip) => (
-              <span key={chip.label} className="shrink-0 inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[10px]">
-                <span className="font-black uppercase tracking-[0.12em] text-slate-500">{chip.label}</span>
-                <span className={`font-black ${chip.accent}`}>{chip.value}</span>
+              <span key={chip.label} className="shrink-0 inline-flex flex-col items-start px-4 py-1.5">
+                <span className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">{chip.label}</span>
+                <span className={`text-[11px] font-black ${chip.accent}`}>{chip.value}</span>
               </span>
             ))}
           </div>
@@ -1792,13 +1928,17 @@ const TenantStatement = () => {
                 <tr key={transaction.id} className={`${idx % 2 === 0 ? "bg-white" : "bg-slate-50"} border-b border-slate-200 hover:bg-orange-50/40`}>
                   <td className="px-2.5 py-0.5 font-semibold text-slate-900 whitespace-nowrap">{new Date(transaction.date).toLocaleDateString()}</td>
                   <td className="px-2.5 py-0.5 text-slate-700 truncate" title={transaction.description}>{transaction.description}</td>
-                  <td className="px-2.5 py-0.5 text-center"><span className={`inline-flex rounded px-2 py-0.5 text-[9px] font-black ${["CHARGE", "DEBIT_NOTE"].includes(transaction.type) ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>{transaction.type}</span></td>
+                  <td className="px-2.5 py-0.5 text-center">{(() => {
+                    const typeMap = { CHARGE: ["Invoice", "bg-red-100 text-red-700"], DEBIT_NOTE: ["Debit", "bg-rose-100 text-rose-700"], CREDIT_NOTE: ["Credit", "bg-sky-100 text-sky-700"], PAYMENT: ["Receipt", "bg-emerald-100 text-emerald-700"] };
+                    const [label, cls] = typeMap[transaction.type] || [transaction.type, "bg-slate-100 text-slate-600"];
+                    return <span className={`inline-flex rounded px-2 py-0.5 text-[9px] font-black ${cls}`}>{label}</span>;
+                  })()}</td>
                   <td className="px-2.5 py-0.5 font-semibold text-slate-900 whitespace-nowrap">{transaction.transactionCode}</td>
                   <td className="px-2.5 py-0.5 text-center">{["invoice", "receipt"].includes(String(transaction.sourceKind || "")) ? (<button type="button" onClick={() => setAllocationTraceTarget({ kind: transaction.sourceKind === "invoice" ? "invoice" : "receipt", id: transaction.sourceId })} className="inline-flex h-6 items-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-[10px] font-bold text-slate-700 hover:bg-slate-100"><FaLink size={10} /> Trace</button>) : (<span className="text-[10px] text-slate-300">—</span>)}</td>
                   <td className={`px-2.5 py-1 text-right font-black whitespace-nowrap ${["CHARGE", "DEBIT_NOTE"].includes(transaction.type) ? "text-red-600" : "text-green-600"}`}>{["CHARGE", "DEBIT_NOTE"].includes(transaction.type) ? "+" : "-"}Ksh {Math.abs(transaction.amount).toLocaleString()}</td>
                   <td className="px-2.5 py-0.5 text-right font-black text-slate-900 whitespace-nowrap">Ksh {transaction.balance.toLocaleString()}</td>
                 </tr>
-              )) : (<tr><td colSpan="7" className="px-3 py-8 text-center text-xs text-slate-500">No transactions found for the selected filters.</td></tr>)}
+              )) : (<tr><td colSpan="7" className="px-3 py-12 text-center"><p className="text-sm font-semibold text-slate-400">No transactions match the selected filters.</p><p className="mt-1 text-[10px] text-slate-300">Try widening the date range or switching to "All Types".</p></td></tr>)}
             </tbody>
           </table>
         </div>
@@ -2575,121 +2715,27 @@ const TenantStatement = () => {
                 );
               })}
             </tbody>
+            {filteredBillingScheduleData.length > 0 && (() => {
+              const totRent = filteredBillingScheduleData.reduce((s, r) => s + (r.rent || 0), 0);
+              const totUtil = filteredBillingScheduleData.reduce((s, r) => s + (r.utility || 0), 0);
+              const totTotal = totRent + totUtil;
+              const bookedCount = filteredBillingScheduleData.filter((r) => r.booked === "Yes").length;
+              return (
+                <tfoot>
+                  <tr className="border-t-2 border-[#0B3B2E] bg-[#EDF5F1]">
+                    <td colSpan={4} className="px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-[#0B3B2E]">
+                      {filteredBillingScheduleData.length} periods · {bookedCount} booked
+                    </td>
+                    <td className="px-2.5 py-1.5 text-right text-[11px] font-black text-[#0B3B2E]">{totRent.toLocaleString()}</td>
+                    <td className="px-2.5 py-1.5 text-right text-[11px] font-black text-[#0B3B2E]">{totUtil > 0 ? totUtil.toLocaleString() : "—"}</td>
+                    <td className="px-2.5 py-1.5 text-right text-[11px] font-black text-[#0B3B2E]">{totTotal.toLocaleString()}</td>
+                    <td colSpan={3} />
+                  </tr>
+                </tfoot>
+              );
+            })()}
           </table>
         </div>
-      </div>
-    );
-  };
-
-  const renderTenantDetails = () => (
-    <div className="bg-white border border-gray-200 rounded-lg p-2">
-      <h3 className="text-sm font-bold text-gray-900 mb-6">Tenant Information</h3>
-      {tenant ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          <div className="border-b md:border-b-0 pb-4 md:pb-0">
-            <label className="block text-sm font-semibold text-gray-600 mb-2">Tenant Name</label>
-            <p className="text-sm font-bold text-gray-900">
-              {tenant?.name || (tenant?.firstName && tenant?.lastName ? `${tenant.firstName} ${tenant.lastName}` : "N/A")}
-            </p>
-          </div>
-          <div className="border-b md:border-b-0 pb-4 md:pb-0">
-            <label className="block text-sm font-semibold text-gray-600 mb-2">Email</label>
-            <p className="text-sm font-bold text-gray-900">{tenant?.email || "N/A"}</p>
-          </div>
-          <div className="border-b md:border-b-0 pb-4 md:pb-0">
-            <label className="block text-sm font-semibold text-gray-600 mb-2">Phone</label>
-            <p className="text-sm font-bold text-gray-900">{tenant?.phone || "N/A"}</p>
-          </div>
-          <div className="border-b md:border-b-0 pb-4 md:pb-0">
-            <label className="block text-sm font-semibold text-gray-600 mb-2">ID Number</label>
-            <p className="text-sm font-bold text-gray-900">{tenant?.idDocument || tenant?.idNumber || "N/A"}</p>
-          </div>
-          <div className="border-b md:border-b-0 pb-4 md:pb-0">
-            <label className="block text-sm font-semibold text-gray-600 mb-2">Unit</label>
-            <p className="text-sm font-bold text-gray-900">{resolveTenantUnitNumber(tenant)}</p>
-          </div>
-          <div className="border-b md:border-b-0 pb-4 md:pb-0">
-            <label className="block text-sm font-semibold text-gray-600 mb-2">Property</label>
-            <p className="text-sm font-bold text-gray-900">{resolveTenantPropertyName(tenant)}</p>
-          </div>
-          <div className="border-b md:border-b-0 pb-4 md:pb-0">
-            <label className="block text-sm font-semibold text-gray-600 mb-2">Move-In Date</label>
-            <p className="text-sm font-bold text-gray-900">
-              {tenantLease?.startDate
-                ? new Date(tenantLease.startDate).toLocaleDateString()
-                : tenant?.moveInDate
-                ? new Date(tenant.moveInDate).toLocaleDateString()
-                : "N/A"}
-            </p>
-          </div>
-          <div className="border-b md:border-b-0 pb-4 md:pb-0">
-            <label className="block text-sm font-semibold text-gray-600 mb-2">Rent Amount</label>
-            <p className="text-sm font-bold text-gray-900">
-              Ksh {(tenantLease?.rentAmount || tenant?.rent || 0).toLocaleString()}
-            </p>
-          </div>
-        </div>
-      ) : (
-        <p className="text-gray-600">Tenant not found</p>
-      )}
-    </div>
-  );
-
-  const renderStandingCharges = () => {
-    let tenantUtilities = tenant?.utilities || [];
-
-    if (tenantUtilities.length === 0 && tenant?.unit?.utilities && tenant.unit.utilities.length > 0) {
-      tenantUtilities = tenant.unit.utilities;
-    }
-
-    const totalStandingCharges = tenantUtilities.reduce(
-      (sum, util) => sum + (parseFloat(util.unitCharge) || 0),
-      0
-    );
-
-    return (
-      <div className="bg-white border border-gray-200 rounded-lg p-2">
-        <h3 className="text-sm font-bold text-gray-900 mb-4">Standing Charges</h3>
-        <p className="text-gray-600 mb-6">Recurring charges attached to this tenancy</p>
-
-        {tenantUtilities.length === 0 ? (
-          <div className="text-center py-8">
-            <p className="text-gray-600">No standing charges for this tenant.</p>
-            <p className="text-sm text-gray-500 mt-2">Utilities will appear here when added to the tenant record.</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {tenantUtilities.map((utility, idx) => (
-              <div key={idx} className="border border-gray-200 rounded-lg p-2 hover:shadow-md transition-shadow">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h4 className="font-semibold text-gray-900">{utility.utilityLabel || utility.utility}</h4>
-                    <p className="text-sm text-gray-600 mt-1">Monthly charge for this tenant</p>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-sm font-bold text-gray-900">
-                      Ksh {(parseFloat(utility.unitCharge) || 0).toLocaleString()}
-                    </div>
-                    <div className="text-xs text-gray-600 font-medium mt-1">
-                      {utility.isIncluded ? (
-                        <span className="text-green-600">✓ Included in Rent</span>
-                      ) : (
-                        <span className="text-orange-600">Tenant Pays</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-
-            <div className="mt-6 p-2 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm text-blue-800">
-                <span className="font-bold">Total Monthly Standing Charges:</span>
-                <span className="float-right font-bold">Ksh {totalStandingCharges.toLocaleString()}</span>
-              </p>
-            </div>
-          </div>
-        )}
       </div>
     );
   };
@@ -2699,30 +2745,40 @@ const TenantStatement = () => {
     const sortedRecords = [...reviewRecords].sort(
       (a, b) => new Date(a.effectiveDate) - new Date(b.effectiveDate)
     );
+    const today = new Date(); today.setHours(0, 0, 0, 0);
 
-    const computeNewRent = (current, type, value) => {
-      const numericValue = Number(value) || 0;
-      if (type === "percentage") {
-        return Math.round(current * (1 + numericValue / 100));
-      }
-      return Math.round(current + numericValue);
+    // direction: "increase" | "decrease"; type: "percentage" | "amount" | "fixed_rent"
+    const computeNewRent = (current, type, value, direction = "increase") => {
+      const v = Number(value) || 0;
+      if (type === "fixed_rent") return Math.max(0, Math.round(v));
+      const sign = direction === "decrease" ? -1 : 1;
+      if (type === "percentage") return Math.max(0, Math.round(current * (1 + sign * v / 100)));
+      return Math.max(0, Math.round(current + sign * v));
+    };
+
+    const computeNextDate = (dateStr, frequency) => {
+      const d = new Date(dateStr);
+      if (frequency === "quarterly") d.setMonth(d.getMonth() + 3);
+      else if (frequency === "biannual") d.setMonth(d.getMonth() + 6);
+      else d.setFullYear(d.getFullYear() + 1);
+      return d.toISOString().slice(0, 10);
     };
 
     const appliedOnly = sortedRecords.filter((record) => record.status === "Applied");
     const currentEffectiveRent = appliedOnly.reduce((rent, record) => {
-      return computeNewRent(rent, record.type, record.value);
+      return computeNewRent(rent, record.type, record.value, record.direction || "increase");
     }, baseRent);
 
     const pendingRecords = sortedRecords.filter((record) => record.status !== "Applied");
     const nextPendingRecord = pendingRecords.length > 0 ? pendingRecords[0] : null;
     const projectedRent = nextPendingRecord
-      ? computeNewRent(currentEffectiveRent, nextPendingRecord.type, nextPendingRecord.value)
+      ? computeNewRent(currentEffectiveRent, nextPendingRecord.type, nextPendingRecord.value, nextPendingRecord.direction || "increase")
       : currentEffectiveRent;
 
     const computedRows = sortedRecords.reduce(
       (acc, record) => {
         const previousRent = acc.runningRent;
-        const resultingRent = computeNewRent(previousRent, record.type, record.value);
+        const resultingRent = computeNewRent(previousRent, record.type, record.value, record.direction || "increase");
         acc.rows.push({ ...record, previousRent, resultingRent });
         if (record.status === "Applied") {
           acc.runningRent = resultingRent;
@@ -2733,15 +2789,10 @@ const TenantStatement = () => {
     ).rows;
 
     const resetReviewForm = () => {
-      setReviewForm({
-        type: "percentage",
-        value: 5,
-        frequency: "yearly",
-        effectiveDate: new Date().toISOString().split("T")[0],
-        note: "",
-      });
+      setReviewForm({ reviewType: "escalation", type: "percentage", direction: "increase", value: 5, frequency: "yearly", effectiveDate: new Date().toISOString().split("T")[0], note: "" });
       setEditingReviewId(null);
       setReviewFormOpen(false);
+      setPendingNoticeReview(null);
     };
 
     const handleSaveReview = async () => {
@@ -2754,11 +2805,23 @@ const TenantStatement = () => {
         return;
       }
       if (!reviewForm.value || Number(reviewForm.value) <= 0) {
-        toast.error("Review value must be greater than zero");
+        toast.error("Value must be greater than zero");
         return;
       }
 
       const timestamp = new Date().toISOString();
+      const prevRent = Number(currentEffectiveRent || baseRent);
+      const newResultingRent = computeNewRent(prevRent, reviewForm.type, reviewForm.value, reviewForm.direction || "increase");
+      const newRecord = {
+        id: `REV-${Date.now()}`,
+        ...reviewForm,
+        status: "Scheduled",
+        previousRent: prevRent,
+        resultingRent: newResultingRent,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+
       const nextRecords = editingReviewId
         ? reviewRecords.map((record) =>
             record.id === editingReviewId
@@ -2767,34 +2830,30 @@ const TenantStatement = () => {
                   ...reviewForm,
                   updatedAt: timestamp,
                   previousRent: Number(record.previousRent || baseRent),
-                  resultingRent: computeNewRent(Number(record.previousRent || baseRent), reviewForm.type, reviewForm.value),
+                  resultingRent: computeNewRent(Number(record.previousRent || baseRent), reviewForm.type, reviewForm.value, reviewForm.direction || "increase"),
                 }
               : record
           )
-        : [
-            ...reviewRecords,
-            {
-              id: `REV-${Date.now()}`,
-              reviewType: "review",
-              ...reviewForm,
-              status: "Scheduled",
-              previousRent: Number(currentEffectiveRent || baseRent),
-              resultingRent: computeNewRent(Number(currentEffectiveRent || baseRent), reviewForm.type, reviewForm.value),
-              createdAt: timestamp,
-              updatedAt: timestamp,
-            },
-          ];
+        : [...reviewRecords, newRecord];
 
       setReviewSaving(true);
-      const saved = await persistRentReviewRecords(nextRecords, localBillingScheduleAdjustments, editingReviewId ? "Review updated" : "Review saved");
+      const saved = await persistRentReviewRecords(nextRecords, localBillingScheduleAdjustments, editingReviewId ? "Review updated" : "Review scheduled");
       setReviewSaving(false);
-      if (saved) resetReviewForm();
+      if (saved) {
+        setReviewFormOpen(false);
+        setEditingReviewId(null);
+        setReviewForm({ reviewType: "escalation", type: "percentage", direction: "increase", value: 5, frequency: "yearly", effectiveDate: new Date().toISOString().split("T")[0], note: "" });
+        if (!editingReviewId) setPendingNoticeReview(newRecord);
+      }
     };
 
     const handleEditReview = (record) => {
       setEditingReviewId(record.id);
+      setPendingNoticeReview(null);
       setReviewForm({
+        reviewType: record.reviewType || "escalation",
         type: record.type,
+        direction: record.direction || "increase",
         value: record.value,
         frequency: record.frequency,
         effectiveDate: record.effectiveDate,
@@ -2882,12 +2941,78 @@ const TenantStatement = () => {
         }
       });
 
-      await persistRentReviewRecords(nextRecords, nextAdjustments, "Review applied and future billing periods updated");
+      // Auto-schedule next recurrence for recurring reviews
+      let finalRecords = nextRecords;
+      if (target.frequency && target.frequency !== "once") {
+        const nextDate = computeNextDate(target.effectiveDate, target.frequency);
+        const nextResultingRent = computeNewRent(target.resultingRent, target.type, target.value, target.direction || "increase");
+        const alreadyExists = nextRecords.some((r) => r.effectiveDate === nextDate && r.type === target.type && r.value === target.value);
+        if (!alreadyExists) {
+          const ts = new Date().toISOString();
+          finalRecords = [
+            ...nextRecords,
+            {
+              id: `REV-${Date.now()}`,
+              reviewType: target.reviewType || "escalation",
+              type: target.type,
+              direction: target.direction || "increase",
+              value: target.value,
+              frequency: target.frequency,
+              effectiveDate: nextDate,
+              note: `Auto-scheduled (${target.frequency}) from ${fmtDate(target.effectiveDate)}`,
+              status: "Scheduled",
+              previousRent: target.resultingRent,
+              resultingRent: nextResultingRent,
+              createdAt: ts,
+              updatedAt: ts,
+            },
+          ];
+        }
+      }
+
+      await persistRentReviewRecords(finalRecords, nextAdjustments,
+        target.frequency && target.frequency !== "once"
+          ? "Review applied — next recurrence scheduled"
+          : "Review applied and future billing periods updated"
+      );
+    };
+
+    const handleSendNotice = async (review) => {
+      if (!tenant?.phone && !tenant?.email) {
+        toast.warning("Tenant has no phone or email on record");
+        return;
+      }
+      const dir = review.direction === "decrease" ? "reduced" : "increased";
+      const changeLabel = review.type === "fixed_rent"
+        ? `set to KES ${Number(review.resultingRent || 0).toLocaleString()}`
+        : review.type === "percentage"
+          ? `${dir} by ${Number(review.value)}%`
+          : `${dir} by KES ${Number(review.value).toLocaleString()}`;
+      const customBody = `Dear ${tenant?.name || "Tenant"}, your rent has been reviewed and will be ${changeLabel}. New rent: KES ${Number(review.resultingRent || 0).toLocaleString()} effective ${fmtDate(review.effectiveDate)}. For queries contact us.`;
+
+      setSendingNotice(true);
+      try {
+        await sendCommunicationMessage({
+          business: currentCompany?._id,
+          contextType: "tenant_bulk",
+          channel: "sms",
+          templateKey: "tenant_notice_sms",
+          recordIds: [tenantId],
+          customBody,
+        });
+        toast.success("Rent review notice sent to tenant");
+        setPendingNoticeReview(null);
+      } catch {
+        toast.error("Failed to send notice — please use SMS Tenants to send manually");
+      } finally {
+        setSendingNotice(false);
+      }
     };
 
     const formatFrequency = (frequency) => {
       if (frequency === "biannual") return "Bi-Annual";
       if (frequency === "quarterly") return "Quarterly";
+      if (frequency === "once") return "One-Off";
       return "Yearly";
     };
 
@@ -2900,19 +3025,31 @@ const TenantStatement = () => {
       <div className="flex flex-col gap-3">
 
         {/* ── KPI strip ───────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {[
-            { label: "Base Rent",             value: fmtMoney(baseRent),            border: "border-slate-200",  bg: "bg-white",       text: "text-slate-900"   },
-            { label: "Current Effective Rent", value: fmtMoney(currentEffectiveRent),border: "border-[#0B3B2E]", bg: "bg-[#EDF5F1]",   text: "text-[#0B3B2E]"  },
-            { label: "Scheduled Reviews",      value: pendingRecords.length,         border: "border-blue-200",  bg: "bg-blue-50",     text: "text-blue-800"   },
-            { label: "Projected Next Rent",    value: fmtMoney(projectedRent),       border: "border-orange-200",bg: "bg-orange-50",   text: "text-orange-800" },
-          ].map(({ label, value, border, bg, text }) => (
-            <div key={label} className={`border px-4 py-3 shadow-sm ${border} ${bg}`}>
-              <div className={`text-[10px] font-black uppercase tracking-widest opacity-70 ${text}`}>{label}</div>
-              <div className={`mt-0.5 text-sm font-extrabold ${text}`}>{value}</div>
+        {(() => {
+          const overdueCount = pendingRecords.filter((r) => new Date(r.effectiveDate) < today).length;
+          const kpis = [
+            { label: "Base Rent",             value: fmtMoney(baseRent),            border: "border-slate-200",  bg: "bg-white",         text: "text-slate-900"  },
+            { label: "Current Effective Rent", value: fmtMoney(currentEffectiveRent),border: "border-[#0B3B2E]", bg: "bg-[#EDF5F1]",     text: "text-[#0B3B2E]" },
+            {
+              label: overdueCount > 0 ? `Pending (${overdueCount} Overdue)` : "Pending Reviews",
+              value: pendingRecords.length,
+              border: overdueCount > 0 ? "border-red-300" : "border-blue-200",
+              bg: overdueCount > 0 ? "bg-red-50" : "bg-blue-50",
+              text: overdueCount > 0 ? "text-red-700" : "text-blue-800",
+            },
+            { label: "Projected Next Rent",    value: fmtMoney(projectedRent),       border: "border-orange-200", bg: "bg-orange-50",    text: "text-orange-800" },
+          ];
+          return (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {kpis.map(({ label, value, border, bg, text }) => (
+                <div key={label} className={`border px-4 py-3 shadow-sm ${border} ${bg}`}>
+                  <div className={`text-[10px] font-black uppercase tracking-widest opacity-70 ${text}`}>{label}</div>
+                  <div className={`mt-0.5 text-sm font-extrabold ${text}`}>{value}</div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          );
+        })()}
 
         {/* ── toolbar ─────────────────────────────────────────────────── */}
         <div className="flex items-center justify-between border border-slate-200 bg-white px-3 py-2 shadow-sm" style={{ borderLeftWidth: 3, borderLeftColor: "#0B3B2E" }}>
@@ -2930,86 +3067,205 @@ const TenantStatement = () => {
           )}
         </div>
 
-        {/* ── form panel ──────────────────────────────────────────────── */}
-        {reviewFormOpen && (
-          <div className="border border-[#0B3B2E] bg-white shadow-sm">
-            <div className="flex items-center justify-between border-b border-slate-100 bg-[#0B3B2E] px-4 py-2.5">
-              <span className="text-xs font-black uppercase tracking-widest text-white">
-                {editingReviewId ? "Edit Review / Escalation" : "New Review / Escalation"}
-              </span>
-              <button onClick={resetReviewForm} className="text-white/60 hover:text-white transition-colors">
+        {/* ── post-save notice banner ──────────────────────────────────── */}
+        {pendingNoticeReview && !reviewFormOpen && (
+          <div className="flex items-center justify-between gap-3 border border-emerald-300 bg-emerald-50 px-4 py-3 shadow-sm">
+            <div className="flex items-center gap-2.5">
+              <FaCheck size={12} className="shrink-0 text-emerald-600" />
+              <div>
+                <p className="text-xs font-black text-emerald-800">Review scheduled for {fmtDate(pendingNoticeReview.effectiveDate)}</p>
+                <p className="text-[10px] text-emerald-600">
+                  New rent: <span className="font-black">{fmtMoney(pendingNoticeReview.resultingRent)}</span>
+                  {pendingNoticeReview.frequency !== "once" && <span className="ml-2 italic">Next recurrence will be created on apply.</span>}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => handleSendNotice(pendingNoticeReview)}
+                disabled={sendingNotice}
+                className="inline-flex items-center gap-1.5 bg-emerald-700 px-3 py-1.5 text-[10px] font-black text-white hover:bg-emerald-800 disabled:opacity-60 transition-colors"
+              >
+                <FaSms size={9} /> {sendingNotice ? "Sending…" : "Notify Tenant via SMS"}
+              </button>
+              <button onClick={() => setPendingNoticeReview(null)} className="text-emerald-500 hover:text-emerald-700 transition-colors">
                 <FaTimes size={11} />
               </button>
             </div>
-            <div className="p-4">
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-                <div>
-                  <label className={labelCls}>Increase Type</label>
-                  <select value={reviewForm.type} onChange={(e) => setReviewForm((p) => ({ ...p, type: e.target.value }))} className={inputCls}>
-                    <option value="percentage">Percentage (%)</option>
-                    <option value="amount">Fixed Amount (KES)</option>
-                  </select>
+          </div>
+        )}
+
+        {/* ── form panel ──────────────────────────────────────────────── */}
+        {reviewFormOpen && (() => {
+          const isEscalation = reviewForm.reviewType === "escalation";
+          const accentBg = isEscalation ? "bg-blue-700" : "bg-amber-600";
+          const accentBorder = isEscalation ? "border-blue-700" : "border-amber-500";
+          const isDecrease = reviewForm.direction === "decrease";
+          const isFixed = reviewForm.type === "fixed_rent";
+          const previewRent = computeNewRent(currentEffectiveRent, reviewForm.type, reviewForm.value, reviewForm.direction || "increase");
+          return (
+            <div className={`border ${accentBorder} bg-white shadow-sm`}>
+              {/* Header */}
+              <div className={`flex items-center justify-between border-b border-white/10 ${accentBg} px-4 py-2.5`}>
+                <div className="flex items-center gap-2 text-white">
+                  {isEscalation ? <FaChartLine size={11} /> : <FaSearch size={11} />}
+                  <span className="text-xs font-black uppercase tracking-widest">
+                    {editingReviewId
+                      ? `Edit ${isEscalation ? "Escalation" : "Review"}`
+                      : `New ${isEscalation ? "Escalation" : "Review"}`}
+                  </span>
                 </div>
-                <div>
-                  <label className={labelCls}>{reviewForm.type === "percentage" ? "Rate (%)" : "Amount (KES)"}</label>
-                  <input
-                    type="number" min="0.01" step="0.01"
-                    value={reviewForm.value}
-                    onChange={(e) => setReviewForm((p) => ({ ...p, value: Math.max(0, Number(e.target.value)) }))}
+                <button onClick={resetReviewForm} className="text-white/60 hover:text-white transition-colors">
+                  <FaTimes size={11} />
+                </button>
+              </div>
+
+              <div className="p-4">
+                {/* ── Category toggle ── */}
+                <div className="mb-4">
+                  <p className={labelCls}>Category</p>
+                  <div className="flex overflow-hidden rounded border border-slate-200">
+                    <button type="button"
+                      onClick={() => setReviewForm((p) => ({ ...p, reviewType: "escalation", direction: "increase", type: p.type === "fixed_rent" ? "percentage" : p.type, frequency: p.frequency === "once" ? "yearly" : p.frequency }))}
+                      className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-black transition-colors ${isEscalation ? "bg-blue-600 text-white" : "bg-white text-slate-500 hover:bg-blue-50"}`}>
+                      <div className="flex items-center gap-1"><FaChartLine size={9} /> Escalation</div>
+                      <span className={`font-normal ${isEscalation ? "text-blue-200" : "text-slate-400"}`}>Predetermined — lease clause</span>
+                    </button>
+                    <button type="button"
+                      onClick={() => setReviewForm((p) => ({ ...p, reviewType: "review", frequency: "once" }))}
+                      className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-black transition-colors border-l border-slate-200 ${!isEscalation ? "bg-amber-500 text-white" : "bg-white text-slate-500 hover:bg-amber-50"}`}>
+                      <div className="flex items-center gap-1"><FaSearch size={9} /> Review</div>
+                      <span className={`font-normal ${!isEscalation ? "text-amber-100" : "text-slate-400"}`}>Discretionary — market assessed</span>
+                    </button>
+                  </div>
+                  <p className={`mt-1 text-[10px] ${isEscalation ? "text-blue-600" : "text-amber-600"}`}>
+                    {isEscalation
+                      ? "Automatic increase on a fixed schedule. Recurs automatically when applied."
+                      : "Negotiated adjustment — can increase, decrease, or set a new fixed rent."}
+                  </p>
+                </div>
+
+                {/* ── Fields grid ── */}
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                  {/* Adjustment Type */}
+                  <div>
+                    <label className={labelCls}>Adjustment Type</label>
+                    <select value={reviewForm.type}
+                      onChange={(e) => setReviewForm((p) => ({ ...p, type: e.target.value, direction: e.target.value === "fixed_rent" ? "increase" : p.direction }))}
+                      className={inputCls}>
+                      <option value="percentage">Percentage (%)</option>
+                      <option value="amount">By Amount (KES)</option>
+                      {/* fixed_rent only available for reviews */}
+                      {!isEscalation && <option value="fixed_rent">Set Fixed Rent</option>}
+                    </select>
+                  </div>
+
+                  {/* Direction — only for reviews and non-fixed-rent types */}
+                  {!isEscalation && !isFixed ? (
+                    <div>
+                      <label className={labelCls}>Direction</label>
+                      <div className="flex h-8 overflow-hidden border border-slate-300">
+                        <button type="button"
+                          onClick={() => setReviewForm((p) => ({ ...p, direction: "increase" }))}
+                          className={`flex flex-1 items-center justify-center gap-1 text-[10px] font-black transition-colors ${!isDecrease ? "bg-emerald-600 text-white" : "bg-white text-slate-500 hover:bg-slate-50"}`}>
+                          <FaArrowUp size={8} /> Increase
+                        </button>
+                        <button type="button"
+                          onClick={() => setReviewForm((p) => ({ ...p, direction: "decrease" }))}
+                          className={`flex flex-1 items-center justify-center gap-1 text-[10px] font-black transition-colors border-l border-slate-300 ${isDecrease ? "bg-red-500 text-white" : "bg-white text-slate-500 hover:bg-slate-50"}`}>
+                          <FaArrowDown size={8} /> Decrease
+                        </button>
+                      </div>
+                    </div>
+                  ) : isEscalation ? (
+                    <div>
+                      <label className={labelCls}>Direction</label>
+                      <div className="flex h-8 items-center gap-1.5 border border-blue-200 bg-blue-50 px-2 text-[10px] font-black text-blue-700">
+                        <FaArrowUp size={8} /> Always Increase
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {/* Value */}
+                  <div>
+                    <label className={labelCls}>
+                      {reviewForm.type === "percentage" ? "Rate (%)" : reviewForm.type === "fixed_rent" ? "New Rent (KES)" : "Amount (KES)"}
+                    </label>
+                    <input type="number" min="0.01" step="0.01"
+                      value={reviewForm.value}
+                      onChange={(e) => setReviewForm((p) => ({ ...p, value: Math.max(0, Number(e.target.value)) }))}
+                      className={inputCls}
+                    />
+                  </div>
+
+                  {/* Frequency */}
+                  <div>
+                    <label className={labelCls}>Frequency</label>
+                    <select value={reviewForm.frequency} onChange={(e) => setReviewForm((p) => ({ ...p, frequency: e.target.value }))} className={inputCls}>
+                      {isEscalation && <option value="yearly">Yearly</option>}
+                      {isEscalation && <option value="biannual">Bi-Annual</option>}
+                      {isEscalation && <option value="quarterly">Quarterly</option>}
+                      {!isEscalation && <option value="once">One-Off</option>}
+                      {!isEscalation && <option value="yearly">Yearly</option>}
+                      {!isEscalation && <option value="biannual">Bi-Annual</option>}
+                      {!isEscalation && <option value="quarterly">Quarterly</option>}
+                    </select>
+                  </div>
+
+                  {/* Effective Date */}
+                  <div>
+                    <label className={labelCls}>Effective Date</label>
+                    <input type="date" value={reviewForm.effectiveDate}
+                      onChange={(e) => setReviewForm((p) => ({ ...p, effectiveDate: e.target.value }))}
+                      className={inputCls} />
+                  </div>
+
+                  {/* Preview */}
+                  <div>
+                    <label className={labelCls}>New Rent</label>
+                    <div className={`flex h-8 items-center border px-2 text-xs font-black ${isDecrease && !isFixed ? "border-red-300 bg-red-50 text-red-700" : isEscalation ? "border-blue-300 bg-blue-50 text-blue-700" : "border-[#0B3B2E] bg-[#EDF5F1] text-[#0B3B2E]"}`}>
+                      {fmtMoney(previewRent)}
+                    </div>
+                  </div>
+
+                  {/* Change */}
+                  <div>
+                    <label className={labelCls}>Change</label>
+                    <div className={`flex h-8 items-center gap-1 border px-2 text-xs font-black ${isDecrease && !isFixed ? "border-red-200 bg-red-50 text-red-600" : "border-orange-200 bg-orange-50 text-orange-700"}`}>
+                      {isFixed
+                        ? <><FaLock size={8} /> Fixed</>
+                        : isDecrease
+                          ? <><FaArrowDown size={8} />{reviewForm.type === "percentage" ? `−${Number(reviewForm.value || 0)}%` : `−${fmtMoney(reviewForm.value || 0)}`}</>
+                          : <><FaArrowUp size={8} />{reviewForm.type === "percentage" ? `+${Number(reviewForm.value || 0)}%` : `+${fmtMoney(reviewForm.value || 0)}`}</>}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Notes */}
+                <div className="mt-3">
+                  <label className={labelCls}>Notes / Reason</label>
+                  <input type="text" value={reviewForm.note}
+                    onChange={(e) => setReviewForm((p) => ({ ...p, note: e.target.value }))}
+                    placeholder={isEscalation ? "e.g. Annual CPI escalation — lease clause 8.2" : "e.g. Market review — negotiated down from current rate"}
                     className={inputCls}
                   />
                 </div>
-                <div>
-                  <label className={labelCls}>Frequency</label>
-                  <select value={reviewForm.frequency} onChange={(e) => setReviewForm((p) => ({ ...p, frequency: e.target.value }))} className={inputCls}>
-                    <option value="yearly">Yearly</option>
-                    <option value="biannual">Bi-Annual</option>
-                    <option value="quarterly">Quarterly</option>
-                    <option value="once">One-Off</option>
-                  </select>
+
+                {/* Footer */}
+                <div className="mt-4 flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
+                  <button onClick={resetReviewForm}
+                    className="inline-flex items-center gap-1.5 border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors">
+                    <FaTimes size={9} /> Cancel
+                  </button>
+                  <button onClick={handleSaveReview} disabled={reviewSaving}
+                    className={`inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-black text-white disabled:opacity-60 transition-colors ${isEscalation ? "bg-blue-700 hover:bg-blue-800" : "bg-amber-600 hover:bg-amber-700"}`}>
+                    {reviewSaving ? "Saving…" : editingReviewId ? `Update ${isEscalation ? "Escalation" : "Review"}` : `Schedule ${isEscalation ? "Escalation" : "Review"}`}
+                  </button>
                 </div>
-                <div>
-                  <label className={labelCls}>Effective Date</label>
-                  <input type="date" value={reviewForm.effectiveDate} onChange={(e) => setReviewForm((p) => ({ ...p, effectiveDate: e.target.value }))} className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>New Rent (Preview)</label>
-                  <div className="flex h-8 items-center border border-[#0B3B2E] bg-[#EDF5F1] px-2 text-xs font-black text-[#0B3B2E]">
-                    {fmtMoney(computeNewRent(currentEffectiveRent, reviewForm.type, reviewForm.value))}
-                  </div>
-                </div>
-                <div>
-                  <label className={labelCls}>Increase</label>
-                  <div className="flex h-8 items-center border border-orange-200 bg-orange-50 px-2 text-xs font-black text-orange-700">
-                    {reviewForm.type === "percentage" ? `+${Number(reviewForm.value || 0)}%` : `+${fmtMoney(reviewForm.value || 0)}`}
-                  </div>
-                </div>
-              </div>
-              <div className="mt-3">
-                <label className={labelCls}>Notes / Reason</label>
-                <input
-                  type="text"
-                  value={reviewForm.note}
-                  onChange={(e) => setReviewForm((p) => ({ ...p, note: e.target.value }))}
-                  placeholder="e.g. Annual CPI escalation — lease clause 8.2"
-                  className={inputCls}
-                />
-              </div>
-              <div className="mt-4 flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
-                <button onClick={resetReviewForm} className="inline-flex items-center gap-1.5 border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors">
-                  <FaTimes size={9} /> Cancel
-                </button>
-                <button
-                  onClick={handleSaveReview}
-                  disabled={reviewSaving}
-                  className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60 transition-colors"
-                >
-                  {reviewSaving ? "Saving…" : editingReviewId ? "Update Review" : "Save Review"}
-                </button>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ── records table ────────────────────────────────────────────── */}
         <div className="border border-slate-200 bg-white shadow-sm">
@@ -3028,47 +3284,82 @@ const TenantStatement = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[820px] border-collapse text-[11px]">
+              <table className="w-full min-w-[980px] border-collapse text-[11px]">
                 <thead>
                   <tr className="bg-[#0B3B2E] text-white">
-                    {["Effective Date", "Type", "Frequency", "Increase", "Previous Rent", "New Rent", "Status", "Notes", "Actions"].map((h, i, arr) => (
-                      <th key={h} className={`px-3 py-1 text-left font-bold whitespace-nowrap ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
+                    {["Effective Date", "Category", "Type", "Direction", "Frequency", "Change", "Previous Rent", "New Rent", "Status", "Notes", "Actions"].map((h, i, arr) => (
+                      <th key={h} className={`px-3 py-1.5 text-left font-bold whitespace-nowrap ${i < arr.length - 1 ? "border-r border-white/10" : ""}`}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {computedRows.map((record, idx) => {
                     const isApplied = record.status === "Applied";
-                    const isScheduled = record.status === "Scheduled";
+                    const isDecrease = (record.direction || "increase") === "decrease";
+                    const isFixedRent = record.type === "fixed_rent";
+                    const isOverdue = !isApplied && new Date(record.effectiveDate) < today;
+                    const isEscalationRecord = (record.reviewType || "escalation") === "escalation";
+                    const rowBg = isApplied
+                      ? "bg-emerald-50/30"
+                      : isOverdue
+                        ? "bg-red-50/60 hover:bg-red-50"
+                        : idx % 2 === 0
+                          ? "bg-white hover:bg-blue-50/40"
+                          : "bg-slate-50/60 hover:bg-blue-50/40";
                     return (
-                      <tr key={record.id} className={`border-b border-gray-100 transition-colors ${idx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
-                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800 whitespace-nowrap">{fmtDate(record.effectiveDate)}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 whitespace-nowrap">
-                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${record.type === "percentage" ? "border-blue-200 bg-blue-50 text-blue-700" : "border-violet-200 bg-violet-50 text-violet-700"}`}>
-                            {record.type === "percentage" ? "%" : "Fixed"}
-                          </span>
+                      <tr key={record.id} className={`border-b border-gray-100 transition-colors ${rowBg}`}>
+                        <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-800 whitespace-nowrap">
+                          {fmtDate(record.effectiveDate)}
+                          {isOverdue && <span className="ml-1.5 text-[9px] font-black text-red-500 uppercase">overdue</span>}
                         </td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-600 capitalize">{formatFrequency(record.frequency)}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 font-black text-orange-700 whitespace-nowrap">
-                          {record.type === "percentage" ? `+${Number(record.value)}%` : `+${fmtMoney(record.value)}`}
+                        <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap">
+                          {isEscalationRecord
+                            ? <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-700"><FaChartLine size={7} /> Escalation</span>
+                            : <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700"><FaSearch size={7} /> Review</span>}
                         </td>
-                        <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-500 whitespace-nowrap">{fmtMoney(record.previousRent)}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 font-mono font-black text-[#0B3B2E] whitespace-nowrap">{fmtMoney(record.resultingRent)}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 whitespace-nowrap">
+                        <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap">
                           <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${
-                            isApplied   ? "border-emerald-200 bg-emerald-50 text-emerald-700" :
-                            isScheduled ? "border-amber-200 bg-amber-50 text-amber-700" :
-                                          "border-slate-200 bg-slate-50 text-slate-600"
+                            isFixedRent   ? "border-purple-200 bg-purple-50 text-purple-700" :
+                            record.type === "percentage" ? "border-blue-200 bg-blue-50 text-blue-700" :
+                                            "border-violet-200 bg-violet-50 text-violet-700"
                           }`}>
-                            {record.status}
+                            {isFixedRent ? "Fixed Rent" : record.type === "percentage" ? "%" : "Amount"}
                           </span>
                         </td>
-                        <td className="px-3 py-1 border-r border-gray-100 max-w-[180px] truncate text-slate-500" title={record.note || ""}>{record.note || "—"}</td>
-                        <td className="px-3 py-1 whitespace-nowrap">
-                          <div className="flex items-center gap-1.5">
+                        <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap">
+                          {isFixedRent
+                            ? <span className="inline-flex items-center gap-1 text-[10px] font-black text-purple-600"><FaLock size={8} /> Set</span>
+                            : isDecrease
+                              ? <span className="inline-flex items-center gap-1 text-[10px] font-black text-red-600"><FaArrowDown size={8} /> Decrease</span>
+                              : <span className="inline-flex items-center gap-1 text-[10px] font-black text-emerald-600"><FaArrowUp size={8} /> Increase</span>}
+                        </td>
+                        <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{formatFrequency(record.frequency)}</td>
+                        <td className={`px-3 py-1.5 border-r border-gray-100 font-black whitespace-nowrap ${isDecrease && !isFixedRent ? "text-red-600" : "text-orange-700"}`}>
+                          {isFixedRent
+                            ? fmtMoney(record.value)
+                            : isDecrease
+                              ? (record.type === "percentage" ? `−${Number(record.value)}%` : `−${fmtMoney(record.value)}`)
+                              : (record.type === "percentage" ? `+${Number(record.value)}%` : `+${fmtMoney(record.value)}`)}
+                        </td>
+                        <td className="px-3 py-1.5 border-r border-gray-100 font-mono text-slate-500 whitespace-nowrap">{fmtMoney(record.previousRent)}</td>
+                        <td className={`px-3 py-1.5 border-r border-gray-100 font-mono font-black whitespace-nowrap ${isDecrease && !isFixedRent ? "text-red-700" : "text-[#0B3B2E]"}`}>
+                          {fmtMoney(record.resultingRent)}
+                        </td>
+                        <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap">
+                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${
+                            isApplied  ? "border-emerald-200 bg-emerald-50 text-emerald-700" :
+                            isOverdue  ? "border-red-300 bg-red-50 text-red-700" :
+                                         "border-amber-200 bg-amber-50 text-amber-700"
+                          }`}>
+                            {isApplied ? "Applied" : isOverdue ? "Overdue" : "Scheduled"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-1.5 border-r border-gray-100 max-w-[160px] truncate text-slate-500" title={record.note || ""}>{record.note || "—"}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">
+                          <div className="flex items-center gap-1">
                             {!isApplied && (
                               <button onClick={() => handleApplyReview(record.id)}
-                                className="inline-flex items-center gap-1 border border-emerald-300 bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700 hover:bg-emerald-100 transition-colors"
+                                className={`inline-flex items-center gap-1 border px-2 py-1 text-[10px] font-black transition-colors ${isOverdue ? "border-red-300 bg-red-50 text-red-700 hover:bg-red-100" : "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"}`}
                                 title="Apply to billing schedule">
                                 <FaCheck size={8} /> Apply
                               </button>
@@ -3080,7 +3371,13 @@ const TenantStatement = () => {
                                 <FaEdit size={9} />
                               </button>
                             )}
-                            {isApplied && <span className="text-[10px] italic text-slate-400">Locked</span>}
+                            {isApplied && (
+                              <button onClick={() => handleSendNotice(record)} disabled={sendingNotice}
+                                className="inline-flex items-center gap-1 border border-slate-200 bg-white px-2 py-1 text-[10px] font-black text-slate-500 hover:border-emerald-400 hover:text-emerald-700 disabled:opacity-50 transition-colors"
+                                title="Send rent notice to tenant">
+                                <FaSms size={8} />
+                              </button>
+                            )}
                             <button
                               onClick={() => handleDeleteReview(record.id)}
                               disabled={isApplied}
@@ -3250,157 +3547,6 @@ const TenantStatement = () => {
     printWindow.document.close();
   };
 
-  const renderActions = () => {
-    const tenantReceipts = tenantPayments.filter(
-      (p) =>
-        (p.tenant === tenantId || p.tenant?._id === tenantId) &&
-        p?.ledgerType === "receipts" &&
-        !p?.reversalOf
-    );
-
-    return (
-      <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="px-3 py-2 border-b border-slate-200 bg-slate-50">
-          <h3 className="text-sm font-bold text-slate-900">Tenant Actions & Receipts</h3>
-        </div>
-
-        <div className="px-3 py-2 border-b border-slate-200">
-          <h4 className="text-sm font-semibold text-slate-800 mb-4">Quick Actions</h4>
-          <div className="flex flex-wrap gap-3">
-            <button
-              onClick={() => {
-                navigate(`/receipts/${tenantId}`);
-              }}
-              className="flex items-center gap-2 px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded font-semibold text-sm transition-colors"
-            >
-              <FaMoneyBillWave size={16} />
-              View All Receipts
-            </button>
-            <button
-              onClick={() => openReceiptAllocationWorkspace()}
-              className="flex items-center gap-2 px-3 py-1.5 bg-[#0B3B2E] hover:bg-[#0A3127] text-white rounded font-semibold text-sm transition-colors"
-            >
-              <FaLink size={16} />
-              Receipt Allocation Workspace
-            </button>
-            <button
-              onClick={handlePrint}
-              className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-semibold text-sm transition-colors"
-            >
-              <FaPrint size={16} />
-              Print Statement
-            </button>
-            <button
-              onClick={() => navigate(`/tenant/${tenantId}/edit`)}
-              className="flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded font-semibold text-sm transition-colors"
-            >
-              <FaEdit size={16} />
-              Edit Tenant
-            </button>
-          </div>
-        </div>
-
-        <div className="px-3 py-2">
-          <h4 className="text-sm font-semibold text-slate-800 mb-4">Recent Receipts</h4>
-          {tenantReceipts.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <p>No receipts found for this tenant</p>
-            </div>
-          ) : (
-            <div className="overflow-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-100 border-b border-slate-200">
-                    <th className="px-3 py-1.5 text-left font-semibold text-slate-700">Receipt #</th>
-                    <th className="px-3 py-1.5 text-left font-semibold text-slate-700">Date</th>
-                    <th className="px-3 py-1.5 text-left font-semibold text-slate-700">Type</th>
-                    <th className="px-3 py-1.5 text-right font-semibold text-slate-700">Amount</th>
-                    <th className="px-3 py-1.5 text-center font-semibold text-slate-700">Status</th>
-                    <th className="px-3 py-1.5 text-center font-semibold text-slate-700">Allocation</th>
-                    <th className="px-3 py-1.5 text-center font-semibold text-slate-700">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tenantReceipts
-                    .slice()
-                    .sort((a, b) => new Date(b.paymentDate || b.createdAt) - new Date(a.paymentDate || a.createdAt))
-                    .map((receipt) => {
-                      const receiptIsReversed = isReceiptReversed(receipt);
-                      const receiptStatusLabel = receiptIsReversed
-                        ? "Reversed"
-                        : receipt.isConfirmed
-                        ? "Confirmed"
-                        : "Pending";
-                      const receiptStatusClass = receiptIsReversed
-                        ? "bg-slate-100 text-slate-700"
-                        : receipt.isConfirmed
-                        ? "bg-green-100 text-green-800"
-                        : "bg-yellow-100 text-yellow-800";
-
-                      return (
-                      <tr key={receipt._id} className="border-b border-slate-200 hover:bg-slate-50">
-                        <td className="px-3 py-2 font-mono text-slate-700">{receipt.receiptNumber}</td>
-                        <td className="px-3 py-2 text-slate-600">
-                          {new Date(receipt.paymentDate).toLocaleDateString()}
-                        </td>
-                        <td className="px-3 py-2 text-slate-600">{receipt.paymentType}</td>
-                        <td className="px-2.5 py-1 text-right font-semibold text-slate-900">
-                          Ksh {(receipt.amount || 0).toLocaleString()}
-                        </td>
-                        <td className="px-2.5 py-1.5 text-center">
-                          <span
-                            className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-bold ${receiptStatusClass}`}
-                          >
-                            {receiptStatusLabel}
-                          </span>
-                        </td>
-                        <td className="px-2.5 py-1.5 text-center">
-                          <div className="space-y-2">
-                            <button
-                              onClick={() => setAllocationTraceTarget({ kind: "receipt", id: safeId(receipt) })}
-                              className="text-slate-700 hover:text-slate-900 font-semibold flex items-center justify-center gap-1 mx-auto"
-                              title="Trace allocations"
-                            >
-                              <FaLink size={13} />
-                              <span className="text-xs">Trace</span>
-                            </button>
-                            <button
-                              onClick={() => openReceiptAllocationWorkspace(safeId(receipt))}
-                              disabled={receiptIsReversed}
-                              className={`font-semibold flex items-center justify-center gap-1 mx-auto ${
-                                receiptIsReversed
-                                  ? "text-slate-400 cursor-not-allowed"
-                                  : "text-[#0B3B2E] hover:text-[#0A3127]"
-                              }`}
-                              title={receiptIsReversed ? "Reversed receipts are read-only here" : "Manage allocations"}
-                            >
-                              <FaMoneyBillWave size={13} />
-                              <span className="text-xs">{receiptIsReversed ? "Read only" : "Allocate"}</span>
-                            </button>
-                          </div>
-                        </td>
-                        <td className="px-2.5 py-1.5 text-center">
-                          <button
-                            onClick={() => handlePrintReceipt(receipt)}
-                            className="text-blue-600 hover:text-blue-800 font-semibold flex items-center justify-center gap-1 mx-auto"
-                            title="Print Receipt"
-                          >
-                            <FaPrint size={14} />
-                            <span className="text-xs">Print</span>
-                          </button>
-                        </td>
-                      </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
-
   const renderContent = () => {
     switch (activeTab) {
       case "statement":
@@ -3539,26 +3685,89 @@ const TenantStatement = () => {
             </div>
           </div>
 
-          <div className="sticky top-0 z-30 flex-shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm no-print">
-            <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-              <button onClick={() => navigate("/tenants")} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50"><FaArrowLeft size={10} /> Back</button>
-              <span className="shrink-0 rounded border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700">{tenant?.tenantName || tenant?.name || "Loading..."}</span>
-              <span className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-700">Unit: {resolveTenantUnitNumber(tenant)}</span>
-              <span className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-700">Property: {resolveTenantPropertyName(tenant)}</span>
-              <span className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-700">Phone: {tenant?.phone || "-"}</span>
-              {activeTab === "statement" && (
-                <>
-                  <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                  <button onClick={() => navigate(`/receipts/${tenantId}`)} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#FF8C00] px-2.5 text-xs font-bold text-white hover:bg-[#e67e00]"><FaMoneyBillWave size={10} /> Receipts</button>
-                  <button onClick={handlePrint} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-bold text-white hover:bg-[#0A3127]"><FaPrint size={10} /> Print</button>
-                  <button onClick={handleDownload} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50"><FaDownload size={10} /> PDF</button>
-                </>
+          <div className="sticky top-0 z-30 flex-shrink-0 overflow-hidden border border-slate-200 bg-white shadow-sm no-print">
+            {/* ── Tenant meta bar ── */}
+            <div className="flex items-center gap-1.5 overflow-x-auto border-b border-slate-100 px-2 py-1.5 bg-[#0B3B2E]/[0.03]">
+              <button onClick={() => navigate("/tenants")} className="h-7 shrink-0 flex items-center gap-1 border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">
+                <FaArrowLeft size={10} /> Back
+              </button>
+              <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+              {/* Tenant name */}
+              <span className="shrink-0 border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-black text-orange-700">
+                {tenant?.tenantName || tenant?.name || "Loading…"}
+              </span>
+              {/* Lease status */}
+              {(() => {
+                const status = String(tenantLease?.status || "").toLowerCase();
+                const cfg = status === "active"
+                  ? { cls: "border-emerald-200 bg-emerald-50 text-emerald-700", label: "Active Lease" }
+                  : status === "terminated" || status === "cancelled"
+                  ? { cls: "border-red-200 bg-red-50 text-red-700", label: status === "terminated" ? "Terminated" : "Cancelled" }
+                  : status === "expired"
+                  ? { cls: "border-amber-200 bg-amber-50 text-amber-700", label: "Expired" }
+                  : status
+                  ? { cls: "border-slate-200 bg-slate-50 text-slate-600", label: status.charAt(0).toUpperCase() + status.slice(1) }
+                  : null;
+                return cfg ? <span className={`shrink-0 border px-2 py-0.5 text-[10px] font-black ${cfg.cls}`}>{cfg.label}</span> : null;
+              })()}
+              <span className="shrink-0 border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                Unit {resolveTenantUnitNumber(tenant)}
+              </span>
+              <span className="shrink-0 border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                {resolveTenantPropertyName(tenant)}
+              </span>
+              {tenant?.phone && (
+                <span className="shrink-0 border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                  {tenant.phone}
+                </span>
               )}
+              {(tenantLease?.startDate || tenant?.moveInDate) && (
+                <span className="shrink-0 border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+                  Since {new Date(tenantLease?.startDate || tenant.moveInDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" })}
+                </span>
+              )}
+              <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200 ml-auto" />
+              {/* Always-visible actions */}
+              <button onClick={() => navigate(`/receipts/${tenantId}`)} className="h-7 shrink-0 flex items-center gap-1 bg-[#FF8C00] px-2.5 text-xs font-bold text-white hover:bg-[#e67e00] transition-colors">
+                <FaMoneyBillWave size={10} /> Receipts
+              </button>
+              <button onClick={handlePrint} className="h-7 shrink-0 flex items-center gap-1 bg-[#0B3B2E] px-2.5 text-xs font-bold text-white hover:bg-[#0A3127] transition-colors">
+                <FaPrint size={10} /> Print
+              </button>
+              <button onClick={handleDownload} className="h-7 shrink-0 flex items-center gap-1 border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">
+                <FaDownload size={10} /> PDF
+              </button>
+              <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+              <button
+                onClick={handleSendStatementSms}
+                disabled={sendingStatementSms || !tenant?.phone}
+                title={!tenant?.phone ? "No phone number on record" : "Send statement summary via SMS"}
+                className="h-7 shrink-0 flex items-center gap-1 border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 hover:border-emerald-400 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
+              >
+                <FaSms size={10} /> {sendingStatementSms ? "Sending…" : "SMS"}
+              </button>
+              <button
+                onClick={handleSendStatementEmail}
+                disabled={sendingStatementEmail || !tenant?.email}
+                title={!tenant?.email ? "No email address on record" : "Email statement to tenant"}
+                className="h-7 shrink-0 flex items-center gap-1 border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 hover:border-blue-400 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
+              >
+                <FaEnvelope size={10} /> {sendingStatementEmail ? "Sending…" : "Email"}
+              </button>
             </div>
-            <div className="flex overflow-x-auto border-t border-slate-200 bg-white">
+            {/* ── Tab bar ── */}
+            <div className="flex overflow-x-auto bg-white">
               {tabs.map((tab) => (
-                <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`inline-flex h-9 shrink-0 items-center justify-center gap-1.5 border-r border-slate-200 px-3 text-[11px] font-bold transition-colors ${activeTab === tab.id ? "bg-orange-50 text-orange-700 shadow-inner" : "text-slate-600 hover:bg-slate-50"}`}>
-                  <span className="text-sm">{tab.icon}</span><span>{tab.label}</span>
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`inline-flex h-9 shrink-0 items-center justify-center gap-1.5 border-r border-slate-200 px-4 text-[11px] font-bold transition-colors ${
+                    activeTab === tab.id
+                      ? "border-b-2 border-b-[#0B3B2E] text-[#0B3B2E] bg-[#EDF5F1]"
+                      : "border-b-2 border-b-transparent text-slate-500 hover:text-[#0B3B2E] hover:bg-slate-50"
+                  }`}
+                >
+                  <span>{tab.icon}</span><span>{tab.label}</span>
                 </button>
               ))}
             </div>
