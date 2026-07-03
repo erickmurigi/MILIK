@@ -47,6 +47,7 @@ const RentalAgedAnalysisReport = () => {
   const [properties, setProperties] = useState([]);
   const [rows, setRows] = useState([]);
   const [filters, setFilters] = useState({ propertyId: "all", category: "all", search: "" });
+  const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [currentPage, setCurrentPage] = useState(1);
 
   const loadData = useCallback(async () => {
@@ -336,13 +337,13 @@ const RentalAgedAnalysisReport = () => {
               <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
                 <div className="relative shrink-0">
                   <FaFilter className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-orange-500" />
-                  <input value={filters.search} onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Tenant, property, unit" className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                  <input value={filters.search} onChange={setFilter("search")} placeholder="Tenant, property, unit" className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </div>
-                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
+                <select value={filters.propertyId} onChange={setFilter("propertyId")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
                   <option value="all">All properties</option>
                   {properties.map((property) => <option key={property._id} value={property._id}>{property.propertyName || property.name}</option>)}
                 </select>
-                <select value={filters.category} onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
+                <select value={filters.category} onChange={setFilter("category")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
                   <option value="all">All charges</option>
                   <option value="RENT_CHARGE">Rent only</option>
                   <option value="UTILITY_CHARGE">Utility only</option>

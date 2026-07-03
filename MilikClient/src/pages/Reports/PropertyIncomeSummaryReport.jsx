@@ -44,6 +44,7 @@ const PropertyIncomeSummaryReport = () => {
     propertyId: '',
     landlordId: '',
   });
+  const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [report, setReport] = useState({ summary: {}, byProperty: [], expensesByCategory: [] });
 
   useEffect(() => {
@@ -349,14 +350,14 @@ const PropertyIncomeSummaryReport = () => {
             {/* Filter bar */}
             <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
               <div className={`grid gap-1.5 md:grid-cols-2 ${isLandlordMode ? 'xl:grid-cols-3' : 'xl:grid-cols-4'}`}>
-                <input type="date" value={filters.startDate} onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                <input type="date" value={filters.endDate} onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
+                <input type="date" value={filters.startDate} onChange={setFilter("startDate")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                <input type="date" value={filters.endDate} onChange={setFilter("endDate")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                <select value={filters.propertyId} onChange={setFilter("propertyId")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
                   <option value="">All properties</option>
                   {properties.map((p) => <option key={p._id} value={p._id}>{p.propertyName || p.name}</option>)}
                 </select>
                 {!isLandlordMode && (
-                  <select value={filters.landlordId} onChange={(e) => setFilters((prev) => ({ ...prev, landlordId: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
+                  <select value={filters.landlordId} onChange={setFilter("landlordId")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
                     <option value="">All landlords</option>
                     {landlords.map((l) => <option key={l._id} value={l._id}>{l.landlordName || l.name}</option>)}
                   </select>

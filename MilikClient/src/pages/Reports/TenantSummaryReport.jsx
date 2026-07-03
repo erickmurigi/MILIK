@@ -30,6 +30,7 @@ const TenantSummaryReport = () => {
   const [invoices, setInvoices] = useState([]);
   const [payments, setPayments] = useState([]);
   const [filters, setFilters] = useState({ propertyId: "all", status: "all", search: "" });
+  const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [currentPage, setCurrentPage] = useState(1);
 
   const loadData = useCallback(async () => {
@@ -304,14 +305,14 @@ const TenantSummaryReport = () => {
                   <FaFilter className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
                   <input
                     value={filters.search}
-                    onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
+                    onChange={setFilter("search")}
                     placeholder="Tenant, property, unit..."
                     className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
                 <select
                   value={filters.propertyId}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))}
+                  onChange={setFilter("propertyId")}
                   className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                 >
                   <option value="all">All properties</option>
@@ -321,7 +322,7 @@ const TenantSummaryReport = () => {
                 </select>
                 <select
                   value={filters.status}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+                  onChange={setFilter("status")}
                   className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                 >
                   <option value="all">All tenants</option>

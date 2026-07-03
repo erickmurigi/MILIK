@@ -49,6 +49,7 @@ const RentalCollectionReport = () => {
     paymentMethod: '',
     cashbook: '',
   });
+  const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [report, setReport] = useState({ summary: {}, byProperty: [], rows: [] });
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -411,13 +412,13 @@ const RentalCollectionReport = () => {
 
             <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
               <div className="grid gap-1.5 md:grid-cols-2 xl:grid-cols-4">
-                <input type="date" value={filters.startDate} onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                <input type="date" value={filters.endDate} onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
+                <input type="date" value={filters.startDate} onChange={setFilter("startDate")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                <input type="date" value={filters.endDate} onChange={setFilter("endDate")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                <select value={filters.propertyId} onChange={setFilter("propertyId")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
                   <option value="">All properties</option>
                   {properties.map((property) => <option key={property._id} value={property._id}>{property.propertyName || property.name}</option>)}
                 </select>
-                <select value={filters.paymentMethod} onChange={(e) => setFilters((prev) => ({ ...prev, paymentMethod: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
+                <select value={filters.paymentMethod} onChange={setFilter("paymentMethod")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
                   <option value="">All methods</option>
                   <option value="cash">Cash</option>
                   <option value="mobile_money">Mobile money</option>
@@ -429,17 +430,17 @@ const RentalCollectionReport = () => {
                   <option value="">All tenants</option>
                   {tenants.map((tenant) => <option key={tenant._id} value={tenant._id}>{tenant.tenantName || tenant.name}</option>)}
                 </select>
-                <select value={filters.unitId} onChange={(e) => setFilters((prev) => ({ ...prev, unitId: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
+                <select value={filters.unitId} onChange={setFilter("unitId")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
                   <option value="">All units</option>
                   {units.map((unit) => <option key={unit._id} value={unit._id}>{unit.unitNumber}</option>)}
                 </select>
                 {!isLandlordMode && (
-                  <select value={filters.landlordId} onChange={(e) => setFilters((prev) => ({ ...prev, landlordId: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
+                  <select value={filters.landlordId} onChange={setFilter("landlordId")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
                     <option value="">All landlords</option>
                     {landlords.map((landlord) => <option key={landlord._id} value={landlord._id}>{landlord.landlordName || landlord.name}</option>)}
                   </select>
                 )}
-                <input value={filters.cashbook} onChange={(e) => setFilters((prev) => ({ ...prev, cashbook: e.target.value }))} placeholder="Cashbook contains..." className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                <input value={filters.cashbook} onChange={setFilter("cashbook")} placeholder="Cashbook contains..." className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </div>
               <div className="mt-1.5 flex flex-wrap justify-end gap-1.5">
                 <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "No export permission"} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaFileDownload /> Export CSV</button>
