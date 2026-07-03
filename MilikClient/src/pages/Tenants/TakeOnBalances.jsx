@@ -556,6 +556,7 @@ const TakeOnBalances = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [draftFilters, setDraftFilters] = useState(emptyFilters);
+  const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [appliedFilters, setAppliedFilters] = useState(emptyFilters);
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState("create");
@@ -975,25 +976,25 @@ const TakeOnBalances = () => {
               <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
                 <span className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">Rows <span className="text-slate-900 normal-case">{filteredRows.length}</span></span>
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                <input value={draftFilters.search} onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Search…" className="h-7 w-40 shrink-0 rounded border border-slate-200 bg-white px-2 text-[10px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <input value={draftFilters.search} onChange={setFilter("search")} placeholder="Search…" className="h-7 w-40 shrink-0 rounded border border-slate-200 bg-white px-2 text-[10px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
                 <select value={draftFilters.propertyId} onChange={(e) => setDraftFilters((prev) => ({ ...prev, propertyId: e.target.value, tenant: "" }))} className="h-7 shrink-0 rounded border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="">Property</option>
                   {propertyOptions.map((property) => (<option key={property._id || property.id} value={normalizeId(property._id || property.id)}>{getPropertyDisplay(property)}</option>))}
                 </select>
-                <select value={draftFilters.tenant} onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenant: e.target.value }))} className="h-7 shrink-0 rounded border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                <select value={draftFilters.tenant} onChange={setFilter("tenant")} className="h-7 shrink-0 rounded border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="">Tenant</option>
                   {tenants.filter((tenant) => !draftFilters.propertyId || getTenantPropertyId(tenant) === draftFilters.propertyId).map((tenant) => (<option key={tenant._id} value={tenant._id}>{getTenantDisplayName(tenant)}</option>))}
                 </select>
-                <select value={draftFilters.billItem} onChange={(e) => setDraftFilters((prev) => ({ ...prev, billItem: e.target.value }))} className="h-7 shrink-0 rounded border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                <select value={draftFilters.billItem} onChange={setFilter("billItem")} className="h-7 shrink-0 rounded border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="">Bill Item</option>
                   {filterBillItemOptions.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}
                 </select>
-                <select value={draftFilters.type} onChange={(e) => setDraftFilters((prev) => ({ ...prev, type: e.target.value }))} className="h-7 shrink-0 rounded border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                <select value={draftFilters.type} onChange={setFilter("type")} className="h-7 shrink-0 rounded border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="">Type</option>
                   <option value="Debit">Debit</option>
                   <option value="Credit">Credit</option>
                 </select>
-                <select value={draftFilters.status} onChange={(e) => setDraftFilters((prev) => ({ ...prev, status: e.target.value }))} className="h-7 shrink-0 rounded border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                <select value={draftFilters.status} onChange={setFilter("status")} className="h-7 shrink-0 rounded border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="">Status</option>
                   <option value="unallocated">Unallocated</option>
                   <option value="partially_allocated">Partially Allocated</option>

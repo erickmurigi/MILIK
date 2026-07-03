@@ -208,6 +208,7 @@ const TenantDeposits = () => {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [draftFilters, setDraftFilters] = useState(emptyFilters);
+  const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [appliedFilters, setAppliedFilters] = useState(emptyFilters);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedInvoices, setSelectedInvoices] = useState([]);
@@ -772,26 +773,26 @@ const TenantDeposits = () => {
                 ))}
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 <input type="text" value={draftFilters.invoiceNo} onChange={(e) => setDraftFilters((prev) => ({ ...prev, invoiceNo: normalizeUppercaseInput(e.target.value) }))} placeholder="Invoice #" className="h-7 w-24 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <input type="text" value={draftFilters.tenantName} onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenantName: e.target.value }))} placeholder="Tenant" className="h-7 w-24 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <input type="text" value={draftFilters.tenantName} onChange={setFilter("tenantName")} placeholder="Tenant" className="h-7 w-24 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
                 <select value={draftFilters.propertyId} onChange={(e) => setDraftFilters((prev) => ({ ...prev, propertyId: e.target.value, unitId: "any" }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="any">Property</option>
                   {activeProperties.map((property) => (<option key={property._id} value={property._id}>{formatPropertyName(property)}</option>))}
                 </select>
-                <select value={draftFilters.unitId} onChange={(e) => setDraftFilters((prev) => ({ ...prev, unitId: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                <select value={draftFilters.unitId} onChange={setFilter("unitId")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="any">Unit</option>
                   {unitsForFilter.map((unit) => (<option key={unit._id} value={unit._id}>{formatUnitName(unit)}</option>))}
                 </select>
-                <select value={draftFilters.depositTypeId} onChange={(e) => setDraftFilters((prev) => ({ ...prev, depositTypeId: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                <select value={draftFilters.depositTypeId} onChange={setFilter("depositTypeId")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="any">Deposit Type</option>
                   {activeDepositTypes.map((type) => (<option key={type._id || type.code || type.name} value={type._id || `deposit:${slugify(type.code || type.name)}`}>{type.name}</option>))}
                 </select>
-                <select value={draftFilters.holder} onChange={(e) => setDraftFilters((prev) => ({ ...prev, holder: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                <select value={draftFilters.holder} onChange={setFilter("holder")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="any">{holderColumnLabel}</option>
                   {!isLandlordWorkspace && <option value="manager">Management Company</option>}
                   <option value="landlord">{isLandlordWorkspace ? "Owner / Landlord" : "Landlord"}</option>
                 </select>
-                <input type="date" value={draftFilters.fromDate} onChange={(e) => setDraftFilters((prev) => ({ ...prev, fromDate: e.target.value }))} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <input type="date" value={draftFilters.toDate} onChange={(e) => setDraftFilters((prev) => ({ ...prev, toDate: e.target.value }))} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <input type="date" value={draftFilters.fromDate} onChange={setFilter("fromDate")} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <input type="date" value={draftFilters.toDate} onChange={setFilter("toDate")} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
                 <button onClick={applySearch} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSearch size={10} /></button>
                 <button onClick={resetFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={10} /></button>
                 <button onClick={loadDepositInvoices} disabled={loading} className="h-7 shrink-0 flex items-center gap-1 rounded border border-gray-300 bg-white px-2.5 text-xs text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-60">{loading ? <FaSpinner className="animate-spin" size={10} /> : <FaRedoAlt size={10} />}</button>

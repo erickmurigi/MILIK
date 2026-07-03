@@ -294,6 +294,7 @@ const MeterReadings = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedReadingIds, setSelectedReadingIds] = useState([]);
   const [draftFilters, setDraftFilters] = useState(emptyFilters);
+  const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [appliedFilters, setAppliedFilters] = useState(emptyFilters);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState("");
@@ -1217,20 +1218,20 @@ const MeterReadings = () => {
                   <button key={val} onClick={() => setDraftFilters((prev) => ({ ...prev, status: val }))} className={`h-7 shrink-0 rounded px-2.5 text-xs font-semibold ${draftFilters.status === val ? `${MILIK_GREEN} text-white` : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"}`}>{label}</button>
                 ))}
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                <input type="text" value={draftFilters.search} onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Search…" className="h-7 w-44 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <input type="text" value={draftFilters.search} onChange={setFilter("search")} placeholder="Search…" className="h-7 w-44 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
                 <select value={draftFilters.property} onChange={(e) => setDraftFilters((prev) => ({ ...prev, property: e.target.value, unit: "any" }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs text-gray-800 appearance-none">
                   <option value="any">Property</option>
                   {properties.map((property) => (<option key={property._id} value={property._id}>{property.propertyName || property.name || property.propertyCode}</option>))}
                 </select>
-                <select value={draftFilters.unit} onChange={(e) => setDraftFilters((prev) => ({ ...prev, unit: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs text-gray-800 appearance-none">
+                <select value={draftFilters.unit} onChange={setFilter("unit")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs text-gray-800 appearance-none">
                   <option value="any">Unit</option>
                   {unitsForSelectedProperty.map((unit) => (<option key={unit._id} value={unit._id}>{unit.unitNumber}</option>))}
                 </select>
-                <select value={draftFilters.utilityType} onChange={(e) => setDraftFilters((prev) => ({ ...prev, utilityType: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs text-gray-800 appearance-none">
+                <select value={draftFilters.utilityType} onChange={setFilter("utilityType")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs text-gray-800 appearance-none">
                   <option value="any">Utility</option>
                   {utilityOptions.map((utility) => (<option key={utility} value={utility}>{utility}</option>))}
                 </select>
-                <input type="month" value={draftFilters.billingPeriod} onChange={(e) => setDraftFilters((prev) => ({ ...prev, billingPeriod: e.target.value }))} className="h-7 w-28 shrink-0 rounded border border-gray-300 px-2 text-xs" />
+                <input type="month" value={draftFilters.billingPeriod} onChange={setFilter("billingPeriod")} className="h-7 w-28 shrink-0 rounded border border-gray-300 px-2 text-xs" />
                 <button onClick={applySearch} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaSearch size={10} /></button>
                 <button onClick={resetFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={10} /></button>
                 <button onClick={handleEditSelected} disabled={!canEditSelected} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs text-white shadow-sm ${canEditSelected ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaEdit size={10} /></button>

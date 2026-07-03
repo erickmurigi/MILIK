@@ -117,6 +117,7 @@ const CommissionReports = () => {
     search: "",
     status: "recognized",
   });
+  const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [appliedFilters, setAppliedFilters] = useState({
     monthFrom: currentMonth,
     monthTo: currentMonth,
@@ -431,16 +432,16 @@ const CommissionReports = () => {
           {/* Filter bar */}
           <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
             <div className="flex flex-wrap items-center gap-1.5">
-              <input type="month" value={draftFilters.monthFrom} onChange={(e) => setDraftFilters((prev) => ({ ...prev, monthFrom: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />
-              <input type="month" value={draftFilters.monthTo} onChange={(e) => setDraftFilters((prev) => ({ ...prev, monthTo: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />
-              <select value={draftFilters.status} onChange={(e) => setDraftFilters((prev) => ({ ...prev, status: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none">
+              <input type="month" value={draftFilters.monthFrom} onChange={setFilter("monthFrom")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />
+              <input type="month" value={draftFilters.monthTo} onChange={setFilter("monthTo")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />
+              <select value={draftFilters.status} onChange={setFilter("status")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none">
                 <option value="recognized">Recognized only</option>
                 <option value="reversed">Reversed only</option>
                 <option value="all">All statuses</option>
               </select>
               <div className="relative flex min-w-[200px] flex-1">
                 <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" size={9} />
-                <input value={draftFilters.search} onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: e.target.value }))} onKeyDown={(e) => e.key === 'Enter' && applySearch()} placeholder="Search statement, property, landlord or basis…" className="h-7 w-full rounded-md border border-slate-200 bg-white pl-6 pr-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />
+                <input value={draftFilters.search} onChange={setFilter("search")} onKeyDown={(e) => e.key === 'Enter' && applySearch()} placeholder="Search statement, property, landlord or basis…" className="h-7 w-full rounded-md border border-slate-200 bg-white pl-6 pr-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />
               </div>
               <div className="ml-auto flex items-center gap-1.5">
                 {canExportReports && <button onClick={handleExportCSV} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"><FaFileDownload size={9} /> Export CSV</button>}
