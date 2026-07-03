@@ -62,6 +62,35 @@ import {
 const MILIK_GREEN = "bg-[#165946]";
 const DEFAULT_SCHEDULE_MONTHS = 12;
 
+const computeNewRent = (current, type, value, direction = "increase") => {
+  const v = Number(value) || 0;
+  if (type === "fixed_rent") return Math.max(0, Math.round(v));
+  const sign = direction === "decrease" ? -1 : 1;
+  if (type === "percentage") return Math.max(0, Math.round(current * (1 + sign * v / 100)));
+  return Math.max(0, Math.round(current + sign * v));
+};
+
+const computeNextDate = (dateStr, frequency) => {
+  const d = new Date(dateStr);
+  if (frequency === "quarterly") d.setMonth(d.getMonth() + 3);
+  else if (frequency === "biannual") d.setMonth(d.getMonth() + 6);
+  else d.setFullYear(d.getFullYear() + 1);
+  return d.toISOString().slice(0, 10);
+};
+
+const formatFrequency = (frequency) => {
+  if (frequency === "biannual") return "Bi-Annual";
+  if (frequency === "quarterly") return "Quarterly";
+  if (frequency === "once") return "One-Off";
+  return "Yearly";
+};
+
+const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+const fmtMoney = (n) => `KES ${Number(n || 0).toLocaleString()}`;
+
+const reviewInputCls = "h-8 w-full border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
+const reviewLabelCls = "mb-1 block text-[10px] font-black uppercase tracking-wide text-slate-500";
+
 const formatPeriodLabel = (dateValue) => {
   const dt = new Date(dateValue);
   if (Number.isNaN(dt.getTime())) return "-";
@@ -2706,22 +2735,6 @@ const TenantStatement = () => {
     );
     const today = new Date(); today.setHours(0, 0, 0, 0);
 
-    // direction: "increase" | "decrease"; type: "percentage" | "amount" | "fixed_rent"
-    const computeNewRent = (current, type, value, direction = "increase") => {
-      const v = Number(value) || 0;
-      if (type === "fixed_rent") return Math.max(0, Math.round(v));
-      const sign = direction === "decrease" ? -1 : 1;
-      if (type === "percentage") return Math.max(0, Math.round(current * (1 + sign * v / 100)));
-      return Math.max(0, Math.round(current + sign * v));
-    };
-
-    const computeNextDate = (dateStr, frequency) => {
-      const d = new Date(dateStr);
-      if (frequency === "quarterly") d.setMonth(d.getMonth() + 3);
-      else if (frequency === "biannual") d.setMonth(d.getMonth() + 6);
-      else d.setFullYear(d.getFullYear() + 1);
-      return d.toISOString().slice(0, 10);
-    };
 
     const appliedOnly = sortedRecords.filter((record) => record.status === "Applied");
     const currentEffectiveRent = appliedOnly.reduce((rent, record) => {
@@ -2968,17 +2981,13 @@ const TenantStatement = () => {
       }
     };
 
-    const formatFrequency = (frequency) => {
-      if (frequency === "biannual") return "Bi-Annual";
-      if (frequency === "quarterly") return "Quarterly";
-      if (frequency === "once") return "One-Off";
-      return "Yearly";
-    };
 
-    const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
-    const fmtMoney = (n) => `KES ${Number(n || 0).toLocaleString()}`;
-    const inputCls = "h-8 w-full border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
-    const labelCls = "mb-1 block text-[10px] font-black uppercase tracking-wide text-slate-500";
+    const isEscalation = reviewForm.reviewType === "escalation";
+    const accentBg = isEscalation ? "bg-blue-700" : "bg-amber-600";
+    const accentBorder = isEscalation ? "border-blue-700" : "border-amber-500";
+    const isFormDecrease = reviewForm.direction === "decrease";
+    const isFormFixed = reviewForm.type === "fixed_rent";
+    const previewRent = computeNewRent(currentEffectiveRent, reviewForm.type, reviewForm.value, reviewForm.direction || "increase");
 
     return (
       <div className="flex flex-col gap-3">
@@ -2996,7 +3005,7 @@ const TenantStatement = () => {
               bg: overdueCount > 0 ? "bg-red-50" : "bg-blue-50",
               text: overdueCount > 0 ? "text-red-700" : "text-blue-800",
             },
-            { label: "Projected Next Rent",    value: fmtMoney(projectedRent),       border: "border-orange-200", bg: "bg-orange-50",    text: "text-orange-800" },
+            { label: "Projected Next Rent", value: fmtMoney(projectedRent), border: "border-orange-200", bg: "bg-orange-50", text: "text-orange-800" },
           ];
           return (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -3055,14 +3064,7 @@ const TenantStatement = () => {
         )}
 
         {/* ── form panel ──────────────────────────────────────────────── */}
-        {reviewFormOpen && (() => {
-          const isEscalation = reviewForm.reviewType === "escalation";
-          const accentBg = isEscalation ? "bg-blue-700" : "bg-amber-600";
-          const accentBorder = isEscalation ? "border-blue-700" : "border-amber-500";
-          const isDecrease = reviewForm.direction === "decrease";
-          const isFixed = reviewForm.type === "fixed_rent";
-          const previewRent = computeNewRent(currentEffectiveRent, reviewForm.type, reviewForm.value, reviewForm.direction || "increase");
-          return (
+        {reviewFormOpen && (
             <div className={`border ${accentBorder} bg-white shadow-sm`}>
               {/* Header */}
               <div className={`flex items-center justify-between border-b border-white/10 ${accentBg} px-4 py-2.5`}>
@@ -3082,7 +3084,7 @@ const TenantStatement = () => {
               <div className="p-4">
                 {/* ── Category toggle ── */}
                 <div className="mb-4">
-                  <p className={labelCls}>Category</p>
+                  <p className={reviewLabelCls}>Category</p>
                   <div className="flex overflow-hidden rounded border border-slate-200">
                     <button type="button"
                       onClick={() => setReviewForm((p) => ({ ...p, reviewType: "escalation", direction: "increase", type: p.type === "fixed_rent" ? "percentage" : p.type, frequency: p.frequency === "once" ? "yearly" : p.frequency }))}
@@ -3108,10 +3110,10 @@ const TenantStatement = () => {
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
                   {/* Adjustment Type */}
                   <div>
-                    <label className={labelCls}>Adjustment Type</label>
+                    <label className={reviewLabelCls}>Adjustment Type</label>
                     <select value={reviewForm.type}
                       onChange={(e) => setReviewForm((p) => ({ ...p, type: e.target.value, direction: e.target.value === "fixed_rent" ? "increase" : p.direction }))}
-                      className={inputCls}>
+                      className={reviewInputCls}>
                       <option value="percentage">Percentage (%)</option>
                       <option value="amount">By Amount (KES)</option>
                       {/* fixed_rent only available for reviews */}
@@ -3120,25 +3122,25 @@ const TenantStatement = () => {
                   </div>
 
                   {/* Direction — only for reviews and non-fixed-rent types */}
-                  {!isEscalation && !isFixed ? (
+                  {!isEscalation && !isFormFixed ? (
                     <div>
-                      <label className={labelCls}>Direction</label>
+                      <label className={reviewLabelCls}>Direction</label>
                       <div className="flex h-8 overflow-hidden border border-slate-300">
                         <button type="button"
                           onClick={() => setReviewForm((p) => ({ ...p, direction: "increase" }))}
-                          className={`flex flex-1 items-center justify-center gap-1 text-[10px] font-black transition-colors ${!isDecrease ? "bg-emerald-600 text-white" : "bg-white text-slate-500 hover:bg-slate-50"}`}>
+                          className={`flex flex-1 items-center justify-center gap-1 text-[10px] font-black transition-colors ${!isFormDecrease ? "bg-emerald-600 text-white" : "bg-white text-slate-500 hover:bg-slate-50"}`}>
                           <FaArrowUp size={8} /> Increase
                         </button>
                         <button type="button"
                           onClick={() => setReviewForm((p) => ({ ...p, direction: "decrease" }))}
-                          className={`flex flex-1 items-center justify-center gap-1 text-[10px] font-black transition-colors border-l border-slate-300 ${isDecrease ? "bg-red-500 text-white" : "bg-white text-slate-500 hover:bg-slate-50"}`}>
+                          className={`flex flex-1 items-center justify-center gap-1 text-[10px] font-black transition-colors border-l border-slate-300 ${isFormDecrease ? "bg-red-500 text-white" : "bg-white text-slate-500 hover:bg-slate-50"}`}>
                           <FaArrowDown size={8} /> Decrease
                         </button>
                       </div>
                     </div>
                   ) : isEscalation ? (
                     <div>
-                      <label className={labelCls}>Direction</label>
+                      <label className={reviewLabelCls}>Direction</label>
                       <div className="flex h-8 items-center gap-1.5 border border-blue-200 bg-blue-50 px-2 text-[10px] font-black text-blue-700">
                         <FaArrowUp size={8} /> Always Increase
                       </div>
@@ -3147,20 +3149,20 @@ const TenantStatement = () => {
 
                   {/* Value */}
                   <div>
-                    <label className={labelCls}>
+                    <label className={reviewLabelCls}>
                       {reviewForm.type === "percentage" ? "Rate (%)" : reviewForm.type === "fixed_rent" ? "New Rent (KES)" : "Amount (KES)"}
                     </label>
                     <input type="number" min="0.01" step="0.01"
                       value={reviewForm.value}
                       onChange={(e) => setReviewForm((p) => ({ ...p, value: Math.max(0, Number(e.target.value)) }))}
-                      className={inputCls}
+                      className={reviewInputCls}
                     />
                   </div>
 
                   {/* Frequency */}
                   <div>
-                    <label className={labelCls}>Frequency</label>
-                    <select value={reviewForm.frequency} onChange={(e) => setReviewForm((p) => ({ ...p, frequency: e.target.value }))} className={inputCls}>
+                    <label className={reviewLabelCls}>Frequency</label>
+                    <select value={reviewForm.frequency} onChange={(e) => setReviewForm((p) => ({ ...p, frequency: e.target.value }))} className={reviewInputCls}>
                       {isEscalation && <option value="yearly">Yearly</option>}
                       {isEscalation && <option value="biannual">Bi-Annual</option>}
                       {isEscalation && <option value="quarterly">Quarterly</option>}
@@ -3173,27 +3175,27 @@ const TenantStatement = () => {
 
                   {/* Effective Date */}
                   <div>
-                    <label className={labelCls}>Effective Date</label>
+                    <label className={reviewLabelCls}>Effective Date</label>
                     <input type="date" value={reviewForm.effectiveDate}
                       onChange={(e) => setReviewForm((p) => ({ ...p, effectiveDate: e.target.value }))}
-                      className={inputCls} />
+                      className={reviewInputCls} />
                   </div>
 
                   {/* Preview */}
                   <div>
-                    <label className={labelCls}>New Rent</label>
-                    <div className={`flex h-8 items-center border px-2 text-xs font-black ${isDecrease && !isFixed ? "border-red-300 bg-red-50 text-red-700" : isEscalation ? "border-blue-300 bg-blue-50 text-blue-700" : "border-[#0B3B2E] bg-[#EDF5F1] text-[#0B3B2E]"}`}>
+                    <label className={reviewLabelCls}>New Rent</label>
+                    <div className={`flex h-8 items-center border px-2 text-xs font-black ${isFormDecrease && !isFormFixed ? "border-red-300 bg-red-50 text-red-700" : isEscalation ? "border-blue-300 bg-blue-50 text-blue-700" : "border-[#0B3B2E] bg-[#EDF5F1] text-[#0B3B2E]"}`}>
                       {fmtMoney(previewRent)}
                     </div>
                   </div>
 
                   {/* Change */}
                   <div>
-                    <label className={labelCls}>Change</label>
-                    <div className={`flex h-8 items-center gap-1 border px-2 text-xs font-black ${isDecrease && !isFixed ? "border-red-200 bg-red-50 text-red-600" : "border-orange-200 bg-orange-50 text-orange-700"}`}>
-                      {isFixed
+                    <label className={reviewLabelCls}>Change</label>
+                    <div className={`flex h-8 items-center gap-1 border px-2 text-xs font-black ${isFormDecrease && !isFormFixed ? "border-red-200 bg-red-50 text-red-600" : "border-orange-200 bg-orange-50 text-orange-700"}`}>
+                      {isFormFixed
                         ? <><FaLock size={8} /> Fixed</>
-                        : isDecrease
+                        : isFormDecrease
                           ? <><FaArrowDown size={8} />{reviewForm.type === "percentage" ? `−${Number(reviewForm.value || 0)}%` : `−${fmtMoney(reviewForm.value || 0)}`}</>
                           : <><FaArrowUp size={8} />{reviewForm.type === "percentage" ? `+${Number(reviewForm.value || 0)}%` : `+${fmtMoney(reviewForm.value || 0)}`}</>}
                     </div>
@@ -3202,11 +3204,11 @@ const TenantStatement = () => {
 
                 {/* Notes */}
                 <div className="mt-3">
-                  <label className={labelCls}>Notes / Reason</label>
+                  <label className={reviewLabelCls}>Notes / Reason</label>
                   <input type="text" value={reviewForm.note}
                     onChange={(e) => setReviewForm((p) => ({ ...p, note: e.target.value }))}
                     placeholder={isEscalation ? "e.g. Annual CPI escalation — lease clause 8.2" : "e.g. Market review — negotiated down from current rate"}
-                    className={inputCls}
+                    className={reviewInputCls}
                   />
                 </div>
 
@@ -3223,8 +3225,7 @@ const TenantStatement = () => {
                 </div>
               </div>
             </div>
-          );
-        })()}
+        )}
 
         {/* ── records table ────────────────────────────────────────────── */}
         <div className="border border-slate-200 bg-white shadow-sm">
