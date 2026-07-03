@@ -69,6 +69,7 @@ const TrialBalanceReport = () => {
     asOfDate: todayString(),
     includeZeroBalances: false,
   });
+  const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
 
   const loadReport = useCallback(async () => {
     if (!businessId) {
@@ -569,7 +570,7 @@ const TrialBalanceReport = () => {
               <input
                 type="date"
                 value={filters.asOfDate}
-                onChange={(e) => setFilters((prev) => ({ ...prev, asOfDate: e.target.value }))}
+                onChange={setFilter("asOfDate")}
                 className="h-8 border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#0B3B2E] focus:bg-white"
               />
               <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 border border-orange-300 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800">

@@ -174,6 +174,7 @@ const LandlordStandingOrders = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState("");
   const [filters, setFilters] = useState({ search: "", status: "all", landlordId: "all", propertyId: "all" });
+  const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const debouncedSearch = useDebounce(filters.search, 400);
   const [form, setForm] = useState(blankForm);
 
@@ -587,17 +588,17 @@ const LandlordStandingOrders = () => {
               <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
                 <div className="relative shrink-0">
                   <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]" />
-                  <input value={filters.search} onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Search order, title…" className="h-7 w-40 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                  <input value={filters.search} onChange={setFilter("search")} placeholder="Search order, title…" className="h-7 w-40 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </div>
-                <select value={filters.landlordId} onChange={(e) => setFilters((prev) => ({ ...prev, landlordId: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                <select value={filters.landlordId} onChange={setFilter("landlordId")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="all">All Landlords</option>
                   {activeLandlords.map((landlord) => (<option key={landlord._id} value={landlord._id}>{getLandlordLabel(landlord)}</option>))}
                 </select>
-                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                <select value={filters.propertyId} onChange={setFilter("propertyId")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="all">All Properties</option>
                   {activeProperties.map((property) => (<option key={property._id} value={property._id}>{property.propertyCode ? `[${property.propertyCode}] ` : ""}{property.propertyName || property.name}</option>))}
                 </select>
-                <select value={filters.status} onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                <select value={filters.status} onChange={setFilter("status")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="all">All Statuses</option>
                   <option value="draft">Draft</option>
                   <option value="active">Active</option>

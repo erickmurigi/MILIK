@@ -57,6 +57,7 @@ const TaxReports = () => {
     endDate: toDateInput(new Date()),
     propertyId: '',
   });
+  const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [loading, setLoading] = useState(false);
   const [companyTaxConfig, setCompanyTaxConfig] = useState({ taxSettings: { defaultVatRate: DEFAULT_RATE } });
   const [invoices, setInvoices] = useState([]);
@@ -340,15 +341,15 @@ const TaxReports = () => {
             <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
               <div>
                 <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-700">Start Date</label>
-                <input type="date" value={filters.startDate} onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))} className="w-full rounded-md border border-orange-300 bg-orange-50 px-2 py-1.5 text-xs" />
+                <input type="date" value={filters.startDate} onChange={setFilter("startDate")} className="w-full rounded-md border border-orange-300 bg-orange-50 px-2 py-1.5 text-xs" />
               </div>
               <div>
                 <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-700">End Date</label>
-                <input type="date" value={filters.endDate} onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))} className="w-full rounded-md border border-orange-300 bg-orange-50 px-2 py-1.5 text-xs" />
+                <input type="date" value={filters.endDate} onChange={setFilter("endDate")} className="w-full rounded-md border border-orange-300 bg-orange-50 px-2 py-1.5 text-xs" />
               </div>
               <div>
                 <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-700">Property</label>
-                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="w-full rounded-md border border-orange-300 bg-orange-50 px-2 py-1.5 text-xs">
+                <select value={filters.propertyId} onChange={setFilter("propertyId")} className="w-full rounded-md border border-orange-300 bg-orange-50 px-2 py-1.5 text-xs">
                   <option value="">All Properties</option>
                   {properties.map((property) => (
                     <option key={property._id} value={property._id}>{property.propertyName}</option>

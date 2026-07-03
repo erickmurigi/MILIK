@@ -165,6 +165,7 @@ const JournalEntries = () => {
   const filters = journalDraft.filters || { search: "", status: "all", journalType: "all", propertyId: "all" };
   const debouncedSearch = useDebounce(filters.search, 400);
   const setFilters = (value) => setJournalDraft((prev) => ({ ...prev, filters: typeof value === "function" ? value(prev.filters || filters) : value }));
+  const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
 
   const form = journalDraft.form || buildInitialForm();
   const setForm = (value) => setJournalDraft((prev) => ({ ...prev, form: typeof value === "function" ? value(prev.form || buildInitialForm()) : value }));
@@ -587,14 +588,14 @@ const JournalEntries = () => {
                   <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
                   <input
                     value={filters.search}
-                    onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
+                    onChange={setFilter("search")}
                     placeholder="Journal no, reference, narration"
                     className="h-7 w-44 border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:border-[#0B3B2E]"
                   />
                 </div>
                 <select
                   value={filters.status}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+                  onChange={setFilter("status")}
                   className="h-7 shrink-0 border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:border-[#0B3B2E]"
                 >
                   <option value="all">All Statuses</option>
@@ -604,7 +605,7 @@ const JournalEntries = () => {
                 </select>
                 <select
                   value={filters.journalType}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, journalType: e.target.value }))}
+                  onChange={setFilter("journalType")}
                   className="h-7 shrink-0 border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:border-[#0B3B2E]"
                 >
                   <option value="all">All Journal Types</option>
@@ -616,7 +617,7 @@ const JournalEntries = () => {
                 </select>
                 <select
                   value={filters.propertyId}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))}
+                  onChange={setFilter("propertyId")}
                   className="h-7 shrink-0 border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:border-[#0B3B2E]"
                 >
                   <option value="all">All Properties</option>

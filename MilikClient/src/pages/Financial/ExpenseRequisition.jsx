@@ -78,6 +78,7 @@ const ExpenseRequisition = () => {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [currentPage, setCurrentPage] = useState(1);
   const [filters, setFilters] = useState({ search: "", status: "all", propertyId: "all" });
+  const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const debouncedSearch = useDebounce(filters.search, 400);
   const [form, setForm] = useState(blankForm);
   const [statusModal, setStatusModal] = useState({ open: false, row: null, status: "", reason: "", loading: false });
@@ -455,14 +456,14 @@ const ExpenseRequisition = () => {
                   <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
                   <input
                     value={filters.search}
-                    onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
+                    onChange={setFilter("search")}
                     placeholder="Requisition no, title, category"
                     className="h-7 w-48 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                   />
                 </div>
                 <select
                   value={filters.propertyId}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))}
+                  onChange={setFilter("propertyId")}
                   className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                 >
                   <option value="all">All properties</option>
@@ -475,7 +476,7 @@ const ExpenseRequisition = () => {
                 </select>
                 <select
                   value={filters.status}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+                  onChange={setFilter("status")}
                   className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                 >
                   <option value="all">All statuses</option>

@@ -301,6 +301,7 @@ const InvoiceNotes = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const filters = invoiceNotesDraft.filters || { propertyId: "", tenantId: "", tenantScope: "active", noteType: initialNoteType, search: "", status: "active" };
   const setFilters = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, filters: typeof value === "function" ? value(prev.filters || filters) : value }));
+  const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const showAddModal = Boolean(invoiceNotesDraft.showAddModal);
   const setShowAddModal = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, showAddModal: typeof value === "function" ? value(Boolean(prev.showAddModal)) : Boolean(value) }));
   const propertyId = invoiceNotesDraft.propertyId || "";
@@ -819,7 +820,7 @@ const InvoiceNotes = () => {
                 <button type="button" onClick={() => { setNoteType("CREDIT_NOTE"); setFilters((prev) => ({ ...prev, noteType: "CREDIT_NOTE" })); const p = new URLSearchParams(searchParams); p.set("type", "credit"); setSearchParams(p, { replace: true }); }} className={`h-7 shrink-0 rounded px-2.5 text-xs font-semibold ${filters.noteType === "CREDIT_NOTE" ? `${MILIK_GREEN} text-white` : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"}`}>Credit Notes</button>
                 <button type="button" onClick={() => { setNoteType("DEBIT_NOTE"); setFilters((prev) => ({ ...prev, noteType: "DEBIT_NOTE" })); const p = new URLSearchParams(searchParams); p.set("type", "debit"); setSearchParams(p, { replace: true }); }} className={`h-7 shrink-0 rounded px-2.5 text-xs font-semibold ${filters.noteType === "DEBIT_NOTE" ? `${MILIK_GREEN} text-white` : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"}`}>Debit Notes</button>
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                <input type="text" value={filters.search} onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Search…" className="h-7 w-36 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <input type="text" value={filters.search} onChange={setFilter("search")} placeholder="Search…" className="h-7 w-36 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
                 <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value, tenantId: "" }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="">Property</option>
                   {properties.map((p) => (<option key={p._id} value={p._id}>{p.propertyName || p.propertyCode || "Unnamed Property"}</option>))}
@@ -829,11 +830,11 @@ const InvoiceNotes = () => {
                   <option value="terminated">Terminated</option>
                   <option value="all">All Tenants</option>
                 </select>
-                <select value={filters.tenantId} onChange={(e) => setFilters((prev) => ({ ...prev, tenantId: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                <select value={filters.tenantId} onChange={setFilter("tenantId")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="">Tenant</option>
                   {filterScopedTenants.map((t) => (<option key={t._id} value={t._id}>{getTenantDisplayName(t)} ({getTenantStatusLabel(t)})</option>))}
                 </select>
-                <select value={filters.status} onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                <select value={filters.status} onChange={setFilter("status")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="active">Active</option>
                   <option value="reversed">Reversed</option>
                   <option value="all">All</option>

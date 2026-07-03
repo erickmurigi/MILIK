@@ -38,6 +38,7 @@ const PaidBalanceReport = () => {
     status: 'all',
     search: '',
   });
+  const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [report, setReport] = useState({ summary: {}, rows: [] });
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -376,18 +377,18 @@ const PaidBalanceReport = () => {
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
               <div className="grid gap-1.5 md:grid-cols-2 xl:grid-cols-4">
-                <input type="date" value={filters.asOfDate} onChange={(e) => setFilters((prev) => ({ ...prev, asOfDate: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
+                <input type="date" value={filters.asOfDate} onChange={setFilter("asOfDate")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                <select value={filters.propertyId} onChange={setFilter("propertyId")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
                   <option value="">All properties</option>
                   {properties.map((property) => <option key={property._id} value={property._id}>{property.propertyName || property.name}</option>)}
                 </select>
-                <select value={filters.status} onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
+                <select value={filters.status} onChange={setFilter("status")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
                   <option value="all">All tenant positions</option>
                   <option value="owing">Owing</option>
                   <option value="credit">Credit</option>
                   <option value="settled">Settled</option>
                 </select>
-                <input value={filters.search} onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Search tenant, property, unit" className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                <input value={filters.search} onChange={setFilter("search")} placeholder="Search tenant, property, unit" className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </div>
               <div className="mt-1.5 flex flex-wrap justify-end gap-1.5">
                 <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "No export permission"} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaFileDownload /> Export CSV</button>

@@ -247,6 +247,7 @@ const CarWashStaff = () => {
   const [form, setForm]         = useState(emptyForm);
   const [editingId, setEditingId] = useState("");
   const [filters, setFilters]   = useState({ search: "", status: "" });
+  const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [appliedFilters, setAppliedFilters] = useState({ search: "", status: "" });
   const [expandedIds, setExpandedIds] = useState([]);
   const [page, setPage]         = useState(1);
@@ -352,12 +353,12 @@ const CarWashStaff = () => {
           className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
           placeholder="Search name / phone / role"
           value={filters.search}
-          onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
+          onChange={setFilter("search")}
         />
         <select
           className="h-8 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
           value={filters.status}
-          onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+          onChange={setFilter("status")}
         >
           <option value="">All status</option>
           <option value="active">Active</option>

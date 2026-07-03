@@ -223,6 +223,7 @@ const LandlordAdvancements = () => {
     landlordId: "all",
     advanceType: "all",
   });
+  const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const debouncedSearch = useDebounce(filters.search, 400);
   const [form, setForm] = useState(blankForm);
 
@@ -645,17 +646,17 @@ const LandlordAdvancements = () => {
           <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
             <div className="relative shrink-0">
               <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]" />
-              <input value={filters.search} onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))} placeholder="Reference, title…" className="h-7 w-40 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs outline-none focus:border-[#0B3B2E]" />
+              <input value={filters.search} onChange={setFilter("search")} placeholder="Reference, title…" className="h-7 w-40 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs outline-none focus:border-[#0B3B2E]" />
             </div>
-            <select value={filters.status} onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+            <select value={filters.status} onChange={setFilter("status")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
               <option value="all">All statuses</option>
               {["draft", "submitted", "approved", "disbursed", "recovering", "paused", "cleared", "cancelled", "rejected", "reversed"].map((status) => (<option key={status} value={status}>{statusLabel(status)}</option>))}
             </select>
-            <select value={filters.landlordId} onChange={(e) => setFilters((prev) => ({ ...prev, landlordId: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+            <select value={filters.landlordId} onChange={setFilter("landlordId")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
               <option value="all">All landlords</option>
               {activeLandlords.map((landlord) => (<option key={landlord._id} value={landlord._id}>{landlord.landlordName || landlord.firstName || landlord.email || "Landlord"}</option>))}
             </select>
-            <select value={filters.advanceType} onChange={(e) => setFilters((prev) => ({ ...prev, advanceType: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+            <select value={filters.advanceType} onChange={setFilter("advanceType")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
               <option value="all">All types</option>
               {TYPE_OPTIONS.map((item) => (<option key={item.value} value={item.value}>{item.label}</option>))}
             </select>
