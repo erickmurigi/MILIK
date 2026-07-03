@@ -736,6 +736,22 @@ const CarWashJobs = () => {
     return Math.max(0, cap - jobDiscount);
   }, [settingsAndBranch, selectedPaymentJob]);
 
+  const dateBounds = useMemo(() => ({
+    today: todayISO(),
+    week:  getWeekBounds(0),
+    lweek: getWeekBounds(-1),
+    month: getMonthBounds(),
+  }), []);
+
+  const quickPickActive = useMemo(() => {
+    const { today, week, lweek, month } = dateBounds;
+    if (filters.dateFrom === today      && filters.dateTo === today)     return "today";
+    if (filters.dateFrom === week.from  && filters.dateTo === week.to)   return "thisWeek";
+    if (filters.dateFrom === lweek.from && filters.dateTo === lweek.to)  return "lastWeek";
+    if (filters.dateFrom === month.from && filters.dateTo === month.to)  return "month";
+    return "";
+  }, [filters.dateFrom, filters.dateTo, dateBounds]);
+
   // Refs let stable useCallback closures always read latest state without being re-created
   const jobsRef = useRef(jobs);
   useEffect(() => { jobsRef.current = jobs; }, [jobs]);
@@ -1239,35 +1255,22 @@ ${taxAmt > 0 ? `<tr class="vat"><td>VAT (incl.)</td><td class="amt">${fmtAmt(tax
           <option value="carpet">Carpet</option>
         </select>
         {/* Date preset */}
-        {(() => {
-          const today = todayISO();
-          const week  = getWeekBounds(0);
-          const lweek = getWeekBounds(-1);
-          const month = getMonthBounds();
-          const active =
-            filters.dateFrom === today     && filters.dateTo === today     ? "today"
-          : filters.dateFrom === week.from  && filters.dateTo === week.to  ? "thisWeek"
-          : filters.dateFrom === lweek.from && filters.dateTo === lweek.to ? "lastWeek"
-          : filters.dateFrom === month.from && filters.dateTo === month.to ? "month"
-          : "";
-          return (
-            <select value={active}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (v === "today")    { const d = today; setFilters((p) => ({ ...p, dateFrom: d, dateTo: d })); }
-                if (v === "thisWeek") { setFilters((p) => ({ ...p, dateFrom: week.from,  dateTo: week.to  })); }
-                if (v === "lastWeek") { setFilters((p) => ({ ...p, dateFrom: lweek.from, dateTo: lweek.to })); }
-                if (v === "month")    { setFilters((p) => ({ ...p, dateFrom: month.from, dateTo: month.to })); }
-              }}
-              className="h-7 w-[100px] shrink-0 border border-slate-200 bg-white px-1.5 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none">
-              <option value="">Quick pick…</option>
-              <option value="today">Today</option>
-              <option value="thisWeek">This Week</option>
-              <option value="lastWeek">Last Week</option>
-              <option value="month">This Month</option>
-            </select>
-          );
-        })()}
+        <select value={quickPickActive}
+          onChange={(e) => {
+            const v = e.target.value;
+            const { today, week, lweek, month } = dateBounds;
+            if (v === "today")    setFilters((p) => ({ ...p, dateFrom: today,      dateTo: today     }));
+            if (v === "thisWeek") setFilters((p) => ({ ...p, dateFrom: week.from,  dateTo: week.to   }));
+            if (v === "lastWeek") setFilters((p) => ({ ...p, dateFrom: lweek.from, dateTo: lweek.to  }));
+            if (v === "month")    setFilters((p) => ({ ...p, dateFrom: month.from, dateTo: month.to  }));
+          }}
+          className="h-7 w-[100px] shrink-0 border border-slate-200 bg-white px-1.5 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none">
+          <option value="">Quick pick…</option>
+          <option value="today">Today</option>
+          <option value="thisWeek">This Week</option>
+          <option value="lastWeek">Last Week</option>
+          <option value="month">This Month</option>
+        </select>
         {/* Date range */}
         <input type="date" title="From"
           className="h-7 w-[120px] shrink-0 border border-slate-300 px-1 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
@@ -1609,14 +1612,10 @@ ${taxAmt > 0 ? `<tr class="vat"><td>VAT (incl.)</td><td class="amt">${fmtAmt(tax
                     <span className="ml-1 font-normal normal-case text-emerald-700">(for STK push &amp; SMS)</span>
                   </label>
                   {(() => {
-                    const jobPhone = String(allPaymentJobs.find((j) => j._id === paymentForm.job)?.phone || "").trim();
+                    const jobPhone  = String(selectedPaymentJob?.phone || "").trim();
                     const formPhone = String(paymentForm.receivedFromPhone || "").trim();
-                    if (jobPhone && formPhone === jobPhone) {
-                      return <span className="text-[9px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">From job record</span>;
-                    }
-                    if (formPhone && formPhone !== jobPhone) {
-                      return <span className="text-[9px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">Edited</span>;
-                    }
+                    if (jobPhone && formPhone === jobPhone)  return <span className="text-[9px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">From job record</span>;
+                    if (formPhone && formPhone !== jobPhone) return <span className="text-[9px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">Edited</span>;
                     return null;
                   })()}
                 </div>
