@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
+﻿import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useSelector } from "react-redux";
 import { selectCurrentUser, selectCurrentCompany, selectAllProperties } from "../../redux/selectors";
 import { adminRequests } from "../../utils/requestMethods";
@@ -605,7 +605,7 @@ export default function LandlordStatementAllocations() {
 
             {/* ── Sticky header — single scrollable line ── */}
             <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
-              <div className="flex items-center gap-1 overflow-x-auto px-2 py-1.5">
+              <div className="filter-bar flex items-center gap-1 overflow-x-auto px-2 py-1.5">
 
                 {/* Tabs */}
                 {TABS.map((tab) => {

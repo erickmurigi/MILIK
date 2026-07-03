@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useDebounce from "../../hooks/useDebounce";
 import {
   FaCheck,
@@ -448,7 +448,7 @@ const ExpenseRequisition = () => {
         <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
-              <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+              <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
                 <span className="shrink-0 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600">Selected: {selectedIds.length}</span>
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 <div className="relative shrink-0">

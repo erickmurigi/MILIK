@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import { toast } from "react-toastify";
@@ -1212,7 +1212,7 @@ const MeterReadings = () => {
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
             <div className="flex-none sticky top-0 z-20 border-b border-gray-200 bg-white shadow-sm">
-              <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+              <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
                 {[{val:"ALL",label:"All"},{val:"draft",label:"Draft"},{val:"billed",label:"Billed"},{val:"void",label:"Voided"}].map(({val,label}) => (
                   <button key={val} onClick={() => setDraftFilters((prev) => ({ ...prev, status: val }))} className={`h-7 shrink-0 rounded px-2.5 text-xs font-semibold ${draftFilters.status === val ? `${MILIK_GREEN} text-white` : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"}`}>{label}</button>
                 ))}

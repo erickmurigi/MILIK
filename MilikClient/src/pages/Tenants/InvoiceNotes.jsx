@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   selectCurrentUser,
@@ -810,7 +810,7 @@ const InvoiceNotes = () => {
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
 
             <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-              <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+              <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
                 <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">Notes: {filteredNotes.length}</span>
                 <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Active: {formatCurrency(summaryCards.activeValue)}</span>
                 <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">Total: {formatCurrency(summaryCards.totalValue)}</span>

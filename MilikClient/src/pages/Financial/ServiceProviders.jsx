@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaEdit, FaPlus, FaSave, FaSearch, FaTimes, FaTrash } from "react-icons/fa";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
@@ -236,7 +236,7 @@ const ServiceProviders = () => {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
         <div className="flex min-h-0 w-full max-w-full flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+            <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
               <div className="relative shrink-0">
                 <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
                 <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Provider code, contact, phone, email" className="h-7 w-52 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />

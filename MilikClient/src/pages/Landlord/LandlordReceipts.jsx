@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
 import useDebounce from "../../hooks/useDebounce";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -530,7 +530,7 @@ const LandlordReceipts = () => {
       <div className="no-print flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
         <div className="mx-auto flex h-full w-full max-w-none min-h-0 flex-1 flex-col gap-2">
           <div className="flex-none sticky top-0 z-20 border-b border-gray-200 bg-white shadow-sm">
-            <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+            <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
               <label className="relative shrink-0">
                 <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"><FaSearch /></span>
                 <input value={filters.search} onChange={(e) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, search: e.target.value })); }} placeholder="Search receipt, landlord…" className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />

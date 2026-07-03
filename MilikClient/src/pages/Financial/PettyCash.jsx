@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import {
@@ -460,7 +460,7 @@ const PettyCash = () => {
 
             {/* ── Sticky toolbar ───────────────────────────────────────────── */}
             <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-              <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+              <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
                 <span className="shrink-0 text-xs font-black text-slate-800">Petty Cash</span>
                 {accounts.length > 0 && (
                   <select

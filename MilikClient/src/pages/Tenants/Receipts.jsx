@@ -1,4 +1,4 @@
-import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtils";
+﻿import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtils";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -351,6 +351,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
 
   const [draftFilters, setDraftFilters] = useState(initialFilters);
   const [appliedFilters, setAppliedFilters] = useState(initialFilters);
+  const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [selectedIds, setSelectedIds] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
@@ -1652,35 +1653,35 @@ const Receipts = ({ viewMode = "tenant" }) => {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-1 sm:p-2">
         <div className="mx-auto flex h-full w-full max-w-none flex-col overflow-hidden">
           <div className="flex-none sticky top-0 z-30 mb-2 border-b border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-              <span className="shrink-0 rounded border border-slate-300 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-700">{stats.count} Receipts</span>
-              <span className="shrink-0 rounded border border-green-300 bg-green-50 px-2 py-0.5 text-[10px] font-bold text-green-700">Ksh {stats.total.toLocaleString()}</span>
-              <span className="shrink-0 rounded border border-blue-300 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">{stats.confirmedCount} Confirmed</span>
-              <span className="shrink-0 rounded border border-orange-300 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700">{stats.pendingCount} Pending</span>
-              <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-              <input value={draftFilters.tenantSearch} onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenantSearch: normalizeUppercaseInput(e.target.value) }))} placeholder="Tenant" className="h-7 w-24 shrink-0 rounded border border-slate-200 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-              <select value={draftFilters.property} onChange={(e) => setDraftFilters((prev) => ({ ...prev, property: e.target.value, unit: "all" }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+            <div className="filter-bar flex items-center gap-1 overflow-x-auto px-2 py-1.5">
+              <span className="shrink-0 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[9px] font-bold text-slate-700">{stats.count} Receipts</span>
+              <span className="shrink-0 rounded border border-green-300 bg-green-50 px-1.5 py-0.5 text-[9px] font-bold text-green-700">Ksh {stats.total.toLocaleString()}</span>
+              <span className="shrink-0 rounded border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">{stats.confirmedCount} Conf.</span>
+              <span className="shrink-0 rounded border border-orange-300 bg-orange-50 px-1.5 py-0.5 text-[9px] font-bold text-orange-700">{stats.pendingCount} Pend.</span>
+              <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+              <input value={draftFilters.tenantSearch} onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenantSearch: normalizeUppercaseInput(e.target.value) }))} placeholder="Tenant" className="h-7 w-20 shrink-0 rounded border border-slate-200 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              <select value={draftFilters.property} onChange={(e) => setDraftFilters((prev) => ({ ...prev, property: e.target.value, unit: "all" }))} className="h-7 w-24 shrink-0 rounded border border-slate-200 bg-white px-1 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                 {propertyOptions.map((p) => (<option key={p} value={p}>{p === "all" ? "Property" : p}</option>))}
               </select>
               <input
                 value={draftFilters.unit === "all" ? "" : draftFilters.unit}
                 onChange={(e) => setDraftFilters((prev) => ({ ...prev, unit: e.target.value || "all" }))}
                 placeholder="Unit"
-                className="h-7 w-20 shrink-0 rounded border border-slate-200 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                className="h-7 w-16 shrink-0 rounded border border-slate-200 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
-              <select value={draftFilters.ledger} onChange={(e) => setDraftFilters((prev) => ({ ...prev, ledger: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+              <select value={draftFilters.ledger} onChange={setFilter("ledger")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-1 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                 <option value="all">Ledger</option>
                 <option value="receipts">Receipts</option>
                 <option value="cashbook">Cashbook</option>
               </select>
-              <select value={draftFilters.status} onChange={(e) => setDraftFilters((prev) => ({ ...prev, status: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+              <select value={draftFilters.status} onChange={setFilter("status")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-1 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                 <option value="active">Active</option>
                 <option value="confirmed">Confirmed</option>
                 <option value="pending">Pending</option>
                 <option value="reversed">Reversed</option>
                 <option value="all">All</option>
               </select>
-              <select value={draftFilters.paymentType} onChange={(e) => setDraftFilters((prev) => ({ ...prev, paymentType: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+              <select value={draftFilters.paymentType} onChange={setFilter("paymentType")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-1 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                 <option value="all">Type</option>
                 <option value="rent">Rent</option>
                 <option value="deposit">Deposit</option>
@@ -1688,13 +1689,13 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 <option value="late_fee">Late Fee</option>
                 <option value="other">Other</option>
               </select>
-              <input type="date" value={draftFilters.from} onChange={(e) => setDraftFilters((prev) => ({ ...prev, from: e.target.value }))} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-              <input type="date" value={draftFilters.to} onChange={(e) => setDraftFilters((prev) => ({ ...prev, to: e.target.value }))} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-              <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+              <input type="date" value={draftFilters.from} onChange={setFilter("from")} className="h-7 w-[7.5rem] shrink-0 rounded border border-slate-200 bg-white px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              <input type="date" value={draftFilters.to} onChange={setFilter("to")} className="h-7 w-[7.5rem] shrink-0 rounded border border-slate-200 bg-white px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
               <select
                 value=""
                 onChange={(e) => { if (e.target.value) applyDatePresetAndSearch(e.target.value); e.target.value = ""; }}
-                className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                className="h-7 shrink-0 rounded border border-slate-200 bg-white px-1 text-xs font-semibold text-slate-700 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               >
                 <option value="">Period</option>
                 <option value="today">Today</option>
@@ -1708,10 +1709,10 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 <option value="thisYear">This Year</option>
                 <option value="lastYear">Last Year</option>
               </select>
-              <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-              <button onClick={applySearchFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSearch size={10} /></button>
-              <button onClick={resetSearchFilters} className="h-7 shrink-0 flex items-center gap-1 rounded bg-slate-500 px-2.5 text-xs font-semibold text-white hover:bg-slate-600"><FaRedoAlt size={10} /></button>
-              <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+              <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+              <button onClick={applySearchFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2 text-xs font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSearch size={10} /></button>
+              <button onClick={resetSearchFilters} className="h-7 shrink-0 flex items-center gap-1 rounded bg-slate-500 px-2 text-xs font-semibold text-white hover:bg-slate-600"><FaRedoAlt size={10} /></button>
+              <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
               <select
                 value=""
                 disabled={selectedIds.length === 0}
@@ -1730,10 +1731,10 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 {canReverseReceipt && <option value="reverse">Reverse selected</option>}
                 {canDeleteReceipt && <option value="delete">Delete selected</option>}
               </select>
-              {canExportReceipt && <button onClick={handlePrintList} title="Print list" className="h-7 shrink-0 flex items-center gap-1 rounded bg-indigo-600 px-2.5 text-xs font-semibold text-white hover:bg-indigo-700"><FaPrint size={10} /></button>}
-              <button onClick={() => setShowSmsModal(true)} disabled={selectedIds.length === 0} title={selectedIds.length > 0 ? `SMS ${selectedIds.length} receipt${selectedIds.length !== 1 ? "s" : ""}` : "Select receipts to SMS"} className="h-7 shrink-0 flex items-center gap-1 rounded bg-teal-600 px-2.5 text-xs font-semibold text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"><FaSms size={10} /></button>
-              <button onClick={() => setShowEmailModal(true)} disabled={selectedIds.length === 0} title={selectedIds.length > 0 ? `Email ${selectedIds.length} receipt${selectedIds.length !== 1 ? "s" : ""}` : "Select receipts to email"} className="h-7 shrink-0 flex items-center gap-1 rounded bg-blue-600 px-2.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><FaEnvelope size={10} /></button>
-              {canCreateReceipt && <button onClick={openCreateForm} title={pageCreateLabel} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaPlus size={10} /></button>}
+              {canExportReceipt && <button onClick={handlePrintList} title="Print list" className="h-7 shrink-0 flex items-center rounded bg-indigo-600 px-2 text-xs text-white hover:bg-indigo-700"><FaPrint size={10} /></button>}
+              <button onClick={() => setShowSmsModal(true)} disabled={selectedIds.length === 0} title={selectedIds.length > 0 ? `SMS ${selectedIds.length} receipt${selectedIds.length !== 1 ? "s" : ""}` : "Select receipts to SMS"} className="h-7 shrink-0 flex items-center rounded bg-teal-600 px-2 text-xs text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"><FaSms size={10} /></button>
+              <button onClick={() => setShowEmailModal(true)} disabled={selectedIds.length === 0} title={selectedIds.length > 0 ? `Email ${selectedIds.length} receipt${selectedIds.length !== 1 ? "s" : ""}` : "Select receipts to email"} className="h-7 shrink-0 flex items-center rounded bg-blue-600 px-2 text-xs text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><FaEnvelope size={10} /></button>
+              {canCreateReceipt && <button onClick={openCreateForm} title={pageCreateLabel} className={`h-7 shrink-0 flex items-center rounded px-2 text-xs text-white ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaPlus size={10} /></button>}
             </div>
           </div>
 

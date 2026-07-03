@@ -1,4 +1,4 @@
-import { propertyBelongsToLandlord } from "./propertyUtils";
+﻿import { propertyBelongsToLandlord } from "./propertyUtils";
 import React, { useState, useEffect, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
@@ -668,7 +668,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
         <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col overflow-hidden">
           <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+            <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
               <div className="relative shrink-0">
                 <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]" />
                 <input value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder="Search name, code, email…" className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />

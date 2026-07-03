@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   selectCurrentCompany,
@@ -240,7 +240,7 @@ const TenantPrepayments = () => {
         <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col gap-2">
           <div className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
-              <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+              <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
                 {[
                   { label: "Open", value: totals.rowCount, accent: "text-slate-900" },
                   { label: "Unapplied", value: formatMoney(totals.totalUnapplied), accent: "text-amber-700" },

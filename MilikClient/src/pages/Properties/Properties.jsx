@@ -1,4 +1,4 @@
-// pages/Properties.js
+﻿// pages/Properties.js
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link, useNavigate } from "react-router-dom";
@@ -594,7 +594,7 @@ const Properties = () => {
       <div className="flex flex-col h-full min-h-0 p-0 bg-white overflow-hidden">
         {/* Toolbar — single scrollable row */}
         <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-          <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+          <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
             <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
               value={draftFilters.status} onChange={(e) => setDraftFilters((p) => ({ ...p, status: e.target.value }))}>
               <option value="active">Active</option>

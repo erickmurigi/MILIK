@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   selectCurrentCompany,
@@ -582,7 +582,7 @@ const TenantAgreements = () => {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50 p-0">
         <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-          <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+          <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
             <span className="shrink-0 text-[10px] font-bold text-gray-500">Total <span className="text-gray-900">{summary.total}</span></span>
             <span className="shrink-0 rounded border border-green-200 bg-green-50 px-2 py-0.5 text-[10px] font-bold text-green-700">Active: {summary.active}</span>
             <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">Expiring: {summary.expiring}</span>

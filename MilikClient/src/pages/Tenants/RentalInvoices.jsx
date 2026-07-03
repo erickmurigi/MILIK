@@ -1,4 +1,4 @@
-import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtils";
+﻿import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtils";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
@@ -898,7 +898,6 @@ function InvoiceTableRowBase({
           {invoice.status}
         </span>
       </td>
-      <td className="px-3 py-1 border-r border-gray-100 text-center text-gray-600">{invoice.createdDate}</td>
       <td className="px-3 py-1 text-right">
         <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
           <button
@@ -977,6 +976,9 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   const [refreshTick, setRefreshTick] = useState(0);
   const [draftFilters, setDraftFilters] = useState(emptyFilters);
   const [appliedFilters, setAppliedFilters] = useState(emptyFilters);
+  const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
+  const actionBtnCls = (enabled, activeCls) =>
+    `h-7 shrink-0 flex items-center rounded px-2 text-xs text-white ${enabled ? activeCls : "bg-gray-400 cursor-not-allowed"}`;
   const [selectedInvoices, setSelectedInvoices] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
   const [showSmsModal, setShowSmsModal] = useState(false);
@@ -3285,67 +3287,55 @@ const createInvoiceForTenant = async (
         <div className="mx-auto flex h-full w-full max-w-none flex-col overflow-hidden">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
             <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-              <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+              <div className="filter-bar flex items-center gap-1 overflow-x-auto px-2 py-1.5">
                 {tenantId && (
                   <button onClick={() => navigate("/tenants")} className="h-7 shrink-0 flex items-center gap-1 rounded px-2 text-xs font-semibold text-gray-600 hover:text-gray-900">
                     <FaArrowLeft size={11} /> Back
                   </button>
                 )}
-                <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">Invoices: {invoiceListPagination.totalItems || 0}</span>
-                <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Total: {formatCurrency(invoicePageSummary.pageTotalAmount || 0)}</span>
-                <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">Pending: {formatCurrency(invoicePageSummary.pagePendingAmount || 0)}</span>
-                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                <select value={draftFilters.status} onChange={(e) => setDraftFilters((prev) => ({ ...prev, status: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs font-semibold text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">Invoices: {invoiceListPagination.totalItems || 0}</span>
+                <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">Total: {formatCurrency(invoicePageSummary.pageTotalAmount || 0)}</span>
+                <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">Pend: {formatCurrency(invoicePageSummary.pagePendingAmount || 0)}</span>
+                <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+                <select value={draftFilters.status} onChange={setFilter("status")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-1 text-xs font-semibold text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="ACTIVE">All</option>
                   <option value="Issued">Issued</option>
                   <option value="Paid">Paid</option>
                 </select>
-                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                <input type="text" value={draftFilters.invoiceNo} onChange={(e) => setDraftFilters((prev) => ({ ...prev, invoiceNo: normalizeUppercaseInput(e.target.value) }))} placeholder="Invoice #" className="h-7 w-24 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                {!tenantId && <input type="text" value={draftFilters.tenantName} onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenantName: e.target.value }))} placeholder="Tenant" className="h-7 w-28 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />}
-                <select value={draftFilters.property} onChange={(e) => setDraftFilters((prev) => ({ ...prev, property: e.target.value, unit: "any" }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+                <input type="text" value={draftFilters.invoiceNo} onChange={(e) => setDraftFilters((prev) => ({ ...prev, invoiceNo: normalizeUppercaseInput(e.target.value) }))} placeholder="Invoice #" className="h-7 w-20 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                {!tenantId && <input type="text" value={draftFilters.tenantName} onChange={setFilter("tenantName")} placeholder="Tenant" className="h-7 w-20 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />}
+                <select value={draftFilters.property} onChange={(e) => setDraftFilters((prev) => ({ ...prev, property: e.target.value, unit: "any" }))} className="h-7 w-24 shrink-0 rounded border border-slate-200 bg-white px-1 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   {uniqueProperties.map((property) => (<option key={property} value={property}>{property === "any" ? "Property" : property}</option>))}
                 </select>
-                <select value={draftFilters.unit} onChange={(e) => setDraftFilters((prev) => ({ ...prev, unit: e.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
+                <select value={draftFilters.unit} onChange={setFilter("unit")} className="h-7 w-16 shrink-0 rounded border border-slate-200 bg-white px-1 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   {unitsForSelectedProperty.map((unit) => (<option key={unit} value={unit}>{unit === "any" ? "Unit" : unit}</option>))}
                 </select>
-                <input type="date" value={draftFilters.fromDate} onChange={(e) => setDraftFilters((prev) => ({ ...prev, fromDate: e.target.value }))} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <input type="date" value={draftFilters.toDate} onChange={(e) => setDraftFilters((prev) => ({ ...prev, toDate: e.target.value }))} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <button onClick={applySearch} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaSearch size={10} /></button>
-                <button onClick={resetFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={10} /></button>
+                <input type="date" value={draftFilters.fromDate} onChange={setFilter("fromDate")} className="h-7 w-[7.5rem] shrink-0 rounded border border-slate-200 bg-white px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <input type="date" value={draftFilters.toDate} onChange={setFilter("toDate")} className="h-7 w-[7.5rem] shrink-0 rounded border border-slate-200 bg-white px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+                <button onClick={applySearch} className={`h-7 shrink-0 flex items-center rounded px-2 text-xs text-white ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaSearch size={10} /></button>
+                <button onClick={resetFilters} className={`h-7 shrink-0 flex items-center rounded px-2 text-xs text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={10} /></button>
+                <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
                 {canUpdateInvoice && (
-                  <button onClick={handleEditSelected} disabled={!canEdit} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${canEdit ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaEdit size={10} /></button>
+                  <button onClick={handleEditSelected} disabled={!canEdit} className={actionBtnCls(canEdit, `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`)}><FaEdit size={10} /></button>
                 )}
                 {canDeleteInvoice && (
-                  <button onClick={handleDeleteSelected} disabled={selectedCount === 0} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${selectedCount > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}><FaTrash size={10} /></button>
+                  <button onClick={handleDeleteSelected} disabled={selectedCount === 0} className={actionBtnCls(selectedCount > 0, "bg-red-600 hover:bg-red-700")}><FaTrash size={10} /></button>
                 )}
                 {canExportInvoice && (
-                  <button onClick={handlePrintList} disabled={totalFilteredCount === 0} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${totalFilteredCount > 0 ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "bg-gray-400 cursor-not-allowed"}`}><FaPrint size={10} /></button>
+                  <button onClick={handlePrintList} disabled={totalFilteredCount === 0} className={actionBtnCls(totalFilteredCount > 0, `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`)}><FaPrint size={10} /></button>
                 )}
-                <button
-                  onClick={() => setShowSmsModal(true)}
-                  disabled={selectedCount === 0}
-                  title={selectedCount === 0 ? "Select invoices to SMS" : `SMS ${selectedCount} invoice${selectedCount !== 1 ? "s" : ""}`}
-                  className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm transition ${selectedCount > 0 ? "bg-emerald-600 hover:bg-emerald-700" : "cursor-not-allowed bg-gray-400"}`}
-                >
-                  <FaSms size={11} />
-                </button>
-                <button
-                  onClick={() => setShowEmailModal(true)}
-                  disabled={selectedCount === 0}
-                  title={selectedCount === 0 ? "Select invoices to email" : `Email ${selectedCount} invoice${selectedCount !== 1 ? "s" : ""}`}
-                  className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm transition ${selectedCount > 0 ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-gray-400"}`}
-                >
-                  <FaEnvelope size={11} />
-                </button>
-                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                <button onClick={() => setShowSmsModal(true)} disabled={selectedCount === 0} title={selectedCount === 0 ? "Select invoices to SMS" : `SMS ${selectedCount} invoice${selectedCount !== 1 ? "s" : ""}`} className={actionBtnCls(selectedCount > 0, "bg-emerald-600 hover:bg-emerald-700")}><FaSms size={10} /></button>
+                <button onClick={() => setShowEmailModal(true)} disabled={selectedCount === 0} title={selectedCount === 0 ? "Select invoices to email" : `Email ${selectedCount} invoice${selectedCount !== 1 ? "s" : ""}`} className={actionBtnCls(selectedCount > 0, "bg-blue-600 hover:bg-blue-700")}><FaEnvelope size={10} /></button>
+                <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
                 {canCreateInvoice && (
-                  <button type="button" onClick={() => navigate("/tenants/deposits")} className={`h-7 shrink-0 rounded px-2.5 text-xs font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}>Deposit</button>
+                  <button type="button" onClick={() => navigate("/tenants/deposits")} className={`h-7 shrink-0 rounded px-2 text-xs font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}>Deposit</button>
                 )}
                 {canCreateInvoice && (
-                  <div className="flex shrink-0 items-center gap-1">
+                  <div className="flex shrink-0 items-center gap-0.5">
                     <FaPlus className="text-[10px] text-[#0B3B2E]" />
-                    <select value={bookingAction} onChange={(e) => handleBookingActionChange(e.target.value)} className="h-7 rounded border border-[#0B3B2E] bg-[#E7F5EC] px-2 text-xs font-semibold text-[#0B3B2E]">
+                    <select value={bookingAction} onChange={(e) => handleBookingActionChange(e.target.value)} className="h-7 rounded border border-[#0B3B2E] bg-[#E7F5EC] px-1 text-xs font-semibold text-[#0B3B2E]">
                       <option value="">Booking</option>
                       <option value="single">Single Booking</option>
                       <option value="batch">Batch Booking</option>
@@ -3356,7 +3346,7 @@ const createInvoiceForTenant = async (
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
-              <table className="w-full min-w-[1320px] text-[11px] border-collapse">
+              <table className="w-full min-w-[1200px] text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className={`${MILIK_GREEN} text-white`}>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">
@@ -3373,14 +3363,13 @@ const createInvoiceForTenant = async (
                     <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount</th>
                     <th className="px-3 py-1 text-right font-bold border-r border-white/10">Paid</th>
                     <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
-                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Created</th>
                     <th className="px-3 py-1 text-right font-bold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {totalFilteredCount === 0 ? (
                     <tr>
-                      <td colSpan={tenantId ? "12" : "14"} className="px-4 py-8 text-center text-gray-500">
+                      <td colSpan={tenantId ? "11" : "13"} className="px-4 py-8 text-center text-gray-500">
                         <FaFileInvoice className="mb-2 inline-block text-4xl text-gray-300" />
                         <p className="mt-1 text-sm font-semibold">No invoices found</p>
                         <p className="mt-1 text-xs text-gray-400">

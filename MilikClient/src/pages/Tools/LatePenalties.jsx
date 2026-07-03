@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useConfirm } from "../../context/ConfirmContext";
 import {
   FaBolt,
@@ -737,7 +737,7 @@ const LatePenalties = () => {
             {workspaceView === "processed_penalties" ? (
               <>
                 <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
-                  <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+                  <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
                     <input
                       value={penaltySearch}
                       onChange={(e) => setPenaltySearch(e.target.value)}
@@ -940,7 +940,7 @@ const LatePenalties = () => {
             {workspaceView === "processed_batches" ? (
               <>
                 <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
-                  <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+                  <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
                     <input
                       value={batchSearch}
                       onChange={(e) => setBatchSearch(e.target.value)}
@@ -1140,7 +1140,7 @@ const LatePenalties = () => {
 
                 <div className="flex min-h-0 flex-col rounded-xl border border-slate-200 bg-white">
                   <div className="flex-none sticky top-0 z-10 border-b border-slate-200 bg-white shadow-sm">
-                    <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+                    <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
                       <select
                         className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                         value={selectedRuleId}

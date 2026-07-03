@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import {
@@ -542,7 +542,7 @@ const ProcessedStatements = () => {
         <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
           <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col overflow-hidden gap-2">
             <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
-              <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+              <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
                 <button onClick={() => handleTabChange("outstanding")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "outstanding" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaHourglass /> Outstanding {activeTab === "outstanding" ? `(${pagination.total})` : ""}</button>
                 <button onClick={() => handleTabChange("recoveries")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "recoveries" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaHourglass /> Recoveries {activeTab === "recoveries" ? `(${pagination.total})` : ""}</button>
                 <button onClick={() => handleTabChange("paid")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "paid" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaCheckCircle /> Paid {activeTab === "paid" ? `(${pagination.total})` : ""}</button>

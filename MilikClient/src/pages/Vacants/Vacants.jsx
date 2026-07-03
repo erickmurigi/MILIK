@@ -1,4 +1,4 @@
-// pages/Vacants/Vacants.jsx
+﻿// pages/Vacants/Vacants.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
@@ -780,7 +780,7 @@ const Vacants = () => {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50 p-0">
         <div className="flex-none sticky top-0 z-30 border-b border-gray-100 bg-white shadow-sm">
-          <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+          <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
             <button onClick={applySearch} className={`h-7 shrink-0 flex items-center gap-1 rounded-md px-2.5 text-[10px] font-bold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaSearch size={9} /></button>
             <button onClick={resetFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded-md px-2 text-[10px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={9} /></button>
             <button onClick={allExpanded ? collapseAll : expandAll} disabled={!currentRows.length} className={`h-7 shrink-0 flex items-center gap-1 rounded-md px-2 text-[10px] font-bold text-white shadow-sm ${currentRows.length ? (allExpanded ? "bg-orange-600 hover:bg-orange-700" : `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`) : "cursor-not-allowed bg-gray-400"}`}>{allExpanded ? <FaCompressAlt size={9} /> : <FaExpandAlt size={9} />}</button>

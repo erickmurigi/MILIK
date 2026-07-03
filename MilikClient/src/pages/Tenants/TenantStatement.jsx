@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect, useMemo } from "react";
+﻿import React, { useCallback, useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -53,9 +53,14 @@ import {
   FaLock,
   FaSearch,
   FaEnvelope,
+  FaBan,
+  FaSnowflake,
+  FaSun,
+  FaSync,
 } from "react-icons/fa";
 
 const MILIK_GREEN = "bg-[#165946]";
+const DEFAULT_SCHEDULE_MONTHS = 12;
 
 const formatPeriodLabel = (dateValue) => {
   const dt = new Date(dateValue);
@@ -423,6 +428,7 @@ const TenantStatement = () => {
   const [scheduleFilterFrom, setScheduleFilterFrom] = useState("");
   const [scheduleFilterTo, setScheduleFilterTo] = useState("");
   const [scheduleSearchText, setScheduleSearchText] = useState("");
+  const [scheduleExtensionMonths, setScheduleExtensionMonths] = useState(0);
   const [companyTaxConfig, setCompanyTaxConfig] = useState(null);
 
   const currentCompany = useSelector(selectCurrentCompany);
@@ -1446,21 +1452,22 @@ const TenantStatement = () => {
     let scheduleStartDate;
     let scheduleEndDate;
 
+    // Open leases: show DEFAULT_SCHEDULE_MONTHS from today + any user-requested extension.
+    const now = new Date();
+    const openLeaseEnd = new Date(now);
+    openLeaseEnd.setMonth(openLeaseEnd.getMonth() + DEFAULT_SCHEDULE_MONTHS + scheduleExtensionMonths);
+
     if (tenantLease) {
       scheduleStartDate = new Date(tenantLease.startDate);
-      const hasEndDate = tenantLease.endDate && new Date(tenantLease.endDate) > new Date();
-      scheduleEndDate = hasEndDate
-        ? new Date(tenantLease.endDate)
-        : new Date(scheduleStartDate.getTime() + 2 * 365 * 24 * 60 * 60 * 1000);
+      const leaseEnd = tenantLease.endDate ? new Date(tenantLease.endDate) : null;
+      scheduleEndDate = (leaseEnd && leaseEnd > now) ? leaseEnd : openLeaseEnd;
     } else if (tenant) {
-      scheduleStartDate = tenant.moveInDate ? new Date(tenant.moveInDate) : new Date();
-      const hasEndDate = tenant.moveOutDate && new Date(tenant.moveOutDate) > new Date();
-      scheduleEndDate = hasEndDate
-        ? new Date(tenant.moveOutDate)
-        : new Date(scheduleStartDate.getTime() + 2 * 365 * 24 * 60 * 60 * 1000);
+      scheduleStartDate = tenant.moveInDate ? new Date(tenant.moveInDate) : now;
+      const moveOut = tenant.moveOutDate ? new Date(tenant.moveOutDate) : null;
+      scheduleEndDate = (moveOut && moveOut > now) ? moveOut : openLeaseEnd;
     } else {
-      scheduleStartDate = new Date();
-      scheduleEndDate = new Date(scheduleStartDate.getTime() + 2 * 365 * 24 * 60 * 60 * 1000);
+      scheduleStartDate = now;
+      scheduleEndDate = openLeaseEnd;
     }
 
     const tenantUnitId = tenant?.unit?._id || tenant?.unit;
@@ -1566,7 +1573,7 @@ const TenantStatement = () => {
     }
 
     return scheduleData;
-  }, [tenantLease, tenant, unitsFromStore, tenantInvoices, billingScheduleAdjustmentsByPeriod, companyTaxConfig]);
+  }, [tenantLease, tenant, unitsFromStore, tenantInvoices, billingScheduleAdjustmentsByPeriod, companyTaxConfig, scheduleExtensionMonths]);
 
   const billingScheduleByKey = useMemo(() => {
     return new Map((billingScheduleData || []).map((row) => [row.periodKey, row]));
@@ -1636,11 +1643,13 @@ const TenantStatement = () => {
 
   const filteredBillingScheduleData = useMemo(() => {
     const normalizedSearch = String(scheduleSearchText || "").trim().toLowerCase();
+    const filterFrom = scheduleFilterFrom ? new Date(`${scheduleFilterFrom}T00:00:00`) : null;
+    const filterTo   = scheduleFilterTo   ? new Date(`${scheduleFilterTo}T23:59:59`)   : null;
     return (billingScheduleData || []).filter((row) => {
       const rowFrom = row?.fromRaw ? new Date(`${row.fromRaw}T00:00:00`) : null;
       const rowTo = row?.toRaw ? new Date(`${row.toRaw}T23:59:59`) : null;
-      const fromOk = scheduleFilterFrom ? (rowTo ? rowTo >= new Date(`${scheduleFilterFrom}T00:00:00`) : false) : true;
-      const toOk = scheduleFilterTo ? (rowFrom ? rowFrom <= new Date(`${scheduleFilterTo}T23:59:59`) : false) : true;
+      const fromOk = filterFrom ? (rowTo ? rowTo >= filterFrom : false) : true;
+      const toOk   = filterTo   ? (rowFrom ? rowFrom <= filterTo : false) : true;
       const searchOk = !normalizedSearch
         ? true
         : [row.description, row.invoice, row.tenantName, row.propertyName, row.booked, row.frozen]
@@ -1649,6 +1658,28 @@ const TenantStatement = () => {
       return fromOk && toOk && searchOk;
     });
   }, [billingScheduleData, scheduleFilterFrom, scheduleFilterTo, scheduleSearchText]);
+
+  const allFrozen = useMemo(
+    () => selectedSchedules.length > 0 && selectedSchedules.every((key) => billingScheduleByKey.get(key)?.frozen === "Yes"),
+    [selectedSchedules, billingScheduleByKey]
+  );
+
+  const hasOpenLease = useMemo(() => {
+    const now = new Date();
+    const leaseEnd = tenantLease?.endDate ? new Date(tenantLease.endDate) : null;
+    const moveOut  = tenant?.moveOutDate  ? new Date(tenant.moveOutDate)  : null;
+    return !((leaseEnd && leaseEnd > now) || (moveOut && moveOut > now));
+  }, [tenantLease?.endDate, tenant?.moveOutDate]);
+
+  const scheduleFooter = useMemo(() => {
+    let totRent = 0, totUtil = 0, bookedCount = 0;
+    for (const r of filteredBillingScheduleData) {
+      totRent += r.rent || 0;
+      totUtil += r.utility || 0;
+      if (r.booked === "Yes") bookedCount++;
+    }
+    return { totRent, totUtil, totTotal: totRent + totUtil, bookedCount };
+  }, [filteredBillingScheduleData]);
 
   const tabs = [
     { id: "statement", label: "Tenant Statement", icon: <FaFileInvoiceDollar /> },
@@ -1841,7 +1872,7 @@ const TenantStatement = () => {
         accent: "text-blue-700",
       },
       {
-        label: "Charges",
+        label: "Invoiced",
         value: `Ksh ${(statementData?.totalCharges || 0).toLocaleString()}`,
         accent: "text-orange-700",
       },
@@ -1942,7 +1973,7 @@ const TenantStatement = () => {
             </tbody>
           </table>
         </div>
-        <div className="flex-shrink-0 border-t border-slate-200 bg-slate-50/95 px-3 py-1.5 text-[10.5px] font-semibold text-slate-600 backdrop-blur"><div className="flex flex-wrap items-center justify-between gap-2"><span>Showing {visibleStatementTransactions.length} filtered transaction(s)</span><div className="flex flex-wrap gap-3"><span>Charges: <strong className="text-red-600">Ksh {(statementData.totalCharges || 0).toLocaleString()}</strong></span><span>Payments: <strong className="text-emerald-700">Ksh {(statementData.totalPayments || 0).toLocaleString()}</strong></span><span>Outstanding: <strong className="text-amber-700">Ksh {(statementData?.operationalOutstanding || 0).toLocaleString()}</strong></span><span>Credits: <strong className="text-sky-700">Ksh {(statementData?.unappliedCredits || 0).toLocaleString()}</strong></span></div></div></div>
+        <div className="flex-shrink-0 border-t border-slate-200 bg-slate-50/95 px-3 py-1.5 text-[10.5px] font-semibold text-slate-600 backdrop-blur"><div className="flex flex-wrap items-center justify-between gap-2"><span>Showing {visibleStatementTransactions.length} filtered transaction(s)</span><div className="flex flex-wrap gap-3"><span>Invoiced: <strong className="text-red-600">Ksh {(statementData.totalCharges || 0).toLocaleString()}</strong></span><span>Payments: <strong className="text-emerald-700">Ksh {(statementData.totalPayments || 0).toLocaleString()}</strong></span><span>Outstanding: <strong className="text-amber-700">Ksh {(statementData?.operationalOutstanding || 0).toLocaleString()}</strong></span><span>Credits: <strong className="text-sky-700">Ksh {(statementData?.unappliedCredits || 0).toLocaleString()}</strong></span></div></div></div>
         {renderAllocationTracePanel()}
       </div>
     );
@@ -2174,207 +2205,130 @@ const TenantStatement = () => {
 
     return (
       <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-2 py-2 backdrop-blur">
-          <div className="mb-2 border-b border-slate-200 pb-2">
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-3 xl:grid-cols-4">
-            <div className="rounded-md border border-emerald-200 bg-white px-2 py-1.5">
-              <p className="text-[9px] font-black uppercase tracking-[0.10em] text-emerald-700">Deposit Amount</p>
-              <p className="mt-0.5 text-xs font-black text-slate-900">KES {tenantDepositAmount.toLocaleString()}</p>
+        <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-white">
+          {/* ── Deposit summary strip ── */}
+          <div className="grid grid-cols-3 divide-x divide-slate-100 border-b border-slate-200">
+            <div className="px-3 py-2">
+              <p className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Deposit Amount</p>
+              <p className="mt-0.5 text-sm font-black text-[#0B3B2E]">KES {tenantDepositAmount.toLocaleString()}</p>
             </div>
-            <div className="rounded-md border border-emerald-200 bg-white px-2 py-1.5">
-              <p className="text-[9px] font-black uppercase tracking-[0.10em] text-emerald-700">Deposit Holder</p>
-              <p className="mt-0.5 text-xs font-black text-slate-900">{tenantDepositHolder}</p>
-              <p className="mt-0.5 text-[9px] text-slate-500">Receipt mode now controls posting and clearing, not this holder label.</p>
+            <div className="px-3 py-2">
+              <p className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Deposit Holder</p>
+              <p className="mt-0.5 text-sm font-black text-slate-800">{tenantDepositHolder}</p>
             </div>
-            <div className="rounded-md border border-emerald-200 bg-white px-2 py-1.5">
-              <p className="text-[9px] font-black uppercase tracking-[0.10em] text-emerald-700">Deposit Billing Status</p>
-              <p className="mt-0.5 text-xs font-black text-slate-900">
-                {hasActiveDepositInvoice
-                  ? `Already billed${depositInvoiceSummary?.invoiceNumber ? ` (${depositInvoiceSummary.invoiceNumber})` : ""}`
-                  : "Not yet billed"}
-              </p>
+            <div className="px-3 py-2">
+              <p className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Deposit Invoice</p>
+              {hasActiveDepositInvoice ? (
+                <p className="mt-0.5 text-sm font-black text-emerald-700">
+                  Billed {depositInvoiceSummary?.invoiceNumber ? `· ${depositInvoiceSummary.invoiceNumber}` : ""}
+                </p>
+              ) : (
+                <p className="mt-0.5 text-sm font-black text-amber-600">Not yet billed</p>
+              )}
             </div>
           </div>
-        </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end">
-            <div className="md:col-span-2">
-              <label className="block text-[10px] text-slate-600 font-semibold mb-1">Defined Period</label>
-              <select
-                value={scheduleDefinedPeriod}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setScheduleDefinedPeriod(value);
-                  const today = new Date();
-                  if (value === "this_year") {
-                    setScheduleFilterFrom(`${today.getFullYear()}-01-01`);
-                    setScheduleFilterTo(`${today.getFullYear()}-12-31`);
-                  } else if (value === "next_12_months") {
-                    const from = new Date(today.getFullYear(), today.getMonth(), 1);
-                    const to = new Date(today.getFullYear(), today.getMonth() + 12, 0);
-                    setScheduleFilterFrom(formatInputDate(from));
-                    setScheduleFilterTo(formatInputDate(to));
-                  }
-                }}
-                className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-              >
-                <option value="custom">Custom</option>
-                <option value="this_year">This Year</option>
-                <option value="next_12_months">Next 12 Months</option>
-              </select>
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-[10px] text-slate-600 font-semibold mb-1">From</label>
-              <input
-                type="date"
-                value={scheduleFilterFrom}
-                onChange={(e) => {
-                  setScheduleDefinedPeriod("custom");
-                  setScheduleFilterFrom(e.target.value);
-                }}
-                className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-[10px] text-slate-600 font-semibold mb-1">To</label>
-              <input
-                type="date"
-                value={scheduleFilterTo}
-                onChange={(e) => {
-                  setScheduleDefinedPeriod("custom");
-                  setScheduleFilterTo(e.target.value);
-                }}
-                className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-              />
-            </div>
-            <div className="md:col-span-3">
-              <label className="block text-[10px] text-slate-600 font-semibold mb-1">Search</label>
-              <input
-                type="text"
-                value={scheduleSearchText}
-                onChange={(e) => setScheduleSearchText(e.target.value)}
-                placeholder="Month, invoice no., status..."
-                className="h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-              />
-            </div>
-            <div className="md:col-span-3 flex gap-2 md:justify-end">
-              <button
-                onClick={() => setSelectedSchedules([])}
-                className={`${MILIK_GREEN} text-white text-xs font-semibold px-3 py-1.5 rounded`}
-              >
-                Search
-              </button>
-              <button
-                onClick={() => {
-                  setScheduleDefinedPeriod("custom");
-                  setScheduleFilterFrom("");
-                  setScheduleFilterTo("");
-                  setScheduleSearchText("");
+          {/* ── Filter row ── */}
+          <div className="flex items-center gap-1.5 overflow-x-auto border-b border-slate-100 px-2 py-1.5">
+            <select
+              value={scheduleDefinedPeriod}
+              onChange={(e) => {
+                const value = e.target.value;
+                setScheduleDefinedPeriod(value);
+                const today = new Date();
+                if (value === "this_year") {
+                  setScheduleFilterFrom(`${today.getFullYear()}-01-01`);
+                  setScheduleFilterTo(`${today.getFullYear()}-12-31`);
+                } else if (value === "next_12_months") {
+                  const from = new Date(today.getFullYear(), today.getMonth(), 1);
+                  const to = new Date(today.getFullYear(), today.getMonth() + 12, 0);
+                  setScheduleFilterFrom(formatInputDate(from));
+                  setScheduleFilterTo(formatInputDate(to));
+                }
+              }}
+              className="h-7 shrink-0 border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:border-[#0B3B2E]"
+            >
+              <option value="custom">Custom Period</option>
+              <option value="this_year">This Year</option>
+              <option value="next_12_months">Next 12 Months</option>
+            </select>
+            <input
+              type="date"
+              value={scheduleFilterFrom}
+              onChange={(e) => { setScheduleDefinedPeriod("custom"); setScheduleFilterFrom(e.target.value); }}
+              className="h-7 w-28 shrink-0 border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:border-[#0B3B2E]"
+            />
+            <span className="shrink-0 text-[10px] text-slate-400">–</span>
+            <input
+              type="date"
+              value={scheduleFilterTo}
+              onChange={(e) => { setScheduleDefinedPeriod("custom"); setScheduleFilterTo(e.target.value); }}
+              className="h-7 w-28 shrink-0 border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:border-[#0B3B2E]"
+            />
+            <input
+              type="text"
+              value={scheduleSearchText}
+              onChange={(e) => setScheduleSearchText(e.target.value)}
+              placeholder="Search month, invoice no…"
+              className="h-7 w-48 shrink-0 border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:border-[#0B3B2E]"
+            />
+            <button
+              onClick={() => { setScheduleDefinedPeriod("custom"); setScheduleFilterFrom(""); setScheduleFilterTo(""); setScheduleSearchText(""); setSelectedSchedules([]); }}
+              className="h-7 shrink-0 border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              Reset
+            </button>
+            <button
+              onClick={async () => {
+                if (currentCompany?._id) {
+                  await Promise.all([
+                    getLeases(dispatch, currentCompany._id, null, tenantId),
+                    getTenantInvoices(dispatch, currentCompany._id, tenantId),
+                  ]);
+                  setInvoiceRefresh((v) => v + 1);
                   setSelectedSchedules([]);
-                }}
-                className="bg-slate-100 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded border border-slate-300"
-              >
-                Reset
-              </button>
-              <button
-                onClick={async () => {
-                  if (currentCompany?._id) {
-                    await Promise.all([
-                      getLeases(dispatch, currentCompany._id, null, tenantId),
-                      getTenantInvoices(dispatch, currentCompany._id, tenantId),
-                    ]);
-                    setInvoiceRefresh((v) => v + 1);
-                    setSelectedSchedules([]);
-                    toast.success("Billing schedule refreshed.");
-                  }
-                }}
-                className="bg-slate-100 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded border border-slate-300"
-              >
-                Refresh
-              </button>
-            </div>
+                  toast.success("Billing schedule refreshed.");
+                }
+              }}
+              className="h-7 shrink-0 flex items-center gap-1 border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              <FaSync size={9} /> Refresh
+            </button>
+            {selectedSchedules.length > 0 && (
+              <span className="ml-auto shrink-0 border border-[#0B3B2E] bg-[#EDF5F1] px-2 py-0.5 text-[10px] font-black text-[#0B3B2E]">
+                {selectedSchedules.length} selected
+              </span>
+            )}
           </div>
+
+          {/* ── Action toolbar ── */}
+          {(() => {
+            const dis = "inline-flex items-center gap-1.5 h-7 px-2.5 text-[11px] font-bold border border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed";
+            const act = (color) => `inline-flex items-center gap-1.5 h-7 px-2.5 text-[11px] font-bold border ${color} text-white transition-colors`;
+            const hasSel = selectedSchedules.length > 0;
+            const hasOneSel = selectedSchedules.length === 1;
+            const off = !hasSel || savingScheduleAction;
+            return (
+              <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+                <button type="button" onClick={handleCreateInvoices} disabled={off} className={off ? dis : act("border-[#0B3B2E] bg-[#0B3B2E] hover:bg-[#0A3127]")}><FaFileInvoiceDollar size={10} /> Create Invoice</button>
+                <button type="button" onClick={handleCancelInvoices} disabled={off} className={off ? dis : act("border-red-600 bg-red-600 hover:bg-red-700")}><FaBan size={10} /> Cancel Invoice</button>
+                <button type="button" onClick={handleEditSchedules} disabled={!hasOneSel || savingScheduleAction} className={!hasOneSel || savingScheduleAction ? dis : act("border-amber-600 bg-amber-600 hover:bg-amber-700")}><FaCog size={10} /> Edit Schedule</button>
+                <button type="button" onClick={handleDeleteSchedules} disabled={off} className={off ? dis : act("border-slate-600 bg-slate-600 hover:bg-slate-700")}><FaTrash size={10} /> Delete Schedule</button>
+                <button type="button" onClick={handleFreezeSchedules} disabled={off} className={off ? dis : allFrozen ? act("border-sky-600 bg-sky-600 hover:bg-sky-700") : act("border-indigo-600 bg-indigo-600 hover:bg-indigo-700")}>
+                  {allFrozen ? <FaSun size={10} /> : <FaSnowflake size={10} />} {allFrozen ? "Unfreeze" : "Freeze"}
+                </button>
+              </div>
+            );
+          })()}
         </div>
 
-        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-2 py-1.5">
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={handleCreateInvoices}
-              disabled={selectedSchedules.length === 0 || savingScheduleAction}
-              className={`flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-semibold transition-colors ${
-                selectedSchedules.length === 0
-                  ? "bg-gray-200 text-gray-400 cursor-not-allowed"
-                  : "bg-blue-600 hover:bg-blue-700 text-white"
-              }`}
-            >
-              <FaFileInvoiceDollar size={12} />
-              Create Invoice
-            </button>
-            <button
-              type="button"
-              onClick={handleCancelInvoices}
-              disabled={selectedSchedules.length === 0 || savingScheduleAction}
-              className={`flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-semibold transition-colors ${
-                selectedSchedules.length === 0
-                  ? "bg-gray-200 text-gray-400 cursor-not-allowed"
-                  : "bg-red-600 hover:bg-red-700 text-white"
-              }`}
-            >
-              <FaPrint size={12} />
-              Cancel Invoice
-            </button>
-            <button
-              type="button"
-              onClick={handleEditSchedules}
-              disabled={selectedSchedules.length === 0 || savingScheduleAction}
-              className={`flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-semibold transition-colors ${
-                selectedSchedules.length === 0
-                  ? "bg-gray-200 text-gray-400 cursor-not-allowed"
-                  : "bg-orange-600 hover:bg-orange-700 text-white"
-              }`}
-            >
-              <FaCog size={12} />
-              Edit Schedule
-            </button>
-            <button
-              type="button"
-              onClick={handleDeleteSchedules}
-              disabled={selectedSchedules.length === 0 || savingScheduleAction}
-              className={`flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-semibold transition-colors ${
-                selectedSchedules.length === 0
-                  ? "bg-gray-200 text-gray-400 cursor-not-allowed"
-                  : "bg-gray-600 hover:bg-gray-700 text-white"
-              }`}
-            >
-              <FaTrash size={12} />
-              Delete Schedule
-            </button>
-            <button
-              type="button"
-              onClick={handleFreezeSchedules}
-              disabled={selectedSchedules.length === 0 || savingScheduleAction}
-              className={`flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-semibold transition-colors ${
-                selectedSchedules.length === 0
-                  ? "bg-blue-200 text-blue-400 cursor-not-allowed"
-                  : "bg-blue-600 hover:bg-blue-700 text-white"
-              }`}
-            >
-              <FaCheck size={12} />
-              {selectedSchedules.length > 0 && selectedSchedules.every((key) => billingScheduleByKey.get(key)?.frozen === "Yes")
-                ? "Activate Schedule"
-                : "Freeze Schedule"}
-            </button>
-
-            {showFreezeScheduleModal && selectedSchedules.length > 0 && (
+        {showFreezeScheduleModal && selectedSchedules.length > 0 && (
               <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-2">
-                <div className="bg-white rounded-lg shadow-xl border border-slate-200 w-full max-w-md">
+                <div className="bg-white shadow-xl border border-slate-200 w-full max-w-md">
                   <div className="px-3 py-2 border-b border-slate-200 flex items-center justify-between">
                     <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                      <FaCheck className="text-blue-600" />
-                      {selectedSchedules.every((key) => billingScheduleByKey.get(key)?.frozen === "Yes")
-                        ? "Confirm Schedule Activation"
-                        : "Confirm Schedule Freeze"}
+                      {allFrozen ? <FaSun className="text-sky-600" /> : <FaSnowflake className="text-indigo-600" />}
+                      {allFrozen ? "Confirm Schedule Activation" : "Confirm Schedule Freeze"}
                     </h3>
                     <button
                       type="button"
@@ -2386,7 +2340,7 @@ const TenantStatement = () => {
                   </div>
                   <div className="p-2">
                     <p className="text-sm text-slate-700 mb-4">
-                      {selectedSchedules.every((key) => billingScheduleByKey.get(key)?.frozen === "Yes")
+                      {allFrozen
                         ? "Are you sure you want to activate the selected frozen schedule(s)?"
                         : "Are you sure you want to freeze the selected schedule(s)?"}
                     </p>
@@ -2394,7 +2348,7 @@ const TenantStatement = () => {
                       <button
                         type="button"
                         onClick={() => setShowFreezeScheduleModal(false)}
-                        className="px-3 py-1.5 text-xs border border-slate-300 rounded-md font-semibold hover:bg-slate-50"
+                        className="px-3 py-1.5 text-xs border border-slate-300 font-semibold hover:bg-slate-50"
                       >
                         Cancel
                       </button>
@@ -2436,7 +2390,7 @@ const TenantStatement = () => {
                             setSelectedSchedules([]);
                           }
                         }}
-                        className="px-3 py-1.5 text-xs rounded-md text-white font-semibold bg-blue-600 hover:bg-blue-700"
+                        className="px-3 py-1.5 text-xs text-white font-semibold bg-blue-600 hover:bg-blue-700"
                       >
                         Confirm
                       </button>
@@ -2448,7 +2402,7 @@ const TenantStatement = () => {
 
             {showDeleteScheduleModal && selectedSchedules.length > 0 && (
               <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-2">
-                <div className="bg-white rounded-lg shadow-xl border border-slate-200 w-full max-w-md">
+                <div className="bg-white shadow-xl border border-slate-200 w-full max-w-md">
                   <div className="px-3 py-2 border-b border-slate-200 flex items-center justify-between">
                     <h3 className="font-bold text-slate-900 flex items-center gap-2">
                       <FaTrash className="text-red-600" />
@@ -2470,7 +2424,7 @@ const TenantStatement = () => {
                       <button
                         type="button"
                         onClick={() => setShowDeleteScheduleModal(false)}
-                        className="px-3 py-1.5 text-xs border border-slate-300 rounded-md font-semibold hover:bg-slate-50"
+                        className="px-3 py-1.5 text-xs border border-slate-300 font-semibold hover:bg-slate-50"
                       >
                         Cancel
                       </button>
@@ -2503,7 +2457,7 @@ const TenantStatement = () => {
                             setSelectedSchedules([]);
                           }
                         }}
-                        className="px-3 py-1.5 text-xs rounded-md text-white font-semibold bg-red-600 hover:bg-red-700"
+                        className="px-3 py-1.5 text-xs text-white font-semibold bg-red-600 hover:bg-red-700"
                       >
                         Delete
                       </button>
@@ -2515,7 +2469,7 @@ const TenantStatement = () => {
 
             {showEditScheduleModal && editingSchedule !== null && (
               <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-2">
-                <div className="bg-white rounded-lg shadow-xl border border-slate-200 w-full max-w-md">
+                <div className="bg-white shadow-xl border border-slate-200 w-full max-w-md">
                   <div className="px-3 py-2 border-b border-slate-200 flex items-center justify-between">
                     <h3 className="font-bold text-slate-900 flex items-center gap-2">
                       <FaCog className="text-green-600" />
@@ -2535,35 +2489,35 @@ const TenantStatement = () => {
                       type="date"
                       value={scheduleForm.from}
                       onChange={(e) => setScheduleForm((prev) => ({ ...prev, from: e.target.value }))}
-                      className="mt-1 h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
+                      className="mt-1 h-8 w-full border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:border-[#0B3B2E]"
                     />
                     <label className="text-xs font-semibold text-slate-700">To Date</label>
                     <input
                       type="date"
                       value={scheduleForm.to}
                       onChange={(e) => setScheduleForm((prev) => ({ ...prev, to: e.target.value }))}
-                      className="mt-1 h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
+                      className="mt-1 h-8 w-full border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:border-[#0B3B2E]"
                     />
                     <label className="text-xs font-semibold text-slate-700">Rent</label>
                     <input
                       type="number"
                       value={scheduleForm.rent}
                       onChange={(e) => setScheduleForm((prev) => ({ ...prev, rent: e.target.value }))}
-                      className="mt-1 h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
+                      className="mt-1 h-8 w-full border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:border-[#0B3B2E]"
                     />
                     <label className="text-xs font-semibold text-slate-700">Utility</label>
                     <input
                       type="number"
                       value={scheduleForm.utility}
                       onChange={(e) => setScheduleForm((prev) => ({ ...prev, utility: e.target.value }))}
-                      className="mt-1 h-8 w-full rounded-md border border-orange-300 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
+                      className="mt-1 h-8 w-full border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-800 focus:outline-none focus:border-[#0B3B2E]"
                     />
                   </div>
                   <div className="px-3 py-2 border-t border-slate-200 flex justify-end gap-2">
                     <button
                       type="button"
                       onClick={() => setShowEditScheduleModal(false)}
-                      className="px-3 py-1.5 text-xs border border-slate-300 rounded-md font-semibold hover:bg-slate-50"
+                      className="px-3 py-1.5 text-xs border border-slate-300 font-semibold hover:bg-slate-50"
                     >
                       Cancel
                     </button>
@@ -2602,7 +2556,7 @@ const TenantStatement = () => {
                           setSelectedSchedules([]);
                         }
                       }}
-                      className={`px-3 py-1.5 text-xs rounded-md text-white font-semibold ${MILIK_GREEN} hover:bg-[#0A3127]`}
+                      className={`px-3 py-1.5 text-xs text-white font-semibold ${MILIK_GREEN} hover:bg-[#0A3127]`}
                     >
                       Save Changes
                     </button>
@@ -2611,13 +2565,6 @@ const TenantStatement = () => {
               </div>
             )}
 
-            {selectedSchedules.length > 0 && (
-              <span className="ml-auto flex items-center text-xs text-gray-600 font-semibold">
-                {selectedSchedules.length} selected
-              </span>
-            )}
-          </div>
-        </div>
 
         <div className="min-h-0 flex-1 overflow-auto">
           <table className="w-full min-w-[1200px] text-[11px]">
@@ -2683,26 +2630,26 @@ const TenantStatement = () => {
                       {total.toLocaleString()}
                     </td>
                     <td className="px-2.5 py-1.5 text-center">
-                      <span
-                        className={`inline-flex px-2 py-0.5 rounded text-[10px] font-semibold ${
-                          row.frozen === "Yes"
-                            ? "bg-purple-100 text-purple-700"
-                            : "bg-slate-100 text-slate-600"
-                        }`}
-                      >
-                        {row.frozen}
-                      </span>
+                      {row.frozen === "Yes" ? (
+                        <span className="inline-flex items-center gap-1 border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[10px] font-black text-indigo-700">
+                          <FaSnowflake size={8} /> Frozen
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 border border-slate-100 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">
+                          —
+                        </span>
+                      )}
                     </td>
                     <td className="px-2.5 py-1.5 text-center">
-                      <span
-                        className={`inline-flex px-2 py-0.5 rounded text-[10px] font-semibold ${
-                          row.booked === "Yes"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-slate-100 text-slate-600"
-                        }`}
-                      >
-                        {row.booked}
-                      </span>
+                      {row.booked === "Yes" ? (
+                        <span className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">
+                          <FaCheck size={8} /> Booked
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 border border-slate-100 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">
+                          —
+                        </span>
+                      )}
                     </td>
                     <td
                       className={`px-3 py-2 ${
@@ -2715,27 +2662,39 @@ const TenantStatement = () => {
                 );
               })}
             </tbody>
-            {filteredBillingScheduleData.length > 0 && (() => {
-              const totRent = filteredBillingScheduleData.reduce((s, r) => s + (r.rent || 0), 0);
-              const totUtil = filteredBillingScheduleData.reduce((s, r) => s + (r.utility || 0), 0);
-              const totTotal = totRent + totUtil;
-              const bookedCount = filteredBillingScheduleData.filter((r) => r.booked === "Yes").length;
-              return (
-                <tfoot>
-                  <tr className="border-t-2 border-[#0B3B2E] bg-[#EDF5F1]">
-                    <td colSpan={4} className="px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-[#0B3B2E]">
-                      {filteredBillingScheduleData.length} periods · {bookedCount} booked
-                    </td>
-                    <td className="px-2.5 py-1.5 text-right text-[11px] font-black text-[#0B3B2E]">{totRent.toLocaleString()}</td>
-                    <td className="px-2.5 py-1.5 text-right text-[11px] font-black text-[#0B3B2E]">{totUtil > 0 ? totUtil.toLocaleString() : "—"}</td>
-                    <td className="px-2.5 py-1.5 text-right text-[11px] font-black text-[#0B3B2E]">{totTotal.toLocaleString()}</td>
-                    <td colSpan={3} />
-                  </tr>
-                </tfoot>
-              );
-            })()}
+            {filteredBillingScheduleData.length > 0 && (
+              <tfoot>
+                <tr className="border-t-2 border-[#0B3B2E] bg-[#EDF5F1]">
+                  <td colSpan={4} className="px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-[#0B3B2E]">
+                    {filteredBillingScheduleData.length} periods · {scheduleFooter.bookedCount} booked
+                  </td>
+                  <td className="px-2.5 py-1.5 text-right text-[11px] font-black text-[#0B3B2E]">{scheduleFooter.totRent.toLocaleString()}</td>
+                  <td className="px-2.5 py-1.5 text-right text-[11px] font-black text-[#0B3B2E]">{scheduleFooter.totUtil > 0 ? scheduleFooter.totUtil.toLocaleString() : "—"}</td>
+                  <td className="px-2.5 py-1.5 text-right text-[11px] font-black text-[#0B3B2E]">{scheduleFooter.totTotal.toLocaleString()}</td>
+                  <td colSpan={3} />
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
+
+        {hasOpenLease && (
+          <div className="flex-shrink-0 border-t border-slate-200 bg-white px-3 py-2">
+            <button
+              type="button"
+              onClick={() => setScheduleExtensionMonths((m) => m + DEFAULT_SCHEDULE_MONTHS)}
+              className="flex items-center gap-1.5 border border-[#0B3B2E] px-3 py-1.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#EDF5F1] transition-colors"
+            >
+              <FaPlus size={9} />
+              Extend {DEFAULT_SCHEDULE_MONTHS} months
+              {scheduleExtensionMonths > 0 && (
+                <span className="ml-1 border border-[#0B3B2E] bg-[#EDF5F1] px-1.5 text-[10px] font-black">
+                  +{scheduleExtensionMonths}mo
+                </span>
+              )}
+            </button>
+          </div>
+        )}
       </div>
     );
   };

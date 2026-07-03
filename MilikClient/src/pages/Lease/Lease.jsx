@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+﻿import React, { useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
 import { toast } from "react-toastify";
@@ -170,7 +170,7 @@ const UnitTypesPage = () => {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50 p-0">
         <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-          <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+          <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
             <div className="h-7 shrink-0 flex items-center gap-2 rounded border border-slate-200 bg-white px-2 text-xs text-gray-800">
               <FaSearch size={10} />
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search unit type" className="w-36 bg-transparent text-xs outline-none" />

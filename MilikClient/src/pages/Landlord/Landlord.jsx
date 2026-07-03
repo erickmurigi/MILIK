@@ -1,4 +1,4 @@
-// pages/Landlord/Landlord.jsx
+﻿// pages/Landlord/Landlord.jsx
 import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
@@ -749,7 +749,7 @@ const Landlords = () => {
       <div className="flex h-full min-h-0 flex-col bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
         {/* Toolbar — single scrollable row */}
         <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-          <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+          <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
             <select
               value={draftFilters.status}
               onChange={(e) => setDraftFilters((p) => ({ ...p, status: e.target.value }))}

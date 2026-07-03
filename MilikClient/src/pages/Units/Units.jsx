@@ -1,4 +1,4 @@
-// pages/Units.js
+﻿// pages/Units.js
 import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
@@ -854,7 +854,7 @@ const Units = () => {
       <div className="flex flex-col h-full min-h-0 p-0 bg-gray-50 overflow-hidden">
         {/* Toolbar — single scrollable row */}
         <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-          <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+          <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
             <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
               value={draftFilters.property} onChange={(e) => setDraftFilters((p) => ({ ...p, property: e.target.value }))}>
               {uniqueProperties.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}

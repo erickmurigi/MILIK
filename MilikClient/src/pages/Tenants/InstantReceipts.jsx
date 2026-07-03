@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   selectCurrentCompany,
@@ -340,7 +340,7 @@ const InstantReceipts = () => {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
         <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
           <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+            <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
               <button onClick={() => navigate("/tenants")} className="h-7 shrink-0 flex items-center gap-1 rounded px-2 text-[11px] font-semibold text-slate-600 hover:text-slate-900"><FaArrowLeft size={11} /> Back</button>
               <span className="shrink-0 text-xs font-black text-slate-900">Instant Receipts</span>
               <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />

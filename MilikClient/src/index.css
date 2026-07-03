@@ -45,6 +45,15 @@ body {
   background: #a1e6c3;
 }
 
+/* Hide horizontal scrollbar on filter bars — scroll still works, just invisible */
+.filter-bar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.filter-bar::-webkit-scrollbar {
+  display: none;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;

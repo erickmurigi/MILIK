@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
+﻿import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   selectCurrentUser,
@@ -1996,7 +1996,7 @@ const confirmTransferUnit = useCallback(async () => {
         <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
           <div className="flex items-center gap-0">
             {/* Scrollable filters section */}
-            <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-1.5 min-w-0 flex-1">
+            <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5 min-w-0 flex-1">
               <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
                 value={draftFilters.property} onChange={(e) => setDraftFilters({ ...draftFilters, property: e.target.value })}>
                 {uniqueProperties.map((prop) => (
