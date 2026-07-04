@@ -259,7 +259,7 @@ const PropertiesOverview = ({ darkMode, invoices = [] }) => {
   }, [propertiesWithStats]);
 
   return (
-    <div className={`dashboard-panel dashboard-panel-compact rounded-xl ${darkMode ? 'bg-white/95' : 'bg-white'} shadow-md border ${darkMode ? 'border-gray-700' : 'border-gray-100'} p-2`}>
+    <div className={`dashboard-panel dashboard-panel-compact flex flex-col h-full overflow-hidden rounded-xl ${darkMode ? 'bg-white/95' : 'bg-white'} shadow-md border ${darkMode ? 'border-gray-700' : 'border-gray-100'} p-2`}>
       <div className="mb-2 flex items-center justify-between gap-2">
         <div>
           <h2 className={`text-xs font-extrabold uppercase tracking-tight ${darkMode ? 'text-gray-900' : 'text-[#1f4a35]'}`}>
@@ -289,7 +289,8 @@ const PropertiesOverview = ({ darkMode, invoices = [] }) => {
         </div>
       </div>
 
-      <div className="dashboard-scroll-list space-y-2 pr-1">
+      <div className="relative flex-1 min-h-0">
+      <div className="absolute inset-0 overflow-y-auto space-y-2 pr-1">
         {propertiesWithStats.length === 0 ? (
           <div className={`p-3 rounded-lg border text-center ${
             darkMode
@@ -363,6 +364,7 @@ const PropertiesOverview = ({ darkMode, invoices = [] }) => {
             </div>
           ))
         )}
+      </div>
       </div>
     </div>
   );

@@ -1,202 +1,97 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { FaTimes, FaCalendarAlt } from "react-icons/fa";
 
-const GenerateStatementModal = ({
-  isOpen,
-  properties = [],
-  landlords = [],
-  onClose,
-  onGenerateDraft,
-  loading = false,
-}) => {
-  const [formData, setFormData] = useState({
-    propertyId: "",
-    landlordId: "",
-    periodStart: "",
-    periodEnd: "",
-    notes: "",
-  });
+const GenerateStatementModal = ({ isOpen, properties = [], landlords = [], onClose, onGenerateDraft, loading = false }) => {
+  const [formData, setFormData] = useState({ propertyId: "", landlordId: "", periodStart: "", periodEnd: "", notes: "" });
+  const [errors, setErrors] = useState({});
 
-  const [validationErrors, setValidationErrors] = useState({});
-
-  const validateForm = () => {
-    const errors = {};
-    if (!formData.propertyId) errors.propertyId = "Property is required";
-    if (!formData.landlordId) errors.landlordId = "Landlord is required";
-    if (!formData.periodStart) errors.periodStart = "Start date is required";
-    if (!formData.periodEnd) errors.periodEnd = "End date is required";
-    if (formData.periodStart && formData.periodEnd) {
-      if (new Date(formData.periodStart) >= new Date(formData.periodEnd)) {
-        errors.periodEnd = "End date must be after start date";
-      }
-    }
-    return errors;
+  const validate = () => {
+    const e = {};
+    if (!formData.propertyId) e.propertyId = "Property is required";
+    if (!formData.landlordId) e.landlordId = "Landlord is required";
+    if (!formData.periodStart) e.periodStart = "Start date is required";
+    if (!formData.periodEnd) e.periodEnd = "End date is required";
+    if (formData.periodStart && formData.periodEnd && new Date(formData.periodStart) >= new Date(formData.periodEnd))
+      e.periodEnd = "End date must be after start date";
+    return e;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const errors = validateForm();
-    if (Object.keys(errors).length > 0) {
-      setValidationErrors(errors);
-      return;
-    }
-
+    const errs = validate();
+    if (Object.keys(errs).length) { setErrors(errs); return; }
     try {
       await onGenerateDraft(formData);
-      setFormData({
-        propertyId: "",
-        landlordId: "",
-        periodStart: "",
-        periodEnd: "",
-        notes: "",
-      });
-      setValidationErrors({});
+      setFormData({ propertyId: "", landlordId: "", periodStart: "", periodEnd: "", notes: "" });
+      setErrors({});
       onClose();
     } catch (err) {
       console.error("Error generating statement:", err);
     }
   };
 
+  const set = (k, v) => setFormData((p) => ({ ...p, [k]: v }));
+  const inputCls = (key) => `w-full border px-3 py-2 text-sm focus:outline-none focus:border-[#0B3B2E] ${errors[key] ? "border-red-500" : "border-slate-300"}`;
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-gray-900 bg-opacity-5 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <div className="flex w-full flex-col bg-white shadow-2xl sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] sm:max-w-md rounded-t-2xl sm:rounded-none overflow-hidden">
         {/* Header */}
-        <div className="flex justify-between items-center p-6 border-b border-gray-200">
-          <h2 className="text-xl font-bold text-gray-900">Generate Draft Statement</h2>
-          <button
-            onClick={onClose}
-            className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <FaTimes className="text-gray-600" />
+        <div className="flex-shrink-0 flex items-center justify-between gap-3 border-b border-slate-700 bg-[#0B3B2E] px-4 py-3 text-white">
+          <div className="flex items-center gap-2">
+            <FaCalendarAlt className="text-emerald-400" />
+            <h2 className="text-sm font-black uppercase tracking-wide">Generate Draft Statement</h2>
+          </div>
+          <button onClick={onClose} className="text-white/60 hover:text-white transition-colors">
+            <FaTimes size={14} />
           </button>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* Property Select */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-900 mb-2">
-              Property *
-            </label>
-            <select
-              value={formData.propertyId}
-              onChange={(e) =>
-                setFormData({ ...formData, propertyId: e.target.value })
-              }
-              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none ${
-                validationErrors.propertyId ? "border-red-500" : "border-gray-300"
-              }`}
-            >
-              <option value="">Select a property...</option>
-              {properties.map((prop) => (
-                <option key={prop._id} value={prop._id}>
-                  {prop.propertyName || prop.name || 'Unnamed Property'}
-                </option>
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+            {[
+              { label: "Property", key: "propertyId", type: "select", options: properties.map((p) => ({ value: p._id, label: p.propertyName || p.name || "Unnamed" })) },
+              { label: "Landlord", key: "landlordId", type: "select", options: landlords.map((l) => ({ value: l._id, label: `${l.firstName} ${l.lastName}` })) },
+            ].map(({ label, key, options }) => (
+              <div key={key}>
+                <label className="block text-xs font-black uppercase tracking-wide text-slate-600 mb-1.5">{label} <span className="text-red-500">*</span></label>
+                <select value={formData[key]} onChange={(e) => set(key, e.target.value)} className={inputCls(key)}>
+                  <option value="">Select {label.toLowerCase()}…</option>
+                  {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+                {errors[key] && <p className="text-red-600 text-xs mt-1">{errors[key]}</p>}
+              </div>
+            ))}
+
+            <div className="grid grid-cols-2 gap-3">
+              {[["Start Date", "periodStart"], ["End Date", "periodEnd"]].map(([label, key]) => (
+                <div key={key}>
+                  <label className="block text-xs font-black uppercase tracking-wide text-slate-600 mb-1.5">{label} <span className="text-red-500">*</span></label>
+                  <input type="date" value={formData[key]} onChange={(e) => set(key, e.target.value)} className={inputCls(key)} />
+                  {errors[key] && <p className="text-red-600 text-xs mt-1">{errors[key]}</p>}
+                </div>
               ))}
-            </select>
-            {validationErrors.propertyId && (
-              <p className="text-red-600 text-sm mt-1">{validationErrors.propertyId}</p>
-            )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-black uppercase tracking-wide text-slate-600 mb-1.5">Notes (Optional)</label>
+              <textarea value={formData.notes} onChange={(e) => set("notes", e.target.value)} rows={3}
+                placeholder="Add any notes…"
+                className="w-full border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-[#0B3B2E] resize-none" />
+            </div>
           </div>
 
-          {/* Landlord Select */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-900 mb-2">
-              Landlord *
-            </label>
-            <select
-              value={formData.landlordId}
-              onChange={(e) =>
-                setFormData({ ...formData, landlordId: e.target.value })
-              }
-              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none ${
-                validationErrors.landlordId ? "border-red-500" : "border-gray-300"
-              }`}
-            >
-              <option value="">Select a landlord...</option>
-              {landlords.map((landlord) => (
-                <option key={landlord._id} value={landlord._id}>
-                  {landlord.firstName} {landlord.lastName}
-                </option>
-              ))}
-            </select>
-            {validationErrors.landlordId && (
-              <p className="text-red-600 text-sm mt-1">{validationErrors.landlordId}</p>
-            )}
-          </div>
-
-          {/* Period Start */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-900 mb-2">
-              Start Date *
-            </label>
-            <input
-              type="date"
-              value={formData.periodStart}
-              onChange={(e) =>
-                setFormData({ ...formData, periodStart: e.target.value })
-              }
-              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none ${
-                validationErrors.periodStart ? "border-red-500" : "border-gray-300"
-              }`}
-            />
-            {validationErrors.periodStart && (
-              <p className="text-red-600 text-sm mt-1">{validationErrors.periodStart}</p>
-            )}
-          </div>
-
-          {/* Period End */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-900 mb-2">
-              End Date *
-            </label>
-            <input
-              type="date"
-              value={formData.periodEnd}
-              onChange={(e) =>
-                setFormData({ ...formData, periodEnd: e.target.value })
-              }
-              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none ${
-                validationErrors.periodEnd ? "border-red-500" : "border-gray-300"
-              }`}
-            />
-            {validationErrors.periodEnd && (
-              <p className="text-red-600 text-sm mt-1">{validationErrors.periodEnd}</p>
-            )}
-          </div>
-
-          {/* Notes */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-900 mb-2">
-              Notes (Optional)
-            </label>
-            <textarea
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              rows="3"
-              placeholder="Add any notes..."
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none resize-none"
-            />
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-3 justify-end pt-4 border-t border-gray-200">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-lg font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
-              disabled={loading}
-            >
+          {/* Footer */}
+          <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+            <button type="button" onClick={onClose} disabled={loading}
+              className="px-4 py-2 text-sm font-bold text-slate-700 bg-slate-200 hover:bg-slate-300 transition-colors">
               Cancel
             </button>
-            <button
-              type="submit"
-              className="px-4 py-2 rounded-lg font-semibold text-white bg-green-700 hover:bg-green-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={loading}
-            >
-              {loading ? "Generating..." : "Generate Statement"}
+            <button type="submit" disabled={loading}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-bold text-white bg-[#0B3B2E] hover:bg-[#0A3127] transition-colors disabled:opacity-50">
+              <FaCalendarAlt size={11} /> {loading ? "Generating…" : "Generate Statement"}
             </button>
           </div>
         </form>

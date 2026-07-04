@@ -71,7 +71,6 @@ const Properties = () => {
   const [selectAll, setSelectAll] = useState(false);
   const [expandedRows, setExpandedRows] = useState([]); // Array to track multiple expanded rows
   const [isResizing, setIsResizing] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
 
   // Dropdown (Archive/Restore placeholder)
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
@@ -257,32 +256,39 @@ const Properties = () => {
     handleSelectProperty(propertyId);
   };
 
-  // Delete
-  const handleDelete = async (propertyId) => {
-    try {
-      const result = await dispatch(deleteProperty(propertyId)).unwrap();
-      toast.success(result?.message || "Property request completed successfully");
-      setShowDeleteConfirm(null);
+  const buildFetchParams = () => ({
+    page: currentPage,
+    limit: pageSize,
+    search: "",
+    status: appliedFilters.status,
+    zone: appliedFilters.zone,
+    category: appliedFilters.category,
+    code: appliedFilters.code,
+    name: appliedFilters.name,
+    lrNumber: appliedFilters.lr,
+    landlord: appliedFilters.landlord,
+    location: appliedFilters.location,
+  });
 
-      // refresh
-      const params = {
-        page: currentPage,
-        limit: pageSize,
-        search: "",
-        status: appliedFilters.status,
-        zone: appliedFilters.zone,
-        category: appliedFilters.category,
-        code: appliedFilters.code,
-        name: appliedFilters.name,
-        lrNumber: appliedFilters.lr,
-        landlord: appliedFilters.landlord,
-        location: appliedFilters.location,
-      };
-      dispatch(getProperties(params));
-    } catch (err) {
-      const errorMsg = typeof err === 'string' ? err : getErrorMessage(err, "Failed to delete property");
-      toast.error(errorMsg);
-    }
+  // Delete
+  const handleDelete = (propertyId) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: "Delete Property",
+      message: "Delete this property? If it has operational or accounting history, MILIK will archive it safely instead.",
+      confirmText: "Delete",
+      isDangerous: true,
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        try {
+          const result = await dispatch(deleteProperty(propertyId)).unwrap();
+          toast.success(result?.message || "Property deleted successfully.");
+          dispatch(getProperties(buildFetchParams()));
+        } catch (err) {
+          toast.error(typeof err === 'string' ? err : getErrorMessage(err, "Failed to delete property"));
+        }
+      },
+    });
   };
 
   const handleBulkDelete = async () => {
@@ -298,62 +304,34 @@ const Properties = () => {
       confirmText: "Delete",
       isDangerous: true,
       onConfirm: async () => {
-        try {
-          let deletedCount = 0;
-          let archivedCount = 0;
-          const responseMessages = [];
-
-          for (const propertyId of selectedProperties) {
-            // unwrap so errors are caught
-            // eslint-disable-next-line no-await-in-loop
-            const result = await dispatch(deleteProperty(propertyId)).unwrap();
-            if (result?.mode === 'deleted') {
-              deletedCount += 1;
-            } else {
-              archivedCount += 1;
-            }
-
-            if (result?.message) {
-              responseMessages.push(result.message);
-            }
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        setSelectedProperties([]);
+        setSelectAll(false);
+        const idsToDelete = [...selectedProperties];
+        const results = await Promise.allSettled(
+          idsToDelete.map((id) => dispatch(deleteProperty(id)).unwrap())
+        );
+        let deletedCount = 0;
+        let archivedCount = 0;
+        const responseMessages = [];
+        for (const r of results) {
+          if (r.status === 'fulfilled') {
+            if (r.value?.mode === 'deleted') deletedCount += 1;
+            else archivedCount += 1;
+            if (r.value?.message) responseMessages.push(r.value.message);
           }
-
-          if (deletedCount > 0 && archivedCount > 0) {
-            toast.success(`${deletedCount} properties deleted and ${archivedCount} archived safely.`);
-          } else if (archivedCount > 0) {
-            toast.success(`${archivedCount} properties archived safely instead of being deleted.`);
-          } else {
-            toast.success(`${deletedCount} properties deleted successfully`);
-          }
-
-          if (deletedCount === 0 && archivedCount === 1 && responseMessages[0]) {
-            toast.info(responseMessages[0]);
-          }
-
-          setSelectedProperties([]);
-          setSelectAll(false);
-          setConfirmDialog({ isOpen: false });
-
-          // refresh
-          const params = {
-            page: currentPage,
-            limit: pageSize,
-            search: "",
-            status: appliedFilters.status,
-            zone: appliedFilters.zone,
-            category: appliedFilters.category,
-            code: appliedFilters.code,
-            name: appliedFilters.name,
-            lrNumber: appliedFilters.lr,
-            landlord: appliedFilters.landlord,
-            location: appliedFilters.location,
-          };
-          dispatch(getProperties(params));
-        } catch (err) {
-          const errorMsg = typeof err === 'string' ? err : getErrorMessage(err, "Failed to delete some properties");
-          toast.error(errorMsg);
         }
-        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        const failed = results.filter((r) => r.status === 'rejected').length;
+        if (deletedCount > 0 && archivedCount > 0) {
+          toast.success(`${deletedCount} properties deleted and ${archivedCount} archived safely.`);
+        } else if (archivedCount > 0) {
+          toast.success(`${archivedCount} properties archived safely instead of being deleted.`);
+        } else if (deletedCount > 0) {
+          toast.success(`${deletedCount} properties deleted successfully.`);
+        }
+        if (deletedCount === 0 && archivedCount === 1 && responseMessages[0]) toast.info(responseMessages[0]);
+        if (failed > 0) toast.error(`${failed} properties could not be deleted.`);
+        dispatch(getProperties(buildFetchParams()));
       },
     });
   };
@@ -506,37 +484,18 @@ const Properties = () => {
       confirmText: "Archive",
       isDangerous: false,
       onConfirm: async () => {
-        try {
-          for (const propertyId of selectedProperties) {
-            // eslint-disable-next-line no-await-in-loop
-            await dispatch(archiveProperty(propertyId)).unwrap();
-          }
-          toast.success(`${selectedProperties.length} properties archived successfully`);
-          setSelectedProperties([]);
-          setSelectAll(false);
-          setActionMenuOpen(false);
-          setConfirmDialog({ isOpen: false });
-
-          // refresh
-          const params = {
-            page: currentPage,
-            limit: pageSize,
-            search: "",
-            status: appliedFilters.status,
-            zone: appliedFilters.zone,
-            category: appliedFilters.category,
-            code: appliedFilters.code,
-            name: appliedFilters.name,
-            lrNumber: appliedFilters.lr,
-            landlord: appliedFilters.landlord,
-            location: appliedFilters.location,
-          };
-          dispatch(getProperties(params));
-        } catch (err) {
-          const errorMsg = typeof err === 'string' ? err : getErrorMessage(err, "Failed to archive properties");
-          toast.error(errorMsg);
-          setConfirmDialog({ isOpen: false });
-        }
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        setSelectedProperties([]);
+        setSelectAll(false);
+        setActionMenuOpen(false);
+        const archResults = await Promise.allSettled(
+          selectedProperties.map((id) => dispatch(archiveProperty(id)).unwrap())
+        );
+        const archOk = archResults.filter((r) => r.status === 'fulfilled').length;
+        const archFail = archResults.filter((r) => r.status === 'rejected').length;
+        if (archOk > 0) toast.success(`${archOk} properties archived successfully.`);
+        if (archFail > 0) toast.error(`${archFail} properties could not be archived.`);
+        dispatch(getProperties(buildFetchParams()));
       },
     });
   };
@@ -554,37 +513,18 @@ const Properties = () => {
       confirmText: "Restore",
       isDangerous: false,
       onConfirm: async () => {
-        try {
-          for (const propertyId of selectedProperties) {
-            // eslint-disable-next-line no-await-in-loop
-            await dispatch(restoreProperty(propertyId)).unwrap();
-          }
-          toast.success(`${selectedProperties.length} properties restored successfully`);
-          setSelectedProperties([]);
-          setSelectAll(false);
-          setActionMenuOpen(false);
-          setConfirmDialog({ isOpen: false });
-
-          // refresh
-          const params = {
-            page: currentPage,
-            limit: pageSize,
-            search: "",
-            status: appliedFilters.status,
-            zone: appliedFilters.zone,
-            category: appliedFilters.category,
-            code: appliedFilters.code,
-            name: appliedFilters.name,
-            lrNumber: appliedFilters.lr,
-            landlord: appliedFilters.landlord,
-            location: appliedFilters.location,
-          };
-          dispatch(getProperties(params));
-        } catch (err) {
-          const errorMsg = typeof err === 'string' ? err : getErrorMessage(err, "Failed to restore properties");
-          toast.error(errorMsg);
-          setConfirmDialog({ isOpen: false });
-        }
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        setSelectedProperties([]);
+        setSelectAll(false);
+        setActionMenuOpen(false);
+        const restResults = await Promise.allSettled(
+          selectedProperties.map((id) => dispatch(restoreProperty(id)).unwrap())
+        );
+        const restOk = restResults.filter((r) => r.status === 'fulfilled').length;
+        const restFail = restResults.filter((r) => r.status === 'rejected').length;
+        if (restOk > 0) toast.success(`${restOk} properties restored successfully.`);
+        if (restFail > 0) toast.error(`${restFail} properties could not be restored.`);
+        dispatch(getProperties(buildFetchParams()));
       },
     });
   };
@@ -930,7 +870,7 @@ const Properties = () => {
                                           <button
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              setShowDeleteConfirm(property._id);
+                                              handleDelete(property._id);
                                             }}
                                             className="px-3 py-2 text-xs bg-red-600 text-white rounded-lg flex items-center justify-center gap-2 hover:bg-red-700 transition-colors w-full font-bold"
                                           >
@@ -1049,30 +989,6 @@ const Properties = () => {
             </>
           </div>
         </div>
-
-        {/* Delete Confirmation Modal */}
-        {showDeleteConfirm && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-auto shadow-xl">
-              <h3 className="text-lg font-bold text-gray-800 mb-2">Confirm Delete</h3>
-              <p className="text-gray-600 mb-6">Are you sure you want to delete this property? If the property has operational or accounting history, MILIK will archive it safely instead of hard-deleting it.</p>
-              <div className="flex justify-end gap-3">
-                <button
-                  onClick={() => setShowDeleteConfirm(null)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => handleDelete(showDeleteConfirm)}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  Delete Property
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Resizing overlay (kept) */}
         {isResizing && <div className="fixed inset-0 z-50 cursor-col-resize" style={{ cursor: "col-resize" }} />}

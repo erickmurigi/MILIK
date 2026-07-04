@@ -1723,13 +1723,28 @@ const TenantStatement = () => {
     const tenantName = tenant?.tenantName || tenant?.name || 'Tenant';
     const unit = tenant?.unit?.unitNumber || '—';
     const property = tenant?.unit?.property?.propertyName || tenant?.property?.propertyName || '—';
-    const txns = (statementData?.transactions || []).filter((t) => {
-      if (transactionType !== 'ALL' && t.type !== transactionType) return false;
-      const d = new Date(t.date);
-      const fromOk = startDate ? d >= new Date(`${startDate}T00:00:00`) : true;
-      const toOk = endDate ? d <= new Date(`${endDate}T23:59:59`) : true;
-      return fromOk && toOk;
-    });
+    const allTxns = statementData?.transactions || [];
+    const printStart = startDate ? new Date(`${startDate}T00:00:00`) : null;
+    const printEnd = endDate ? new Date(`${endDate}T23:59:59`) : null;
+    const printBbf = printStart
+      ? allTxns.filter((t) => new Date(t.date) < printStart).reduce((sum, t) => sum + t.amount, 0)
+      : 0;
+    const hasPrintBbf = printStart !== null && allTxns.some((t) => new Date(t.date) < printStart);
+    const txns = allTxns
+      .filter((t) => {
+        if (transactionType !== 'ALL' && t.type !== transactionType) return false;
+        const d = new Date(t.date);
+        const fromOk = printStart ? d >= printStart : true;
+        const toOk = printEnd ? d <= printEnd : true;
+        return fromOk && toOk;
+      })
+      .map((t) => ({ ...t, balance: t.balance + printBbf }));
+    const printBcfBalance = txns.length > 0 ? txns[txns.length - 1].balance : hasPrintBbf ? printBbf : null;
+    const allPrintRows = [
+      ...(hasPrintBbf ? [{ id: 'BBF', type: 'BBF', description: 'Balance Brought Forward', amount: printBbf, balance: printBbf }] : []),
+      ...txns,
+      ...(printBcfBalance !== null ? [{ id: 'BCF', type: 'BCF', description: 'Balance Carried Forward', amount: printBcfBalance, balance: printBcfBalance }] : []),
+    ];
     const win = window.open('', '_blank', 'width=900,height=1100');
     if (!win) { window.print(); return; }
     win.document.write(`<!DOCTYPE html><html><head><title>Tenant Statement — ${tenantName}</title><style>
@@ -1760,8 +1775,15 @@ const TenantStatement = () => {
       <div class="box"><div class="box-label">Unit / Property</div><strong>${unit}</strong> · ${property}</div>
     </div>
     <table><thead><tr><th>Date</th><th>Description</th><th class="c">Type</th><th>Code</th><th class="r">Amount</th><th class="r">Balance</th></tr></thead>
-    <tbody>${txns.map((t) => `<tr><td>${new Date(t.date).toLocaleDateString()}</td><td>${t.description || '—'}</td><td class="c"><span style="padding:1px 5px;border-radius:3px;font-size:7.5px;font-weight:800;background:${['CHARGE','DEBIT_NOTE'].includes(t.type) ? '#fee2e2' : '#d1fae5'};color:${['CHARGE','DEBIT_NOTE'].includes(t.type) ? '#b91c1c' : '#065f46'}">${t.type}</span></td><td>${t.transactionCode || '—'}</td><td class="r ${['CHARGE','DEBIT_NOTE'].includes(t.type) ? 'chg' : 'pay'}"><strong>${['CHARGE','DEBIT_NOTE'].includes(t.type) ? '+' : '-'}Ksh ${Math.abs(t.amount || 0).toLocaleString()}</strong></td><td class="r">Ksh ${(t.balance || 0).toLocaleString()}</td></tr>`).join('')}
-    ${txns.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:20px;color:#94a3b8">No transactions for the selected filters.</td></tr>' : ''}
+    <tbody>${allPrintRows.map((t) => {
+      const isBbcf = t.type === 'BBF' || t.type === 'BCF';
+      const isDebit = ['CHARGE','DEBIT_NOTE'].includes(t.type);
+      const balColor = t.balance > 0 ? '#b91c1c' : t.balance < 0 ? '#047857' : '#475569';
+      const balLabel = `Ksh ${Math.abs(t.balance || 0).toLocaleString()}${t.balance < 0 ? ' CR' : t.balance > 0 ? ' DR' : ''}`;
+      if (isBbcf) return `<tr style="background:#f0fdf4;border-top:2px solid #0B3B2E40;border-bottom:2px solid #0B3B2E40"><td style="color:#475569">—</td><td colspan="3" style="font-weight:900;font-size:8px;text-transform:uppercase;letter-spacing:.1em;color:#0B3B2E">${t.description}</td><td class="r"></td><td class="r" style="font-weight:900;color:${balColor}">${balLabel}</td></tr>`;
+      return `<tr><td>${new Date(t.date).toLocaleDateString()}</td><td>${t.description || '—'}</td><td class="c"><span style="padding:1px 5px;border-radius:3px;font-size:7.5px;font-weight:800;background:${isDebit ? '#fee2e2' : '#d1fae5'};color:${isDebit ? '#b91c1c' : '#065f46'}">${t.type}</span></td><td>${t.transactionCode || '—'}</td><td class="r ${isDebit ? 'chg' : 'pay'}"><strong>${isDebit ? '+' : '-'}Ksh ${Math.abs(t.amount || 0).toLocaleString()}</strong></td><td class="r">Ksh ${(t.balance || 0).toLocaleString()}</td></tr>`;
+    }).join('')}
+    ${allPrintRows.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:20px;color:#94a3b8">No transactions for the selected filters.</td></tr>' : ''}
     </tbody></table>
     <div class="totals">
       <div class="t-card"><div class="t-cl">Charges</div><div class="t-cv chg">Ksh ${(statementData?.totalCharges || 0).toLocaleString()}</div></div>
@@ -1885,14 +1907,44 @@ const TenantStatement = () => {
   };
 
   const renderStatement = () => {
-    const visibleStatementTransactions = (statementData?.transactions || [])
+    const allTransactions = statementData?.transactions || [];
+    const startBoundary = startDate ? new Date(`${startDate}T00:00:00`) : null;
+    const endBoundary = endDate ? new Date(`${endDate}T23:59:59`) : null;
+
+    const bbf = startBoundary
+      ? allTransactions.filter((t) => new Date(t.date) < startBoundary).reduce((sum, t) => sum + t.amount, 0)
+      : 0;
+    const hasBbf = startBoundary !== null && allTransactions.some((t) => new Date(t.date) < startBoundary);
+
+    const visibleStatementTransactions = allTransactions
       .filter((t) => transactionType === "ALL" || t.type === transactionType)
       .filter((t) => {
         const txDate = new Date(t.date);
-        const fromOk = startDate ? txDate >= new Date(`${startDate}T00:00:00`) : true;
-        const toOk = endDate ? txDate <= new Date(`${endDate}T23:59:59`) : true;
+        const fromOk = startBoundary ? txDate >= startBoundary : true;
+        const toOk = endBoundary ? txDate <= endBoundary : true;
         return fromOk && toOk;
-      });
+      })
+      .map((t) => ({ ...t, balance: t.balance + bbf }));
+
+    const bbfRow = hasBbf ? { id: "BBF", type: "BBF", description: "Balance Brought Forward", amount: bbf, balance: bbf } : null;
+    const finalBalance = visibleStatementTransactions.length > 0
+      ? visibleStatementTransactions[visibleStatementTransactions.length - 1].balance
+      : hasBbf ? bbf : null;
+    const bcfRow = finalBalance !== null
+      ? { id: "BCF", type: "BCF", description: "Balance Carried Forward", amount: finalBalance, balance: finalBalance }
+      : null;
+    const displayRows = [
+      ...(bbfRow ? [bbfRow] : []),
+      ...visibleStatementTransactions,
+      ...(bcfRow ? [bcfRow] : []),
+    ];
+
+    const periodCharges = visibleStatementTransactions.reduce((s, t) => ["CHARGE", "DEBIT_NOTE"].includes(t.type) ? s + Math.abs(t.amount) : s, 0);
+    const periodPayments = visibleStatementTransactions.reduce((s, t) => ["PAYMENT", "CREDIT_NOTE"].includes(t.type) ? s + Math.abs(t.amount) : s, 0);
+
+    const defaultStart = `${new Date().getFullYear()}-01-01`;
+    const defaultEnd = new Date().toISOString().split("T")[0];
+    const isFiltered = startDate !== defaultStart || endDate !== defaultEnd || transactionType !== "ALL";
 
     const statementSummaryChips = [
       {
@@ -1900,6 +1952,11 @@ const TenantStatement = () => {
         value: `Ksh ${(tenantLease?.rentAmount || tenant?.rent || 0).toLocaleString()}`,
         accent: "text-blue-700",
       },
+      ...(hasBbf ? [{
+        label: "Opening Bal.",
+        value: `Ksh ${Math.abs(bbf).toLocaleString()}${bbf < 0 ? " CR" : bbf > 0 ? " DR" : ""}`,
+        accent: bbf > 0 ? "text-red-700" : bbf < 0 ? "text-emerald-700" : "text-slate-500",
+      }] : []),
       {
         label: "Invoiced",
         value: `Ksh ${(statementData?.totalCharges || 0).toLocaleString()}`,
@@ -1941,17 +1998,35 @@ const TenantStatement = () => {
               className="h-7 w-28 shrink-0 border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:border-[#0B3B2E]"
             />
             {/* Quick date presets */}
-            {[
-              { label: "Today", fn: () => { const d = new Date().toISOString().split("T")[0]; setStartDate(d); setEndDate(d); } },
-              { label: "This Month", fn: () => { const now = new Date(); setStartDate(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`); setEndDate(new Date().toISOString().split("T")[0]); } },
-              { label: "YTD", fn: () => { setStartDate(`${new Date().getFullYear()}-01-01`); setEndDate(new Date().toISOString().split("T")[0]); } },
-              { label: "All", fn: () => { setStartDate("2000-01-01"); setEndDate(new Date().toISOString().split("T")[0]); } },
-            ].map(({ label, fn }) => (
-              <button key={label} type="button" onClick={fn}
-                className="h-7 shrink-0 border border-slate-200 bg-slate-50 px-2 text-[10px] font-bold text-slate-600 hover:border-[#0B3B2E] hover:bg-[#EDF5F1] hover:text-[#0B3B2E] transition-colors">
-                {label}
-              </button>
-            ))}
+            {(() => {
+              const _now = new Date();
+              const _today = _now.toISOString().split("T")[0];
+              const _monthStart = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,"0")}-01`;
+              const _ytdStart = `${_now.getFullYear()}-01-01`;
+              const _3mAgo = (() => { const d = new Date(_now); d.setMonth(d.getMonth()-3); return d.toISOString().split("T")[0]; })();
+              const activePreset =
+                startDate === _today && endDate === _today ? "Today" :
+                startDate === _monthStart && endDate === _today ? "This Month" :
+                startDate === _3mAgo && endDate === _today ? "3 Months" :
+                startDate === _ytdStart && endDate === _today ? "YTD" :
+                startDate === "2000-01-01" && endDate === _today ? "All" : null;
+              return [
+                { label: "Today", fn: () => { setStartDate(_today); setEndDate(_today); } },
+                { label: "This Month", fn: () => { setStartDate(_monthStart); setEndDate(_today); } },
+                { label: "3 Months", fn: () => { setStartDate(_3mAgo); setEndDate(_today); } },
+                { label: "YTD", fn: () => { setStartDate(_ytdStart); setEndDate(_today); } },
+                { label: "All", fn: () => { setStartDate("2000-01-01"); setEndDate(_today); } },
+              ].map(({ label, fn }) => (
+                <button key={label} type="button" onClick={fn}
+                  className={`h-7 shrink-0 border px-2.5 text-[10px] font-bold transition-colors ${
+                    activePreset === label
+                      ? "border-[#0B3B2E] bg-[#0B3B2E] text-white"
+                      : "border-slate-200 bg-slate-50 text-slate-600 hover:border-[#0B3B2E] hover:bg-[#EDF5F1] hover:text-[#0B3B2E]"
+                  }`}>
+                  {label}
+                </button>
+              ));
+            })()}
             <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
             <select
               value={transactionType}
@@ -1964,6 +2039,14 @@ const TenantStatement = () => {
               <option value="CREDIT_NOTE">Credit Notes</option>
               <option value="PAYMENT">Receipts</option>
             </select>
+            <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+            <button
+              type="button"
+              onClick={() => { setStartDate(`${new Date().getFullYear()}-01-01`); setEndDate(new Date().toISOString().split("T")[0]); setTransactionType("ALL"); }}
+              className={`h-7 shrink-0 border px-2.5 text-[10px] font-bold transition-colors ${isFiltered ? "border-red-200 bg-red-50 text-red-600 hover:bg-red-100" : "border-slate-200 bg-slate-50 text-slate-400 hover:text-slate-600"}`}
+            >
+              ↺ Reset
+            </button>
             <span className="shrink-0 border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600">
               {visibleStatementTransactions.length} row{visibleStatementTransactions.length !== 1 ? "s" : ""}
             </span>
@@ -1984,25 +2067,57 @@ const TenantStatement = () => {
             <colgroup><col className="w-[10%]" /><col className="w-[35%]" /><col className="w-[11%]" /><col className="w-[13%]" /><col className="w-[9%]" /><col className="w-[11%]" /><col className="w-[11%]" /></colgroup>
             <thead className="sticky top-0 z-10 shadow-sm"><tr className="bg-[#0B3B2E] text-white">{['Date', 'Description', 'Type', 'Code', 'Trace', 'Amount', 'R. Balance'].map((header, index) => (<th key={header} className={`whitespace-nowrap px-2.5 py-1.5 text-[9.5px] font-black uppercase tracking-[0.12em] ${index >= 5 ? 'text-right' : index === 4 || index === 2 ? 'text-center' : 'text-left'}`}>{header}</th>))}</tr></thead>
             <tbody>
-              {visibleStatementTransactions.length > 0 ? visibleStatementTransactions.map((transaction, idx) => (
-                <tr key={transaction.id} className={`${idx % 2 === 0 ? "bg-white" : "bg-slate-50"} border-b border-slate-200 hover:bg-orange-50/40`}>
-                  <td className="px-2.5 py-0.5 font-semibold text-slate-900 whitespace-nowrap">{new Date(transaction.date).toLocaleDateString()}</td>
-                  <td className="px-2.5 py-0.5 text-slate-700 truncate" title={transaction.description}>{transaction.description}</td>
-                  <td className="px-2.5 py-0.5 text-center">{(() => {
-                    const typeMap = { CHARGE: ["Invoice", "bg-red-100 text-red-700"], DEBIT_NOTE: ["Debit", "bg-rose-100 text-rose-700"], CREDIT_NOTE: ["Credit", "bg-sky-100 text-sky-700"], PAYMENT: ["Receipt", "bg-emerald-100 text-emerald-700"] };
-                    const [label, cls] = typeMap[transaction.type] || [transaction.type, "bg-slate-100 text-slate-600"];
-                    return <span className={`inline-flex rounded px-2 py-0.5 text-[9px] font-black ${cls}`}>{label}</span>;
-                  })()}</td>
-                  <td className="px-2.5 py-0.5 font-semibold text-slate-900 whitespace-nowrap">{transaction.transactionCode}</td>
-                  <td className="px-2.5 py-0.5 text-center">{["invoice", "receipt"].includes(String(transaction.sourceKind || "")) ? (<button type="button" onClick={() => setAllocationTraceTarget({ kind: transaction.sourceKind === "invoice" ? "invoice" : "receipt", id: transaction.sourceId })} className="inline-flex h-6 items-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-[10px] font-bold text-slate-700 hover:bg-slate-100"><FaLink size={10} /> Trace</button>) : (<span className="text-[10px] text-slate-300">—</span>)}</td>
-                  <td className={`px-2.5 py-1 text-right font-black whitespace-nowrap ${["CHARGE", "DEBIT_NOTE"].includes(transaction.type) ? "text-red-600" : "text-green-600"}`}>{["CHARGE", "DEBIT_NOTE"].includes(transaction.type) ? "+" : "-"}Ksh {Math.abs(transaction.amount).toLocaleString()}</td>
-                  <td className="px-2.5 py-0.5 text-right font-black text-slate-900 whitespace-nowrap">Ksh {transaction.balance.toLocaleString()}</td>
-                </tr>
-              )) : (<tr><td colSpan="7" className="px-3 py-12 text-center"><p className="text-sm font-semibold text-slate-400">No transactions match the selected filters.</p><p className="mt-1 text-[10px] text-slate-300">Try widening the date range or switching to "All Types".</p></td></tr>)}
+              {displayRows.length > 0 ? displayRows.map((transaction, idx) => {
+                const isBbcf = transaction.type === "BBF" || transaction.type === "BCF";
+                const isDebit = ["CHARGE", "DEBIT_NOTE"].includes(transaction.type);
+                const balColor = transaction.balance > 0 ? "text-red-700" : transaction.balance < 0 ? "text-emerald-700" : "text-slate-500";
+                if (isBbcf) return (
+                  <tr key={transaction.id} className="border-y-2 border-[#0B3B2E]/25 bg-[#0B3B2E]/[0.06]">
+                    <td className="px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-[#0B3B2E]/50">—</td>
+                    <td className="px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-[#0B3B2E]" colSpan="4">{transaction.description}</td>
+                    <td className="px-2.5 py-1"></td>
+                    <td className={`px-2.5 py-1 text-right text-[10.5px] font-black whitespace-nowrap ${balColor}`}>
+                      Ksh {Math.abs(transaction.balance).toLocaleString()}{transaction.balance < 0 ? " CR" : transaction.balance > 0 ? " DR" : ""}
+                    </td>
+                  </tr>
+                );
+                return (
+                  <tr key={transaction.id} className={`${idx % 2 === 0 ? "bg-white" : "bg-slate-50"} border-b border-slate-200 hover:bg-orange-50/40`}>
+                    <td className="px-2.5 py-0.5 font-semibold text-slate-900 whitespace-nowrap">{new Date(transaction.date).toLocaleDateString()}</td>
+                    <td className="px-2.5 py-0.5 text-slate-700 truncate" title={transaction.description}>{transaction.description}</td>
+                    <td className="px-2.5 py-0.5 text-center">{(() => {
+                      const typeMap = { CHARGE: ["Invoice", "bg-red-100 text-red-700"], DEBIT_NOTE: ["Debit", "bg-rose-100 text-rose-700"], CREDIT_NOTE: ["Credit", "bg-sky-100 text-sky-700"], PAYMENT: ["Receipt", "bg-emerald-100 text-emerald-700"] };
+                      const [label, cls] = typeMap[transaction.type] || [transaction.type, "bg-slate-100 text-slate-600"];
+                      return <span className={`inline-flex rounded px-2 py-0.5 text-[9px] font-black ${cls}`}>{label}</span>;
+                    })()}</td>
+                    <td className="px-2.5 py-0.5 font-semibold text-slate-900 whitespace-nowrap">{transaction.transactionCode}</td>
+                    <td className="px-2.5 py-0.5 text-center">{["invoice", "receipt"].includes(String(transaction.sourceKind || "")) ? (<button type="button" onClick={() => setAllocationTraceTarget({ kind: transaction.sourceKind === "invoice" ? "invoice" : "receipt", id: transaction.sourceId })} className="inline-flex h-6 items-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-[10px] font-bold text-slate-700 hover:bg-slate-100"><FaLink size={10} /> Trace</button>) : (<span className="text-[10px] text-slate-300">—</span>)}</td>
+                    <td className={`px-2.5 py-1 text-right font-black whitespace-nowrap ${isDebit ? "text-red-600" : "text-green-600"}`}>{isDebit ? "+" : "-"}Ksh {Math.abs(transaction.amount).toLocaleString()}</td>
+                    <td className="px-2.5 py-0.5 text-right font-black text-slate-900 whitespace-nowrap">Ksh {transaction.balance.toLocaleString()}</td>
+                  </tr>
+                );
+              }) : (<tr><td colSpan="7" className="px-3 py-12 text-center"><p className="text-sm font-semibold text-slate-400">No transactions match the selected filters.</p><p className="mt-1 text-[10px] text-slate-300">Try widening the date range or switching to "All Types".</p></td></tr>)}
             </tbody>
           </table>
         </div>
-        <div className="flex-shrink-0 border-t border-slate-200 bg-slate-50/95 px-3 py-1.5 text-[10.5px] font-semibold text-slate-600 backdrop-blur"><div className="flex flex-wrap items-center justify-between gap-2"><span>Showing {visibleStatementTransactions.length} filtered transaction(s)</span><div className="flex flex-wrap gap-3"><span>Invoiced: <strong className="text-red-600">Ksh {(statementData.totalCharges || 0).toLocaleString()}</strong></span><span>Payments: <strong className="text-emerald-700">Ksh {(statementData.totalPayments || 0).toLocaleString()}</strong></span><span>Outstanding: <strong className="text-amber-700">Ksh {(statementData?.operationalOutstanding || 0).toLocaleString()}</strong></span><span>Credits: <strong className="text-sky-700">Ksh {(statementData?.unappliedCredits || 0).toLocaleString()}</strong></span></div></div></div>
+        <div className="flex-shrink-0 border-t border-slate-200 bg-slate-50/95 px-3 py-1.5 text-[10.5px] font-semibold text-slate-600 backdrop-blur">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-slate-500">{visibleStatementTransactions.length} transaction{visibleStatementTransactions.length !== 1 ? "s" : ""} in period</span>
+            <div className="flex flex-wrap items-center gap-3">
+              {isFiltered && (
+                <>
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Period</span>
+                  <span>Charged: <strong className="text-red-600">Ksh {periodCharges.toLocaleString()}</strong></span>
+                  <span>Received: <strong className="text-emerald-700">Ksh {periodPayments.toLocaleString()}</strong></span>
+                  <span className="mx-1 h-3 w-px bg-slate-300" />
+                </>
+              )}
+              <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">All-time</span>
+              <span>Outstanding: <strong className="text-amber-700">Ksh {Math.abs(statementData?.operationalOutstanding || 0).toLocaleString()}</strong></span>
+              <span>Credits: <strong className="text-sky-700">Ksh {(statementData?.unappliedCredits || 0).toLocaleString()}</strong></span>
+            </div>
+          </div>
+        </div>
         {renderAllocationTracePanel()}
       </div>
     );
@@ -3688,46 +3803,47 @@ const TenantStatement = () => {
               )}
               <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200 ml-auto" />
               {/* Always-visible actions */}
-              <button onClick={() => navigate(`/receipts/${tenantId}`)} className="h-7 shrink-0 flex items-center gap-1 bg-[#FF8C00] px-2.5 text-xs font-bold text-white hover:bg-[#e67e00] transition-colors">
-                <FaMoneyBillWave size={10} /> Receipts
+              <button onClick={() => navigate(`/receipts/${tenantId}`)} className="h-8 shrink-0 flex items-center gap-1.5 rounded bg-[#FF8C00] px-3 text-xs font-black text-white shadow-sm hover:bg-[#e67e00] active:scale-95 transition-all">
+                <FaMoneyBillWave size={11} /> Receipts
               </button>
-              <button onClick={handlePrint} className="h-7 shrink-0 flex items-center gap-1 bg-[#0B3B2E] px-2.5 text-xs font-bold text-white hover:bg-[#0A3127] transition-colors">
-                <FaPrint size={10} /> Print
+              <button onClick={handlePrint} className="h-8 shrink-0 flex items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white shadow-sm hover:bg-[#0d4a39] active:scale-95 transition-all">
+                <FaPrint size={11} /> Print
               </button>
-              <button onClick={handleDownload} className="h-7 shrink-0 flex items-center gap-1 border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">
-                <FaDownload size={10} /> PDF
+              <button onClick={handleDownload} className="h-8 shrink-0 flex items-center gap-1.5 rounded bg-slate-600 px-3 text-xs font-black text-white shadow-sm hover:bg-slate-700 active:scale-95 transition-all">
+                <FaDownload size={11} /> PDF
               </button>
-              <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+              <div className="mx-1 h-5 w-px shrink-0 bg-slate-200" />
               <button
                 onClick={handleSendStatementSms}
                 disabled={sendingStatementSms || !tenant?.phone}
                 title={!tenant?.phone ? "No phone number on record" : "Send statement summary via SMS"}
-                className="h-7 shrink-0 flex items-center gap-1 border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 hover:border-emerald-400 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
+                className="h-8 shrink-0 flex items-center gap-1.5 rounded bg-emerald-600 px-3 text-xs font-black text-white shadow-sm hover:bg-emerald-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 transition-all"
               >
-                <FaSms size={10} /> {sendingStatementSms ? "Sending…" : "SMS"}
+                <FaSms size={11} /> {sendingStatementSms ? "Sending…" : "SMS"}
               </button>
               <button
                 onClick={handleSendStatementEmail}
                 disabled={sendingStatementEmail || !tenant?.email}
                 title={!tenant?.email ? "No email address on record" : "Email statement to tenant"}
-                className="h-7 shrink-0 flex items-center gap-1 border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 hover:border-blue-400 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
+                className="h-8 shrink-0 flex items-center gap-1.5 rounded bg-blue-600 px-3 text-xs font-black text-white shadow-sm hover:bg-blue-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 transition-all"
               >
-                <FaEnvelope size={10} /> {sendingStatementEmail ? "Sending…" : "Email"}
+                <FaEnvelope size={11} /> {sendingStatementEmail ? "Sending…" : "Email"}
               </button>
             </div>
             {/* ── Tab bar ── */}
-            <div className="flex overflow-x-auto bg-white">
+            <div className="flex overflow-x-auto bg-slate-50 border-t border-slate-100">
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`inline-flex h-9 shrink-0 items-center justify-center gap-1.5 border-r border-slate-200 px-4 text-[11px] font-bold transition-colors ${
+                  className={`inline-flex h-10 shrink-0 items-center justify-center gap-2 border-r border-slate-200 px-5 text-[11px] transition-colors ${
                     activeTab === tab.id
-                      ? "border-b-2 border-b-[#0B3B2E] text-[#0B3B2E] bg-[#EDF5F1]"
-                      : "border-b-2 border-b-transparent text-slate-500 hover:text-[#0B3B2E] hover:bg-slate-50"
+                      ? "border-b-[3px] border-b-[#0B3B2E] bg-white text-[#0B3B2E] font-black shadow-sm"
+                      : "border-b-[3px] border-b-transparent font-semibold text-slate-400 hover:bg-white hover:text-slate-700"
                   }`}
                 >
-                  <span>{tab.icon}</span><span>{tab.label}</span>
+                  <span className={activeTab === tab.id ? "text-[#0B3B2E]" : "text-slate-400"}>{tab.icon}</span>
+                  <span>{tab.label}</span>
                 </button>
               ))}
             </div>

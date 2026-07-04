@@ -1857,40 +1857,24 @@ const confirmTransferUnit = useCallback(async () => {
       toast.warning("You do not have permission to delete tenants");
       return;
     }
-    setIsDeleting(true);
-    let successCount = 0;
-    let failCount = 0;
     const skippedCount = selectedTenantRows.length - selectedDeletableTenants.length;
-
-    for (const tenant of selectedDeletableTenants) {
-      try {
-        await dispatch(deleteTenant(tenant.id)).unwrap();
-        successCount++;
-      } catch (error) {
-        console.error(`Failed to delete tenant ${tenant.id}:`, error);
-        failCount++;
-      }
-    }
-
     setIsDeleting(false);
     setShowDeleteModal(false);
     setSelectedTenants([]);
     setSelectAll(false);
     setActionMenuOpen(false);
 
-    if (successCount > 0) {
-      toast.success(`Successfully deleted ${successCount} tenant(s)`);
-    }
-    if (skippedCount > 0) {
-      toast.info(`${skippedCount} tenant(s) were skipped because they have balances or transaction history that prevents deletion.`);
-    }
-    if (failCount > 0) {
-      toast.error(`Failed to delete ${failCount} tenant(s)`);
-    }
+    const deleteResults = await Promise.allSettled(
+      selectedDeletableTenants.map((tenant) => dispatch(deleteTenant(tenant.id)).unwrap())
+    );
+    const successCount = deleteResults.filter((r) => r.status === "fulfilled").length;
+    const failCount = deleteResults.filter((r) => r.status === "rejected").length;
 
-    if (currentCompany?._id) {
-      dispatch(getTenants(buildTenantParams()));
-    }
+    if (successCount > 0) toast.success(`Successfully deleted ${successCount} tenant(s).`);
+    if (skippedCount > 0) toast.info(`${skippedCount} tenant(s) skipped — they have balances or transaction history.`);
+    if (failCount > 0) toast.error(`Failed to delete ${failCount} tenant(s).`);
+
+    if (currentCompany?._id) dispatch(getTenants(buildTenantParams()));
   };
 
   // ---------------------------

@@ -483,7 +483,18 @@ export const approveStatement = async (statementId, userId, approvalNotes = "") 
 
   const allSnapshots = [...tenantSnapshots, ...depositSnapshots];
   if (allSnapshots.length > 0) {
-    await LandlordStatementTenantBalance.insertMany(allSnapshots, { ordered: false });
+    // bulkWrite with $setOnInsert makes this idempotent: re-running approve (double-click /
+    // race condition) silently skips rows that already exist instead of throwing E11000.
+    await LandlordStatementTenantBalance.bulkWrite(
+      allSnapshots.map((snap) => ({
+        updateOne: {
+          filter: { statement: snap.statement, tenantKey: snap.tenantKey },
+          update: { $setOnInsert: snap },
+          upsert: true,
+        },
+      })),
+      { ordered: false }
+    );
   }
 
   // Lines are now frozen (immutable via pre-save hooks)

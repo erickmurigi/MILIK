@@ -119,6 +119,7 @@ import saleCommissionRoutes from "./modules/propertySale/routes/commissions.js";
 import saleReportRoutes     from "./modules/propertySale/routes/reports.js";
 import saleLeadRoutes       from "./modules/propertySale/routes/leads.js";
 import saleActivityRoutes   from "./modules/propertySale/routes/activities.js";
+import publicListingsRoute  from "./routes/publicListings.js";
 import mongoSanitize from "mongo-sanitize";
 import hpp from "hpp";
 import { blockDemoWrites } from "./utils/demoAccess.js";
@@ -463,6 +464,15 @@ const companyCreationLimiter = rateLimit({
   store: buildStore("company_create"),
 });
 
+const publicListingsLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  message: { success: false, message: "Too many requests, please try again later" },
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: buildStore("pub_listings"),
+});
+
 app.use(generalLimiter);
 
 app.get("/health", (req, res) => {
@@ -527,6 +537,7 @@ app.use("/uploads", express.static(UPLOADS_ROOT));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/trial", trialLimiter, trialRoutes);
+app.use("/api/public/listings", publicListingsLimiter, publicListingsRoute);
 app.use("/api", tryAttachUserFromToken, enforceRequestedCompanyScope, enforceRoutePermissions);
 app.use("/api/chart-of-accounts", chartOfAccountsRoutes);
 app.use("/api/users", userRoutes);

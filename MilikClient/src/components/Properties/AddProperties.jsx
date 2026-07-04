@@ -595,10 +595,8 @@ const AddProperty = () => {
     }
 
     const cleanedFormData = { ...formData };
-    delete cleanedFormData.lrNumber;
-    delete cleanedFormData.specification;
-    delete cleanedFormData.multiStoreyType;
-    const optionalEnumFields = ["category"];
+    // Remove optional enum fields when empty to avoid Mongoose cast errors on empty strings
+    const optionalEnumFields = ["category", "specification", "multiStoreyType"];
     optionalEnumFields.forEach((field) => {
       if (cleanedFormData[field] === "") {
         delete cleanedFormData[field];

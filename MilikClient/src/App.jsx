@@ -28,6 +28,7 @@ const PageLoader = () => (
 // Public / auth
 const NotFound          = lazy(() => import("./pages/NotFound/NotFound"));
 const Home              = lazy(() => import("./pages/Home/Home"));
+const RentalListings    = lazy(() => import("./pages/Listings/RentalListings"));
 const DemoAccessEntry   = lazy(() => import("./pages/Home/DemoAccessEntry"));
 
 // Module landing pages (public, SEO-indexed)
@@ -580,6 +581,7 @@ function App() {
           <Routes>
             {/* ── Public display screens (no auth) ─────────────────────── */}
             <Route path="/display/carwash/:businessId" element={<CarWashQueueDisplay />} />
+            <Route path="/listings/:businessId" element={<RentalListings />} />
 
             {/* ── Public ────────────────────────────────────────────────── */}
             <Route path="/" element={<PublicEntryRoute />} />

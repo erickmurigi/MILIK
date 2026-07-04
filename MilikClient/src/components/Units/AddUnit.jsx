@@ -178,6 +178,9 @@ const AddUnit = () => {
     amenities: "",
     utilities: [],
     billingFrequency: "monthly",
+    furnished: "unfurnished",
+    listingEnabled: false,
+    ownerOccupied: false,
   });
 
   const [fieldErrors, setFieldErrors] = useState({});
@@ -245,6 +248,9 @@ const AddUnit = () => {
           amenities: existingUnit.amenities?.join(", ") || "",
           utilities: existingUnit.utilities || [],
           billingFrequency: canonicalBillingPeriodKey(existingUnit.billingPeriodKey || existingUnit.billingFrequency || "monthly"),
+          furnished: existingUnit.furnished || "unfurnished",
+          listingEnabled: Boolean(existingUnit.listingEnabled),
+          ownerOccupied: Boolean(existingUnit.ownerOccupied),
         });
       }
     }
@@ -513,6 +519,9 @@ const AddUnit = () => {
         })),
       billingFrequency: canonicalBillingPeriodKey(formData.billingFrequency || "monthly"),
       billingPeriodKey: canonicalBillingPeriodKey(formData.billingFrequency || "monthly"),
+      furnished: formData.furnished || "unfurnished",
+      listingEnabled: Boolean(formData.listingEnabled),
+      ownerOccupied: Boolean(formData.ownerOccupied),
       business: currentCompany._id,
       ...(isEditMode
         ? {
@@ -560,7 +569,7 @@ const AddUnit = () => {
 
   const handleReset = () => {
     if (isEditMode) return;
-    setFormData({ unitNumber: "", property: "", unitType: "", areaSqFt: "", rent: "", deposit: "", status: "vacant", description: "", amenities: "", utilities: [], billingFrequency: "monthly" });
+    setFormData({ unitNumber: "", property: "", unitType: "", areaSqFt: "", rent: "", deposit: "", status: "vacant", description: "", amenities: "", utilities: [], billingFrequency: "monthly", furnished: "unfurnished", listingEnabled: false, ownerOccupied: false });
     setFieldErrors({});
     setGeneralError("");
     clearDraftState();
@@ -702,7 +711,7 @@ const AddUnit = () => {
               </div>
             </div>
 
-            {/* Area, Rent and Deposit */}
+            {/* Area, Furnished, Rent and Deposit */}
             <div className="xl:col-span-12 grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-3">
               <div>
                 <label className={labelClass}>Area ({measurementLabel})</label>
@@ -720,6 +729,21 @@ const AddUnit = () => {
                 <p className="mt-1 text-xs text-slate-500">
                   Enter the measured unit area to let the property pricing defaults calculate rent.
                 </p>
+              </div>
+
+              <div>
+                <label className={labelClass}>Furnishing</label>
+                <select
+                  name="furnished"
+                  value={formData.furnished}
+                  onChange={handleInputChange}
+                  className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS} appearance-none`}
+                  disabled={loading}
+                >
+                  <option value="unfurnished">Unfurnished</option>
+                  <option value="semi-furnished">Semi-Furnished</option>
+                  <option value="furnished">Furnished</option>
+                </select>
               </div>
 
               <div>
@@ -1000,6 +1024,50 @@ const AddUnit = () => {
                 className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS} resize-none`}
                 disabled={loading}
               />
+            </div>
+
+            {/* Toggles row */}
+            <div className="xl:col-span-6 flex flex-wrap gap-6">
+              <label className="flex items-center gap-3 cursor-pointer select-none">
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={Boolean(formData.listingEnabled)}
+                    onChange={(e) => setFormData((p) => ({ ...p, listingEnabled: e.target.checked, ownerOccupied: e.target.checked ? false : p.ownerOccupied }))}
+                    disabled={loading || Boolean(formData.ownerOccupied)}
+                  />
+                  <div className={`w-10 h-5 rounded-full transition-colors ${formData.listingEnabled ? "bg-[#0B3B2E]" : "bg-slate-200"}`} />
+                  <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${formData.listingEnabled ? "translate-x-5" : "translate-x-0"}`} />
+                </div>
+                <span className="text-xs font-semibold text-slate-700">
+                  List this unit publicly
+                  <span className="ml-1.5 font-normal text-slate-400">— shows on the public vacancy page</span>
+                </span>
+              </label>
+
+              <label className="flex items-center gap-3 cursor-pointer select-none">
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={Boolean(formData.ownerOccupied)}
+                    onChange={(e) => setFormData((p) => ({
+                      ...p,
+                      ownerOccupied: e.target.checked,
+                      listingEnabled: e.target.checked ? false : p.listingEnabled,
+                      status: e.target.checked ? "occupied" : (p.status === "occupied" ? "vacant" : p.status),
+                    }))}
+                    disabled={loading}
+                  />
+                  <div className={`w-10 h-5 rounded-full transition-colors ${formData.ownerOccupied ? "bg-pink-600" : "bg-slate-200"}`} />
+                  <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${formData.ownerOccupied ? "translate-x-5" : "translate-x-0"}`} />
+                </div>
+                <span className="text-xs font-semibold text-slate-700">
+                  Owner Occupied
+                  <span className="ml-1.5 font-normal text-slate-400">— excluded from rent income & occupancy rate</span>
+                </span>
+              </label>
             </div>
 
           </form>

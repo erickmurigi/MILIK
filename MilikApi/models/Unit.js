@@ -89,6 +89,17 @@ const UnitSchema = new mongoose.Schema(
 
     areaSqFt: { type: Number, default: 0, min: 0 },
 
+    furnished: {
+      type: String,
+      enum: ["furnished", "semi-furnished", "unfurnished"],
+      default: "unfurnished",
+      trim: true,
+    },
+
+    listingEnabled: { type: Boolean, default: false },
+
+    ownerOccupied: { type: Boolean, default: false },
+
     business: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Company",
@@ -103,6 +114,7 @@ UnitSchema.index({ business: 1, status: 1 });
 UnitSchema.index({ property: 1, status: 1 });
 UnitSchema.index({ business: 1, property: 1, unitNumber: 1 }, { unique: true });
 UnitSchema.index({ isVacant: 1 });
+UnitSchema.index({ listingEnabled: 1, status: 1 });
 
 UnitSchema.pre("validate", function (next) {
   if (typeof this.unitNumber === "string") {

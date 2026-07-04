@@ -162,6 +162,7 @@ const AddReceipt = () => {
       cashbook: "Main Cashbook",
       paidDirectToLandlord: isLandlordMode,
       paymentDate: todayInput(),
+      bookingDate: todayInput(),
       referenceNumber: prefilledReference,
       bankingDate: todayInput(),
       description: prefilledDescription,
@@ -217,7 +218,7 @@ const AddReceipt = () => {
   // ── Dynamic reference label based on payment method ──
   const refRequired = ["mobile_money", "bank_transfer", "pesalink", "rtgs", "standing_order"].includes(formData.paymentMethod);
   const refLabel = {
-    mobile_money:   "M-Pesa / Airtel Code",
+    mobile_money:   "M-Pesa / Airtel Ref Number",
     bank_transfer:  "Bank Transfer Ref",
     pesalink:       "PesaLink Ref",
     rtgs:           "RTGS / Wire Ref",
@@ -392,6 +393,11 @@ const AddReceipt = () => {
           outstanding,
           paid,
         });
+        const metadata = inv?.metadata && typeof inv.metadata === "object" ? inv.metadata : {};
+        const specificUtilityName = chargeType === "utility"
+          ? (metadata.utilityName || metadata.utilityType || metadata.takeOnBillItemLabel || "").trim()
+          : "";
+        const chargeTypeLabel = specificUtilityName || getChargeTypeLabel(chargeType);
 
         return {
           invoiceId: String(inv._id || ""),
@@ -400,7 +406,7 @@ const AddReceipt = () => {
           invoiceNumber: String(inv?.invoiceNumber || "").trim(),
           invoiceLabel,
           chargeType,
-          chargeTypeLabel: getChargeTypeLabel(chargeType),
+          chargeTypeLabel,
           billedAmount,
           paid,
           outstanding,
@@ -535,7 +541,13 @@ const AddReceipt = () => {
       }
       if (byPeriod.size > 0) {
         autoDesc = Array.from(byPeriod.entries())
-          .map(([period, types]) => `${period} — ${Array.from(types).filter(Boolean).join(", ")}`)
+          .map(([period, types]) => {
+            const typeList = Array.from(types).filter(Boolean);
+            const joined = typeList.length > 1
+              ? typeList.slice(0, -1).join(", ") + " and " + typeList[typeList.length - 1]
+              : typeList[0] || "";
+            return `${period} — ${joined}`;
+          })
           .join("; ");
       }
     }
@@ -568,7 +580,7 @@ const AddReceipt = () => {
 
 
   const labelClass = "mb-0.5 block text-xs font-semibold text-slate-700";
-  const inputClass = "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+  const inputClass = "w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
   const preventWheelValueChange = (event) => {
     event.currentTarget.blur();
   };
@@ -636,6 +648,7 @@ const AddReceipt = () => {
       cashbook: isDirectToLandlord ? "" : formData.cashbook,
       paidDirectToLandlord: isDirectToLandlord,
       paymentDate: formData.paymentDate,
+      bookingDate: formData.bookingDate && formData.bookingDate !== formData.paymentDate ? formData.bookingDate : undefined,
       dueDate: new Date(paymentDateObj.getFullYear(), paymentDateObj.getMonth(), 1).toISOString().slice(0, 10),
       referenceNumber: String(formData.referenceNumber || "").trim(),
       bankingDate: formData.bankingDate || formData.paymentDate || undefined,
@@ -804,13 +817,33 @@ const AddReceipt = () => {
                   {/* Amount Due — read-only */}
                   <div>
                     <label className={labelClass}>Amount Due</label>
-                    <div className={`flex h-8 items-center rounded border px-3 text-xs font-black ${amountDueColor}`}>
+                    <div className={`flex h-8 items-center border px-3 text-xs font-black ${amountDueColor}`}>
                       {formData.tenantId
                         ? balanceSummary.balance < -0.009
                           ? `Ksh ${Math.abs(balanceSummary.balance).toLocaleString()} CR`
                           : `Ksh ${balanceSummary.balance.toLocaleString()}`
                         : <span className="text-[12px] font-normal">Select tenant</span>}
                     </div>
+                  </div>
+
+                  {/* Payment Method */}
+                  <div>
+                    <label className={labelClass}>Payment Method *</label>
+                    <select
+                      value={formData.paymentMethod}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, paymentMethod: e.target.value }))}
+                      className={inputClass}
+                    >
+                      <option value="mobile_money">Mobile Money (M-Pesa / Airtel)</option>
+                      <option value="bank_transfer">Bank Transfer (EFT)</option>
+                      <option value="pesalink">PesaLink</option>
+                      <option value="rtgs">RTGS / Wire Transfer</option>
+                      <option value="standing_order">Standing Order</option>
+                      <option value="direct_debit">Direct Debit</option>
+                      <option value="cash">Cash</option>
+                      <option value="check">Cheque</option>
+                      <option value="credit_card">Card (Debit / Credit)</option>
+                    </select>
                   </div>
 
                   {/* Reference Number — label changes with payment method */}
@@ -834,35 +867,15 @@ const AddReceipt = () => {
                     />
                   </div>
 
-                  {/* Payment Method */}
-                  <div>
-                    <label className={labelClass}>Payment Method *</label>
-                    <select
-                      value={formData.paymentMethod}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, paymentMethod: e.target.value }))}
-                      className={inputClass}
-                    >
-                      <option value="mobile_money">Mobile Money (M-Pesa / Airtel)</option>
-                      <option value="bank_transfer">Bank Transfer (EFT)</option>
-                      <option value="pesalink">PesaLink</option>
-                      <option value="rtgs">RTGS / Wire Transfer</option>
-                      <option value="standing_order">Standing Order</option>
-                      <option value="direct_debit">Direct Debit</option>
-                      <option value="cash">Cash</option>
-                      <option value="check">Cheque</option>
-                      <option value="credit_card">Card (Debit / Credit)</option>
-                    </select>
-                  </div>
-
                   {/* Cashbook */}
                   <div>
                     <label className={labelClass}>{isDirectToLandlord ? "Cashbook" : "Cashbook *"}</label>
                     {isDirectToLandlord ? (
-                      <div className="flex h-8 items-center rounded border border-amber-200 bg-amber-50 px-3 text-xs text-amber-800">
+                      <div className="flex h-8 items-center border border-amber-200 bg-amber-50 px-3 text-xs text-amber-800">
                         Direct-to-landlord — not posted to cashbooks.
                       </div>
                     ) : cashbookOptions.length === 1 ? (
-                      <div className="flex h-8 items-center rounded border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700">
+                      <div className="flex h-8 items-center border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700">
                         {cashbookOptions[0].code ? `${cashbookOptions[0].code} · ${cashbookOptions[0].name}` : cashbookOptions[0].name}
                       </div>
                     ) : (
@@ -890,9 +903,29 @@ const AddReceipt = () => {
                         ...prev,
                         paymentDate: e.target.value,
                         bankingDate: prev.bankingDate === prev.paymentDate ? e.target.value : prev.bankingDate,
+                        bookingDate: prev.bookingDate === prev.paymentDate ? e.target.value : prev.bookingDate,
                       }))}
                       className={inputClass}
                     />
+                  </div>
+
+                  {/* Booking Date — controls which landlord statement period owns this receipt */}
+                  <div>
+                    <label className={labelClass}>
+                      Booking Date{" "}
+                      <span className="font-normal text-slate-400">(statement period)</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.bookingDate}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, bookingDate: e.target.value }))}
+                      className={inputClass}
+                    />
+                    {formData.bookingDate && formData.bookingDate !== formData.paymentDate && (
+                      <p className="mt-1 text-[10px] text-amber-700 font-semibold">
+                        ⚠ Statement date overridden — receipt will appear in the period containing {formData.bookingDate}, not {formData.paymentDate}.
+                      </p>
+                    )}
                   </div>
 
                   {/* Banking Date — only relevant for bank transfer / cheque */}
@@ -973,8 +1006,8 @@ const AddReceipt = () => {
 
               {/* ── EXISTING CREDIT BANNER ── */}
               {formData.tenantId && balanceSummary.balance < -0.009 && !creditOnAccountMode && (
-                <div className="mb-3 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-                  <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded bg-emerald-200 text-emerald-800 font-bold text-xs">CR</div>
+                <div className="mb-3 flex items-start gap-3 border border-emerald-200 bg-emerald-50 px-4 py-3">
+                  <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center bg-emerald-200 text-emerald-800 font-bold text-xs">CR</div>
                   <div className="flex-1">
                     <p className="text-sm font-bold text-emerald-800">
                       This tenant has KES {Math.abs(balanceSummary.balance).toLocaleString("en-KE", { minimumFractionDigits: 2 })} credit on account
@@ -991,7 +1024,7 @@ const AddReceipt = () => {
                 <div className="mb-3 space-y-3">
 
                   {/* Flat invoice ledger */}
-                  <div className="overflow-hidden rounded-xl border border-slate-200 shadow-sm">
+                  <div className="overflow-hidden border border-slate-200 shadow-sm">
                     {/* Table header bar */}
                     <div className="flex flex-wrap items-center justify-between gap-3 bg-[#0B3B2E] px-4 py-3">
                       <div>
@@ -1166,7 +1199,7 @@ const AddReceipt = () => {
                   </div>
 
                   {/* Receipt allocation preview */}
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                  <div className="border border-amber-200 bg-amber-50 px-4 py-3">
                     <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Receipt Allocation Preview</p>
                     {Number(formData.amount) > 0 ? (
                       <div className="space-y-1">
@@ -1174,7 +1207,7 @@ const AddReceipt = () => {
                           line.apply > 0 ? (
                             <div
                               key={`${line.period}-${line.chargeType}-${idx}`}
-                              className="flex items-center justify-between rounded-lg border border-amber-100 bg-white px-3 py-1.5 text-xs text-amber-900"
+                              className="flex items-center justify-between border border-amber-100 bg-white px-3 py-1.5 text-xs text-amber-900"
                             >
                               <span>{line.period} — {line.chargeTypeLabel || line.chargeType}</span>
                               <span className="font-semibold">
@@ -1207,7 +1240,7 @@ const AddReceipt = () => {
           <div className="flex items-center justify-end gap-2">
             <button
               onClick={() => navigate(backToPath)}
-              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              className="border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
             >
               Cancel
             </button>
@@ -1215,7 +1248,7 @@ const AddReceipt = () => {
               onClick={handleSubmit}
               disabled={!canSaveReceipt || isSaving}
               title={canSaveReceipt ? "Save receipt" : "You do not have permission to record receipts"}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-black text-white transition ${
+              className={`inline-flex items-center gap-1.5 px-4 py-2 text-xs font-black text-white transition ${
                 canSaveReceipt && !isSaving ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "cursor-not-allowed bg-gray-400"
               }`}
             >

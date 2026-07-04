@@ -105,7 +105,9 @@ const Landlords = () => {
 
   // Dropdown (Archive/Restore)
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const [actionMenuPos, setActionMenuPos] = useState({ top: 0, right: 0 });
   const actionMenuRef = useRef(null);
+  const actionMenuBtnRef = useRef(null);
 
   // Column widths (FIXED KEYS)
   const [columnWidths, setColumnWidths] = useState({
@@ -164,8 +166,9 @@ const Landlords = () => {
   // Close dropdown on outside click
   useEffect(() => {
     const onDocClick = (e) => {
-      if (!actionMenuRef.current) return;
-      if (!actionMenuRef.current.contains(e.target)) setActionMenuOpen(false);
+      if (actionMenuBtnRef.current?.contains(e.target)) return;
+      if (actionMenuRef.current?.contains(e.target)) return;
+      setActionMenuOpen(false);
     };
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
@@ -370,42 +373,19 @@ const Landlords = () => {
       cancelText: "Cancel",
       isDangerous: true,
       onConfirm: async () => {
-        try {
-          for (const landlord of selectedDeletableLandlords) {
-            await dispatch(deleteLandlord(landlord._id));
-          }
-          setCurrentPage(1);
-          await dispatch(getLandlords(buildLandlordParams()));
-          setSelectedLandlords([]);
-          setSelectAll(false);
-          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
-
-          if (deleteCount > 0) {
-            toast.success(
-              deleteCount === 1
-                ? "Landlord deleted successfully."
-                : `${deleteCount} landlords deleted successfully.`
-            );
-          }
-          if (skippedCount > 0) {
-            toast.info(
-              skippedCount === 1
-                ? "1 landlord was skipped because it still has linked properties."
-                : `${skippedCount} landlords were skipped because they still have linked properties.`
-            );
-          }
-        } catch (err) {
-          console.error('Delete error:', err);
-          setConfirmDialog({
-            isOpen: true,
-            title: "Delete Failed",
-            message: getErrorMessage(err, "Failed to delete landlord(s)"),
-            confirmText: "OK",
-            cancelText: "Close",
-            isDangerous: false,
-            onConfirm: () => setConfirmDialog((prev) => ({ ...prev, isOpen: false })),
-          });
-        }
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        setSelectedLandlords([]);
+        setSelectAll(false);
+        const delResults = await Promise.allSettled(
+          selectedDeletableLandlords.map((l) => dispatch(deleteLandlord(l._id)))
+        );
+        const delOk = delResults.filter((r) => r.status === "fulfilled").length;
+        const delFail = delResults.filter((r) => r.status === "rejected").length;
+        if (delOk > 0) toast.success(delOk === 1 ? "Landlord deleted successfully." : `${delOk} landlords deleted successfully.`);
+        if (delFail > 0) toast.error(`${delFail} landlord(s) could not be deleted.`);
+        if (skippedCount > 0) toast.info(skippedCount === 1 ? "1 landlord was skipped (still has linked properties)." : `${skippedCount} landlords were skipped (still have linked properties).`);
+        setCurrentPage(1);
+        dispatch(getLandlords(buildLandlordParams()));
       },
     });
   };
@@ -439,32 +419,19 @@ const Landlords = () => {
       cancelText: "Cancel",
       isDangerous: false,
       onConfirm: async () => {
-        try {
-          for (const landlord of selectedArchivableLandlords) {
-            await dispatch(updateLandlord(landlord._id, { status: "Archived" }));
-          }
-          setCurrentPage(1);
-          await dispatch(getLandlords(buildLandlordParams()));
-          setSelectedLandlords([]);
-          setSelectAll(false);
-          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
-          toast.success(
-            selectedArchivableLandlords.length === 1
-              ? "Landlord archived successfully."
-              : `${selectedArchivableLandlords.length} landlords archived successfully.`
-          );
-        } catch (err) {
-          console.error("Archive error:", err);
-          setConfirmDialog({
-            isOpen: true,
-            title: "Archive Failed",
-            message: getErrorMessage(err, "Failed to archive landlord(s)"),
-            confirmText: "OK",
-            cancelText: "Close",
-            isDangerous: false,
-            onConfirm: () => setConfirmDialog((prev) => ({ ...prev, isOpen: false })),
-          });
-        }
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        setSelectedLandlords([]);
+        setSelectAll(false);
+        const count = selectedArchivableLandlords.length;
+        const archResults = await Promise.allSettled(
+          selectedArchivableLandlords.map((l) => dispatch(updateLandlord(l._id, { status: "Archived" })))
+        );
+        const archOk = archResults.filter((r) => r.status === "fulfilled").length;
+        const archFail = archResults.filter((r) => r.status === "rejected").length;
+        if (archOk > 0) toast.success(archOk === 1 ? "Landlord archived successfully." : `${archOk} landlords archived successfully.`);
+        if (archFail > 0) toast.error(`${archFail} landlord(s) could not be archived.`);
+        setCurrentPage(1);
+        dispatch(getLandlords(buildLandlordParams()));
       },
     });
   };
@@ -498,32 +465,18 @@ const Landlords = () => {
       cancelText: "Cancel",
       isDangerous: false,
       onConfirm: async () => {
-        try {
-          for (const landlord of selectedRestorableLandlords) {
-            await dispatch(updateLandlord(landlord._id, { status: "Active" }));
-          }
-          setCurrentPage(1);
-          await dispatch(getLandlords(buildLandlordParams()));
-          setSelectedLandlords([]);
-          setSelectAll(false);
-          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
-          toast.success(
-            selectedRestorableLandlords.length === 1
-              ? "Landlord restored successfully."
-              : `${selectedRestorableLandlords.length} landlords restored successfully.`
-          );
-        } catch (err) {
-          console.error("Restore error:", err);
-          setConfirmDialog({
-            isOpen: true,
-            title: "Restore Failed",
-            message: getErrorMessage(err, "Failed to restore landlord(s)"),
-            confirmText: "OK",
-            cancelText: "Close",
-            isDangerous: false,
-            onConfirm: () => setConfirmDialog((prev) => ({ ...prev, isOpen: false })),
-          });
-        }
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        setSelectedLandlords([]);
+        setSelectAll(false);
+        const restResults = await Promise.allSettled(
+          selectedRestorableLandlords.map((l) => dispatch(updateLandlord(l._id, { status: "Active" })))
+        );
+        const restOk = restResults.filter((r) => r.status === "fulfilled").length;
+        const restFail = restResults.filter((r) => r.status === "rejected").length;
+        if (restOk > 0) toast.success(restOk === 1 ? "Landlord restored successfully." : `${restOk} landlords restored successfully.`);
+        if (restFail > 0) toast.error(`${restFail} landlord(s) could not be restored.`);
+        setCurrentPage(1);
+        dispatch(getLandlords(buildLandlordParams()));
       },
     });
   };
@@ -829,13 +782,25 @@ const Landlords = () => {
               <FaEdit size={9} /> Edit
             </button>
 
-            <div className="relative shrink-0" ref={actionMenuRef}>
-              <button onClick={() => setActionMenuOpen((v) => !v)} disabled={selectedCount === 0}
+            <div className="shrink-0">
+              <button
+                ref={actionMenuBtnRef}
+                onClick={() => {
+                  if (!actionMenuOpen) {
+                    const rect = actionMenuBtnRef.current?.getBoundingClientRect();
+                    if (rect) setActionMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                  }
+                  setActionMenuOpen((v) => !v);
+                }}
+                disabled={selectedCount === 0}
                 className={`h-7 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedCount > 0 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
                 <FaArchive size={9} /> Actions <FaChevronDown size={8} />
               </button>
               {actionMenuOpen && selectedCount > 0 && (
-                <div className="absolute mt-1 right-0 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden">
+                <div
+                  ref={actionMenuRef}
+                  style={{ position: "fixed", top: actionMenuPos.top, right: actionMenuPos.right, zIndex: 9999 }}
+                  className="w-40 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden">
                   <button onClick={archiveSelected} disabled={selectedArchivableLandlords.length === 0}
                     className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${selectedArchivableLandlords.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
                     <FaArchive className="text-xs text-gray-700" /> Archive

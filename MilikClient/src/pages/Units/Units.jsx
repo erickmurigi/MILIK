@@ -114,9 +114,11 @@ const Units = () => {
   const [isResizing, setIsResizing] = useState(false);
   const resizingRef = useRef(null);
 
-  // Archive/Restore dropdown (placeholder, wire later)
+  // Archive/Restore dropdown
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const [actionMenuPos, setActionMenuPos] = useState({ top: 0, right: 0 });
   const actionMenuRef = useRef(null);
+  const actionMenuBtnRef = useRef(null);
 
   // Modal
   const [showAddUnitModal, setShowAddUnitModal] = useState(false);
@@ -239,8 +241,9 @@ const Units = () => {
   // Close dropdown on outside click
   useEffect(() => {
     const onDocClick = (e) => {
-      if (!actionMenuRef.current) return;
-      if (!actionMenuRef.current.contains(e.target)) setActionMenuOpen(false);
+      if (actionMenuBtnRef.current?.contains(e.target)) return;
+      if (actionMenuRef.current?.contains(e.target)) return;
+      setActionMenuOpen(false);
     };
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
@@ -516,34 +519,20 @@ const Units = () => {
       confirmText: "Archive",
       isDangerous: false,
       onConfirm: async () => {
-        try {
-          for (const unit of selectedArchivableUnits) {
-            // eslint-disable-next-line no-await-in-loop
-            await dispatch(
-              updateUnit({
-                id: unit.id,
-                unitData: {
-                  status: "archived",
-                  isVacant: true,
-                  vacantSince: new Date(),
-                },
-              })
-            ).unwrap();
-          }
-
-          await dispatch(getUnits(buildUnitParams(safeCurrentPage)));
-          setSelectedUnits([]);
-          setSelectAll(false);
-          toast.success(`${archiveCount} unit(s) archived successfully`);
-          if (skippedCount > 0) {
-            toast.info(`${skippedCount} unit(s) were skipped because they are not archivable from this list.`);
-          }
-        } catch (error) {
-          const msg = error?.message || error?.data?.message || "Error archiving units";
-          toast.error(msg);
-        } finally {
-          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
-        }
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        setSelectedUnits([]);
+        setSelectAll(false);
+        const archiveResults = await Promise.allSettled(
+          selectedArchivableUnits.map((unit) =>
+            dispatch(updateUnit({ id: unit.id, unitData: { status: "archived", isVacant: true, vacantSince: new Date() } })).unwrap()
+          )
+        );
+        const archiveOk = archiveResults.filter((r) => r.status === "fulfilled").length;
+        const archiveFail = archiveResults.filter((r) => r.status === "rejected").length;
+        if (archiveOk > 0) toast.success(`${archiveOk} unit(s) archived successfully.`);
+        if (archiveFail > 0) toast.error(`${archiveFail} unit(s) could not be archived.`);
+        if (skippedCount > 0) toast.info(`${skippedCount} unit(s) were skipped (occupied or already archived).`);
+        dispatch(getUnits(buildUnitParams(safeCurrentPage)));
       },
     });
   };
@@ -570,34 +559,20 @@ const Units = () => {
       confirmText: "Restore",
       isDangerous: false,
       onConfirm: async () => {
-        try {
-          for (const unit of selectedRestorableUnits) {
-            // eslint-disable-next-line no-await-in-loop
-            await dispatch(
-              updateUnit({
-                id: unit.id,
-                unitData: {
-                  status: "vacant",
-                  isVacant: true,
-                  vacantSince: new Date(),
-                },
-              })
-            ).unwrap();
-          }
-
-          await dispatch(getUnits(buildUnitParams(safeCurrentPage)));
-          setSelectedUnits([]);
-          setSelectAll(false);
-          toast.success(`${restoreCount} unit(s) restored successfully`);
-          if (skippedCount > 0) {
-            toast.info(`${skippedCount} unit(s) were skipped because they are not archived.`);
-          }
-        } catch (error) {
-          const msg = error?.message || error?.data?.message || "Error restoring units";
-          toast.error(msg);
-        } finally {
-          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
-        }
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        setSelectedUnits([]);
+        setSelectAll(false);
+        const restoreResults = await Promise.allSettled(
+          selectedRestorableUnits.map((unit) =>
+            dispatch(updateUnit({ id: unit.id, unitData: { status: "vacant", isVacant: true, vacantSince: new Date() } })).unwrap()
+          )
+        );
+        const restoreOk = restoreResults.filter((r) => r.status === "fulfilled").length;
+        const restoreFail = restoreResults.filter((r) => r.status === "rejected").length;
+        if (restoreOk > 0) toast.success(`${restoreOk} unit(s) restored successfully.`);
+        if (restoreFail > 0) toast.error(`${restoreFail} unit(s) could not be restored.`);
+        if (skippedCount > 0) toast.info(`${skippedCount} unit(s) were skipped (not archived).`);
+        dispatch(getUnits(buildUnitParams(safeCurrentPage)));
       },
     });
   };
@@ -623,24 +598,18 @@ const Units = () => {
       confirmText: "Delete",
       isDangerous: true,
       onConfirm: async () => {
-        try {
-          for (const unit of selectedDeletableUnits) {
-            // eslint-disable-next-line no-await-in-loop
-            await dispatch(deleteUnit(unit.id)).unwrap();
-          }
-          await dispatch(getUnits(buildUnitParams(safeCurrentPage)));
-          setSelectedUnits([]);
-          setSelectAll(false);
-          toast.success(`${deleteCount} unit(s) deleted successfully`);
-          if (skippedCount > 0) {
-            toast.info(`${skippedCount} unit(s) were skipped because they are still protected.`);
-          }
-        } catch (error) {
-          const msg = error?.message || error?.data?.message || "Error deleting units";
-          toast.error(msg);
-        } finally {
-          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
-        }
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        setSelectedUnits([]);
+        setSelectAll(false);
+        const deleteResults = await Promise.allSettled(
+          selectedDeletableUnits.map((unit) => dispatch(deleteUnit(unit.id)).unwrap())
+        );
+        const deleteOk = deleteResults.filter((r) => r.status === "fulfilled").length;
+        const deleteFail = deleteResults.filter((r) => r.status === "rejected").length;
+        if (deleteOk > 0) toast.success(`${deleteOk} unit(s) deleted successfully.`);
+        if (deleteFail > 0) toast.error(`${deleteFail} unit(s) could not be deleted.`);
+        if (skippedCount > 0) toast.info(`${skippedCount} unit(s) were skipped (occupied or have tenant history).`);
+        dispatch(getUnits(buildUnitParams(safeCurrentPage)));
       },
     });
   };
@@ -815,7 +784,7 @@ const Units = () => {
     e.preventDefault();
     if (!formData.property || !formData.unitSpaceNo) return;
 
-    // wire later
+    // wire later — payload when wired: ownerOccupied: formData.ownerOccupied === "Yes"
     if (_uDraftKey) { try { window.sessionStorage.removeItem(_uDraftKey); } catch {} }
     setShowAddUnitModal(false);
 
@@ -905,13 +874,25 @@ const Units = () => {
             )}
 
             {canUpdateUnit && (
-              <div className="relative shrink-0" ref={actionMenuRef}>
-                <button onClick={() => setActionMenuOpen((v) => !v)} disabled={selectedCount === 0}
+              <div className="shrink-0">
+                <button
+                  ref={actionMenuBtnRef}
+                  onClick={() => {
+                    if (!actionMenuOpen) {
+                      const rect = actionMenuBtnRef.current?.getBoundingClientRect();
+                      if (rect) setActionMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                    }
+                    setActionMenuOpen((v) => !v);
+                  }}
+                  disabled={selectedCount === 0}
                   className={`h-7 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedCount > 0 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
                   <FaArchive size={9} /> Actions <FaChevronDown size={8} />
                 </button>
                 {actionMenuOpen && selectedCount > 0 && (
-                  <div className="absolute mt-1 right-0 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden">
+                  <div
+                    ref={actionMenuRef}
+                    style={{ position: "fixed", top: actionMenuPos.top, right: actionMenuPos.right, zIndex: 9999 }}
+                    className="w-40 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden">
                     <button onClick={archiveSelected} disabled={selectedArchivableUnits.length === 0}
                       className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${selectedArchivableUnits.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
                       <FaArchive className="text-xs text-gray-700" /> Archive

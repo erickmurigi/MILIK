@@ -15,17 +15,12 @@ import {
   FaChevronRight,
   FaChevronDown,
   FaChevronUp,
-  FaHome,
-  FaBuilding,
-  FaCalendarAlt,
-  FaTools,
   FaUserPlus,
   FaUserEdit,
   FaWrench,
   FaArchive,
   FaUndo,
   FaCheckCircle,
-  FaClock,
   FaTag,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -128,39 +123,27 @@ const sanitizeCompanyUnitTypes = (value = []) => {
 
 const getAvailabilityTone = (status) => {
   switch (status) {
-    case "occupied":
-      return "bg-emerald-100 text-emerald-800 border border-emerald-300";
-    case "vacant":
-      return "bg-orange-100 text-orange-800 border border-orange-300";
-    case "notice_given":
-      return "bg-blue-100 text-blue-800 border border-blue-300";
-    case "reserved":
-      return "bg-violet-100 text-violet-800 border border-violet-300";
-    case "under_maintenance":
-      return "bg-amber-100 text-amber-800 border border-amber-300";
-    case "off_market":
-      return "bg-slate-200 text-slate-700 border border-slate-300";
-    default:
-      return "bg-gray-100 text-gray-700 border border-gray-300";
+    case "occupied":       return "bg-emerald-100 text-emerald-800 border border-emerald-300";
+    case "vacant":         return "bg-orange-100 text-orange-800 border border-orange-300";
+    case "notice_given":   return "bg-blue-100 text-blue-800 border border-blue-300";
+    case "reserved":       return "bg-violet-100 text-violet-800 border border-violet-300";
+    case "under_maintenance": return "bg-amber-100 text-amber-800 border border-amber-300";
+    case "off_market":     return "bg-slate-200 text-slate-700 border border-slate-300";
+    case "owner_occupied": return "bg-pink-100 text-pink-800 border border-pink-300";
+    default:               return "bg-gray-100 text-gray-700 border border-gray-300";
   }
 };
 
 const getAvailabilityLabel = (status) => {
   switch (status) {
-    case "occupied":
-      return "Occupied";
-    case "vacant":
-      return "Vacant";
-    case "notice_given":
-      return "Notice Given";
-    case "reserved":
-      return "Reserved";
-    case "under_maintenance":
-      return "Under Maintenance";
-    case "off_market":
-      return "Off Market";
-    default:
-      return "Unknown";
+    case "occupied":          return "Occupied";
+    case "vacant":            return "Vacant";
+    case "notice_given":      return "Notice Given";
+    case "reserved":          return "Reserved";
+    case "under_maintenance": return "Under Maintenance";
+    case "off_market":        return "Off Market";
+    case "owner_occupied":    return "Owner Occupied";
+    default:                  return "Unknown";
   }
 };
 
@@ -226,6 +209,7 @@ const Vacants = () => {
 
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedRows, setExpandedRows] = useState([]);
+  const [selectedRowId, setSelectedRowId] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState({
     isOpen: false,
     title: "",
@@ -323,6 +307,8 @@ const Vacants = () => {
       let availabilityStatus = "vacant";
       if (isOffMarket) {
         availabilityStatus = "off_market";
+      } else if (unit?.ownerOccupied) {
+        availabilityStatus = "owner_occupied";
       } else if (isMaintenance) {
         availabilityStatus = "under_maintenance";
       } else if (isReserved) {
@@ -366,6 +352,9 @@ const Vacants = () => {
       }
       if (availabilityStatus === "off_market") {
         notes.push("Unit is archived or inactive");
+      }
+      if (availabilityStatus === "owner_occupied") {
+        notes.push("Occupied by property owner");
       }
       if (availabilityStatus === "vacant" && daysVacant !== null) {
         notes.push(`Vacant for ${daysVacant} day${daysVacant === 1 ? "" : "s"}`);
@@ -412,16 +401,17 @@ const Vacants = () => {
     const totals = availabilityRows.reduce(
       (acc, row) => {
         acc.total += 1;
-        if (row.status !== "off_market") acc.rentable += 1;
+        if (row.status !== "off_market" && row.status !== "owner_occupied") acc.rentable += 1;
         if (row.status === "occupied") acc.occupied += 1;
         if (row.status === "vacant") acc.vacant += 1;
         if (row.status === "notice_given") acc.notice += 1;
         if (row.status === "reserved") acc.reserved += 1;
         if (row.status === "under_maintenance") acc.maintenance += 1;
         if (row.status === "off_market") acc.offMarket += 1;
+        if (row.status === "owner_occupied") acc.ownerOccupied += 1;
         return acc;
       },
-      { total: 0, rentable: 0, occupied: 0, vacant: 0, notice: 0, reserved: 0, maintenance: 0, offMarket: 0 }
+      { total: 0, rentable: 0, occupied: 0, vacant: 0, notice: 0, reserved: 0, maintenance: 0, offMarket: 0, ownerOccupied: 0 }
     );
 
     return {
@@ -530,9 +520,10 @@ const Vacants = () => {
             if (row.status === "reserved") acc.reserved += 1;
             if (row.status === "under_maintenance") acc.maintenance += 1;
             if (row.status === "off_market") acc.offMarket += 1;
+            if (row.status === "owner_occupied") acc.ownerOccupied += 1;
             return acc;
           },
-          { total: 0, occupied: 0, vacant: 0, notice: 0, reserved: 0, maintenance: 0, offMarket: 0 }
+          { total: 0, occupied: 0, vacant: 0, notice: 0, reserved: 0, maintenance: 0, offMarket: 0, ownerOccupied: 0 }
         );
 
         return {
@@ -549,6 +540,11 @@ const Vacants = () => {
   const endIndex = startIndex + ITEMS_PER_PAGE;
   const currentRows = filteredRows.slice(startIndex, endIndex);
 
+  const selectedRow = useMemo(
+    () => currentRows.find((r) => r.id === selectedRowId) || null,
+    [currentRows, selectedRowId]
+  );
+
   useEffect(() => {
     if (currentPage !== safeCurrentPage) setCurrentPage(safeCurrentPage);
   }, [currentPage, safeCurrentPage]);
@@ -564,6 +560,7 @@ const Vacants = () => {
       tenant: draftFilters.tenant.trim(),
     });
     setExpandedRows([]);
+    setSelectedRowId(null);
   };
 
   const applySearch = () => {
@@ -573,12 +570,14 @@ const Vacants = () => {
       tenant: draftFilters.tenant.trim(),
     });
     setExpandedRows([]);
+    setSelectedRowId(null);
   };
 
   const resetFilters = () => {
     setDraftFilters(emptyFilters);
     setAppliedFilters(emptyFilters);
     setExpandedRows([]);
+    setSelectedRowId(null);
   };
 
   const toggleRow = (rowId) => {
@@ -693,6 +692,30 @@ const Vacants = () => {
     });
   };
 
+  const handleOwnerOccupied = (row) => {
+    if (row.tenantId && row.tenantName !== "-") {
+      toast.error(`${row.unitNo} has an active tenant (${row.tenantName}). Remove the tenant before marking this unit as owner occupied.`);
+      return;
+    }
+    queueStatusChange({
+      row,
+      title: "Mark as Owner Occupied",
+      message: `Mark ${row.unitNo} as owner occupied? The unit will be excluded from rental availability and occupancy calculations.`,
+      confirmText: "Mark Owner Occupied",
+      unitData: { ownerOccupied: true, status: "occupied", isVacant: false },
+    });
+  };
+
+  const handleReleaseOwner = (row) => {
+    queueStatusChange({
+      row,
+      title: "Release Owner Occupied Unit",
+      message: `Release ${row.unitNo} back into the letting stock as vacant?`,
+      confirmText: "Release Unit",
+      unitData: { ownerOccupied: false, status: "vacant", isVacant: true, vacantSince: new Date().toISOString() },
+    });
+  };
+
   const openTenantTakeOn = (row) => {
     if (!row?.id || !row?.propertyId) {
       toast.error("The selected unit is missing its property or unit reference.");
@@ -773,6 +796,9 @@ const Vacants = () => {
       <span className="rounded-full bg-violet-100 px-2.5 py-1 text-violet-800">Reserved {group.counts.reserved}</span>
       <span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-800">Maintenance {group.counts.maintenance}</span>
       <span className="rounded-full bg-slate-200 px-2.5 py-1 text-slate-700">Off Market {group.counts.offMarket}</span>
+      {group.counts.ownerOccupied > 0 && (
+        <span className="rounded-full bg-pink-100 px-2.5 py-1 text-pink-800">Owner Occ. {group.counts.ownerOccupied}</span>
+      )}
     </div>
   );
 
@@ -802,6 +828,7 @@ const Vacants = () => {
               <option value="reserved">Reserved</option>
               <option value="under_maintenance">Under Maintenance</option>
               <option value="off_market">Off Market</option>
+              <option value="owner_occupied">Owner Occupied</option>
             </select>
             <select value={draftFilters.unitType} onChange={(event) => setDraftFilters((prev) => ({ ...prev, unitType: event.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-[11px] text-gray-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
               <option value="any">Unit Type</option>
@@ -817,61 +844,106 @@ const Vacants = () => {
             <input value={draftFilters.search} onChange={(event) => setDraftFilters((prev) => ({ ...prev, search: event.target.value }))} onKeyDown={handleFilterEnter} placeholder="Search…" className="h-7 w-36 shrink-0 rounded border border-gray-300 bg-white px-2 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
             <input value={draftFilters.tenant} onChange={(event) => setDraftFilters((prev) => ({ ...prev, tenant: event.target.value }))} onKeyDown={handleFilterEnter} placeholder="Tenant" className="h-7 w-24 shrink-0 rounded border border-gray-300 bg-white px-2 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
           </div>
+
+          {/* Context action bar — shows when a row is selected */}
+          <div className={`flex items-center gap-1.5 overflow-x-auto border-t px-2 py-1 transition-all ${selectedRow ? "border-gray-200 bg-[#f5faf8]" : "border-transparent bg-transparent"}`} style={{ minHeight: "34px" }}>
+            {selectedRow ? (
+              <>
+                <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-slate-400">Unit:</span>
+                <span className="shrink-0 inline-flex items-center gap-1 rounded bg-[#0B3B2E] px-2 py-0.5 text-[10px] font-bold text-white">{selectedRow.unitNo}</span>
+                <span className="shrink-0 text-[10px] font-semibold text-slate-600 truncate max-w-[140px]" title={selectedRow.propertyName}>{selectedRow.propertyName}</span>
+                <span className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${getAvailabilityTone(selectedRow.status)}`}>{selectedRow.statusLabel}</span>
+                <span className="shrink-0 text-[10px] font-bold text-slate-700">{selectedRow.rentLabel}</span>
+                <div className="mx-1 h-4 w-px shrink-0 bg-gray-300" />
+                {canUpdateUnit && (
+                  <button onClick={() => navigate(`/units/${selectedRow.id}`)} className={`h-7 shrink-0 flex items-center gap-1 rounded-md px-2 text-[10px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}>
+                    <FaUserEdit size={9} /> View Unit
+                  </button>
+                )}
+                {selectedRow.status !== "owner_occupied" && (
+                  selectedRow.tenantId ? (
+                    <button onClick={() => navigate(`/tenant/${selectedRow.tenantId}/statement`, { state: { tabTitle: `${selectedRow.unitNo} Tenant` } })} className="h-7 shrink-0 flex items-center gap-1 rounded-md bg-slate-700 px-2 text-[10px] font-bold text-white shadow-sm hover:bg-slate-800">
+                      <FaUserEdit size={9} /> Review Tenant
+                    </button>
+                  ) : canCreateTenant && (
+                    <button
+                      onClick={() => openTenantTakeOn(selectedRow)}
+                      disabled={!["vacant", "reserved"].includes(selectedRow.status)}
+                      className={`h-7 shrink-0 flex items-center gap-1 rounded-md px-2 text-[10px] font-bold text-white shadow-sm ${["vacant", "reserved"].includes(selectedRow.status) ? `${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}` : "cursor-not-allowed bg-gray-400"}`}
+                    >
+                      <FaUserPlus size={9} /> {selectedRow.status === "reserved" ? "Complete Take-On" : "Add Tenant"}
+                    </button>
+                  )
+                )}
+                {canUpdateUnit && ["vacant", "notice_given"].includes(selectedRow.status) && (
+                  <button onClick={() => handleReserve(selectedRow)} className="h-7 shrink-0 flex items-center gap-1 rounded-md bg-violet-600 px-2 text-[10px] font-bold text-white shadow-sm hover:bg-violet-700">
+                    <FaTag size={9} /> Reserve
+                  </button>
+                )}
+                {canUpdateUnit && ["vacant", "notice_given", "reserved"].includes(selectedRow.status) && (
+                  <button onClick={() => handleMaintenance(selectedRow)} className="h-7 shrink-0 flex items-center gap-1 rounded-md bg-amber-600 px-2 text-[10px] font-bold text-white shadow-sm hover:bg-amber-700">
+                    <FaWrench size={9} /> Maintenance
+                  </button>
+                )}
+                {canUpdateUnit && ["reserved", "under_maintenance"].includes(selectedRow.status) && (
+                  <button onClick={() => handleReady(selectedRow)} className="h-7 shrink-0 flex items-center gap-1 rounded-md bg-green-600 px-2 text-[10px] font-bold text-white shadow-sm hover:bg-green-700">
+                    <FaCheckCircle size={9} /> Mark Ready
+                  </button>
+                )}
+                {canUpdateUnit && selectedRow.status === "owner_occupied" ? (
+                  <button onClick={() => handleReleaseOwner(selectedRow)} className="h-7 shrink-0 flex items-center gap-1 rounded-md bg-emerald-600 px-2 text-[10px] font-bold text-white shadow-sm hover:bg-emerald-700">
+                    <FaUndo size={9} /> Release Unit
+                  </button>
+                ) : canUpdateUnit && (selectedRow.status === "off_market" ? (
+                  <button onClick={() => handleRestore(selectedRow)} className="h-7 shrink-0 flex items-center gap-1 rounded-md bg-emerald-600 px-2 text-[10px] font-bold text-white shadow-sm hover:bg-emerald-700">
+                    <FaUndo size={9} /> Restore
+                  </button>
+                ) : (
+                  <>
+                    <button onClick={() => handleOffMarket(selectedRow)} className="h-7 shrink-0 flex items-center gap-1 rounded-md bg-slate-600 px-2 text-[10px] font-bold text-white shadow-sm hover:bg-slate-700">
+                      <FaArchive size={9} /> Off Market
+                    </button>
+                    <button onClick={() => handleOwnerOccupied(selectedRow)} className="h-7 shrink-0 flex items-center gap-1 rounded-md bg-pink-600 px-2 text-[10px] font-bold text-white shadow-sm hover:bg-pink-700">
+                      Owner Occupied
+                    </button>
+                  </>
+                ))}
+                <button onClick={() => setSelectedRowId(null)} className="ml-auto h-7 shrink-0 flex items-center justify-center rounded border border-gray-300 px-2 text-[10px] font-bold text-slate-500 hover:bg-gray-100" title="Deselect">✕</button>
+              </>
+            ) : (
+              <span className="text-[10px] text-slate-400 select-none">Click a row to reveal actions</span>
+            )}
+          </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-hidden px-2 pb-2">
           <div className="flex h-full min-h-0 flex-col rounded-lg border border-gray-200 bg-white shadow-sm">
-            <div className="border-b border-gray-100 bg-white px-3 py-3">
-              <div className="grid grid-cols-3 gap-1.5 md:grid-cols-6">
-                {[
-                  { label: "Rentable Units", value: summary.rentable, tone: "bg-emerald-50 border border-emerald-200 text-emerald-900", icon: <FaBuilding className="text-emerald-700" /> },
-                  { label: "Vacant", value: summary.vacant, tone: "bg-orange-50 border border-orange-200 text-orange-900", icon: <FaHome className="text-orange-700" /> },
-                  { label: "Notice Given", value: summary.notice, tone: "bg-blue-50 border border-blue-200 text-blue-900", icon: <FaClock className="text-blue-700" /> },
-                  { label: "Reserved", value: summary.reserved, tone: "bg-violet-50 border border-violet-200 text-violet-900", icon: <FaTag className="text-violet-700" /> },
-                  { label: "Maintenance", value: summary.maintenance, tone: "bg-amber-50 border border-amber-200 text-amber-900", icon: <FaTools className="text-amber-700" /> },
-                  { label: "Occupancy Rate", value: `${summary.occupancyRate}%`, tone: "bg-slate-50 border border-slate-200 text-slate-900", icon: <FaCheckCircle className="text-[#0B3B2E]" /> },
-                ].map((card) => (
-                  <div key={card.label} className={`rounded-md px-2 py-1 ${card.tone}`}>
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="text-[10px] font-black uppercase tracking-[0.18em]">{card.label}</div>
-                        <div className="mt-0.5 text-[13px] font-black">{card.value}</div>
-                      </div>
-                      <div className="hidden rounded-full bg-white/80 p-1 shadow-sm">{card.icon}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
             <div className="min-h-0 flex-1 overflow-auto">
-              <table className="w-full min-w-[1180px] border-collapse bg-white text-[11px]" style={{ tableLayout: "fixed" }}>
+              <table className="w-full min-w-[980px] border-collapse bg-white text-[11px]" style={{ tableLayout: "fixed" }}>
                 <colgroup>
-                  <col style={{ width: "42px" }} />
-                  <col style={{ width: "120px" }} />
-                  <col style={{ width: "85px" }} />
-                  <col style={{ width: "80px" }} />
-                  <col style={{ width: "105px" }} />
-                  <col style={{ width: "115px" }} />
-                  <col style={{ width: "105px" }} />
-                  <col style={{ width: "105px" }} />
+                  <col style={{ width: "32px" }} />
+                  <col style={{ width: "130px" }} />
                   <col style={{ width: "75px" }} />
-                  <col style={{ width: "85px" }} />
-                  <col style={{ width: "180px" }} />
+                  <col style={{ width: "75px" }} />
+                  <col style={{ width: "105px" }} />
+                  <col style={{ width: "110px" }} />
+                  <col style={{ width: "120px" }} />
+                  <col style={{ width: "100px" }} />
+                  <col style={{ width: "70px" }} />
+                  <col style={{ width: "90px" }} />
                 </colgroup>
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className="border-b border-gray-300 bg-[#0B3B2E]">
-                    <th className="border-r border-white/10 px-1 py-1.5 text-center font-bold text-white"></th>
-                    <th className="sticky left-[42px] z-20 border-r border-white/10 bg-[#0B3B2E] px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Property</th>
+                    <th className="border-r border-white/10 px-1 py-1 text-center font-bold text-white"></th>
+                    <th className="sticky left-[32px] z-20 border-r border-white/10 bg-[#0B3B2E] px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Property</th>
                     <th className="border-r border-white/10 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Unit No</th>
                     <th className="border-r border-white/10 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Code</th>
                     <th className="border-r border-white/10 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Unit Type</th>
                     <th className="border-r border-white/10 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Availability</th>
                     <th className="border-r border-white/10 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Current Tenant</th>
                     <th className="border-r border-white/10 px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Available From</th>
-                    <th className="border-r border-white/10 px-1.5 py-1 text-right font-bold text-white whitespace-nowrap">Days Vacant</th>
-                    <th className="border-r border-white/10 px-1.5 py-1 text-right font-bold text-white whitespace-nowrap">Rent</th>
-                    <th className="px-1.5 py-1 text-left font-bold text-white whitespace-nowrap">Actions</th>
+                    <th className="border-r border-white/10 px-1.5 py-1 text-right font-bold text-white whitespace-nowrap">Days</th>
+                    <th className="px-1.5 py-1 text-right font-bold text-white whitespace-nowrap">Rent</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -879,14 +951,13 @@ const Vacants = () => {
                     currentRows.map((row, index) => {
                       const isFirstInProperty = index === 0 || currentRows[index - 1].propertyId !== row.propertyId;
                       const group = groupedRows.find((item) => item.propertyId === row.propertyId);
-                      const canAddTenant = ["vacant", "reserved"].includes(row.status);
                       const isExpanded = expandedRows.includes(row.id);
 
                       return (
                         <React.Fragment key={row.id}>
                           {isFirstInProperty && group && (
                             <tr className="bg-[#eef5f1]">
-                              <td colSpan={11} className="border-b border-t border-[#d7e6df] px-3 py-2">
+                              <td colSpan={10} className="border-b border-t border-[#d7e6df] px-3 py-2">
                                 <div className="flex flex-wrap items-center justify-between gap-3">
                                   <div>
                                     <div className="text-sm font-black uppercase tracking-[0.18em] text-[#0B3B2E]">
@@ -902,138 +973,49 @@ const Vacants = () => {
                             </tr>
                           )}
 
-                          <tr className={`border-b border-gray-100 transition-colors hover:bg-blue-50/40 ${isExpanded ? "bg-[#fcfdfc]" : "bg-white"}`}>
-                            <td className="border-r border-gray-100 px-1 py-1.5 text-center align-top">
+                          <tr
+                            className={`border-b border-gray-100 cursor-pointer select-none transition-colors ${
+                              selectedRowId === row.id
+                                ? "bg-[#e8f4ef] ring-1 ring-inset ring-[#0B3B2E]/30"
+                                : isExpanded
+                                ? "bg-[#fcfdfc] hover:bg-blue-50/30"
+                                : "bg-white hover:bg-blue-50/30"
+                            }`}
+                            onClick={() => setSelectedRowId((prev) => (prev === row.id ? null : row.id))}
+                          >
+                            <td
+                              className="border-r border-gray-100 px-1 py-0.5 text-center"
+                              onClick={(e) => { e.stopPropagation(); toggleRow(row.id); }}
+                            >
                               <button
-                                onClick={() => toggleRow(row.id)}
-                                className="rounded border border-gray-300 bg-white p-1 text-slate-600 transition-colors hover:bg-gray-50"
+                                className="rounded border border-gray-300 bg-white p-0.5 text-slate-500 transition-colors hover:bg-gray-50"
                                 title={isExpanded ? "Collapse" : "Expand"}
                               >
-                                {isExpanded ? <FaChevronUp size={10} /> : <FaChevronDown size={10} />}
+                                {isExpanded ? <FaChevronUp size={9} /> : <FaChevronDown size={9} />}
                               </button>
                             </td>
-                            <td className="border-r border-gray-100 px-1.5 py-1 align-top font-bold text-slate-800">
-                              <div className="truncate whitespace-nowrap" title={row.propertyName}>
-                                {row.propertyName}
-                              </div>
+                            <td className="border-r border-gray-100 px-1.5 py-0.5 font-semibold text-slate-800">
+                              <div className="truncate whitespace-nowrap" title={row.propertyName}>{row.propertyName}</div>
                             </td>
-                            <td className="border-r border-gray-100 px-1.5 py-1 align-top font-bold text-slate-900 whitespace-nowrap">
-                              {row.unitNo}
+                            <td className="border-r border-gray-100 px-1.5 py-0.5 font-bold text-slate-900 whitespace-nowrap">{row.unitNo}</td>
+                            <td className="border-r border-gray-100 px-1.5 py-0.5 font-medium text-slate-500 whitespace-nowrap">{row.unitCode}</td>
+                            <td className="border-r border-gray-100 px-1.5 py-0.5">
+                              <span className="inline-flex max-w-full truncate whitespace-nowrap rounded-full border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">{row.unitTypeLabel}</span>
                             </td>
-                            <td className="border-r border-gray-100 px-1.5 py-1 align-top font-semibold text-slate-600 whitespace-nowrap">
-                              {row.unitCode}
+                            <td className="border-r border-gray-100 px-1.5 py-0.5">
+                              <span className={`inline-flex max-w-full truncate whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${getAvailabilityTone(row.status)}`}>{row.statusLabel}</span>
                             </td>
-                            <td className="border-r border-gray-100 px-1.5 py-1 align-top">
-                              <span className="inline-flex max-w-full truncate whitespace-nowrap rounded-full border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">
-                                {row.unitTypeLabel}
-                              </span>
+                            <td className="border-r border-gray-100 px-1.5 py-0.5 text-slate-600">
+                              <div className="truncate whitespace-nowrap" title={row.tenantName}>{row.tenantName}</div>
                             </td>
-                            <td className="border-r border-gray-100 px-1.5 py-1 align-top">
-                              <span className={`inline-flex max-w-full truncate whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${getAvailabilityTone(row.status)}`}>
-                                {row.statusLabel}
-                              </span>
-                            </td>
-                            <td className="border-r border-gray-100 px-1.5 py-1 align-top font-semibold text-slate-700">
-                              <div className="truncate whitespace-nowrap" title={row.tenantName}>
-                                {row.tenantName}
-                              </div>
-                            </td>
-                            <td className="border-r border-gray-100 px-1.5 py-1 align-top font-semibold text-slate-700 whitespace-nowrap">
-                              {row.availableFromLabel}
-                            </td>
-                            <td className="border-r border-gray-100 px-1.5 py-1 text-right align-top font-bold text-slate-700 whitespace-nowrap">
-                              {row.daysVacantLabel}
-                            </td>
-                            <td className="border-r border-gray-100 px-1.5 py-1 text-right align-top font-bold text-slate-900 whitespace-nowrap">
-                              {row.rentLabel}
-                            </td>
-                            <td className="px-1.5 py-1 align-top">
-                              <div className="flex min-w-0 flex-wrap gap-1.5">
-                                {canUpdateUnit && (
-                                  <button
-                                    onClick={() => navigate(`/units/${row.id}`)}
-                                    className={`flex items-center gap-1 whitespace-nowrap rounded-lg px-1.5 py-0.5 text-[10px] text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                                  >
-                                    <FaUserEdit size={10} />
-                                    View Unit
-                                  </button>
-                                )}
-
-                                {row.tenantId ? (
-                                  <button
-                                    onClick={() => navigate(`/tenant/${row.tenantId}/statement`, { state: { tabTitle: `${row.unitNo} Tenant` } })}
-                                    className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-slate-700 px-1.5 py-0.5 text-[10px] text-white shadow-sm transition-colors hover:bg-slate-800"
-                                  >
-                                    <FaUserEdit size={10} />
-                                    Review Tenant
-                                  </button>
-                                ) : canCreateTenant && (
-                                  <button
-                                    onClick={() => openTenantTakeOn(row)}
-                                    disabled={!canAddTenant}
-                                    className={`flex items-center gap-1 whitespace-nowrap rounded-lg px-1.5 py-0.5 text-[10px] text-white shadow-sm ${
-                                      canAddTenant ? `${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}` : "cursor-not-allowed bg-gray-400"
-                                    }`}
-                                  >
-                                    <FaUserPlus size={10} />
-                                    {row.status === "reserved" ? "Complete Take-On" : "Add Tenant"}
-                                  </button>
-                                )}
-
-                                {canUpdateUnit && ["vacant", "notice_given"].includes(row.status) && (
-                                  <button
-                                    onClick={() => handleReserve(row)}
-                                    className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-violet-600 px-1.5 py-0.5 text-[10px] text-white shadow-sm transition-colors hover:bg-violet-700"
-                                  >
-                                    <FaTag size={10} />
-                                    Reserve
-                                  </button>
-                                )}
-
-                                {canUpdateUnit && ["vacant", "notice_given", "reserved"].includes(row.status) && (
-                                  <button
-                                    onClick={() => handleMaintenance(row)}
-                                    className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-amber-600 px-1.5 py-0.5 text-[10px] text-white shadow-sm transition-colors hover:bg-amber-700"
-                                  >
-                                    <FaWrench size={10} />
-                                    Maintenance
-                                  </button>
-                                )}
-
-                                {canUpdateUnit && (row.status === "off_market" ? (
-                                  <button
-                                    onClick={() => handleRestore(row)}
-                                    className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-emerald-600 px-1.5 py-0.5 text-[10px] text-white shadow-sm transition-colors hover:bg-emerald-700"
-                                  >
-                                    <FaUndo size={10} />
-                                    Restore
-                                  </button>
-                                ) : (
-                                  <button
-                                    onClick={() => handleOffMarket(row)}
-                                    className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-slate-600 px-1.5 py-0.5 text-[10px] text-white shadow-sm transition-colors hover:bg-slate-700"
-                                  >
-                                    <FaArchive size={10} />
-                                    Off Market
-                                  </button>
-                                ))}
-
-                                {canUpdateUnit && ["reserved", "under_maintenance"].includes(row.status) && (
-                                  <button
-                                    onClick={() => handleReady(row)}
-                                    className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-green-600 px-1.5 py-0.5 text-[10px] text-white shadow-sm transition-colors hover:bg-green-700"
-                                  >
-                                    <FaCheckCircle size={10} />
-                                    Mark Ready
-                                  </button>
-                                )}
-                              </div>
-                            </td>
+                            <td className="border-r border-gray-100 px-1.5 py-0.5 text-slate-600 whitespace-nowrap">{row.availableFromLabel}</td>
+                            <td className="border-r border-gray-100 px-1.5 py-0.5 text-right font-bold text-slate-700 whitespace-nowrap">{row.daysVacantLabel}</td>
+                            <td className="px-1.5 py-0.5 text-right font-bold text-slate-900 whitespace-nowrap">{row.rentLabel}</td>
                           </tr>
 
                           {isExpanded && (
                             <tr className="bg-[#f9fbfa]">
-                              <td colSpan={11} className="px-3 py-3">
+                              <td colSpan={10} className="px-3 py-3">
                                 <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
                                   <div className="space-y-3 rounded-lg border-2 border-[#0B3B2E]/20 bg-white p-4 shadow-md">
                                     <h4 className="border-b-2 border-[#0B3B2E] pb-2 text-sm font-black text-gray-900">🏢 Inventory Snapshot</h4>
@@ -1107,7 +1089,7 @@ const Vacants = () => {
                     })
                   ) : (
                     <tr>
-                      <td colSpan={11} className="px-4 py-10 text-center">
+                      <td colSpan={10} className="px-4 py-10 text-center">
                         <div className="flex flex-col items-center justify-center gap-2">
                           <div className="text-lg font-bold text-slate-400">No availability records found</div>
                           <div className="text-sm text-slate-500">

@@ -279,7 +279,7 @@ router.get("/:id/activity", verifyUser, requireCompanyModule(GL_ACCESS_MODULES),
         openingBalance,
         closingBalance: runningBalance,
         count: rows.length,
-        entries: rows,
+        entries: rows.reverse(),
       },
     });
   } catch (err) {

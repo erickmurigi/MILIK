@@ -1,14 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { FaTimes, FaMoneyBillWave } from "react-icons/fa";
 
-const MILIK_GREEN = "bg-[#0B3B2E]";
-const MILIK_GREEN_HOVER = "hover:bg-[#0A3327]";
-
-const getOutstandingRecoveryBalance = (statement) => {
-  const totalRecovery = Number(statement?.amountPayableByLandlordToManager || 0);
-  const recovered = Number(statement?.amountRecovered || 0);
-  return Math.max(totalRecovery - recovered, 0);
-};
+const getOutstandingRecoveryBalance = (statement) =>
+  Math.max(Number(statement?.amountPayableByLandlordToManager || 0) - Number(statement?.amountRecovered || 0), 0);
 
 const RecordLandlordRecoveryModal = ({ statement, onClose, onSubmit, cashbookOptions = [] }) => {
   const outstandingRecovery = getOutstandingRecoveryBalance(statement);
@@ -23,187 +17,112 @@ const RecordLandlordRecoveryModal = ({ statement, onClose, onSubmit, cashbookOpt
   });
 
   useEffect(() => {
-    setFormData((prev) => ({
-      ...prev,
-      amount: outstandingRecovery,
-      cashbook: prev.cashbook || cashbookOptions[0]?.name || "",
-    }));
+    setFormData((p) => ({ ...p, amount: outstandingRecovery, cashbook: p.cashbook || cashbookOptions[0]?.name || "" }));
   }, [outstandingRecovery, cashbookOptions]);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    onSubmit(formData);
-  };
-
-  const formatCurrency = (value) => {
-    if (!value) return "KES 0.00";
-    return new Intl.NumberFormat("en-KE", {
-      style: "currency",
-      currency: "KES",
-    }).format(value);
-  };
+  const set = (k, v) => setFormData((p) => ({ ...p, [k]: v }));
+  const fmt = (v) => v ? new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES" }).format(v) : "KES 0.00";
+  const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-GB") : "N/A";
+  const inputCls = "w-full border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-[#0B3B2E]";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/5 p-4 backdrop-blur-sm">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-gray-200 bg-white shadow-xl">
-        <div className="flex items-center justify-between rounded-t-2xl border-b border-gray-200 bg-red-50 px-6 py-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <div className="flex w-full flex-col bg-white shadow-2xl sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] sm:max-w-2xl rounded-t-2xl sm:rounded-none overflow-hidden">
+        {/* Header */}
+        <div className="flex-shrink-0 flex items-center justify-between gap-3 border-b border-slate-700 bg-[#0B3B2E] px-4 py-3 text-white">
           <div className="flex items-center gap-2">
-            <FaMoneyBillWave className="text-xl text-red-600" />
-            <h2 className="text-xl font-bold text-gray-900">Record Recovery From Landlord</h2>
+            <FaMoneyBillWave className="text-red-400" />
+            <h2 className="text-sm font-black uppercase tracking-wide">Record Recovery From Landlord</h2>
           </div>
-          <button onClick={onClose} className="text-gray-500 transition hover:text-gray-700">
-            <FaTimes className="text-xl" />
+          <button onClick={onClose} className="text-white/60 hover:text-white transition-colors">
+            <FaTimes size={14} />
           </button>
         </div>
 
-        <div className="p-6">
-          <div className="mb-6 rounded-lg bg-gray-50 p-4">
-            <h3 className="mb-3 font-semibold text-gray-800">Processed Statement Details</h3>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <p className="text-gray-600">Landlord</p>
-                <p className="font-semibold">{statement?.landlord?.landlordName || "N/A"}</p>
-              </div>
-              <div>
-                <p className="text-gray-600">Property</p>
-                <p className="font-semibold">{statement?.property?.propertyName || "N/A"}</p>
-              </div>
-              <div>
-                <p className="text-gray-600">Period</p>
-                <p className="font-semibold">
-                  {`${new Date(statement?.periodStart).toLocaleDateString("en-GB")} - ${new Date(
-                    statement?.periodEnd
-                  ).toLocaleDateString("en-GB")}`}
-                </p>
-              </div>
-              <div>
-                <p className="text-gray-600">Outstanding Recovery</p>
-                <p className="text-lg font-semibold text-red-700">{formatCurrency(outstandingRecovery)}</p>
+        <form onSubmit={(e) => { e.preventDefault(); onSubmit(formData); }} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+            {/* Statement details */}
+            <div className="bg-slate-50 border border-slate-200 p-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Processed Statement Details</p>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                {[
+                  ["Landlord", statement?.landlord?.landlordName || "N/A"],
+                  ["Property", statement?.property?.propertyName || "N/A"],
+                  ["Period", `${fmtDate(statement?.periodStart)} – ${fmtDate(statement?.periodEnd)}`],
+                  ["Outstanding Recovery", fmt(outstandingRecovery)],
+                ].map(([label, val]) => (
+                  <div key={label}>
+                    <p className="text-xs text-slate-400">{label}</p>
+                    <p className={`font-bold ${label === "Outstanding Recovery" ? "text-red-700 text-base" : "text-slate-800"}`}>{val}</p>
+                  </div>
+                ))}
               </div>
             </div>
-          </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="mb-2 block text-sm font-semibold text-gray-700">
-                  Recovery Date <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  name="recoveryDate"
-                  value={formData.recoveryDate}
-                  onChange={handleChange}
-                  required
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-green-500"
-                />
+                <label className="block text-xs font-black uppercase tracking-wide text-slate-600 mb-1.5">Recovery Date <span className="text-red-500">*</span></label>
+                <input type="date" name="recoveryDate" value={formData.recoveryDate} required
+                  onChange={(e) => set("recoveryDate", e.target.value)} className={inputCls} />
               </div>
-
               <div>
-                <label className="mb-2 block text-sm font-semibold text-gray-700">
-                  Amount (KES) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  name="amount"
-                  value={formData.amount}
-                  onChange={handleChange}
-                  required
-                  min="0"
-                  step="0.01"
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-green-500"
-                />
+                <label className="block text-xs font-black uppercase tracking-wide text-slate-600 mb-1.5">Amount (KES) <span className="text-red-500">*</span></label>
+                <input type="number" name="amount" value={formData.amount} required min="0" step="0.01"
+                  onChange={(e) => set("amount", e.target.value)} className={inputCls} />
               </div>
-
               <div>
-                <label className="mb-2 block text-sm font-semibold text-gray-700">
-                  Payment Method <span className="text-red-500">*</span>
-                </label>
-                <select
-                  name="paymentMethod"
-                  value={formData.paymentMethod}
-                  onChange={handleChange}
-                  required
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-green-500"
-                >
-                  <option value="Bank Transfer">Bank Transfer</option>
-                  <option value="Check">Check</option>
-                  <option value="Cash">Cash</option>
+                <label className="block text-xs font-black uppercase tracking-wide text-slate-600 mb-1.5">Payment Method <span className="text-red-500">*</span></label>
+                <select name="paymentMethod" value={formData.paymentMethod} required
+                  onChange={(e) => set("paymentMethod", e.target.value)} className={inputCls}>
+                  <option>Bank Transfer</option>
+                  <option>Check</option>
+                  <option>Cash</option>
                   <option value="Mobile Money">Mobile Money (M-Pesa)</option>
-                  <option value="Other">Other</option>
+                  <option>Other</option>
                 </select>
               </div>
-
               <div>
-                <label className="mb-2 block text-sm font-semibold text-gray-700">Reference Number</label>
-                <input
-                  type="text"
-                  name="referenceNumber"
-                  value={formData.referenceNumber}
-                  onChange={handleChange}
-                  placeholder="Transaction / cheque / transfer reference"
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-green-500"
-                />
+                <label className="block text-xs font-black uppercase tracking-wide text-slate-600 mb-1.5">Reference Number</label>
+                <input type="text" name="referenceNumber" value={formData.referenceNumber}
+                  placeholder="Transaction / cheque / transfer ref"
+                  onChange={(e) => set("referenceNumber", e.target.value)} className={inputCls} />
               </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-gray-700">
-                  Cashbook <span className="text-red-500">*</span>
-                </label>
-                <select
-                  name="cashbook"
-                  value={formData.cashbook}
-                  onChange={handleChange}
-                  required
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-green-500"
-                >
-                  {cashbookOptions.length === 0 ? (
-                    <option value="">No cashbook accounts found</option>
-                  ) : (
-                    cashbookOptions.map((account) => (
-                      <option key={account._id || account.code || account.name} value={account.name}>
-                        {account.code ? `${account.code} - ${account.name}` : account.name}
-                      </option>
-                    ))
-                  )}
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-black uppercase tracking-wide text-slate-600 mb-1.5">Cashbook <span className="text-red-500">*</span></label>
+                <select name="cashbook" value={formData.cashbook} required
+                  onChange={(e) => set("cashbook", e.target.value)} className={inputCls}>
+                  {cashbookOptions.length === 0
+                    ? <option value="">No cashbook accounts found</option>
+                    : cashbookOptions.map((a) => (
+                        <option key={a._id || a.code || a.name} value={a.name}>
+                          {a.code ? `${a.code} - ${a.name}` : a.name}
+                        </option>
+                      ))}
                 </select>
               </div>
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-semibold text-gray-700">Notes</label>
-              <textarea
-                name="notes"
-                value={formData.notes}
-                onChange={handleChange}
-                rows="3"
-                placeholder="Recovery details or notes..."
-                className="w-full resize-none rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-green-500"
-              />
+              <label className="block text-xs font-black uppercase tracking-wide text-slate-600 mb-1.5">Notes</label>
+              <textarea name="notes" value={formData.notes} rows={3}
+                placeholder="Recovery details or notes…"
+                onChange={(e) => set("notes", e.target.value)}
+                className="w-full border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:border-[#0B3B2E] resize-none" />
             </div>
+          </div>
 
-            <div className="flex justify-end gap-3 border-t pt-4">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-lg bg-gray-300 px-6 py-2 font-semibold text-gray-700 transition hover:bg-gray-400"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className={`flex items-center gap-2 rounded-lg px-6 py-2 font-semibold text-white transition ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-              >
-                <FaMoneyBillWave /> Record Recovery
-              </button>
-            </div>
-          </form>
-        </div>
+          {/* Footer */}
+          <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 text-sm font-bold text-slate-700 bg-slate-200 hover:bg-slate-300 transition-colors">
+              Cancel
+            </button>
+            <button type="submit"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-bold text-white bg-[#0B3B2E] hover:bg-[#0A3127] transition-colors">
+              <FaMoneyBillWave size={11} /> Record Recovery
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

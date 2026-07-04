@@ -1,141 +1,96 @@
 import React, { useState } from "react";
 import { FaTimes, FaEdit } from "react-icons/fa";
 
-const CreateRevisionModal = ({
-  isOpen,
-  statement,
-  onClose,
-  onCreateRevision,
-  loading = false,
-}) => {
+const CreateRevisionModal = ({ isOpen, statement, onClose, onCreateRevision, loading = false }) => {
   const [revisionReason, setRevisionReason] = useState("");
   const [validationError, setValidationError] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (!revisionReason.trim()) {
-      setValidationError("Revision reason is required");
-      return;
-    }
-
-    if (revisionReason.trim().length < 10) {
-      setValidationError("Revision reason must be at least 10 characters");
-      return;
-    }
-
+    if (!revisionReason.trim()) { setValidationError("Revision reason is required"); return; }
+    if (revisionReason.trim().length < 10) { setValidationError("Must be at least 10 characters"); return; }
     try {
       await onCreateRevision(statement._id, revisionReason);
-      setRevisionReason("");
-      setValidationError("");
-      onClose();
+      setRevisionReason(""); setValidationError(""); onClose();
     } catch (err) {
       console.error("Error creating revision:", err);
     }
   };
 
-  const formatDate = (date) => {
-    if (!date) return "N/A";
-    return new Date(date).toLocaleDateString("en-GB");
-  };
+  const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-GB") : "N/A";
 
   if (!isOpen || !statement) return null;
 
   return (
-    <div className="fixed inset-0 bg-gray-900 bg-opacity-5 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <div className="flex w-full flex-col bg-white shadow-2xl sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] sm:max-w-md rounded-t-2xl sm:rounded-none overflow-hidden">
         {/* Header */}
-        <div className="flex justify-between items-center p-6 border-b border-gray-200">
-          <h2 className="text-xl font-bold text-gray-900">Create Revision</h2>
-          <button
-            onClick={onClose}
-            className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <FaTimes className="text-gray-600" />
+        <div className="flex-shrink-0 flex items-center justify-between gap-3 border-b border-slate-700 bg-[#0B3B2E] px-4 py-3 text-white">
+          <div className="flex items-center gap-2">
+            <FaEdit className="text-amber-400" />
+            <h2 className="text-sm font-black uppercase tracking-wide">Create Revision</h2>
+          </div>
+          <button onClick={onClose} className="text-white/60 hover:text-white transition-colors">
+            <FaTimes size={14} />
           </button>
         </div>
 
-        {/* Content */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* Info Box */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-sm text-blue-800">
-              <strong>ℹ️ Note:</strong> Creating a revision will mark the original
-              statement as "Revised" and generate a new v{(statement.version || 1) + 1}
-              draft statement for corrections.
-            </p>
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+            {/* Info */}
+            <div className="border-l-4 border-blue-400 bg-blue-50 p-3">
+              <p className="text-sm text-blue-800">
+                Creating a revision marks the original as <strong>"Revised"</strong> and opens a new v{(statement.version || 1) + 1} draft for corrections.
+              </p>
+            </div>
+
+            {/* Original statement */}
+            <div className="bg-slate-50 border border-slate-200 p-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Original Statement</p>
+              <p className="font-black text-slate-900 text-sm">{statement.statementNumber}</p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                v{statement.version || 1} · {fmtDate(statement.periodStart)} — {fmtDate(statement.periodEnd)}
+              </p>
+              <p className="text-xs text-slate-400 mt-1">Status: <strong className="text-slate-700">{statement.status?.toUpperCase()}</strong></p>
+            </div>
+
+            {/* Reason */}
+            <div>
+              <label className="block text-xs font-black uppercase tracking-wide text-slate-600 mb-1.5">
+                Reason for Revision <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                value={revisionReason}
+                onChange={(e) => { setRevisionReason(e.target.value); setValidationError(""); }}
+                rows={5}
+                placeholder={"Describe why this statement needs revision:\n- Corrected rent amount\n- Added missing payment\n- Adjusted opening balance"}
+                className={`w-full border px-3 py-2 text-sm focus:outline-none focus:border-[#0B3B2E] resize-none ${validationError ? "border-red-500" : "border-slate-300"}`}
+              />
+              {validationError && <p className="text-red-600 text-xs mt-1">{validationError}</p>}
+              <p className="text-xs text-slate-400 mt-1">{revisionReason.length}/500</p>
+            </div>
+
+            {/* What happens */}
+            <div className="border-l-4 border-amber-400 bg-amber-50 p-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-amber-700 mb-1.5">What happens next</p>
+              <ul className="text-xs text-amber-800 space-y-0.5">
+                <li>✓ Original marked as "Revised"</li>
+                <li>✓ New draft v{(statement.version || 1) + 1} created</li>
+                <li>✓ Ledger entries regenerated</li>
+                <li>✓ Both statements linked in audit trail</li>
+              </ul>
+            </div>
           </div>
 
-          {/* Original Statement Info */}
-          <div className="bg-gray-50 rounded-lg p-4">
-            <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Original Statement</p>
-            <p className="font-semibold text-gray-900">{statement.statementNumber}</p>
-            <p className="text-sm text-gray-600">
-              v{statement.version || 1} • {formatDate(statement.periodStart)} -
-              {formatDate(statement.periodEnd)}
-            </p>
-            <p className="text-xs text-gray-500 mt-2">
-              Status: <span className="font-semibold text-gray-700">{statement.status?.toUpperCase()}</span>
-            </p>
-          </div>
-
-          {/* Revision Reason */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-900 mb-2">
-              Reason for Revision *
-            </label>
-            <textarea
-              value={revisionReason}
-              onChange={(e) => {
-                setRevisionReason(e.target.value);
-                setValidationError("");
-              }}
-              rows="5"
-              placeholder="Describe why this statement needs to be revised. Examples:
-- Corrected rent amount calculation
-- Added missing rent payment
-- Updated expense deductions
-- Adjusted opening balance based on ledger review"
-              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent outline-none resize-none ${
-                validationError ? "border-red-500" : "border-gray-300"
-              }`}
-            />
-            {validationError && (
-              <p className="text-red-600 text-sm mt-1">{validationError}</p>
-            )}
-            <p className="text-xs text-gray-500 mt-1">
-              {revisionReason.length}/500 characters
-            </p>
-          </div>
-
-          {/* What Happens */}
-          <div className="bg-amber-50 rounded-lg p-4">
-            <p className="text-xs font-semibold text-amber-800 mb-2">WHAT HAPPENS NEXT:</p>
-            <ul className="text-xs text-amber-800 space-y-1">
-              <li>✓ Original statement marked as "Revised"</li>
-              <li>✓ New draft v{(statement.version || 1) + 1} created</li>
-              <li>✓ Ledger entries regenerated in new draft</li>
-              <li>✓ Both statements linked in audit trail</li>
-            </ul>
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-3 justify-end pt-4 border-t border-gray-200">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-lg font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
-              disabled={loading}
-            >
+          {/* Footer */}
+          <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+            <button type="button" onClick={onClose} disabled={loading}
+              className="px-4 py-2 text-sm font-bold text-slate-700 bg-slate-200 hover:bg-slate-300 transition-colors">
               Cancel
             </button>
-            <button
-              type="submit"
-              className="flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-white bg-yellow-600 hover:bg-yellow-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={loading || !revisionReason.trim()}
-            >
-              <FaEdit />
-              {loading ? "Creating..." : "Create Revision"}
+            <button type="submit" disabled={loading || !revisionReason.trim()}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-bold text-white bg-[#0B3B2E] hover:bg-[#0A3127] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+              <FaEdit size={11} /> {loading ? "Creating…" : "Create Revision"}
             </button>
           </div>
         </form>

@@ -106,9 +106,10 @@ router.get("/summary", verifyUser, async (req, res) => {
       collectedThisMonthAgg,
       collectedByMonthRaw,
     ] = await Promise.all([
-      Unit.countDocuments({ business }),
+      Unit.countDocuments({ business, ownerOccupied: { $ne: true } }),
       Unit.countDocuments({
         business,
+        ownerOccupied: { $ne: true },
         $or: [{ status: "occupied" }, { isVacant: false }],
       }),
       RentPayment.countDocuments({ business, isConfirmed: { $ne: true } }),

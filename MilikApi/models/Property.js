@@ -293,6 +293,13 @@ const PropertySchema = new mongoose.Schema(
 
     images: [{ type: String }],
 
+    coordinates: {
+      lat: { type: Number, default: null },
+      lng: { type: Number, default: null },
+    },
+
+    listingEnabled: { type: Boolean, default: false },
+
     business: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Company",

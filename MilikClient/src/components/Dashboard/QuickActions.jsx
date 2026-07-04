@@ -292,7 +292,7 @@ const QuickActions = ({
 
   return (
     <div
-      className={`dashboard-panel rounded-xl ${
+      className={`dashboard-panel flex flex-col h-full overflow-hidden rounded-xl ${
         darkMode ? 'bg-gray-800 border-gray-700' : 'bg-[#f8faf9] border-[#31694E]/10'
       } shadow-md border p-4`}
     >
@@ -312,7 +312,8 @@ const QuickActions = ({
         </div>
       </div>
 
-      <div className="dashboard-scroll-list space-y-2.5 pr-1">
+      <div className="relative flex-1 min-h-0">
+      <div className="absolute inset-0 overflow-y-auto space-y-2.5 pr-1">
         {items.map((item) => {
           const tone = getToneClasses(item.tone);
           return (
@@ -348,11 +349,12 @@ const QuickActions = ({
           );
         })}
       </div>
+      </div>
 
       <button
         type="button"
         onClick={() => priorityItem && handleItemOpen(priorityItem)}
-        className={`mt-4 w-full rounded-xl border p-3 text-left transition ${
+        className={`shrink-0 mt-4 w-full rounded-xl border p-3 text-left transition ${
           darkMode ? 'border-gray-700 bg-gray-700/20 hover:bg-gray-700/35' : 'border-[#dce9e1] bg-white/90 hover:bg-white'
         } ${priorityItem ? 'cursor-pointer' : 'cursor-default'}`}
       >

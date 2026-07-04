@@ -578,6 +578,38 @@ const TenantAgreements = () => {
     }
   };
 
+  const handleBulkDelete = async () => {
+    const selectedRows = agreementRows.filter((r) => selectedAgreements.includes(r.id));
+    const deletableRows = selectedRows.filter((r) => {
+      const st = String(r.status || "").toLowerCase();
+      const isAutoCreated = Boolean(r.raw?.autoCreatedFromTenant);
+      return (["draft", "cancelled"].includes(st) && !r.signedByTenant && !r.signedByLandlord) || isAutoCreated;
+    });
+
+    if (deletableRows.length === 0) {
+      toast.warning("None of the selected agreements can be deleted. Only unsigned draft or cancelled agreements are eligible.");
+      return;
+    }
+
+    const skipped = selectedRows.length - deletableRows.length;
+    const message = skipped > 0
+      ? `Delete ${deletableRows.length} of ${selectedRows.length} selected agreements? ${skipped} will be skipped (active or signed). This cannot be undone.`
+      : `Delete ${deletableRows.length} agreement${deletableRows.length !== 1 ? "s" : ""}? This cannot be undone.`;
+
+    const confirmed = await confirm({ title: "Bulk Delete Agreements", message, confirmText: `Delete ${deletableRows.length}`, isDangerous: true });
+    if (!confirmed) return;
+
+    const results = await Promise.allSettled(deletableRows.map((r) => deleteLease(dispatch, r.id)));
+    const succeeded = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.filter((r) => r.status === "rejected").length;
+
+    if (failed > 0) toast.warning(`${succeeded} deleted, ${failed} failed.`);
+    else toast.success(`${succeeded} agreement${succeeded !== 1 ? "s" : ""} deleted.`);
+
+    setSelectedAgreements([]);
+    await loadData();
+  };
+
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50 p-0">
@@ -587,7 +619,14 @@ const TenantAgreements = () => {
             <span className="shrink-0 rounded border border-green-200 bg-green-50 px-2 py-0.5 text-[10px] font-bold text-green-700">Active: {summary.active}</span>
             <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">Expiring: {summary.expiring}</span>
             <span className="shrink-0 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600">Pending: {summary.pending}</span>
-            {selectedAgreements.length > 0 && <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">{selectedAgreements.length} selected</span>}
+            {selectedAgreements.length > 0 && (
+              <>
+                <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">{selectedAgreements.length} selected</span>
+                <button onClick={handleBulkDelete} className="h-7 shrink-0 flex items-center gap-1 rounded bg-red-600 px-2.5 text-xs font-medium text-white shadow-sm hover:bg-red-700">
+                  <FaTrash size={10} /> Delete ({selectedAgreements.length})
+                </button>
+              </>
+            )}
             <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
             <button onClick={expandAllAgreements} className="h-7 shrink-0 rounded p-1.5 text-gray-700 hover:bg-gray-200" title="Expand all"><FaExpandAlt size={11} /></button>
             <button onClick={collapseAllAgreements} className="h-7 shrink-0 rounded p-1.5 text-gray-700 hover:bg-gray-200" title="Collapse all"><FaCompressAlt size={11} /></button>
