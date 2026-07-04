@@ -524,7 +524,9 @@ const AddReceipt = () => {
   }, [creditOnAccountMode, allocationPreview]);
 
   // ── Auto-populate description from allocated invoices (falls back to tenant+date) ──
-  const lastAutoDescRef = useRef("");
+  // Initialize with the current description so a restored draft value is treated as auto-generated
+  // and gets refreshed when the underlying data (utility names, allocations) changes.
+  const lastAutoDescRef = useRef(formData.description || "");
   useEffect(() => {
     let autoDesc = "";
 
