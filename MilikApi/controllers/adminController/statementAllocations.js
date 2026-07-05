@@ -489,10 +489,16 @@ export const reallocatePayment = async (req, res) => {
       if (amount <= 0) continue;
 
       if (!alloc.invoiceId) {
-        // Unapplied / excess
+        // Unapplied / prepayment — preserve prepayment tags so auto-allocation still works
         builtAllocations.push({
-          invoice: null, invoiceNumber: "", category: alloc.category || "other",
-          priorityGroup: "", appliedAmount: amount,
+          invoice: null, invoiceNumber: "",
+          category: alloc.category || "",
+          priorityGroup: alloc.priorityGroup || "",
+          utilityType: alloc.utilityType || "",
+          billItemKey: alloc.billItemKey || null,
+          prepaymentLabel: alloc.prepaymentLabel || null,
+          isPrepayment: Boolean(alloc.isPrepayment),
+          appliedAmount: amount,
           beforeOutstanding: 0, afterOutstanding: 0,
           description: alloc.description || "Unapplied balance",
           metadata: { adminReallocated: true },

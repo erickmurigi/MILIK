@@ -398,6 +398,8 @@ const Receipts = ({ viewMode = "tenant" }) => {
   const [formPayments, setFormPayments] = useState([]);
   const requestedReceiptId = useMemo(() => new URLSearchParams(location.search).get("receipt") || "", [location.search]);
   const [autoOpenedReceiptId, setAutoOpenedReceiptId] = useState("");
+  const [prepaymentLines, setPrepaymentLines] = useState([]);
+  const [prepaymentLinesInitialized, setPrepaymentLinesInitialized] = useState(false);
   const [reversalModal, setReversalModal] = useState({ open: false, isBatch: false, receipt: null, receipts: [], reason: "", loading: false });
 
   const loadInvoices = useCallback(async () => {
@@ -514,6 +516,18 @@ const Receipts = ({ viewMode = "tenant" }) => {
 
   const isDirectToLandlord = Boolean(formData.paidDirectToLandlord);
 
+  // Prepayment type options built from tenant's lease utilities + rent (always first)
+  const prepaymentTypeOptions = useMemo(() => {
+    const opts = [{ billItemKey: "rent", label: "Rent" }];
+    (selectedTenant?.utilities || []).forEach((u) => {
+      const label = String(u?.utilityLabel || u?.label || "").trim();
+      if (!label) return;
+      const normalized = label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+      opts.push({ billItemKey: `utility:${normalized}`, label });
+    });
+    return opts;
+  }, [selectedTenant]);
+
   const getCreatedInvoicesForTenant = useCallback(
     (targetTenantId) => {
       if (!targetTenantId) return [];
@@ -614,6 +628,30 @@ const Receipts = ({ viewMode = "tenant" }) => {
     [getCreatedInvoicesForTenant, formPayments]
   );
 
+  // Excess = receipt amount beyond all open invoices → must be tagged as prepayment
+  const totalOutstanding = useMemo(() => {
+    if (!formData.tenantId) return 0;
+    return getOutstandingInvoices(formData.tenantId).reduce((s, inv) => s + Number(inv.outstanding || 0), 0);
+  }, [formData.tenantId, getOutstandingInvoices]);
+
+  const excessAmount = useMemo(() => {
+    const amt = Number(formData.amount) || 0;
+    return Math.max(0, Math.round((amt - totalOutstanding) * 100) / 100);
+  }, [formData.amount, totalOutstanding]);
+
+  // When excess appears/changes, auto-seed prepayment lines; reset when excess disappears
+  useEffect(() => {
+    if (excessAmount <= 0) {
+      setPrepaymentLines([]);
+      setPrepaymentLinesInitialized(false);
+      return;
+    }
+    if (!prepaymentLinesInitialized) {
+      setPrepaymentLines([{ billItemKey: "rent", label: "Rent", amount: excessAmount }]);
+      setPrepaymentLinesInitialized(true);
+    }
+  }, [excessAmount, prepaymentLinesInitialized]);
+
   const resetForm = () => {
     setFormData({
       tenantId: tenantId || "",
@@ -632,6 +670,8 @@ const Receipts = ({ viewMode = "tenant" }) => {
     });
     setActiveReceipt(null);
     setShowForm(false);
+    setPrepaymentLines([]);
+    setPrepaymentLinesInitialized(false);
   };
 
   const openCreateForm = () => {
@@ -702,6 +742,15 @@ const Receipts = ({ viewMode = "tenant" }) => {
       return;
     }
 
+    if (excessAmount > 0 && !activeReceipt?._id) {
+      const prepayTotal = prepaymentLines.reduce((s, l) => s + Number(l.amount || 0), 0);
+      const diff = Math.abs(Math.round((prepayTotal - excessAmount) * 100) / 100);
+      if (diff > 0.01) {
+        toast.error(`Prepayment lines must total exactly Ksh ${excessAmount.toLocaleString()}. Currently Ksh ${prepayTotal.toLocaleString()}.`);
+        return;
+      }
+    }
+
     const paymentDateObj = new Date(formData.paymentDate);
     const payload = {
       tenant: formData.tenantId,
@@ -721,6 +770,9 @@ const Receipts = ({ viewMode = "tenant" }) => {
       month: paymentDateObj.getMonth() + 1,
       year: paymentDateObj.getFullYear(),
       ledgerType: "receipts",
+      prepaymentLines: excessAmount > 0 && !activeReceipt?._id
+        ? prepaymentLines.map((l) => ({ billItemKey: l.billItemKey, label: l.label, amount: Number(l.amount || 0) }))
+        : [],
       business: currentCompany?._id,
     };
 
@@ -2019,6 +2071,96 @@ const Receipts = ({ viewMode = "tenant" }) => {
                           />
                         </div>
                       </>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {excessAmount > 0 && !activeReceipt?._id && (
+                <div className="mb-4 border border-[#0B3B2E]/30 bg-[#0B3B2E]/5 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-[10px] font-black uppercase tracking-wide text-[#0B3B2E]">
+                      Prepayment Lines — Ksh {excessAmount.toLocaleString()} excess
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPrepaymentLines((prev) => [
+                          ...prev,
+                          { billItemKey: "rent", label: "Rent", amount: 0 },
+                        ])
+                      }
+                      className="text-[10px] font-black uppercase tracking-wide text-[#0B3B2E] hover:underline"
+                    >
+                      + Add Line
+                    </button>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    {prepaymentLines.map((line, i) => {
+                      const prepayTotal = prepaymentLines.reduce((s, l) => s + Number(l.amount || 0), 0);
+                      const remaining = Math.round((excessAmount - prepayTotal) * 100) / 100;
+                      return (
+                        <div key={i} className="flex items-center gap-2">
+                          <select
+                            value={line.billItemKey}
+                            onChange={(e) => {
+                              const opt = prepaymentTypeOptions.find((o) => o.billItemKey === e.target.value);
+                              setPrepaymentLines((prev) =>
+                                prev.map((l, idx) =>
+                                  idx === i ? { ...l, billItemKey: e.target.value, label: opt?.label || e.target.value } : l
+                                )
+                              );
+                            }}
+                            className="flex-1 border border-slate-300 px-2 py-1.5 text-xs"
+                          >
+                            {prepaymentTypeOptions.map((o) => (
+                              <option key={o.billItemKey} value={o.billItemKey}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={line.amount}
+                            onChange={(e) =>
+                              setPrepaymentLines((prev) =>
+                                prev.map((l, idx) =>
+                                  idx === i ? { ...l, amount: Number(e.target.value) || 0 } : l
+                                )
+                              )
+                            }
+                            className="w-28 border border-slate-300 px-2 py-1.5 text-xs"
+                            placeholder="Amount"
+                          />
+                          {prepaymentLines.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setPrepaymentLines((prev) => prev.filter((_, idx) => idx !== i))}
+                              className="text-slate-400 hover:text-red-500 text-xs font-bold px-1"
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {(() => {
+                    const prepayTotal = prepaymentLines.reduce((s, l) => s + Number(l.amount || 0), 0);
+                    const remaining = Math.round((excessAmount - prepayTotal) * 100) / 100;
+                    const isBalanced = Math.abs(remaining) <= 0.01;
+                    return (
+                      <p className={`mt-2 text-[10px] font-black uppercase tracking-wide ${isBalanced ? "text-green-700" : "text-red-600"}`}>
+                        {isBalanced
+                          ? "✓ Fully tagged"
+                          : remaining > 0
+                          ? `Remaining: Ksh ${remaining.toLocaleString()} untagged`
+                          : `Over by: Ksh ${Math.abs(remaining).toLocaleString()}`}
+                      </p>
                     );
                   })()}
                 </div>

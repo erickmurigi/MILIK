@@ -190,6 +190,8 @@ const AddReceipt = () => {
   const [tenantInvoices, setTenantInvoices] = useState([]);
   const [cashbookOptions, setCashbookOptions] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [prepaymentLines, setPrepaymentLines] = useState([]);
+  const prepaymentInitializedRef = useRef(false);
   const creditOnAccountMode = Boolean(receiptDraft.creditOnAccountMode);
   const setCreditOnAccountMode = (value) => {
     setReceiptDraft((prev) => ({
@@ -429,6 +431,8 @@ const AddReceipt = () => {
   useEffect(() => {
     setPriorityInvoiceKeys([]);
     setManualSelectionMode(false);
+    setPrepaymentLines([]);
+    prepaymentInitializedRef.current = false;
   }, [formData.tenantId]);
 
   useEffect(() => {
@@ -522,6 +526,46 @@ const AddReceipt = () => {
     const primary = entries.sort((a, b) => b[1] - a[1])[0][0];
     return { rent: "rent", deposit: "deposit", utility: "utility", late_fee: "late_fee", combined: "rent" }[primary] || "rent";
   }, [creditOnAccountMode, allocationPreview]);
+
+  const prepaymentTypeOptions = useMemo(() => {
+    const options = [{ billItemKey: "rent", label: "Rent Prepayment" }];
+    if (!formData.tenantId) return options;
+    const allTenantInvoices = getCreatedInvoicesForTenant(formData.tenantId);
+    const seenKeys = new Set(["rent"]);
+    for (const inv of allTenantInvoices) {
+      if (String(inv?.category || "").toUpperCase() !== "UTILITY_CHARGE") continue;
+      const meta = inv?.metadata && typeof inv.metadata === "object" ? inv.metadata : {};
+      const utilName = (meta.utilityName || meta.utilityType || meta.takeOnBillItemLabel || "").trim();
+      if (!utilName) continue;
+      const normalized = utilName.toLowerCase().replace(/\s+/g, "_");
+      const key = `utility:${normalized}`;
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+      options.push({ billItemKey: key, label: `${utilName} Prepayment` });
+    }
+    return options;
+  }, [formData.tenantId, tenantInvoices]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const excess = allocationPreview.unappliedAmount;
+    if (excess <= 0.005) {
+      setPrepaymentLines([]);
+      prepaymentInitializedRef.current = false;
+      return;
+    }
+    if (!prepaymentInitializedRef.current) {
+      setPrepaymentLines([{ billItemKey: "rent", label: "Rent Prepayment", amount: parseFloat(excess.toFixed(2)) }]);
+      prepaymentInitializedRef.current = true;
+      return;
+    }
+    setPrepaymentLines((prev) => {
+      if (!prev.length) return [{ billItemKey: "rent", label: "Rent Prepayment", amount: parseFloat(excess.toFixed(2)) }];
+      const otherTotal = prev.slice(0, -1).reduce((s, l) => s + (Number(l.amount) || 0), 0);
+      const lastAmount = parseFloat(Math.max(0, excess - otherTotal).toFixed(2));
+      if (lastAmount <= 0 && prev.length > 1) return [{ billItemKey: "rent", label: "Rent Prepayment", amount: parseFloat(excess.toFixed(2)) }];
+      return [...prev.slice(0, -1), { ...prev[prev.length - 1], amount: lastAmount }];
+    });
+  }, [allocationPreview.unappliedAmount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Auto-populate description from allocated invoices (falls back to tenant+date) ──
   // Initialize with the current description so a restored draft value is treated as auto-generated
@@ -662,6 +706,9 @@ const AddReceipt = () => {
       business: currentCompany._id,
       allocations: creditOnAccountMode ? creditAllocations : (shouldUseManualAllocations ? manualAllocationRows : undefined),
       allocationMode: creditOnAccountMode ? "credit_on_account" : (shouldUseManualAllocations ? "manual" : undefined),
+      prepaymentLines: !creditOnAccountMode && allocationPreview.unappliedAmount > 0.005 && prepaymentLines.length > 0
+        ? prepaymentLines.map((l) => ({ billItemKey: l.billItemKey, label: l.label || l.billItemKey, amount: Number(l.amount) || 0 }))
+        : undefined,
       metadata: prefilledCollectionId
         ? {
             mpesa: {
@@ -676,6 +723,22 @@ const AddReceipt = () => {
         : undefined,
     };
 
+    if (!creditOnAccountMode && allocationPreview.unappliedAmount > 0.005) {
+      if (prepaymentLines.length === 0) {
+        toast.error("Please allocate the prepayment excess before saving");
+        return;
+      }
+      const linesTotal = prepaymentLines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
+      if (Math.abs(linesTotal - allocationPreview.unappliedAmount) > 0.5) {
+        toast.error(`Prepayment lines must total KES ${allocationPreview.unappliedAmount.toLocaleString()}. Current: KES ${linesTotal.toLocaleString()}`);
+        return;
+      }
+      for (const line of prepaymentLines) {
+        if (!line.billItemKey) { toast.error("Each prepayment line must have a type selected"); return; }
+        if (!(Number(line.amount) > 0)) { toast.error("Each prepayment line amount must be greater than zero"); return; }
+      }
+    }
+
     setIsSaving(true);
     try {
       await createRentPayment(dispatch, payload);
@@ -686,7 +749,7 @@ const AddReceipt = () => {
       toast.error(error?.response?.data?.message || "Failed to create receipt");
       setIsSaving(false);
     }
-  }, [isSaving, canSaveReceipt, currentCompany, formData, isDirectToLandlord, isCompanyLandlordMode, selectedTenant, allocationPreview, derivedPaymentType, refRequired, refLabel, manualSelectionMode, priorityInvoiceKeys, prefilledCollectionId, prefilledAccountReference, prefilledMsisdn, prefilledPayerName, isInstantMode, dispatch, clearReceiptDraft, navigate, backToPath]);
+  }, [isSaving, canSaveReceipt, currentCompany, formData, isDirectToLandlord, isCompanyLandlordMode, selectedTenant, allocationPreview, derivedPaymentType, refRequired, refLabel, manualSelectionMode, priorityInvoiceKeys, prepaymentLines, creditOnAccountMode, prefilledCollectionId, prefilledAccountReference, prefilledMsisdn, prefilledPayerName, isInstantMode, dispatch, clearReceiptDraft, navigate, backToPath]);
 
   const amountDueColor =
     !formData.tenantId
@@ -1232,6 +1295,110 @@ const AddReceipt = () => {
                       <p className="text-xs text-amber-700">Enter an amount to preview how this receipt clears open invoices.</p>
                     )}
                   </div>
+
+                  {/* ── PREPAYMENT ALLOCATION ── */}
+                  {!creditOnAccountMode && allocationPreview.unappliedAmount > 0.005 && (
+                    <div className="overflow-hidden border border-[#0B3B2E]/30 shadow-sm">
+                      <div className="flex items-center gap-3 bg-[#0B3B2E] px-4 py-2.5">
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/60">Prepayment Allocation</p>
+                          <p className="text-[11px] font-semibold text-white">
+                            KES {allocationPreview.unappliedAmount.toLocaleString("en-KE", { minimumFractionDigits: 2 })} excess — tag how this should apply to future invoices
+                          </p>
+                        </div>
+                      </div>
+                      <div className="space-y-2 bg-[#0B3B2E]/5 p-4">
+                        <p className="text-[10px] text-slate-500">
+                          Receipt exceeds outstanding invoices. Tag the surplus so it auto-allocates when the matching invoice is raised.
+                        </p>
+                        {prepaymentLines.map((line, idx) => {
+                          const usedKeys = new Set(prepaymentLines.filter((_, i) => i !== idx).map((l) => l.billItemKey));
+                          const availableOptions = prepaymentTypeOptions.filter((opt) => !usedKeys.has(opt.billItemKey) || opt.billItemKey === line.billItemKey);
+                          return (
+                            <div key={idx} className="flex items-center gap-2">
+                              <div className="flex-1">
+                                <select
+                                  value={line.billItemKey}
+                                  onChange={(e) => {
+                                    const opt = prepaymentTypeOptions.find((o) => o.billItemKey === e.target.value);
+                                    setPrepaymentLines((prev) => {
+                                      const updated = [...prev];
+                                      updated[idx] = { ...updated[idx], billItemKey: e.target.value, label: opt?.label || e.target.value };
+                                      return updated;
+                                    });
+                                  }}
+                                  className={inputClass}
+                                >
+                                  {availableOptions.map((opt) => (
+                                    <option key={opt.billItemKey} value={opt.billItemKey}>{opt.label}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="w-36">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  inputMode="decimal"
+                                  value={line.amount}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value) || 0;
+                                    setPrepaymentLines((prev) => {
+                                      const updated = [...prev];
+                                      updated[idx] = { ...updated[idx], amount: val };
+                                      return updated;
+                                    });
+                                  }}
+                                  onWheel={preventWheelValueChange}
+                                  className={`${inputClass} [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+                                />
+                              </div>
+                              {prepaymentLines.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPrepaymentLines((prev) => prev.filter((_, i) => i !== idx))}
+                                  className="shrink-0 px-2 text-sm font-bold text-red-400 hover:text-red-600"
+                                  title="Remove line"
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                        <div className="flex items-center justify-between border-t border-[#0B3B2E]/10 pt-2">
+                          {prepaymentLines.length < prepaymentTypeOptions.length ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const usedKeys = new Set(prepaymentLines.map((l) => l.billItemKey));
+                                const nextOpt = prepaymentTypeOptions.find((opt) => !usedKeys.has(opt.billItemKey));
+                                if (!nextOpt) return;
+                                const remaining = parseFloat(Math.max(0, allocationPreview.unappliedAmount - prepaymentLines.reduce((s, l) => s + (Number(l.amount) || 0), 0)).toFixed(2));
+                                setPrepaymentLines((prev) => [...prev, { billItemKey: nextOpt.billItemKey, label: nextOpt.label, amount: remaining }]);
+                              }}
+                              className="text-[11px] font-bold text-[#0B3B2E] hover:underline"
+                            >
+                              + Add line
+                            </button>
+                          ) : <span />}
+                          <div className="text-right text-[11px]">
+                            {(() => {
+                              const total = prepaymentLines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
+                              const diff = parseFloat((allocationPreview.unappliedAmount - total).toFixed(2));
+                              return Math.abs(diff) < 0.01 ? (
+                                <span className="font-bold text-emerald-700">✓ Balanced</span>
+                              ) : (
+                                <span className="font-bold text-red-600">
+                                  {diff > 0 ? `KES ${diff.toLocaleString()} unallocated` : `KES ${Math.abs(diff).toLocaleString()} over-allocated`}
+                                </span>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

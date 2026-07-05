@@ -3517,6 +3517,20 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
     );
 
     await applyIncrementalBalanceDelta({ tenantId: invoice.tenant, businessId: invoice.business, delta: Math.abs(Number(invoice.amount || 0)) });
+
+    // Auto-apply any tagged prepayments that match this invoice's type
+    try {
+      const { autoApplyPrepayments } = await import("./rentPayment.js");
+      await autoApplyPrepayments({
+        businessId: String(invoice.business),
+        tenantId: String(invoice.tenant),
+        invoice,
+        actorId: actorUserId || null,
+      });
+    } catch (prepErr) {
+      console.error("[createTenantInvoiceRecord] prepayment auto-apply failed:", prepErr.message);
+    }
+
     await recomputeTenantFinancialState({
       businessId: invoice.business,
       tenantId: invoice.tenant,

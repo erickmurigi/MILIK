@@ -761,7 +761,7 @@ const getPostingRoleForAllocationGroup = (groupKey) => {
   return "tenant_receivable";
 };
 
-const buildReceiptAllocationData = async ({ businessId, tenantId, amount, paymentTypeOverride = "", metadata = {} }) => {
+const buildReceiptAllocationData = async ({ businessId, tenantId, amount, paymentTypeOverride = "", metadata = {}, prepaymentLines = [] }) => {
   const receiptAmount = Math.abs(Number(amount || 0));
   const allocationSummary = {
     rent: 0,
@@ -862,6 +862,53 @@ const buildReceiptAllocationData = async ({ businessId, tenantId, amount, paymen
     remaining -= appliedAmount;
   }
 
+  // Tag unapplied excess with prepayment type so auto-allocation knows where to apply it later
+  if (remaining > 0.005) {
+    const lines = Array.isArray(prepaymentLines) && prepaymentLines.length > 0
+      ? prepaymentLines
+      : [{ billItemKey: "rent", label: "Rent Prepayment", amount: remaining }];
+
+    let excessPool = remaining;
+    for (const line of lines) {
+      if (excessPool <= 0.005) break;
+      const lineAmt = round2(Math.min(Number(line.amount || 0), excessPool));
+      if (lineAmt <= 0.005) continue;
+
+      const isUtility = String(line.billItemKey || "").startsWith("utility:");
+      const utType = isUtility ? String(line.billItemKey).replace("utility:", "") : "";
+
+      allocations.push({
+        invoice: null,
+        invoiceNumber: "",
+        category: isUtility ? "UTILITY_CHARGE" : "RENT_CHARGE",
+        priorityGroup: isUtility ? "utility" : "rent",
+        utilityType: utType,
+        billItemKey: line.billItemKey || "rent",
+        prepaymentLabel: line.label || (isUtility ? `${utType} Prepayment` : "Rent Prepayment"),
+        isPrepayment: true,
+        appliedAmount: lineAmt,
+        beforeOutstanding: 0,
+        afterOutstanding: 0,
+        description: line.label || "Prepayment",
+      });
+      excessPool = round2(excessPool - lineAmt);
+    }
+    // Absorb any residual (rounding) into the first rent prepayment line or create one
+    if (excessPool > 0.005) {
+      const rentLine = allocations.find((a) => !a.invoice && a.isPrepayment && a.billItemKey === "rent");
+      if (rentLine) {
+        rentLine.appliedAmount = round2(rentLine.appliedAmount + excessPool);
+      } else {
+        allocations.push({
+          invoice: null, invoiceNumber: "",
+          category: "RENT_CHARGE", priorityGroup: "rent", utilityType: "",
+          billItemKey: "rent", prepaymentLabel: "Rent Prepayment", isPrepayment: true,
+          appliedAmount: round2(excessPool), beforeOutstanding: 0, afterOutstanding: 0,
+          description: "Rent Prepayment",
+        });
+      }
+    }
+  }
   allocationSummary.unapplied = Math.max(0, remaining);
 
   const breakdown = {
@@ -1696,6 +1743,132 @@ const rollbackPostedAllocationReleaseEntries = async ({ entryIds = [], actorId =
   return reversalEntries;
 };
 
+// Auto-applies tagged prepayment lines from confirmed receipts to a newly-raised invoice.
+// Called from createTenantInvoiceRecord after GL posting and before full recompute.
+// Non-fatal: PMS allocation state is primary; GL release failure is logged but not thrown.
+export const autoApplyPrepayments = async ({ businessId, tenantId, invoice, actorId = null }) => {
+  const invoiceCategory = String(invoice.category || "").toUpperCase();
+  if (!["RENT_CHARGE", "UTILITY_CHARGE"].includes(invoiceCategory)) return;
+
+  const utType = normalizeUtilityMatch(invoice.metadata?.utilityType || "");
+  const billItemKey = invoiceCategory === "RENT_CHARGE" ? "rent" : `utility:${utType}`;
+
+  const receipts = await RentPayment.find({
+    business: invoice.business,
+    tenant: invoice.tenant,
+    isConfirmed: true,
+    isReversed: { $ne: true },
+    isCancelled: { $ne: true },
+    allocations: { $elemMatch: { invoice: null, isPrepayment: true, billItemKey } },
+  }).sort({ paymentDate: 1, createdAt: 1 });
+
+  if (!receipts.length) return;
+
+  let remaining = round2(Math.max(0, Number(invoice.outstanding ?? invoice.amount ?? 0)));
+  if (remaining <= 0) return;
+
+  const CATEGORY_TO_SUMMARY = {
+    RENT_CHARGE: "rent", DEPOSIT_CHARGE: "deposit", UTILITY_CHARGE: "utility",
+    LATE_PENALTY_CHARGE: "latePenalty", OTHER_CHARGE: "other", DEBIT_NOTE: "debitNote",
+  };
+
+  for (const receipt of receipts) {
+    if (remaining <= 0) break;
+
+    const matchingLines = receipt.allocations.filter(
+      (a) => !a.invoice && a.isPrepayment && a.billItemKey === billItemKey && Number(a.appliedAmount || 0) > 0.005
+    );
+    if (!matchingLines.length) continue;
+
+    const releaseRows = [];
+
+    for (let i = matchingLines.length - 1; i >= 0; i--) {
+      if (remaining <= 0) break;
+      const line = matchingLines[i];
+      const lineAmt = round2(Number(line.appliedAmount || 0));
+      const applyAmt = round2(Math.min(lineAmt, remaining));
+
+      // Remove original line and replace with reduced remainder (if any)
+      const allocIdx = receipt.allocations.findIndex(
+        (a) => a === line || (a._id && String(a._id) === String(line._id))
+      );
+      if (allocIdx !== -1) receipt.allocations.splice(allocIdx, 1);
+
+      const leftover = round2(lineAmt - applyAmt);
+      if (leftover > 0.005) {
+        receipt.allocations.push({
+          invoice: null, invoiceNumber: "",
+          category: line.category, priorityGroup: line.priorityGroup,
+          utilityType: line.utilityType || "", billItemKey: line.billItemKey,
+          prepaymentLabel: line.prepaymentLabel, isPrepayment: true,
+          appliedAmount: leftover, beforeOutstanding: 0, afterOutstanding: 0,
+          description: line.description || line.prepaymentLabel || "Prepayment",
+          metadata: line.metadata || {},
+        });
+      }
+
+      const beforeOutstanding = remaining;
+      const afterOutstanding = round2(Math.max(0, remaining - applyAmt));
+
+      receipt.allocations.push({
+        invoice: invoice._id,
+        invoiceNumber: invoice.invoiceNumber || "",
+        category: invoiceCategory,
+        priorityGroup: invoiceCategory === "RENT_CHARGE" ? "rent" : "utility",
+        utilityType: utType || "",
+        appliedAmount: applyAmt,
+        beforeOutstanding,
+        afterOutstanding,
+        invoiceDate: invoice.invoiceDate || null,
+        dueDate: invoice.dueDate || null,
+        description: invoice.description || "",
+        metadata: { autoPrepaymentApply: true, billItemKey },
+      });
+
+      releaseRows.push({
+        invoice: invoice._id, invoiceNumber: invoice.invoiceNumber || "",
+        category: invoiceCategory,
+        priorityGroup: invoiceCategory === "RENT_CHARGE" ? "rent" : "utility",
+        utilityType: utType || "", appliedAmount: applyAmt,
+        beforeOutstanding, afterOutstanding,
+      });
+
+      remaining = afterOutstanding;
+    }
+
+    if (!releaseRows.length) continue;
+
+    // Rebuild allocationSummary from new allocations array
+    const summary = { rent: 0, deposit: 0, utility: 0, latePenalty: 0, debitNote: 0, other: 0, unapplied: 0 };
+    for (const a of receipt.allocations) {
+      const key = a.invoice ? (CATEGORY_TO_SUMMARY[a.category] || "other") : "unapplied";
+      summary[key] = round2(summary[key] + Number(a.appliedAmount || 0));
+    }
+    receipt.allocationSummary = summary;
+    receipt.markModified("allocations");
+    receipt.markModified("allocationSummary");
+    await receipt.save();
+
+    // Post GL release journal — non-fatal
+    if (receipt.journalGroupId && actorId) {
+      try {
+        await postReceiptUnappliedAllocationReleaseJournal({
+          payment: receipt,
+          releaseRows,
+          actorId,
+          reason: `Auto-applied prepayment to invoice ${invoice.invoiceNumber || invoice._id}`,
+        });
+      } catch (glErr) {
+        console.error("[autoApplyPrepayments] GL release failed:", glErr.message);
+      }
+    }
+  }
+
+  // Update invoice outstanding in-memory — caller's recomputeTenantFinancialState persists it via full replay
+  invoice.outstanding = remaining;
+  invoice.status = remaining <= 0 ? "paid" : remaining < Number(invoice.amount) ? "partially_paid" : "pending";
+};
+
 export const postReceiptUnappliedAllocationReleaseJournal = async ({
   payment,
   releaseRows = [],
@@ -1962,6 +2135,7 @@ export const createPayment = async (req, res, next) => {
             amount: req.body?.amount,
             paymentTypeOverride: isTakeOnCredit ? (metadata?.paymentType || req.body?.paymentType || "") : "",
             metadata,
+            prepaymentLines: Array.isArray(req.body?.prepaymentLines) ? req.body.prepaymentLines : [],
           }),
       unit?.property
         ? Property.findOne({ _id: unit.property, business: businessId }).select("_id depositHeldBy").lean()
@@ -3307,7 +3481,7 @@ export const reversePayment = async (req, res, next) => {
     const reversalPayload = {
       tenant: payment.tenant,
       unit: payment.unit,
-      amount: -Math.abs(Number(payment.amount || 0)),
+      amount: Math.abs(Number(payment.amount || 0)),
       paymentType: payment.paymentType,
       breakdown: payment.breakdown || {
         rent: 0,

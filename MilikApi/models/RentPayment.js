@@ -201,6 +201,9 @@ const RentPaymentSchema = new mongoose.Schema(
         invoiceDate: { type: Date, default: null },
         dueDate: { type: Date, default: null },
         description: { type: String, default: "" },
+        billItemKey: { type: String, default: null },
+        prepaymentLabel: { type: String, default: null },
+        isPrepayment: { type: Boolean, default: false },
       },
     ],
     allocationSummary: {
@@ -282,6 +285,7 @@ RentPaymentSchema.index({ business: 1, postingStatus: 1, paymentDate: -1 });
 RentPaymentSchema.index({ business: 1, ledgerType: 1, isCancelled: 1, isReversed: 1, "allocationSummary.unapplied": 1, paymentDate: -1 });
 RentPaymentSchema.index({ business: 1, reversalOf: 1, isCancelled: 1, isReversed: 1, isConfirmed: 1, paymentDate: -1 });
 RentPaymentSchema.index({ year: -1, month: -1 });
+RentPaymentSchema.index({ business: 1, tenant: 1, isConfirmed: 1, 'allocations.isPrepayment': 1, 'allocations.billItemKey': 1, paymentDate: 1 });
 
 RentPaymentSchema.index(
   { business: 1, referenceNumber: 1 },
