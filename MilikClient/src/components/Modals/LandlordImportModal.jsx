@@ -1,11 +1,13 @@
-// components/Modals/LandlordImportModal.jsx
-import React, { useState } from 'react';
-import { FaTimes, FaUpload, FaCheckCircle, FaExclamationTriangle, FaSpinner } from 'react-icons/fa';
-import { parseLandlordsExcel } from '../../utils/excelTemplates';
-import { toast } from 'react-toastify';
-
-const MILIK_GREEN = "bg-[#0B3B2E]";
-const MILIK_ORANGE = "bg-[#FF8C00]";
+import React, { useState } from "react";
+import {
+  FaTimes,
+  FaUpload,
+  FaCheckCircle,
+  FaExclamationTriangle,
+  FaSpinner,
+} from "react-icons/fa";
+import { parseLandlordsExcel } from "../../utils/excelTemplates";
+import { toast } from "react-toastify";
 
 const LandlordImportModal = ({ isOpen, onClose, onImport }) => {
   const [file, setFile] = useState(null);
@@ -19,29 +21,29 @@ const LandlordImportModal = ({ isOpen, onClose, onImport }) => {
 
   const handleFileChange = async (e) => {
     const selectedFile = e.target.files[0];
-    
+
     if (!selectedFile) return;
-    
-    if (!selectedFile.name.endsWith('.xlsx') && !selectedFile.name.endsWith('.xls')) {
-      toast.error('Please upload a valid Excel file (.xlsx or .xls)');
+
+    if (!selectedFile.name.endsWith(".xlsx") && !selectedFile.name.endsWith(".xls")) {
+      toast.error("Please upload a valid Excel file (.xlsx or .xls)");
       return;
     }
-    
+
     setFile(selectedFile);
     setIsUploading(true);
     setParseResult(null);
-     
+
     try {
       const result = await parseLandlordsExcel(selectedFile);
       setParseResult(result);
-      
+
       if (result.errorCount > 0) {
         toast.warning(`File parsed with ${result.errorCount} errors. Please review before importing.`);
       } else {
-        toast.success(`Successfully parsed ${result.validCount} landlords!`);
+        toast.success(`Successfully parsed ${result.validCount} landlords.`);
       }
     } catch (error) {
-      toast.error(error.message || 'Failed to parse Excel file');
+      toast.error(error.message || "Failed to parse Excel file");
       setFile(null);
     } finally {
       setIsUploading(false);
@@ -50,46 +52,40 @@ const LandlordImportModal = ({ isOpen, onClose, onImport }) => {
 
   const handleImport = async () => {
     if (!parseResult || parseResult.validCount === 0) {
-      toast.error('No valid records to import');
+      toast.error("No valid records to import");
       return;
     }
-    
+
     setIsImporting(true);
-    
+
     try {
       const result = await onImport(parseResult.valid);
 
-      // Show detailed success/failure message based on actual backend result
       if (result?.data) {
         const { successful = [], failed = [] } = result.data;
         if (successful.length > 0 && failed.length === 0) {
-          // All succeeded
-          toast.success(`Successfully imported ${successful.length} landlord${successful.length !== 1 ? 's' : ''}!`);
+          toast.success(`Successfully imported ${successful.length} landlord${successful.length !== 1 ? "s" : ""}.`);
           handleClose();
         } else if (successful.length > 0 && failed.length > 0) {
-          // Partial success — keep modal open so user can see failures
-          toast.warning(`Imported ${successful.length} landlord${successful.length !== 1 ? 's' : ''} successfully. ${failed.length} row${failed.length !== 1 ? 's' : ''} failed — see details below.`);
+          toast.warning(`Imported ${successful.length} landlord${successful.length !== 1 ? "s" : ""}. ${failed.length} row${failed.length !== 1 ? "s" : ""} failed — see details below.`);
           setImportFailures(failed);
           setIsImporting(false);
         } else {
-          // All failed — keep modal open, do NOT close
-          toast.error(`Import failed: all ${failed.length} row${failed.length !== 1 ? 's' : ''} could not be saved. See errors below.`);
+          toast.error(`Import failed: all ${failed.length} row${failed.length !== 1 ? "s" : ""} could not be saved.`);
           setImportFailures(failed);
           setIsImporting(false);
         }
       } else if (result?.success === false) {
-        // Backend-level failure
-        toast.error(result?.message || 'Import failed. Please check your file and try again.');
+        toast.error(result?.message || "Import failed. Please check your file and try again.");
         setIsImporting(false);
       } else {
-        // Fallback: treat as success if backend returned no data breakdown
-        toast.success(`Successfully imported ${parseResult.validCount} landlord${parseResult.validCount !== 1 ? 's' : ''}!`);
+        toast.success(`Successfully imported ${parseResult.validCount} landlord${parseResult.validCount !== 1 ? "s" : ""}.`);
         handleClose();
       }
     } catch (error) {
-      console.error('Import error in modal:', error);
-      toast.error(error.message || 'Failed to import landlords. Please check console for details.');
-      setIsImporting(false); // Keep modal open on error
+      console.error("Import error in modal:", error);
+      toast.error(error.message || "Failed to import landlords.");
+      setIsImporting(false);
     }
   };
 
@@ -104,188 +100,171 @@ const LandlordImportModal = ({ isOpen, onClose, onImport }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+      <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+
         {/* Header */}
-        <div className={`${MILIK_GREEN} text-white px-6 py-4 flex items-center justify-between`}>
-          <h2 className="text-xl font-bold">Import Landlords from Excel</h2>
+        <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+          <h2 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
+            <FaUpload size={14} />
+            Import Landlords from Excel
+          </h2>
           <button
             onClick={handleClose}
-            className="text-white hover:text-gray-200 transition-colors"
+            className="text-white/70 transition-colors hover:text-white"
             disabled={isImporting}
           >
-            <FaTimes size={20} />
+            <FaTimes size={18} />
           </button>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {/* File Upload Section */}
-          <div className="mb-6">
-            <label className="block text-sm font-bold text-gray-700 mb-2">
-              Select Excel File
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto bg-white px-5 py-4">
+
+          {/* File upload */}
+          <div className="mb-5">
+            <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
+              Select Excel File (.xlsx or .xls)
             </label>
-            <div className="flex items-center gap-3">
-              <label className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-orange-500 transition-colors ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                <FaUpload className="text-gray-400" />
-                <span className="text-sm text-gray-600">
-                  {file ? file.name : 'Choose Excel file or drag here'}
-                </span>
-                <input
-                  type="file"
-                  accept=".xlsx,.xls"
-                  onChange={handleFileChange}
-                  className="hidden"
-                  disabled={isUploading || isImporting}
-                />
-              </label>
-            </div>
-            <p className="text-xs text-gray-500 mt-2">
-              Supported formats: .xlsx, .xls | Maximum 1000 records per file
+            <label className={`flex cursor-pointer items-center gap-2 border-2 border-dashed border-slate-300 px-4 py-3 transition-colors hover:border-[#0B3B2E] ${isUploading ? "cursor-not-allowed opacity-50" : ""}`}>
+              <FaUpload className="text-slate-400" size={14} />
+              <span className="text-sm text-slate-500">
+                {file ? file.name : "Choose Excel file or drag here"}
+              </span>
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleFileChange}
+                className="hidden"
+                disabled={isUploading || isImporting}
+              />
+            </label>
+            <p className="mt-1.5 text-xs text-slate-400">
+              Supported: .xlsx, .xls — max 1,000 records per file
             </p>
           </div>
 
-          {/* Parsing Progress */}
+          {/* Parsing spinner */}
           {isUploading && (
-            <div className="flex items-center justify-center gap-3 p-6 bg-blue-50 rounded-lg">
-              <FaSpinner className="animate-spin text-blue-600" size={24} />
-              <span className="text-sm font-semibold text-blue-800">Parsing Excel file...</span>
+            <div className="flex items-center justify-center gap-3 border border-blue-200 bg-blue-50 p-6">
+              <FaSpinner className="animate-spin text-blue-600" size={20} />
+              <span className="text-sm font-semibold text-blue-800">Parsing Excel file…</span>
             </div>
           )}
 
-          {/* Parse Results */}
+          {/* Parse results */}
           {parseResult && !isUploading && (
             <div className="space-y-4">
-              {/* Summary Cards */}
-              <div className="grid grid-cols-3 gap-4">
-                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                  <div className="text-2xl font-bold text-gray-900">{parseResult.total}</div>
-                  <div className="text-xs text-gray-600 mt-1">Total Records</div>
+
+              {/* Summary strip */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="border border-slate-200 bg-slate-50 p-3">
+                  <div className="text-[10px] font-black uppercase tracking-wide text-slate-500">Total Records</div>
+                  <div className="mt-0.5 text-xl font-black text-slate-900">{parseResult.total}</div>
                 </div>
-                <div className="bg-green-50 rounded-lg p-4 border border-green-200">
-                  <div className="flex items-center gap-2">
-                    <FaCheckCircle className="text-green-600" />
-                    <div className="text-2xl font-bold text-green-900">{parseResult.validCount}</div>
+                <div className="border border-emerald-200 bg-emerald-50 p-3">
+                  <div className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-emerald-700">
+                    <FaCheckCircle size={10} /> Valid
                   </div>
-                  <div className="text-xs text-green-700 mt-1">Valid Records</div>
+                  <div className="mt-0.5 text-xl font-black text-emerald-700">{parseResult.validCount}</div>
                 </div>
-                <div className="bg-red-50 rounded-lg p-4 border border-red-200">
-                  <div className="flex items-center gap-2">
-                    <FaExclamationTriangle className="text-red-600" />
-                    <div className="text-2xl font-bold text-red-900">{parseResult.errorCount}</div>
+                <div className="border border-red-200 bg-red-50 p-3">
+                  <div className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-red-700">
+                    <FaExclamationTriangle size={10} /> Errors
                   </div>
-                  <div className="text-xs text-red-700 mt-1">Errors</div>
+                  <div className="mt-0.5 text-xl font-black text-red-700">{parseResult.errorCount}</div>
                 </div>
               </div>
 
-              {/* Valid Records Preview */}
+              {/* Preview table */}
               {parseResult.validCount > 0 && (
-                <div className="bg-green-50 rounded-lg p-4 border border-green-200">
-                  <h3 className="text-sm font-bold text-green-900 mb-3">
-                    Valid Records Preview (First 5)
-                  </h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="bg-green-100">
-                          <th className="px-2 py-1 text-left font-semibold">Name</th>
-                          <th className="px-2 py-1 text-left font-semibold">Type</th>
-                          <th className="px-2 py-1 text-left font-semibold">Reg/ID</th>
-                          <th className="px-2 py-1 text-left font-semibold">Email</th>
-                          <th className="px-2 py-1 text-left font-semibold">Phone</th>
+                <div>
+                  <p className="mb-1.5 text-[10px] font-black uppercase tracking-wide text-slate-500">
+                    Preview — first 5 valid records
+                  </p>
+                  <div className="overflow-x-auto border border-slate-200">
+                    <table className="w-full divide-y divide-slate-200 text-xs">
+                      <thead className="bg-[#0B3B2E] text-white">
+                        <tr>
+                          {["Name", "Type", "Reg / ID", "Email", "Phone"].map((h) => (
+                            <th key={h} className="px-3 py-2 text-left text-[9px] font-black uppercase tracking-wide">{h}</th>
+                          ))}
                         </tr>
                       </thead>
-                      <tbody>
+                      <tbody className="divide-y divide-slate-100 bg-white">
                         {parseResult.valid.slice(0, 5).map((record, idx) => (
-                          <tr key={idx} className="border-t border-green-200">
-                            <td className="px-2 py-1">{record.landlordName}</td>
-                            <td className="px-2 py-1">{record.landlordType}</td>
-                            <td className="px-2 py-1">{record.regId}</td>
-                            <td className="px-2 py-1">{record.email}</td>
-                            <td className="px-2 py-1">{record.phoneNumber}</td>
+                          <tr key={idx} className="hover:bg-slate-50">
+                            <td className="px-3 py-1.5 font-semibold text-slate-900">{record.landlordName}</td>
+                            <td className="px-3 py-1.5 text-slate-600">{record.landlordType}</td>
+                            <td className="px-3 py-1.5 text-slate-600">{record.regId}</td>
+                            <td className="px-3 py-1.5 text-slate-600">{record.email}</td>
+                            <td className="px-3 py-1.5 text-slate-600">{record.phoneNumber}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
                   {parseResult.validCount > 5 && (
-                    <p className="text-xs text-green-700 mt-2">
+                    <p className="mt-1.5 text-xs text-slate-400">
                       + {parseResult.validCount - 5} more records
                     </p>
                   )}
                 </div>
               )}
 
-              {/* Errors */}
+              {/* Validation errors */}
               {parseResult.errorCount > 0 && (
-                <div className="bg-red-50 rounded-lg p-4 border border-red-200">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-bold text-red-900">
+                <div className="border border-red-200 bg-red-50 p-4">
+                  <div className="mb-2 flex items-center justify-between">
+                    <h3 className="text-xs font-black uppercase tracking-wide text-red-900">
                       Errors Found ({parseResult.errorCount})
                     </h3>
                     <button
                       onClick={() => setShowErrors(!showErrors)}
-                      className="text-xs text-red-700 hover:text-red-900 font-semibold"
+                      className="text-[10px] font-bold text-red-700 underline"
                     >
-                      {showErrors ? 'Hide Details' : 'Show Details'}
+                      {showErrors ? "Hide Details" : "Show Details"}
                     </button>
                   </div>
-                  
                   {showErrors && (
-                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                    <div className="max-h-60 space-y-2 overflow-y-auto">
                       {parseResult.errors.map((error, idx) => (
-                        <div key={idx} className="bg-white rounded p-3 border border-red-200">
-                          <div className="flex items-start gap-2">
-                            <FaExclamationTriangle className="text-red-600 mt-0.5 flex-shrink-0" />
-                            <div className="flex-1">
-                              <div className="text-xs font-bold text-red-900 mb-1">
-                                Row {error.row}: {error.data.landlordName || 'Unnamed'}
-                              </div>
-                              <ul className="text-xs text-red-700 space-y-0.5">
-                                {error.errors.map((err, errIdx) => (
-                                  <li key={errIdx}>• {err}</li>
-                                ))}
-                              </ul>
-                            </div>
+                        <div key={idx} className="border border-red-200 bg-white p-3">
+                          <div className="text-xs font-bold text-red-900">
+                            Row {error.row}: {error.data.landlordName || "Unnamed"}
                           </div>
+                          <ul className="mt-1 space-y-0.5 text-xs text-red-700">
+                            {error.errors.map((err, errIdx) => (
+                              <li key={errIdx}>• {err}</li>
+                            ))}
+                          </ul>
                         </div>
                       ))}
                     </div>
                   )}
-                  
-                  <p className="text-xs text-red-700 mt-3">
-                    ⚠️ Fix these errors in your Excel file and re-upload to import all records.
+                  <p className="mt-2 text-xs text-red-700">
+                    Fix these errors in your Excel file and re-upload to import all records.
                   </p>
                 </div>
               )}
             </div>
           )}
 
-          {/* Import backend failures (shown after a failed/partial import attempt) */}
+          {/* Backend import failures */}
           {importFailures.length > 0 && (
-            <div className="mt-4 bg-red-50 rounded-lg p-4 border border-red-200">
-              <div className="flex items-center gap-2 mb-3">
-                <FaExclamationTriangle className="text-red-600" />
-                <h3 className="text-sm font-bold text-red-900">
-                  Import Failures ({importFailures.length} row{importFailures.length !== 1 ? 's' : ''})
-                </h3>
-              </div>
-              <div className="space-y-2 max-h-60 overflow-y-auto">
+            <div className="mt-4 border border-red-200 bg-red-50 p-4">
+              <h3 className="mb-2 text-xs font-black uppercase tracking-wide text-red-900">
+                Import Failures ({importFailures.length} row{importFailures.length !== 1 ? "s" : ""})
+              </h3>
+              <div className="max-h-60 space-y-2 overflow-y-auto">
                 {importFailures.map((failure, idx) => (
-                  <div key={idx} className="bg-white rounded p-3 border border-red-200">
-                    <div className="flex items-start gap-2">
-                      <FaExclamationTriangle className="text-red-500 mt-0.5 flex-shrink-0" />
-                      <div className="flex-1">
-                        <div className="text-xs font-bold text-red-900 mb-0.5">
-                          {failure.landlord || 'Unknown record'}
-                        </div>
-                        <div className="text-xs text-red-700">{failure.error}</div>
-                      </div>
-                    </div>
+                  <div key={idx} className="border border-red-200 bg-white p-3">
+                    <div className="text-xs font-bold text-red-900">{failure.landlord || "Unknown record"}</div>
+                    <div className="mt-0.5 text-xs text-red-700">{failure.error}</div>
                   </div>
                 ))}
               </div>
-              <p className="text-xs text-red-600 mt-3">
+              <p className="mt-2 text-xs text-red-600">
                 Correct the issues above in your Excel file and re-import those specific rows.
               </p>
             </div>
@@ -293,20 +272,20 @@ const LandlordImportModal = ({ isOpen, onClose, onImport }) => {
         </div>
 
         {/* Footer */}
-        <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 flex items-center justify-between">
-          <div className="text-xs text-gray-600">
+        <div className="flex flex-shrink-0 items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3">
+          <div className="text-xs text-slate-500">
             {parseResult && parseResult.validCount > 0 ? (
-              <span className="font-semibold text-green-700">
-                Ready to import {parseResult.validCount} landlord{parseResult.validCount !== 1 ? 's' : ''}
+              <span className="font-semibold text-emerald-700">
+                Ready to import {parseResult.validCount} landlord{parseResult.validCount !== 1 ? "s" : ""}
               </span>
             ) : (
-              <span>Upload an Excel file to begin</span>
+              "Upload an Excel file to begin"
             )}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button
               onClick={handleClose}
-              className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50"
               disabled={isImporting}
             >
               Cancel
@@ -314,21 +293,17 @@ const LandlordImportModal = ({ isOpen, onClose, onImport }) => {
             <button
               onClick={handleImport}
               disabled={!parseResult || parseResult.validCount === 0 || isImporting}
-              className={`px-6 py-2 text-sm font-bold text-white rounded-lg transition-colors flex items-center gap-2 ${
-                !parseResult || parseResult.validCount === 0 || isImporting
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : `${MILIK_ORANGE} hover:bg-[#e67e00]`
-              }`}
+              className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white transition-colors hover:bg-[#0d5442] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isImporting ? (
                 <>
-                  <FaSpinner className="animate-spin" />
-                  <span>Importing...</span>
+                  <FaSpinner className="animate-spin" size={11} />
+                  Importing…
                 </>
               ) : (
                 <>
-                  <FaUpload />
-                  <span>Import {parseResult?.validCount || 0} Landlords</span>
+                  <FaUpload size={11} />
+                  Import {parseResult?.validCount || 0} Landlords
                 </>
               )}
             </button>

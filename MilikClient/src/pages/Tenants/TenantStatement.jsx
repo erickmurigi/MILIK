@@ -2093,7 +2093,7 @@ const TenantStatement = () => {
                     <td className="px-2.5 py-0.5 font-semibold text-slate-900 whitespace-nowrap">{transaction.transactionCode}</td>
                     <td className="px-2.5 py-0.5 text-center">{["invoice", "receipt"].includes(String(transaction.sourceKind || "")) ? (<button type="button" onClick={() => setAllocationTraceTarget({ kind: transaction.sourceKind === "invoice" ? "invoice" : "receipt", id: transaction.sourceId })} className="inline-flex h-6 items-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-[10px] font-bold text-slate-700 hover:bg-slate-100"><FaLink size={10} /> Trace</button>) : (<span className="text-[10px] text-slate-300">—</span>)}</td>
                     <td className={`px-2.5 py-1 text-right font-black whitespace-nowrap ${isDebit ? "text-red-600" : "text-green-600"}`}>{isDebit ? "+" : "-"}Ksh {Math.abs(transaction.amount).toLocaleString()}</td>
-                    <td className="px-2.5 py-0.5 text-right font-black text-slate-900 whitespace-nowrap">Ksh {transaction.balance.toLocaleString()}</td>
+                    <td className={`px-2.5 py-0.5 text-right font-black whitespace-nowrap ${balColor}`}>Ksh {Math.abs(transaction.balance).toLocaleString()}{transaction.balance < 0 ? " CR" : transaction.balance > 0 ? " DR" : ""}</td>
                   </tr>
                 );
               }) : (<tr><td colSpan="7" className="px-3 py-12 text-center"><p className="text-sm font-semibold text-slate-400">No transactions match the selected filters.</p><p className="mt-1 text-[10px] text-slate-300">Try widening the date range or switching to "All Types".</p></td></tr>)}

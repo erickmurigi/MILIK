@@ -579,20 +579,18 @@ const Maintenances = () => {
 
       {/* Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-slate-950/55 px-4 py-4 backdrop-blur-sm sm:items-center sm:py-6">
-          <div className="w-full max-w-3xl max-h-[calc(100vh-2rem)] overflow-y-auto overscroll-contain rounded-[28px] border border-slate-200 bg-white shadow-2xl">
-            <div className="sticky top-0 z-20 flex items-center justify-between bg-[#0B3B2E] px-6 py-4 text-white rounded-t-[28px]">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-200">Maintenance</p>
-                <h2 className="text-xl font-black">{editingRequest?._id ? "Edit Request" : "New Maintenance Request"}</h2>
-              </div>
-              <button onClick={closeModal} className="rounded-full border border-white/30 p-2 hover:bg-white/10"><FaTimes /></button>
+        <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="w-full max-w-3xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between bg-[#0B3B2E] px-4 py-3 text-white">
+              <h2 className="text-sm font-black uppercase tracking-wide">{editingRequest?._id ? "Edit Request" : "New Maintenance Request"}</h2>
+              <button onClick={closeModal} className="text-white/70 transition-colors hover:text-white"><FaTimes /></button>
             </div>
 
-            <form onSubmit={handleSave} className="space-y-4 px-6 py-5">
+            <form onSubmit={handleSave} className="flex flex-col flex-1 overflow-hidden">
+              <div className="flex-1 overflow-y-auto bg-white px-5 py-4 space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Property</span>
+                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Property</span>
                   <AppSelect
                     value={selectedPropertyId}
                     onChange={(v) => setForm((prev) => ({ ...prev, unit: "", tenant: "", property: v ?? "" }))}
@@ -603,7 +601,7 @@ const Maintenances = () => {
                   />
                 </div>
                 <div>
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Unit <span className="text-red-500">*</span></span>
+                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Unit <span className="text-red-500">*</span></span>
                   <AppSelect
                     value={form.unit}
                     onChange={(v) => setForm((prev) => ({ ...prev, unit: v ?? "", tenant: "" }))}
@@ -617,7 +615,7 @@ const Maintenances = () => {
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Tenant</span>
+                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tenant</span>
                   <AppSelect
                     value={form.tenant}
                     onChange={(v) => setForm((prev) => ({ ...prev, tenant: v ?? "" }))}
@@ -629,42 +627,42 @@ const Maintenances = () => {
                   />
                 </div>
                 <label className="block">
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Assigned to</span>
+                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Assigned to</span>
                   <input
                     value={form.assignedTo}
                     onChange={(e) => setForm((prev) => ({ ...prev, assignedTo: e.target.value }))}
                     placeholder="Technician or service provider"
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </label>
               </div>
 
               <div className="grid gap-4 md:grid-cols-[1fr_auto_auto]">
                 <label className="block">
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Issue title <span className="text-red-500">*</span></span>
+                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Issue title <span className="text-red-500">*</span></span>
                   <input
                     value={form.title}
                     onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
                     placeholder="e.g. Water leak in kitchen"
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Priority</span>
+                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Priority</span>
                   <select
                     value={form.priority}
                     onChange={(e) => setForm((prev) => ({ ...prev, priority: e.target.value }))}
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     {PRIORITY_OPTIONS.filter((o) => o.value !== "all").map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </label>
                 <label className="block">
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Status</span>
+                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Status</span>
                   <select
                     value={form.status}
                     onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     {STATUS_OPTIONS.filter((o) => o.value !== "all").map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
@@ -672,13 +670,13 @@ const Maintenances = () => {
               </div>
 
               <label className="block">
-                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Description <span className="text-red-500">*</span></span>
+                <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Description <span className="text-red-500">*</span></span>
                 <textarea
                   rows={3}
                   value={form.description}
                   onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
                   placeholder="Describe the issue clearly so a technician can act on it."
-                  className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                  className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                 />
               </label>
 
@@ -690,21 +688,22 @@ const Maintenances = () => {
                   { label: "Actual cost", key: "actualCost", type: "number" },
                 ].map(({ label, key, type }) => (
                   <label key={key} className="block">
-                    <span className="mb-0.5 block text-xs font-semibold text-slate-700">{label}</span>
+                    <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">{label}</span>
                     <input
                       type={type}
                       min={type === "number" ? "0" : undefined}
                       value={form[key]}
                       onChange={(e) => setForm((prev) => ({ ...prev, [key]: e.target.value }))}
-                      className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                      className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                     />
                   </label>
                 ))}
               </div>
 
-              <div className="sticky bottom-0 flex flex-wrap justify-end gap-3 border-t border-slate-200 bg-white/95 pt-4 backdrop-blur-sm">
-                <button type="button" onClick={closeModal} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-                <button type="submit" disabled={submitting} className="rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
+              </div>
+              <div className="flex-shrink-0 flex flex-wrap justify-end gap-3 border-t border-slate-200 bg-slate-50 px-5 py-3">
+                <button type="button" onClick={closeModal} className="border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+                <button type="submit" disabled={submitting} className="bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
                   {submitting ? "Saving…" : editingRequest?._id ? "Save Changes" : "Create Request"}
                 </button>
               </div>

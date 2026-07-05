@@ -7,6 +7,7 @@ import {
   FaMoneyBillWave,
   FaReceipt,
   FaChartLine,
+  FaHandHoldingUsd,
 } from 'react-icons/fa';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
 import { hasCompanyPermission } from '../../utils/permissions';
@@ -149,12 +150,30 @@ const MetricsGrid = ({ darkMode, summaryData = {} }) => {
     ];
   }, [canViewFinancials, isLandlordMode, monthlyExpenses, netIncome, propertiesLoading]);
 
-  const metrics = [...baseMetrics, ...landlordExtraMetrics];
+  const totalLandlordPayable = Number(summaryData?.totalLandlordPayable || 0);
+
+  const pmExtraMetrics = useMemo(() => {
+    if (isLandlordMode || !canViewFinancials) return [];
+    if (totalLandlordPayable <= 0) return [];
+    return [{
+      id: 7,
+      label: 'Owed to Landlords',
+      value: formatCurrency(totalLandlordPayable),
+      icon: <FaHandHoldingUsd />,
+      color: 'from-[#b45309] to-[#92400e]',
+      iconBg: 'bg-[#b45309]/25',
+      loading: false,
+    }];
+  }, [isLandlordMode, canViewFinancials, totalLandlordPayable]);
+
+  const metrics = [...baseMetrics, ...landlordExtraMetrics, ...pmExtraMetrics];
 
   return (
     <div className={`sticky top-0 z-20 grid gap-2 border-b border-gray-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur ${
-      isLandlordMode && canViewFinancials
+      metrics.length >= 6
         ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'
+        : metrics.length === 5
+        ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
         : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'
     }`}>
       {metrics.map((metric) => (

@@ -974,20 +974,12 @@ const MeterReadings = () => {
           </div>
 
           {showAddModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
-              <div className="max-h-[92vh] w-full max-w-5xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
-                <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4">
-                  <div>
-                    <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-slate-500">
-                      Meter readings
-                    </p>
-                    <h2 className="mt-1 text-lg font-bold text-slate-900">
-                      {editingId ? "Edit meter reading" : "Add meter reading"}
-                    </h2>
-                    <p className="mt-1 text-sm text-slate-500">
-                      Draft readings can be billed later through the normal tenant invoice workflow.
-                    </p>
-                  </div>
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
+              <div className="flex flex-col max-h-[92vh] w-full max-w-5xl overflow-hidden border border-slate-200 bg-white shadow-2xl">
+                <div className="flex items-center justify-between bg-[#0B3B2E] px-4 py-3 text-white">
+                  <h2 className="text-sm font-black uppercase tracking-wide">
+                    {editingId ? "Edit meter reading" : "Add meter reading"}
+                  </h2>
                   <button
                     type="button"
                     onClick={() => {
@@ -995,21 +987,21 @@ const MeterReadings = () => {
                       resetForm();
                       setShowAddModal(false);
                     }}
-                    className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-white hover:text-slate-800"
+                    className="text-white/70 transition-colors hover:text-white"
                   >
                     <FaBan />
                   </button>
                 </div>
 
-                <div className="max-h-[calc(92vh-82px)] overflow-y-auto p-5">
-                  <form className="space-y-5" onSubmit={handleSubmit}>
+                <form className="flex flex-col flex-1 overflow-hidden" onSubmit={handleSubmit}>
+                  <div className="flex-1 overflow-y-auto bg-white px-5 py-4 space-y-5">
                     <div className="grid gap-4 md:grid-cols-2">
-                      <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
-                        <span>Property</span>
+                      <label className="block">
+                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Property</span>
                         <select
                           value={form.property}
                           onChange={(e) => handleFormChange("property", e.target.value)}
-                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         >
                           <option value="">Select property</option>
                           {properties.map((property) => (
@@ -1020,12 +1012,12 @@ const MeterReadings = () => {
                         </select>
                       </label>
 
-                      <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
-                        <span>Unit</span>
+                      <label className="block">
+                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Unit</span>
                         <select
                           value={form.unit}
                           onChange={(e) => handleFormChange("unit", e.target.value)}
-                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         >
                           <option value="">Select unit</option>
                           {filteredUnits.map((unit) => (
@@ -1036,12 +1028,12 @@ const MeterReadings = () => {
                         </select>
                       </label>
 
-                      <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
-                        <span>Tenant / occupant</span>
+                      <label className="block">
+                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tenant / occupant</span>
                         <select
                           value={form.tenant}
                           onChange={(e) => handleFormChange("tenant", e.target.value)}
-                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         >
                           <option value="">Auto-detect active tenant</option>
                           {filteredTenants.map((tenant) => (
@@ -1057,12 +1049,12 @@ const MeterReadings = () => {
                         )}
                       </label>
 
-                      <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
-                        <span>Utility type</span>
+                      <label className="block">
+                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Utility type</span>
                         <select
                           value={form.utilityType}
                           onChange={(e) => handleFormChange("utilityType", e.target.value)}
-                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         >
                           <option value="">Select utility</option>
                           {selectedUnitUtilityOptions.map((utility) => (
@@ -1073,77 +1065,77 @@ const MeterReadings = () => {
                         </select>
                       </label>
 
-                      <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
-                        <span>Billing period</span>
+                      <label className="block">
+                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Billing period</span>
                         <input
                           type="month"
                           value={form.billingPeriod}
                           onChange={(e) => handleFormChange("billingPeriod", e.target.value)}
-                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </label>
 
-                      <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
-                        <span>Reading date</span>
+                      <label className="block">
+                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Reading date</span>
                         <input
                           type="date"
                           value={form.readingDate}
                           onChange={(e) => handleFormChange("readingDate", e.target.value)}
-                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </label>
 
-                      <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
-                        <span>Previous reading</span>
+                      <label className="block">
+                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Previous reading</span>
                         <input
                           type="text"
                           inputMode="decimal"
                           value={form.previousReading === "" ? (inferredPreviousReading > 0 ? String(inferredPreviousReading) : "") : form.previousReading}
                           onChange={(e) => handleFormChange("previousReading", e.target.value)}
-                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                           placeholder="0"
                         />
                       </label>
 
-                      <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
-                        <span>Current reading</span>
+                      <label className="block">
+                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Current reading</span>
                         <input
                           type="text"
                           inputMode="decimal"
                           value={form.currentReading}
                           onChange={(e) => handleFormChange("currentReading", e.target.value)}
-                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </label>
 
-                      <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
-                        <span>Rate per unit</span>
+                      <label className="block">
+                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Rate per unit</span>
                         <input
                           type="text"
                           inputMode="decimal"
                           value={form.rate}
                           onChange={(e) => handleFormChange("rate", e.target.value)}
-                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </label>
 
-                      <label className="space-y-0.5 block text-xs font-semibold text-slate-700 md:col-span-2">
-                        <span>Meter number</span>
+                      <label className="block md:col-span-2">
+                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Meter number</span>
                         <input
                           type="text"
                           value={form.meterNumber}
                           onChange={(e) => handleFormChange("meterNumber", e.target.value)}
-                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </label>
 
-                      <label className="space-y-0.5 block text-xs font-semibold text-slate-700 md:col-span-2">
-                        <span>Notes</span>
+                      <label className="block md:col-span-2">
+                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Notes</span>
                         <textarea
                           rows={4}
                           value={form.notes}
                           onChange={(e) => handleFormChange("notes", e.target.value)}
-                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </label>
                     </div>
@@ -1182,31 +1174,31 @@ const MeterReadings = () => {
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 pt-4">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          resetForm();
-                          setShowAddModal(false);
-                        }}
-                        className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={saving || (!editingId && !canCreateReading) || (editingId && !canUpdateReading)}
-                        className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-black text-white ${
-                          saving || (!editingId && !canCreateReading) || (editingId && !canUpdateReading)
-                            ? "cursor-not-allowed bg-gray-400"
-                            : `${MILIK_GREEN} hover:bg-[#0A3127]`
-                        }`}
-                      >
-                        <FaSave /> {saving ? "Saving..." : editingId ? "Update Reading" : "Save Reading"}
-                      </button>
-                    </div>
-                  </form>
-                </div>
+                  </div>
+                  <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetForm();
+                        setShowAddModal(false);
+                      }}
+                      className="border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={saving || (!editingId && !canCreateReading) || (editingId && !canUpdateReading)}
+                      className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-black text-white ${
+                        saving || (!editingId && !canCreateReading) || (editingId && !canUpdateReading)
+                          ? "cursor-not-allowed bg-gray-400"
+                          : `${MILIK_GREEN} hover:bg-[#0A3127]`
+                      }`}
+                    >
+                      <FaSave /> {saving ? "Saving..." : editingId ? "Update Reading" : "Save Reading"}
+                    </button>
+                  </div>
+                </form>
               </div>
             </div>
           )}

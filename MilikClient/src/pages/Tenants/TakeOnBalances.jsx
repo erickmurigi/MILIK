@@ -213,48 +213,34 @@ function TakeOnBalanceModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center sm:p-6">
-      <div
-        className="absolute inset-0 bg-slate-950/30 backdrop-blur-[5px]"
-        onClick={onClose}
-      />
-      <div className="relative flex w-full max-w-3xl max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100vh-3rem)]">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+      <div className="flex w-full max-w-3xl max-h-[90vh] flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
         {/* Header */}
-        <div className="shrink-0 bg-[#0B3B2E] px-6 py-4">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-white/50">
-                Tenant Take-On Balances
-              </p>
-              <h2 className="mt-1 text-lg font-bold text-white">
-                {mode === "edit" ? "Edit Take-On Balance" : "Add Take-On Balance"}
-              </h2>
-              <p className="mt-0.5 text-[10px] text-white/60">
-                Keep opening balances clean, auditable, and aligned to the right tenant bill item.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="shrink-0 rounded-lg border border-white/20 bg-white/10 p-2 text-white/80 transition hover:bg-white/20 hover:text-white"
-            >
-              <FaTimes size={12} />
-            </button>
-          </div>
+        <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+          <h2 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
+            {mode === "edit" ? "Edit Take-On Balance" : "Add Take-On Balance"}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-white/70 transition-colors hover:text-white"
+          >
+            <FaTimes size={12} />
+          </button>
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex-1 overflow-y-auto bg-white px-5 py-4">
           <div className="grid grid-cols-1 gap-5 md:grid-cols-[1fr_260px]">
             {/* Left — form fields */}
             <div className="space-y-4">
               <div>
-                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Property</label>
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Property</label>
                 <select
                   value={form.propertyId}
                   onChange={(e) => setForm((prev) => ({ ...prev, propertyId: e.target.value, tenantId: "" }))}
                   disabled={mode === "edit"}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10 disabled:bg-slate-100 disabled:text-slate-500"
+                  className="w-full border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10 disabled:bg-slate-100 disabled:text-slate-500"
                 >
                   <option value="">Select property</option>
                   {propertyOptions.map((property) => {
@@ -269,25 +255,25 @@ function TakeOnBalanceModal({
               </div>
 
               <div>
-                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Find Tenant</label>
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Find Tenant</label>
                 <div className="relative">
                   <FaSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={10} />
                   <input
                     value={form.tenantSearch}
                     onChange={(e) => setForm((prev) => ({ ...prev, tenantSearch: e.target.value }))}
                     placeholder="Type tenant name, unit, or property"
-                    className="w-full rounded-lg border border-slate-300 py-2 pl-8 pr-3 text-xs shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
+                    className="w-full border border-slate-300 py-2 pl-8 pr-3 text-xs shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Tenant</label>
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tenant</label>
                 <select
                   value={form.tenantId}
                   onChange={(e) => setForm((prev) => ({ ...prev, tenantId: e.target.value }))}
                   disabled={mode === "edit" || (!form.propertyId && mode !== "edit")}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10 disabled:bg-slate-100 disabled:text-slate-500"
+                  className="w-full border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10 disabled:bg-slate-100 disabled:text-slate-500"
                 >
                   <option value="">
                     {form.propertyId ? "Select tenant" : "Select property first"}
@@ -306,11 +292,11 @@ function TakeOnBalanceModal({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Bill Item</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Bill Item</label>
                   <select
                     value={form.billItem}
                     onChange={(e) => setForm((prev) => ({ ...prev, billItem: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
+                    className="w-full border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
                   >
                     {(Array.isArray(filterBillItemOptions) ? filterBillItemOptions : []).map((option) => (
                       <option key={option.value} value={option.value}>{option.label}</option>
@@ -320,11 +306,11 @@ function TakeOnBalanceModal({
 
                 {form.billItem === "utility" ? (
                   <div>
-                    <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Utility Type</label>
+                    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Utility Type</label>
                     <select
                       value={form.utilityLabel}
                       onChange={(e) => setForm((prev) => ({ ...prev, utilityLabel: e.target.value }))}
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
+                      className="w-full border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
                     >
                       <option value="">Select type</option>
                       <option value="Water">Water</option>
@@ -341,12 +327,12 @@ function TakeOnBalanceModal({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Type</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Type</label>
                   <select
                     value={form.type}
                     onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value }))}
                     disabled={mode === "edit" && form.type === "credit"}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10 disabled:bg-slate-100 disabled:text-slate-500"
+                    className="w-full border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10 disabled:bg-slate-100 disabled:text-slate-500"
                   >
                     <option value="debit">Debit</option>
                     <option value="credit">Credit</option>
@@ -358,7 +344,7 @@ function TakeOnBalanceModal({
                   </p>
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Amount</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Amount</label>
                   <input
                     type="number"
                     min="0"
@@ -366,18 +352,18 @@ function TakeOnBalanceModal({
                     value={form.amount}
                     onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
                     placeholder="0.00"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
+                    className="w-full border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
                   />
                 </div>
               </div>
 
               {form.type === "credit" && (
                 <div>
-                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Opening Balance Posting Account</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Opening Balance Posting Account</label>
                   <select
                     value={form.openingBalanceAccountId}
                     onChange={(e) => setForm((prev) => ({ ...prev, openingBalanceAccountId: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
+                    className="w-full border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
                   >
                     <option value="">Select account</option>
                     {chartAccounts.map((account) => (
@@ -391,25 +377,25 @@ function TakeOnBalanceModal({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Effective Date</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Effective Date</label>
                   <input
                     type="date"
                     value={form.effectiveDate}
                     onChange={(e) => setForm((prev) => ({ ...prev, effectiveDate: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
+                    className="w-full border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
                   />
                 </div>
                 <div />
               </div>
 
               <div>
-                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Notes / Description</label>
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Notes / Description</label>
                 <textarea
                   rows={3}
                   value={form.description}
                   onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
                   placeholder="Optional narration for this take-on balance"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
+                  className="w-full border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
                 />
               </div>
             </div>
@@ -457,25 +443,23 @@ function TakeOnBalanceModal({
         </div>
 
         {/* Footer */}
-        <div className="shrink-0 border-t border-slate-200 bg-white px-6 py-3">
-          <div className="flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={onSave}
-              disabled={saving}
-              className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-white shadow-sm transition ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER} disabled:cursor-not-allowed disabled:opacity-60`}
-            >
-              <FaSave size={11} />
-              {saving ? "Saving…" : mode === "edit" ? "Save Changes" : "Save Take-On Balance"}
-            </button>
-          </div>
+        <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={saving}
+            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-black uppercase text-white shadow-sm transition bg-[#0B3B2E] hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <FaSave size={11} />
+            {saving ? "Saving…" : mode === "edit" ? "Save Changes" : "Save Take-On Balance"}
+          </button>
         </div>
       </div>
     </div>
@@ -486,27 +470,19 @@ function TakeOnViewModal({ open, row, onClose }) {
   if (!open || !row) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center sm:p-6">
-      <div className="absolute inset-0 bg-slate-950/25 backdrop-blur-[4px]" onClick={onClose} />
-      <div className="relative w-full max-w-2xl max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100vh-3rem)]">
-        <div className="sticky top-0 z-20 border-b border-slate-200 bg-gradient-to-r from-slate-900 via-[#0B3B2E] to-[#FF8C00] px-6 py-5 text-white">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/70">
-                Take-On Balance Details
-              </p>
-              <h2 className="mt-2 text-2xl font-bold">{row.billItemLabel}</h2>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-xl border border-white/20 bg-white/10 p-2 text-white hover:bg-white/20"
-            >
-              <FaTimes />
-            </button>
-          </div>
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+      <div className="flex w-full max-w-2xl max-h-[90vh] flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+        <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+          <h2 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">{row.billItemLabel}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-white/70 transition-colors hover:text-white"
+          >
+            <FaTimes />
+          </button>
         </div>
-        <div className="grid grid-cols-1 gap-4 px-6 py-6 md:grid-cols-2">
+        <div className="flex-1 overflow-y-auto grid grid-cols-1 gap-4 px-6 py-6 md:grid-cols-2">
           {[
             ["Tenant", getTenantDisplayName(row.tenant)],
             ["Unit", getUnitDisplay(row.unit)],

@@ -1075,21 +1075,21 @@ const InvoiceNotes = () => {
       </div>
 
       {showAddModal ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
-            <div className="max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
+            <div className="max-h-[92vh] w-full max-w-4xl overflow-hidden border border-slate-200 bg-white shadow-2xl">
               <div className="flex items-center justify-between bg-[#0B3B2E] px-5 py-3 text-white">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-100">Add invoice note</p>
-                  <h3 className="text-lg font-black">{noteType === "CREDIT_NOTE" ? "Credit Note" : "Debit Note"}</h3>
+                  <h3 className="text-sm font-black uppercase tracking-wide">{noteType === "CREDIT_NOTE" ? "Credit Note" : "Debit Note"}</h3>
                 </div>
-                <button onClick={() => !saving && setShowAddModal(false)} className="rounded-full border border-white/30 p-2 hover:bg-white/10">
+                <button onClick={() => !saving && setShowAddModal(false)} className="text-white/70 transition-colors hover:text-white">
                   <FaTimes />
                 </button>
               </div>
 
               <div className="max-h-[calc(92vh-78px)] overflow-y-auto px-5 py-5">
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
+                  <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
                     <span>Note Type</span>
                     <select
                       value={noteType}
@@ -1100,19 +1100,19 @@ const InvoiceNotes = () => {
                         nextParams.set("type", nextValue === "DEBIT_NOTE" ? "debit" : "credit");
                         setSearchParams(nextParams, { replace: true });
                       }}
-                      className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                      className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                     >
                       <option value="CREDIT_NOTE">Credit Note</option>
                       <option value="DEBIT_NOTE">Debit Note</option>
                     </select>
                   </label>
 
-                  <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
+                  <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
                     <span>Property</span>
                     <select
                       value={propertyId}
                       onChange={(e) => setPropertyId(e.target.value)}
-                      className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                      className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                     >
                       <option value="">Select property</option>
                       {properties.map((property) => (
@@ -1121,19 +1121,19 @@ const InvoiceNotes = () => {
                     </select>
                   </label>
 
-                  <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
+                  <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
                     <span>Date</span>
-                    <input type="date" value={noteDate} onChange={(e) => setNoteDate(e.target.value)} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                    <input type="date" value={noteDate} onChange={(e) => setNoteDate(e.target.value)} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                   </label>
 
-                  <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
+                  <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
                     <span>Tenant</span>
-                    <select value={tenantScope} onChange={(e) => setTenantScope(e.target.value)} disabled={!propertyId} className="mb-2 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed">
+                    <select value={tenantScope} onChange={(e) => setTenantScope(e.target.value)} disabled={!propertyId} className="mb-2 w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed">
                       <option value="active">Active tenants</option>
                       <option value="terminated">Terminated tenants</option>
                       <option value="all">All tenants</option>
                     </select>
-                    <select value={tenantId} onChange={(e) => setTenantId(e.target.value)} disabled={!propertyId} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed">
+                    <select value={tenantId} onChange={(e) => setTenantId(e.target.value)} disabled={!propertyId} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed">
                       <option value="">{propertyId ? "Select tenant" : "Select property first"}</option>
                       {propertyScopedTenants.map((tenant) => (
                         <option key={tenant._id} value={tenant._id}>{getTenantDisplayName(tenant)} ({getTenantStatusLabel(tenant)})</option>
@@ -1145,9 +1145,9 @@ const InvoiceNotes = () => {
                   </label>
 
                   {noteType === "CREDIT_NOTE" ? (
-                    <label className="space-y-0.5 block text-xs font-semibold text-slate-700 md:col-span-2">
+                    <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500 md:col-span-2">
                       <span>Source Invoice</span>
-                      <select value={sourceInvoiceId} onChange={(e) => setSourceInvoiceId(e.target.value)} disabled={!tenantId} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed">
+                      <select value={sourceInvoiceId} onChange={(e) => setSourceInvoiceId(e.target.value)} disabled={!tenantId} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed">
                         <option value="">{tenantId ? (sourceInvoiceOptions.length ? "Select source invoice" : "No matching open posted invoices") : "Select tenant first"}</option>
                         {sourceInvoiceOptions.map((invoice) => (
                           <option key={invoice._id} value={invoice._id}>
@@ -1157,7 +1157,7 @@ const InvoiceNotes = () => {
                       </select>
                     </label>
                   ) : (
-                    <label className="space-y-0.5 block text-xs font-semibold text-slate-700 md:col-span-2">
+                    <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500 md:col-span-2">
                       <span>Charge Item</span>
                       <input
                         type="text"
@@ -1165,9 +1165,9 @@ const InvoiceNotes = () => {
                         onChange={(e) => setChargeItemSearch(e.target.value)}
                         disabled={!tenantId}
                         placeholder="Search rent month, utility, deposit, late payment..."
-                        className="mb-2 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed"
+                        className="mb-2 w-full border border-slate-200 bg-white px-3 py-1.5 text-xs normal-case text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed"
                       />
-                      <select value={invoiceItemSelection} onChange={(e) => setInvoiceItemSelection(e.target.value)} disabled={!tenantId} size={Math.min(8, Math.max(3, filteredDebitInvoiceItemOptions.length + 1))} className="max-h-56 w-full overflow-y-auto rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed">
+                      <select value={invoiceItemSelection} onChange={(e) => setInvoiceItemSelection(e.target.value)} disabled={!tenantId} size={Math.min(8, Math.max(3, filteredDebitInvoiceItemOptions.length + 1))} className="max-h-56 w-full overflow-y-auto border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed">
                         <option value="">{tenantId ? (debitInvoiceItemOptions.length ? "Select charge item" : "No charge items available") : "Select tenant first"}</option>
                         {filteredDebitInvoiceItemOptions.map((item) => (
                           <option key={item.key} value={item.key}>
@@ -1179,9 +1179,9 @@ const InvoiceNotes = () => {
                   )}
 
                   {noteType === "CREDIT_NOTE" ? (
-                    <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
+                    <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
                       <span>Charge Type</span>
-                      <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
+                      <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
                         <option value="">Select charge type</option>
                         {chargeTypes.map((item) => (
                           <option key={item.value} value={item.value}>{item.label}</option>
@@ -1189,25 +1189,25 @@ const InvoiceNotes = () => {
                       </select>
                     </label>
                   ) : (
-                    <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
+                    <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
                       <span>Charge Category</span>
                       <input
                         type="text"
                         value={selectedInvoiceItem ? humanizeCategory(selectedInvoiceItem.category) : ""}
                         readOnly
-                        className="w-full rounded border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700 outline-none"
+                        className="w-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700 outline-none"
                       />
                     </label>
                   )}
 
-                  <label className="space-y-0.5 block text-xs font-semibold text-slate-700">
+                  <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
                     <span>Amount</span>
-                    <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                    <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                   </label>
 
-                  <label className="space-y-0.5 block text-xs font-semibold text-slate-700 xl:col-span-3">
+                  <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500 xl:col-span-3">
                     <span>Posting Account (optional)</span>
-                    <select value={chartAccountId} onChange={(e) => setChartAccountId(e.target.value)} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
+                    <select value={chartAccountId} onChange={(e) => setChartAccountId(e.target.value)} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
                       <option value="">Use existing charge mapping</option>
                       {postingAccounts.map((account) => (
                         <option key={account._id} value={account._id}>{account.code} - {account.name}</option>
@@ -1215,9 +1215,9 @@ const InvoiceNotes = () => {
                     </select>
                   </label>
 
-                  <label className="space-y-0.5 block text-xs font-semibold text-slate-700 xl:col-span-3">
+                  <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500 xl:col-span-3">
                     <span>Description</span>
-                    <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                    <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs normal-case text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                   </label>
                 </div>
 
@@ -1235,10 +1235,10 @@ const InvoiceNotes = () => {
               </div>
 
               <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-white px-5 py-4">
-                <button type="button" onClick={() => setShowAddModal(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                <button type="button" onClick={() => setShowAddModal(false)} className="border border-slate-200 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-700 hover:bg-slate-50">
                   Cancel
                 </button>
-                <button type="button" onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60">
+                <button type="button" onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60">
                   <FaSave /> {saving ? "Saving..." : `Save ${noteType === "CREDIT_NOTE" ? "Credit" : "Debit"} Note`}
                 </button>
               </div>
@@ -1259,14 +1259,14 @@ const InvoiceNotes = () => {
       />
 
       {reverseNoteModal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 backdrop-blur-[2px] px-4">
+          <div className="bg-white shadow-2xl w-full max-w-md overflow-hidden border border-slate-200">
             <div className="bg-[#0B3B2E] px-6 py-4 flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15">
+              <div className="flex h-9 w-9 items-center justify-center bg-white/15">
                 <FaUndo className="text-white text-sm" />
               </div>
               <div>
-                <h2 className="text-white font-semibold text-base leading-tight">
+                <h2 className="text-sm font-black uppercase tracking-wide text-white">
                   Reverse {String(reverseNoteModal.note?.noteType || "").toUpperCase() === "CREDIT_NOTE" ? "Credit" : "Debit"} Note
                 </h2>
                 <p className="text-white/60 text-xs mt-0.5">{reverseNoteModal.note?.noteNumber || ""}</p>
@@ -1278,11 +1278,11 @@ const InvoiceNotes = () => {
                 <p className="text-sm text-amber-800">This will reverse the note and post offsetting ledger entries. This action cannot be undone.</p>
               </div>
               <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide">Reason (optional)</label>
+                <label className="block text-[10px] font-black uppercase tracking-wide text-slate-500">Reason (optional)</label>
                 <textarea
                   rows={3}
                   autoFocus
-                  className="w-full resize-none rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="w-full resize-none border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm normal-case text-slate-800 placeholder-slate-400 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                   placeholder="Add an optional reason for the audit trail…"
                   value={reverseNoteModal.reason}
                   onChange={(e) => setReverseNoteModal((prev) => ({ ...prev, reason: e.target.value }))}
@@ -1292,8 +1292,8 @@ const InvoiceNotes = () => {
               </div>
             </div>
             <div className="px-6 pb-5 flex justify-end gap-3">
-              <button onClick={() => setReverseNoteModal({ open: false, note: null, reason: "", loading: false })} disabled={reverseNoteModal.loading} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50">Cancel</button>
-              <button onClick={handleReverseNoteConfirm} disabled={reverseNoteModal.loading} className="rounded-lg bg-red-600 hover:bg-red-700 px-5 py-2 text-sm font-semibold text-white transition-colors disabled:opacity-60 flex items-center gap-2">
+              <button onClick={() => setReverseNoteModal({ open: false, note: null, reason: "", loading: false })} disabled={reverseNoteModal.loading} className="border border-slate-300 bg-white px-4 py-2 text-sm font-medium uppercase tracking-wide text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50">Cancel</button>
+              <button onClick={handleReverseNoteConfirm} disabled={reverseNoteModal.loading} className="bg-red-600 hover:bg-red-700 px-5 py-2 text-sm font-semibold uppercase tracking-wide text-white transition-colors disabled:opacity-60 flex items-center gap-2">
                 {reverseNoteModal.loading ? <><svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg>Reversing…</> : <><FaUndo className="text-xs" />Confirm Reversal</>}
               </button>
             </div>

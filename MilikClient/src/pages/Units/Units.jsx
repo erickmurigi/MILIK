@@ -1219,34 +1219,31 @@ const Units = () => {
 
         {/* Add Unit Modal (kept; styling aligned a bit) */}
         {showAddUnitModal && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-md backdrop-saturate-300 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-              <div className="flex justify-between items-center p-4 border-b">
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-800">Add New Unit/Space</h2>
-                  <p className="text-xs text-gray-600">Fill in the unit details below</p>
-                </div>
+          <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+            <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+              <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+                <h2 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">Add New Unit/Space</h2>
                 <button
                   onClick={closeAddUnitModal}
-                  className="text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-100"
+                  className="text-white/70 transition-colors hover:text-white"
                 >
                   <FaTimes />
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-6">
+              <div className="flex-1 overflow-y-auto bg-white px-5 py-4">
                 <form onSubmit={handleAddUnitSubmit} id="unitForm">
                   <div className="mb-6">
-                    <h3 className="text-sm font-semibold text-gray-800 mb-4 pb-2 border-b">General Information</h3>
+                    <h3 className="mb-3 border-b border-slate-100 pb-1 text-[10px] font-black uppercase tracking-wide text-slate-500">General Information</h3>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">Property <span className="text-red-500">*</span></label>
+                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Property <span className="text-red-500">*</span></label>
                         <select
                           name="property"
                           value={formData.property}
                           onChange={handleInputChange}
-                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                           required
                         >
                           <option value="">Select Property</option>
@@ -1259,44 +1256,44 @@ const Units = () => {
                       </div>
 
                       <div>
-                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">Specified Floor</label>
+                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Specified Floor</label>
                         <input
                           type="text"
                           name="specifiedFloor"
                           value={formData.specifiedFloor}
                           onChange={handleInputChange}
-                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                           placeholder="e.g., Ground Floor"
                         />
                       </div>
 
                       <div>
-                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">General Floor No.</label>
+                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">General Floor No.</label>
                         <input
                           type="number"
                           name="generalFloorNo"
                           value={formData.generalFloorNo}
                           onChange={handleInputChange}
-                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                           placeholder="e.g., 1, 2, 3..."
                         />
                       </div>
 
                       <div>
-                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">Unit/Space No. <span className="text-red-500">*</span></label>
+                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Unit/Space No. <span className="text-red-500">*</span></label>
                         <input
                           type="text"
                           name="unitSpaceNo"
                           value={formData.unitSpaceNo}
                           onChange={handleInputChange}
-                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                           placeholder="e.g., A101, 201, etc."
                           required
                         />
                       </div>
 
                       <div className="md:col-span-2">
-                        <label className="block text-xs font-medium text-gray-700 mb-2">Owner Occupied?</label>
+                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Owner Occupied?</label>
                         <div className="flex gap-4">
                           <label className="flex items-center gap-2">
                             <input
@@ -1327,55 +1324,55 @@ const Units = () => {
 
                   {/* AREA/SPACE MANAGEMENT & COSTING */}
                   <div className="mb-6 border-t pt-4">
-                    <h3 className="text-sm font-semibold text-gray-800 mb-4">AREA/SPACE MANAGEMENT & COSTING</h3>
+                    <h3 className="mb-3 border-b border-slate-100 pb-1 text-[10px] font-black uppercase tracking-wide text-slate-500">Area/Space Management &amp; Costing</h3>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">Rent Per Unit Area (Ksh)</label>
+                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Rent Per Unit Area (Ksh)</label>
                         <input
                           type="number"
                           name="rentPerUnitArea"
                           value={formData.rentPerUnitArea}
                           onChange={handleInputChange}
-                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                           placeholder="0.00"
                           step="0.01"
                         />
                       </div>
 
                       <div>
-                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">Market Rent (Ksh)</label>
+                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Market Rent (Ksh)</label>
                         <input
                           type="number"
                           name="marketRent"
                           value={formData.marketRent}
                           onChange={handleInputChange}
-                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                           placeholder="0.00"
                           step="0.01"
                         />
                       </div>
 
                       <div>
-                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">Area (Sq Ft)</label>
+                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Area (Sq Ft)</label>
                         <input
                           type="number"
                           name="areaSqFt"
                           value={formData.areaSqFt}
                           onChange={handleInputChange}
-                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                           placeholder="0.00"
                           step="0.01"
                         />
                       </div>
 
                       <div>
-                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">Charge Freq.</label>
+                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Charge Freq.</label>
                         <select
                           name="chargeFreq"
                           value={formData.chargeFreq}
                           onChange={handleInputChange}
-                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         >
                           <option value="">Select Frequency</option>
                           {chargeFrequencies.map((f) => (
@@ -1390,17 +1387,17 @@ const Units = () => {
                     {/* Services */}
                     <div className="mt-4">
                       <div className="flex justify-between items-center mb-2">
-                        <h4 className="text-xs font-medium text-gray-700">Service Charge/Utility/Amenity</h4>
+                        <h4 className="text-[10px] font-black uppercase tracking-wide text-slate-500">Service Charge/Utility/Amenity</h4>
                         <button
                           type="button"
                           onClick={addServiceRow}
-                          className={`px-3 py-1 text-xs text-white rounded transition-colors ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                          className={`px-3 py-1 text-xs text-white transition-colors ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
                         >
                           Add Service
                         </button>
                       </div>
 
-                      <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                      <div className="overflow-x-auto border border-gray-200">
                         <table className="min-w-full text-[11px] border-collapse">
                           <thead>
                             <tr className="bg-[#0B3B2E] text-white">
@@ -1419,7 +1416,7 @@ const Units = () => {
                                     type="checkbox"
                                     checked={s.checked}
                                     onChange={(e) => handleServiceChange(i, "checked", e.target.checked)}
-                                    className="rounded border-gray-300 text-emerald-600 focus:ring-[#0B3B2E]/20"
+                                    className="border-gray-300 text-emerald-600 focus:ring-[#0B3B2E]/20"
                                   />
                                 </td>
                                 <td className="px-3 py-2 border-b">
@@ -1427,7 +1424,7 @@ const Units = () => {
                                     type="text"
                                     value={s.service}
                                     onChange={(e) => handleServiceChange(i, "service", e.target.value)}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                                    className="w-full px-2 py-1 border border-gray-300 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                                     placeholder="e.g., Water"
                                   />
                                 </td>
@@ -1436,7 +1433,7 @@ const Units = () => {
                                     type="number"
                                     value={s.costPerArea}
                                     onChange={(e) => handleServiceChange(i, "costPerArea", e.target.value)}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                                    className="w-full px-2 py-1 border border-gray-300 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                                     placeholder="0.00"
                                     step="0.01"
                                   />
@@ -1446,7 +1443,7 @@ const Units = () => {
                                     type="text"
                                     value={s.totalCost}
                                     readOnly
-                                    className="w-full px-2 py-1 border border-gray-300 rounded bg-gray-50"
+                                    className="w-full px-2 py-1 border border-gray-300 bg-gray-50"
                                   />
                                 </td>
                                 <td className="px-3 py-2 border-b">
@@ -1454,7 +1451,7 @@ const Units = () => {
                                     <button
                                       type="button"
                                       onClick={() => removeServiceRow(i)}
-                                      className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
+                                      className="px-2 py-1 text-xs bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
                                     >
                                       Remove
                                     </button>
@@ -1470,67 +1467,67 @@ const Units = () => {
 
                   {/* Utility meters */}
                   <div className="mb-6 border-t pt-4">
-                    <h3 className="text-sm font-semibold text-gray-800 mb-4">UTILITY ACCOUNT & METER NO.</h3>
+                    <h3 className="mb-3 border-b border-slate-100 pb-1 text-[10px] font-black uppercase tracking-wide text-slate-500">Utility Account &amp; Meter No.</h3>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">Electricity Ac/No.</label>
+                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Electricity Ac/No.</label>
                         <input
                           type="text"
                           name="electricityAccountNo"
                           value={formData.electricityAccountNo}
                           onChange={handleInputChange}
-                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </div>
 
                       <div>
-                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">Water Ac/No.</label>
+                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Water Ac/No.</label>
                         <input
                           type="text"
                           name="waterAccountNo"
                           value={formData.waterAccountNo}
                           onChange={handleInputChange}
-                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </div>
 
                       <div>
-                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">Electricity Meter/No.</label>
+                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Electricity Meter/No.</label>
                         <input
                           type="text"
                           name="electricityMeterNo"
                           value={formData.electricityMeterNo}
                           onChange={handleInputChange}
-                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </div>
 
                       <div>
-                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">Water Meter/No.</label>
+                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Water Meter/No.</label>
                         <input
                           type="text"
                           name="waterMeterNo"
                           value={formData.waterMeterNo}
                           onChange={handleInputChange}
-                          className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </div>
                     </div>
 
                     <div className="mt-4">
                       <div className="flex justify-between items-center mb-2">
-                        <h4 className="text-xs font-medium text-gray-700">Extra Meter Numbers</h4>
+                        <h4 className="text-[10px] font-black uppercase tracking-wide text-slate-500">Extra Meter Numbers</h4>
                         <button
                           type="button"
                           onClick={addMeterRow}
-                          className={`px-3 py-1 text-xs text-white rounded transition-colors ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                          className={`px-3 py-1 text-xs text-white transition-colors ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
                         >
                           Add Meter
                         </button>
                       </div>
 
-                      <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                      <div className="overflow-x-auto border border-gray-200">
                         <table className="min-w-full text-[11px] border-collapse">
                           <thead>
                             <tr className="bg-[#0B3B2E] text-white">
@@ -1549,7 +1546,7 @@ const Units = () => {
                                     type="text"
                                     value={m.meterNo}
                                     onChange={(e) => handleMeterChange(i, "meterNo", e.target.value)}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                                    className="w-full px-2 py-1 border border-gray-300 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                                     placeholder="Meter number"
                                   />
                                 </td>
@@ -1559,7 +1556,7 @@ const Units = () => {
                                       type="checkbox"
                                       checked={m.readingSetup}
                                       onChange={(e) => handleMeterChange(i, "readingSetup", e.target.checked)}
-                                      className="rounded border-gray-300 text-emerald-600 focus:ring-[#0B3B2E]/20"
+                                      className="border-gray-300 text-emerald-600 focus:ring-[#0B3B2E]/20"
                                     />
                                     <span className="ml-2 text-xs">Enabled</span>
                                   </div>
@@ -1569,7 +1566,7 @@ const Units = () => {
                                     <button
                                       type="button"
                                       onClick={() => removeMeterRow(i)}
-                                      className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
+                                      className="px-2 py-1 text-xs bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
                                     >
                                       Remove
                                     </button>
@@ -1585,13 +1582,11 @@ const Units = () => {
                 </form>
               </div>
 
-              <div className="flex justify-between items-center p-4 border-t bg-gray-50">
-                <div className="text-xs text-gray-500">Fields marked with * are required</div>
-                <div className="flex items-center gap-2">
+              <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
                   <button
                     type="button"
                     onClick={closeAddUnitModal}
-                    className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                    className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-700 transition-colors hover:bg-slate-100"
                   >
                     Cancel
                   </button>
@@ -1616,18 +1611,17 @@ const Units = () => {
                       setServices([{ service: "", costPerArea: "", totalCost: "", checked: false }]);
                       setExtraMeters([{ meterNo: "", readingSetup: false }]);
                     }}
-                    className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                    className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-700 transition-colors hover:bg-slate-100"
                   >
                     Reset
                   </button>
                   <button
                     type="submit"
                     form="unitForm"
-                    className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] ${MILIK_GREEN}`}
+                    className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white transition-colors hover:bg-[#0d5442] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <FaSave /> Save Unit
                   </button>
-                </div>
               </div>
             </div>
           </div>

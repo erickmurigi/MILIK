@@ -361,18 +361,18 @@ function AddUtilityModal({ tenants, allUnits, company, dispatch, onClose, onSave
   };
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+    <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
 
         {/* Header */}
-        <div className="flex items-center justify-between bg-[#0B3B2E] px-5 py-4">
-          <div className="flex items-center gap-2.5 text-white">
+        <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+          <div className="flex items-center gap-2.5">
             <FaBolt size={14} />
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">
                 {isMulti ? `Adding Utilities — ${tenants.length} Tenants` : "Utilities"}
               </p>
-              <h3 className="text-sm font-black leading-tight">
+              <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
                 {isMulti
                   ? tenants.map((t) => t.name || t.tenantCode || "Tenant").join(", ")
                   : <>
@@ -383,7 +383,7 @@ function AddUtilityModal({ tenants, allUnits, company, dispatch, onClose, onSave
             </div>
           </div>
           <button onClick={onClose} disabled={saving}
-            className="flex h-7 w-7 items-center justify-center rounded text-white/70 hover:bg-white/10 hover:text-white transition">
+            className="text-white/70 transition-colors hover:text-white">
             <FaTimes size={13} />
           </button>
         </div>
@@ -445,9 +445,9 @@ function AddUtilityModal({ tenants, allUnits, company, dispatch, onClose, onSave
             ) : (
               <div className="space-y-2">
                 {rows.map((row, idx) => (
-                  <div key={idx} className="grid grid-cols-[1fr_120px_auto_auto] items-end gap-2 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3">
+                  <div key={idx} className="grid grid-cols-[1fr_120px_auto_auto] items-end gap-2 border border-indigo-100 bg-indigo-50/40 p-3">
                     <div>
-                      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500">Utility Type</label>
+                      <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Utility Type</label>
                       <select
                         value={row.utility}
                         onChange={(e) => updateRow(idx, "utility", e.target.value)}
@@ -458,7 +458,7 @@ function AddUtilityModal({ tenants, allUnits, company, dispatch, onClose, onSave
                       </select>
                     </div>
                     <div>
-                      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500">Charge (Ksh)</label>
+                      <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Charge (Ksh)</label>
                       <input
                         type="number" min="0" step="0.01" placeholder="0.00"
                         value={row.unitCharge}
@@ -489,13 +489,13 @@ function AddUtilityModal({ tenants, allUnits, company, dispatch, onClose, onSave
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+        <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
           <button onClick={onClose} disabled={saving}
-            className="h-8 rounded border border-slate-300 px-4 text-xs font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50">
+            className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-700 hover:bg-slate-100 disabled:opacity-50">
             Cancel
           </button>
           <button onClick={handleSave} disabled={saving}
-            className="flex h-8 items-center gap-1.5 rounded bg-[#0B3B2E] px-5 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-60">
+            className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0d5442] disabled:opacity-50">
             {saving
               ? <><FaSpinner size={10} className="animate-spin" /> Saving…</>
               : isMulti ? `Save to ${tenants.length} Tenants` : "Save Utilities"}
@@ -570,18 +570,18 @@ function RemoveUtilityModal({ tenants, allUnits, dispatch, onClose, onSaved }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-      <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+    <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+      <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
 
         {/* Header */}
-        <div className="flex items-center justify-between bg-[#0B3B2E] px-5 py-4">
-          <div className="flex items-center gap-2.5 text-white">
+        <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+          <div className="flex items-center gap-2.5">
             <FaTrash size={13} />
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">
                 {isMulti ? `Remove Utilities — ${tenants.length} Tenants` : "Remove Utilities"}
               </p>
-              <h3 className="text-sm font-black leading-tight">
+              <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
                 {isMulti
                   ? tenants.map((t) => t.name || t.tenantCode || "Tenant").join(", ")
                   : <>{tenants[0]?.name || "Tenant"}{tenants[0]?.tenantCode ? <span className="ml-2 font-normal text-white/60">({tenants[0].tenantCode})</span> : null}</>}
@@ -589,7 +589,7 @@ function RemoveUtilityModal({ tenants, allUnits, dispatch, onClose, onSaved }) {
             </div>
           </div>
           <button onClick={onClose} disabled={saving}
-            className="flex h-7 w-7 items-center justify-center rounded text-white/70 hover:bg-white/10 hover:text-white transition">
+            className="text-white/70 transition-colors hover:text-white">
             <FaTimes size={13} />
           </button>
         </div>
@@ -644,17 +644,17 @@ function RemoveUtilityModal({ tenants, allUnits, dispatch, onClose, onSaved }) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3">
+        <div className="flex flex-shrink-0 items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3">
           <p className="text-[11px] text-slate-400">
             {selected.size === 0 ? "Select utilities to remove" : `${selected.size} utility type${selected.size !== 1 ? "s" : ""} selected`}
           </p>
           <div className="flex gap-2">
             <button onClick={onClose} disabled={saving}
-              className="h-8 rounded border border-slate-300 px-4 text-xs font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50">
+              className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-700 hover:bg-slate-100 disabled:opacity-50">
               Cancel
             </button>
             <button onClick={handleSave} disabled={saving || selected.size === 0}
-              className="flex h-8 items-center gap-1.5 rounded bg-red-600 px-5 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-60">
+              className="flex items-center gap-2 bg-red-600 px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-red-700 disabled:opacity-50">
               {saving
                 ? <><FaSpinner size={10} className="animate-spin" /> Removing…</>
                 : `Remove from ${isMulti ? `${tenants.length} Tenants` : "Tenant"}`}
@@ -2626,20 +2626,20 @@ const confirmTransferUnit = useCallback(async () => {
   const diffCls = (v) => v > 0 ? "text-red-600" : v < 0 ? "text-emerald-600" : "text-slate-500";
   const diffLabel = (v) => v === 0 ? "No change" : (v > 0 ? `+Ksh ${fmtKES(Math.abs(v))}` : `-Ksh ${fmtKES(Math.abs(v))}`);
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-      <div className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+    <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+      <div className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
 
         {/* Header */}
-        <div className="flex items-center justify-between bg-[#0B3B2E] px-5 py-4">
-          <div className="flex items-center gap-2.5 text-white">
+        <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+          <div className="flex items-center gap-2.5">
             <FaExchangeAlt size={14} />
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">Internal Transfer</p>
-              <h3 className="text-sm font-black leading-tight">Transfer Tenant to New Unit</h3>
+              <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">Transfer Tenant to New Unit</h3>
             </div>
           </div>
           <button onClick={() => { if (!isTransferring) setShowTransferModal(false); }}
-            className="flex h-7 w-7 items-center justify-center rounded text-white/70 hover:bg-white/10 hover:text-white transition">
+            className="text-white/70 transition-colors hover:text-white">
             <FaTimes size={13} />
           </button>
         </div>
@@ -2867,7 +2867,7 @@ const confirmTransferUnit = useCallback(async () => {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between border-t border-slate-200 px-5 py-3">
+        <div className="flex flex-shrink-0 items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3">
           <p className="text-[11px] text-slate-400">
             {filteredUnits.length} unit{filteredUnits.length !== 1 ? "s" : ""} available
             {transferForm.newUnit && destUnit ? ` · ${destUnit.unitNumber} selected` : ""}
@@ -2876,13 +2876,13 @@ const confirmTransferUnit = useCallback(async () => {
             <button
               onClick={() => { if (!isTransferring) setShowTransferModal(false); }}
               disabled={isTransferring}
-              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60">
+              className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-700 hover:bg-slate-100 disabled:opacity-50">
               Cancel
             </button>
             <button
               onClick={confirmTransferUnit}
               disabled={isTransferring || !transferForm.newUnit}
-              className="rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
+              className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0d5442] disabled:opacity-50">
               {isTransferring ? "Transferring…" : "Transfer Unit"}
             </button>
           </div>
@@ -2892,16 +2892,22 @@ const confirmTransferUnit = useCallback(async () => {
   );
 })()}
       {showTerminateModal && (
-        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div className="bg-gradient-to-r from-amber-600 to-red-600 px-6 py-4">
-              <h3 className="flex items-center gap-2 text-lg font-bold text-white">
-                <FaUserSlash size={18} />
+        <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+              <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
+                <FaUserSlash size={14} />
                 Terminate Tenant
               </h3>
+              <button
+                onClick={() => { if (!isTerminating) setShowTerminateModal(false); }}
+                disabled={isTerminating}
+                className="text-white/70 transition-colors hover:text-white">
+                <FaTimes size={13} />
+              </button>
             </div>
-            <div className="space-y-5 px-6 py-5">
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <div className="flex-1 overflow-y-auto bg-white px-5 py-4 space-y-4">
+              <div className="border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                 <p className="font-semibold">This will remove the tenant from active occupancy and future active billing flows.</p>
                 <p className="mt-1 text-xs text-amber-800">
                   Historical invoices, receipts, balances, and statements remain intact. The unit is released back to vacant inventory using the same effective date.
@@ -2909,12 +2915,12 @@ const confirmTransferUnit = useCallback(async () => {
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="border border-slate-200 bg-slate-50 px-4 py-3">
                   <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Tenant</p>
                   <p className="mt-1 text-sm font-bold text-slate-900">{selectedPrimaryTenant?.tenantName || "-"}</p>
                   <p className="mt-1 text-xs text-slate-600">{selectedPrimaryTenant?.tenantCode || "-"}</p>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="border border-slate-200 bg-slate-50 px-4 py-3">
                   <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Occupied Space</p>
                   <p className="mt-1 text-sm font-bold text-slate-900">{selectedPrimaryTenant?.unitNumber || "-"}</p>
                   <p className="mt-1 text-xs text-slate-600">{selectedPrimaryTenant?.propertyName || "-"}</p>
@@ -2923,19 +2929,19 @@ const confirmTransferUnit = useCallback(async () => {
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700">Effective move-out date</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Effective move-out date</label>
                   <input
                     type="date"
                     max={new Date().toISOString().slice(0, 10)}
                     value={terminationForm.effectiveDate}
                     onChange={(e) => setTerminationForm((prev) => ({ ...prev, effectiveDate: e.target.value }))}
-                    className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm"
+                    className="w-full border border-slate-200 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none"
                   />
                   <p className="mt-1 text-[11px] text-slate-500">Future-dated termination is blocked so unit occupancy and billing remain consistent.</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700">Outstanding balance</label>
-                  <div className="mt-1 flex h-[50px] items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-900">
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Outstanding balance</label>
+                  <div className="flex h-[50px] items-center border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-900">
                     Ksh {Number(selectedPrimaryTenant?.balance || 0).toLocaleString()}
                   </div>
                   <p className="mt-1 text-[11px] text-slate-500">Outstanding balances remain collectible and visible after termination.</p>
@@ -2943,31 +2949,31 @@ const confirmTransferUnit = useCallback(async () => {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-slate-700">Reason / notes</label>
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Reason / notes</label>
                 <textarea
                   rows={3}
                   value={terminationForm.reason}
                   onChange={(e) => setTerminationForm((prev) => ({ ...prev, reason: e.target.value }))}
                   placeholder="Tenant moved out, lease ended, voluntary exit..."
-                  className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm"
+                  className="w-full border border-slate-200 px-4 py-3 text-sm focus:border-[#0B3B2E] focus:outline-none"
                 />
               </div>
             </div>
-            <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
+            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
               <button
                 onClick={() => {
                   if (isTerminating) return;
                   setShowTerminateModal(false);
                 }}
-                className="rounded-2xl border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700"
                 disabled={isTerminating}
+                className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-700 hover:bg-slate-100 disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmTerminateTenant}
                 disabled={!canUpdateTenant || isTerminating}
-                className="rounded-2xl bg-red-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-60"
+                className="flex items-center gap-2 bg-red-600 px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-red-700 disabled:opacity-50"
               >
                 {isTerminating ? "Terminating..." : "Terminate Tenant"}
               </button>
@@ -2976,47 +2982,47 @@ const confirmTransferUnit = useCallback(async () => {
         </div>
       )}
       {showRestoreModal && (
-        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between bg-[#0B3B2E] px-5 py-4">
-              <div className="flex items-center gap-2.5 text-white">
-                <FaRedoAlt size={15} />
+        <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+              <div className="flex items-center gap-2.5">
+                <FaRedoAlt size={14} />
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">Restore</p>
-                  <h3 className="text-sm font-black leading-tight">Restore Tenant</h3>
+                  <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">Restore Tenant</h3>
                 </div>
               </div>
               <button onClick={() => { if (!isRestoring) { setShowRestoreModal(false); } }}
-                className="flex h-7 w-7 items-center justify-center rounded text-white/70 hover:bg-white/10 hover:text-white transition">
+                className="text-white/70 transition-colors hover:text-white">
                 <FaTimes size={13} />
               </button>
             </div>
 
-            <div className="space-y-4 px-5 py-4">
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-900">
+            <div className="flex-1 overflow-y-auto bg-white px-5 py-4 space-y-4">
+              <div className="border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-900">
                 <p className="font-semibold">Re-activating this tenant will restore their occupancy and restart billing.</p>
                 <p className="mt-0.5 text-emerald-700">The system will verify the unit is still vacant before completing the restoration.</p>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <div className="border border-slate-200 bg-slate-50 px-3 py-2.5">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Tenant</p>
                   <p className="mt-1 text-xs font-bold text-slate-900">{selectedPrimaryTenant?.tenantName || "-"}</p>
                   <p className="text-[11px] text-slate-500">{selectedPrimaryTenant?.tenantCode || "-"}</p>
                 </div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <div className="border border-slate-200 bg-slate-50 px-3 py-2.5">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Unit / Property</p>
                   <p className="mt-1 text-xs font-bold text-slate-900">{selectedPrimaryTenant?.unitNumber || "-"}</p>
                   <p className="text-[11px] text-slate-500">{selectedPrimaryTenant?.propertyName || "-"}</p>
                 </div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <div className="border border-slate-200 bg-slate-50 px-3 py-2.5">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Terminated On</p>
                   <p className="mt-1 text-xs font-bold text-slate-900">{selectedPrimaryTenant?.terminationDate || "-"}</p>
                   {selectedPrimaryTenant?.terminationReason ? (
                     <p className="mt-0.5 text-[11px] italic text-slate-500 line-clamp-2">{selectedPrimaryTenant.terminationReason}</p>
                   ) : null}
                 </div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <div className="border border-slate-200 bg-slate-50 px-3 py-2.5">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Outstanding Balance</p>
                   <p className={`mt-1 text-xs font-black ${Math.abs(Number(selectedPrimaryTenant?.balance || 0)) > 0.009 ? "text-red-600" : "text-slate-900"}`}>
                     Ksh {Number(selectedPrimaryTenant?.balance || 0).toLocaleString()}
@@ -3025,7 +3031,7 @@ const confirmTransferUnit = useCallback(async () => {
                 </div>
               </div>
 
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+              <div className="border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
                 <p className="font-semibold">Conditions that must be met:</p>
                 <ul className="mt-1 space-y-0.5 list-disc list-inside text-amber-700">
                   <li>The unit must currently be vacant (not occupied by another tenant)</li>
@@ -3035,28 +3041,28 @@ const confirmTransferUnit = useCallback(async () => {
               </div>
 
               <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Restoration notes <span className="font-normal text-slate-400">(optional)</span></label>
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Restoration notes <span className="font-normal text-slate-400">(optional)</span></label>
                 <textarea
                   rows={2}
                   value={restoreForm.notes}
                   onChange={(e) => setRestoreForm((p) => ({ ...p, notes: e.target.value }))}
                   placeholder="Reason for restoring this tenant..."
-                  className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                  className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                 />
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
+            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
               <button
                 onClick={() => { if (!isRestoring) setShowRestoreModal(false); }}
                 disabled={isRestoring}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60">
+                className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-700 hover:bg-slate-100 disabled:opacity-50">
                 Cancel
               </button>
               <button
                 onClick={confirmRestoreTenant}
                 disabled={!canUpdateTenant || isRestoring}
-                className="rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
+                className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0d5442] disabled:opacity-50">
                 {isRestoring ? "Restoring…" : "Restore Tenant"}
               </button>
             </div>
@@ -3065,23 +3071,21 @@ const confirmTransferUnit = useCallback(async () => {
       )}
 
       {showDepositSettlementModal && (
-        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
-          <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div className="bg-[#0B3B2E] px-6 py-4">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/60">Deposit Settlement</p>
-                  <h3 className="mt-0.5 text-base font-bold text-white">Terminate Tenant Settlement Workspace</h3>
-                  <p className="mt-0.5 text-xs text-white/70">Apply deposit, refund the balance, or retain charges without leaving the terminated tenants page.</p>
-                </div>
-                <button
-                  onClick={closeDepositSettlementModal}
-                  disabled={isProcessingDepositSettlement}
-                  className="flex h-7 w-7 items-center justify-center rounded text-white/70 transition hover:bg-white/10 hover:text-white disabled:opacity-60"
-                >
-                  <FaTimes size={13} />
-                </button>
+        <div className="fixed inset-0 z-[140] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/60">Deposit Settlement</p>
+                <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">Terminate Tenant Settlement Workspace</h3>
+                <p className="mt-0.5 text-xs text-white/70">Apply deposit, refund the balance, or retain charges without leaving the terminated tenants page.</p>
               </div>
+              <button
+                onClick={closeDepositSettlementModal}
+                disabled={isProcessingDepositSettlement}
+                className="text-white/70 transition-colors hover:text-white disabled:opacity-60"
+              >
+                <FaTimes size={13} />
+              </button>
             </div>
 
             <div className="flex-1 overflow-y-auto px-6 py-5">
@@ -3187,7 +3191,7 @@ const confirmTransferUnit = useCallback(async () => {
 
                     <div className="mt-3 grid gap-3 md:grid-cols-2">
                       <div>
-                        <label className="block text-xs font-semibold text-slate-700">Refund amount</label>
+                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Refund amount</label>
                         <input
                           type="number"
                           min="0"
@@ -3195,13 +3199,13 @@ const confirmTransferUnit = useCallback(async () => {
                           disabled={depositSettlementAction !== "refund" || !depositSettlementDerived.canRefund}
                           value={depositSettlementForm.refundAmount}
                           onChange={(e) => setDepositSettlementForm((prev) => ({ ...prev, refundAmount: e.target.value }))}
-                          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10 disabled:bg-slate-100"
+                          className="mt-1 w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10 disabled:bg-slate-100"
                           placeholder="0.00"
                         />
                         <p className="mt-1 text-[10px] text-slate-500">Capped at the deposit left after arrears are applied.</p>
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-slate-700">Retain amount</label>
+                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Retain amount</label>
                         <input
                           type="number"
                           min="0"
@@ -3209,7 +3213,7 @@ const confirmTransferUnit = useCallback(async () => {
                           disabled={depositSettlementAction !== "retain"}
                           value={depositSettlementForm.retainAmount}
                           onChange={(e) => setDepositSettlementForm((prev) => ({ ...prev, retainAmount: e.target.value }))}
-                          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10 disabled:bg-slate-100"
+                          className="mt-1 w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10 disabled:bg-slate-100"
                           placeholder="0.00"
                         />
                         <p className="mt-1 text-[10px] text-slate-500">Retained via a charge invoice and deposit settlement trail.</p>
@@ -3218,12 +3222,12 @@ const confirmTransferUnit = useCallback(async () => {
 
                     <div className="mt-3 grid gap-3 md:grid-cols-2">
                       <div>
-                        <label className="block text-xs font-semibold text-slate-700">Cash / bank account for refund</label>
+                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Cash / bank account for refund</label>
                         <select
                           value={depositSettlementForm.cashbookAccountId}
                           disabled={depositSettlementAction !== "refund" || !depositSettlementDerived.canRefund}
                           onChange={(e) => setDepositSettlementForm((prev) => ({ ...prev, cashbookAccountId: e.target.value }))}
-                          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10 disabled:bg-slate-100"
+                          className="mt-1 w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10 disabled:bg-slate-100"
                         >
                           <option value="">Select cash or bank account</option>
                           {cashbookAccounts.map((account) => (
@@ -3234,13 +3238,13 @@ const confirmTransferUnit = useCallback(async () => {
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-slate-700">Reason / narration</label>
+                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Reason / narration</label>
                         <textarea
                           rows={3}
                           value={depositSettlementForm.reason}
                           onChange={(e) => setDepositSettlementForm((prev) => ({ ...prev, reason: e.target.value }))}
                           placeholder="Move-out arrears cleared, damage retention, tenant refund reference..."
-                          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10"
+                          className="mt-1 w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10"
                         />
                       </div>
                     </div>
@@ -3325,14 +3329,14 @@ const confirmTransferUnit = useCallback(async () => {
                       <button
                         onClick={closeDepositSettlementModal}
                         disabled={isProcessingDepositSettlement}
-                        className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                        className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-700 hover:bg-slate-100 disabled:opacity-50"
                       >
                         Cancel
                       </button>
                       <button
                         onClick={processDepositSettlement}
                         disabled={isProcessingDepositSettlement || depositSettlementContext.loading}
-                        className="rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white shadow-md transition hover:bg-[#0a2f25] disabled:cursor-not-allowed disabled:opacity-60"
+                        className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0d5442] disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {isProcessingDepositSettlement ? "Processing..." : "Confirm Settlement"}
                       </button>
@@ -3345,27 +3349,33 @@ const confirmTransferUnit = useCallback(async () => {
         </div>
       )}
       {showDeleteModal && (
-        <div className="fixed inset-0 bg-black/0 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-2xl w-full max-w-md transform transition-all">
-            <div className="bg-gradient-to-r from-red-600 to-red-700 px-6 py-4 rounded-t-lg">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <FaTrash size={18} />
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+              <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
+                <FaTrash size={13} />
                 Confirm Delete
               </h3>
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                disabled={isDeleting}
+                className="text-white/70 transition-colors hover:text-white disabled:opacity-50">
+                <FaTimes size={13} />
+              </button>
             </div>
 
-            <div className="p-6">
-              <p className="text-gray-700 mb-4">
+            <div className="flex-1 overflow-y-auto bg-white px-5 py-4 space-y-3">
+              <p className="text-xs text-slate-700">
                 Delete <strong>{selectedDeletableTenants.length}</strong> eligible tenant record(s).
               </p>
-              <p className="text-sm text-red-600 font-semibold">
-                ⚠️ Only unused tenant records will be deleted. Active or historical tenants stay protected.
+              <p className="text-xs font-semibold text-red-600">
+                Only unused tenant records will be deleted. Active or historical tenants stay protected.
               </p>
 
               {selectedDeletableTenants.length > 0 && (
-                <div className="mt-4 p-3 bg-gray-50 rounded border border-gray-200">
-                  <p className="text-xs text-gray-600 mb-2">Eligible tenants to be deleted:</p>
-                  <ul className="text-xs text-gray-700 space-y-1 max-h-32 overflow-y-auto">
+                <div className="border border-slate-200 bg-slate-50 p-3">
+                  <p className="mb-1.5 text-[10px] font-black uppercase tracking-wide text-slate-500">Eligible tenants to be deleted:</p>
+                  <ul className="text-xs text-slate-700 space-y-1 max-h-32 overflow-y-auto">
                     {selectedDeletableTenants.slice(0, 10).map((tenant) => (
                       <li key={tenant.id} className="flex items-center gap-2">
                         <span className="w-2 h-2 bg-red-500 rounded-full"></span>
@@ -3373,7 +3383,7 @@ const confirmTransferUnit = useCallback(async () => {
                       </li>
                     ))}
                     {selectedDeletableTenants.length > 10 && (
-                      <li className="text-gray-500 italic">
+                      <li className="text-slate-500 italic">
                         ...and {selectedDeletableTenants.length - 10} more
                       </li>
                     )}
@@ -3382,33 +3392,33 @@ const confirmTransferUnit = useCallback(async () => {
               )}
 
               {selectedTenantRows.length > selectedDeletableTenants.length && (
-                <div className="mt-4 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                <div className="border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
                   {selectedTenantRows.length - selectedDeletableTenants.length} selected tenant(s) will be skipped because they are still active, have balances, or already have history.
                 </div>
               )}
             </div>
 
-            <div className="flex gap-3 px-6 py-4 bg-gray-50 rounded-b-lg">
+            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
               <button
                 onClick={() => setShowDeleteModal(false)}
                 disabled={isDeleting}
-                className="flex-1 px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-700 hover:bg-slate-100 disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmDeleteTenants}
                 disabled={!canDeleteTenant || isDeleting || selectedDeletableTenants.length === 0}
-                className="flex-1 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-md font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="flex items-center gap-2 bg-red-600 px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isDeleting ? (
                   <>
-                    <FaSpinner className="animate-spin" size={14} />
+                    <FaSpinner className="animate-spin" size={10} />
                     Deleting...
                   </>
                 ) : (
                   <>
-                    <FaTrash size={14} />
+                    <FaTrash size={10} />
                     Delete {selectedDeletableTenants.length} Tenant(s)
                   </>
                 )}

@@ -1,7 +1,7 @@
 ﻿import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
-import { FaEdit, FaFilter, FaPlus, FaTimes, FaTrash } from "react-icons/fa";
+import { FaCalendarAlt, FaEdit, FaFilter, FaPlus, FaTimes, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
 import { saleApi } from "../../services/propertySaleApi";
@@ -232,77 +232,77 @@ export default function SaleActivities() {
 
       {/* â”€â”€ Log / Edit Activity Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-5 py-4 border-b">
-              <h3 className="font-semibold text-slate-700">{editingId ? "Edit Activity" : "Log Activity"}</h3>
-              <button onClick={() => setShowModal(false)}><FaTimes className="text-slate-400 hover:text-slate-600" /></button>
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+              <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide"><FaCalendarAlt />{editingId ? "Edit Activity" : "Log Activity"}</h3>
+              <button onClick={() => setShowModal(false)} className="text-white/70 transition-colors hover:text-white"><FaTimes /></button>
             </div>
-            <div className="px-5 py-4 grid grid-cols-2 gap-3">
+            <div className="flex-1 overflow-y-auto bg-white px-5 py-4 grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Type *</label>
-                <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20">
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Type *</label>
+                <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none">
                   {ACTIVITY_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, " ")}</option>)}
                 </select>
               </div>
               <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Date & Time *</label>
-                <input type="datetime-local" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Date & Time *</label>
+                <input type="datetime-local" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none" />
               </div>
               <div className="col-span-2">
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Subject</label>
-                <input value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Subject</label>
+                <input value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none" />
               </div>
               <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Outcome</label>
-                <select value={form.outcome} onChange={(e) => setForm((f) => ({ ...f, outcome: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20">
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Outcome</label>
+                <select value={form.outcome} onChange={(e) => setForm((f) => ({ ...f, outcome: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none">
                   {OUTCOMES.map((o) => <option key={o} value={o}>{o.replace(/_/g, " ")}</option>)}
                 </select>
               </div>
               <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Duration (min)</label>
-                <input type="number" value={form.durationMinutes} onChange={(e) => setForm((f) => ({ ...f, durationMinutes: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Duration (min)</label>
+                <input type="number" value={form.durationMinutes} onChange={(e) => setForm((f) => ({ ...f, durationMinutes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none" />
               </div>
 
               {/* Linking â€” at most one entity */}
               <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Link to Lead</label>
-                <select value={form.relatedLead} onChange={(e) => setForm((f) => ({ ...f, relatedLead: e.target.value, relatedBuyer: "", relatedDeal: "" }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20">
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Link to Lead</label>
+                <select value={form.relatedLead} onChange={(e) => setForm((f) => ({ ...f, relatedLead: e.target.value, relatedBuyer: "", relatedDeal: "" }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none">
                   <option value="">â€” None â€”</option>
                   {leads.map((l) => <option key={l._id} value={l._id}>{l.fullName} ({l.leadNumber})</option>)}
                 </select>
               </div>
               <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Link to Buyer</label>
-                <select value={form.relatedBuyer} onChange={(e) => setForm((f) => ({ ...f, relatedBuyer: e.target.value, relatedLead: "", relatedDeal: "" }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" disabled={!!form.relatedLead}>
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Link to Buyer</label>
+                <select value={form.relatedBuyer} onChange={(e) => setForm((f) => ({ ...f, relatedBuyer: e.target.value, relatedLead: "", relatedDeal: "" }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none" disabled={!!form.relatedLead}>
                   <option value="">â€” None â€”</option>
                   {buyers.map((b) => <option key={b._id} value={b._id}>{b.fullName} ({b.buyerNumber})</option>)}
                 </select>
               </div>
               <div className="col-span-2">
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Link to Deal</label>
-                <select value={form.relatedDeal} onChange={(e) => setForm((f) => ({ ...f, relatedDeal: e.target.value, relatedLead: "", relatedBuyer: "" }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" disabled={!!(form.relatedLead || form.relatedBuyer)}>
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Link to Deal</label>
+                <select value={form.relatedDeal} onChange={(e) => setForm((f) => ({ ...f, relatedDeal: e.target.value, relatedLead: "", relatedBuyer: "" }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none" disabled={!!(form.relatedLead || form.relatedBuyer)}>
                   <option value="">â€” None â€”</option>
                   {deals.map((d) => <option key={d._id} value={d._id}>{d.dealNumber}{d.buyer?.fullName ? ` â€” ${d.buyer.fullName}` : ""}</option>)}
                 </select>
               </div>
 
               <div className="col-span-2">
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Notes</label>
-                <textarea rows={3} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20 resize-none" />
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Notes</label>
+                <textarea rows={3} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none resize-none" />
               </div>
               <div className="col-span-2">
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Next Action</label>
-                <input value={form.nextAction} onChange={(e) => setForm((f) => ({ ...f, nextAction: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Next Action</label>
+                <input value={form.nextAction} onChange={(e) => setForm((f) => ({ ...f, nextAction: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none" />
               </div>
               <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Next Action Date</label>
-                <input type="date" value={form.nextActionDate} onChange={(e) => setForm((f) => ({ ...f, nextActionDate: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Next Action Date</label>
+                <input type="date" value={form.nextActionDate} onChange={(e) => setForm((f) => ({ ...f, nextActionDate: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none" />
               </div>
             </div>
-            <div className="flex justify-end gap-2 px-5 py-3 border-t bg-slate-50">
-              <button onClick={() => setShowModal(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button onClick={handleSave} disabled={saving} className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-black text-white hover:bg-indigo-700 disabled:opacity-50">
+            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+              <button onClick={() => setShowModal(false)} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-700 hover:bg-slate-100">Cancel</button>
+              <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0d5442] disabled:opacity-50">
                 {saving ? "Savingâ€¦" : editingId ? "Update" : "Log Activity"}
               </button>
             </div>

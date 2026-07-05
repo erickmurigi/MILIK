@@ -3,10 +3,8 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
-import AppSelect from "../../components/common/AppSelect";
 import {
   FaArrowLeft,
-  FaMoneyBillWave,
   FaPlus,
   FaSearch,
   FaRedoAlt,
@@ -22,7 +20,7 @@ import {
   FaSms,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { getLandlords, getLandlordPayments, createLandlordPayment, getChartOfAccounts } from "../../redux/apiCalls";
+import { getLandlords, getLandlordPayments } from "../../redux/apiCalls";
 import { selectCurrentCompany, selectCurrentUser, selectAllProperties, selectAllLandlords, selectAllTenants } from "../../redux/selectors";
 import { hasCompanyPermission } from "../../utils/permissions";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
@@ -30,7 +28,6 @@ import { getProperties } from "../../redux/propertyRedux";
 // NOTE: getLandlords is a thunk creator — must be called via dispatch(getLandlords({...}))
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
-const MILIK_ORANGE = "bg-[#FF8C00]";
 const ITEMS_PER_PAGE = 20;
 
 const formatDate = (date) => {
@@ -49,8 +46,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
   const properties = useSelector(selectAllProperties);
   const tenants = useSelector(selectAllTenants);
 
-  const canProcessPayment = hasCompanyPermission(currentUser || {}, currentCompany, "landlordPayments", "process", "accounts");
-  const canExportPayment   = hasCompanyPermission(currentUser || {}, currentCompany, "landlordPayments", "export", "accounts");
+  const canExportPayment = hasCompanyPermission(currentUser || {}, currentCompany, "landlordPayments", "export", "accounts");
 
   // Local state
   const [filters, setFilters] = useState({
@@ -60,23 +56,11 @@ const LandlordPayments = ({ mode = "payments" }) => {
   });
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedLandlords, setSelectedLandlords] = useState([]);
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showSmsModal, setShowSmsModal] = useState(false);
   const [activeDetail, setActiveDetail] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
-  const [paymentForm, setPaymentForm] = useState({
-    landlordId: "",
-    amount: "",
-    paymentDate: new Date().toISOString().split("T")[0],
-    paymentMethod: "bank_transfer",
-    referenceNumber: "",
-    cashbook: "",
-    description: "",
-    propertyIds: [],
-  });
   // Landlord payment vouchers from backend
   const [landlordPayments, setLandlordPayments] = useState([]);
-  const [cashbookAccounts, setCashbookAccounts] = useState([]);
 
   // Load data
   useEffect(() => {
@@ -90,27 +74,6 @@ const LandlordPayments = ({ mode = "payments" }) => {
     };
     fetchData();
   }, [dispatch, currentCompany?._id]);
-
-  useEffect(() => {
-    const loadCashbooks = async () => {
-      if (!currentCompany?._id) return;
-      try {
-        const rows = await getChartOfAccounts({ business: currentCompany._id });
-        const CASHBOOK_PATTERN = /cash|bank|m-?pesa|mobile|wallet|petty|till|collection/i;
-        setCashbookAccounts(
-          (Array.isArray(rows) ? rows : []).filter(
-            (row) =>
-              row?.isPosting !== false &&
-              String(row?.type || "").toLowerCase() === "asset" &&
-              CASHBOOK_PATTERN.test(`${row?.name || ""} ${row?.group || ""} ${row?.subGroup || ""}`)
-          )
-        );
-      } catch {
-        // non-critical — cashbook dropdown will be empty, user can still type
-      }
-    };
-    loadCashbooks();
-  }, [currentCompany?._id]);
 
   // Calculate landlord financial data
   const tenantsByPropertyId = useMemo(() => {
@@ -223,67 +186,6 @@ const LandlordPayments = ({ mode = "payments" }) => {
   }, [filteredLandlords]);
 
   // Handlers
-  const handleOpenPayment = (landlord) => {
-    setPaymentForm({
-      landlordId: landlord._id,
-      amount: landlord.balance > 0 ? landlord.balance : "",
-      paymentDate: new Date().toISOString().split("T")[0],
-      paymentMethod: "bank_transfer",
-      referenceNumber: "",
-      cashbook: "",
-      description: `Payment to ${landlord.landlordName}`,
-      propertyIds: landlord.propertyBreakdown.map((p) => p.propertyId),
-    });
-    setShowPaymentModal(true);
-  };
-
-  const handleSavePayment = async () => {
-    if (!paymentForm.amount || Number(paymentForm.amount) <= 0) {
-      toast.error("Enter a valid payment amount");
-      return;
-    }
-
-    if (!paymentForm.cashbook) {
-      toast.error("Select or enter a cashbook account");
-      return;
-    }
-
-    try {
-      // Save payment to backend
-      const payload = {
-        landlordId: paymentForm.landlordId,
-        amount: Number(paymentForm.amount),
-        paymentDate: paymentForm.paymentDate,
-        paymentMethod: paymentForm.paymentMethod,
-        referenceNumber: paymentForm.referenceNumber,
-        cashbook: paymentForm.cashbook,
-        description: paymentForm.description,
-        propertyIds: paymentForm.propertyIds,
-        business: currentCompany?._id,
-      };
-      await createLandlordPayment(payload);
-      toast.success("Payment recorded successfully");
-      // Refresh landlord payments
-      if (currentCompany?._id) {
-        const payments = await getLandlordPayments(currentCompany._id);
-        setLandlordPayments(payments);
-      }
-      setShowPaymentModal(false);
-      setPaymentForm({
-        landlordId: "",
-        amount: "",
-        paymentDate: new Date().toISOString().split("T")[0],
-        paymentMethod: "bank_transfer",
-        referenceNumber: "",
-        cashbook: "",
-        description: "",
-        propertyIds: [],
-      });
-    } catch (err) {
-      toast.error("Failed to record payment: " + (err?.response?.data?.message || err.message));
-    }
-  };
-
   const handleViewDetails = (landlord) => {
     setActiveDetail(landlord);
     setShowDetailModal(true);
@@ -784,16 +686,6 @@ const LandlordPayments = ({ mode = "payments" }) => {
                             >
                               <FaFileInvoiceDollar size={11} />
                             </button>
-                            {canProcessPayment && (
-                            <button
-                              onClick={() => handleOpenPayment(landlord)}
-                              className={`px-2 py-1 rounded ${MILIK_ORANGE} hover:bg-[#e67e00] text-white`}
-                              title="Make Payment"
-                              disabled={landlord.balance <= 0}
-                            >
-                              <FaMoneyBillWave size={11} />
-                            </button>
-                            )}
                             {canExportPayment && (
                             <button
                               onClick={() => handlePrintLandlordStatement(landlord)}
@@ -846,141 +738,24 @@ const LandlordPayments = ({ mode = "payments" }) => {
         </div>
       </div>
 
-      {/* Payment Modal */}
-      {showPaymentModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl border border-slate-200 w-full max-w-2xl">
-            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-              <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                <FaMoneyBillWave className="text-orange-600" />
-                Record Landlord Payment
-              </h3>
-              <button
-                onClick={() => setShowPaymentModal(false)}
-                className="text-slate-500 hover:text-slate-700"
-              >
-                <FaTimes />
-              </button>
-            </div>
-
-            <div className="p-4 space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Amount to Pay <span className="text-red-500">*</span></label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={paymentForm.amount}
-                    onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
-                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                    placeholder="0.00"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Payment Date <span className="text-red-500">*</span></label>
-                  <input
-                    type="date"
-                    value={paymentForm.paymentDate}
-                    onChange={(e) =>
-                      setPaymentForm({ ...paymentForm, paymentDate: e.target.value })
-                    }
-                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Payment Method <span className="text-red-500">*</span></label>
-                  <select
-                    value={paymentForm.paymentMethod}
-                    onChange={(e) =>
-                      setPaymentForm({ ...paymentForm, paymentMethod: e.target.value })
-                    }
-                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  >
-                    <option value="bank_transfer">Bank Transfer</option>
-                    <option value="check">Check</option>
-                    <option value="cash">Cash</option>
-                    <option value="mobile_money">Mobile Money</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Cashbook Account <span className="text-red-500">*</span></label>
-                  <AppSelect
-                    value={paymentForm.cashbook}
-                    onChange={(v) => setPaymentForm({ ...paymentForm, cashbook: v ?? "" })}
-                    options={cashbookAccounts.map((a) => ({ value: a._id, label: `${a.code ? `${a.code} - ` : ""}${a.name}` }))}
-                    placeholder="Select cashbook / bank account…"
-                    searchable
-                    size="sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Reference Number</label>
-                  <input
-                    type="text"
-                    value={paymentForm.referenceNumber}
-                    onChange={(e) =>
-                      setPaymentForm({ ...paymentForm, referenceNumber: e.target.value })
-                    }
-                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                    placeholder="Transaction ref"
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Description</label>
-                  <textarea
-                    rows={3}
-                    value={paymentForm.description}
-                    onChange={(e) =>
-                      setPaymentForm({ ...paymentForm, description: e.target.value })
-                    }
-                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                    placeholder="Payment notes"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="px-4 py-3 border-t border-slate-200 flex justify-end gap-2">
-              <button
-                onClick={() => setShowPaymentModal(false)}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSavePayment}
-                className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-black text-white ${MILIK_GREEN} hover:bg-[#0A3127]`}
-              >
-                Record Payment
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Detail Modal */}
       {showDetailModal && activeDetail && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl border border-slate-200 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white">
-              <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                <FaFileInvoiceDollar className="text-blue-600" />
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+              <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
+                <FaFileInvoiceDollar />
                 {activeDetail.landlordName} - Payment Details
               </h3>
               <button
                 onClick={() => setShowDetailModal(false)}
-                className="text-slate-500 hover:text-slate-700"
+                className="text-white/70 transition-colors hover:text-white"
               >
                 <FaTimes />
               </button>
             </div>
 
-            <div className="p-4 space-y-4">
+            <div className="flex-1 overflow-y-auto bg-white px-5 py-4 space-y-4">
               {/* Summary Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="bg-green-50 border border-green-200 rounded-lg p-3">
@@ -1115,29 +890,19 @@ const LandlordPayments = ({ mode = "payments" }) => {
               </div>
             </div>
 
-            <div className="px-4 py-3 border-t border-slate-200 flex justify-end gap-2 sticky bottom-0 bg-white">
+            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
               {canExportPayment && (
               <button
                 onClick={() => handlePrintLandlordStatement(activeDetail)}
-                className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-black text-white bg-purple-600 hover:bg-purple-700 flex items-center gap-2"
+                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-black uppercase tracking-wide text-white bg-purple-600 hover:bg-purple-700"
               >
                 <FaPrint />
                 Print Statement
               </button>
               )}
-              {canProcessPayment && (
-              <button
-                onClick={() => handleOpenPayment(activeDetail)}
-                className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-black text-white ${MILIK_ORANGE} hover:bg-[#e67e00] flex items-center gap-2`}
-                disabled={activeDetail.balance <= 0}
-              >
-                <FaMoneyBillWave />
-                Make Payment
-              </button>
-              )}
               <button
                 onClick={() => setShowDetailModal(false)}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-700 transition-colors hover:bg-slate-100"
               >
                 Close
               </button>

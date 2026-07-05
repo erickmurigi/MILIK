@@ -105,6 +105,7 @@ router.get("/summary", verifyUser, async (req, res) => {
       leasesExpiringSoonCount,
       collectedThisMonthAgg,
       collectedByMonthRaw,
+      totalLandlordPayableAgg,
     ] = await Promise.all([
       Unit.countDocuments({ business, ownerOccupied: { $ne: true } }),
       Unit.countDocuments({
@@ -166,6 +167,18 @@ router.get("/summary", verifyUser, async (req, res) => {
           },
         },
         { $group: { _id: null, total: { $sum: { $ifNull: ["$amount", 0] } } } },
+      ]),
+      // Total outstanding payable to all landlords (sum of ProcessedStatement.balanceDue)
+      ProcessedStatement.aggregate([
+        {
+          $match: {
+            business,
+            status: { $ne: "reversed" },
+            isNegativeStatement: { $ne: true },
+            balanceDue: { $gt: 0 },
+          },
+        },
+        { $group: { _id: null, total: { $sum: "$balanceDue" } } },
       ]),
       // Monthly breakdown for current year (12 buckets) — drives the FinancialOverview chart
       RentPayment.aggregate([
@@ -260,6 +273,7 @@ router.get("/summary", verifyUser, async (req, res) => {
     for (const row of collectedByMonthRaw) monthMap[row._id] = Number(row.total || 0);
     const collectedByMonth = Array.from({ length: 12 }, (_, i) => monthMap[i + 1] || 0);
 
+    const totalLandlordPayable = Number(totalLandlordPayableAgg[0]?.total || 0);
     const vacantUnits = Math.max(totalUnits - occupiedUnits, 0);
     const totalMonthlyRentDue = Number(totalMonthlyRentDueAgg?.[0]?.total || 0);
     const totalDeposits = Number(totalDepositsAgg?.[0]?.total || 0);
@@ -292,6 +306,7 @@ router.get("/summary", verifyUser, async (req, res) => {
       pendingStatementCount,
       unpostedReceiptCount,
       leasesExpiringSoonCount,
+      totalLandlordPayable,
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });

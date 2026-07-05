@@ -28,10 +28,12 @@ import {
   FaTimes,
   FaTrash,
   FaFileContract,
+  FaWrench,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { useConfirm } from "../../context/ConfirmContext";
+import { adminRequests } from "../../utils/requestMethods";
 import { getTenants } from "../../redux/tenantsRedux";
 import { getProperties } from "../../redux/propertyRedux";
 import { getUnits } from "../../redux/unitRedux";
@@ -180,6 +182,7 @@ const TenantAgreements = () => {
   const [includeTerminatedTenants, setIncludeTerminatedTenants] = useState(false);
   const [openDropdownId, setOpenDropdownId] = useState(null);
   const [renewModal, setRenewModal] = useState({ open: false, row: null, newEndDate: "", loading: false });
+  const [backfilling, setBackfilling] = useState(false);
   useEffect(() => {
     if (!openDropdownId) return;
     const close = () => setOpenDropdownId(null);
@@ -294,6 +297,38 @@ const TenantAgreements = () => {
       { total: 0, active: 0, draft: 0, pending: 0, expiring: 0, terminated: 0 }
     );
   }, [agreementRows]);
+
+  const missingCount = useMemo(() => {
+    const tenantIdsWithLease = new Set(
+      agreementRows
+        .filter((r) => ["draft", "pending_signature", "active"].includes(r.status))
+        .map((r) => r.tenantId)
+    );
+    return (Array.isArray(tenants) ? tenants : [])
+      .filter((t) => isActiveTenant(t) && !tenantIdsWithLease.has(normalizeId(t._id)))
+      .length;
+  }, [agreementRows, tenants]);
+
+  const handleBackfillLeases = async () => {
+    if (!currentCompany?._id) return;
+    setBackfilling(true);
+    try {
+      const res = await adminRequests.post("/tenants/backfill-leases", { business: currentCompany._id });
+      const { created = 0, failed = 0 } = res.data || {};
+      if (created > 0) {
+        toast.success(`Created ${created} missing agreement${created !== 1 ? "s" : ""}${failed > 0 ? ` (${failed} failed — check unit assignments)` : ""}.`);
+        await loadData();
+      } else if (failed > 0) {
+        toast.warning(`${failed} tenant${failed !== 1 ? "s" : ""} still have no agreement — they may not have a unit assigned.`);
+      } else {
+        toast.info("No missing agreements found — all active tenants already have one.");
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Backfill failed.");
+    } finally {
+      setBackfilling(false);
+    }
+  };
 
   const filteredRows = useMemo(() => {
     return agreementRows.filter((row) => {
@@ -619,6 +654,11 @@ const TenantAgreements = () => {
             <span className="shrink-0 rounded border border-green-200 bg-green-50 px-2 py-0.5 text-[10px] font-bold text-green-700">Active: {summary.active}</span>
             <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">Expiring: {summary.expiring}</span>
             <span className="shrink-0 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600">Pending: {summary.pending}</span>
+            {missingCount > 0 && (
+              <span className="shrink-0 rounded border border-red-300 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-700">
+                {missingCount} tenant{missingCount !== 1 ? "s" : ""} missing agreement
+              </span>
+            )}
             {selectedAgreements.length > 0 && (
               <>
                 <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">{selectedAgreements.length} selected</span>
@@ -646,8 +686,18 @@ const TenantAgreements = () => {
             <button onClick={handleSearchFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-medium text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSearch size={10} /></button>
             <button onClick={handleResetFilters} className="h-7 shrink-0 flex items-center gap-1 rounded bg-gray-500 px-2.5 text-xs font-medium text-white shadow-sm hover:bg-gray-600"><FaRedoAlt size={10} /></button>
             <button onClick={() => loadData()} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-medium text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSyncAlt size={10} /></button>
-            <button onClick={() => selectedAgreements.length === 1 && openEditModal(sortedFilteredRows.find((row) => row.id === selectedAgreements[0]))} disabled={selectedAgreements.length !== 1} className="h-7 shrink-0 flex items-center gap-1 rounded bg-blue-500 px-2.5 text-xs font-medium text-white shadow-sm hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"><FaEdit size={10} /></button>
-            <button onClick={() => openNewModal()} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-medium text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaPlus size={10} /> New Agreement</button>
+            {missingCount > 0 && (
+              <button
+                onClick={handleBackfillLeases}
+                disabled={backfilling}
+                title={`Create agreements for ${missingCount} tenant${missingCount !== 1 ? "s" : ""} that don't have one`}
+                className="h-7 shrink-0 flex items-center gap-1 rounded bg-red-600 px-2.5 text-xs font-medium text-white shadow-sm hover:bg-red-700 disabled:opacity-60"
+              >
+                {backfilling ? <FaSyncAlt size={10} className="animate-spin" /> : <FaWrench size={10} />}
+                Fix {missingCount} missing
+              </button>
+            )}
+            <button onClick={() => selectedAgreements.length === 1 && openEditModal(sortedFilteredRows.find((row) => row.id === selectedAgreements[0]))} disabled={selectedAgreements.length !== 1} className="h-7 shrink-0 flex items-center gap-1 rounded bg-blue-500 px-2.5 text-xs font-medium text-white shadow-sm hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"><FaEdit size={10} /> Edit</button>
           </div>
         </div>
 
@@ -918,89 +968,88 @@ const TenantAgreements = () => {
             </div>
 
         {modalOpen && (
-          <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:items-center">
-            <div className="relative w-full max-w-4xl overflow-hidden rounded-xl bg-white shadow-2xl">
+          <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+            <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
               {/* Modal header */}
-              <div className="bg-[#0B3B2E] px-6 py-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-white/50">Tenant Agreements</p>
-                    <h2 className="mt-1 text-lg font-bold text-white">{form._id ? "Edit Agreement" : "New Agreement"}</h2>
-                    <p className="mt-0.5 text-[10px] text-white/60">Capture rent terms, deposit, due day, and renewal details.</p>
-                  </div>
-                  <button onClick={closeModal} className="shrink-0 rounded-lg border border-white/20 bg-white/10 p-2 text-white/80 transition hover:bg-white/20 hover:text-white">
-                    <FaTimes size={12} />
-                  </button>
-                </div>
+              <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+                <h2 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
+                  <FaEdit size={13} />
+                  {form._id ? "Edit Agreement" : "Edit Agreement"}
+                </h2>
+                <button onClick={closeModal} className="text-white/70 transition-colors hover:text-white">
+                  <FaTimes size={18} />
+                </button>
               </div>
 
-              <form onSubmit={handleSave} className="px-6 py-5">
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  {[
-                    { label: "Tenant", content: (
-                      <>
-                        <select value={form.tenant} onChange={(e) => handleTenantChange(e.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10">
-                          <option value="">Select tenant</option>
-                          {(Array.isArray(tenants) ? tenants : []).filter((t) => includeTerminatedTenants || isActiveTenant(t)).map((t) => (
-                            <option key={t._id} value={t._id}>{t.name} {t.tenantCode ? `(${t.tenantCode})` : ""}</option>
-                          ))}
+              <form onSubmit={handleSave} className="flex flex-col flex-1 min-h-0">
+                <div className="flex-1 overflow-y-auto bg-white px-5 py-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {[
+                      { label: "Tenant", content: (
+                        <>
+                          <select value={form.tenant} onChange={(e) => handleTenantChange(e.target.value)} className="w-full border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none focus:border-[#0B3B2E]">
+                            <option value="">Select tenant</option>
+                            {(Array.isArray(tenants) ? tenants : []).filter((t) => includeTerminatedTenants || isActiveTenant(t)).map((t) => (
+                              <option key={t._id} value={t._id}>{t.name} {t.tenantCode ? `(${t.tenantCode})` : ""}</option>
+                            ))}
+                          </select>
+                          <label className="mt-1.5 inline-flex cursor-pointer items-center gap-2 text-[10px] text-slate-500">
+                            <input type="checkbox" checked={includeTerminatedTenants} onChange={(e) => setIncludeTerminatedTenants(e.target.checked)} className="border-slate-300" />
+                            Include terminated tenants
+                          </label>
+                        </>
+                      )},
+                      { label: "Unit", content: (
+                        <select value={form.unit} onChange={(e) => setForm((p) => ({ ...p, unit: e.target.value }))} className="w-full border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none focus:border-[#0B3B2E]">
+                          <option value="">Select unit</option>
+                          {(Array.isArray(units) ? units : []).map((u) => (<option key={u._id} value={u._id}>{u.unitNumber || u.unitName || u.name}</option>))}
                         </select>
-                        <label className="mt-1.5 inline-flex cursor-pointer items-center gap-2 text-[10px] text-slate-500">
-                          <input type="checkbox" checked={includeTerminatedTenants} onChange={(e) => setIncludeTerminatedTenants(e.target.checked)} className="rounded border-slate-300" />
-                          Include terminated tenants
-                        </label>
-                      </>
-                    )},
-                    { label: "Unit", content: (
-                      <select value={form.unit} onChange={(e) => setForm((p) => ({ ...p, unit: e.target.value }))} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10">
-                        <option value="">Select unit</option>
-                        {(Array.isArray(units) ? units : []).map((u) => (<option key={u._id} value={u._id}>{u.unitNumber || u.unitName || u.name}</option>))}
-                      </select>
-                    )},
-                    { label: "Status", content: (
-                      <select value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10">
-                        {AGREEMENT_STATUS_OPTIONS.map((s) => (<option key={s} value={s}>{getStatusLabel(s)}</option>))}
-                      </select>
-                    )},
-                    { label: "Start Date", content: <input type="date" value={form.startDate} onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10" /> },
-                    { label: "End Date", content: <input type="date" value={form.endDate} onChange={(e) => setForm((p) => ({ ...p, endDate: e.target.value }))} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10" /> },
-                    { label: "Lease Type", content: (
-                      <select value={form.leaseType} onChange={(e) => setForm((p) => ({ ...p, leaseType: e.target.value }))} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10">
-                        <option value="fixed">Fixed Term</option>
-                        <option value="at_will">At Will</option>
-                      </select>
-                    )},
-                    { label: "Monthly Rent", content: <input type="number" min="0" step="0.01" value={form.rentAmount} onChange={(e) => setForm((p) => ({ ...p, rentAmount: e.target.value }))} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10" /> },
-                    { label: "Deposit Amount", content: <input type="number" min="0" step="0.01" value={form.depositAmount} onChange={(e) => setForm((p) => ({ ...p, depositAmount: e.target.value }))} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10" /> },
-                    { label: "Payment Due Day", content: <input type="number" min="1" max="28" value={form.paymentDueDay} onChange={(e) => setForm((p) => ({ ...p, paymentDueDay: e.target.value }))} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10" /> },
-                    { label: "Notice Period (Days)", content: <input type="number" min="0" value={form.noticePeriodDays} onChange={(e) => setForm((p) => ({ ...p, noticePeriodDays: e.target.value }))} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10" /> },
-                    { label: "Late Fee", content: <input type="number" min="0" step="0.01" value={form.lateFee} onChange={(e) => setForm((p) => ({ ...p, lateFee: e.target.value }))} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10" /> },
-                    { label: "Document URL", content: <input type="text" value={form.documentUrl} onChange={(e) => setForm((p) => ({ ...p, documentUrl: e.target.value }))} placeholder="Optional link to signed PDF" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10" /> },
-                  ].map(({ label, content }) => (
-                    <div key={label}>
-                      <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">{label}</label>
-                      {content}
-                    </div>
-                  ))}
+                      )},
+                      { label: "Status", content: (
+                        <select value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))} className="w-full border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none focus:border-[#0B3B2E]">
+                          {AGREEMENT_STATUS_OPTIONS.map((s) => (<option key={s} value={s}>{getStatusLabel(s)}</option>))}
+                        </select>
+                      )},
+                      { label: "Start Date", content: <input type="date" value={form.startDate} onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))} className="w-full border border-slate-300 px-3 py-2 text-xs outline-none focus:border-[#0B3B2E]" /> },
+                      { label: "End Date", content: <input type="date" value={form.endDate} onChange={(e) => setForm((p) => ({ ...p, endDate: e.target.value }))} className="w-full border border-slate-300 px-3 py-2 text-xs outline-none focus:border-[#0B3B2E]" /> },
+                      { label: "Lease Type", content: (
+                        <select value={form.leaseType} onChange={(e) => setForm((p) => ({ ...p, leaseType: e.target.value }))} className="w-full border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none focus:border-[#0B3B2E]">
+                          <option value="fixed">Fixed Term</option>
+                          <option value="at_will">At Will</option>
+                        </select>
+                      )},
+                      { label: "Monthly Rent", content: <input type="number" min="0" step="0.01" value={form.rentAmount} onChange={(e) => setForm((p) => ({ ...p, rentAmount: e.target.value }))} className="w-full border border-slate-300 px-3 py-2 text-xs outline-none focus:border-[#0B3B2E]" /> },
+                      { label: "Deposit Amount", content: <input type="number" min="0" step="0.01" value={form.depositAmount} onChange={(e) => setForm((p) => ({ ...p, depositAmount: e.target.value }))} className="w-full border border-slate-300 px-3 py-2 text-xs outline-none focus:border-[#0B3B2E]" /> },
+                      { label: "Payment Due Day", content: <input type="number" min="1" max="28" value={form.paymentDueDay} onChange={(e) => setForm((p) => ({ ...p, paymentDueDay: e.target.value }))} className="w-full border border-slate-300 px-3 py-2 text-xs outline-none focus:border-[#0B3B2E]" /> },
+                      { label: "Notice Period (Days)", content: <input type="number" min="0" value={form.noticePeriodDays} onChange={(e) => setForm((p) => ({ ...p, noticePeriodDays: e.target.value }))} className="w-full border border-slate-300 px-3 py-2 text-xs outline-none focus:border-[#0B3B2E]" /> },
+                      { label: "Late Fee", content: <input type="number" min="0" step="0.01" value={form.lateFee} onChange={(e) => setForm((p) => ({ ...p, lateFee: e.target.value }))} className="w-full border border-slate-300 px-3 py-2 text-xs outline-none focus:border-[#0B3B2E]" /> },
+                      { label: "Document URL", content: <input type="text" value={form.documentUrl} onChange={(e) => setForm((p) => ({ ...p, documentUrl: e.target.value }))} placeholder="Optional link to signed PDF" className="w-full border border-slate-300 px-3 py-2 text-xs outline-none focus:border-[#0B3B2E]" /> },
+                    ].map(({ label, content }) => (
+                      <div key={label}>
+                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">{label}</label>
+                        {content}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-4">
+                    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Terms / Notes</label>
+                    <textarea
+                      rows={3}
+                      value={form.terms}
+                      onChange={(e) => setForm((p) => ({ ...p, terms: e.target.value }))}
+                      className="w-full border border-slate-300 px-3 py-2 text-xs outline-none focus:border-[#0B3B2E] resize-none"
+                      placeholder="Capture notice terms, utility arrangement, renewal notes, or special clauses."
+                    />
+                  </div>
                 </div>
 
-                <div className="mt-4">
-                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Terms / Notes</label>
-                  <textarea
-                    rows={3}
-                    value={form.terms}
-                    onChange={(e) => setForm((p) => ({ ...p, terms: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
-                    placeholder="Capture notice terms, utility arrangement, renewal notes, or special clauses."
-                  />
-                </div>
-
-                <div className="mt-4 flex items-center justify-end gap-2 border-t border-slate-200 pt-4">
-                  <button type="button" onClick={closeModal} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">
+                <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+                  <button type="button" onClick={closeModal} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-700 transition-colors hover:bg-slate-100">
                     Cancel
                   </button>
-                  <button type="submit" disabled={submitting} className={`rounded-lg px-4 py-2 text-xs font-semibold text-white shadow-sm transition ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER} ${submitting ? "cursor-not-allowed opacity-70" : ""}`}>
-                    {submitting ? "Saving…" : form._id ? "Update Agreement" : "Create Agreement"}
+                  <button type="submit" disabled={submitting} className={`px-4 py-2 text-xs font-black uppercase tracking-wide text-white transition-colors ${MILIK_GREEN} ${MILIK_GREEN_HOVER} ${submitting ? "cursor-not-allowed opacity-70" : ""}`}>
+                    {submitting ? "Saving…" : form._id ? "Update Agreement" : "Save Agreement"}
                   </button>
                 </div>
               </form>

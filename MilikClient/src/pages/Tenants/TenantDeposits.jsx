@@ -992,19 +992,19 @@ const TenantDeposits = () => {
       </div>
 
       {showDepositModal && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 p-4 sm:items-center sm:p-6">
-          <div className="flex w-full max-w-3xl max-h-[calc(100vh-2rem)] flex-col overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100vh-3rem)]">
-            <div className="sticky top-0 z-20 flex items-center justify-between bg-[#0B3B2E] px-5 py-3 text-white">
-              <h3 className="text-sm font-bold tracking-wide">New Deposit Invoice</h3>
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="flex w-full max-w-3xl max-h-[90vh] flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+              <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">New Deposit Invoice</h3>
               <button
                 onClick={closeDepositModal}
-                className="rounded bg-white/20 px-2 py-1 text-xs font-semibold hover:bg-white/30"
+                className="text-white/70 transition-colors hover:text-white"
               >
                 <FaTimes />
               </button>
             </div>
 
-            <div className="flex-1 space-y-4 overflow-y-auto p-5">
+            <div className="flex-1 overflow-y-auto bg-white px-5 py-4">
               {depositTypes.length === 0 && (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
                   No custom deposit types are active in Operational Settings yet, so Security Deposit is available as a fallback.
@@ -1013,14 +1013,14 @@ const TenantDeposits = () => {
 
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Property Filter</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Property Filter</label>
                   <select
                     value={tenantPropertyFilter}
                     onChange={(e) => {
                       setTenantPropertyFilter(e.target.value);
                       setDepositForm((prev) => ({ ...prev, tenantId: "" }));
                     }}
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     <option value="any">All properties</option>
                     {activeProperties.map((property) => (
@@ -1031,11 +1031,11 @@ const TenantDeposits = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Tenant <span className="text-red-500">*</span></label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tenant <span className="text-red-500">*</span></label>
                   <select
                     value={depositForm.tenantId}
                     onChange={(e) => updateDepositTenant(e.target.value)}
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     <option value="">Select tenant</option>
                     {tenantOptions.map((option) => (
@@ -1046,11 +1046,11 @@ const TenantDeposits = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Deposit Type *</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Deposit Type *</label>
                   <select
                     value={depositForm.depositTypeId}
                     onChange={(e) => updateDepositType(e.target.value)}
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     {activeDepositTypes.map((type) => (
                       <option key={type._id || type.code || type.name} value={type._id || type.code || type.name}>
@@ -1060,40 +1060,40 @@ const TenantDeposits = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Amount *</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Amount *</label>
                   <input
                     type="number"
                     min="0"
                     step="0.01"
                     value={depositForm.amount}
                     onChange={(e) => setDepositForm((prev) => ({ ...prev, amount: e.target.value }))}
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
                 <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Invoice Date</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Invoice Date</label>
                   <input
                     type="date"
                     value={depositForm.invoiceDate}
                     onChange={(e) => setDepositForm((prev) => ({ ...prev, invoiceDate: e.target.value }))}
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
                 <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Due Date</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Due Date</label>
                   <input
                     type="date"
                     value={depositForm.dueDate}
                     onChange={(e) => setDepositForm((prev) => ({ ...prev, dueDate: e.target.value }))}
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
                 <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">{holderColumnLabel}</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">{holderColumnLabel}</label>
                   <select
                     value={depositForm.depositHeldBy}
                     onChange={(e) => setDepositForm((prev) => ({ ...prev, depositHeldBy: e.target.value }))}
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                     disabled={isLandlordWorkspace}
                   >
                     {!isLandlordWorkspace && <option value="manager">Management Company</option>}
@@ -1101,22 +1101,22 @@ const TenantDeposits = () => {
                   </select>
                 </div>
                 <div className="md:col-span-2">
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Description</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Description</label>
                   <textarea
                     value={depositForm.description}
                     onChange={(e) => setDepositForm((prev) => ({ ...prev, description: e.target.value }))}
                     rows="3"
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="sticky bottom-0 z-20 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4">
+            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
               <button
                 type="button"
                 onClick={closeDepositModal}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                className="border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
               >
                 Cancel
               </button>
@@ -1124,7 +1124,7 @@ const TenantDeposits = () => {
                 type="button"
                 onClick={handleCreateDepositInvoice}
                 disabled={saving}
-                className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60 ${MILIK_GREEN}`}
+                className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-black uppercase text-white hover:bg-[#0A3127] disabled:opacity-60 ${MILIK_GREEN}`}
               >
                 {saving ? <FaSpinner className="animate-spin" /> : <FaMoneyBillWave />}
                 {saving ? "Saving..." : "Create Deposit Invoice"}

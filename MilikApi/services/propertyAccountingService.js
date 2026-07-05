@@ -306,52 +306,24 @@ export const getLandlordBalance = async (landlordId, businessId = null) => {
     throw new Error("Valid businessId is required to calculate landlord balance.");
   }
 
-  const payableAccount = await resolveLandlordRemittancePayableAccount(resolvedBusinessId);
-  const FinancialLedgerEntry = (await import("../models/FinancialLedgerEntry.js")).default;
-
-  const ledgerTotals = await FinancialLedgerEntry.aggregate([
-    {
-      $match: {
-        business: resolvedBusinessId,
-        landlord: normalizedLandlordId,
-        accountId: payableAccount._id,
-        status: { $ne: "reversed" },
-        $or: [{ reversalOf: { $exists: false } }, { reversalOf: null }],
-      },
-    },
-    { $group: { _id: null, debit: { $sum: "$debit" }, credit: { $sum: "$credit" }, count: { $sum: 1 } } },
-  ]);
-
-  const ledgerRow = ledgerTotals[0] || { debit: 0, credit: 0, count: 0 };
-  if (ledgerRow.count > 0) {
-    return Math.max(Number(ledgerRow.credit || 0) - Number(ledgerRow.debit || 0), 0);
-  }
-
+  // ProcessedStatement.balanceDue is the authoritative outstanding amount — it is
+  // decremented by every payLandlord call (Path A). Using the ledger's 2110 credit/debit
+  // delta caused split-brain: Path B debits 2110 without crediting it, making the
+  // balance appear zero after the first payment even when statements remain unpaid.
   const ProcessedStatement = (await import("../models/ProcessedStatement.js")).default;
-  const LandlordPayment = (await import("../models/LandlordPayment.js")).default;
 
-  const statementTotals = await ProcessedStatement.aggregate([
+  const result = await ProcessedStatement.aggregate([
     {
       $match: {
         business: resolvedBusinessId,
         landlord: normalizedLandlordId,
         status: { $ne: "reversed" },
         isNegativeStatement: { $ne: true },
+        balanceDue: { $gt: 0 },
       },
     },
-    { $group: { _id: null, payable: { $sum: "$netAmountDue" } } },
+    { $group: { _id: null, balance: { $sum: "$balanceDue" } } },
   ]);
 
-  const paymentTotals = await LandlordPayment.aggregate([
-    {
-      $match: {
-        business: resolvedBusinessId,
-        landlord: normalizedLandlordId,
-        status: { $ne: "reversed" },
-      },
-    },
-    { $group: { _id: null, paid: { $sum: "$amount" } } },
-  ]);
-
-  return Math.max(Number(statementTotals[0]?.payable || 0) - Number(paymentTotals[0]?.paid || 0), 0);
+  return Number(result[0]?.balance || 0);
 };

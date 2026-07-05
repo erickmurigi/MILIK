@@ -1912,18 +1912,18 @@ const Receipts = ({ viewMode = "tenant" }) => {
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl border border-slate-200 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white">
-              <h3 className="font-bold text-slate-900 text-sm">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+              <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
                 {activeReceipt ? "Edit Receipt" : "Create Receipt"}
               </h3>
-              <button onClick={resetForm} className="text-slate-500 hover:text-slate-700">
+              <button onClick={resetForm} className="text-white/70 transition-colors hover:text-white">
                 <FaTimes />
               </button>
             </div>
 
-            <div className="p-4">
+            <div className="flex-1 overflow-y-auto bg-white px-5 py-4">
               {formData.tenantId && (
                 <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-3">
                   {(() => {
@@ -2026,11 +2026,11 @@ const Receipts = ({ viewMode = "tenant" }) => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">Tenant *</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tenant *</label>
                   <select
                     value={formData.tenantId}
                     onChange={(e) => setFormData((prev) => ({ ...prev, tenantId: e.target.value }))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                    className="w-full mt-1 px-3 py-2 border border-slate-300 text-sm"
                   >
                     <option value="">Select tenant</option>
                     {tenants
@@ -2048,22 +2048,22 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">Amount *</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Amount *</label>
                   <input
                     type="number"
                     min="0"
                     value={formData.amount}
                     onChange={(e) => setFormData((prev) => ({ ...prev, amount: e.target.value }))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                    className="w-full mt-1 px-3 py-2 border border-slate-300 text-sm"
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">Payment Type *</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Payment Type *</label>
                   <select
                     value={formData.paymentType}
                     onChange={(e) => setFormData((prev) => ({ ...prev, paymentType: e.target.value }))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                    className="w-full mt-1 px-3 py-2 border border-slate-300 text-sm"
                   >
                     <option value="rent">Rent</option>
                     <option value="deposit">Deposit</option>
@@ -2074,11 +2074,11 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">Payment Method *</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Payment Method *</label>
                   <select
                     value={formData.paymentMethod}
                     onChange={(e) => setFormData((prev) => ({ ...prev, paymentMethod: e.target.value }))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                    className="w-full mt-1 px-3 py-2 border border-slate-300 text-sm"
                   >
                     <option value="mobile_money">Mobile Money</option>
                     <option value="bank_transfer">Bank Transfer</option>
@@ -2089,7 +2089,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
                     {isDirectToLandlord ? "Cashbook" : "Cashbook *"}
                   </label>
                   {isDirectToLandlord ? (
@@ -2100,7 +2100,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
                     <select
                       value={formData.cashbook}
                       onChange={(e) => setFormData((prev) => ({ ...prev, cashbook: e.target.value }))}
-                      className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                      className="w-full mt-1 px-3 py-2 border border-slate-300 text-sm"
                     >
                       {cashbookOptions.map((option) => (
                         <option key={option._id || option.name} value={option.name}>
@@ -2112,32 +2112,32 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">Payment Date *</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Payment Date *</label>
                   <input
                     type="date"
                     value={formData.paymentDate}
                     onChange={(e) => setFormData((prev) => ({ ...prev, paymentDate: e.target.value }))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                    className="w-full mt-1 px-3 py-2 border border-slate-300 text-sm"
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">Due Date *</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Due Date *</label>
                   <input
                     type="date"
                     value={formData.dueDate}
                     onChange={(e) => setFormData((prev) => ({ ...prev, dueDate: e.target.value }))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                    className="w-full mt-1 px-3 py-2 border border-slate-300 text-sm"
                   />
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="text-xs font-semibold text-slate-700">Description</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Description</label>
                   <textarea
                     rows={2}
                     value={formData.description}
                     onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 rounded-md text-sm"
+                    className="w-full mt-1 px-3 py-2 border border-slate-300 text-sm"
                     placeholder="Optional note"
                   />
                 </div>
@@ -2176,16 +2176,16 @@ const Receipts = ({ viewMode = "tenant" }) => {
               </div>
             </div>
 
-            <div className="px-4 py-3 border-t border-slate-200 flex justify-end gap-2 sticky bottom-0 bg-white">
+            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
               <button
                 onClick={resetForm}
-                className="px-4 py-2 text-xs border border-slate-300 rounded-md font-semibold hover:bg-slate-50"
+                className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-700 hover:bg-slate-100"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSave}
-                className={`px-4 py-2 text-xs rounded-md text-white font-semibold ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                className={`px-4 py-2 text-xs text-white font-semibold ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
               >
                 {activeReceipt ? "Update Receipt" : "Create Receipt"}
               </button>
@@ -2482,15 +2482,18 @@ const Receipts = ({ viewMode = "tenant" }) => {
       })()}
 
       {allocationDrawerOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
-          <div className="flex max-h-[94vh] w-full max-w-[1500px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4">
-              <div>
-                <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-slate-500">Receipt Allocation Workspace</p>
-                <h3 className="mt-1 text-lg font-bold text-slate-900">{allocationTarget?.receiptNumber || allocationTarget?.referenceNumber || "Receipt"}</h3>
-                <p className="mt-1 text-sm text-slate-600">Review and control how this receipt settles tenant bills. Confirmed receipts keep their posted base allocations locked, but any remaining unapplied balance can still be applied safely.</p>
-              </div>
-              <button onClick={closeAllocationDrawer} className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-white hover:text-slate-800">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="flex max-h-[90vh] w-full max-w-[1500px] flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+              <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
+                Receipt Allocation Workspace
+                {(allocationTarget?.receiptNumber || allocationTarget?.referenceNumber) && (
+                  <span className="font-mono font-semibold normal-case tracking-normal text-emerald-300">
+                    · {allocationTarget.receiptNumber || allocationTarget.referenceNumber}
+                  </span>
+                )}
+              </h3>
+              <button onClick={closeAllocationDrawer} className="text-white/70 transition-colors hover:text-white">
                 <FaTimes />
               </button>
             </div>
@@ -2664,7 +2667,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
                                               }}
                                               disabled={isLockedBaseLine}
                                               placeholder="Search invoice number, bill type, rent, deposit..."
-                                              className="h-8 w-full rounded-lg border border-slate-300 bg-white px-2 text-[11px] font-semibold text-slate-800 focus:border-[#0B3B2E] focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100"
+                                              className="h-8 w-full border border-slate-300 bg-white px-2 text-[11px] font-semibold text-slate-800 focus:border-[#0B3B2E] focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100"
                                             />
 
                                             {isDropdownOpen && !isLockedBaseLine && (
@@ -2727,7 +2730,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
                                       step="0.01"
                                       value={line?.appliedAmount || ""}
                                       onChange={(e) => updateAllocationLine(index, "appliedAmount", e.target.value)}
-                                      className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-[11px] text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
+                                      className="w-full border border-slate-300 bg-white px-2 py-1.5 text-[11px] text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
                                       placeholder="0.00"
                                     />
                                   </td>
@@ -2808,7 +2811,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
                         rows={4}
                         value={allocationReason}
                         onChange={(e) => setAllocationReason(e.target.value)}
-                        className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
+                        className="mt-2 w-full border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
                         placeholder="Example: Reassign utility settlement to the correct invoice for landlord statement continuity."
                       />
                     </div>
@@ -2836,17 +2839,17 @@ const Receipts = ({ viewMode = "tenant" }) => {
               </div>
             )}
 
-            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-white px-5 py-4">
+            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
               <button
                 onClick={closeAllocationDrawer}
-                className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-700 hover:bg-slate-100"
               >
                 Close
               </button>
               <button
                 onClick={handleSaveAllocations}
                 disabled={allocationLoading || allocationSaving}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <FaSave /> {allocationSaving ? "Saving..." : "Save Allocations"}
               </button>
@@ -2891,25 +2894,23 @@ const Receipts = ({ viewMode = "tenant" }) => {
 
       {/* ── Reversal Reason Modal ── */}
       {reversalModal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
             {/* Header */}
-            <div className="bg-[#0B3B2E] px-6 py-4 flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15">
-                <FaUndo className="text-white text-sm" />
-              </div>
-              <div>
-                <h2 className="text-white font-semibold text-base leading-tight">
+            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+              <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
+                <FaUndo className="text-xs" />
+                <span>
                   {reversalModal.isBatch ? `Reverse ${reversalModal.receipts.length} Receipt${reversalModal.receipts.length !== 1 ? "s" : ""}` : "Reverse Receipt"}
-                </h2>
-                {!reversalModal.isBatch && reversalModal.receipt?.receiptNumber && (
-                  <p className="text-white/60 text-xs mt-0.5">{reversalModal.receipt.receiptNumber}</p>
-                )}
-              </div>
+                  {!reversalModal.isBatch && reversalModal.receipt?.receiptNumber && (
+                    <span className="ml-1.5 font-mono text-xs font-normal normal-case tracking-normal text-white/60">{reversalModal.receipt.receiptNumber}</span>
+                  )}
+                </span>
+              </h3>
             </div>
 
             {/* Body */}
-            <div className="px-6 py-5 space-y-4">
+            <div className="flex-1 overflow-y-auto bg-white px-5 py-4 space-y-4">
               <div className="flex items-start gap-3 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3">
                 <FaInfoCircle className="text-amber-500 mt-0.5 shrink-0" />
                 <p className="text-sm text-amber-800">
@@ -2920,13 +2921,13 @@ const Receipts = ({ viewMode = "tenant" }) => {
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
                   Reversal Reason
                 </label>
                 <textarea
                   rows={3}
                   autoFocus
-                  className="w-full resize-none rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="w-full resize-none border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                   placeholder="Enter reason for reversal…"
                   value={reversalModal.reason}
                   onChange={(e) => setReversalModal((prev) => ({ ...prev, reason: e.target.value }))}
@@ -2937,18 +2938,18 @@ const Receipts = ({ viewMode = "tenant" }) => {
             </div>
 
             {/* Footer */}
-            <div className="px-6 pb-5 flex justify-end gap-3">
+            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
               <button
                 onClick={() => setReversalModal({ open: false, isBatch: false, receipt: null, receipts: [], reason: "", loading: false })}
                 disabled={reversalModal.loading}
-                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-700 hover:bg-slate-100 transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleReversalConfirm}
                 disabled={reversalModal.loading}
-                className="rounded-lg bg-red-600 hover:bg-red-700 px-5 py-2 text-sm font-semibold text-white transition-colors disabled:opacity-60 flex items-center gap-2"
+                className="bg-red-600 hover:bg-red-700 px-5 py-2 text-xs font-bold uppercase tracking-wide text-white transition-colors disabled:opacity-60 flex items-center gap-2"
               >
                 {reversalModal.loading ? (
                   <>

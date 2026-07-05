@@ -22,8 +22,8 @@ const ApproveStatementModal = ({ isOpen, statement, onClose, onApprove, loading 
   if (!isOpen || !statement) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="flex w-full flex-col bg-white shadow-2xl sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] sm:max-w-md rounded-t-2xl sm:rounded-none overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+      <div className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
         {/* Header */}
         <div className="flex-shrink-0 flex items-center justify-between gap-3 border-b border-slate-700 bg-[#0B3B2E] px-4 py-3 text-white">
           <div className="flex items-center gap-2">

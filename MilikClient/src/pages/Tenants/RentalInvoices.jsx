@@ -3449,25 +3449,25 @@ const createInvoiceForTenant = async (
       </div>
 
       {showSingleBooking && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 p-4 sm:items-center sm:p-6">
-          <div className="flex w-full max-w-3xl max-h-[calc(100vh-2rem)] flex-col overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100vh-3rem)]">
-            <div className="sticky top-0 z-20 flex items-center justify-between bg-[#0B3B2E] px-5 py-3 text-white">
-              <h3 className="text-sm font-bold tracking-wide">Single Tenant Booking</h3>
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="flex w-full max-w-3xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+              <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">Single Tenant Booking</h3>
               <button
                 onClick={() => {
                   setShowSingleBooking(false);
                   setBookingAction("");
                 }}
-                className="text-xs font-semibold px-2 py-1 rounded bg-white/20 hover:bg-white/30"
+                className="text-white/70 transition-colors hover:text-white"
               >
                 Close
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            <div className="flex-1 overflow-y-auto bg-white px-5 py-4 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Property Filter</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Property Filter</label>
                   <select
                     value={singleBookingPropertyFilter}
                     onChange={(e) => {
@@ -3476,7 +3476,7 @@ const createInvoiceForTenant = async (
                       setSingleBookingTenantDropdownOpen(false);
                       setSingleBookingForm((prev) => ({ ...prev, tenantId: "" }));
                     }}
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     <option value="all">All active properties</option>
                     {activeProperties.map((property) => (
@@ -3488,7 +3488,7 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div className="relative md:col-span-2">
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Tenant</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tenant</label>
                   <input
                     type="text"
                     value={singleBookingTenantSearch || formatTenantOptionLabel(selectedSingleBookingTenantOption)}
@@ -3499,7 +3499,7 @@ const createInvoiceForTenant = async (
                       setSingleBookingForm((prev) => ({ ...prev, tenantId: "" }));
                     }}
                     placeholder="Type tenant name, code, unit, or property..."
-                    className="w-full px-3 py-2 pr-9 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                    className="w-full px-3 py-2 pr-9 text-sm border border-slate-300 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                   />
                   <button
                     type="button"
@@ -3546,7 +3546,7 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Period</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Period</label>
                   <select
                     value={singleBookingForm.month}
                     onChange={(e) =>
@@ -3555,7 +3555,7 @@ const createInvoiceForTenant = async (
                         return { ...prev, month: nextPeriod.month, year: nextPeriod.year };
                       })
                     }
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     {MONTH_OPTIONS.map((monthOption) => (
                       <option
@@ -3570,7 +3570,7 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Year</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Year</label>
                   <input
                     type="number"
                     min="2000"
@@ -3583,20 +3583,20 @@ const createInvoiceForTenant = async (
                         return { ...prev, month: nextPeriod.month, year: nextPeriod.year };
                       })
                     }
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
 
 
                 <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Booking Date</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Booking Date</label>
                   <input
                     type="date"
                     value={singleBookingForm.invoiceDate ? new Date(singleBookingForm.invoiceDate).toISOString().slice(0, 10) : ""}
                     onChange={(e) =>
                       setSingleBookingForm((prev) => ({ ...prev, invoiceDate: e.target.value ? new Date(e.target.value) : prev.invoiceDate, bookWithInvoiceDate: true }))
                     }
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                   <label className="mt-2 flex items-center gap-2 text-xs font-semibold text-slate-700">
                     <input
@@ -3615,7 +3615,7 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Due Day</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Due Day</label>
                   <div className="flex items-center gap-2">
                     <input
                       type="number"
@@ -3628,7 +3628,7 @@ const createInvoiceForTenant = async (
                           dueDay: normalizeDueDay(e.target.value, prev.month, prev.year),
                         }))
                       }
-                      className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                      className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                     />
                     <button
                       type="button"
@@ -3641,13 +3641,13 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Booking Option</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Booking Option</label>
                   <select
                     value={singleBookingForm.billingMode}
                     onChange={(e) =>
                       setSingleBookingForm((prev) => ({ ...prev, billingMode: e.target.value }))
                     }
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     <option value="separate">Rent + Utility (separate)</option>
                     <option value="combined">Rent + Utility (combined)</option>
@@ -3657,13 +3657,13 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Tax Handling</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tax Handling</label>
                   <select
                     value={singleBookingForm.taxHandling}
                     onChange={(e) =>
                       setSingleBookingForm((prev) => ({ ...prev, taxHandling: e.target.value }))
                     }
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     <option value="company_default">Use company default</option>
                     <option value="taxable" disabled={!companyTaxEnabled}>Force taxable</option>
@@ -3672,14 +3672,14 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Tax Code</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tax Code</label>
                   <select
                     value={singleBookingForm.taxCodeKey}
                     onChange={(e) =>
                       setSingleBookingForm((prev) => ({ ...prev, taxCodeKey: e.target.value }))
                     }
                     disabled={singleBookingForm.taxHandling === "non_taxable"}
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed"
                   >
                     {activeTaxCodes.map((code) => (
                       <option key={code.key} value={code.key}>
@@ -3690,14 +3690,14 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Tax Mode</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tax Mode</label>
                   <select
                     value={singleBookingForm.taxMode}
                     onChange={(e) =>
                       setSingleBookingForm((prev) => ({ ...prev, taxMode: e.target.value }))
                     }
                     disabled={singleBookingForm.taxHandling === "non_taxable"}
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed"
                   >
                     <option value="company_default">Use company default</option>
                     <option value="exclusive">Exclusive</option>
@@ -3768,49 +3768,49 @@ const createInvoiceForTenant = async (
                 </div>
               )}
 
-              <div className="flex justify-end gap-2">
-                <button
-                  onClick={() => {
-                    setShowSingleBooking(false);
-                    setBookingAction("");
-                  }}
-                  className="px-4 py-2 text-xs font-semibold rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSingleBooking}
-                  disabled={submittingSingleBooking}
-                  className="px-4 py-2 text-xs font-semibold rounded-lg text-white bg-[#0B3B2E] hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {submittingSingleBooking ? "Creating..." : "Create Booking"}
-                </button>
-              </div>
+            </div>
+            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+              <button
+                onClick={() => {
+                  setShowSingleBooking(false);
+                  setBookingAction("");
+                }}
+                className="px-4 py-2 text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSingleBooking}
+                disabled={submittingSingleBooking}
+                className="bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0d5442] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {submittingSingleBooking ? "Creating..." : "Create Booking"}
+              </button>
             </div>
           </div>
         </div>
       )}
 
       {showBatchBooking && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 p-4 sm:items-center sm:p-6">
-          <div className="flex w-full max-w-3xl max-h-[calc(100vh-2rem)] flex-col overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100vh-3rem)]">
-            <div className="sticky top-0 z-20 flex items-center justify-between bg-[#0B3B2E] px-5 py-3 text-white">
-              <h3 className="text-sm font-bold tracking-wide">Batch Booking</h3>
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="flex w-full max-w-3xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+              <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">Batch Booking</h3>
               <button
                 onClick={() => {
                   setShowBatchBooking(false);
                   setBookingAction("");
                 }}
-                className="text-xs font-semibold px-2 py-1 rounded bg-white/20 hover:bg-white/30"
+                className="text-white/70 transition-colors hover:text-white"
               >
                 Close
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            <div className="flex-1 overflow-y-auto bg-white px-5 py-4 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
                     Property Scope
                   </label>
                   <select
@@ -3818,7 +3818,7 @@ const createInvoiceForTenant = async (
                     onChange={(e) => {
                       setBatchBookingForm((prev) => ({ ...prev, propertyId: e.target.value }));
                     }}
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     <option value="all">All active properties</option>
                     {activeProperties.map((property) => (
@@ -3835,7 +3835,7 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Period</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Period</label>
                   <select
                     value={batchBookingForm.month}
                     onChange={(e) =>
@@ -3844,7 +3844,7 @@ const createInvoiceForTenant = async (
                         return { ...prev, month: nextPeriod.month, year: nextPeriod.year };
                       })
                     }
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     {MONTH_OPTIONS.map((monthOption) => (
                       <option
@@ -3859,7 +3859,7 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Year</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Year</label>
                   <input
                     type="number"
                     min="2000"
@@ -3872,19 +3872,19 @@ const createInvoiceForTenant = async (
                         return { ...prev, month: nextPeriod.month, year: nextPeriod.year };
                       })
                     }
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
 
                 <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Booking Date</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Booking Date</label>
                   <input
                     type="date"
                     value={batchBookingForm.invoiceDate ? new Date(batchBookingForm.invoiceDate).toISOString().slice(0, 10) : ""}
                     onChange={(e) =>
                       setBatchBookingForm((prev) => ({ ...prev, invoiceDate: e.target.value ? new Date(e.target.value) : prev.invoiceDate, bookWithInvoiceDate: true }))
                     }
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                   <label className="mt-2 flex items-center gap-2 text-xs font-semibold text-slate-700">
                     <input
@@ -3903,7 +3903,7 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Due Day</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Due Day</label>
                   <div className="flex items-center gap-2">
                     <input
                       type="number"
@@ -3916,7 +3916,7 @@ const createInvoiceForTenant = async (
                           dueDay: normalizeDueDay(e.target.value, prev.month, prev.year),
                         }))
                       }
-                      className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                      className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                     />
                     <button
                       type="button"
@@ -3929,13 +3929,13 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Booking Option</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Booking Option</label>
                   <select
                     value={batchBookingForm.billingMode}
                     onChange={(e) =>
                       setBatchBookingForm((prev) => ({ ...prev, billingMode: e.target.value }))
                     }
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     <option value="separate">Rent + Utility (separate)</option>
                     <option value="combined">Rent + Utility (combined)</option>
@@ -3945,13 +3945,13 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Tax Handling</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tax Handling</label>
                   <select
                     value={batchBookingForm.taxHandling}
                     onChange={(e) =>
                       setBatchBookingForm((prev) => ({ ...prev, taxHandling: e.target.value }))
                     }
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     <option value="company_default">Use company default</option>
                     <option value="taxable" disabled={!companyTaxEnabled}>Force taxable</option>
@@ -3960,14 +3960,14 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Tax Code</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tax Code</label>
                   <select
                     value={batchBookingForm.taxCodeKey}
                     onChange={(e) =>
                       setBatchBookingForm((prev) => ({ ...prev, taxCodeKey: e.target.value }))
                     }
                     disabled={batchBookingForm.taxHandling === "non_taxable"}
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed"
                   >
                     {activeTaxCodes.map((code) => (
                       <option key={code.key} value={code.key}>
@@ -3978,14 +3978,14 @@ const createInvoiceForTenant = async (
                 </div>
 
                 <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Tax Mode</label>
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tax Mode</label>
                   <select
                     value={batchBookingForm.taxMode}
                     onChange={(e) =>
                       setBatchBookingForm((prev) => ({ ...prev, taxMode: e.target.value }))
                     }
                     disabled={batchBookingForm.taxHandling === "non_taxable"}
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed"
                   >
                     <option value="company_default">Use company default</option>
                     <option value="exclusive">Exclusive</option>
@@ -4018,24 +4018,24 @@ const createInvoiceForTenant = async (
                 )}
               </div>
 
-              <div className="flex justify-end gap-2">
-                <button
-                  onClick={() => {
-                    setShowBatchBooking(false);
-                    setBookingAction("");
-                  }}
-                  className="px-4 py-2 text-xs font-semibold rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleBatchBooking}
-                  disabled={submittingBatchBooking}
-                  className="px-4 py-2 text-xs font-semibold rounded-lg text-white bg-[#0B3B2E] hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {submittingBatchBooking ? "Running..." : "Run Batch Booking"}
-                </button>
-              </div>
+            </div>
+            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+              <button
+                onClick={() => {
+                  setShowBatchBooking(false);
+                  setBookingAction("");
+                }}
+                className="px-4 py-2 text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBatchBooking}
+                disabled={submittingBatchBooking}
+                className="bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0d5442] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {submittingBatchBooking ? "Running..." : "Run Batch Booking"}
+              </button>
             </div>
           </div>
         </div>

@@ -560,20 +560,18 @@ const Inspections = () => {
 
       {/* Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-slate-950/55 px-4 py-4 backdrop-blur-sm sm:items-center sm:py-6">
-          <div className="w-full max-w-4xl max-h-[calc(100vh-2rem)] overflow-y-auto overscroll-contain rounded-[28px] border border-slate-200 bg-white shadow-2xl">
-            <div className="sticky top-0 z-20 flex items-center justify-between bg-[#0B3B2E] px-6 py-4 text-white rounded-t-[28px]">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-200">Inspections</p>
-                <h2 className="text-xl font-black">{editingInspection?._id ? "Edit Inspection" : "Schedule Inspection"}</h2>
-              </div>
-              <button onClick={closeModal} className="rounded-full border border-white/30 p-2 hover:bg-white/10"><FaTimes /></button>
+        <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="w-full max-w-4xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between bg-[#0B3B2E] px-4 py-3 text-white">
+              <h2 className="text-sm font-black uppercase tracking-wide">{editingInspection?._id ? "Edit Inspection" : "Schedule Inspection"}</h2>
+              <button onClick={closeModal} className="text-white/70 transition-colors hover:text-white"><FaTimes /></button>
             </div>
 
-            <form onSubmit={handleSave} className="space-y-4 px-6 py-5">
+            <form onSubmit={handleSave} className="flex flex-col flex-1 overflow-hidden">
+              <div className="flex-1 overflow-y-auto bg-white px-5 py-4 space-y-4">
               <div className="grid gap-4 md:grid-cols-3">
                 <div>
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Property <span className="text-red-500">*</span></span>
+                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Property <span className="text-red-500">*</span></span>
                   <AppSelect
                     value={selectedPropertyId}
                     onChange={(v) => setForm((prev) => ({ ...prev, property: v ?? "", unit: "", tenant: "" }))}
@@ -584,7 +582,7 @@ const Inspections = () => {
                   />
                 </div>
                 <div>
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Unit</span>
+                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Unit</span>
                   <AppSelect
                     value={form.unit}
                     onChange={(v) => setForm((prev) => ({ ...prev, unit: v ?? "", tenant: "" }))}
@@ -596,7 +594,7 @@ const Inspections = () => {
                   />
                 </div>
                 <div>
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Tenant</span>
+                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tenant</span>
                   <AppSelect
                     value={form.tenant}
                     onChange={(v) => setForm((prev) => ({ ...prev, tenant: v ?? "" }))}
@@ -612,48 +610,48 @@ const Inspections = () => {
 
               <div className="grid gap-4 md:grid-cols-4">
                 <label className="block">
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Type</span>
+                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Type</span>
                   <select
                     value={form.type}
                     onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value }))}
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     {TYPE_OPTIONS.filter((o) => o.value !== "all").map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </label>
                 <label className="block">
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Status</span>
+                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Status</span>
                   <select
                     value={form.status}
                     onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   >
                     {STATUS_OPTIONS.filter((o) => o.value !== "all").map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </label>
                 <label className="block md:col-span-2">
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Inspector name <span className="text-red-500">*</span></span>
+                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Inspector name <span className="text-red-500">*</span></span>
                   <input
                     value={form.inspectorName}
                     onChange={(e) => setForm((prev) => ({ ...prev, inspectorName: e.target.value }))}
                     placeholder="Inspector, staff or service provider"
-                    className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </label>
               </div>
 
               <div className="grid gap-4 md:grid-cols-4">
                 <label className="block">
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Scheduled <span className="text-red-500">*</span></span>
-                  <input type="date" value={form.scheduledDate} onChange={(e) => setForm((prev) => ({ ...prev, scheduledDate: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Scheduled <span className="text-red-500">*</span></span>
+                  <input type="date" value={form.scheduledDate} onChange={(e) => setForm((prev) => ({ ...prev, scheduledDate: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </label>
                 <label className="block">
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Completed</span>
-                  <input type="date" value={form.completedDate} onChange={(e) => setForm((prev) => ({ ...prev, completedDate: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Completed</span>
+                  <input type="date" value={form.completedDate} onChange={(e) => setForm((prev) => ({ ...prev, completedDate: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </label>
                 <label className="block">
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Next inspection</span>
-                  <input type="date" value={form.nextInspectionDate} onChange={(e) => setForm((prev) => ({ ...prev, nextInspectionDate: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Next inspection</span>
+                  <input type="date" value={form.nextInspectionDate} onChange={(e) => setForm((prev) => ({ ...prev, nextInspectionDate: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </label>
                 <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-700 md:mt-6">
                   <input
@@ -668,32 +666,33 @@ const Inspections = () => {
 
               <div className="grid gap-4 md:grid-cols-3">
                 <label className="block">
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Score (0–100)</span>
-                  <input type="number" min="0" max="100" value={form.score} onChange={(e) => setForm((prev) => ({ ...prev, score: e.target.value }))} placeholder="e.g. 92" className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Score (0–100)</span>
+                  <input type="number" min="0" max="100" value={form.score} onChange={(e) => setForm((prev) => ({ ...prev, score: e.target.value }))} placeholder="e.g. 92" className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </label>
                 <label className="block">
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Issues found</span>
-                  <input type="number" min="0" value={form.issuesFound} onChange={(e) => setForm((prev) => ({ ...prev, issuesFound: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Issues found</span>
+                  <input type="number" min="0" value={form.issuesFound} onChange={(e) => setForm((prev) => ({ ...prev, issuesFound: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </label>
                 <label className="block">
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Photos count</span>
-                  <input type="number" min="0" value={form.photosCount} onChange={(e) => setForm((prev) => ({ ...prev, photosCount: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Photos count</span>
+                  <input type="number" min="0" value={form.photosCount} onChange={(e) => setForm((prev) => ({ ...prev, photosCount: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </label>
               </div>
 
               <label className="block">
-                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Recommendations</span>
-                <textarea rows={2} value={form.recommendations} onChange={(e) => setForm((prev) => ({ ...prev, recommendations: e.target.value }))} placeholder="Recommended repairs, deductions, compliance actions…" className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Recommendations</span>
+                <textarea rows={2} value={form.recommendations} onChange={(e) => setForm((prev) => ({ ...prev, recommendations: e.target.value }))} placeholder="Recommended repairs, deductions, compliance actions…" className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </label>
 
               <label className="block">
-                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Notes</span>
-                <textarea rows={3} value={form.notes} onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))} placeholder="Observations for the property manager or next inspection cycle." className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Notes</span>
+                <textarea rows={3} value={form.notes} onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))} placeholder="Observations for the property manager or next inspection cycle." className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </label>
 
-              <div className="sticky bottom-0 flex flex-wrap justify-end gap-3 border-t border-slate-200 bg-white/95 pt-4 backdrop-blur-sm">
-                <button type="button" onClick={closeModal} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-                <button type="submit" disabled={submitting} className="rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
+              </div>
+              <div className="flex-shrink-0 flex flex-wrap justify-end gap-3 border-t border-slate-200 bg-slate-50 px-5 py-3">
+                <button type="button" onClick={closeModal} className="border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+                <button type="submit" disabled={submitting} className="bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
                   {submitting ? "Saving…" : editingInspection?._id ? "Save Changes" : "Create Inspection"}
                 </button>
               </div>

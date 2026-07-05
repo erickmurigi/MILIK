@@ -45,8 +45,8 @@ const pillTabClass = (active, tone = "green") => {
     : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50";
 };
 const inputClass =
-  "h-8 w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/10";
-const labelClass = "mb-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500";
+  "h-8 w-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/10";
+const labelClass = "mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500";
 const ITEMS_PER_PAGE = 50;
 
 const getErrorMessage = (error, fallback) =>
@@ -1283,14 +1283,13 @@ const LatePenalties = () => {
       </div>
 
       {batchDetail ? (
-        <div className="fixed inset-0 z-[58] flex items-end justify-center bg-slate-950/30 px-4 py-4 backdrop-blur-[2px]">
-          <div className="max-h-[88vh] w-full max-w-7xl overflow-hidden rounded-t-[32px] border border-slate-200 bg-white shadow-2xl">
-            <div className="border-b border-slate-200 bg-gradient-to-r from-[#0B3B2E] via-slate-900 to-orange-500 px-3 py-2 text-white">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="fixed inset-0 z-[58] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="flex max-h-[90vh] w-full max-w-7xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <div className="flex flex-shrink-0 flex-col border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+              <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-orange-100">Processed batch detail</p>
-                  <h2 className="mt-0.5 text-xl font-black tracking-tight">{batchDetail.batchName}</h2>
-                  <p className="mt-1 text-sm text-slate-200">
+                  <p className="text-sm font-black uppercase tracking-wide">{batchDetail.batchName}</p>
+                  <p className="mt-0.5 text-xs text-white/60">
                     {batchDetail.ruleName || batchDetail.rule?.ruleName || "-"} · {formatDate(batchDetail.runDate)} · {batchDetail.status}
                   </p>
                 </div>
@@ -1331,40 +1330,41 @@ const LatePenalties = () => {
                       setSelectedBatchRows({});
                       setBatchDetail(null);
                     }}
-                    className="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-xs font-bold text-white hover:bg-white/20"
+                    className="text-white/70 transition-colors hover:text-white"
                   >
-                    <FaTimes /> Close
+                    <FaTimes />
                   </button>
                 </div>
               </div>
               {!batchDetail?.canDeleteBatch ? (
-                <p className="mt-3 text-xs text-orange-100">{batchDeleteSummary(batchDetail) || "This batch still has active linked penalty invoices."}</p>
+                <p className="mt-2 text-xs text-white/60">{batchDeleteSummary(batchDetail) || "This batch still has active linked penalty invoices."}</p>
               ) : (
-                <p className="mt-3 text-xs text-emerald-100">All linked penalty invoices have been cleared. This batch can now be deleted safely.</p>
+                <p className="mt-2 text-xs text-white/60">All linked penalty invoices have been cleared. This batch can now be deleted safely.</p>
               )}
             </div>
 
-            <div className="grid gap-4 border-b border-slate-200 bg-slate-50 px-3 py-2 md:grid-cols-4">
-              <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Status</p>
-                <p className="mt-1 text-base font-semibold text-slate-900">{batchDetail.status}</p>
+            <div className="flex-1 overflow-y-auto min-h-0">
+              <div className="grid gap-4 border-b border-slate-200 bg-slate-50 px-3 py-2 md:grid-cols-4">
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Status</p>
+                  <p className="mt-1 text-base font-semibold text-slate-900">{batchDetail.status}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Invoices</p>
+                  <p className="mt-1 text-base font-semibold text-slate-900">{Number(batchDetail.invoicesCreatedCount || 0)}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Penalty amount</p>
+                  <p className="mt-1 text-base font-semibold text-slate-900">{formatCurrency(batchDetail.totalPenaltyAmount)}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Rule</p>
+                  <p className="mt-1 text-base font-semibold text-slate-900">{batchDetail.ruleName || batchDetail.rule?.ruleName || "-"}</p>
+                </div>
               </div>
-              <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Invoices</p>
-                <p className="mt-1 text-base font-semibold text-slate-900">{Number(batchDetail.invoicesCreatedCount || 0)}</p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Penalty amount</p>
-                <p className="mt-1 text-base font-semibold text-slate-900">{formatCurrency(batchDetail.totalPenaltyAmount)}</p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Rule</p>
-                <p className="mt-1 text-base font-semibold text-slate-900">{batchDetail.ruleName || batchDetail.rule?.ruleName || "-"}</p>
-              </div>
-            </div>
 
-            <div className="max-h-[52vh] overflow-auto">
-              <table className="w-full min-w-[1450px] text-[11px] border-collapse">
+              <div className="overflow-auto">
+                <table className="w-full min-w-[1450px] text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr className="bg-[#0B3B2E] text-white">
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">
@@ -1474,31 +1474,30 @@ const LatePenalties = () => {
                     })
                   )}
                 </tbody>
-              </table>
+                </table>
+              </div>
             </div>
           </div>
         </div>
       ) : null}
 
       {showRuleModal ? (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/20 px-4 py-6 backdrop-blur-[10px]">
-          <div className="relative max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-[32px] border border-white/40 bg-white shadow-2xl">
-            <div className="flex items-start justify-between gap-4 bg-gradient-to-r from-[#0B3B2E] via-slate-900 to-orange-500 px-6 py-5 text-white">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-orange-100">Milik rule setup</p>
-                <h2 className="mt-2 text-2xl font-bold">{editingRuleId ? "Edit late penalty rule" : "Add late penalty rule"}</h2>
-                <p className="mt-1 text-sm text-slate-200">A focused modal for quick setup without leaving the penalties workspace.</p>
-              </div>
+        <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+              <h2 className="text-sm font-black uppercase tracking-wide">
+                {editingRuleId ? "Edit late penalty rule" : "Add late penalty rule"}
+              </h2>
               <button
                 onClick={() => !savingRule && setShowRuleModal(false)}
-                className="rounded-xl border border-white/15 bg-white/10 p-3 text-white hover:bg-white/20"
+                className="text-white/70 transition-colors hover:text-white"
                 type="button"
               >
                 <FaTimes />
               </button>
             </div>
 
-            <div className="max-h-[calc(92vh-100px)] overflow-y-auto px-6 py-6">
+            <div className="flex-1 overflow-y-auto bg-white px-5 py-4">
               <div className="mb-5 grid grid-cols-1 gap-3 lg:grid-cols-3">
                 <div className="rounded-xl border border-orange-100 bg-orange-50 px-4 py-2 text-xs text-slate-700">
                   <p className="font-semibold text-slate-900">Grace days</p>
@@ -1662,7 +1661,7 @@ const LatePenalties = () => {
                   </div>
 
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <label className={`${labelClass} mb-2`}>Notes</label>
+                    <label className={labelClass}>Notes</label>
                     <textarea
                       rows={8}
                       className={`${inputClass} min-h-[180px]`}
@@ -1671,26 +1670,26 @@ const LatePenalties = () => {
                       placeholder="Optional internal guidance for the team."
                     />
                   </div>
-
-                  <div className="flex items-center justify-end gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setShowRuleModal(false)}
-                      className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-                    >
-                      <FaTimes /> Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleSaveRule}
-                      disabled={savingRule || !incomeAccounts.length}
-                      className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 font-semibold text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <FaSave /> {savingRule ? "Saving..." : editingRuleId ? "Update rule" : "Save rule"}
-                    </button>
-                  </div>
                 </div>
               </div>
+            </div>
+
+            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+              <button
+                type="button"
+                onClick={() => setShowRuleModal(false)}
+                className="inline-flex items-center gap-2 border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              >
+                <FaTimes /> Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveRule}
+                disabled={savingRule || !incomeAccounts.length}
+                className="inline-flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <FaSave /> {savingRule ? "Saving..." : editingRuleId ? "Update Rule" : "Save Rule"}
+              </button>
             </div>
           </div>
         </div>

@@ -444,70 +444,70 @@ export default function SaleLeads() {
 
       {/* ── Add / Edit Lead Modal ──────────────────────────────────────────────── */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-5 py-4 border-b">
-              <h3 className="font-semibold text-slate-700">{editingId ? "Edit Lead" : "Add Lead"}</h3>
-              <button onClick={() => setShowModal(false)}><FaTimes className="text-slate-400 hover:text-slate-600" /></button>
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+              <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide"><FaUserFriends />{editingId ? "Edit Lead" : "Add Lead"}</h3>
+              <button onClick={() => setShowModal(false)} className="text-white/70 transition-colors hover:text-white"><FaTimes /></button>
             </div>
-            <div className="px-5 py-4 grid grid-cols-2 gap-3">
+            <div className="flex-1 overflow-y-auto bg-white px-5 py-4 grid grid-cols-2 gap-3">
               <div className="col-span-2">
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Full Name *</label>
-                <input value={form.fullName} onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Full Name *</label>
+                <input value={form.fullName} onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none" />
               </div>
               <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Phone</label>
-                <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Phone</label>
+                <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none" />
               </div>
               <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Email</label>
-                <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Email</label>
+                <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none" />
               </div>
               <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Source</label>
-                <select value={form.source} onChange={(e) => setForm((f) => ({ ...f, source: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20">
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Source</label>
+                <select value={form.source} onChange={(e) => setForm((f) => ({ ...f, source: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none">
                   {LEAD_SOURCES.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
                 </select>
               </div>
               <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Status</label>
-                <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20">
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Status</label>
+                <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none">
                   {LEAD_STATUSES.filter((s) => s !== "converted").map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
                 </select>
               </div>
               <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Assigned Agent</label>
-                <select value={form.assignedAgent} onChange={(e) => setForm((f) => ({ ...f, assignedAgent: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20">
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Assigned Agent</label>
+                <select value={form.assignedAgent} onChange={(e) => setForm((f) => ({ ...f, assignedAgent: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none">
                   <option value="">— Unassigned —</option>
                   {agents.map((a) => <option key={a._id} value={a._id}>{a.fullName}</option>)}
                 </select>
               </div>
               <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Next Follow-up</label>
-                <input type="date" value={form.nextFollowUpDate} onChange={(e) => setForm((f) => ({ ...f, nextFollowUpDate: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Next Follow-up</label>
+                <input type="date" value={form.nextFollowUpDate} onChange={(e) => setForm((f) => ({ ...f, nextFollowUpDate: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none" />
               </div>
               <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Budget Min (KES)</label>
-                <input type="number" value={form.budgetMin} onChange={(e) => setForm((f) => ({ ...f, budgetMin: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Budget Min (KES)</label>
+                <input type="number" value={form.budgetMin} onChange={(e) => setForm((f) => ({ ...f, budgetMin: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none" />
               </div>
               <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Budget Max (KES)</label>
-                <input type="number" value={form.budgetMax} onChange={(e) => setForm((f) => ({ ...f, budgetMax: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Budget Max (KES)</label>
+                <input type="number" value={form.budgetMax} onChange={(e) => setForm((f) => ({ ...f, budgetMax: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none" />
               </div>
               {form.status === "lost" && (
                 <div className="col-span-2">
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Lost Reason</label>
-                  <input value={form.lostReason} onChange={(e) => setForm((f) => ({ ...f, lostReason: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
+                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Lost Reason</label>
+                  <input value={form.lostReason} onChange={(e) => setForm((f) => ({ ...f, lostReason: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none" />
                 </div>
               )}
               <div className="col-span-2">
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Notes</label>
-                <textarea rows={3} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20 resize-none" />
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Notes</label>
+                <textarea rows={3} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none resize-none" />
               </div>
             </div>
-            <div className="flex justify-end gap-2 px-5 py-3 border-t bg-slate-50">
-              <button onClick={() => setShowModal(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button onClick={handleSave} disabled={saving} className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-black text-white hover:bg-indigo-700 disabled:opacity-50">
+            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+              <button onClick={() => setShowModal(false)} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-700 hover:bg-slate-100">Cancel</button>
+              <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0d5442] disabled:opacity-50">
                 {saving ? "Saving…" : editingId ? "Update" : "Create Lead"}
               </button>
             </div>
@@ -517,56 +517,56 @@ export default function SaleLeads() {
 
       {/* ── Log Activity Modal ─────────────────────────────────────────────────── */}
       {showActModal && selected && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-5 py-4 border-b">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
               <div>
-                <h3 className="font-semibold text-slate-700">{editingAct ? "Edit Activity" : "Log Activity"}</h3>
-                <div className="text-xs text-slate-400 mt-0.5">for {selected.fullName}</div>
+                <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide"><FaCalendarAlt />{editingAct ? "Edit Activity" : "Log Activity"}</h3>
+                <div className="text-[10px] text-white/60 mt-0.5">for {selected.fullName}</div>
               </div>
-              <button onClick={() => setActModal(false)}><FaTimes className="text-slate-400 hover:text-slate-600" /></button>
+              <button onClick={() => setActModal(false)} className="text-white/70 transition-colors hover:text-white"><FaTimes /></button>
             </div>
-            <div className="px-5 py-4 grid grid-cols-2 gap-3">
+            <div className="flex-1 overflow-y-auto bg-white px-5 py-4 grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Type *</label>
-                <select value={actForm.type} onChange={(e) => setActForm((f) => ({ ...f, type: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20">
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Type *</label>
+                <select value={actForm.type} onChange={(e) => setActForm((f) => ({ ...f, type: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none">
                   {ACTIVITY_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, " ")}</option>)}
                 </select>
               </div>
               <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Date & Time</label>
-                <input type="datetime-local" value={actForm.date} onChange={(e) => setActForm((f) => ({ ...f, date: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Date & Time</label>
+                <input type="datetime-local" value={actForm.date} onChange={(e) => setActForm((f) => ({ ...f, date: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none" />
               </div>
               <div className="col-span-2">
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Subject</label>
-                <input value={actForm.subject} onChange={(e) => setActForm((f) => ({ ...f, subject: e.target.value }))} placeholder="e.g. Site visit — Westlands plot" className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Subject</label>
+                <input value={actForm.subject} onChange={(e) => setActForm((f) => ({ ...f, subject: e.target.value }))} placeholder="e.g. Site visit — Westlands plot" className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none" />
               </div>
               <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Duration (min)</label>
-                <input type="number" value={actForm.durationMinutes} onChange={(e) => setActForm((f) => ({ ...f, durationMinutes: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Duration (min)</label>
+                <input type="number" value={actForm.durationMinutes} onChange={(e) => setActForm((f) => ({ ...f, durationMinutes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none" />
               </div>
               <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Outcome</label>
-                <select value={actForm.outcome} onChange={(e) => setActForm((f) => ({ ...f, outcome: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20">
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Outcome</label>
+                <select value={actForm.outcome} onChange={(e) => setActForm((f) => ({ ...f, outcome: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none">
                   {OUTCOMES.map((o) => <option key={o} value={o}>{o.replace(/_/g, " ")}</option>)}
                 </select>
               </div>
               <div className="col-span-2">
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Notes</label>
-                <textarea rows={3} value={actForm.notes} onChange={(e) => setActForm((f) => ({ ...f, notes: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20 resize-none" />
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Notes</label>
+                <textarea rows={3} value={actForm.notes} onChange={(e) => setActForm((f) => ({ ...f, notes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none resize-none" />
               </div>
               <div className="col-span-2">
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Next Action</label>
-                <input value={actForm.nextAction} onChange={(e) => setActForm((f) => ({ ...f, nextAction: e.target.value }))} placeholder="e.g. Send site plan brochure" className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Next Action</label>
+                <input value={actForm.nextAction} onChange={(e) => setActForm((f) => ({ ...f, nextAction: e.target.value }))} placeholder="e.g. Send site plan brochure" className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none" />
               </div>
               <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Next Action Date</label>
-                <input type="date" value={actForm.nextActionDate} onChange={(e) => setActForm((f) => ({ ...f, nextActionDate: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Next Action Date</label>
+                <input type="date" value={actForm.nextActionDate} onChange={(e) => setActForm((f) => ({ ...f, nextActionDate: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none" />
               </div>
             </div>
-            <div className="flex justify-end gap-2 px-5 py-3 border-t bg-slate-50">
-              <button onClick={() => setActModal(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button onClick={handleSaveAct} disabled={savingAct} className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-black text-white hover:bg-indigo-700 disabled:opacity-50">
+            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+              <button onClick={() => setActModal(false)} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-700 hover:bg-slate-100">Cancel</button>
+              <button onClick={handleSaveAct} disabled={savingAct} className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0d5442] disabled:opacity-50">
                 {savingAct ? "Saving…" : editingAct ? "Update" : "Log Activity"}
               </button>
             </div>
@@ -576,24 +576,24 @@ export default function SaleLeads() {
 
       {/* ── Convert to Buyer Modal ─────────────────────────────────────────────── */}
       {showConvert && selected && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm">
-            <div className="flex items-center justify-between px-5 py-4 border-b">
-              <h3 className="font-semibold text-slate-700">Convert to Buyer</h3>
-              <button onClick={() => setShowConvert(false)}><FaTimes className="text-slate-400 hover:text-slate-600" /></button>
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="flex max-h-[90vh] w-full max-w-sm flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+              <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide"><FaExchangeAlt />Convert to Buyer</h3>
+              <button onClick={() => setShowConvert(false)} className="text-white/70 transition-colors hover:text-white"><FaTimes /></button>
             </div>
-            <div className="px-5 py-4 space-y-3">
+            <div className="flex-1 overflow-y-auto bg-white px-5 py-4 space-y-4">
               <p className="text-sm text-slate-600">
                 Convert <strong>{selected.fullName}</strong> to a registered buyer. A buyer profile will be created automatically.
               </p>
               <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">ID / Passport Number</label>
-                <input value={convertId} onChange={(e) => setConvertId(e.target.value)} placeholder="National ID or Passport No." className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">ID / Passport Number</label>
+                <input value={convertId} onChange={(e) => setConvertId(e.target.value)} placeholder="National ID or Passport No." className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:outline-none" />
               </div>
             </div>
-            <div className="flex justify-end gap-2 px-5 py-3 border-t bg-slate-50">
-              <button onClick={() => setShowConvert(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button onClick={handleConvert} disabled={converting} className="text-sm px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50">
+            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+              <button onClick={() => setShowConvert(false)} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-700 hover:bg-slate-100">Cancel</button>
+              <button onClick={handleConvert} disabled={converting} className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0d5442] disabled:opacity-50">
                 {converting ? "Converting…" : "Convert to Buyer"}
               </button>
             </div>
