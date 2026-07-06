@@ -1,6 +1,6 @@
 ﻿import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtils";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   selectCurrentUser,
@@ -399,7 +399,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
   const requestedReceiptId = useMemo(() => new URLSearchParams(location.search).get("receipt") || "", [location.search]);
   const [autoOpenedReceiptId, setAutoOpenedReceiptId] = useState("");
   const [prepaymentLines, setPrepaymentLines] = useState([]);
-  const [prepaymentLinesInitialized, setPrepaymentLinesInitialized] = useState(false);
+  const prepaymentLinesInitializedRef = useRef(false);
   const [reversalModal, setReversalModal] = useState({ open: false, isBatch: false, receipt: null, receipts: [], reason: "", loading: false });
 
   const loadInvoices = useCallback(async () => {
@@ -643,14 +643,14 @@ const Receipts = ({ viewMode = "tenant" }) => {
   useEffect(() => {
     if (excessAmount <= 0) {
       setPrepaymentLines([]);
-      setPrepaymentLinesInitialized(false);
+      prepaymentLinesInitializedRef.current = false;
       return;
     }
-    if (!prepaymentLinesInitialized) {
+    if (!prepaymentLinesInitializedRef.current) {
       setPrepaymentLines([{ billItemKey: "rent", label: "Rent", amount: excessAmount }]);
-      setPrepaymentLinesInitialized(true);
+      prepaymentLinesInitializedRef.current = true;
     }
-  }, [excessAmount, prepaymentLinesInitialized]);
+  }, [excessAmount]);
 
   const resetForm = () => {
     setFormData({
@@ -671,7 +671,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
     setActiveReceipt(null);
     setShowForm(false);
     setPrepaymentLines([]);
-    setPrepaymentLinesInitialized(false);
+    prepaymentLinesInitializedRef.current = false;
   };
 
   const openCreateForm = () => {
@@ -2098,8 +2098,6 @@ const Receipts = ({ viewMode = "tenant" }) => {
 
                   <div className="space-y-1.5">
                     {prepaymentLines.map((line, i) => {
-                      const prepayTotal = prepaymentLines.reduce((s, l) => s + Number(l.amount || 0), 0);
-                      const remaining = Math.round((excessAmount - prepayTotal) * 100) / 100;
                       return (
                         <div key={i} className="flex items-center gap-2">
                           <select

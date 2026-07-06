@@ -537,7 +537,7 @@ const AddReceipt = () => {
       const meta = inv?.metadata && typeof inv.metadata === "object" ? inv.metadata : {};
       const utilName = (meta.utilityName || meta.utilityType || meta.takeOnBillItemLabel || "").trim();
       if (!utilName) continue;
-      const normalized = utilName.toLowerCase().replace(/\s+/g, "_");
+      const normalized = utilName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
       const key = `utility:${normalized}`;
       if (seenKeys.has(key)) continue;
       seenKeys.add(key);
@@ -682,6 +682,22 @@ const AddReceipt = () => {
         appliedAmount: Number(line.apply || 0),
       }));
 
+    if (!creditOnAccountMode && allocationPreview.unappliedAmount > 0.005) {
+      if (prepaymentLines.length === 0) {
+        toast.error("Please allocate the prepayment excess before saving");
+        return;
+      }
+      const linesTotal = prepaymentLines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
+      if (Math.abs(linesTotal - allocationPreview.unappliedAmount) > 0.01) {
+        toast.error(`Prepayment lines must total KES ${allocationPreview.unappliedAmount.toLocaleString()}. Current: KES ${linesTotal.toLocaleString()}`);
+        return;
+      }
+      for (const line of prepaymentLines) {
+        if (!line.billItemKey) { toast.error("Each prepayment line must have a type selected"); return; }
+        if (!(Number(line.amount) > 0)) { toast.error("Each prepayment line amount must be greater than zero"); return; }
+      }
+    }
+
     // Credit on account → send empty allocations so entire amount goes to 2130
     const shouldUseManualAllocations = creditOnAccountMode || manualSelectionMode || priorityInvoiceKeys.length > 0;
     const creditAllocations = creditOnAccountMode ? [] : undefined;
@@ -723,22 +739,6 @@ const AddReceipt = () => {
         : undefined,
     };
 
-    if (!creditOnAccountMode && allocationPreview.unappliedAmount > 0.005) {
-      if (prepaymentLines.length === 0) {
-        toast.error("Please allocate the prepayment excess before saving");
-        return;
-      }
-      const linesTotal = prepaymentLines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
-      if (Math.abs(linesTotal - allocationPreview.unappliedAmount) > 0.5) {
-        toast.error(`Prepayment lines must total KES ${allocationPreview.unappliedAmount.toLocaleString()}. Current: KES ${linesTotal.toLocaleString()}`);
-        return;
-      }
-      for (const line of prepaymentLines) {
-        if (!line.billItemKey) { toast.error("Each prepayment line must have a type selected"); return; }
-        if (!(Number(line.amount) > 0)) { toast.error("Each prepayment line amount must be greater than zero"); return; }
-      }
-    }
-
     setIsSaving(true);
     try {
       await createRentPayment(dispatch, payload);
@@ -763,6 +763,9 @@ const AddReceipt = () => {
   const totalInvoiced = outstandingInvoices.reduce((s, i) => s + i.billedAmount, 0);
   const totalPaid = outstandingInvoices.reduce((s, i) => s + i.paid, 0);
   const totalOutstanding = outstandingInvoices.reduce((s, i) => s + i.outstanding, 0);
+
+  const prepayTotal = prepaymentLines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
+  const prepayDiff = parseFloat((allocationPreview.unappliedAmount - prepayTotal).toFixed(2));
 
   return (
     <DashboardLayout lockContentScroll>
@@ -1311,61 +1314,63 @@ const AddReceipt = () => {
                         <p className="text-[10px] text-slate-500">
                           Receipt exceeds outstanding invoices. Tag the surplus so it auto-allocates when the matching invoice is raised.
                         </p>
-                        {prepaymentLines.map((line, idx) => {
-                          const usedKeys = new Set(prepaymentLines.filter((_, i) => i !== idx).map((l) => l.billItemKey));
-                          const availableOptions = prepaymentTypeOptions.filter((opt) => !usedKeys.has(opt.billItemKey) || opt.billItemKey === line.billItemKey);
-                          return (
-                            <div key={idx} className="flex items-center gap-2">
-                              <div className="flex-1">
-                                <select
-                                  value={line.billItemKey}
-                                  onChange={(e) => {
-                                    const opt = prepaymentTypeOptions.find((o) => o.billItemKey === e.target.value);
-                                    setPrepaymentLines((prev) => {
-                                      const updated = [...prev];
-                                      updated[idx] = { ...updated[idx], billItemKey: e.target.value, label: opt?.label || e.target.value };
-                                      return updated;
-                                    });
-                                  }}
-                                  className={inputClass}
-                                >
-                                  {availableOptions.map((opt) => (
-                                    <option key={opt.billItemKey} value={opt.billItemKey}>{opt.label}</option>
-                                  ))}
-                                </select>
+                        {(() => {
+                          const allUsedKeys = new Set(prepaymentLines.map((l) => l.billItemKey));
+                          return prepaymentLines.map((line, idx) => {
+                            const availableOptions = prepaymentTypeOptions.filter((opt) => opt.billItemKey === line.billItemKey || !allUsedKeys.has(opt.billItemKey));
+                            return (
+                              <div key={idx} className="flex items-center gap-2">
+                                <div className="flex-1">
+                                  <select
+                                    value={line.billItemKey}
+                                    onChange={(e) => {
+                                      const opt = prepaymentTypeOptions.find((o) => o.billItemKey === e.target.value);
+                                      setPrepaymentLines((prev) => {
+                                        const updated = [...prev];
+                                        updated[idx] = { ...updated[idx], billItemKey: e.target.value, label: opt?.label || e.target.value };
+                                        return updated;
+                                      });
+                                    }}
+                                    className={inputClass}
+                                  >
+                                    {availableOptions.map((opt) => (
+                                      <option key={opt.billItemKey} value={opt.billItemKey}>{opt.label}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div className="w-36">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    inputMode="decimal"
+                                    value={line.amount}
+                                    onChange={(e) => {
+                                      const val = parseFloat(e.target.value) || 0;
+                                      setPrepaymentLines((prev) => {
+                                        const updated = [...prev];
+                                        updated[idx] = { ...updated[idx], amount: val };
+                                        return updated;
+                                      });
+                                    }}
+                                    onWheel={preventWheelValueChange}
+                                    className={`${inputClass} [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+                                  />
+                                </div>
+                                {prepaymentLines.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setPrepaymentLines((prev) => prev.filter((_, i) => i !== idx))}
+                                    className="shrink-0 px-2 text-sm font-bold text-red-400 hover:text-red-600"
+                                    title="Remove line"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
                               </div>
-                              <div className="w-36">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  inputMode="decimal"
-                                  value={line.amount}
-                                  onChange={(e) => {
-                                    const val = parseFloat(e.target.value) || 0;
-                                    setPrepaymentLines((prev) => {
-                                      const updated = [...prev];
-                                      updated[idx] = { ...updated[idx], amount: val };
-                                      return updated;
-                                    });
-                                  }}
-                                  onWheel={preventWheelValueChange}
-                                  className={`${inputClass} [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
-                                />
-                              </div>
-                              {prepaymentLines.length > 1 && (
-                                <button
-                                  type="button"
-                                  onClick={() => setPrepaymentLines((prev) => prev.filter((_, i) => i !== idx))}
-                                  className="shrink-0 px-2 text-sm font-bold text-red-400 hover:text-red-600"
-                                  title="Remove line"
-                                >
-                                  ✕
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
+                            );
+                          });
+                        })()}
                         <div className="flex items-center justify-between border-t border-[#0B3B2E]/10 pt-2">
                           {prepaymentLines.length < prepaymentTypeOptions.length ? (
                             <button
@@ -1383,17 +1388,13 @@ const AddReceipt = () => {
                             </button>
                           ) : <span />}
                           <div className="text-right text-[11px]">
-                            {(() => {
-                              const total = prepaymentLines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
-                              const diff = parseFloat((allocationPreview.unappliedAmount - total).toFixed(2));
-                              return Math.abs(diff) < 0.01 ? (
-                                <span className="font-bold text-emerald-700">✓ Balanced</span>
-                              ) : (
-                                <span className="font-bold text-red-600">
-                                  {diff > 0 ? `KES ${diff.toLocaleString()} unallocated` : `KES ${Math.abs(diff).toLocaleString()} over-allocated`}
-                                </span>
-                              );
-                            })()}
+                            {Math.abs(prepayDiff) < 0.01 ? (
+                              <span className="font-bold text-emerald-700">✓ Balanced</span>
+                            ) : (
+                              <span className="font-bold text-red-600">
+                                {prepayDiff > 0 ? `KES ${prepayDiff.toLocaleString()} unallocated` : `KES ${Math.abs(prepayDiff).toLocaleString()} over-allocated`}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>

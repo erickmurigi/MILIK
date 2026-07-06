@@ -28,6 +28,11 @@ const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value 
 
 const escapeRegExp = (value = "") => String(value || "").replace(/[|\\{}()\[\]^$+*?.]/g, "\\$&");
 
+const CATEGORY_TO_SUMMARY = {
+  RENT_CHARGE: "rent", DEPOSIT_CHARGE: "deposit", UTILITY_CHARGE: "utility",
+  LATE_PENALTY_CHARGE: "latePenalty", OTHER_CHARGE: "other", DEBIT_NOTE: "debitNote",
+};
+
 const populateReceiptQuery = (query) =>
   query
     .populate("tenant", "name email phone unit business")
@@ -1766,11 +1771,6 @@ export const autoApplyPrepayments = async ({ businessId, tenantId, invoice, acto
 
   let remaining = round2(Math.max(0, Number(invoice.outstanding ?? invoice.amount ?? 0)));
   if (remaining <= 0) return;
-
-  const CATEGORY_TO_SUMMARY = {
-    RENT_CHARGE: "rent", DEPOSIT_CHARGE: "deposit", UTILITY_CHARGE: "utility",
-    LATE_PENALTY_CHARGE: "latePenalty", OTHER_CHARGE: "other", DEBIT_NOTE: "debitNote",
-  };
 
   for (const receipt of receipts) {
     if (remaining <= 0) break;

@@ -168,18 +168,6 @@ router.get("/summary", verifyUser, async (req, res) => {
         },
         { $group: { _id: null, total: { $sum: { $ifNull: ["$amount", 0] } } } },
       ]),
-      // Total outstanding payable to all landlords (sum of ProcessedStatement.balanceDue)
-      ProcessedStatement.aggregate([
-        {
-          $match: {
-            business,
-            status: { $ne: "reversed" },
-            isNegativeStatement: { $ne: true },
-            balanceDue: { $gt: 0 },
-          },
-        },
-        { $group: { _id: null, total: { $sum: "$balanceDue" } } },
-      ]),
       // Monthly breakdown for current year (12 buckets) — drives the FinancialOverview chart
       RentPayment.aggregate([
         {
@@ -205,6 +193,18 @@ router.get("/summary", verifyUser, async (req, res) => {
             total: { $sum: { $ifNull: ["$amount", 0] } },
           },
         },
+      ]),
+      // Total outstanding payable to all landlords (sum of ProcessedStatement.balanceDue)
+      ProcessedStatement.aggregate([
+        {
+          $match: {
+            business,
+            status: { $ne: "reversed" },
+            isNegativeStatement: { $ne: true },
+            balanceDue: { $gt: 0 },
+          },
+        },
+        { $group: { _id: null, total: { $sum: "$balanceDue" } } },
       ]),
     ]);
 
