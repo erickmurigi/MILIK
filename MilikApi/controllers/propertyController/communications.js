@@ -6,6 +6,7 @@ import {
   getAvailableTemplates,
   getCommunicationPermissionTarget,
   getSmsLogs,
+  resendSmsLog,
   previewCommunication,
   sendCommunication,
   sendTestSms,
@@ -187,6 +188,21 @@ export const deleteSmsLogController = async (req, res, next) => {
     return res.status(200).json({ success: true, message: 'Log entry deleted.' });
   } catch (error) {
     return next(error);
+  }
+};
+
+export const resendSmsLogController = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) return next(createError(400, 'Business is required.'));
+
+    const { id } = req.params;
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) return next(createError(400, 'Invalid log ID.'));
+
+    await resendSmsLog({ businessId, logId: id });
+    return res.status(200).json({ success: true, message: 'SMS resent successfully.' });
+  } catch (error) {
+    return next(createError(error.status || 500, error.message || 'Failed to resend SMS.'));
   }
 };
 

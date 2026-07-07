@@ -1441,6 +1441,34 @@ export const sendAdHocSmsToMasked = async ({ businessId, maskedNumber, body, tem
   }
 };
 
+export const resendSmsLog = async ({ businessId, logId }) => {
+  const log = await SmsLog.findOne({ _id: logId, business: businessId });
+  if (!log) throw Object.assign(new Error('SMS log not found.'), { status: 404 });
+  if (log.status !== 'failed') throw Object.assign(new Error('Only failed messages can be resent.'), { status: 400 });
+
+  const company = await ensureCompany(businessId);
+  const profiles = getRawSmsProfiles(company.communication || {});
+  const profile = getPrimarySmsProfile(profiles, company.communication?.defaultSmsProfileId || null);
+  if (!profile?.enabled) throw Object.assign(new Error('No active SMS profile configured.'), { status: 400 });
+
+  const isMasked = String(log.to || '').startsWith('masked:');
+  let result;
+  if (isMasked) {
+    const maskedNumber = String(log.to).slice('masked:'.length);
+    result = await sendSmsViaAfricasTalkingMasked({ profile, maskedNumber, body: log.body });
+  } else {
+    result = await dispatchSms({ profile, to: log.to, body: log.body });
+  }
+
+  await SmsLog.updateOne(
+    { _id: logId },
+    { status: 'sent', providerMessageId: result?.messageId || '', providerStatus: result?.status || '',
+      costLabel: result?.cost || '', provider: profile?.provider || log.provider, error: '', sentAt: new Date() }
+  );
+
+  return { success: true };
+};
+
 export const getSmsLogs = async ({ businessId, limit = 25, page = 1, channel, contextType, status, search } = {}) => {
   const safeLimit = Math.min(Math.max(Number(limit || 25), 1), 100);
   const safePage  = Math.max(Number(page || 1), 1);

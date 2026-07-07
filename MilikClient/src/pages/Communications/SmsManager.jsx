@@ -5,7 +5,7 @@ import {
   FaSms, FaSpinner, FaSearch, FaSyncAlt, FaPaperPlane,
   FaTimesCircle, FaPlus, FaTimes, FaUsers, FaCheckCircle,
   FaChevronDown, FaChevronRight, FaEnvelope, FaExclamationTriangle,
-  FaInbox, FaTrash,
+  FaInbox, FaTrash, FaRedo,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -446,6 +446,7 @@ const SmsManager = () => {
   const [expandedId,     setExpanded]       = useState(null);
   const [loading,        setLoading]        = useState(false);
   const [deletingId,     setDeletingId]     = useState(null);
+  const [resendingId,    setResendingId]    = useState(null);
   const [data, setData] = useState({
     logs: [],
     pagination: { page: 1, limit: PAGE_SIZE, total: 0, pages: 1 },
@@ -486,6 +487,19 @@ const SmsManager = () => {
   }, [businessId, urlPage, activeStatus, debouncedSearch]);
 
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
+
+  const handleResend = async (logId) => {
+    setResendingId(logId);
+    try {
+      await adminRequests.post(`/communications/sms-logs/${logId}/resend`);
+      toast.success("SMS resent successfully.");
+      fetchLogs();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to resend SMS.");
+    } finally {
+      setResendingId(null);
+    }
+  };
 
   const handleDeleteLog = async (logId) => {
     if (!window.confirm("Delete this log entry? This cannot be undone.")) return;
@@ -685,19 +699,33 @@ const SmsManager = () => {
                                   </div>
                                 </div>
                               )}
-                              {/* Delete — only on failed or test entries; sent messages are audit trail */}
-                              {(log.status !== "sent" || log.isTest) && (
-                                <div className="mt-3 flex justify-end">
-                                  <button
-                                    onClick={e => { e.stopPropagation(); handleDeleteLog(log._id); }}
-                                    disabled={deletingId === log._id}
-                                    className="inline-flex items-center gap-1.5 border border-rose-300 bg-rose-50 px-3 py-1.5 text-[10px] font-bold text-rose-600 transition hover:bg-rose-100 disabled:opacity-50"
-                                  >
-                                    {deletingId === log._id
-                                      ? <FaSpinner size={9} className="animate-spin" />
-                                      : <FaTrash size={9} />}
-                                    {deletingId === log._id ? "Deleting…" : "Delete Entry"}
-                                  </button>
+                              {/* Actions row */}
+                              {(log.status === "failed" || (log.status !== "sent" || log.isTest)) && (
+                                <div className="mt-3 flex items-center justify-end gap-2">
+                                  {log.status === "failed" && (
+                                    <button
+                                      onClick={e => { e.stopPropagation(); handleResend(log._id); }}
+                                      disabled={resendingId === log._id}
+                                      className="inline-flex items-center gap-1.5 border border-[#31694E] bg-[#ECF6F1] px-3 py-1.5 text-[10px] font-bold text-[#1f4a35] transition hover:bg-[#d4ede2] disabled:opacity-50"
+                                    >
+                                      {resendingId === log._id
+                                        ? <FaSpinner size={9} className="animate-spin" />
+                                        : <FaRedo size={9} />}
+                                      {resendingId === log._id ? "Resending…" : "Resend"}
+                                    </button>
+                                  )}
+                                  {(log.status !== "sent" || log.isTest) && (
+                                    <button
+                                      onClick={e => { e.stopPropagation(); handleDeleteLog(log._id); }}
+                                      disabled={deletingId === log._id}
+                                      className="inline-flex items-center gap-1.5 border border-rose-300 bg-rose-50 px-3 py-1.5 text-[10px] font-bold text-rose-600 transition hover:bg-rose-100 disabled:opacity-50"
+                                    >
+                                      {deletingId === log._id
+                                        ? <FaSpinner size={9} className="animate-spin" />
+                                        : <FaTrash size={9} />}
+                                      {deletingId === log._id ? "Deleting…" : "Delete Entry"}
+                                    </button>
+                                  )}
                                 </div>
                               )}
                             </div>
