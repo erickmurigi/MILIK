@@ -102,6 +102,79 @@ const setCompanyMpesaConfigs = (company, configs = []) => {
   };
 };
 
+const getCompanyCoopConfigs = (company) =>
+  Array.isArray(company?.paymentIntegration?.coopB2BConfigs)
+    ? company.paymentIntegration.coopB2BConfigs
+    : [];
+
+const setCompanyCoopConfigs = (company, configs = []) => {
+  const cur = company.paymentIntegration?.toObject
+    ? company.paymentIntegration.toObject()
+    : company.paymentIntegration || {};
+  company.paymentIntegration = { ...cur, coopB2BConfigs: configs };
+};
+
+const applyCoopB2BMutation = ({ company, payload, actorUserId }) => {
+  const action   = normalizeText(payload?.action).toLowerCase();
+  const configId = normalizeText(payload?.configId);
+  const cfg      = payload?.config || {};
+
+  if (!["create", "update", "delete"].includes(action)) {
+    throw createError(400, "Invalid Co-op B2B configuration action.");
+  }
+
+  const existing = getCompanyCoopConfigs(company);
+
+  if (action === "create") {
+    const newConfig = {
+      name:                     normalizeText(cfg.name) || `Co-op B2B ${existing.length + 1}`,
+      enabled:                  Boolean(cfg.enabled),
+      institutionCode:          normalizeText(cfg.institutionCode),
+      institutionName:          normalizeText(cfg.institutionName),
+      connectionID:             normalizeText(cfg.connectionID),
+      connectionPassword:       normalizeText(cfg.connectionPassword),
+      coopBankAccountNumber:    normalizeText(cfg.coopBankAccountNumber),
+      paybillNumber:            normalizeText(cfg.paybillNumber),
+      defaultCashbookAccountId: cfg.defaultCashbookAccountId || null,
+      defaultCashbookAccountName: normalizeText(cfg.defaultCashbookAccountName),
+      postingMode:              cfg.postingMode === "auto_post_matched" ? "auto_post_matched" : "manual_review",
+      lastConfiguredAt:         new Date(),
+      lastConfiguredBy:         normalizeText(actorUserId),
+    };
+    setCompanyCoopConfigs(company, [...existing, newConfig]);
+    return;
+  }
+
+  if (!configId) throw createError(400, "Co-op B2B configuration id is required.");
+
+  const idx = existing.findIndex((c) => String(c?._id || "") === configId);
+  if (idx === -1) throw createError(404, "Co-op B2B configuration not found.");
+
+  if (action === "delete") {
+    setCompanyCoopConfigs(company, existing.filter((_, i) => i !== idx));
+    return;
+  }
+
+  const prev = existing[idx];
+  const updated = {
+    ...prev,
+    name:                     normalizeText(cfg.name)             || prev.name,
+    enabled:                  cfg.enabled !== undefined ? Boolean(cfg.enabled) : prev.enabled,
+    institutionCode:          cfg.institutionCode !== undefined   ? normalizeText(cfg.institutionCode)         : prev.institutionCode,
+    institutionName:          cfg.institutionName !== undefined   ? normalizeText(cfg.institutionName)         : prev.institutionName,
+    connectionID:             cfg.connectionID !== undefined      ? normalizeText(cfg.connectionID)            : prev.connectionID,
+    connectionPassword:       normalizeText(cfg.connectionPassword) || prev.connectionPassword,
+    coopBankAccountNumber:    cfg.coopBankAccountNumber !== undefined ? normalizeText(cfg.coopBankAccountNumber) : prev.coopBankAccountNumber,
+    paybillNumber:            cfg.paybillNumber !== undefined     ? normalizeText(cfg.paybillNumber)           : prev.paybillNumber,
+    defaultCashbookAccountId: cfg.defaultCashbookAccountId !== undefined ? (cfg.defaultCashbookAccountId || null) : prev.defaultCashbookAccountId,
+    defaultCashbookAccountName: cfg.defaultCashbookAccountName !== undefined ? normalizeText(cfg.defaultCashbookAccountName) : prev.defaultCashbookAccountName,
+    postingMode:              cfg.postingMode === "auto_post_matched" ? "auto_post_matched" : (prev.postingMode || "manual_review"),
+    lastConfiguredAt:         new Date(),
+    lastConfiguredBy:         normalizeText(actorUserId),
+  };
+  setCompanyCoopConfigs(company, existing.map((c, i) => (i === idx ? updated : c)));
+};
+
 
 const EMAIL_USAGE_TAGS = [
   "receipts",
@@ -1401,6 +1474,14 @@ export const updateCompany = async (req, res, next) => {
       await applyLegacySingleMpesaUpdate({
         company,
         payload: req.body.paymentIntegration.mpesaPaybill,
+        actorUserId: req.user?.id || req.user?._id,
+      });
+    }
+
+    if (req.body.paymentIntegration?.coopB2BConfigs) {
+      applyCoopB2BMutation({
+        company,
+        payload: req.body.paymentIntegration.coopB2BConfigs,
         actorUserId: req.user?.id || req.user?._id,
       });
     }

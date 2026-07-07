@@ -988,6 +988,16 @@ export default function CompanySetupPage() {
   const [smsLogsPage, setSmsLogsPage] = useState(1);
   const SMS_LOGS_PAGE_SIZE = 30;
   const [paymentSearch, setPaymentSearch] = useState("");
+  const [coopModalOpen, setCoopModalOpen] = useState(false);
+  const [selectedCoopConfigId, setSelectedCoopConfigId] = useState("__new_coop__");
+  const [savingCoop, setSavingCoop] = useState(false);
+  const COOP_DRAFT_ID = "__new_coop__";
+  const [coopForm, setCoopForm] = useState({
+    _id: COOP_DRAFT_ID, name: "", enabled: false, institutionCode: "", institutionName: "",
+    connectionID: "", connectionPassword: "", coopBankAccountNumber: "", paybillNumber: "400222",
+    defaultCashbookAccountId: "", defaultCashbookAccountName: "", postingMode: "manual_review",
+    hasConnectionPassword: false, connectionPasswordMasked: "",
+  });
   const [taxConfig, setTaxConfig] = useState(normalizeTaxConfiguration());
   const [activityView, setActivityView] = useState("activities");
   const [activityCategory, setActivityCategory] = useState("all");
@@ -1005,6 +1015,7 @@ export default function CompanySetupPage() {
   const activeTab = ALL_VALID_TAB_KEYS.has(searchParams.get("tab")) ? searchParams.get("tab") : "details";
   const activeSmsSection = validSmsSections.has(searchParams.get("smsTab")) ? searchParams.get("smsTab") : "configuration";
   const paymentConfigs = useMemo(() => normalizePaymentConfigs(currentCompany), [currentCompany]);
+  const coopConfigs    = useMemo(() => Array.isArray(currentCompany?.paymentIntegration?.coopB2BConfigs) ? currentCompany.paymentIntegration.coopB2BConfigs : [], [currentCompany]);
   const emailProfiles = useMemo(() => normalizeEmailConfigs(currentCompany), [currentCompany]);
   const smsProfiles = useMemo(() => normalizeSmsConfigs(currentCompany), [currentCompany]);
   const smsTemplates = useMemo(() => normalizeSmsTemplates(currentCompany), [currentCompany]);
@@ -1507,6 +1518,73 @@ export default function CompanySetupPage() {
         }
       },
     });
+  };
+
+  const mutateCoopConfig = async ({ action, configId = "", config = null, successMessage }) => {
+    if (!currentCompany?._id) { toast.error("No active company selected"); return null; }
+    setSavingCoop(true);
+    try {
+      const response = await dispatch(updateCompany(currentCompany._id, {
+        paymentIntegration: { coopB2BConfigs: { action, configId, config } },
+      }));
+      toast.success(successMessage);
+      return response?.company || null;
+    } catch (err) {
+      toast.error(err?.response?.data?.message || err?.message || "Failed to update Co-op B2B configuration");
+      return null;
+    } finally {
+      setSavingCoop(false);
+    }
+  };
+
+  const handleSaveCoopConfig = async () => {
+    if (!coopForm.name.trim()) { toast.error("Enter a configuration name"); return; }
+    if (!coopForm.institutionCode.trim()) { toast.error("Enter the Institution Code"); return; }
+    if (!coopForm.connectionID.trim()) { toast.error("Enter the Connection ID"); return; }
+    const isNew = selectedCoopConfigId === COOP_DRAFT_ID;
+    await mutateCoopConfig({
+      action: isNew ? "create" : "update",
+      configId: isNew ? "" : selectedCoopConfigId,
+      config: {
+        name:                     coopForm.name.trim(),
+        enabled:                  coopForm.enabled,
+        institutionCode:          coopForm.institutionCode.trim(),
+        institutionName:          coopForm.institutionName.trim(),
+        connectionID:             coopForm.connectionID.trim(),
+        connectionPassword:       coopForm.connectionPassword?.trim() || "",
+        coopBankAccountNumber:    coopForm.coopBankAccountNumber.trim(),
+        paybillNumber:            coopForm.paybillNumber.trim(),
+        defaultCashbookAccountId: coopForm.defaultCashbookAccountId || null,
+        defaultCashbookAccountName: coopForm.defaultCashbookAccountName,
+        postingMode:              coopForm.postingMode,
+      },
+      successMessage: isNew ? "Co-op B2B configuration saved" : "Co-op B2B configuration updated",
+    });
+    setCoopModalOpen(false);
+  };
+
+  const handleDeleteCoopConfig = async (cfg) => {
+    if (!await confirm({ title: "Delete Co-op B2B Config", message: `Delete "${cfg.name}"?`, confirmText: "Delete", isDangerous: true })) return;
+    await mutateCoopConfig({ action: "delete", configId: String(cfg._id), successMessage: "Co-op B2B configuration deleted" });
+  };
+
+  const beginCreateCoopConfig = () => {
+    setSelectedCoopConfigId(COOP_DRAFT_ID);
+    setCoopForm({
+      _id: COOP_DRAFT_ID, name: `Co-op B2B ${coopConfigs.length + 1}`, enabled: false,
+      institutionCode: "", institutionName: "", connectionID: "", connectionPassword: "",
+      coopBankAccountNumber: "", paybillNumber: "400222", defaultCashbookAccountId: "",
+      defaultCashbookAccountName: "", postingMode: "manual_review", hasConnectionPassword: false, connectionPasswordMasked: "",
+    });
+    setCoopModalOpen(true);
+  };
+
+  const beginEditCoopConfig = (cfg) => {
+    setSelectedCoopConfigId(String(cfg._id));
+    setCoopForm({
+      ...cfg, connectionPassword: "", _id: String(cfg._id),
+    });
+    setCoopModalOpen(true);
   };
 
   const selectedExistingEmailProfile = useMemo(
@@ -2489,6 +2567,62 @@ export default function CompanySetupPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* ── Co-op Bank B2B ── */}
+      <div className="overflow-hidden border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-2 border-b border-slate-200 bg-slate-50/95 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="text-[11px] font-black uppercase tracking-wider text-slate-700">Co-operative Bank B2B</div>
+            <div className="text-[10px] text-slate-400 mt-0.5">Tenants pay via M-Pesa to Co-op Paybill using format: <span className="font-mono font-bold text-slate-600">[AccountNo]#[TenantCode]</span></div>
+          </div>
+          <button onClick={beginCreateCoopConfig} className="inline-flex items-center gap-1.5 bg-[#FF8C00] px-3 py-1.5 text-[11px] font-bold text-white hover:bg-[#E67E00]">
+            <FaPlus /> Add Co-op Config
+          </button>
+        </div>
+        {coopConfigs.length === 0 ? (
+          <div className="px-4 py-8 text-center text-xs text-slate-400">
+            No Co-op Bank B2B configuration yet. Click "Add Co-op Config" to set up.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-xs">
+              <thead className="bg-[#0B3B2E] text-white">
+                <tr>
+                  <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider">#</th>
+                  <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider">Name</th>
+                  <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider">Institution Code</th>
+                  <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider">Paybill</th>
+                  <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider">Coop A/C</th>
+                  <th className="px-3 py-2 text-center font-black text-[10px] uppercase tracking-wider">Status</th>
+                  <th className="px-3 py-2 text-center font-black text-[10px] uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {coopConfigs.map((cfg, idx) => (
+                  <tr key={cfg._id} className="border-b border-slate-100 odd:bg-white even:bg-slate-50/50 hover:bg-[#EDF5F1]/70 cursor-pointer" onDoubleClick={() => beginEditCoopConfig(cfg)}>
+                    <td className="px-3 py-2.5 font-semibold text-slate-500">{idx + 1}</td>
+                    <td className="px-3 py-2.5 font-bold text-slate-900">{cfg.name}</td>
+                    <td className="px-3 py-2.5 font-mono text-slate-700">{cfg.institutionCode || <span className="text-slate-400">—</span>}</td>
+                    <td className="px-3 py-2.5 text-slate-700">{cfg.paybillNumber || <span className="text-slate-400">—</span>}</td>
+                    <td className="px-3 py-2.5 text-slate-700">{cfg.coopBankAccountNumber || <span className="text-slate-400">—</span>}</td>
+                    <td className="px-3 py-2.5 text-center">
+                      {cfg.enabled
+                        ? <span className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-bold text-emerald-700 text-[10px]">Enabled</span>
+                        : <span className="inline-flex items-center gap-1 border border-slate-200 bg-slate-50 px-2 py-0.5 font-bold text-slate-500 text-[10px]">Disabled</span>}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button onClick={() => beginEditCoopConfig(cfg)} className="inline-flex items-center gap-1 border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-600 hover:bg-slate-50"><FaPen /></button>
+                        <button onClick={() => handleDeleteCoopConfig(cfg)} className="inline-flex items-center gap-1 border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-bold text-rose-600 hover:bg-rose-100"><FaTrashAlt /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -3929,6 +4063,128 @@ export default function CompanySetupPage() {
                 </Select>
               </div>
             </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Co-op B2B Config Modal ── */}
+      <Modal
+        open={coopModalOpen}
+        onClose={() => setCoopModalOpen(false)}
+        title={selectedCoopConfigId === COOP_DRAFT_ID ? "New Co-op Bank B2B Configuration" : "Edit Co-op Bank B2B Configuration"}
+        subtitle="Configure the Co-operative Bank B2B integration so tenants can pay via M-Pesa using your Co-op account number."
+        footer={
+          <div className="flex flex-wrap justify-end gap-2">
+            <button className="border border-slate-300 bg-white px-4 py-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50" onClick={() => setCoopModalOpen(false)}>
+              Cancel
+            </button>
+            <button disabled={savingCoop} onClick={handleSaveCoopConfig} className="inline-flex items-center gap-2 bg-[#FF8C00] px-4 py-2 text-[11px] font-bold text-white hover:bg-[#E67E00] disabled:opacity-50">
+              <FaSave /> {savingCoop ? "Saving..." : selectedCoopConfigId === COOP_DRAFT_ID ? "Save Config" : "Update Config"}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          {/* How-it-works banner */}
+          <div className="border-l-4 border-[#0B3B2E] bg-[#EDF5F1] px-3 py-2.5 text-[11px] leading-5 text-slate-700">
+            <span className="font-bold">How it works:</span> Co-op Bank calls your system when a tenant makes a payment.
+            Tenants pay to Paybill <span className="font-mono font-bold">{coopForm.paybillNumber || "400222"}</span> with account format{" "}
+            <span className="font-mono font-bold">{coopForm.coopBankAccountNumber || "[CoopAccountNo]"}#[TenantCode]</span>.
+            Co-op Bank will validate the account with your endpoint before accepting payment.
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="md:col-span-2">
+              <label className="text-xs font-bold text-slate-700">Configuration Name</label>
+              <Input value={coopForm.name} onChange={(e) => setCoopForm((p) => ({ ...p, name: e.target.value }))} placeholder="Co-op B2B Main" />
+            </div>
+
+            <div className="flex items-center justify-between gap-3 border border-slate-200 bg-slate-50/80 px-3 py-2.5 md:col-span-2">
+              <div>
+                <div className="text-xs font-bold text-slate-700">Enable this configuration</div>
+                <div className="text-[10px] text-slate-500">Only enable after the Institution Code and credentials are confirmed with Co-op Bank.</div>
+              </div>
+              <label className="relative inline-flex cursor-pointer items-center">
+                <input type="checkbox" className="peer sr-only" checked={Boolean(coopForm.enabled)} onChange={(e) => setCoopForm((p) => ({ ...p, enabled: e.target.checked }))} />
+                <div className="peer h-5 w-9 rounded-full bg-slate-300 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:bg-[#0B3B2E] peer-checked:after:translate-x-4" />
+              </label>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700">Institution Code <span className="text-rose-500">*</span></label>
+              <Input value={coopForm.institutionCode} onChange={(e) => setCoopForm((p) => ({ ...p, institutionCode: e.target.value.replace(/\s/g,"") }))} placeholder="e.g. MILIK001" />
+              <p className="mt-1 text-[10px] text-slate-400">Unique code Co-op Bank uses to route callbacks to your endpoint.</p>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700">Institution Name</label>
+              <Input value={coopForm.institutionName} onChange={(e) => setCoopForm((p) => ({ ...p, institutionName: e.target.value }))} placeholder="e.g. Milik Property Systems" />
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700">Connection ID <span className="text-rose-500">*</span></label>
+              <Input value={coopForm.connectionID} onChange={(e) => setCoopForm((p) => ({ ...p, connectionID: e.target.value }))} placeholder="Given to Co-op Bank for authentication" />
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700">Connection Password</label>
+              <Input type="password" value={coopForm.connectionPassword} onChange={(e) => setCoopForm((p) => ({ ...p, connectionPassword: e.target.value }))} placeholder={coopForm.hasConnectionPassword ? "Leave blank to keep saved password" : "Set a shared secret with Co-op Bank"} />
+              {coopForm.hasConnectionPassword && <p className="mt-1 text-[10px] text-slate-400">Saved: {coopForm.connectionPasswordMasked || "Yes"}</p>}
+            </div>
+
+            <div className="border-t border-slate-200 pt-3 md:col-span-2">
+              <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">M-Pesa Payment Details</div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div>
+                  <label className="text-xs font-bold text-slate-700">Co-op Bank Account Number</label>
+                  <Input value={coopForm.coopBankAccountNumber} onChange={(e) => setCoopForm((p) => ({ ...p, coopBankAccountNumber: e.target.value.replace(/\D/g,"") }))} placeholder="e.g. 1234567" maxLength={20} />
+                  <p className="mt-1 text-[10px] text-slate-400">Client's Co-op Bank account. Tenant pays as: <span className="font-mono">{coopForm.coopBankAccountNumber || "[AccountNo]"}#[TenantCode]</span></p>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-700">M-Pesa Paybill Number</label>
+                  <Input value={coopForm.paybillNumber} onChange={(e) => setCoopForm((p) => ({ ...p, paybillNumber: e.target.value.replace(/\D/g,"") }))} placeholder="400222" maxLength={10} />
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700">Default Receiving Cashbook</label>
+              <Select
+                value={coopForm.defaultCashbookAccountId}
+                onChange={(e) => {
+                  const sel = cashbookOptions.find((a) => String(a._id) === String(e.target.value));
+                  setCoopForm((p) => ({ ...p, defaultCashbookAccountId: e.target.value, defaultCashbookAccountName: sel?.name || p.defaultCashbookAccountName || "" }));
+                }}
+                disabled={loadingCashbooks}
+              >
+                <option value="">{loadingCashbooks ? "Loading..." : "Select receiving cashbook"}</option>
+                {cashbookOptions.map((a) => <option key={a._id} value={a._id}>{a.name}{a.code ? ` (${a.code})` : ""}</option>)}
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700">Matched Payment Processing</label>
+              <Select value={coopForm.postingMode} onChange={(e) => setCoopForm((p) => ({ ...p, postingMode: e.target.value }))}>
+                <option value="manual_review">Manual review before posting</option>
+                <option value="auto_post_matched">Auto-post matched payments</option>
+              </Select>
+            </div>
+
+            {selectedCoopConfigId !== COOP_DRAFT_ID && coopForm.institutionCode && (
+              <div className="border border-slate-200 bg-slate-50 p-3 md:col-span-2">
+                <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Co-op Bank Callback URLs (provide to Co-op Bank)</div>
+                <div className="space-y-2 text-[11px]">
+                  <div>
+                    <span className="font-bold text-slate-600">Validation URL:</span>{" "}
+                    <span className="break-all font-mono text-slate-700">{`${window.location.protocol}//${window.location.host.replace("3000","5000")}/api/coop-b2b/${coopForm.institutionCode}/account`}</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-600">Payment Advice URL:</span>{" "}
+                    <span className="break-all font-mono text-slate-700">{`${window.location.protocol}//${window.location.host.replace("3000","5000")}/api/coop-b2b/${coopForm.institutionCode}/advise`}</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </Modal>

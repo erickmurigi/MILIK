@@ -334,6 +334,33 @@ const mpesaPaybillConfigSchema = new mongoose.Schema(
   { _id: true }
 );
 
+const coopB2BConfigSchema = new mongoose.Schema(
+  {
+    name:                    { type: String, trim: true, default: '' },
+    enabled:                 { type: Boolean, default: false },
+    institutionCode:         { type: String, trim: true, default: '' },
+    institutionName:         { type: String, trim: true, default: '' },
+    connectionID:            { type: String, trim: true, default: '' },
+    connectionPassword:      { type: String, trim: true, default: '' },
+    coopBankAccountNumber:   { type: String, trim: true, default: '' },
+    paybillNumber:           { type: String, trim: true, default: '' },
+    defaultCashbookAccountId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ChartOfAccount',
+      default: null,
+    },
+    defaultCashbookAccountName: { type: String, trim: true, default: '' },
+    postingMode: {
+      type: String,
+      enum: ['manual_review', 'auto_post_matched'],
+      default: 'manual_review',
+    },
+    lastConfiguredAt: { type: Date, default: null },
+    lastConfiguredBy: { type: String, trim: true, default: '' },
+  },
+  { _id: true }
+);
+
 const paymentIntegrationSchema = new mongoose.Schema(
   {
     mpesaPaybill: {
@@ -342,6 +369,10 @@ const paymentIntegrationSchema = new mongoose.Schema(
     },
     mpesaPaybills: {
       type: [mpesaPaybillConfigSchema],
+      default: [],
+    },
+    coopB2BConfigs: {
+      type: [coopB2BConfigSchema],
       default: [],
     },
   },

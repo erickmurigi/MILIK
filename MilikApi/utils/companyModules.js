@@ -1092,6 +1092,31 @@ export const sanitizePaymentIntegrationForClient = (paymentIntegration = {}) => 
 
   const primary = getPrimaryMpesaPaybillConfig(mpesaPaybills);
 
+  const rawCoopConfigs = Array.isArray(paymentIntegration?.coopB2BConfigs)
+    ? paymentIntegration.coopB2BConfigs
+    : [];
+
+  const coopB2BConfigs = rawCoopConfigs.map((raw, index) => {
+    const c = typeof raw?.toObject === 'function' ? raw.toObject() : (raw || {});
+    const id = c._id ? String(c._id) : `coop-config-${index + 1}`;
+    return {
+      _id:                      id,
+      name:                     String(c.name || `Co-op B2B ${index + 1}`).trim(),
+      enabled:                  Boolean(c.enabled),
+      institutionCode:          String(c.institutionCode || '').trim(),
+      institutionName:          String(c.institutionName || '').trim(),
+      connectionID:             String(c.connectionID   || '').trim(),
+      hasConnectionPassword:    Boolean(String(c.connectionPassword || '').trim()),
+      connectionPasswordMasked: maskSecret(c.connectionPassword),
+      coopBankAccountNumber:    String(c.coopBankAccountNumber || '').trim(),
+      paybillNumber:            String(c.paybillNumber         || '').trim(),
+      defaultCashbookAccountId:   c.defaultCashbookAccountId ? String(c.defaultCashbookAccountId) : '',
+      defaultCashbookAccountName: String(c.defaultCashbookAccountName || '').trim(),
+      postingMode:              c.postingMode === 'auto_post_matched' ? 'auto_post_matched' : 'manual_review',
+      lastConfiguredAt:         c.lastConfiguredAt || null,
+    };
+  });
+
   return {
     mpesaPaybills,
     mpesaPaybill: primary
@@ -1122,6 +1147,7 @@ export const sanitizePaymentIntegrationForClient = (paymentIntegration = {}) => 
           statusReason: 'No M-Pesa Paybill setup has been saved for this company yet.',
           isConfigured: false,
         },
+    coopB2BConfigs,
   };
 };
 
