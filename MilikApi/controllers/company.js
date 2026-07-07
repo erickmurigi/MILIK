@@ -1710,6 +1710,16 @@ export const toggleCompanyLock = async (req, res, next) => {
     if (!company) return next(createError(404, 'Company not found'));
 
     company.locked = !company.locked;
+
+    // When unlocking, restore the company to active state
+    if (!company.locked) {
+      company.isActive = true;
+      const s = String(company.accountStatus || "").trim().toLowerCase();
+      if (!s || ["inactive", "disabled", "suspended", "archived"].includes(s)) {
+        company.accountStatus = "Active";
+      }
+    }
+
     await company.save();
 
     await logAuditEvent({
@@ -1725,7 +1735,7 @@ export const toggleCompanyLock = async (req, res, next) => {
       metadata: { locked: company.locked },
     });
 
-    res.json({ _id: company._id, locked: company.locked, companyName: company.companyName });
+    res.json(serializeCompanyResponse(company, req.user));
   } catch (err) {
     next(err);
   }

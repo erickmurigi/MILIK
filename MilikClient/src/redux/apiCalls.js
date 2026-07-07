@@ -297,7 +297,6 @@ import {
   deleteCompanyStart,
   deleteCompanySuccess,
   deleteCompanyFailure,
-  toggleCompanyLockSuccess,
   setCurrentCompany,
   clearCompanyState,
   startCompanySwitch,
@@ -880,8 +879,14 @@ export const updateCompany = (id, companyData) => async (dispatch) => {
 export const deleteCompany = (id) => async (dispatch) => {
   dispatch(deleteCompanyStart());
   try {
-    await adminRequests.delete(`/companies/${id}`);
-    dispatch(deleteCompanySuccess(id));
+    const res = await adminRequests.delete(`/companies/${id}`);
+    if (res.data?.archived) {
+      // Company has active data — backend archived it instead of deleting
+      dispatch(updateCompanySuccess({ id, company: res.data.company }));
+    } else {
+      dispatch(deleteCompanySuccess(id));
+    }
+    return res.data;
   } catch (err) {
     dispatch(deleteCompanyFailure());
     throw err;
@@ -892,7 +897,8 @@ export const deleteCompany = (id) => async (dispatch) => {
 export const toggleCompanyLock = (id) => async (dispatch) => {
   try {
     const res = await adminRequests.patch(`/companies/${id}/toggle-lock`);
-    dispatch(toggleCompanyLockSuccess({ id, locked: res.data.locked }));
+    // Use updateCompanySuccess so all restored fields (isActive, accountStatus) propagate
+    dispatch(updateCompanySuccess({ id, company: res.data }));
     return res.data;
   } catch (err) {
     throw err;

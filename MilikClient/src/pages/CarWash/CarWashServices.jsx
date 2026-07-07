@@ -8,8 +8,8 @@ import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import PaginationBar from "../../components/PaginationBar";
 
-const emptyForm = { name: "", category: "", jobType: "both", pricingType: "flat", defaultPrice: "", pricingTiers: [], active: true, isTaxable: false, taxRate: "" };
-const normalizeForm = (f) => ({ ...emptyForm, ...f, pricingTiers: Array.isArray(f?.pricingTiers) ? f.pricingTiers : [], isTaxable: Boolean(f?.isTaxable), taxRate: f?.taxRate !== undefined ? String(f.taxRate) : "" });
+const emptyForm = { name: "", category: "", jobType: "both", pricingType: "flat", defaultPrice: "", pricingTiers: [], active: true, isTaxable: false, taxRate: "", isCombo: false, comboDescription: "" };
+const normalizeForm = (f) => ({ ...emptyForm, ...f, pricingTiers: Array.isArray(f?.pricingTiers) ? f.pricingTiers : [], isTaxable: Boolean(f?.isTaxable), taxRate: f?.taxRate !== undefined ? String(f.taxRate) : "", isCombo: Boolean(f?.isCombo), comboDescription: String(f?.comboDescription || "") });
 const inputClass  = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelClass  = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 const selectClass = "h-9 w-full border border-slate-300 bg-white px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
@@ -118,9 +118,11 @@ const CarWashServices = () => {
               return { vehicleType: match ?? t.vehicleType, price: String(t.price) };
             })
         : [],
-      active:     row.active !== false,
-      isTaxable:  Boolean(row.isTaxable),
-      taxRate:    row.taxRate !== undefined ? String(row.taxRate) : "",
+      active:           row.active !== false,
+      isTaxable:        Boolean(row.isTaxable),
+      taxRate:          row.taxRate !== undefined ? String(row.taxRate) : "",
+      isCombo:          Boolean(row.isCombo),
+      comboDescription: String(row.comboDescription || ""),
     };
     const catExists = categories.includes(fromRow.category || "");
     setForm(normalizeForm(fromRow));
@@ -130,14 +132,16 @@ const CarWashServices = () => {
 
   const openDuplicate = (row) => {
     openCreate({
-      name:         `${row.name || ""} (Copy)`,
-      category:     row.category || "",
-      jobType:      row.jobType || "both",
-      pricingType:  row.pricingType || "flat",
-      defaultPrice: String(row.defaultPrice ?? ""),
-      pricingTiers: Array.isArray(row.pricingTiers)
+      name:             `${row.name || ""} (Copy)`,
+      category:         row.category || "",
+      jobType:          row.jobType || "both",
+      pricingType:      row.pricingType || "flat",
+      defaultPrice:     String(row.defaultPrice ?? ""),
+      pricingTiers:     Array.isArray(row.pricingTiers)
         ? row.pricingTiers.map((t) => ({ vehicleType: t.vehicleType, price: String(t.price) }))
         : [],
+      isCombo:          Boolean(row.isCombo),
+      comboDescription: String(row.comboDescription || ""),
       active: true,
     });
   };
@@ -165,14 +169,16 @@ const CarWashServices = () => {
     if (hasDuplicateTiers) { toast.error("Each vehicle type can only appear once in the pricing table"); return; }
 
     const payload = {
-      name:         String(form.name || "").trim(),
-      category:     String(form.category || "").trim(),
-      jobType:      String(form.jobType || "both"),
-      pricingType:  String(form.pricingType || "flat"),
-      defaultPrice: Number(form.defaultPrice || 0),
-      active:       Boolean(form.active),
-      isTaxable:    Boolean(form.isTaxable),
-      taxRate:      Number(form.taxRate || 0),
+      name:             String(form.name || "").trim(),
+      category:         String(form.category || "").trim(),
+      jobType:          String(form.jobType || "both"),
+      pricingType:      String(form.pricingType || "flat"),
+      defaultPrice:     Number(form.defaultPrice || 0),
+      active:           Boolean(form.active),
+      isTaxable:        Boolean(form.isTaxable),
+      taxRate:          Number(form.taxRate || 0),
+      isCombo:          Boolean(form.isCombo),
+      comboDescription: String(form.comboDescription || "").trim(),
       pricingTiers: (form.pricingTiers || [])
         .filter((t) => t.vehicleType && t.price !== "")
         .map((t) => ({ vehicleType: String(t.vehicleType), price: Number(t.price) })),
@@ -263,7 +269,10 @@ const CarWashServices = () => {
               <div key={row._id} className="p-3 space-y-1.5">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="text-sm font-extrabold text-slate-900">{row.name}</p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="text-sm font-extrabold text-slate-900">{row.name}</p>
+                      {row.isCombo && <span className="inline-flex border border-purple-300 bg-purple-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-purple-700">Combo</span>}
+                    </div>
                     {row.category && <p className="text-xs text-slate-500">{row.category}</p>}
                   </div>
                   <span className={`inline-flex border px-2 py-0.5 text-[11px] font-bold uppercase ${row.active === false ? "border-orange-200 bg-orange-50 text-orange-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
@@ -343,7 +352,12 @@ const CarWashServices = () => {
                           {expanded ? <FaChevronDown /> : <FaChevronRight />}
                         </button>
                       </td>
-                      <td className="px-2 py-1 font-extrabold text-slate-900">{row.name}</td>
+                      <td className="px-2 py-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-extrabold text-slate-900">{row.name}</span>
+                          {row.isCombo && <span className="inline-flex border border-purple-300 bg-purple-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-purple-700">Combo</span>}
+                        </div>
+                      </td>
                       <td className="px-2 py-1 text-slate-700">{row.category || "—"}</td>
                       <td className="px-2 py-1">
                         {row.pricingType === "per_sqft" ? (
@@ -382,6 +396,12 @@ const CarWashServices = () => {
                     {expanded && (
                       <tr className="border-b border-slate-200 bg-[#F8FBF9]">
                         <td colSpan={7} className="px-10 py-3 text-[11px] text-slate-600">
+                          {row.isCombo && row.comboDescription && (
+                            <div className="mb-3 border border-purple-200 bg-purple-50 px-3 py-2">
+                              <p className="text-[9px] font-black uppercase tracking-wide text-purple-500 mb-1">Includes</p>
+                              <p className="text-[11px] text-purple-900 leading-relaxed">{row.comboDescription}</p>
+                            </div>
+                          )}
                           {tiers.length > 0 ? (
                             <div className="max-w-sm">
                               <p className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">Vehicle Type Pricing</p>
@@ -510,6 +530,36 @@ const CarWashServices = () => {
                   <option value="vehicle">Vehicle Wash only</option>
                   <option value="carpet">Carpet / Textile only</option>
                 </select>
+              </div>
+
+              {/* Combo toggle */}
+              <div className="md:col-span-2">
+                <div className="border border-slate-200">
+                  <div className="flex items-center gap-3 border-b border-slate-200 bg-[#EDF5F1] px-3 py-2">
+                    <input
+                      id="svc-iscombo"
+                      type="checkbox"
+                      checked={form.isCombo}
+                      onChange={(e) => setForm((p) => ({ ...p, isCombo: e.target.checked }))}
+                      className="h-4 w-4"
+                    />
+                    <label htmlFor="svc-iscombo" className="text-[11px] font-extrabold uppercase tracking-wide text-[#0B3B2E] cursor-pointer select-none">
+                      This is a Service Combo
+                    </label>
+                  </div>
+                  {form.isCombo && (
+                    <div className="p-3">
+                      <label className={labelClass}>What's Included <span className="font-normal normal-case text-slate-400">(shown to staff when selecting this combo)</span></label>
+                      <textarea
+                        className="w-full border border-slate-300 px-2 py-1.5 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none resize-none"
+                        rows={3}
+                        value={form.comboDescription}
+                        onChange={(e) => setForm((p) => ({ ...p, comboDescription: e.target.value }))}
+                        placeholder="e.g. Full body wash, Vacuum, Engine wash, Wet shampoo of Seatbelt, Roof, Floor, Carpet, Mats, Interior & Exterior Polish, Tyre Shine"
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Pricing type toggle */}

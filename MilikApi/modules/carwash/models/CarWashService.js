@@ -18,6 +18,8 @@ const carWashServiceSchema = new mongoose.Schema(
       price:       { type: Number, required: true, min: 0 },
       _id: false,
     }],
+    isCombo:          { type: Boolean, default: false },
+    comboDescription: { type: String, trim: true, default: "" },
     isTaxable: { type: Boolean, default: false },
     taxRate:   { type: Number, min: 0, max: 100, default: 0 },
     active: { type: Boolean, default: true },

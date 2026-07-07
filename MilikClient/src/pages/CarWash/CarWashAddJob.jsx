@@ -1158,12 +1158,30 @@ const CarWashAddJob = () => {
                       </div>
                       <div>
                         <label className={labelClass}>Service</label>
-                        <select disabled={isReward} className={`h-9 w-full border px-2 text-xs focus:outline-none ${isReward ? "border-amber-200 bg-amber-50 text-amber-800" : "border-slate-300 text-slate-800 focus:border-[#0B3B2E]"}`} value={line.service} onChange={(e) => handleLineServiceChange(index, e.target.value)}>
-                          <option value="">Select or type below</option>
-                          {services.filter((s2) => !s2.jobType || s2.jobType === "both" || s2.jobType === jobType).map((s2) => (
-                            <option key={s2._id} value={s2._id}>{s2.name}</option>
-                          ))}
-                        </select>
+                        {(() => {
+                          const filtered = services.filter((s2) => !s2.jobType || s2.jobType === "both" || s2.jobType === jobType);
+                          const regular  = filtered.filter((s2) => !s2.isCombo);
+                          const combos   = filtered.filter((s2) => s2.isCombo);
+                          return (
+                            <>
+                              <select disabled={isReward} className={`h-9 w-full border px-2 text-xs focus:outline-none ${isReward ? "border-amber-200 bg-amber-50 text-amber-800" : "border-slate-300 text-slate-800 focus:border-[#0B3B2E]"}`} value={line.service} onChange={(e) => handleLineServiceChange(index, e.target.value)}>
+                                <option value="">— Select service —</option>
+                                {regular.map((s2) => <option key={s2._id} value={s2._id}>{s2.name}</option>)}
+                                {combos.length > 0 && (
+                                  <optgroup label="── COMBOS ──">
+                                    {combos.map((s2) => <option key={s2._id} value={s2._id}>★ {s2.name}</option>)}
+                                  </optgroup>
+                                )}
+                              </select>
+                              {svc?.isCombo && svc?.comboDescription && (
+                                <div className="mt-1 border border-purple-200 bg-purple-50 px-2 py-1.5">
+                                  <p className="text-[9px] font-black uppercase tracking-wide text-purple-500">Includes</p>
+                                  <p className="text-[10px] text-purple-800 leading-relaxed">{svc.comboDescription}</p>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                       <div>
                         <label className={labelClass}>Name *</label>
@@ -1278,20 +1296,35 @@ const CarWashAddJob = () => {
                               <span className="text-[10px] font-black text-amber-700">{line.serviceName}</span>
                               <span className="ml-auto rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-black text-amber-600">FREE</span>
                             </div>
-                          ) : (
-                            <select
-                              className="h-8 w-full border border-slate-300 px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
-                              value={line.service}
-                              onChange={(e) => handleLineServiceChange(index, e.target.value)}
-                            >
-                              <option value="">Select or type below</option>
-                              {services
-                                .filter((svc) => !svc.jobType || svc.jobType === "both" || svc.jobType === jobType)
-                                .map((svc) => (
-                                  <option key={svc._id} value={svc._id}>{svc.category ? `${svc.category} — ${svc.name}` : svc.name}</option>
-                                ))}
-                            </select>
-                          )}
+                          ) : (() => {
+                              const filtered = services.filter((s2) => !s2.jobType || s2.jobType === "both" || s2.jobType === jobType);
+                              const regular  = filtered.filter((s2) => !s2.isCombo);
+                              const combos   = filtered.filter((s2) => s2.isCombo);
+                              const selSvc   = servicesById.get(line.service);
+                              return (
+                                <>
+                                  <select
+                                    className="h-8 w-full border border-slate-300 px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
+                                    value={line.service}
+                                    onChange={(e) => handleLineServiceChange(index, e.target.value)}
+                                  >
+                                    <option value="">— Select service —</option>
+                                    {regular.map((s2) => <option key={s2._id} value={s2._id}>{s2.category ? `${s2.category} — ${s2.name}` : s2.name}</option>)}
+                                    {combos.length > 0 && (
+                                      <optgroup label="── COMBOS ──">
+                                        {combos.map((s2) => <option key={s2._id} value={s2._id}>★ {s2.name}</option>)}
+                                      </optgroup>
+                                    )}
+                                  </select>
+                                  {selSvc?.isCombo && selSvc?.comboDescription && (
+                                    <div className="mt-1 border border-purple-200 bg-purple-50 px-2 py-1">
+                                      <p className="text-[9px] font-black uppercase tracking-wide text-purple-500">Includes</p>
+                                      <p className="text-[10px] text-purple-800 leading-relaxed">{selSvc.comboDescription}</p>
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
                         </td>
                         <td className="px-3 py-1.5">
                           <input

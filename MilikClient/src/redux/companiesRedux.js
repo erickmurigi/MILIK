@@ -110,13 +110,6 @@ export const companySlice = createSlice({
       state.isFetching = false;
       state.error = true;
     },
-    // LOCK TOGGLE
-    toggleCompanyLockSuccess: (state, action) => {
-      const { id, locked } = action.payload;
-      const index = state.companies.findIndex((item) => item._id === id);
-      if (index !== -1) state.companies[index] = { ...state.companies[index], locked };
-      if (state.currentCompany?._id === id) state.currentCompany = { ...state.currentCompany, locked };
-    },
     // DELETE
     deleteCompanyStart: (state) => {
       state.isFetching = true;
@@ -156,7 +149,6 @@ export const {
   updateCompanyStart,
   updateCompanySuccess,
   updateCompanyFailure,
-  toggleCompanyLockSuccess,
   deleteCompanyStart,
   deleteCompanySuccess,
   deleteCompanyFailure,

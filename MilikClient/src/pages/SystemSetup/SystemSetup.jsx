@@ -464,7 +464,7 @@ const OverviewPanel = ({ companies, users, companyReadiness, companyUserCounts, 
 };
 
 // ─── Companies Panel ───────────────────────────────────────────────────────────
-const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, onAddCompany, onEditCompany, onDeleteCompany, onToggleCompanyLock, onOpenCompanySetup, onOpenOperationalSettings, onOpenWorkspace, onManageUsers }) => {
+const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, pendingId, onAddCompany, onEditCompany, onDeleteCompany, onToggleCompanyLock, onOpenCompanySetup, onOpenOperationalSettings, onOpenWorkspace, onManageUsers }) => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [modeFilter, setModeFilter] = useState("all");
@@ -525,17 +525,17 @@ const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, onAddC
       {/* Table */}
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="min-w-full text-[11px] border-collapse">
-          <thead className="sticky top-0 z-10">
+          <thead className="sticky top-0 z-10 shadow-sm">
             <tr className="bg-[#0B3B2E] text-white">
-              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Company</th>
-              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Mode</th>
-              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
-              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Readiness</th>
-              <th className="px-3 py-1 text-center font-bold border-r border-white/10">Users</th>
-              <th className="px-3 py-1 text-center font-bold border-r border-white/10">Modules</th>
-              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Contact</th>
-              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Updated</th>
-              <th className="px-3 py-1 text-right font-bold border-r border-white/10">Actions</th>
+              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Company</th>
+              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Mode</th>
+              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Status</th>
+              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Readiness</th>
+              <th className="px-3 py-2 text-center font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Users</th>
+              <th className="px-3 py-2 text-center font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Mods</th>
+              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Contact</th>
+              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Updated</th>
+              <th className="px-3 py-2 text-right font-black text-[10px] uppercase tracking-wider whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -546,13 +546,17 @@ const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, onAddC
               const readiness = companyReadiness.get(companyId) || evaluateCompanySetup(company, 0);
               const userCount = companyUserCounts.get(companyId) || 0;
               const statusLabel = getCompanyStatusLabel(company);
+              const isPending = pendingId === companyId;
               return (
-                <tr key={companyId} className="group border-b border-gray-100 bg-white hover:bg-blue-50/40 transition">
+                <tr key={companyId} className={`group border-b border-slate-100 transition ${isPending ? "opacity-60 bg-white" : "odd:bg-white even:bg-slate-50/50 hover:bg-[#EDF5F1]/70"}`}>
                   <td className="px-3 py-1.5 border-r border-gray-100">
                     <div className="flex items-center gap-2.5">
                       <CompanyAvatar company={company} />
                       <div>
-                        <div className="font-black text-slate-900 leading-tight">{company.companyName}</div>
+                        <div className="flex items-center gap-1.5 font-black text-slate-900 leading-tight">
+                          {company.companyName}
+                          {company?.locked && <FaLock className="text-[9px] text-rose-500 shrink-0" title="Locked" />}
+                        </div>
                         <div className="text-[10px] text-slate-400 mt-0.5">{company.companyCode || company.registrationNo || "—"}</div>
                       </div>
                     </div>
@@ -583,16 +587,20 @@ const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, onAddC
                   </td>
                   <td className="px-3 py-1.5 border-r border-gray-100 text-[11px] text-slate-400 whitespace-nowrap">{formatDate(company.updatedAt || company.createdAt)}</td>
                   <td className="px-3 py-1.5 border-r border-gray-100 text-right">
-                    <ActionMenu items={[
-                      { label: "Setup", icon: FaCog, onClick: () => onOpenCompanySetup(company) },
-                      { label: "Operational Settings", icon: FaGlobeAfrica, onClick: () => onOpenOperationalSettings(company) },
-                      { label: "Open Workspace", icon: FaEye, onClick: () => onOpenWorkspace(company) },
-                      { label: "Manage Users", icon: FaUsers, onClick: () => onManageUsers(company) },
-                      { separator: true },
-                      { label: "Edit", icon: FaEdit, onClick: () => onEditCompany(company) },
-                      { label: company?.locked ? "Unlock" : "Lock", icon: company?.locked ? FaLockOpen : FaLock, onClick: () => onToggleCompanyLock(company) },
-                      { label: "Delete", icon: FaTrash, onClick: () => onDeleteCompany(company), danger: true },
-                    ]} />
+                    {isPending ? (
+                      <FaRedoAlt className="ml-auto animate-spin text-[11px] text-slate-400" />
+                    ) : (
+                      <ActionMenu items={[
+                        { label: "Setup", icon: FaCog, onClick: () => onOpenCompanySetup(company) },
+                        { label: "Operational Settings", icon: FaGlobeAfrica, onClick: () => onOpenOperationalSettings(company) },
+                        { label: "Open Workspace", icon: FaEye, onClick: () => onOpenWorkspace(company) },
+                        { label: "Manage Users", icon: FaUsers, onClick: () => onManageUsers(company) },
+                        { separator: true },
+                        { label: "Edit", icon: FaEdit, onClick: () => onEditCompany(company) },
+                        { label: company?.locked ? "Unlock" : "Lock", icon: company?.locked ? FaLockOpen : FaLock, onClick: () => onToggleCompanyLock(company) },
+                        { label: "Delete", icon: FaTrash, onClick: () => onDeleteCompany(company), danger: true },
+                      ]} />
+                    )}
                   </td>
                 </tr>
               );
@@ -661,16 +669,16 @@ const UsersPanel = ({ users, companies, companyMap, selectedCompanyId, onSelecte
 
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="min-w-full text-[11px] border-collapse">
-          <thead className="sticky top-0 z-10">
+          <thead className="sticky top-0 z-10 shadow-sm">
             <tr className="bg-[#0B3B2E] text-white">
-              <th className="px-3 py-1 text-left font-bold border-r border-white/10">User</th>
-              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Email</th>
-              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Role</th>
-              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Primary Company</th>
-              <th className="px-3 py-1 text-center font-bold border-r border-white/10">Companies</th>
-              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
-              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Created</th>
-              <th className="px-3 py-1 text-right font-bold border-r border-white/10">Actions</th>
+              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">User</th>
+              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Email</th>
+              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Role</th>
+              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Primary Company</th>
+              <th className="px-3 py-2 text-center font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Companies</th>
+              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Status</th>
+              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Created</th>
+              <th className="px-3 py-2 text-right font-black text-[10px] uppercase tracking-wider whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -682,7 +690,7 @@ const UsersPanel = ({ users, companies, companyMap, selectedCompanyId, onSelecte
               const assignedCompanyIds = getUserAssignedCompanyIds(user);
               const lockState = user?.locked ? "Locked" : user?.isActive === false ? "Inactive" : "Active";
               return (
-                <tr key={userId} className="group border-b border-gray-100 bg-white hover:bg-blue-50/40 transition">
+                <tr key={userId} className="group border-b border-slate-100 odd:bg-white even:bg-slate-50/50 hover:bg-[#EDF5F1]/70 transition">
                   <td className="px-3 py-1.5 border-r border-gray-100">
                     <div className="flex items-center gap-2.5">
                       <UserAvatar user={user} />
@@ -760,16 +768,16 @@ const TrialsPanel = ({ companies, companyReadiness, companyUserCounts, onOpenWor
 
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="min-w-full text-[11px] border-collapse">
-          <thead className="sticky top-0 z-10">
+          <thead className="sticky top-0 z-10 shadow-sm">
             <tr className="bg-[#0B3B2E] text-white">
-              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Company</th>
-              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
-              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Mode</th>
-              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Readiness</th>
-              <th className="px-3 py-1 text-center font-bold border-r border-white/10">Users</th>
-              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Missing Setup</th>
-              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Updated</th>
-              <th className="px-3 py-1 text-right font-bold border-r border-white/10">Actions</th>
+              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Company</th>
+              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Type</th>
+              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Mode</th>
+              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Readiness</th>
+              <th className="px-3 py-2 text-center font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Users</th>
+              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Missing Setup</th>
+              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Updated</th>
+              <th className="px-3 py-2 text-right font-black text-[10px] uppercase tracking-wider whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -781,7 +789,7 @@ const TrialsPanel = ({ companies, companyReadiness, companyUserCounts, onOpenWor
               const userCount = companyUserCounts.get(companyId) || 0;
               const spotlightLabel = company?.isDemoWorkspace ? "Demo" : !isCompanyActive(company) ? "Inactive" : "Needs Attention";
               return (
-                <tr key={companyId} className="group border-b border-gray-100 bg-white hover:bg-blue-50/40 transition">
+                <tr key={companyId} className="group border-b border-slate-100 odd:bg-white even:bg-slate-50/50 hover:bg-[#EDF5F1]/70 transition">
                   <td className="px-3 py-1.5 border-r border-gray-100">
                     <div className="flex items-center gap-2.5">
                       <CompanyAvatar company={company} />
@@ -875,19 +883,19 @@ const AuditPanel = ({ companies, users, companyMap }) => {
 
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="min-w-full text-[11px] border-collapse">
-          <thead className="sticky top-0 z-10">
+          <thead className="sticky top-0 z-10 shadow-sm">
             <tr className="bg-[#0B3B2E] text-white">
-              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date</th>
-              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Event</th>
-              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
-              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Detail</th>
+              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Date</th>
+              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Event</th>
+              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider border-r border-white/10 whitespace-nowrap">Type</th>
+              <th className="px-3 py-2 text-left font-black text-[10px] uppercase tracking-wider whitespace-nowrap">Detail</th>
             </tr>
           </thead>
           <tbody>
             {pageRows.length === 0 ? (
               <tr><td colSpan={4}><EmptyState icon={FaHistory} title="No platform activity found" body="Events will appear here as the system is used" /></td></tr>
             ) : pageRows.map((event) => (
-              <tr key={event.id} className="group border-b border-gray-100 bg-white hover:bg-blue-50/40 transition">
+              <tr key={event.id} className="group border-b border-slate-100 odd:bg-white even:bg-slate-50/50 hover:bg-[#EDF5F1]/70 transition">
                 <td className="px-3 py-1.5 border-r border-gray-100 text-[11px] text-slate-400 whitespace-nowrap">{formatDate(event.timestamp)}</td>
                 <td className="px-3 py-1.5 border-r border-gray-100 font-black text-slate-900">{event.title}</td>
                 <td className="px-3 py-1.5 border-r border-gray-100">
@@ -923,6 +931,7 @@ export default function SystemSetupPage() {
   const companyFilterFromQuery = new URLSearchParams(location.search).get("company") || "";
   const [selectedCompanyId, setSelectedCompanyId] = useState(companyFilterFromQuery);
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: "", message: "", isDangerous: false, confirmText: "Confirm", onConfirm: null });
+  const [pendingId, setPendingId] = useState(null);
 
   const companyList = Array.isArray(companies) ? companies : [];
   const userList = Array.isArray(users) ? users : [];
@@ -996,13 +1005,15 @@ export default function SystemSetupPage() {
       isDangerous: !isLocked,
       confirmText: isLocked ? "Unlock" : "Lock",
       onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        setPendingId(id);
         try {
           await dispatch(toggleCompanyLock(id));
-          toast.success(isLocked ? "Company unlocked successfully." : "Company locked successfully.");
+          toast.success(isLocked ? "Company unlocked." : "Company locked.");
         } catch (error) {
           toast.error(error?.response?.data?.message || error?.message || "Failed to update company lock status.");
         } finally {
-          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+          setPendingId(null);
         }
       },
     });
@@ -1016,9 +1027,20 @@ export default function SystemSetupPage() {
       message: `Delete ${company?.companyName || "this company"}? This action cannot be undone.`,
       isDangerous: true, confirmText: "Delete",
       onConfirm: async () => {
-        try { await dispatch(deleteCompany(id)); toast.success("Company deleted successfully."); }
-        catch (error) { toast.error(error?.response?.data?.message || error?.message || "Failed to delete company."); }
-        finally { setConfirmDialog((prev) => ({ ...prev, isOpen: false })); }
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        setPendingId(id);
+        try {
+          const result = await dispatch(deleteCompany(id));
+          if (result?.archived) {
+            toast.info(result.message || `${company?.companyName || "Company"} was archived — it has active records that must be removed first.`);
+          } else {
+            toast.success("Company deleted successfully.");
+          }
+        } catch (error) {
+          toast.error(error?.response?.data?.message || error?.message || "Failed to delete company.");
+        } finally {
+          setPendingId(null);
+        }
       },
     });
   };
@@ -1175,6 +1197,7 @@ export default function SystemSetupPage() {
                     companies={companyList}
                     companyReadiness={companyReadiness}
                     companyUserCounts={companyUserCounts}
+                    pendingId={pendingId}
                     onAddCompany={() => navigate("/add-company", { state: { tabTitle: "New Company" } })}
                     onEditCompany={handleEditCompany}
                     onDeleteCompany={handleDeleteCompany}

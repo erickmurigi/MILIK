@@ -7,14 +7,16 @@ const sanitizeServicePayload = (body = {}) => {
   const taxRate   = Math.min(100, Math.max(0, Number(body.taxRate || 0)));
   const isTaxable = Boolean(body.isTaxable) && taxRate > 0;
   return {
-    name:         String(body.name || "").trim().toUpperCase(),
-    category:     String(body.category || "").trim().toUpperCase(),
-    jobType:      ["vehicle", "carpet", "both"].includes(body.jobType) ? body.jobType : "both",
-    pricingType:  body.pricingType === "per_sqft" ? "per_sqft" : "flat",
-    defaultPrice: Number(body.defaultPrice || 0),
+    name:             String(body.name || "").trim().toUpperCase(),
+    category:         String(body.category || "").trim().toUpperCase(),
+    jobType:          ["vehicle", "carpet", "both"].includes(body.jobType) ? body.jobType : "both",
+    pricingType:      body.pricingType === "per_sqft" ? "per_sqft" : "flat",
+    defaultPrice:     Number(body.defaultPrice || 0),
+    isCombo:          Boolean(body.isCombo),
+    comboDescription: String(body.comboDescription || "").trim(),
     isTaxable,
-    taxRate:      isTaxable ? taxRate : 0,
-    active:       parseBoolean(body.active, true),
+    taxRate:          isTaxable ? taxRate : 0,
+    active:           parseBoolean(body.active, true),
   };
 };
 
