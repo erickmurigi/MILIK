@@ -1,201 +1,113 @@
 import React, { useMemo } from 'react';
 import { useSelector } from 'react-redux';
 import {
-  FaBuilding,
-  FaHome,
-  FaChartPie,
-  FaMoneyBillWave,
-  FaReceipt,
-  FaChartLine,
-  FaHandHoldingUsd,
+  FaBuilding, FaHome, FaChartPie, FaMoneyBillWave,
+  FaReceipt, FaChartLine, FaHandHoldingUsd,
 } from 'react-icons/fa';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
 import { hasCompanyPermission } from '../../utils/permissions';
 import {
-  selectCurrentUser,
-  selectCurrentCompany,
-  selectAllProperties,
-  selectAllUnits,
-  selectAllRentPayments,
-  selectAllExpenseProperties,
+  selectCurrentUser, selectCurrentCompany,
+  selectAllProperties, selectAllUnits,
+  selectAllRentPayments, selectAllExpenseProperties,
 } from '../../redux/selectors';
+import { fmtKES, parseDate } from './dashboardUtils';
 
-const MetricsGrid = ({ darkMode, summaryData = {} }) => {
-  const properties = useSelector(selectAllProperties);
-  const units = useSelector(selectAllUnits);
-  const rentPayments = useSelector(selectAllRentPayments);
+const TONES = {
+  green:  'bg-[#0B3B2E] border-[#0B3B2E]',
+  orange: 'bg-[#C8511A] border-[#C8511A]',
+  slate:  'bg-slate-700  border-slate-700',
+  red:    'bg-red-700    border-red-700',
+};
+
+const MetricCard = ({ label, value, icon: Icon, tone = 'green' }) => (
+  <div className={`relative overflow-hidden border ${TONES[tone] || TONES.green} px-4 py-3 shadow-sm`}>
+    {Icon && <Icon className="absolute right-3 top-2.5 h-10 w-10 text-white/10" />}
+    <p className="text-[9px] font-extrabold uppercase tracking-widest text-white/60">{label}</p>
+    <p className="mt-1.5 text-2xl font-black leading-none text-white">{value}</p>
+  </div>
+);
+
+const MetricsGrid = ({ summaryData = {}, loading = false }) => {
+  const properties        = useSelector(selectAllProperties);
+  const units             = useSelector(selectAllUnits);
+  const rentPayments      = useSelector(selectAllRentPayments);
   const expenseProperties = useSelector(selectAllExpenseProperties);
-  const propertiesLoading = useSelector((state) => state.property?.isFetching);
-  const currentCompany = useSelector(selectCurrentCompany);
-  const currentUser = useSelector(selectCurrentUser);
+  const currentCompany    = useSelector(selectCurrentCompany);
+  const currentUser       = useSelector(selectCurrentUser);
 
-  const activeCompanyContext = currentCompany || currentUser?.company || null;
-  const isLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);
-  const canViewFinancials = hasCompanyPermission(currentUser || {}, currentCompany, 'financialReports', 'view', ['accounts', 'propertyManagement']);
+  const ctx           = currentCompany || currentUser?.company || null;
+  const isLandlord    = isSelfManagingLandlordCompany(ctx);
+  const canFinancials = hasCompanyPermission(currentUser || {}, currentCompany, 'financialReports', 'view', ['accounts', 'propertyManagement']);
 
   const totalProperties = properties.length;
-  const totalUnits = units.filter((u) => {
-    const s = String(u?.status || '').trim().toLowerCase();
-    return !['off_market', 'inactive', 'archived', 'disabled'].includes(s);
-  }).length;
-  const occupiedUnits = units.filter((u) => {
-    const s = String(u?.status || '').trim().toLowerCase();
-    return s === 'occupied' || s === 'notice_given' || s === 'reserved';
-  }).length;
+  const totalUnits = units.filter(
+    (u) => !['off_market', 'inactive', 'archived', 'disabled'].includes(String(u?.status || '').trim().toLowerCase())
+  ).length;
+  const occupiedUnits = units.filter(
+    (u) => ['occupied', 'notice_given', 'reserved'].includes(String(u?.status || '').trim().toLowerCase())
+  ).length;
   const occupancyRate = totalUnits > 0 ? ((occupiedUnits / totalUnits) * 100).toFixed(1) : '0.0';
 
-  const currentMonth = new Date().getMonth();
-  const currentYear = new Date().getFullYear();
+  const now      = new Date();
+  const curMonth = now.getMonth();
+  const curYear  = now.getFullYear();
 
-  // Prefer the authoritative server-computed total; fall back to local Redux if summaryData not yet loaded
   const serverCollected = Number(summaryData?.collectedThisMonth ?? summaryData?.monthlyRevenue ?? -1);
-  const thisMonthPayments = serverCollected >= 0 ? [] : rentPayments.filter((payment) => {
-    const paymentDate = new Date(payment?.paymentDate || payment?.createdAt || 0);
-    return (
-      !Number.isNaN(paymentDate.getTime()) &&
-      paymentDate.getMonth() === currentMonth &&
-      paymentDate.getFullYear() === currentYear &&
-      payment?.isConfirmed === true &&
-      payment?.isCancelled !== true &&
-      payment?.isReversed !== true &&
-      !payment?.reversalOf &&
-      String(payment?.postingStatus || '').toLowerCase() !== 'reversed'
-    );
-  });
-
   const monthlyCollected = serverCollected >= 0
     ? serverCollected
-    : thisMonthPayments.reduce((sum, p) => sum + Math.abs(Number(p?.amount || 0)), 0);
+    : rentPayments
+        .filter((p) => {
+          const d = parseDate(p?.paymentDate || p?.createdAt);
+          return d && d.getMonth() === curMonth && d.getFullYear() === curYear
+            && p?.isConfirmed === true && !p?.isCancelled && !p?.isReversed && !p?.reversalOf
+            && String(p?.postingStatus || '').toLowerCase() !== 'reversed';
+        })
+        .reduce((s, p) => s + Math.abs(Number(p?.amount || 0)), 0);
 
   const monthlyExpenses = useMemo(() => {
-    if (!isLandlordMode) return 0;
-    return expenseProperties.reduce((sum, exp) => {
-      const d = new Date(exp?.date || exp?.createdAt || 0);
-      if (d.getMonth() !== currentMonth || d.getFullYear() !== currentYear) return sum;
-      return sum + Math.abs(Number(exp?.amount || 0));
+    if (!isLandlord) return 0;
+    return expenseProperties.reduce((s, e) => {
+      const d = parseDate(e?.date || e?.createdAt);
+      return (d && d.getMonth() === curMonth && d.getFullYear() === curYear)
+        ? s + Math.abs(Number(e?.amount || 0)) : s;
     }, 0);
-  }, [isLandlordMode, expenseProperties, currentMonth, currentYear]);
+  }, [isLandlord, expenseProperties, curMonth, curYear]);
 
-  const netIncome = monthlyCollected - monthlyExpenses;
-
-  const formatCurrency = (value) => {
-    if (value >= 1000000) return `KSh ${(value / 1000000).toFixed(1)}M`;
-    if (value >= 1000) return `KSh ${(value / 1000).toFixed(1)}K`;
-    return `KSh ${Number(value || 0).toLocaleString()}`;
-  };
-
-  const baseMetrics = useMemo(
-    () => [
-      {
-        id: 1,
-        label: isLandlordMode ? 'My Properties' : 'Total Properties',
-        value: totalProperties.toString(),
-        icon: <FaBuilding />,
-        color: 'from-[#1e5a4a] to-[#0f3d2e]',
-        iconBg: 'bg-[#1e5a4a]/20',
-        loading: propertiesLoading,
-      },
-      {
-        id: 2,
-        label: isLandlordMode ? 'Portfolio Units' : 'Total Units',
-        value: totalUnits.toString(),
-        icon: <FaHome />,
-        color: 'from-[#31694E] to-[#1f4a35]',
-        iconBg: 'bg-[#31694E]/25',
-        loading: propertiesLoading,
-      },
-      {
-        id: 3,
-        label: 'Occupancy Rate',
-        value: `${occupancyRate}%`,
-        icon: <FaChartPie />,
-        color: 'from-[#4a9976] to-[#31694E]',
-        iconBg: 'bg-[#4a9976]/25',
-        loading: propertiesLoading,
-      },
-      ...(canViewFinancials ? [{
-        id: 4,
-        label: isLandlordMode ? 'Collected This Month' : 'Collected This Month',
-        value: formatCurrency(monthlyCollected),
-        icon: <FaMoneyBillWave />,
-        color: 'from-[#E85C0D] to-[#c7490a]',
-        iconBg: 'bg-[#E85C0D]/25',
-        loading: propertiesLoading,
-      }] : []),
-    ],
-    [canViewFinancials, isLandlordMode, monthlyCollected, occupancyRate, propertiesLoading, totalProperties, totalUnits]
-  );
-
-  const landlordExtraMetrics = useMemo(() => {
-    if (!isLandlordMode || !canViewFinancials) return [];
-    return [
-      {
-        id: 5,
-        label: 'Expenses This Month',
-        value: formatCurrency(monthlyExpenses),
-        icon: <FaReceipt />,
-        color: 'from-[#6b21a8] to-[#4c1d95]',
-        iconBg: 'bg-[#6b21a8]/25',
-        loading: propertiesLoading,
-      },
-      {
-        id: 6,
-        label: 'Net Income This Month',
-        value: formatCurrency(Math.max(0, netIncome)),
-        icon: <FaChartLine />,
-        color: netIncome >= 0 ? 'from-[#065f46] to-[#064e3b]' : 'from-[#991b1b] to-[#7f1d1d]',
-        iconBg: 'bg-white/20',
-        loading: propertiesLoading,
-      },
-    ];
-  }, [canViewFinancials, isLandlordMode, monthlyExpenses, netIncome, propertiesLoading]);
-
+  const netIncome            = monthlyCollected - monthlyExpenses;
   const totalLandlordPayable = Number(summaryData?.totalLandlordPayable || 0);
 
-  const pmExtraMetrics = useMemo(() => {
-    if (isLandlordMode || !canViewFinancials) return [];
-    if (totalLandlordPayable <= 0) return [];
-    return [{
-      id: 7,
-      label: 'Owed to Landlords',
-      value: formatCurrency(totalLandlordPayable),
-      icon: <FaHandHoldingUsd />,
-      color: 'from-[#b45309] to-[#92400e]',
-      iconBg: 'bg-[#b45309]/25',
-      loading: false,
-    }];
-  }, [isLandlordMode, canViewFinancials, totalLandlordPayable]);
+  const metrics = useMemo(() => {
+    const v = loading ? '…' : null;
+    const base = [
+      { id: 1, label: isLandlord ? 'My Properties'   : 'Total Properties', value: v ?? totalProperties.toString(), icon: FaBuilding,     tone: 'green'  },
+      { id: 2, label: isLandlord ? 'Portfolio Units'  : 'Total Units',      value: v ?? totalUnits.toString(),      icon: FaHome,          tone: 'green'  },
+      { id: 3, label: 'Occupancy Rate',                                      value: v ?? `${occupancyRate}%`,        icon: FaChartPie,      tone: 'green'  },
+      ...(canFinancials ? [
+        { id: 4, label: 'Collected This Month', value: v ?? fmtKES(monthlyCollected), icon: FaMoneyBillWave, tone: 'orange' },
+      ] : []),
+    ];
+    if (isLandlord && canFinancials) {
+      base.push(
+        { id: 5, label: 'Expenses This Month', value: v ?? fmtKES(monthlyExpenses),      icon: FaReceipt,   tone: 'slate' },
+        { id: 6, label: 'Net Income',           value: v ?? fmtKES(Math.abs(netIncome)), icon: FaChartLine, tone: netIncome >= 0 ? 'green' : 'red' },
+      );
+    }
+    if (!isLandlord && canFinancials && totalLandlordPayable > 0) {
+      base.push({ id: 7, label: 'Owed to Landlords', value: fmtKES(totalLandlordPayable), icon: FaHandHoldingUsd, tone: 'orange' });
+    }
+    return base;
+  }, [canFinancials, isLandlord, loading, monthlyCollected, monthlyExpenses, netIncome, occupancyRate, totalLandlordPayable, totalProperties, totalUnits]);
 
-  const metrics = [...baseMetrics, ...landlordExtraMetrics, ...pmExtraMetrics];
+  const cols = metrics.length >= 6 ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'
+    : metrics.length === 5          ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
+    :                                  'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4';
 
   return (
-    <div className={`sticky top-0 z-20 grid gap-2 border-b border-gray-200 bg-slate-50/95 p-2 shadow-sm backdrop-blur ${
-      metrics.length >= 6
-        ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'
-        : metrics.length === 5
-        ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
-        : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'
-    }`}>
-      {metrics.map((metric) => (
-        <div
-          key={metric.id}
-          className={`bg-gradient-to-br ${metric.color} rounded-lg p-2 text-white shadow-sm transition-all duration-300 ${
-            metric.loading ? 'opacity-60' : ''
-          }`}
-        >
-          <div className="mb-1.5 flex items-center justify-between">
-            <div className={`p-1.5 ${metric.iconBg} rounded-lg backdrop-blur-sm`}>
-              <div className="text-white text-base">{metric.icon}</div>
-            </div>
-          </div>
-          <h3 className="mb-0.5 text-base font-extrabold tracking-tight">
-            {metric.loading ? '...' : metric.value}
-          </h3>
-          <p className="text-white/80 text-[10px] font-semibold uppercase tracking-normal leading-tight">{metric.label}</p>
-        </div>
-      ))}
+    <div className={`grid gap-1.5 ${cols}`}>
+      {metrics.map((m) => <MetricCard key={m.id} {...m} />)}
     </div>
   );
 };
 
-export default MetricsGrid;
+export default React.memo(MetricsGrid);

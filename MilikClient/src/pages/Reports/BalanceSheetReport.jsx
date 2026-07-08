@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
-import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
+import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "../../redux/selectors";
 import { FaChevronDown, FaChevronRight, FaFileDownload, FaFilePdf, FaSyncAlt } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getBalanceSheetReport } from "../../redux/apiCalls";
@@ -132,6 +132,7 @@ const ColumnCard = ({ title, sections, total, totalColor, accentColor, categoryT
 const BalanceSheetReport = () => {
   const currentUser    = useSelector(selectCurrentUser);
   const currentCompany = useSelector(selectCurrentCompany);
+  const properties     = useSelector(selectAllProperties);
   const canExport      = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
 
   const businessId = useMemo(() => {
@@ -145,6 +146,14 @@ const BalanceSheetReport = () => {
   }, [currentCompany?._id, currentUser?.company, currentUser?.businessId]);
 
   const businessName = currentCompany?.companyName || currentUser?.company?.companyName || "Active company";
+
+  const offGLProperties = useMemo(
+    () => properties.filter((p) => {
+      const v = String(p.accountLedgerType || "").toLowerCase().trim();
+      return (v.startsWith("off") || v === "property-gl") && String(p.status || "").toLowerCase() !== "archived";
+    }),
+    [properties]
+  );
 
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState({ asOfDate: todayString(), includeZeroBalances: false });
@@ -349,6 +358,19 @@ const BalanceSheetReport = () => {
             </div>
           </div>
         </div>
+
+        {/* ── Property GL notice ────────────────────────────────────────────── */}
+        {offGLProperties.length > 0 && (
+          <div className="shrink-0 flex items-center gap-2 border-b border-purple-200 bg-purple-50 px-4 py-1.5 print:hidden">
+            <span className="text-purple-500 text-xs">⚠</span>
+            <span className="text-[11px] text-purple-700">
+              <span className="font-bold">{offGLProperties.length} {offGLProperties.length === 1 ? "property uses" : "properties use"} Property GL</span>
+              {" "}and {offGLProperties.length === 1 ? "is" : "are"} excluded from this company report:{" "}
+              {offGLProperties.map((p) => `${p.propertyCode} – ${p.propertyName}`).join(", ")}
+              {". "}View their accounts via Property Ledger on the properties list.
+            </span>
+          </div>
+        )}
 
         {/* ── KPI strip ─────────────────────────────────────────────────────── */}
         <div className="flex shrink-0 overflow-hidden border-b border-slate-200 bg-white shadow-sm">

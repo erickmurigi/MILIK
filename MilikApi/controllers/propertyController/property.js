@@ -463,17 +463,29 @@ const formatPropertyDependencyMessage = (summary = {}) => {
 const normalizePropertyServiceMode = (value = "Managing") => {
   const normalized = String(value || "").trim().toLowerCase();
   if (normalized === "letting") return "Letting";
+  if (normalized === "both") return "Both";
   return "Managing";
 };
 
-/** Returns true when a normalised letManage value represents Letting mode. */
+/** True only for pure Letting — blocks statements and forces payment routing to landlord. */
 const isLettingMode = (value) =>
   String(value || "").trim().toLowerCase() === "letting";
 
+/** True for Letting OR Both — triggers the one-time letting fee on tenant add. */
+const hasLettingFee = (value) => {
+  const v = String(value || "").trim().toLowerCase();
+  return v === "letting" || v === "both";
+};
+
+// Normalize to canonical values. Legacy "off-gl"/"OFF-GL (Property GL)" both
+// map to "property-gl" — the new canonical name for the property-isolated ledger.
 const normalizePropertyLedgerType = (value) => {
   const v = String(value || "").toLowerCase().trim();
-  return v.includes("off") ? "off-gl" : "in-gl";
+  if (v.startsWith("off") || v === "property-gl" || v === "property gl") return "property-gl";
+  return "in-gl";
 };
+
+const isPropertyGL = (value) => normalizePropertyLedgerType(value) === "property-gl";
 
 // Create property
 export const createProperty = async (req, res) => {
@@ -502,6 +514,7 @@ export const createProperty = async (req, res) => {
       rentPerMeasure,
       rentCurrency,
       accountLedgerType,
+      propertyLedgerEnabled,
       primaryBank,
       alternativeTaxPin,
       invoicePrefix,
@@ -650,16 +663,18 @@ export const createProperty = async (req, res) => {
         : 0;
 
     const resolvedLetManage = normalizePropertyServiceMode(letManage);
-    const lettingMode = isLettingMode(resolvedLetManage);
+    const lettingOnly = isLettingMode(resolvedLetManage);
+    const withLettingFee = hasLettingFee(resolvedLetManage);
 
-    // In Letting mode the landlord handles payments and holds the deposit directly.
-    // Override the modeAwareAssignment defaults if the property is Letting.
-    const resolvedTenantsPaysTo = lettingMode
+    // Only pure Letting forces payment routing to the landlord — the agent steps away
+    // after placement so the landlord must collect directly.
+    // Managing and Both let the property's own tenantsPaysTo / depositHeldBy settings win.
+    const resolvedTenantsPaysTo = lettingOnly
       ? "landlord"
-      : (modeAwareAssignment.tenantsPaysTo || "propertyManager");
-    const resolvedDepositHeldBy = lettingMode
+      : (req.body.tenantsPaysTo || modeAwareAssignment.tenantsPaysTo || "propertyManager");
+    const resolvedDepositHeldBy = lettingOnly
       ? "landlord"
-      : (modeAwareAssignment.depositHeldBy || "propertyManager");
+      : (req.body.depositHeldBy || modeAwareAssignment.depositHeldBy || "propertyManager");
 
     const property = new Property({
       dateAcquired: dateAcquired ? new Date(dateAcquired) : null,
@@ -687,6 +702,7 @@ export const createProperty = async (req, res) => {
       rentPerMeasure: Math.max(0, parseFloat(rentPerMeasure) || 0),
       rentCurrency: rentCurrency || "Kenyan Shilling [KES]",
       accountLedgerType: normalizePropertyLedgerType(accountLedgerType),
+      propertyLedgerEnabled: isPropertyGL(accountLedgerType) ? !!propertyLedgerEnabled : false,
       primaryBank,
       alternativeTaxPin,
       invoicePrefix,
@@ -717,8 +733,8 @@ export const createProperty = async (req, res) => {
       commissionPaymentMode: modeAwareAssignment.commissionPaymentMode || "percentage",
       commissionRecognitionBasis: modeAwareAssignment.commissionRecognitionBasis || "received",
       commissionTaxSettings: modeAwareAssignment.commissionTaxSettings || undefined,
-      lettingFeeMode: lettingMode ? (lettingFeeMode === "fixed" ? "fixed" : "percentage") : "percentage",
-      lettingFeeValue: lettingMode ? Math.max(0, parseFloat(lettingFeeValue) || 100) : 100,
+      lettingFeeMode: withLettingFee ? (lettingFeeMode === "fixed" ? "fixed" : "percentage") : "percentage",
+      lettingFeeValue: withLettingFee ? Math.max(0, parseFloat(lettingFeeValue) || 100) : 100,
     });
 
     const savedProperty = await property.save();
@@ -1130,9 +1146,17 @@ export const updateProperty = async (req, res, next) => {
       req.body.letManage = normalizePropertyServiceMode(req.body.letManage);
     }
 
-    // When a property is in (or is being switched to) Letting mode, enforce that
-    // tenantsPaysTo and depositHeldBy default to "landlord" — unless the caller
-    // has explicitly provided a different value in this same update payload.
+    if (req.body.accountLedgerType !== undefined) {
+      req.body.accountLedgerType = normalizePropertyLedgerType(req.body.accountLedgerType);
+    }
+    // propertyLedgerEnabled is only meaningful when accountLedgerType === "property-gl"
+    if (req.body.propertyLedgerEnabled !== undefined) {
+      const effectiveLedgerType = req.body.accountLedgerType ?? property.accountLedgerType;
+      req.body.propertyLedgerEnabled = isPropertyGL(effectiveLedgerType) ? !!req.body.propertyLedgerEnabled : false;
+    }
+
+    // Only pure Letting forces payment routing to landlord on save.
+    // Managing and Both let the caller's explicit values (or existing values) stand.
     const effectiveLetManage = req.body.letManage !== undefined
       ? req.body.letManage
       : property.letManage;
@@ -1642,13 +1666,14 @@ export const bulkImportProperties = async (req, res, next) => {
             landlords: requestedLandlords.filter((l) => l.landlordId && mongoose.Types.ObjectId.isValid(String(l.landlordId))),
           };
         }
-        const lettingMode = isLettingMode(property.letManage);
-        const resolvedTenantsPaysTo = lettingMode
+        const lettingOnly = isLettingMode(property.letManage);
+        const withLettingFeeImport = hasLettingFee(property.letManage);
+        const resolvedTenantsPaysTo = lettingOnly
           ? "landlord"
-          : (modeAwareAssignment.tenantsPaysTo || "propertyManager");
-        const resolvedDepositHeldBy = lettingMode
+          : (property.tenantsPaysTo || modeAwareAssignment.tenantsPaysTo || "propertyManager");
+        const resolvedDepositHeldBy = lettingOnly
           ? "landlord"
-          : (modeAwareAssignment.depositHeldBy || "propertyManager");
+          : (property.depositHeldBy || modeAwareAssignment.depositHeldBy || "propertyManager");
 
         const newProperty = new Property({
           propertyCode: generatedPropertyCode,
@@ -1676,8 +1701,8 @@ export const bulkImportProperties = async (req, res, next) => {
           commissionPaymentMode: modeAwareAssignment.commissionPaymentMode || "percentage",
           commissionRecognitionBasis: modeAwareAssignment.commissionRecognitionBasis || "received",
           commissionTaxSettings: modeAwareAssignment.commissionTaxSettings || undefined,
-          lettingFeeMode: lettingMode ? property.lettingFeeMode : "percentage",
-          lettingFeeValue: lettingMode ? Math.max(0, parseFloat(property.lettingFeeValue) || 100) : 100,
+          lettingFeeMode: withLettingFeeImport ? property.lettingFeeMode : "percentage",
+          lettingFeeValue: withLettingFeeImport ? Math.max(0, parseFloat(property.lettingFeeValue) || 100) : 100,
         });
 
         const savedProperty = await newProperty.save();

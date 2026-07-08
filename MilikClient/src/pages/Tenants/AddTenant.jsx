@@ -110,7 +110,8 @@ const sanitizeTenantSaveError = (error, fallback = "Failed to save tenant") => {
     error?.error ||
     fallback;
 
-  if (/E11000|duplicate key|MongoServerError|Milik\.leases|agreementNumber/i.test(String(rawMessage || ""))) {
+  // Only remap when the error is specifically about the lease agreement number index
+  if (/Milik\.leases|agreementNumber/i.test(String(rawMessage || ""))) {
     return "Tenant could not be created because the lease agreement number already exists. Please try again.";
   }
 
@@ -410,6 +411,7 @@ const AddTenant = () => {
   const [utilityOptions, setUtilityOptions] = useState([]);
   const draftStorageKey = currentCompany?._id ? `milik:new-tenant-draft:${currentCompany._id}:${currentUser?._id || currentUser?.id || currentUser?.email || "user"}` : null;
   const draftRestoredRef = useRef(false);
+  const submittingRef = useRef(false);
   const lastPropertyRef = useRef("");
   const skipNextUnitAutofillRef = useRef(false);
   const additionalUtilitiesSectionRef = useRef(null);
@@ -682,7 +684,7 @@ useEffect(() => {
     [properties, formData.property]
   );
 
-  const isLettingProperty = selectedPropertyRecord?.letManage === "Letting";
+  const isLettingProperty = ["Letting", "Both"].includes(selectedPropertyRecord?.letManage);
 
   const computedLettingFee = useMemo(() => {
     if (!isLettingProperty) return 0;
@@ -1181,10 +1183,13 @@ useEffect(() => {
       toast.error(isEditMode ? "You do not have permission to update tenants" : "You do not have permission to create tenants");
       return;
     }
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setGeneralError("");
 
     const errors = validateForm();
     if (Object.keys(errors).length > 0) {
+      submittingRef.current = false;
       toast.error("Please fix validation errors");
       return;
     }
@@ -1202,6 +1207,7 @@ useEffect(() => {
         currentUnitStatus === "reserved";
 
       if (!selectedUnitForSubmission || !isUnitAssignable) {
+        submittingRef.current = false;
         const availabilityMessage = "The selected unit is no longer available for tenant take-on. Refresh the Availability Status page and choose another unit.";
         setGeneralError(availabilityMessage);
         setFieldErrors((prev) => ({ ...prev, unit: availabilityMessage }));
@@ -1256,6 +1262,7 @@ useEffect(() => {
       setPendingInvoiceContext(nextInvoiceContext);
       setShowInvoicePrompt(true);
     } catch (err) {
+      submittingRef.current = false;
       const errorMsg = sanitizeTenantSaveError(
         err,
         `Failed to ${isEditMode ? "update" : "create"} tenant`
@@ -1511,7 +1518,7 @@ for (const request of invoiceRequests) {
               </div>
 
               {/* ── Property & Unit ── */}
-              <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+              <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
                 <div className="flex items-center gap-2.5 border-b border-slate-200 bg-slate-50 px-3 py-2">
                   <span className="flex h-7 w-7 items-center justify-center rounded bg-emerald-100 text-emerald-600"><FaBuilding size={13} /></span>
                   <div>

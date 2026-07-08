@@ -336,13 +336,14 @@ const Receipts = ({ viewMode = "tenant" }) => {
   const [receipts, setReceipts] = useState([]);
   const [recPagination, setRecPagination] = useState({ totalItems: 0, totalPages: 1, page: 1, limit: ITEMS_PER_PAGE });
 
+  const fromLedger = location.state?.fromPropertyLedger;
   const initialFilters = {
     search: "",
     tenantSearch: "",
     status: "active",
     paymentType: "all",
     tenant: tenantId || "all",
-    property: "all",
+    property: fromLedger ? (location.state?.propertyName || "all") : "all",
     unit: "all",
     ledger: "all",
     from: "",
@@ -1706,6 +1707,11 @@ const Receipts = ({ viewMode = "tenant" }) => {
         <div className="mx-auto flex h-full w-full max-w-none flex-col overflow-hidden">
           <div className="flex-none sticky top-0 z-30 mb-2 border-b border-slate-200 bg-white shadow-sm">
             <div className="filter-bar flex items-center gap-1 overflow-x-auto px-2 py-1.5">
+              {fromLedger && (
+                <button onClick={() => navigate(`/properties/${location.state.propertyId}/ledger`)} className="h-7 shrink-0 flex items-center gap-1 rounded px-2 text-xs font-semibold text-[#0B3B2E] hover:bg-[#EDF5F1]">
+                  <FaArrowLeft size={11} /> {location.state.propertyName} Ledger
+                </button>
+              )}
               <span className="shrink-0 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[9px] font-bold text-slate-700">{stats.count} Receipts</span>
               <span className="shrink-0 rounded border border-green-300 bg-green-50 px-1.5 py-0.5 text-[9px] font-bold text-green-700">Ksh {stats.total.toLocaleString()}</span>
               <span className="shrink-0 rounded border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">{stats.confirmedCount} Conf.</span>

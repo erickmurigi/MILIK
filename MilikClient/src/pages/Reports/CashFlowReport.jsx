@@ -114,8 +114,9 @@ const CashSection = ({ title, items = [], totalInflows, totalOutflows, net, acce
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const CashFlowReport = () => {
-  const currentUser = useSelector((s) => s.auth?.currentUser);
+  const currentUser  = useSelector((s) => s.auth?.currentUser);
   const currentCompany = useSelector((s) => s.company?.currentCompany);
+  const properties   = useSelector((s) => Array.isArray(s.property?.properties) ? s.property.properties : []);
   const canExport = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
 
   const businessId = useMemo(() => {
@@ -128,6 +129,14 @@ const CashFlowReport = () => {
   }, [currentCompany?._id, currentUser?.company, currentUser?.businessId]);
 
   const businessName = currentCompany?.companyName || currentUser?.company?.companyName || "Active company";
+
+  const offGLProperties = useMemo(
+    () => properties.filter((p) => {
+      const v = String(p.accountLedgerType || "").toLowerCase().trim();
+      return (v.startsWith("off") || v === "property-gl") && String(p.status || "").toLowerCase() !== "archived";
+    }),
+    [properties]
+  );
 
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState(null);
@@ -351,6 +360,19 @@ const CashFlowReport = () => {
               )}
             </div>
           </div>
+
+          {/* ── Property GL notice ──────────────────────────────────────────── */}
+          {offGLProperties.length > 0 && (
+            <div className="shrink-0 flex items-center gap-2 border-b border-purple-200 bg-purple-50 px-4 py-1.5 print:hidden">
+              <span className="text-purple-500 text-xs">⚠</span>
+              <span className="text-[11px] text-purple-700">
+                <span className="font-bold">{offGLProperties.length} {offGLProperties.length === 1 ? "property uses" : "properties use"} Property GL</span>
+                {" "}and {offGLProperties.length === 1 ? "is" : "are"} excluded from this company report:{" "}
+                {offGLProperties.map((p) => `${p.propertyCode} – ${p.propertyName}`).join(", ")}
+                {". "}View their accounts via Property Ledger on the properties list.
+              </span>
+            </div>
+          )}
 
           {/* ── KPI strip ───────────────────────────────────────────────────── */}
           <div className="shrink-0 grid grid-cols-5 divide-x divide-slate-200 border-b border-slate-200 bg-white">

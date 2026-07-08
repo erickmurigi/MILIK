@@ -17,6 +17,10 @@ import {
   resolvePropertyAccountingContext,
   resolveTenantDepositPayableAccount,
 } from "../../services/propertyAccountingService.js";
+import {
+  postPropertyLedgerEntry,
+  resolvePropertyLedgerAccounts,
+} from "../../services/propertyLedgerService.js";
 import { resolveConfiguredAccountingDefaultAccount } from "../../services/companyAccountingDefaultsService.js";
 import { buildInvoiceTaxSnapshot, getCompanyTaxConfiguration, resolveOutputVatAccount } from "../../services/taxCalculationService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
@@ -3459,8 +3463,48 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
 
   try {
     if (ledgerMode === "off_ledger") {
-      invoice.postingStatus = "not_applicable";
-      invoice.postingError = null;
+      // Property GL — active: post to the property's own isolated ledger.
+      // Property GL — not yet enabled: no posting (not_applicable).
+      if (accountingContext.isPropertyLedgerActive) {
+        try {
+          const plAccounts = await resolvePropertyLedgerAccounts(businessId);
+          const creditAccountId = normalizedCategory === "DEPOSIT_CHARGE"
+            ? plAccounts.depositsHeld
+            : normalizedCategory === "UTILITY_CHARGE"   ? plAccounts.utilityIncome
+            : normalizedCategory === "SERVICE_CHARGE" || normalizedCategory === "LEASE_FEE"
+                                                         ? plAccounts.serviceCharge
+            : normalizedCategory === "LATE_PENALTY_CHARGE" ? plAccounts.penaltyIncome
+            : plAccounts.rentIncome;
+
+          if (plAccounts.receivables && creditAccountId) {
+            await postPropertyLedgerEntry({
+              businessId,
+              propertyId: accountingContext.propertyId,
+              debitAccountId:  plAccounts.receivables,
+              creditAccountId,
+              amount:    Math.abs(Number(invoice.amount || 0)),
+              date:      invoice.invoiceDate,
+              narration: `${normalizedCategory} — ${invoice.invoiceNumber || ""}`.trim(),
+              reference: invoice.invoiceNumber || "",
+              category:  normalizedCategory.toLowerCase(),
+              tenantId:  invoice.tenant,
+              unitId:    invoice.unit,
+              invoiceId: invoice._id,
+              postedBy:  actorUserId,
+            });
+            invoice.postingStatus = "posted";
+          } else {
+            invoice.postingStatus = "not_applicable";
+            invoice.postingError  = "Property ledger accounts not configured";
+          }
+        } catch (plErr) {
+          invoice.postingStatus = "not_applicable";
+          invoice.postingError  = `Property ledger posting failed: ${plErr.message}`;
+        }
+      } else {
+        invoice.postingStatus = "not_applicable";
+      }
+      invoice.postingError = invoice.postingStatus === "posted" ? null : invoice.postingError;
       await invoice.save();
 
       if (deferPostProcessing) {

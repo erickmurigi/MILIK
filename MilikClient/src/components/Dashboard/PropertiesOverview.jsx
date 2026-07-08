@@ -1,373 +1,246 @@
 import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
 import {
-  selectCurrentUser,
-  selectCurrentCompany,
-  selectAllProperties,
-  selectAllUnits,
-  selectAllTenants,
-  selectAllMaintenances,
-  selectAllRentPayments,
+  selectAllProperties, selectAllUnits,
 } from '../../redux/selectors';
+import {
+  normalizeId, normalizeText,
+  classifyUnit,
+  fmtKES,
+} from './dashboardUtils';
 
-const normalizeArray = (value) => {
-  if (Array.isArray(value)) return value;
-  if (Array.isArray(value?.data)) return value.data;
-  if (Array.isArray(value?.items)) return value.items;
-  if (Array.isArray(value?.rentPayments)) return value.rentPayments;
-  return [];
-};
+// ─── Health colour ────────────────────────────────────────────────────────────
+const health = (pct) => pct >= 80 ? '#0B3B2E' : pct >= 50 ? '#C8511A' : '#DC2626';
 
-const normalizeId = (value) => {
-  if (!value) return '';
-  if (typeof value === 'string') return value;
-  return value?._id || value?.id || '';
-};
+// ─── Occupancy SVG ring ───────────────────────────────────────────────────────
+const OccupancyRing = React.memo(({ pct }) => {
+  const r    = 18;
+  const cx   = 22;
+  const circ = 2 * Math.PI * r;
+  const col  = health(pct);
+  return (
+    <svg width={44} height={44} className="shrink-0">
+      <circle cx={cx} cy={cx} r={r} fill="none" stroke="#E2E8F0" strokeWidth={4} />
+      <circle
+        cx={cx} cy={cx} r={r} fill="none"
+        stroke={col} strokeWidth={4}
+        strokeDasharray={`${circ * Math.min(pct, 100) / 100} ${circ}`}
+        strokeLinecap="round"
+        transform={`rotate(-90 ${cx} ${cx})`}
+      />
+      <text x={cx} y={cx + 4} textAnchor="middle" fontSize={9} fontWeight="800" fill={col}>
+        {Math.round(pct)}%
+      </text>
+    </svg>
+  );
+});
 
-const normalizeText = (value) => String(value || '').trim().toLowerCase();
-const parseDate = (value) => {
-  const date = value ? new Date(value) : null;
-  return date && !Number.isNaN(date.getTime()) ? date : null;
-};
-const getInvoiceRecognitionDate = (invoice) => parseDate(invoice?.bookingDate || invoice?.invoiceDate || invoice?.createdAt);
-const isOpenMaintenanceStatus = (status) => !['completed', 'cancelled', 'resolved', 'closed'].includes(normalizeText(status));
-const isOperationalTenant = (tenant) => !['inactive', 'terminated', 'evicted', 'moved_out'].includes(normalizeText(tenant?.status));
+// ─── Property tile ────────────────────────────────────────────────────────────
+const PropertyTile = React.memo(({ property, onClick }) => {
+  const collColor = health(property.collectionRate);
+  const invoiced  = property.expectedRevenue > 0;
 
-const PropertiesOverview = ({ darkMode, invoices = [] }) => {
-  const navigate = useNavigate();
-  const currentCompany = useSelector(selectCurrentCompany);
-  const currentUser = useSelector(selectCurrentUser);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex w-44 shrink-0 flex-col gap-2 border border-slate-200 bg-white p-3 text-left transition-all hover:border-[#0B3B2E] hover:shadow-sm"
+    >
+      {/* Ring + name */}
+      <div className="flex items-center gap-2">
+        <OccupancyRing pct={property.occupancyRate} />
+        <div className="min-w-0">
+          <p className="truncate text-[10px] font-black leading-tight text-slate-800" title={property.name}>
+            {property.name}
+          </p>
+          <p className="text-[9px] font-semibold text-slate-400">{property.code}</p>
+          <p className="mt-0.5 text-[9px] font-bold text-slate-500">
+            {property.occupiedUnits}/{property.totalUnits} units
+          </p>
+        </div>
+      </div>
+
+      {/* Collection — hidden when not yet invoiced this month */}
+      {invoiced ? (
+        <div>
+          <div className="mb-0.5 flex items-center justify-between">
+            <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Collection</span>
+            <span className="text-[9px] font-black" style={{ color: collColor }}>
+              {Math.round(property.collectionRate)}%
+            </span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full"
+              style={{ width: `${Math.min(property.collectionRate, 100)}%`, backgroundColor: collColor }}
+            />
+          </div>
+          <div className="mt-1 flex items-center justify-between">
+            <span className="text-[9px] text-slate-400">KES {fmtKES(property.monthlyCollection, false)}</span>
+            <span className="text-[9px] text-slate-300">/ {fmtKES(property.expectedRevenue, false)}</span>
+          </div>
+        </div>
+      ) : (
+        <p className="text-[9px] italic text-slate-400">Not invoiced this month</p>
+      )}
+
+      {/* Vacancy badge */}
+      {property.vacantUnits > 0 ? (
+        <div className="rounded bg-amber-50 px-1.5 py-0.5">
+          <span className="text-[9px] font-black text-amber-700">{property.vacantUnits} vacant</span>
+        </div>
+      ) : (
+        <div className="rounded bg-emerald-50 px-1.5 py-0.5">
+          <span className="text-[9px] font-black text-emerald-700">Fully occupied</span>
+        </div>
+      )}
+    </button>
+  );
+});
+
+// ─── Summary pane (left anchor) ───────────────────────────────────────────────
+const SummaryPane = React.memo(({ occupancy, collection, total, navigate }) => (
+  <div className="flex w-36 shrink-0 flex-col justify-between gap-3 border-r border-slate-200 bg-[#0B3B2E] p-3">
+    <div>
+      <p className="text-[9px] font-black uppercase tracking-widest text-white/50">Portfolio</p>
+      <p className="mt-0.5 text-[10px] font-black text-white">{total} Propert{total === 1 ? 'y' : 'ies'}</p>
+    </div>
+    <div className="space-y-3">
+      {[
+        { label: 'Occupancy',  value: occupancy,  barCls: 'bg-white/80' },
+        { label: 'Collection', value: collection, barCls: 'bg-[#C8511A]' },
+      ].map(({ label, value, barCls }) => (
+        <div key={label}>
+          <p className="text-[9px] font-bold uppercase tracking-widest text-white/50">{label}</p>
+          <p className="mt-0.5 text-2xl font-black leading-none text-white">{value.toFixed(1)}%</p>
+          <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/20">
+            <div className={`h-full rounded-full ${barCls}`} style={{ width: `${Math.min(value, 100)}%` }} />
+          </div>
+        </div>
+      ))}
+    </div>
+    <button
+      type="button"
+      onClick={() => navigate('/properties')}
+      className="text-left text-[9px] font-extrabold uppercase tracking-widest text-white/60 transition hover:text-white"
+    >
+      View all →
+    </button>
+  </div>
+));
+
+// ─── Main component ───────────────────────────────────────────────────────────
+// Collection data comes from summaryData.propertyStats (server-aggregated) — no invoice iteration.
+// Occupancy rings use units/tenants from Redux (loaded in Phase 2).
+// tenantsByUnit, maintByUnit, today are computed ONCE in Dashboard.jsx — no duplicate Map-building.
+const PropertiesOverview = ({
+  summaryData   = {},
+  tenantsByUnit = new Map(),
+  maintByUnit   = new Map(),
+  today         = new Date(),
+}) => {
+  const navigate   = useNavigate();
   const properties = useSelector(selectAllProperties);
-  const units = useSelector(selectAllUnits);
-  const tenants = useSelector(selectAllTenants);
-  const maintenances = useSelector(selectAllMaintenances);
-  const rentPayments = useSelector(selectAllRentPayments);
-  const propertiesLoading = useSelector((state) => state.property?.loading || state.property?.isFetching);
+  const units      = useSelector(selectAllUnits);
+  const loading    = useSelector((s) => s.property?.loading || s.property?.isFetching);
 
-  const activeCompanyContext = currentCompany || currentUser?.company || null;
-  const isLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);
+  const now = new Date();
+
+  // Server-computed per-property collection stats — O(1) lookup by propertyId
+  const propStatsMap = useMemo(() => {
+    const map = new Map();
+    (summaryData.propertyStats || []).forEach((ps) => map.set(String(ps.propertyId), ps));
+    return map;
+  }, [summaryData.propertyStats]);
 
   const activeProperties = useMemo(
     () => properties.filter((p) => !p?.status || normalizeText(p.status) === 'active'),
-    [properties]
+    [properties],
   );
 
-  const now = new Date();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
-
-  const unitMap = useMemo(() => new Map(units.map((unit) => [String(unit?._id || ''), unit])), [units]);
-
-  const tenantAssignmentsByUnit = useMemo(() => {
-    const byUnit = new Map();
-    tenants.forEach((tenant) => {
-      if (!isOperationalTenant(tenant)) return;
-      const unitIds = [normalizeId(tenant?.unit), ...(Array.isArray(tenant?.additionalUnits) ? tenant.additionalUnits.map(normalizeId) : [])].filter(Boolean);
-      unitIds.forEach((unitId) => {
-        if (!byUnit.has(unitId)) byUnit.set(unitId, []);
-        byUnit.get(unitId).push(tenant);
-      });
-    });
-    return byUnit;
-  }, [tenants]);
-
-  const maintenanceAssignmentsByUnit = useMemo(() => {
-    const byUnit = new Map();
-    maintenances.forEach((item) => {
-      if (!isOpenMaintenanceStatus(item?.status)) return;
-      const unitId = normalizeId(item?.unit);
-      if (!unitId) return;
-      if (!byUnit.has(unitId)) byUnit.set(unitId, []);
-      byUnit.get(unitId).push(item);
-    });
-    return byUnit;
-  }, [maintenances]);
-
-  const isActiveInvoice = (invoice) => !['cancelled', 'reversed'].includes(normalizeText(invoice?.status));
-  const isActivePayment = (payment) => {
-    const postingStatus = normalizeText(payment?.postingStatus);
-    return (
-      payment?.isConfirmed === true &&
-      !payment?.reversalOf &&
-      !payment?.isReversed &&
-      !payment?.isCancelled &&
-      postingStatus !== 'reversed'
-    );
-  };
-  // Gross amount (includes tax) — used for collections comparison
-  const amountFromInvoice = (invoice) => Number(invoice?.adjustedAmount ?? invoice?.netAmount ?? invoice?.amount ?? 0);
-  // Net amount (pre-tax) — used to compare booked rent against tenant.rent which is also pre-tax
-  const netAmountFromInvoice = (invoice) => {
-    const gross = Number(invoice?.adjustedAmount ?? invoice?.amount ?? 0);
-    const tax = Number(invoice?.taxSnapshot?.taxAmount ?? 0);
-    return Math.max(0, gross - tax);
-  };
-
-  const formatMoney = (value) => {
-    const numeric = Number(value || 0);
-    if (numeric >= 1000000) return `KSh ${(numeric / 1000000).toFixed(1)}M`;
-    if (numeric >= 1000) return `KSh ${(numeric / 1000).toFixed(1)}K`;
-    return `KSh ${Math.round(numeric).toLocaleString()}`;
-  };
-
   const propertiesWithStats = useMemo(() => {
-    const propertyStats = activeProperties.map((property) => {
-      const propertyId = String(property._id || '');
-      const propertyUnits = units.filter((unit) => String(normalizeId(unit.property) || '') === propertyId);
-      const unitIds = new Set(propertyUnits.map((unit) => String(unit._id)));
+    return activeProperties.map((property) => {
+      const pid    = String(property._id || '');
+      const pUnits = units.filter((u) => String(normalizeId(u.property) || '') === pid);
 
-      const availability = propertyUnits.reduce(
-        (summary, unit) => {
-          const unitId = normalizeId(unit?._id);
-          const currentTenant = unit?.currentTenant || (tenantAssignmentsByUnit.get(unitId) || [])[0] || null;
-          const maintenanceItems = maintenanceAssignmentsByUnit.get(unitId) || [];
-          const rawStatus = normalizeText(unit?.status);
-          const moveOutDate = parseDate(currentTenant?.moveOutDate || currentTenant?.terminationDate || currentTenant?.noticeDate);
-          const hasFutureMoveOut = Boolean(moveOutDate && moveOutDate >= now);
-          const hasOccupant = Boolean(
-            currentTenant || rawStatus === 'occupied' || unit?.isVacant === false || normalizeText(unit?.tenantName) !== ''
-          );
-
-          let status = 'vacant';
-          if (['off_market', 'inactive', 'archived', 'disabled'].includes(rawStatus)) {
-            status = 'off_market';
-          } else if (['maintenance', 'under_maintenance'].includes(rawStatus) || maintenanceItems.length > 0) {
-            status = 'under_maintenance';
-          } else if (rawStatus === 'reserved') {
-            status = 'reserved';
-          } else if (hasFutureMoveOut) {
-            status = 'notice_given';
-          } else if (hasOccupant) {
-            status = 'occupied';
-          }
-
-          if (status === 'occupied' || status === 'notice_given') summary.occupied += 1;
-          if (status === 'vacant') summary.vacant += 1;
-          return summary;
-        },
-        { occupied: 0, vacant: 0 }
-      );
-
-      const totalUnits = propertyUnits.length;
-      const occupancyRate = totalUnits > 0 ? (availability.occupied / totalUnits) * 100 : 0;
-
-      const periodInvoices = invoices.filter((invoice) => {
-        if (!isActiveInvoice(invoice)) return false;
-        if (!['RENT_CHARGE', 'UTILITY_CHARGE'].includes(String(invoice?.category || '').toUpperCase())) return false;
-        const invoicePropertyId = String(normalizeId(invoice?.property) || '');
-        if (invoicePropertyId !== propertyId) return false;
-        const recognitionDate = getInvoiceRecognitionDate(invoice);
-        return Boolean(recognitionDate && recognitionDate.getMonth() === currentMonth && recognitionDate.getFullYear() === currentYear);
+      // Occupancy — uses pre-built Maps from Dashboard (no re-iteration)
+      let occupied = 0, vacant = 0;
+      pUnits.forEach((unit) => {
+        const status = classifyUnit(unit, tenantsByUnit, maintByUnit, today);
+        if (status === 'off_market' || status === 'maintenance' || status === 'reserved') return;
+        if (status === 'occupied') { occupied++; } else { vacant++; }
       });
 
-      const invoicedThisMonth = periodInvoices.reduce((sum, invoice) => sum + amountFromInvoice(invoice), 0);
-      const bookedRentThisMonth = periodInvoices
-        .filter((invoice) => String(invoice?.category || '').toUpperCase() === 'RENT_CHARGE')
-        .reduce((sum, invoice) => sum + netAmountFromInvoice(invoice), 0);
+      // Collection — from server-aggregated stats (no invoice/payment iteration)
+      const ps = propStatsMap.get(pid) || { expectedThisMonth: 0, collectedThisMonth: 0 };
+      const expectedRevenue   = ps.expectedThisMonth;
+      const monthlyCollection = ps.collectedThisMonth;
+      const collectionRate    = expectedRevenue > 0 ? (monthlyCollection / expectedRevenue) * 100 : 0;
 
-      const expectedCollections = tenants
-        .filter((tenant) => isOperationalTenant(tenant))
-        .reduce((sum, tenant) => {
-          const primaryUnitId = String(normalizeId(tenant?.unit) || '');
-          const additionalUnitIds = Array.isArray(tenant?.additionalUnits)
-            ? tenant.additionalUnits.map((item) => String(normalizeId(item) || '')).filter(Boolean)
-            : [];
-
-          if (primaryUnitId && unitIds.has(primaryUnitId)) {
-            return sum + Number(tenant?.rent || unitMap.get(primaryUnitId)?.rent || 0);
-          }
-
-          const additionalPropertyRent = additionalUnitIds.reduce((unitSum, additionalUnitId) => {
-            if (!unitIds.has(additionalUnitId)) return unitSum;
-            return unitSum + Number(unitMap.get(additionalUnitId)?.rent || 0);
-          }, 0);
-
-          return sum + additionalPropertyRent;
-        }, 0);
-
-      // Build tenant ID set for this property as a fallback when payment.unit is missing
-      const propertyTenantIds = new Set(
-        tenants
-          .filter((t) => {
-            const tUnitId = String(normalizeId(t?.unit) || '');
-            const additionalIds = Array.isArray(t?.additionalUnits)
-              ? t.additionalUnits.map((u) => String(normalizeId(u) || '')).filter(Boolean)
-              : [];
-            return (tUnitId && unitIds.has(tUnitId)) || additionalIds.some((id) => unitIds.has(id));
-          })
-          .map((t) => String(normalizeId(t?._id) || ''))
-          .filter(Boolean)
-      );
-
-      const monthlyCollectionRaw = rentPayments
-        .filter((payment) => {
-          const paymentDate = parseDate(payment?.paymentDate || payment?.createdAt);
-          if (!paymentDate) return false;
-          if (paymentDate.getMonth() !== currentMonth || paymentDate.getFullYear() !== currentYear) return false;
-          if (!isActivePayment(payment)) return false;
-          const unitId = String(normalizeId(payment?.unit) || '');
-          const tenantId = String(normalizeId(payment?.tenant) || '');
-          return (unitId && unitIds.has(unitId)) || (tenantId && propertyTenantIds.has(tenantId));
-        })
-        .reduce((sum, payment) => sum + Math.abs(Number(payment?.amount || 0)), 0);
-
-      const monthlyCollection = invoicedThisMonth > 0 ? monthlyCollectionRaw : 0;
-      const collectionRate = invoicedThisMonth > 0 ? (monthlyCollection / invoicedThisMonth) * 100 : 0;
-      const invoicedStatus = invoicedThisMonth > 0 ? 'Invoiced' : 'Not invoiced';
-      const expectedBookingRate = expectedCollections > 0 ? (bookedRentThisMonth / expectedCollections) * 100 : 0;
-      const expectedBookingStatus =
-        expectedCollections <= 0
-          ? 'No expected rent'
-          : bookedRentThisMonth + 0.009 >= expectedCollections
-          ? 'Fully booked'
-          : 'Booking gap';
+      const totalUnits    = pUnits.length;
+      const occupancyRate = totalUnits > 0 ? (occupied / totalUnits) * 100 : 0;
 
       return {
-        id: propertyId,
-        name: property.propertyName || property.name || 'Unnamed Property',
-        code: property.propertyCode || '---',
-        totalUnits,
-        occupiedUnits: availability.occupied,
-        vacantUnits: availability.vacant,
-        occupancyRate,
-        expectedRevenue: invoicedThisMonth,
-        expectedCollections,
-        bookedRentThisMonth,
-        expectedBookingRate,
-        expectedBookingStatus,
-        monthlyCollection,
-        collectionRate,
-        invoicedStatus,
+        id:           pid,
+        name:         property.propertyName || property.name || 'Unnamed',
+        code:         property.propertyCode || '---',
+        totalUnits, occupiedUnits: occupied, vacantUnits: vacant,
+        occupancyRate, expectedRevenue, monthlyCollection, collectionRate,
       };
-    });
+    }).sort((a, b) => b.occupancyRate - a.occupancyRate);
+  }, [activeProperties, units, propStatsMap, tenantsByUnit, maintByUnit, today]);
 
-    return propertyStats.sort((a, b) => b.occupancyRate - a.occupancyRate);
-  }, [activeProperties, invoices, units, tenants, rentPayments, currentMonth, currentYear, unitMap, maintenances, tenantAssignmentsByUnit, maintenanceAssignmentsByUnit, now]);
-
-  const portfolioOccupancy = useMemo(() => {
-    const totalUnits = propertiesWithStats.reduce((sum, item) => sum + item.totalUnits, 0);
-    const occupiedUnits = propertiesWithStats.reduce((sum, item) => sum + item.occupiedUnits, 0);
-    return totalUnits > 0 ? (occupiedUnits / totalUnits) * 100 : 0;
-  }, [propertiesWithStats]);
-
+  // Portfolio-level summary — occupancy from server, collection from propertyStats
+  const portfolioOccupancy = Number(summaryData?.occupancyRate || 0);
   const portfolioCollection = useMemo(() => {
-    const expectedRevenue = propertiesWithStats.reduce((sum, item) => sum + item.expectedRevenue, 0);
-    const monthlyCollection = propertiesWithStats.reduce((sum, item) => sum + item.monthlyCollection, 0);
-    return expectedRevenue > 0 ? (monthlyCollection / expectedRevenue) * 100 : 0;
-  }, [propertiesWithStats]);
+    const stats = summaryData.propertyStats || [];
+    const exp = stats.reduce((s, ps) => s + ps.expectedThisMonth, 0);
+    const col = stats.reduce((s, ps) => s + ps.collectedThisMonth, 0);
+    return exp > 0 ? (col / exp) * 100 : 0;
+  }, [summaryData.propertyStats]);
+
+  if (loading && propertiesWithStats.length === 0) {
+    return (
+      <div className="flex h-32 items-center justify-center border border-slate-200 bg-white">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#0B3B2E] border-t-transparent" />
+      </div>
+    );
+  }
 
   return (
-    <div className={`dashboard-panel dashboard-panel-compact flex flex-col h-full overflow-hidden rounded-xl ${darkMode ? 'bg-white/95' : 'bg-white'} shadow-md border ${darkMode ? 'border-gray-700' : 'border-gray-100'} p-2`}>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div>
-          <h2 className={`text-xs font-extrabold uppercase tracking-tight ${darkMode ? 'text-gray-900' : 'text-[#1f4a35]'}`}>
-            Portfolio Overview
-          </h2>
-          <p className={`mt-1 text-[11px] font-medium ${darkMode ? 'text-gray-500' : 'text-gray-600'}`}>
-            Booking-date aware property billing, occupancy and collection snapshot across your portfolio.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => navigate('/properties', { state: { tabTitle: isLandlordMode ? 'My Properties' : 'Properties' } })}
-          className="text-xs font-bold text-[#31694E] hover:text-[#E85C0D] transition-colors uppercase tracking-wide"
-        >
-          View portfolio &gt;
-        </button>
+    <div className="overflow-hidden border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5">
+        <h2 className="text-[10px] font-black uppercase tracking-widest text-[#0B3B2E]">Portfolio Pulse</h2>
+        <span className="text-[10px] font-semibold text-slate-400">
+          {now.toLocaleString('en-KE', { month: 'long', year: 'numeric' })} · {propertiesWithStats.length} propert{propertiesWithStats.length === 1 ? 'y' : 'ies'}
+        </span>
       </div>
-
-      <div className="mb-2 grid grid-cols-2 gap-2">
-        <div className={`rounded-lg border p-2 ${darkMode ? 'border-gray-700 bg-gray-50' : 'border-[#dce9e1] bg-[#fbfdfc]'}`}>
-          <div className={`text-[10px] font-extrabold uppercase tracking-wide ${darkMode ? 'text-gray-500' : 'text-[#4a6b5e]'}`}>Portfolio occupancy</div>
-          <div className={`mt-1 text-base font-extrabold ${darkMode ? 'text-gray-900' : 'text-slate-900'}`}>{portfolioOccupancy.toFixed(1)}%</div>
-        </div>
-        <div className={`rounded-lg border p-2 ${darkMode ? 'border-gray-700 bg-gray-50' : 'border-[#dce9e1] bg-[#fbfdfc]'}`}>
-          <div className={`text-[10px] font-extrabold uppercase tracking-wide ${darkMode ? 'text-gray-500' : 'text-[#4a6b5e]'}`}>Collection pace</div>
-          <div className={`mt-1 text-base font-extrabold ${darkMode ? 'text-gray-900' : 'text-slate-900'}`}>{portfolioCollection.toFixed(1)}%</div>
-        </div>
-      </div>
-
-      <div className="relative flex-1 min-h-0">
-      <div className="absolute inset-0 overflow-y-auto space-y-2 pr-1">
+      <div className="flex overflow-x-auto">
+        <SummaryPane
+          occupancy={portfolioOccupancy}
+          collection={portfolioCollection}
+          total={propertiesWithStats.length}
+          navigate={navigate}
+        />
         {propertiesWithStats.length === 0 ? (
-          <div className={`p-3 rounded-lg border text-center ${
-            darkMode
-              ? 'bg-gray-50 border-gray-700 text-gray-500'
-              : 'bg-gray-50/80 border-gray-200 text-gray-500'
-          }`}>
-            {propertiesLoading ? 'Loading properties...' : 'No properties found'}
+          <div className="flex flex-1 items-center justify-center py-10 text-xs font-semibold text-slate-400">
+            No active properties found.
           </div>
         ) : (
-          propertiesWithStats.map((property) => (
-            <div
-              key={property.id}
-              className={`rounded-lg border p-2 ${
-                darkMode
-                  ? 'border-gray-700 bg-gray-50'
-                  : 'border-[#dce9e1] bg-white'
-              } hover:shadow-sm transition-all`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h4 className={`font-extrabold text-sm truncate ${darkMode ? 'text-gray-900' : 'text-slate-900'}`} title={property.name}>
-                    {property.name}
-                  </h4>
-                  <div className="mt-1 flex items-center gap-2 text-xs">
-                    <span className={`${darkMode ? 'text-gray-500' : 'text-slate-500'}`}>{property.code}</span>
-                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.14em] text-emerald-700">
-                      {property.invoicedStatus}
-                    </span>
-                  </div>
-                </div>
-                <div className="text-right shrink-0">
-                  <div className={`text-base font-extrabold ${darkMode ? 'text-gray-900' : 'text-[#1f4a35]'}`}>{property.occupancyRate.toFixed(0)}%</div>
-                  <div className={`text-[10px] font-extrabold uppercase tracking-wide ${darkMode ? 'text-gray-500' : 'text-[#4a6b5e]'}`}>Occupied</div>
-                </div>
-              </div>
-
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <div className="rounded-lg border border-[#dce9e1] bg-[#fbfdfc] p-2">
-                  <div className="text-[10px] font-extrabold uppercase tracking-wide text-[#4a6b5e]">Units</div>
-                  <div className="mt-1 text-sm font-bold text-slate-900">{property.totalUnits}</div>
-                  <div className="mt-1 text-[11px] text-slate-500">Occupied {property.occupiedUnits}</div>
-                </div>
-                <div className="rounded-lg border border-[#f7d3c1] bg-[#fff7f2] p-2">
-                  <div className="text-[10px] font-extrabold uppercase tracking-wide text-[#c44b0b]">Vacant</div>
-                  <div className="mt-1 text-sm font-bold text-[#c44b0b]">{property.vacantUnits}</div>
-                  <div className="mt-1 text-[11px] text-slate-500">Availability ready</div>
-                </div>
-              </div>
-
-              <div className="mt-2 space-y-1.5">
-                <div>
-                  <div className="flex items-center justify-between text-xs font-semibold text-slate-600 mb-1">
-                    <span>Collections this month</span>
-                    <span>{formatMoney(property.monthlyCollection)} / {formatMoney(property.expectedRevenue)}</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
-                    <div className="h-full rounded-full bg-[#E85C0D]" style={{ width: `${Math.min(property.collectionRate, 100)}%` }} />
-                  </div>
-                </div>
-                <div>
-                  <div className="flex items-center justify-between text-xs font-semibold text-slate-600 mb-1">
-                    <span>Base rent invoiced <span className="font-normal text-slate-400">(excl. VAT)</span></span>
-                    <span>{formatMoney(property.bookedRentThisMonth)} / {formatMoney(property.expectedCollections)}</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
-                    <div className="h-full rounded-full bg-[#31694E]" style={{ width: `${Math.min(property.expectedBookingRate, 100)}%` }} />
-                  </div>
-                  <div className="mt-1 text-[11px] font-semibold text-[#31694E] uppercase tracking-[0.14em]">{property.expectedBookingStatus}</div>
-                </div>
-              </div>
-            </div>
-          ))
+          <div className="flex divide-x divide-slate-100">
+            {propertiesWithStats.map((property) => (
+              <PropertyTile
+                key={property.id}
+                property={property}
+                onClick={() => navigate('/tenants', { state: { propertyFilter: property.name } })}
+              />
+            ))}
+          </div>
         )}
-      </div>
       </div>
     </div>
   );
 };
 
-export default PropertiesOverview;
+export default React.memo(PropertiesOverview);

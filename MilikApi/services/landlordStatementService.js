@@ -1240,7 +1240,7 @@ export const generateLandlordStatement = async ({
   if (!property) throw new Error("Property not found");
   if (String(property?.letManage || "").trim().toLowerCase() === "letting") {
     const lettingErr = new Error(
-      "Landlord statements are not available for letting-only properties. Convert the property to Managing before generating recurring landlord statements."
+      "Landlord statements are not available for Letting-only properties. Switch the property to Managing or Both mode to generate landlord statements."
     );
     lettingErr.statusCode = 422;
     throw lettingErr;

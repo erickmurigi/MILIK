@@ -9,7 +9,7 @@ import {
   selectAllLeases,
   selectTenantPagination,
 } from "../../redux/selectors";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import {
   FaPlus,
@@ -667,8 +667,9 @@ function RemoveUtilityModal({ tenants, allUnits, dispatch, onClose, onSaved }) {
 }
 
 const Tenants = ({ listingMode = "active" }) => {
-  const dispatch = useDispatch();
-  const navigate = useNavigate();
+  const dispatch  = useDispatch();
+  const navigate  = useNavigate();
+  const location  = useLocation();
 
   // Redux state
   const currentCompany = useSelector(selectCurrentCompany);
@@ -750,6 +751,15 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
     tenantName: "",
     tenantCode: "",
   });
+
+  // Pre-select property filter when navigated from Portfolio Pulse (or similar)
+  useEffect(() => {
+    const pf = location.state?.propertyFilter;
+    if (pf) {
+      setDraftFilters((f) => ({ ...f, property: pf }));
+      setAppliedFilters((f) => ({ ...f, property: pf }));
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ===== EFFECTS =====
   const propertyIdByName = useMemo(() => {

@@ -26,7 +26,14 @@ const VALID_PAYMENT_METHODS = ["bank_transfer", "mobile_money", "cash", "check",
 
 const normalizePropertyServiceMode = (value = "Managing") => {
   const normalized = String(value || "").trim().toLowerCase();
-  return normalized === "letting" ? "Letting" : "Managing";
+  if (normalized === "letting") return "Letting";
+  if (normalized === "both") return "Both";
+  return "Managing";
+};
+
+const hasLettingFee = (mode) => {
+  const v = String(mode || "").trim().toLowerCase();
+  return v === "letting" || v === "both";
 };
 
 const tenantLabel = (tenant = {}) => tenant?.name || tenant?.tenantCode || String(tenant?._id || "tenant");
@@ -736,11 +743,12 @@ export const createTenant = async (req, res, next) => {
 
     const unit = unitDocs.find((item) => String(item._id) === requestedUnits.primary) || null;
     const propertyServiceMode = normalizePropertyServiceMode(unit?.property?.letManage);
-    const isPropertyLetting = propertyServiceMode === "Letting";
+    const isPropertyLettingOnly = propertyServiceMode === "Letting";
+    const isPropertyWithLettingFee = hasLettingFee(propertyServiceMode);
 
-    // In Letting mode the landlord holds deposits; use "landlord" as the fallback
-    // when the caller has not explicitly specified a depositHeldBy value.
-    const effectivePropertyDepositHolder = isPropertyLetting
+    // Only pure Letting forces deposit to landlord — the agent steps away after placement.
+    // Both and Managing use the property's own depositHeldBy setting.
+    const effectivePropertyDepositHolder = isPropertyLettingOnly
       ? "landlord"
       : (unit?.property?.depositHeldBy || "propertyManager");
 
@@ -821,7 +829,7 @@ export const createTenant = async (req, res, next) => {
     const assignedRent = calculateTenantAssignedRent(unitDocs, req.body.rent || unit.rent || 0);
 
     const computedLettingFeeAmount = (() => {
-      if (!isPropertyLetting) return 0;
+      if (!isPropertyWithLettingFee) return 0;
       const feeMode = unit?.property?.lettingFeeMode || "percentage";
       const feeValue = Math.max(0, parseFloat(unit?.property?.lettingFeeValue ?? 100) || 0);
       if (feeMode === "fixed") return feeValue;
@@ -2169,8 +2177,9 @@ export const bulkImportTenants = async (req, res, next) => {
         }
 
         const propertyServiceMode = normalizePropertyServiceMode(primaryUnitDoc?.property?.letManage);
-        const isPropertyLetting = propertyServiceMode === "Letting";
-        const propertyDepositHeldBy = isPropertyLetting
+        const isPropertyLettingOnly = propertyServiceMode === "Letting";
+        const isPropertyWithLettingFee = hasLettingFee(propertyServiceMode);
+        const propertyDepositHeldBy = isPropertyLettingOnly
           ? "landlord"
           : (primaryUnitDoc?.property?.depositHeldBy || "propertyManager");
         const hasExplicitRent = record.rent !== undefined && record.rent !== null && String(record.rent).trim() !== "";
@@ -2184,7 +2193,7 @@ export const bulkImportTenants = async (req, res, next) => {
         );
         const assignedRent = requestedRent > 0 ? requestedRent : computedRent;
         const computedLettingFeeAmount = (() => {
-          if (!isPropertyLetting) return 0;
+          if (!isPropertyWithLettingFee) return 0;
           const feeMode = primaryUnitDoc?.property?.lettingFeeMode || "percentage";
           const feeValue = Math.max(0, parseFloat(primaryUnitDoc?.property?.lettingFeeValue ?? 100) || 0);
           if (feeMode === "fixed") return feeValue;

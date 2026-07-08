@@ -36,7 +36,14 @@ const MILIK_ORANGE_BORDER_FOCUS = "focus:border-orange-700";
 
 const normalizePropertyServiceMode = (value = "Managing") => {
   const normalized = String(value || "").trim().toLowerCase();
-  return normalized === "letting" ? "Letting" : "Managing";
+  if (normalized === "letting") return "Letting";
+  if (normalized === "both") return "Both";
+  return "Managing";
+};
+
+const hasLettingFee = (mode) => {
+  const v = String(mode || "").trim().toLowerCase();
+  return v === "letting" || v === "both";
 };
 
 function Modal({ open, title, onClose, children, maxWidthClass = "max-w-lg" }) {
@@ -254,7 +261,8 @@ const EditProperty = () => {
       unitMeasurement: "Sq Ft",
       rentPerMeasure: "",
       rentCurrency: "Kenyan Shilling [KES]",
-      accountLedgerType: "Property Control Ledger In GL",
+      accountLedgerType: "in-gl",
+      propertyLedgerEnabled: false,
       primaryBank: "",
       alternativeTaxPin: "",
       invoicePrefix: "",
@@ -498,15 +506,15 @@ const EditProperty = () => {
       const next = { ...prev, [name]: fieldValue };
       // Keep tenantsPaysTo and depositHeldBy in sync with the selected service mode.
       if (name === "letManage") {
-        if (String(fieldValue).toLowerCase() === "letting") {
+        const v = String(fieldValue).toLowerCase();
+        if (v === "letting") {
           next.tenantsPaysTo = "landlord";
           next.depositHeldBy = "landlord";
-        } else {
-          next.tenantsPaysTo = "propertyManager";
-          next.depositHeldBy = "propertyManager";
+        } else if (v === "managing") {
           next.lettingFeeMode = "percentage";
           next.lettingFeeValue = 100;
         }
+        // "Both": leave tenantsPaysTo / depositHeldBy unchanged so user keeps their settings
       }
       return next;
     });
@@ -873,7 +881,7 @@ const EditProperty = () => {
               label="Let/Manage"
               required
               placeholder="Select..."
-              items={["Managing", "Letting"]}
+              items={["Managing", "Letting", "Both"]}
               value={formData.letManage}
               onChange={(val) => handleChange({ target: { name: "letManage", value: val } })}
               getLabel={(x) => x}
@@ -881,12 +889,17 @@ const EditProperty = () => {
             />
             {formData.letManage === "Letting" && (
               <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                <span className="font-bold">Letting mode:</span> Tenant payments go directly to the landlord. Deposit is held by the landlord. Landlord disbursement statements and commission processing are not available for letting properties.
+                <span className="font-bold">Letting only:</span> Tenant pays rent directly to the landlord. Deposit held by landlord. A one-time letting fee is charged when placing a tenant. Landlord statements and disbursements are not available.
+              </div>
+            )}
+            {formData.letManage === "Both" && (
+              <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                <span className="font-bold">Let &amp; Manage:</span> Charge a one-time letting fee when placing a tenant, then continue managing the property with ongoing commission and landlord statements.
               </div>
             )}
           </div>
 
-          {formData.letManage === "Letting" && (
+          {hasLettingFee(formData.letManage) && (
             <div className="md:col-span-1 lg:col-span-1">
               <label className={labelClass}>Letting Fee Mode</label>
               <select
@@ -901,7 +914,7 @@ const EditProperty = () => {
             </div>
           )}
 
-          {formData.letManage === "Letting" && (
+          {hasLettingFee(formData.letManage) && (
             <div className="md:col-span-1 lg:col-span-1">
               <label className={labelClass}>
                 Letting Fee {formData.lettingFeeMode === "percentage" ? "(%)" : "(Fixed)"}
@@ -1205,17 +1218,41 @@ const EditProperty = () => {
           <MilikSelect
             label="Account Ledger Type"
             placeholder="Select Ledger Type"
-            items={[
-              "Property Control Ledger In GL",
-              "OFF-GL (Property GL)",
-            ]}
+            items={["in-gl", "property-gl"]}
             value={formData.accountLedgerType}
             onChange={(val) => handleChange({ target: { name: "accountLedgerType", value: val } })}
-            getLabel={(x) => x}
+            getLabel={(x) => x === "property-gl" ? "Property GL" : "In-GL (Company General Ledger)"}
             getValue={(x) => x}
           />
+          {formData.accountLedgerType === "in-gl" && (
+            <p className="mt-1 text-[11px] text-blue-600">Invoices and receipts post journal entries into the company GL. Appears in Trial Balance, P&amp;L, and Balance Sheet.</p>
+          )}
+          {formData.accountLedgerType === "property-gl" && (
+            <p className="mt-1 text-[11px] text-purple-600">This property has its own isolated ledger — no entries post to the company GL. Enable the Property Ledger below to activate posting.</p>
+          )}
         </div>
       </div>
+
+      {formData.accountLedgerType === "property-gl" && (
+        <div className="mt-3 rounded-lg border border-purple-200 bg-purple-50 p-4">
+          <div className="flex items-start gap-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                name="propertyLedgerEnabled"
+                checked={!!formData.propertyLedgerEnabled}
+                onChange={(e) => handleChange({ target: { name: "propertyLedgerEnabled", type: "checkbox", checked: e.target.checked } })}
+                className="h-4 w-4 rounded border-purple-300 text-purple-600 focus:ring-purple-500"
+              />
+              <span className="text-sm font-semibold text-purple-800">Enable Property Ledger</span>
+            </label>
+          </div>
+          <p className="mt-2 text-[11px] text-purple-700">
+            When enabled, invoices and receipts post to this property&apos;s own isolated ledger — visible via the <strong>Property Ledger</strong> button on the properties list.
+            When disabled, transactions are tracked internally but no journal entries are created.
+          </p>
+        </div>
+      )}
 
       <div>
         <label className={labelClass}>Invoice Payment Terms</label>

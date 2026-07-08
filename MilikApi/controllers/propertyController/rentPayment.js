@@ -19,6 +19,10 @@ import {
   resolveLandlordRemittancePayableAccount,
   resolvePropertyAccountingContext,
 } from "../../services/propertyAccountingService.js";
+import {
+  postPropertyLedgerEntry,
+  resolvePropertyLedgerAccounts,
+} from "../../services/propertyLedgerService.js";
 import { resolveConfiguredAccountingDefaultAccount } from "../../services/companyAccountingDefaultsService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { logAuditEvent } from "../../utils/auditLogger.js";
@@ -1306,9 +1310,40 @@ const confirmNonCashDirectToLandlordReceipt = async (payment, actorId) => {
     businessId: payment.business,
   }).catch(() => null);
 
-  if (propCtx?.isOffGL) {
-    payment.postingStatus = "not_applicable";
-    payment.postingError = null;
+  if (propCtx?.isPropertyGL) {
+    if (propCtx.isPropertyLedgerActive) {
+      try {
+        const plAccounts = await resolvePropertyLedgerAccounts(payment.business);
+        const totalAmt = Math.abs(Number(payment.amount || 0));
+        if (plAccounts.receivables && totalAmt > 0) {
+          const cashAccount = await resolveCashbookAccount(payment.business, payment).catch(() => null);
+          await postPropertyLedgerEntry({
+            businessId:      payment.business,
+            propertyId,
+            debitAccountId:  cashAccount?._id || plAccounts.receivables,
+            creditAccountId: plAccounts.receivables,
+            amount:          totalAmt,
+            date:            payment.paymentDate,
+            narration:       `Receipt — ${payment.receiptNumber || payment.reference || ""}`.trim(),
+            reference:       payment.receiptNumber || payment.reference || "",
+            category:        "receipt",
+            tenantId:        payment.tenant,
+            paymentId:       payment._id,
+          });
+          payment.postingStatus = "posted";
+          payment.postingError  = null;
+        } else {
+          payment.postingStatus = "not_applicable";
+          payment.postingError  = "Property ledger accounts not configured";
+        }
+      } catch (plErr) {
+        payment.postingStatus = "not_applicable";
+        payment.postingError  = `Property ledger posting failed: ${plErr.message}`;
+      }
+    } else {
+      payment.postingStatus = "not_applicable";
+      payment.postingError  = null;
+    }
     await payment.save();
     return { journalGroupId: null, entries: [] };
   }
@@ -1479,10 +1514,40 @@ const postReceiptJournal = async (payment, actorId) => {
     businessId: payment.business,
   }).catch(() => null);
 
-  // Off-GL properties never post receipts to the main GL
-  if (propCtx?.isOffGL) {
-    payment.postingStatus = "not_applicable";
-    payment.postingError = null;
+  // Property GL — route to property ledger or mark not_applicable
+  if (propCtx?.isPropertyGL) {
+    if (propCtx.isPropertyLedgerActive) {
+      try {
+        const plAccounts = await resolvePropertyLedgerAccounts(payment.business);
+        const totalAmt = Math.abs(Number(payment.amount || 0));
+        if (plAccounts.receivables && totalAmt > 0) {
+          await postPropertyLedgerEntry({
+            businessId:      payment.business,
+            propertyId,
+            debitAccountId:  balancingAccount?._id || plAccounts.receivables,
+            creditAccountId: plAccounts.receivables,
+            amount:          totalAmt,
+            date:            payment.paymentDate,
+            narration:       `Receipt — ${payment.receiptNumber || payment.reference || ""}`.trim(),
+            reference:       payment.receiptNumber || payment.reference || "",
+            category:        "receipt",
+            tenantId:        payment.tenant,
+            paymentId:       payment._id,
+          });
+          payment.postingStatus = "posted";
+          payment.postingError  = null;
+        } else {
+          payment.postingStatus = "not_applicable";
+          payment.postingError  = "Property ledger accounts not configured";
+        }
+      } catch (plErr) {
+        payment.postingStatus = "not_applicable";
+        payment.postingError  = `Property ledger posting failed: ${plErr.message}`;
+      }
+    } else {
+      payment.postingStatus = "not_applicable";
+      payment.postingError  = null;
+    }
     await payment.save();
     return { journalGroupId: null, entries: [] };
   }

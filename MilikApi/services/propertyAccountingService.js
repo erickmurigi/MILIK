@@ -69,7 +69,7 @@ export const resolvePropertyAccountingContext = async ({
     _id: propertyId,
     ...(businessId && isValidObjectId(businessId) ? { business: businessId } : {}),
   })
-    .select("_id business propertyCode propertyName landlords controlAccount accountLedgerType")
+    .select("_id business propertyCode propertyName landlords controlAccount accountLedgerType propertyLedgerEnabled")
     .lean();
 
   if (!property) {
@@ -110,7 +110,18 @@ export const resolvePropertyAccountingContext = async ({
     throw new Error("Linked landlord was not found in the supplied business.");
   }
 
-  const isOffGL = String(property.accountLedgerType || "").toLowerCase().includes("off");
+  const normalizedLedgerType = (() => {
+    const v = String(property.accountLedgerType || "").toLowerCase().trim();
+    if (v.startsWith("off") || v === "property-gl" || v === "property gl") return "property-gl";
+    return "in-gl";
+  })();
+  // isPropertyGL: property has its own isolated ledger — never posts to main GL.
+  // isPropertyLedgerActive: property-gl AND the ledger has been explicitly enabled
+  //   (false = property-gl but ledger not yet activated, behaves like true off-gl / no posting).
+  const isPropertyGL = normalizedLedgerType === "property-gl";
+  const isPropertyLedgerActive = isPropertyGL && !!property.propertyLedgerEnabled;
+  // Legacy alias kept so callers that still read isOffGL don't break during migration.
+  const isOffGL = isPropertyGL;
 
   // All postings use generic system accounts — the property dimension on the ledger entry
   // provides property-level filtering without cluttering the CoA with sub-accounts.
@@ -138,8 +149,10 @@ export const resolvePropertyAccountingContext = async ({
     businessId: resolvedBusinessId,
     landlordId: resolvedLandlordId,
     controlAccountId: property.controlAccount || null,
-    accountLedgerType: property.accountLedgerType || "in-gl",
-    isOffGL,
+    accountLedgerType: normalizedLedgerType,
+    isPropertyGL,
+    isPropertyLedgerActive,
+    isOffGL, // legacy alias — prefer isPropertyGL in new code
     receivablesAccountId,
     depositsPayableAccountId,
     landlordRemittanceAccountId,

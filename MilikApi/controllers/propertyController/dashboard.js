@@ -18,11 +18,8 @@ import { isManagerIncomeAccount, isManagerExpenseAccount } from "../../utils/acc
 
 const router = express.Router();
 
-// isManagerIncomeAccount and isManagerExpenseAccount are imported from accountClassifiers.js
-
 // ── Aggregation expression helpers ───────────────────────────────────────────
 
-// Replicates: Number(entry.amount || 0) || Math.max(debit, credit, 0)
 const amountExpr = {
   $cond: {
     if: { $gt: [{ $ifNull: ["$amount", 0] }, 0] },
@@ -37,7 +34,6 @@ const amountExpr = {
   },
 };
 
-// income: credit entry adds, debit entry subtracts
 const incomeContribExpr = {
   $sum: {
     $cond: {
@@ -48,7 +44,6 @@ const incomeContribExpr = {
   },
 };
 
-// expense: debit entry adds, credit entry subtracts
 const expenseContribExpr = {
   $sum: {
     $cond: {
@@ -59,18 +54,50 @@ const expenseContribExpr = {
   },
 };
 
+// Reusable invoice amount expression (adjustedAmount → netAmount → amount)
+const invAmountExpr = {
+  $ifNull: [
+    "$adjustedAmount",
+    { $ifNull: ["$netAmount", { $ifNull: ["$amount", 0] }] },
+  ],
+};
+
+// Reusable invoice recognition-date expression (bookingDate → invoiceDate → createdAt)
+const invDateExpr = {
+  $cond: [
+    { $ifNull: ["$bookingDate", false] },
+    "$bookingDate",
+    {
+      $cond: [
+        { $ifNull: ["$invoiceDate", false] },
+        "$invoiceDate",
+        "$createdAt",
+      ],
+    },
+  ],
+};
+
 // ── Route ─────────────────────────────────────────────────────────────────────
 
 router.get("/summary", verifyUser, async (req, res) => {
   try {
-    // JWT stores company as a string — aggregate $match needs an actual ObjectId to match stored values
     const rawBusiness = req.user.company?._id || req.user.company;
     const business = mongoose.Types.ObjectId.isValid(rawBusiness)
       ? new mongoose.Types.ObjectId(rawBusiness)
       : rawBusiness;
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-    const yearStart  = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+
+    // ── Timezone-aware boundaries (Kenya = UTC+3) ─────────────────────────────
+    // Dates are stored as UTC. A Kenya midnight like "2026-07-01 00:00 EAT" is
+    // "2026-06-30 21:00 UTC" in the DB, so MongoDB's $month returns 6 (June)
+    // without timezone awareness, causing a systematic 1-month shift on the chart.
+    const TZ           = "Africa/Nairobi";
+    const EAT_OFFSET_MS = 3 * 60 * 60 * 1000; // UTC+3
+    const nowUTC       = new Date();
+    const nowKE        = new Date(nowUTC.getTime() + EAT_OFFSET_MS); // current moment in Kenya
+    // Start-of-month/year in Kenya, expressed as UTC timestamps
+    const monthStart   = new Date(Date.UTC(nowKE.getUTCFullYear(), nowKE.getUTCMonth(), 1) - EAT_OFFSET_MS);
+    const yearStart    = new Date(Date.UTC(nowKE.getUTCFullYear(), 0,                    1) - EAT_OFFSET_MS);
+    const in30Days     = new Date(nowUTC.getTime() + 30 * 24 * 60 * 60 * 1000);
 
     const receiptBaseMatch = {
       business,
@@ -78,14 +105,17 @@ router.get("/summary", verifyUser, async (req, res) => {
       isConfirmed: true,
       isCancelled: { $ne: true },
       isReversed: { $ne: true },
-      reversalOf: null, // null matches both missing field and explicit null (default value on new docs)
+      reversalOf: null,
       postingStatus: { $ne: "reversed" },
     };
 
-    const in30Days = new Date(now);
-    in30Days.setDate(in30Days.getDate() + 30);
+    const invoiceBaseMatch = {
+      business,
+      status: { $nin: ["cancelled", "reversed"] },
+      category: { $in: ["RENT_CHARGE", "UTILITY_CHARGE"] },
+    };
 
-    // ── Phase 1: counts + chart accounts (all parallel) ──────────────────────
+    // ── Single parallel batch — all aggregations at once ─────────────────────
     const [
       totalUnits,
       occupiedUnits,
@@ -106,6 +136,11 @@ router.get("/summary", verifyUser, async (req, res) => {
       collectedThisMonthAgg,
       collectedByMonthRaw,
       totalLandlordPayableAgg,
+      // ── NEW: eliminates the large /tenant-invoices fetch on the frontend ──
+      expectedByMonthRaw,    // 12-bucket billed amounts for the chart
+      outstandingArrearsAgg, // total outstanding invoice balance
+      propertyExpectedRaw,   // per-property billed this month
+      propertyCollectedRaw,  // per-property collected this month (via unit→property)
     ] = await Promise.all([
       Unit.countDocuments({ business, ownerOccupied: { $ne: true } }),
       Unit.countDocuments({
@@ -130,11 +165,10 @@ router.get("/summary", verifyUser, async (req, res) => {
       ChartOfAccount.find({ business, isPosting: { $ne: false }, isHeader: { $ne: true } })
         .select("_id code name type subGroup")
         .lean(),
-      // Action-centre counts (used by frontend QuickActions without fetching full collections)
       TenantInvoice.countDocuments({
         business,
         status: { $in: ["pending", "partially_paid", "part_paid"] },
-        dueDate: { $lt: now },
+        dueDate: { $lt: nowUTC },
       }),
       PaymentVoucher.countDocuments({ business, status: "draft" }),
       ProcessedStatement.countDocuments({
@@ -156,9 +190,8 @@ router.get("/summary", verifyUser, async (req, res) => {
       Lease.countDocuments({
         business,
         status: { $nin: ["inactive", "terminated", "expired", "cancelled"] },
-        endDate: { $gte: now, $lte: in30Days },
+        endDate: { $gte: nowUTC, $lte: in30Days },
       }),
-      // Direct receipt sum — authoritative "collected this month" regardless of ledger setup
       RentPayment.aggregate([
         {
           $match: {
@@ -168,7 +201,6 @@ router.get("/summary", verifyUser, async (req, res) => {
         },
         { $group: { _id: null, total: { $sum: { $ifNull: ["$amount", 0] } } } },
       ]),
-      // Monthly breakdown for current year (12 buckets) — drives the FinancialOverview chart
       RentPayment.aggregate([
         {
           $match: {
@@ -183,18 +215,14 @@ router.get("/summary", verifyUser, async (req, res) => {
           $group: {
             _id: {
               $month: {
-                $cond: [
-                  { $ifNull: ["$paymentDate", false] },
-                  "$paymentDate",
-                  "$createdAt",
-                ],
+                date: { $cond: [{ $ifNull: ["$paymentDate", false] }, "$paymentDate", "$createdAt"] },
+                timezone: TZ,
               },
             },
             total: { $sum: { $ifNull: ["$amount", 0] } },
           },
         },
       ]),
-      // Total outstanding payable to all landlords (sum of ProcessedStatement.balanceDue)
       ProcessedStatement.aggregate([
         {
           $match: {
@@ -206,90 +234,166 @@ router.get("/summary", verifyUser, async (req, res) => {
         },
         { $group: { _id: null, total: { $sum: "$balanceDue" } } },
       ]),
+
+      // expectedByMonth — 12-bucket invoice billed amounts for the chart
+      // Uses timezone-aware $month so Kenya midnight dates (stored as prev-day UTC) land
+      // in the correct month instead of shifting one month left.
+      TenantInvoice.aggregate([
+        { $match: { ...invoiceBaseMatch } },
+        { $addFields: { recDate: invDateExpr } },
+        { $match: { recDate: { $gte: yearStart } } },
+        {
+          $group: {
+            _id: { $month: { date: "$recDate", timezone: TZ } },
+            total: { $sum: invAmountExpr },
+          },
+        },
+      ]),
+
+      // outstandingArrears — total unpaid invoice balance across all properties
+      TenantInvoice.aggregate([
+        {
+          $match: {
+            business,
+            status: { $in: ["pending", "partially_paid", "part_paid"] },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            total: {
+              $sum: {
+                $cond: [
+                  { $gt: [{ $ifNull: ["$outstanding", 0] }, 0] },
+                  "$outstanding",
+                  invAmountExpr,
+                ],
+              },
+            },
+          },
+        },
+      ]),
+
+      // propertyExpectedRaw — per-property billed amount for the current month
+      TenantInvoice.aggregate([
+        { $match: { ...invoiceBaseMatch } },
+        { $addFields: { recDate: invDateExpr } },
+        { $match: { recDate: { $gte: monthStart } } },
+        {
+          $group: {
+            _id: "$property",
+            expectedThisMonth: { $sum: invAmountExpr },
+          },
+        },
+      ]),
+
+      // propertyCollectedRaw — per-property collected receipts for the current month
+      // Uses a pipeline $lookup so only the property field is transferred
+      RentPayment.aggregate([
+        {
+          $match: {
+            ...receiptBaseMatch,
+            $or: [
+              { paymentDate: { $gte: monthStart } },
+              { paymentDate: null, createdAt: { $gte: monthStart } },
+            ],
+          },
+        },
+        {
+          $lookup: {
+            from: "units",
+            let: { uid: "$unit" },
+            pipeline: [
+              { $match: { $expr: { $eq: ["$_id", "$$uid"] } } },
+              { $project: { _id: 0, property: 1 } },
+            ],
+            as: "_u",
+          },
+        },
+        {
+          $group: {
+            _id: { $arrayElemAt: ["$_u.property", 0] },
+            collectedThisMonth: { $sum: { $abs: { $ifNull: ["$amount", 0] } } },
+          },
+        },
+        { $match: { _id: { $ne: null } } },
+      ]),
     ]);
 
-    // ── Phase 2: targeted ledger aggregations using known account IDs ─────────
-    // Classify accounts in JS (small list — no DB round trip needed).
-    // Then query MongoDB with $in so it uses the (business, accountId, status) index
-    // and aggregates server-side — zero ledger documents transferred to Node.
-    const incomeAccountIds = chartAccounts
-      .filter(isManagerIncomeAccount)
-      .map((a) => a._id);
+    // ── Phase 2: ledger aggregations using known account IDs ──────────────────
+    const incomeAccountIds  = chartAccounts.filter(isManagerIncomeAccount).map((a) => a._id);
+    const expenseAccountIds = chartAccounts.filter(isManagerExpenseAccount).map((a) => a._id);
 
-    const expenseAccountIds = chartAccounts
-      .filter(isManagerExpenseAccount)
-      .map((a) => a._id);
-
-    const ledgerBaseMatch = {
-      business,
-      status: { $nin: ["draft", "void", "reversed"] },
-    };
+    const ledgerBaseMatch = { business, status: { $nin: ["draft", "void", "reversed"] } };
 
     const [totalRevenueAgg, monthRevenueAgg, monthExpenseAgg] = await Promise.all([
-      // All-time manager revenue
       incomeAccountIds.length
         ? FinancialLedgerEntry.aggregate([
             { $match: { ...ledgerBaseMatch, accountId: { $in: incomeAccountIds } } },
             { $group: { _id: null, total: incomeContribExpr } },
           ])
         : Promise.resolve([]),
-
-      // Current-month manager revenue
       incomeAccountIds.length
         ? FinancialLedgerEntry.aggregate([
-            {
-              $match: {
-                ...ledgerBaseMatch,
-                accountId: { $in: incomeAccountIds },
-                transactionDate: { $gte: monthStart },
-              },
-            },
+            { $match: { ...ledgerBaseMatch, accountId: { $in: incomeAccountIds }, transactionDate: { $gte: monthStart } } },
             { $group: { _id: null, total: incomeContribExpr } },
           ])
         : Promise.resolve([]),
-
-      // Current-month manager expenses
       expenseAccountIds.length
         ? FinancialLedgerEntry.aggregate([
-            {
-              $match: {
-                ...ledgerBaseMatch,
-                accountId: { $in: expenseAccountIds },
-                transactionDate: { $gte: monthStart },
-              },
-            },
+            { $match: { ...ledgerBaseMatch, accountId: { $in: expenseAccountIds }, transactionDate: { $gte: monthStart } } },
             { $group: { _id: null, total: expenseContribExpr } },
           ])
         : Promise.resolve([]),
     ]);
 
-    const totalRevenue = Number(totalRevenueAgg[0]?.total || 0);
-    const monthlyRevenue = Number(monthRevenueAgg[0]?.total || 0);
-    const currentMonthExpenses = Number(monthExpenseAgg[0]?.total || 0);
-    const collectedThisMonth = Number(collectedThisMonthAgg[0]?.total || 0);
+    // ── Build response ─────────────────────────────────────────────────────────
+    const totalRevenue        = Number(totalRevenueAgg[0]?.total   || 0);
+    const monthlyRevenue      = Number(monthRevenueAgg[0]?.total   || 0);
+    const currentMonthExpenses= Number(monthExpenseAgg[0]?.total   || 0);
+    const collectedThisMonth  = Number(collectedThisMonthAgg[0]?.total || 0);
+    const totalLandlordPayable= Number(totalLandlordPayableAgg[0]?.total || 0);
+    const outstandingArrears  = Number(outstandingArrearsAgg[0]?.total || 0);
 
-    // Build a 12-element array [Jan, Feb, ..., Dec] of confirmed receipt totals
+    // collectedByMonth — 0-indexed [Jan…Dec]
     const monthMap = {};
     for (const row of collectedByMonthRaw) monthMap[row._id] = Number(row.total || 0);
     const collectedByMonth = Array.from({ length: 12 }, (_, i) => monthMap[i + 1] || 0);
 
-    const totalLandlordPayable = Number(totalLandlordPayableAgg[0]?.total || 0);
-    const vacantUnits = Math.max(totalUnits - occupiedUnits, 0);
-    const totalMonthlyRentDue = Number(totalMonthlyRentDueAgg?.[0]?.total || 0);
-    const totalDeposits = Number(totalDepositsAgg?.[0]?.total || 0);
-    const occupancyRate = totalUnits > 0 ? (occupiedUnits / totalUnits) * 100 : 0;
-    const collectionRate = totalMonthlyRentDue > 0 ? (monthlyRevenue / totalMonthlyRentDue) * 100 : 0;
-    const netProfit = monthlyRevenue - currentMonthExpenses;
+    // expectedByMonth — 0-indexed [Jan…Dec]
+    const expMap = {};
+    for (const row of expectedByMonthRaw) expMap[row._id] = Number(row.total || 0);
+    const expectedByMonth = Array.from({ length: 12 }, (_, i) => expMap[i + 1] || 0);
+
+    // propertyStats — [{ propertyId, expectedThisMonth, collectedThisMonth }]
+    const propExpMap = {};
+    for (const r of propertyExpectedRaw)  propExpMap[String(r._id)]  = Number(r.expectedThisMonth  || 0);
+    const propColMap = {};
+    for (const r of propertyCollectedRaw) propColMap[String(r._id)]  = Number(r.collectedThisMonth || 0);
+    const allPropIds = new Set([...Object.keys(propExpMap), ...Object.keys(propColMap)]);
+    const propertyStats = [...allPropIds].map((pid) => ({
+      propertyId:       pid,
+      expectedThisMonth:  propExpMap[pid] || 0,
+      collectedThisMonth: propColMap[pid] || 0,
+    }));
+
+    const vacantUnits     = Math.max(totalUnits - occupiedUnits, 0);
+    const occupancyRate   = totalUnits > 0 ? (occupiedUnits / totalUnits) * 100 : 0;
+    const collectionRate  = Number(totalMonthlyRentDueAgg?.[0]?.total || 0) > 0
+      ? (monthlyRevenue / Number(totalMonthlyRentDueAgg[0].total)) * 100 : 0;
 
     return res.json({
       totalUnits,
       occupiedUnits,
       vacantUnits,
       totalRevenue,
-      totalDeposits,
+      totalDeposits:      Number(totalDepositsAgg?.[0]?.total || 0),
       monthlyRevenue,
       collectedThisMonth,
       collectedByMonth,
+      expectedByMonth,       // NEW — drives the chart expected bars
+      outstandingArrears,    // NEW — live arrears total
+      propertyStats,         // NEW — per-property collection for Portfolio Pulse
       pendingPayments,
       activeTenants,
       overdueTenants,
@@ -299,8 +403,7 @@ router.get("/summary", verifyUser, async (req, res) => {
       occupancyRate,
       collectionRate,
       currentMonthExpenses,
-      netProfit,
-      // Action-centre counts
+      netProfit:          monthlyRevenue - currentMonthExpenses,
       overdueInvoiceCount,
       draftVoucherCount,
       pendingStatementCount,

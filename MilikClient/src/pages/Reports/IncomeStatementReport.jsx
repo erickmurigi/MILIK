@@ -192,6 +192,14 @@ const IncomeStatementReport = () => {
     [properties, filters.propertyId]
   );
 
+  const offGLProperties = useMemo(
+    () => properties.filter((p) => {
+      const v = String(p.accountLedgerType || "").toLowerCase().trim();
+      return (v.startsWith("off") || v === "property-gl") && String(p.status || "").toLowerCase() !== "archived";
+    }),
+    [properties]
+  );
+
   const loadReport = useCallback(async () => {
     if (!businessId) return;
     setLoading(true);
@@ -410,6 +418,28 @@ const IncomeStatementReport = () => {
             </div>
           </div>
         </div>
+
+        {/* ── Off-GL notice ─────────────────────────────────────────────────── */}
+        {offGLProperties.length > 0 && !filters.propertyId && (
+          <div className="shrink-0 flex items-center gap-2 border-b border-purple-200 bg-purple-50 px-4 py-1.5 print:hidden">
+            <span className="text-purple-500 text-xs">⚠</span>
+            <span className="text-[11px] text-purple-700">
+              <span className="font-bold">{offGLProperties.length} {offGLProperties.length === 1 ? "property uses" : "properties use"} Property GL</span>
+              {" "}and are excluded from this company report:{" "}
+              {offGLProperties.map((p) => `${p.propertyCode} – ${p.propertyName}`).join(", ")}
+              {". View their accounts via Property Ledger on the properties list."}
+            </span>
+          </div>
+        )}
+        {selectedProperty && (() => { const v = String(selectedProperty.accountLedgerType || "").toLowerCase().trim(); return v.startsWith("off") || v === "property-gl"; })() && (
+          <div className="shrink-0 flex items-center gap-2 border-b border-purple-200 bg-purple-50 px-4 py-1.5 print:hidden">
+            <span className="text-purple-500 text-xs">⚠</span>
+            <span className="text-[11px] text-purple-700">
+              <span className="font-bold">{selectedProperty.propertyCode} – {selectedProperty.propertyName}</span>
+              {" "}uses Property GL — its accounts are isolated from the company GL. Use the Property Ledger to view this property's financial reports.
+            </span>
+          </div>
+        )}
 
         {/* ── KPI strip ─────────────────────────────────────────────────────── */}
         <div className="flex shrink-0 overflow-hidden border-b border-slate-200 bg-white shadow-sm">

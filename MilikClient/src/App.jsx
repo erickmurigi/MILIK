@@ -87,6 +87,7 @@ const AddUnit                     = lazy(() => import("./components/Units/AddUni
 const AddProperty                 = lazy(() => import("./components/Properties/AddProperties"));
 const EditProperty                = lazy(() => import("./components/Properties/EditProperties"));
 const PropertyDetail              = lazy(() => import("./components/Properties/PropertyDetail"));
+const PropertyLedger              = lazy(() => import("./pages/Properties/PropertyLedger"));
 
 // Tenants
 const Tenants             = lazy(() => import("./pages/Tenants/Tenants"));
@@ -768,6 +769,7 @@ function App() {
             <Route path="/properties"                     element={<Guard resource="properties" moduleKey="propertyManagement"><Properties /></Guard>} />
             <Route path="/properties/new"                 element={<Guard resource="properties" action="create" moduleKey="propertyManagement"><AddProperty /></Guard>} />
             <Route path="/properties/:id"                 element={<Guard resource="properties" moduleKey="propertyManagement"><PropertyDetail /></Guard>} />
+            <Route path="/properties/:id/ledger"          element={<Guard resource="properties" moduleKey="propertyManagement"><PropertyLedger /></Guard>} />
             <Route path="/properties/edit/:id"            element={<Guard resource="properties" action="update" moduleKey="propertyManagement"><EditProperty /></Guard>} />
             <Route path="/properties/commission-settings" element={<Guard companyMode={{ allowLandlord: false }} resource="commissions" moduleKey="propertyManagement"><PropertyCommissionSettings /></Guard>} />
             <Route path="/properties/commissions-list"    element={<Guard companyMode={{ allowLandlord: false }} resource="commissions" moduleKey="propertyManagement"><CommissionsList /></Guard>} />

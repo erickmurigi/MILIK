@@ -80,15 +80,13 @@ export const markAsRead = async (req, res, next) => {
   }
 };
 
-// Mark all as read
+// Mark all as read — scoped to business only (no recipient filter, since notifications are
+// fetched without recipient filter in getNotifications)
 export const markAllAsRead = async (req, res, next) => {
-  const { recipient } = req.body;
-  if (!recipient || !mongoose.Types.ObjectId.isValid(recipient)) {
-    return res.status(400).json({ message: "Valid recipient ID is required" });
-  }
   try {
     const business = resolveBusinessId(req);
-    await Notification.updateMany({ recipient, business, isRead: false }, { $set: { isRead: true } });
+    if (!business) return res.status(400).json({ message: "Business context required" });
+    await Notification.updateMany({ business, isRead: false }, { $set: { isRead: true } });
     res.status(200).json({ message: "All notifications marked as read" });
   } catch (err) {
     next(err);

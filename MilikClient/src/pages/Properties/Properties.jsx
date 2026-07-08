@@ -724,6 +724,11 @@ const Properties = () => {
                               </td>
                               <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
                                 <span className="font-semibold text-slate-900 truncate block">{toListingCaps(property.propertyName)}</span>
+                                {(() => { const v = String(property.accountLedgerType || "").toLowerCase(); return (v.startsWith("off") || v === "property-gl") ? (
+                                  <span className="inline-flex items-center px-1.5 py-px rounded text-[9px] font-bold tracking-wide bg-purple-100 text-purple-700 border border-purple-200 mt-0.5">
+                                    Property GL{property.propertyLedgerEnabled ? " ✓" : ""}
+                                  </span>
+                                ) : null; })()}
                               </td>
                               <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
                                 <span className="text-slate-600 truncate block">{toListingCaps(getPrimaryLandlord(property.landlords))}</span>
@@ -793,7 +798,26 @@ const Properties = () => {
                                       </div>
                                       <div>
                                         <span className="text-xs font-semibold text-gray-700">Account Ledger:</span>
-                                        <p className="text-sm font-bold text-gray-900 mt-1">{property.accountLedgerType || "N/A"}</p>
+                                        <div className="mt-1 flex flex-col gap-1">
+                                          {(() => { const v = String(property.accountLedgerType || "").toLowerCase(); return (v.startsWith("off") || v === "property-gl") ? (
+                                            <>
+                                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700 border border-purple-200">
+                                                Property GL — {property.propertyLedgerEnabled ? "Ledger Active" : "Ledger Disabled"}
+                                              </span>
+                                              <Link
+                                                to={`/properties/${property._id}/ledger`}
+                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-purple-700 text-white hover:bg-purple-800 w-fit"
+                                                onClick={(e) => e.stopPropagation()}
+                                              >
+                                                Property Ledger →
+                                              </Link>
+                                            </>
+                                          ) : (
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                              In-GL — Posts to General Ledger
+                                            </span>
+                                          ); })()}
+                                        </div>
                                       </div>
                                       <div>
                                         <span className="text-xs font-semibold text-gray-700">Held for Landlord:</span>

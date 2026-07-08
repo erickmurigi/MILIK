@@ -115,6 +115,7 @@ const commissionTaxSettingsSchema = new mongoose.Schema(
 const normalizePropertyServiceMode = (value = "Managing") => {
   const normalized = String(value || "").trim().toLowerCase();
   if (normalized === "letting") return "Letting";
+  if (normalized === "both") return "Both";
   return "Managing";
 };
 
@@ -123,7 +124,7 @@ const PropertySchema = new mongoose.Schema(
     dateAcquired: { type: Date },
     letManage: {
       type: String,
-      enum: ["Managing", "Letting"],
+      enum: ["Managing", "Letting", "Both"],
       default: "Managing",
     },
 
@@ -224,11 +225,16 @@ const PropertySchema = new mongoose.Schema(
 
     accountLedgerType: {
       type: String,
-      // Accept both new values and legacy UI strings for backward compat with existing documents
-      enum: ["in-gl", "off-gl", "Property Control Ledger In GL", "OFF-GL (Property GL)"],
+      // "property-gl" = property has its own isolated ledger (replaces legacy "off-gl")
+      // Legacy values kept in enum so existing documents remain valid
+      enum: ["in-gl", "property-gl", "off-gl", "Property Control Ledger In GL", "OFF-GL (Property GL)"],
       default: "in-gl",
       trim: true,
     },
+
+    // When true and accountLedgerType === "property-gl", invoices and receipts
+    // post journal entries into the PropertyLedgerEntry collection instead of the main GL.
+    propertyLedgerEnabled: { type: Boolean, default: false },
 
     primaryBank: { type: String, trim: true },
     alternativeTaxPin: { type: String, trim: true },

@@ -1,291 +1,152 @@
 import React, { useMemo } from 'react';
 import { useSelector } from 'react-redux';
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
 import { hasCompanyPermission } from '../../utils/permissions';
-import {
-  selectCurrentUser,
-  selectCurrentCompany,
-  selectAllRentPayments,
-  selectAllExpenseProperties,
-} from '../../redux/selectors';
+import { selectCurrentUser, selectCurrentCompany, selectAllExpenseProperties } from '../../redux/selectors';
+import { parseDate, fmtKES, shortKES, fullKES } from './dashboardUtils';
+import DashboardCard from './DashboardCard';
 
-const GRN  = '#31694E';
-const ORG  = '#E85C0D';
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const SNAPSHOT_CATEGORIES = new Set(['RENT_CHARGE', 'UTILITY_CHARGE']);
+const GRN    = '#0B3B2E';
+const ORG    = '#C8511A';
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-const normalizeText = (value) => String(value || '').trim().toLowerCase();
-
-const parseDate = (value) => {
-  const date = value ? new Date(value) : null;
-  return date && !Number.isNaN(date.getTime()) ? date : null;
-};
-
-const getInvoiceRecognitionDate = (invoice) =>
-  parseDate(invoice?.bookingDate || invoice?.invoiceDate || invoice?.createdAt);
-
-// ── Formatters ────────────────────────────────────────────────────────────────
-const fullKES = (v) => `KES ${Number(v || 0).toLocaleString('en-KE', { minimumFractionDigits: 0 })}`;
-
-const fmtMoney = (value) => {
-  const n = Number(value || 0);
-  if (n >= 1_000_000) return `KSh ${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000)     return `KSh ${(n / 1_000).toFixed(1)}K`;
-  return `KSh ${Math.round(n).toLocaleString()}`;
-};
-
-const shortKES = (v) => {
-  const n = Number(v || 0);
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000)     return `${(n / 1_000).toFixed(0)}K`;
-  return `${Math.round(n)}`;
-};
-
-// ── Tooltip ───────────────────────────────────────────────────────────────────
-
-const ChartTooltip = ({ active, payload, darkMode }) => {
+const ChartTooltip = ({ active, payload }) => {
   if (!active || !payload?.length) return null;
-  const displayLabel = payload[0]?.payload?.label || payload[0]?.payload?.month || '';
   return (
-    <div className={`border px-3 py-2 shadow-lg ${darkMode ? 'border-gray-600 bg-gray-800' : 'border-slate-200 bg-white'}`}>
-      <div className={`mb-1.5 text-[10px] font-extrabold uppercase tracking-wide ${darkMode ? 'text-gray-200' : 'text-slate-700'}`}>{displayLabel}</div>
+    <div className="border border-slate-200 bg-white px-3 py-2 shadow-lg">
+      <div className="mb-1.5 text-[10px] font-extrabold uppercase tracking-wide text-slate-700">
+        {payload[0]?.payload?.label || ''}
+      </div>
       {payload.map((entry) => (
         <div key={entry.name} className="flex items-center gap-2 text-[10px]">
-          <div className="h-2 w-2 shrink-0" style={{ backgroundColor: entry.fill || entry.color }} />
-          <span className={darkMode ? 'text-gray-400' : 'text-slate-500'}>{entry.name}:</span>
-          <span className={`font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>{fullKES(entry.value)}</span>
+          <div className="h-2 w-2 shrink-0" style={{ backgroundColor: entry.fill }} />
+          <span className="text-slate-500">{entry.name}:</span>
+          <span className="font-bold text-slate-900">{fullKES(entry.value)}</span>
         </div>
       ))}
     </div>
   );
 };
 
-// ── Component ─────────────────────────────────────────────────────────────────
-const FinancialOverview = ({ darkMode, invoices = [], summaryData = {} }) => {
+// FinancialOverview no longer needs the invoices prop — all chart data comes from summaryData:
+//   summaryData.expectedByMonth  — server-computed 12-month billed array
+//   summaryData.collectedByMonth — server-computed 12-month collected array
+//   summaryData.outstandingArrears — server-computed total arrears balance
+const FinancialOverview = ({ summaryData = {} }) => {
   const currentCompany    = useSelector(selectCurrentCompany);
   const currentUser       = useSelector(selectCurrentUser);
-  const rentPayments      = useSelector(selectAllRentPayments);
   const expenseProperties = useSelector(selectAllExpenseProperties);
 
-  const activeCompanyContext = currentCompany || currentUser?.company || null;
-  const isLandlordMode    = isSelfManagingLandlordCompany(activeCompanyContext);
-  const canViewFinancials = hasCompanyPermission(currentUser || {}, currentCompany, 'financialReports', 'view', ['accounts', 'propertyManagement']);
+  const ctx           = currentCompany || currentUser?.company || null;
+  const isLandlord    = isSelfManagingLandlordCompany(ctx);
+  const canFinancials = hasCompanyPermission(currentUser || {}, currentCompany, 'financialReports', 'view', ['accounts', 'propertyManagement']);
 
-  const now               = new Date();
-  const currentYear       = now.getFullYear();
-  const currentMonthIndex = now.getMonth();
+  // Use Kenya time (UTC+3) for month/year so they match the server-side aggregation timezone
+  const nowKE    = new Date(Date.now() + 3 * 60 * 60 * 1000);
+  const curYear  = nowKE.getUTCFullYear();
+  const curMonth = nowKE.getUTCMonth(); // 0-indexed, matching expectedByMonth/collectedByMonth
 
-  const isActiveInvoice   = (invoice) => !['cancelled', 'reversed'].includes(normalizeText(invoice?.status));
-  const isSnapshotInvoice = (invoice) => SNAPSHOT_CATEGORIES.has(String(invoice?.category || '').toUpperCase());
-  const amountFromInvoice = (invoice) => Number(invoice?.adjustedAmount ?? invoice?.netAmount ?? invoice?.amount ?? 0);
+  const expectedByMonth  = Array.isArray(summaryData?.expectedByMonth)  ? summaryData.expectedByMonth  : [];
+  const collectedByMonth = Array.isArray(summaryData?.collectedByMonth) ? summaryData.collectedByMonth : [];
 
-  const outstandingFromInvoice = (invoice) => {
-    const snap = Number(invoice?.outstanding ?? invoice?.remainingCreditableAmount ?? 0);
-    if (snap > 0) return snap;
-    const status = normalizeText(invoice?.status);
-    if (['pending', 'partially_paid', 'part_paid'].includes(status)) return Math.max(0, amountFromInvoice(invoice));
-    return 0;
-  };
+  const chartData = useMemo(() => Array.from({ length: 12 }, (_, m) => ({
+    month:    MONTHS[m],
+    label:    new Date(curYear, m, 1).toLocaleString('default', { month: 'long', year: 'numeric' }),
+    expected:  expectedByMonth[m]  || 0,
+    collected: collectedByMonth[m] || 0,
+  })), [curYear, expectedByMonth, collectedByMonth]);
 
-  // Server-computed monthly totals (authoritative); fall back to Redux if not yet available
-  const serverByMonth = Array.isArray(summaryData?.collectedByMonth) ? summaryData.collectedByMonth : null;
+  const cur            = chartData[curMonth] || { expected: 0, collected: 0 };
+  const remaining      = Math.max(0, cur.expected - cur.collected);
+  const collectionRate = cur.expected > 0 ? (cur.collected / cur.expected) * 100 : 0;
+  const outstandingTotal = Number(summaryData?.outstandingArrears || 0);
 
-  // Last 6 months ending with the current month
-  const chartData = useMemo(() => {
-    return Array.from({ length: 6 }, (_, i) => {
-      const offset = currentMonthIndex - 5 + i;
-      const year   = offset < 0 ? currentYear - 1 : currentYear;
-      const m      = ((offset % 12) + 12) % 12;
-
-      let expected = 0;
-      invoices.forEach((invoice) => {
-        if (!isActiveInvoice(invoice) || !isSnapshotInvoice(invoice)) return;
-        const date = getInvoiceRecognitionDate(invoice);
-        if (!date || date.getFullYear() !== year || date.getMonth() !== m) return;
-        expected += amountFromInvoice(invoice);
-      });
-
-      let collected = 0;
-      if (serverByMonth && year === currentYear) {
-        collected = serverByMonth[m] || 0;
-      } else {
-        rentPayments.forEach((payment) => {
-          const date = parseDate(payment?.paymentDate || payment?.createdAt);
-          if (!date || date.getFullYear() !== year || date.getMonth() !== m) return;
-          if (payment?.isConfirmed !== true) return;
-          if (payment?.isReversed || payment?.isCancelled || payment?.reversalOf) return;
-          if (normalizeText(payment?.postingStatus) === 'reversed') return;
-          collected += Math.abs(Number(payment?.amount || 0));
-        });
-      }
-
-      return {
-        month: MONTHS[m],
-        label: new Date(year, m, 1).toLocaleString('default', { month: 'long', year: 'numeric' }),
-        expected,
-        collected,
-      };
-    });
-  }, [currentYear, currentMonthIndex, invoices, rentPayments, serverByMonth]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const currentMonthData      = chartData[chartData.length - 1] || { expected: 0, collected: 0 };
-  const currentMonthExpected  = currentMonthData.expected;
-  const currentMonthCollected = currentMonthData.collected;
-  const remainingToCollect    = Math.max(0, currentMonthExpected - currentMonthCollected);
-
-  const outstandingArrears = useMemo(
-    () => invoices.reduce((sum, inv) => sum + (isActiveInvoice(inv) ? Math.max(0, outstandingFromInvoice(inv)) : 0), 0),
-    [invoices] // eslint-disable-line react-hooks/exhaustive-deps
-  );
-
-  const collectionRate = currentMonthExpected > 0 ? (currentMonthCollected / currentMonthExpected) * 100 : 0;
-
-  const currentMonthExpenses = useMemo(() => {
-    if (!isLandlordMode) return 0;
-    return expenseProperties.reduce((sum, exp) => {
-      const d = parseDate(exp?.date || exp?.createdAt);
-      if (!d || d.getFullYear() !== currentYear || d.getMonth() !== currentMonthIndex) return sum;
-      return sum + Math.abs(Number(exp?.amount || 0));
+  const curExpenses = useMemo(() => {
+    if (!isLandlord) return 0;
+    return expenseProperties.reduce((s, e) => {
+      const raw = parseDate(e?.date || e?.createdAt);
+      if (!raw) return s;
+      const dKE = new Date(raw.getTime() + 3 * 60 * 60 * 1000);
+      return (dKE.getUTCFullYear() === curYear && dKE.getUTCMonth() === curMonth)
+        ? s + Math.abs(Number(e?.amount || 0)) : s;
     }, 0);
-  }, [isLandlordMode, expenseProperties, currentYear, currentMonthIndex]);
+  }, [isLandlord, expenseProperties, curYear, curMonth]);
 
-  const currentMonthNet = currentMonthCollected - currentMonthExpenses;
+  const netIncome  = cur.collected - curExpenses;
+  const rateColor  = collectionRate >= 80 ? 'text-emerald-700' : collectionRate >= 50 ? 'text-amber-700' : 'text-red-700';
 
-  const cards = isLandlordMode
-    ? [
-        { label: 'Billed',          value: fmtMoney(currentMonthExpected) },
-        { label: 'Collected',       value: fmtMoney(currentMonthCollected) },
-        { label: 'Expenses',        value: fmtMoney(currentMonthExpenses) },
-        { label: 'Net income',      value: fmtMoney(currentMonthNet), accent: currentMonthNet >= 0 ? 'green' : 'red' },
-        { label: 'Live arrears',    value: fmtMoney(outstandingArrears) },
-        { label: 'Collection rate', value: `${collectionRate.toFixed(1)}%` },
-      ]
-    : [
-        { label: 'Expected',        value: fmtMoney(currentMonthExpected) },
-        { label: 'Collected',       value: fmtMoney(currentMonthCollected) },
-        { label: 'Arrears',         value: fmtMoney(outstandingArrears) },
-        { label: 'Collection rate', value: `${collectionRate.toFixed(1)}%` },
-      ];
+  const statRows = isLandlord ? [
+    { label: 'Billed',          value: fmtKES(cur.expected) },
+    { label: 'Collected',       value: fmtKES(cur.collected) },
+    { label: 'Expenses',        value: fmtKES(curExpenses) },
+    { label: 'Net Income',      value: fmtKES(netIncome),       cls: netIncome >= 0 ? 'text-emerald-700' : 'text-red-700' },
+    { label: 'Live Arrears',    value: fmtKES(outstandingTotal) },
+    { label: 'Collection Rate', value: `${collectionRate.toFixed(1)}%`, cls: rateColor },
+  ] : [
+    { label: 'Expected',        value: fmtKES(cur.expected) },
+    { label: 'Collected',       value: fmtKES(cur.collected) },
+    { label: 'Arrears',         value: fmtKES(outstandingTotal) },
+    { label: 'Collection Rate', value: `${collectionRate.toFixed(1)}%`, cls: rateColor },
+  ];
 
-  if (!canViewFinancials) return null;
+  if (!canFinancials) return null;
 
   return (
-    <div
-      className={`dashboard-panel rounded-xl shadow-md border p-4 ${
-        darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'
-      }`}
+    <DashboardCard
+      title={isLandlord ? 'Portfolio Cashflow Overview' : 'Financial Operations Overview'}
+      right={<span className="text-[10px] font-bold text-[#0B3B2E]">{curYear}</span>}
     >
-      {/* Header */}
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div>
-          <h2 className={`text-sm font-extrabold uppercase tracking-tight ${darkMode ? 'text-white' : 'text-[#1f4a35]'}`}>
-            {isLandlordMode ? 'Portfolio Cashflow Overview' : 'Financial Operations Overview'}
-          </h2>
-          <p className={`mt-1 text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-            {currentYear} full-year expected vs collected — current month stats in cards below.
-          </p>
-        </div>
-        <div className={`rounded-full px-3 py-1 text-[10px] font-extrabold uppercase tracking-wide ${
-          darkMode ? 'bg-[#31694E]/20 text-[#8bd1b0]' : 'bg-[#ECF6F1] text-[#1f4a35]'
-        }`}>
-          {currentYear}
-        </div>
+      {/* Current-month stat rows */}
+      <div className="divide-y divide-slate-100 border-b border-slate-200">
+        {statRows.map((row) => (
+          <div key={row.label} className="flex items-center justify-between gap-2 px-3 py-2.5">
+            <p className="text-xs font-bold text-slate-600">{row.label}</p>
+            <p className={`text-right text-sm font-extrabold tabular-nums ${row.cls || 'text-slate-900'}`}>
+              {row.value}
+            </p>
+          </div>
+        ))}
       </div>
 
-      {/* Metric cards */}
-      <div className={`mb-4 grid gap-3 ${isLandlordMode ? 'grid-cols-3' : 'grid-cols-2'}`}>
-        {cards.map((card) => {
-          const accentGreen = card.accent === 'green';
-          const accentRed   = card.accent === 'red';
-          return (
-            <div
-              key={card.label}
-              className={`rounded-xl border p-3 ${
-                accentGreen ? 'border-emerald-200 bg-emerald-50/60'
-                : accentRed ? 'border-red-200 bg-red-50/60'
-                : darkMode  ? 'border-gray-700 bg-gray-700/30'
-                            : 'border-[#dce9e1] bg-[#fbfdfc]'
-              }`}
-            >
-              <div className={`text-[10px] font-extrabold uppercase tracking-wide ${
-                accentGreen ? 'text-emerald-700' : accentRed ? 'text-red-700' : darkMode ? 'text-gray-400' : 'text-[#4a6b5e]'
-              }`}>{card.label}</div>
-              <div className={`mt-2 text-base font-extrabold ${
-                accentGreen ? 'text-emerald-800' : accentRed ? 'text-red-800' : darkMode ? 'text-white' : 'text-slate-900'
-              }`}>{card.value}</div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Chart — same implementation as AccountsDashboard */}
-      <div
-        className={`flex flex-col border border-slate-200 ${darkMode ? 'border-gray-700' : ''}`}
-        style={{ borderLeftWidth: '3px', borderLeftColor: GRN }}
-      >
-        {/* Chart header */}
-        <div className={`flex items-center justify-between border-b px-4 py-2.5 ${
-          darkMode ? 'border-gray-700 bg-gray-700/30' : 'border-slate-100 bg-white'
-        }`}>
+      {/* Chart section */}
+      <div>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 py-2" style={{ backgroundColor: '#F8FAF9' }}>
           <div>
-            <div className={`text-[11px] font-extrabold ${darkMode ? 'text-white' : 'text-slate-800'}`}>
-              {isLandlordMode ? 'Billed vs Collected' : 'Expected vs Collected'}
-            </div>
-            <div className="text-[10px] text-slate-400">Last 6 months</div>
+            <p className="text-[10px] font-extrabold text-slate-800">
+              {isLandlord ? 'Billed vs Collected' : 'Expected vs Collected'}
+            </p>
+            <p className="text-[10px] text-slate-400">Jan – Dec {curYear}</p>
           </div>
           <div className="flex flex-wrap items-center gap-4 text-[10px] font-bold">
-            <span className="flex items-center gap-1.5 text-slate-500">
+            <span className="flex items-center gap-1 text-slate-500">
               <span className="inline-block h-2 w-2" style={{ backgroundColor: ORG }} />
-              {isLandlordMode ? 'Billed' : 'Expected'}
+              {isLandlord ? 'Billed' : 'Expected'}
             </span>
-            <span className="flex items-center gap-1.5 text-slate-500">
+            <span className="flex items-center gap-1 text-slate-500">
               <span className="inline-block h-2 w-2" style={{ backgroundColor: GRN }} />
               Collected
             </span>
-            {remainingToCollect > 0 && (
-              <span className={`font-extrabold ${darkMode ? 'text-gray-300' : 'text-[#1f4a35]'}`}>
-                {fmtMoney(remainingToCollect)} remaining
-              </span>
+            {remaining > 0 && (
+              <span className="font-extrabold text-[#0B3B2E]">{fmtKES(remaining)} remaining</span>
             )}
           </div>
         </div>
-
-        {/* Chart body */}
-        <div className={`px-2 py-3 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+        <div className="px-2 py-3">
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={chartData} barCategoryGap="30%" barGap={3}>
-              <CartesianGrid strokeDasharray="2 2" stroke={darkMode ? '#374151' : '#f1f5f9'} vertical={false} />
-              <XAxis
-                dataKey="month"
-                tick={{ fontSize: 9, fill: darkMode ? '#9ca3af' : '#94a3b8' }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                tickFormatter={shortKES}
-                tick={{ fontSize: 9, fill: darkMode ? '#9ca3af' : '#94a3b8' }}
-                axisLine={false}
-                tickLine={false}
-                width={38}
-              />
-              <Tooltip content={<ChartTooltip darkMode={darkMode} />} cursor={{ fill: darkMode ? '#374151' : '#f8fafc' }} />
-              <Bar dataKey="expected"  name={isLandlordMode ? 'Billed' : 'Expected'} fill={ORG} radius={0} />
-              <Bar dataKey="collected" name="Collected"                               fill={GRN} radius={0} />
+              <CartesianGrid strokeDasharray="2 2" stroke="#f1f5f9" vertical={false} />
+              <XAxis dataKey="month" tick={{ fontSize: 9, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+              <YAxis tickFormatter={shortKES} tick={{ fontSize: 9, fill: '#94a3b8' }} axisLine={false} tickLine={false} width={38} />
+              <Tooltip content={<ChartTooltip />} cursor={{ fill: '#f8fafc' }} />
+              <Bar dataKey="expected"  name={isLandlord ? 'Billed' : 'Expected'} fill={ORG} radius={0} />
+              <Bar dataKey="collected" name="Collected"                           fill={GRN} radius={0} />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
-    </div>
+    </DashboardCard>
   );
 };
 
-export default FinancialOverview;
+export default React.memo(FinancialOverview);

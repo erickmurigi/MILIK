@@ -1,6 +1,6 @@
 ﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   FaArrowLeft,
   FaCheckCircle,
@@ -64,8 +64,10 @@ const getStatementAmountHeading = (statement) =>
   isNegativeProcessedStatement(statement) ? "Landlord Owes Manager" : "Net Due";
 
 const ProcessedStatements = () => {
-  const dispatch = useDispatch();
-  const navigate = useNavigate();
+  const dispatch  = useDispatch();
+  const navigate  = useNavigate();
+  const location  = useLocation();
+  const fromLedger = location.state?.fromPropertyLedger;
 
   const currentUser = useSelector(selectCurrentUser);
   const currentCompany = useSelector(selectCurrentCompany);
@@ -79,7 +81,7 @@ const ProcessedStatements = () => {
 
   const [activeTab, setActiveTab] = useState("outstanding");
   const [expandedRow, setExpandedRow] = useState(null);
-  const [searchText, setSearchText] = useState("");
+  const [searchText, setSearchText] = useState(fromLedger ? (location.state?.propertyName || "") : "");
   const [sortBy, setSortBy] = useState("date-desc");
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -543,6 +545,11 @@ const ProcessedStatements = () => {
           <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col overflow-hidden gap-2">
             <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
               <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+                {fromLedger && (
+                  <button onClick={() => navigate(`/properties/${location.state.propertyId}/ledger`)} className="h-7 shrink-0 flex items-center gap-1 rounded px-2 text-xs font-semibold text-[#0B3B2E] hover:bg-[#EDF5F1]">
+                    <FaArrowLeft size={11} /> {location.state.propertyName} Ledger
+                  </button>
+                )}
                 <button onClick={() => handleTabChange("outstanding")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "outstanding" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaHourglass /> Outstanding {activeTab === "outstanding" ? `(${pagination.total})` : ""}</button>
                 <button onClick={() => handleTabChange("recoveries")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "recoveries" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaHourglass /> Recoveries {activeTab === "recoveries" ? `(${pagination.total})` : ""}</button>
                 <button onClick={() => handleTabChange("paid")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "paid" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaCheckCircle /> Paid {activeTab === "paid" ? `(${pagination.total})` : ""}</button>

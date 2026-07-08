@@ -973,9 +973,13 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
+  const fromLedger     = location.state?.fromPropertyLedger;
+  const ledgerProperty = location.state?.propertyName || "any";
+  const initialFilters = fromLedger ? { ...emptyFilters, property: ledgerProperty } : emptyFilters;
+
   const [refreshTick, setRefreshTick] = useState(0);
-  const [draftFilters, setDraftFilters] = useState(emptyFilters);
-  const [appliedFilters, setAppliedFilters] = useState(emptyFilters);
+  const [draftFilters, setDraftFilters] = useState(initialFilters);
+  const [appliedFilters, setAppliedFilters] = useState(initialFilters);
   const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const actionBtnCls = (enabled, activeCls) =>
     `h-7 shrink-0 flex items-center rounded px-2 text-xs text-white ${enabled ? activeCls : "bg-gray-400 cursor-not-allowed"}`;
@@ -3288,7 +3292,12 @@ const createInvoiceForTenant = async (
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
             <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
               <div className="filter-bar flex items-center gap-1 overflow-x-auto px-2 py-1.5">
-                {tenantId && (
+                {fromLedger && (
+                  <button onClick={() => navigate(`/properties/${location.state.propertyId}/ledger`)} className="h-7 shrink-0 flex items-center gap-1 rounded px-2 text-xs font-semibold text-[#0B3B2E] hover:bg-[#EDF5F1]">
+                    <FaArrowLeft size={11} /> {location.state.propertyName} Ledger
+                  </button>
+                )}
+                {!fromLedger && tenantId && (
                   <button onClick={() => navigate("/tenants")} className="h-7 shrink-0 flex items-center gap-1 rounded px-2 text-xs font-semibold text-gray-600 hover:text-gray-900">
                     <FaArrowLeft size={11} /> Back
                   </button>
