@@ -15,6 +15,7 @@ import { autoEnrollPlate, awardLoyaltyStamp } from "./loyaltyController.js";
 import { normalizePlate } from "../utils/plateUtils.js";
 import { sendAdHocSms, sendAdHocSmsToMasked } from "../../../services/communicationService.js";
 import { resolveCarWashSmsBody } from "../services/carwashSmsService.js";
+import { recomputeCustomerStats } from "../services/customerStatsService.js";
 
 const JOB_STATUSES = new Set(["waiting", "washing", "drying", "ready", "done", "cancelled"]);
 const JOB_TYPES = new Set(["vehicle", "carpet", "balance_bf"]);
@@ -410,6 +411,9 @@ export const createJob = async (req, res, next) => {
         }
       }
 
+      // Keep customer stats current
+      recomputeCustomerStats(business, job.plateNumber).catch(() => {});
+
       // Register plate on the credit account — but not for voucher accounts (any plate can use any voucher)
       if (resolvedCreditAccount && job.plateNumber && resolvedCreditAccountType !== "voucher") {
         CarWashCreditAccount.updateOne(
@@ -628,6 +632,7 @@ export const updateJob = async (req, res, next) => {
         }
       }
     }
+    if (existing.plateNumber) recomputeCustomerStats(business, existing.plateNumber).catch(() => {});
     res.status(200).json({ success: true, data: existing, job: existing, message: "Car Wash job updated" });
   } catch (error) {
     next(error);
@@ -704,6 +709,7 @@ export const updateJobStatus = async (req, res, next) => {
         }
       }
     }
+    if (job.plateNumber) recomputeCustomerStats(business, job.plateNumber).catch(() => {});
     res.status(200).json({ success: true, data: job, job, message: "Car Wash job status updated" });
   } catch (error) {
     next(error);
@@ -747,6 +753,7 @@ export const deleteJob = async (req, res, next) => {
     const blocker = await getJobDeleteBlocker(business, job);
     if (blocker) return next(createError(400, blocker));
     await CarWashJob.deleteOne({ _id: job._id, business });
+    if (job.plateNumber) recomputeCustomerStats(business, job.plateNumber).catch(() => {});
 
     // Clean up any statements that embedded this job's line
     if (job.creditAccount) {
@@ -830,6 +837,9 @@ export const deleteJobsBulk = async (req, res, next) => {
     if (safeIds.length) {
       const result = await CarWashJob.deleteMany({ _id: { $in: safeIds }, business });
       deletedCount = result.deletedCount || 0;
+      // Recompute stats for each affected plate (deduplicated)
+      const affectedPlates = [...new Set(jobs.filter((j) => safeIds.some((sid) => String(sid) === String(j._id)) && j.plateNumber).map((j) => j.plateNumber))];
+      for (const plate of affectedPlates) recomputeCustomerStats(business, plate).catch(() => {});
     }
 
     res.status(200).json({

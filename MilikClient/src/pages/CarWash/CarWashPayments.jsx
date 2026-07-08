@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
@@ -10,95 +10,180 @@ import CwSmsModal from "./CwSmsModal";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import PaginationBar from "../../components/PaginationBar";
 
-const defaultFilters = { date: todayISO(), method: "", cashbookAccount: "", reference: "", reconciliationStatus: "" };
+// ─── Date helpers ─────────────────────────────────────────────────────────────
+const isoDate = (d) => d.toISOString().slice(0, 10);
+
+const quickRanges = () => {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7)); // Monday
+
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+
+  return {
+    today:     { dateFrom: isoDate(today),      dateTo: isoDate(today) },
+    yesterday: { dateFrom: isoDate(yesterday),  dateTo: isoDate(yesterday) },
+    week:      { dateFrom: isoDate(weekStart),  dateTo: isoDate(today) },
+    month:     { dateFrom: isoDate(monthStart), dateTo: isoDate(today) },
+  };
+};
+
+const defaultFilters = () => {
+  const t = todayISO();
+  return { dateFrom: t, dateTo: t, method: "", cashbookAccount: "", reference: "", reconciliationStatus: "" };
+};
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 const DEFAULT_PAGE_SIZE = 25;
 const reconciliationStatuses = ["pending", "reconciled", "flagged"];
 const paymentMethods = ["cash", "mpesa", "bank", "card", "other"];
 
 const reconciliationBadgeClass = {
-  pending: "border-orange-200 bg-orange-50 text-orange-700",
+  pending:    "border-orange-200 bg-orange-50 text-orange-700",
   reconciled: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  flagged: "border-red-200 bg-red-50 text-red-700",
+  flagged:    "border-red-200 bg-red-50 text-red-700",
 };
 
+// ─── Date range label ─────────────────────────────────────────────────────────
+const formatDateRange = (dateFrom, dateTo) => {
+  if (!dateFrom && !dateTo) return "All dates";
+  const fmt = (s) => s ? new Date(s + "T00:00:00").toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "?";
+  return dateFrom === dateTo ? fmt(dateFrom) : `${fmt(dateFrom)} → ${fmt(dateTo)}`;
+};
+
+// ─── Main component ───────────────────────────────────────────────────────────
 const CarWashPayments = () => {
-  const queryClient = useQueryClient();
+  const queryClient   = useQueryClient();
   const currentCompany = useSelector(selectCurrentCompany);
   const isConsolidated = !getActiveBranchId();
-  const canReconcile = useCarWashPermission("carwash-payments", "reconcile");
-  const [filters, setFilters] = useState(defaultFilters);
+  const canReconcile   = useCarWashPermission("carwash-payments", "reconcile");
+
+  const [filters,        setFilters]        = useState(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
-  const [expandedIds, setExpandedIds] = useState([]);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [smsTarget, setSmsTarget] = useState(null);
-  const [smsBody, setSmsBody] = useState("");
-  const [smsSending, setSmsSending] = useState(false);
+  const [expandedIds,    setExpandedIds]    = useState([]);
+  const [page,           setPage]           = useState(1);
+  const [pageSize,       setPageSize]       = useState(DEFAULT_PAGE_SIZE);
+  const [smsTarget,      setSmsTarget]      = useState(null);
+  const [smsBody,        setSmsBody]        = useState("");
+  const [smsSending,     setSmsSending]     = useState(false);
   const reconcilingRef = useRef(new Set());
 
+  // ── Payments query ────────────────────────────────────────────────────────
   const { data: paymentsData, isLoading: loading, error, refetch } = useQuery({
     queryKey: ["cw-payments", appliedFilters, page, pageSize],
-    queryFn: () => carWashApi.listPayments({ ...appliedFilters, limit: pageSize, page }),
+    queryFn:  () => carWashApi.listPayments({ ...appliedFilters, limit: pageSize, page }),
     placeholderData: (prev) => prev,
     staleTime: 30_000,
   });
 
+  // ── Cashbooks reference query ─────────────────────────────────────────────
   const { data: cashbooksRaw } = useQuery({
     queryKey: ["cw-payment-cashbooks", currentCompany?._id],
-    queryFn: async () => {
-      const accounts = await carWashApi.listChartOfAccounts({ business: currentCompany._id, type: "asset", moduleScope: "carwash", search: "Cashbooks" });
+    queryFn:  async () => {
+      const accounts = await carWashApi.listChartOfAccounts({
+        business: currentCompany._id, type: "asset", moduleScope: "carwash", search: "Cashbooks",
+      });
       return Array.isArray(accounts) ? accounts : [];
     },
-    enabled: !!currentCompany?._id,
+    enabled:   !!currentCompany?._id,
     staleTime: 5 * 60_000,
   });
 
   useEffect(() => { if (error) toast.error("Failed to load payments"); }, [error]);
   useEffect(() => { setExpandedIds([]); }, [paymentsData]);
 
-  const rows = useMemo(() => normalizeListPayload(paymentsData, "payments"), [paymentsData]);
-  const pagination = paymentsData?.pagination || { page, limit: pageSize, total: rows.length, pages: 1 };
-  const cashbooks = cashbooksRaw ?? [];
+  const rows       = useMemo(() => normalizeListPayload(paymentsData, "payments"), [paymentsData]);
+  const pagination = paymentsData?.pagination || { page, limit: pageSize, total: rows.length, pages: 1, totalAmount: 0 };
+  const cashbooks  = cashbooksRaw ?? [];
 
-  const rowStats = useMemo(() => {
-    let totalAmount = 0, pendingCount = 0, reconciledCount = 0, flaggedCount = 0;
-    rows.forEach((row) => {
-      totalAmount += Number(row.amount || 0);
-      const status = row.reconciliationStatus || "pending";
-      if (status === "pending") pendingCount++;
-      else if (status === "reconciled") reconciledCount++;
-      else if (status === "flagged") flaggedCount++;
-    });
-    return { totalAmount, pendingCount, reconciledCount, flaggedCount };
+  // Page-level stats (current page only)
+  const pageStats = useMemo(() => {
+    let pageTotal = 0, pendingCount = 0, reconciledCount = 0, flaggedCount = 0;
+    for (const row of rows) {
+      pageTotal += Number(row.amount || 0);
+      const s = row.reconciliationStatus || "pending";
+      if (s === "pending")    pendingCount++;
+      else if (s === "reconciled") reconciledCount++;
+      else if (s === "flagged")    flaggedCount++;
+    }
+    return { pageTotal, pendingCount, reconciledCount, flaggedCount };
   }, [rows]);
-  const { totalAmount, pendingCount, reconciledCount, flaggedCount } = rowStats;
 
-  const buildPaymentTemplates = (row) => {
+  const periodTotal = pagination.totalAmount ?? 0;
+
+  // ── Filter helpers ────────────────────────────────────────────────────────
+  const setF = useCallback((key, val) => setFilters(prev => ({ ...prev, [key]: val })), []);
+
+  const applyQuickRange = useCallback((rangeKey) => {
+    const ranges = quickRanges();
+    const r = ranges[rangeKey];
+    setFilters(prev => ({ ...prev, ...r }));
+    setPage(1);
+    setAppliedFilters(prev => ({ ...prev, ...r }));
+  }, []);
+
+  const applyFilters = (e) => {
+    e.preventDefault();
+    setPage(1);
+    setAppliedFilters({ ...filters });
+  };
+
+  const resetFilters = () => {
+    const d = defaultFilters();
+    setFilters(d);
+    setPage(1);
+    setAppliedFilters(d);
+  };
+
+  // ── Row interactions ──────────────────────────────────────────────────────
+  const toggleExpanded = useCallback((id) => {
+    setExpandedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }, []);
+
+  const updateReconciliation = async (row, status) => {
+    const paymentId = row._id;
+    if (reconcilingRef.current.has(paymentId)) return;
+    reconcilingRef.current.add(paymentId);
+    const note = status === "flagged"
+      ? window.prompt("Reason for flagging this payment?", row.reconciliationNote || "") || ""
+      : row.reconciliationNote || "";
+    try {
+      await carWashApi.updatePaymentReconciliation(paymentId, { reconciliationStatus: status, reconciliationNote: note });
+      await queryClient.invalidateQueries({ queryKey: ["cw-payments"] });
+      toast.success("Reconciliation updated");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Unable to update reconciliation");
+    } finally {
+      reconcilingRef.current.delete(paymentId);
+    }
+  };
+
+  // ── SMS ───────────────────────────────────────────────────────────────────
+  const resolvePhone = (row) => row.receivedFromPhone || row.job?.phone || "";
+
+  const buildTemplates = useCallback((row) => {
     const name   = row.job?.customerName || "Customer";
     const amount = Number(row.amount || 0).toLocaleString();
     const num    = row.job?.jobNumber || "";
     const plate  = row.job?.plateNumber || "";
     return [
       { label: "Payment Confirmed", color: "green",  body: `Hi ${name}! Payment of KES ${amount} received for ${plate || num} wash. Thank you!` },
-      { label: "Receipt",           color: "blue",   body: `Hi ${name}, your payment of KES ${amount} for car wash job ${num} has been received. Your balance is now cleared. Thank you for choosing us!` },
-      { label: "Partial Payment",   color: "amber",  body: `Hi ${name}, we've received KES ${amount} toward your car wash job ${num}. Please pay the remaining balance at your convenience. Thank you!` },
+      { label: "Receipt",           color: "blue",   body: `Hi ${name}, your payment of KES ${amount} for car wash job ${num} has been received. Balance cleared. Thank you!` },
+      { label: "Partial Payment",   color: "amber",  body: `Hi ${name}, we received KES ${amount} toward job ${num}. Please pay the remaining balance. Thank you!` },
     ];
-  };
+  }, []);
 
-  const openSmsModal = (row) => {
+  const openSmsModal = useCallback((row) => {
     setSmsTarget(row);
     const name   = row.job?.customerName || "Customer";
     const amount = Number(row.amount || 0).toLocaleString();
     const plate  = row.job?.plateNumber || "";
     const num    = row.job?.jobNumber || "";
     setSmsBody(`Hi ${name}! Payment of KES ${amount} received for ${plate || num} wash. Thank you!`);
-  };
-
-  // Resolve the best SMS target phone for a payment:
-  // 1. M-Pesa sender phone (stored at payment time — most accurate for Paybill)
-  // 2. Customer phone from the job record
-  const resolvePaymentSmsPhone = (row) =>
-    row.receivedFromPhone || row.job?.phone || "";
+  }, []);
 
   const sendSms = async (phone, body) => {
     if (!smsTarget) return;
@@ -108,44 +193,36 @@ const CarWashPayments = () => {
       await carWashApi.sendPaymentSms(smsTarget._id, { phone, body });
       toast.success("SMS sent successfully");
       setSmsTarget(null);
-    } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to send SMS");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to send SMS");
     } finally {
       setSmsSending(false);
     }
   };
 
-  const applyFilters = (event) => {
-    event.preventDefault();
-    setPage(1);
-    setAppliedFilters({ ...filters });
-  };
+  // ── Quick-pick active state ────────────────────────────────────────────────
+  const ranges = quickRanges();
+  const activeQuick = useMemo(() => {
+    const { dateFrom: af, dateTo: at } = appliedFilters;
+    return Object.entries(ranges).find(([, r]) => r.dateFrom === af && r.dateTo === at)?.[0] || null;
+  }, [appliedFilters]);
 
-  const resetFilters = () => {
-    setFilters(defaultFilters);
-    setPage(1);
-    setAppliedFilters(defaultFilters);
-  };
+  const quickBtn = (key, label) => (
+    <button
+      key={key}
+      type="button"
+      onClick={() => applyQuickRange(key)}
+      className={`h-8 px-2.5 text-[11px] font-bold border transition ${
+        activeQuick === key
+          ? "border-[#0B3B2E] bg-[#0B3B2E] text-white"
+          : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+      }`}
+    >
+      {label}
+    </button>
+  );
 
-  const toggleExpanded = (id) => {
-    setExpandedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
-  };
-
-  const updateReconciliation = async (row, status) => {
-    const paymentId = row._id;
-    if (reconcilingRef.current.has(paymentId)) return;
-    reconcilingRef.current.add(paymentId);
-    const note = status === "flagged" ? window.prompt("Reason for flagging this payment?", row.reconciliationNote || "") || "" : row.reconciliationNote || "";
-    try {
-      await carWashApi.updatePaymentReconciliation(paymentId, { reconciliationStatus: status, reconciliationNote: note });
-      await queryClient.invalidateQueries({ queryKey: ["cw-payments"] });
-      toast.success("Payment reconciliation updated");
-    } catch (error) {
-      toast.error(error?.response?.data?.message || "Unable to update reconciliation");
-    } finally {
-      reconcilingRef.current.delete(paymentId);
-    }
-  };
+  const colCount = isConsolidated ? 10 : 9;
 
   return (
     <CarWashShell
@@ -157,74 +234,112 @@ const CarWashPayments = () => {
         </button>
       }
     >
-      <form onSubmit={applyFilters} className="mb-2 flex-shrink-0 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm grid-cols-1 sm:grid-cols-2 xl:grid-cols-[170px_170px_220px_180px_1fr_auto_auto]">
-        <input
-          type="date"
-          className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-          value={filters.date}
-          onChange={(event) => setFilters((prev) => ({ ...prev, date: event.target.value }))}
-        />
-        <select
-          className="h-8 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
-          value={filters.method}
-          onChange={(event) => setFilters((prev) => ({ ...prev, method: event.target.value }))}
-        >
-          <option value="">All methods</option>
-          {paymentMethods.map((method) => (
-            <option key={method} value={method}>{method.toUpperCase()}</option>
-          ))}
-        </select>
-        <select
-          className="h-8 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
-          value={filters.cashbookAccount}
-          onChange={(event) => setFilters((prev) => ({ ...prev, cashbookAccount: event.target.value }))}
-        >
-          <option value="">All cashbooks</option>
-          {cashbooks.map((account) => (
-            <option key={account._id} value={account._id}>{account.code} - {account.name}</option>
-          ))}
-        </select>
-        <select
-          className="h-8 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
-          value={filters.reconciliationStatus}
-          onChange={(event) => setFilters((prev) => ({ ...prev, reconciliationStatus: event.target.value }))}
-        >
-          <option value="">All reconciliation</option>
-          {reconciliationStatuses.map((status) => (
-            <option key={status} value={status}>{status.toUpperCase()}</option>
-          ))}
-        </select>
-        <input
-          className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-          placeholder="Reference / receipt code"
-          value={filters.reference}
-          onChange={(event) => setFilters((prev) => ({ ...prev, reference: event.target.value }))}
-        />
-        <button type="submit" className="inline-flex h-8 items-center justify-center gap-1.5 bg-[#FF8C00] px-4 text-xs font-bold text-white hover:bg-[#E67E00]">
-          <FaSearch />
-          Search
-        </button>
-        <button type="button" onClick={resetFilters} className="inline-flex h-8 items-center justify-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0A3127]">
-          <FaRedoAlt />
-          Reset
-        </button>
+      {/* ── Filter bar ───────────────────────────────────────────────────── */}
+      <form
+        onSubmit={applyFilters}
+        className="mb-2 flex-shrink-0 space-y-1.5 border border-slate-200 bg-white p-2 shadow-sm"
+      >
+        {/* Row 1: date range + quick picks */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] font-extrabold uppercase tracking-wide text-slate-500 whitespace-nowrap">From</span>
+            <input
+              type="date"
+              className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+              value={filters.dateFrom}
+              onChange={e => setF("dateFrom", e.target.value)}
+            />
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] font-extrabold uppercase tracking-wide text-slate-500 whitespace-nowrap">To</span>
+            <input
+              type="date"
+              className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+              value={filters.dateTo}
+              min={filters.dateFrom}
+              onChange={e => setF("dateTo", e.target.value)}
+            />
+          </div>
+          <div className="flex items-center gap-1">
+            {quickBtn("today",     "Today")}
+            {quickBtn("yesterday", "Yesterday")}
+            {quickBtn("week",      "This Week")}
+            {quickBtn("month",     "This Month")}
+          </div>
+          {(filters.dateFrom !== appliedFilters.dateFrom || filters.dateTo !== appliedFilters.dateTo) && (
+            <span className="text-[10px] font-semibold text-amber-600">— press Search to apply</span>
+          )}
+        </div>
+
+        {/* Row 2: method, cashbook, reconciliation, reference, actions */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <select
+            className="h-8 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
+            value={filters.method}
+            onChange={e => setF("method", e.target.value)}
+          >
+            <option value="">All methods</option>
+            {paymentMethods.map(m => <option key={m} value={m}>{m.toUpperCase()}</option>)}
+          </select>
+          <select
+            className="h-8 min-w-[180px] border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
+            value={filters.cashbookAccount}
+            onChange={e => setF("cashbookAccount", e.target.value)}
+          >
+            <option value="">All cashbooks</option>
+            {cashbooks.map(a => <option key={a._id} value={a._id}>{a.code} - {a.name}</option>)}
+          </select>
+          <select
+            className="h-8 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
+            value={filters.reconciliationStatus}
+            onChange={e => setF("reconciliationStatus", e.target.value)}
+          >
+            <option value="">All reconciliation</option>
+            {reconciliationStatuses.map(s => <option key={s} value={s}>{s.toUpperCase()}</option>)}
+          </select>
+          <input
+            className="h-8 flex-1 min-w-[140px] border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+            placeholder="Reference / receipt code"
+            value={filters.reference}
+            onChange={e => setF("reference", e.target.value)}
+          />
+          <button type="submit" className="inline-flex h-8 items-center justify-center gap-1.5 bg-[#FF8C00] px-4 text-xs font-bold text-white hover:bg-[#E67E00] whitespace-nowrap">
+            <FaSearch /> Search
+          </button>
+          <button type="button" onClick={resetFilters} className="inline-flex h-8 items-center justify-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0A3127] whitespace-nowrap">
+            <FaTimes /> Reset
+          </button>
+        </div>
       </form>
 
       <div className="flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm">
-        <div className="flex-shrink-0 flex flex-wrap min-h-8 items-center gap-x-5 gap-y-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
+
+        {/* ── Info bar ─────────────────────────────────────────────────────── */}
+        <div className="flex-shrink-0 flex flex-wrap min-h-8 items-center gap-x-4 gap-y-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
           <span>Showing: <strong className="text-[#0B3B2E]">{rows.length}</strong> / {pagination.total}</span>
           <span>Page: <strong className="text-[#0B3B2E]">{pagination.page}</strong> / {pagination.pages}</span>
-          <span>Page Total: <strong className="text-[#0B3B2E]">{formatMoney(totalAmount)}</strong></span>
-          <span>Date: <strong className="text-slate-900">{appliedFilters.date || "All"}</strong></span>
-          <span>Pending: <strong className="text-[#FF8C00]">{pendingCount}</strong></span>
-          <span>Reconciled: <strong className="text-[#0B3B2E]">{reconciledCount}</strong></span>
-          <span>Flagged: <strong className="text-red-700">{flaggedCount}</strong></span>
+          <span className="border-l border-slate-300 pl-4">
+            Page total: <strong className="text-[#0B3B2E]">{formatMoney(pageStats.pageTotal)}</strong>
+          </span>
+          {pagination.pages > 1 && (
+            <span>Period total: <strong className="text-emerald-700">{formatMoney(periodTotal)}</strong></span>
+          )}
+          <span className="border-l border-slate-300 pl-4">
+            Date: <strong className="normal-case text-slate-900">{formatDateRange(appliedFilters.dateFrom, appliedFilters.dateTo)}</strong>
+          </span>
+          <span className="ml-auto flex items-center gap-3">
+            {pageStats.pendingCount > 0    && <span>Pending: <strong className="text-[#FF8C00]">{pageStats.pendingCount}</strong></span>}
+            {pageStats.reconciledCount > 0 && <span>Reconciled: <strong className="text-emerald-700">{pageStats.reconciledCount}</strong></span>}
+            {pageStats.flaggedCount > 0    && <span>Flagged: <strong className="text-red-700">{pageStats.flaggedCount}</strong></span>}
+          </span>
         </div>
-        {/* Mobile card list */}
+
+        {/* ── Mobile list ───────────────────────────────────────────────────── */}
         <div className="sm:hidden flex-1 min-h-0 overflow-y-auto divide-y divide-slate-200">
           {rows.length ? rows.map((row) => {
             const expanded = expandedIds.includes(row._id);
-            const phone = resolvePaymentSmsPhone(row);
+            const phone    = resolvePhone(row);
+            const status   = row.reconciliationStatus || "pending";
             return (
               <React.Fragment key={row._id}>
                 <div className="p-3">
@@ -233,7 +348,7 @@ const CarWashPayments = () => {
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="font-extrabold text-slate-900">{row.job?.jobNumber || "-"}</span>
                         <span className="font-bold uppercase text-slate-700">{row.method || "-"}</span>
-                        <span className={`inline-flex border px-1.5 py-0.5 text-[10px] font-bold uppercase ${reconciliationBadgeClass[row.reconciliationStatus || "pending"] || reconciliationBadgeClass.pending}`}>{row.reconciliationStatus || "pending"}</span>
+                        <span className={`inline-flex border px-1.5 py-0.5 text-[10px] font-bold uppercase ${reconciliationBadgeClass[status] || reconciliationBadgeClass.pending}`}>{status}</span>
                       </div>
                       <div className="mt-0.5 font-bold uppercase text-slate-800">{row.job?.plateNumber || "-"}</div>
                       {row.job?.customerName && <div className="text-xs text-slate-500">{row.job.customerName}</div>}
@@ -243,16 +358,14 @@ const CarWashPayments = () => {
                       <div className="font-extrabold text-slate-900">{formatMoney(row.amount)}</div>
                       {canReconcile ? (
                         <select
-                          className={`mt-1 h-6 border px-1.5 text-[10px] font-bold uppercase ${reconciliationBadgeClass[row.reconciliationStatus || "pending"] || reconciliationBadgeClass.pending}`}
-                          value={row.reconciliationStatus || "pending"}
-                          onChange={(e) => updateReconciliation(row, e.target.value)}
+                          className={`mt-1 h-6 border px-1.5 text-[10px] font-bold uppercase ${reconciliationBadgeClass[status] || reconciliationBadgeClass.pending}`}
+                          value={status}
+                          onChange={e => updateReconciliation(row, e.target.value)}
                         >
-                          {reconciliationStatuses.map((s) => <option key={s} value={s}>{s.toUpperCase()}</option>)}
+                          {reconciliationStatuses.map(s => <option key={s} value={s}>{s.toUpperCase()}</option>)}
                         </select>
                       ) : (
-                        <span className={`mt-1 inline-flex border px-1.5 py-0.5 text-[10px] font-bold uppercase ${reconciliationBadgeClass[row.reconciliationStatus || "pending"] || reconciliationBadgeClass.pending}`}>
-                          {(row.reconciliationStatus || "pending").toUpperCase()}
-                        </span>
+                        <span className={`mt-1 inline-flex border px-1.5 py-0.5 text-[10px] font-bold uppercase ${reconciliationBadgeClass[status] || reconciliationBadgeClass.pending}`}>{status}</span>
                       )}
                     </div>
                   </div>
@@ -268,9 +381,9 @@ const CarWashPayments = () => {
                   </div>
                   {expanded && (
                     <div className="mt-2 space-y-1 rounded border border-slate-200 bg-[#F8FBF9] p-2 text-[11px] text-slate-600">
+                      <div><span className="font-extrabold uppercase text-slate-500">Time:</span> {row.paymentDate ? new Date(row.paymentDate).toLocaleString("en-KE") : "-"}</div>
                       <div><span className="font-extrabold uppercase text-slate-500">Reference:</span> {row.reference || "-"}</div>
                       <div><span className="font-extrabold uppercase text-slate-500">Cashbook:</span> {row.cashbookAccount ? `${row.cashbookAccount.code} - ${row.cashbookAccount.name}` : "-"}</div>
-                      <div><span className="font-extrabold uppercase text-slate-500">Customer:</span> {row.job?.customerName || "-"}</div>
                       {row.receivedFromPhone && <div><span className="font-extrabold uppercase text-slate-500">M-Pesa Phone:</span> {row.receivedFromPhone}</div>}
                       {row.reconciliationNote && <div><span className="font-extrabold uppercase text-slate-500">Note:</span> {row.reconciliationNote}</div>}
                     </div>
@@ -279,110 +392,150 @@ const CarWashPayments = () => {
               </React.Fragment>
             );
           }) : (
-            <div className="py-10 text-center text-xs font-semibold text-slate-500">No Car Wash payments found for the selected filters.</div>
+            <div className="py-10 text-center text-xs font-semibold text-slate-500">No payments found for the selected filters.</div>
           )}
         </div>
 
-        {/* Desktop table */}
+        {/* ── Desktop table ─────────────────────────────────────────────────── */}
         <div className="hidden sm:flex sm:flex-col sm:flex-1 sm:min-h-0 sm:overflow-hidden">
-        <div className="flex-1 overflow-y-auto overflow-x-auto">
-        <table className="w-full min-w-[1120px] text-xs">
-          <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
-            <tr>
-              <th className="w-8 px-2 py-1.5 text-left" />
-              <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Date</th>
-              <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Job</th>
-              <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Plate</th>
-              {isConsolidated && <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Branch</th>}
-              <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Method</th>
-              <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Cashbook</th>
-              <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Reference</th>
-              <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Reconciliation</th>
-              <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length ? (
-              rows.map((row) => {
-                const expanded = expandedIds.includes(row._id);
-                return (
-                  <React.Fragment key={row._id}>
-                    <tr className="border-b border-slate-200 hover:bg-slate-50">
-                      <td className="px-2 py-1">
-                        <button type="button" onClick={() => toggleExpanded(row._id)} className="text-[#0B3B2E] hover:text-[#FF8C00]">
-                          {expanded ? <FaChevronDown /> : <FaChevronRight />}
-                        </button>
-                      </td>
-                      <td className="px-2 py-1 text-slate-700">{row.paymentDate ? new Date(row.paymentDate).toLocaleDateString("en-GB") : "-"}</td>
-                      <td className="px-2 py-1 font-extrabold text-slate-900">{row.job?.jobNumber || "-"}</td>
-                      <td className="px-2 py-1 font-bold uppercase text-slate-800">{row.job?.plateNumber || "-"}</td>
-                      {isConsolidated && <td className="px-2 py-1 text-slate-600">{row.branch?.name || <span className="text-slate-400">—</span>}</td>}
-                      <td className="px-2 py-1 font-bold text-slate-700">{row.method?.toUpperCase() || "-"}</td>
-                      <td className="px-2 py-1 font-semibold text-slate-700">{row.cashbookAccount ? `${row.cashbookAccount.code} - ${row.cashbookAccount.name}` : "-"}</td>
-                      <td className="px-2 py-1 text-slate-700">{row.reference || "-"}</td>
-                      <td className="px-2 py-1">
-                        {canReconcile ? (
-                          <select
-                            className={`h-6 border px-2 text-[11px] font-bold uppercase ${reconciliationBadgeClass[row.reconciliationStatus || "pending"] || reconciliationBadgeClass.pending}`}
-                            value={row.reconciliationStatus || "pending"}
-                            onChange={(event) => updateReconciliation(row, event.target.value)}
-                          >
-                            {reconciliationStatuses.map((status) => (
-                              <option key={status} value={status}>{status.toUpperCase()}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <span className={`inline-flex border px-2 py-0.5 text-[11px] font-bold uppercase ${reconciliationBadgeClass[row.reconciliationStatus || "pending"] || reconciliationBadgeClass.pending}`}>
-                            {(row.reconciliationStatus || "pending").toUpperCase()}
-                          </span>
+          <div className="flex-1 overflow-y-auto overflow-x-auto">
+            <table className="w-full min-w-[1100px] text-xs">
+              <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+                <tr>
+                  <th className="w-8 px-2 py-1.5 text-left" />
+                  <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Date</th>
+                  <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Job</th>
+                  <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Plate</th>
+                  {isConsolidated && <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Branch</th>}
+                  <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Method</th>
+                  <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Cashbook</th>
+                  <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Reference</th>
+                  <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Reconciliation</th>
+                  <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.length ? rows.map((row) => {
+                  const expanded = expandedIds.includes(row._id);
+                  const status   = row.reconciliationStatus || "pending";
+                  const phone    = resolvePhone(row);
+                  return (
+                    <React.Fragment key={row._id}>
+                      <tr className="border-b border-slate-200 hover:bg-slate-50">
+                        <td className="px-2 py-1">
+                          <button type="button" onClick={() => toggleExpanded(row._id)} className="text-[#0B3B2E] hover:text-[#FF8C00]">
+                            {expanded ? <FaChevronDown /> : <FaChevronRight />}
+                          </button>
+                        </td>
+                        <td className="px-2 py-1 text-slate-700 whitespace-nowrap">
+                          {row.paymentDate ? new Date(row.paymentDate).toLocaleDateString("en-GB") : "-"}
+                        </td>
+                        <td className="px-2 py-1 font-extrabold text-slate-900">{row.job?.jobNumber || "-"}</td>
+                        <td className="px-2 py-1 font-bold uppercase text-slate-800">{row.job?.plateNumber || "-"}</td>
+                        {isConsolidated && (
+                          <td className="px-2 py-1 text-slate-600">{row.branch?.name || <span className="text-slate-400">—</span>}</td>
                         )}
-                      </td>
-                      <td className="px-2 py-1 text-right font-extrabold text-slate-900">{formatMoney(row.amount)}</td>
-                    </tr>
-                    {expanded && (
-                      <tr className="border-b border-slate-200 bg-[#F8FBF9]">
-                        <td colSpan={isConsolidated ? 10 : 9} className="px-10 py-2 text-[11px] text-slate-600">
-                          <div className="grid gap-3 md:grid-cols-5">
-                            <div><span className="font-extrabold uppercase text-slate-500">Time:</span> {row.paymentDate ? new Date(row.paymentDate).toLocaleString("en-KE") : "-"}</div>
-                            <div className="flex items-center gap-2">
-                              <div><span className="font-extrabold uppercase text-slate-500">Customer:</span> {row.job?.customerName || "-"}</div>
-                              {(row.receivedFromPhone || row.job?.phone) && (
-                                <button
-                                  type="button"
-                                  onClick={() => openSmsModal(row)}
-                                  className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-1.5 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-                                  title={`Send SMS to ${row.receivedFromPhone || row.job?.phone}`}
-                                >
-                                  <FaSms /> SMS
-                                  {row.receivedFromPhone && (
-                                    <span className="rounded bg-emerald-100 px-1 text-[9px] font-black text-emerald-700">M-Pesa</span>
+                        <td className="px-2 py-1 font-bold text-slate-700">{row.method?.toUpperCase() || "-"}</td>
+                        <td className="px-2 py-1 font-semibold text-slate-700">{row.cashbookAccount ? `${row.cashbookAccount.code} - ${row.cashbookAccount.name}` : "-"}</td>
+                        <td className="px-2 py-1 text-slate-600">{row.reference || "-"}</td>
+                        <td className="px-2 py-1">
+                          {canReconcile ? (
+                            <select
+                              className={`h-6 border px-2 text-[11px] font-bold uppercase ${reconciliationBadgeClass[status] || reconciliationBadgeClass.pending}`}
+                              value={status}
+                              onChange={e => updateReconciliation(row, e.target.value)}
+                            >
+                              {reconciliationStatuses.map(s => <option key={s} value={s}>{s.toUpperCase()}</option>)}
+                            </select>
+                          ) : (
+                            <span className={`inline-flex border px-2 py-0.5 text-[11px] font-bold uppercase ${reconciliationBadgeClass[status] || reconciliationBadgeClass.pending}`}>
+                              {status}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-2 py-1 text-right font-extrabold tabular-nums text-slate-900">{formatMoney(row.amount)}</td>
+                      </tr>
+
+                      {expanded && (
+                        <tr className="border-b border-slate-200 bg-[#F8FBF9]">
+                          <td colSpan={colCount} className="px-10 py-3 text-[11px] text-slate-600">
+                            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                              <div>
+                                <span className="font-extrabold uppercase text-slate-400">Time</span>
+                                <div className="mt-0.5 font-semibold">{row.paymentDate ? new Date(row.paymentDate).toLocaleString("en-KE") : "-"}</div>
+                              </div>
+                              <div>
+                                <span className="font-extrabold uppercase text-slate-400">Customer</span>
+                                <div className="mt-0.5 flex items-center gap-2">
+                                  <span className="font-semibold">{row.job?.customerName || "-"}</span>
+                                  {phone && (
+                                    <button
+                                      type="button"
+                                      onClick={() => openSmsModal(row)}
+                                      className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-1.5 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+                                    >
+                                      <FaSms /> SMS
+                                      {row.receivedFromPhone && (
+                                        <span className="rounded bg-emerald-100 px-1 text-[9px] font-black text-emerald-700">M-Pesa</span>
+                                      )}
+                                    </button>
                                   )}
-                                </button>
+                                </div>
+                              </div>
+                              <div>
+                                <span className="font-extrabold uppercase text-slate-400">Service</span>
+                                <div className="mt-0.5 font-semibold">{row.job?.serviceName || "-"}</div>
+                              </div>
+                              <div>
+                                <span className="font-extrabold uppercase text-slate-400">Job Status</span>
+                                <div className="mt-0.5 font-semibold capitalize">{row.job?.status || "-"}</div>
+                              </div>
+                              <div>
+                                <span className="font-extrabold uppercase text-slate-400">Received By</span>
+                                <div className="mt-0.5 font-semibold">{row.receivedBy?.name || row.receivedBy?.username || row.receivedBy?.email || "-"}</div>
+                              </div>
+                              <div>
+                                <span className="font-extrabold uppercase text-slate-400">Cashbook</span>
+                                <div className="mt-0.5 font-semibold">{row.cashbookAccount ? `${row.cashbookAccount.code} - ${row.cashbookAccount.name}` : "-"}</div>
+                              </div>
+                              {row.receivedFromPhone && (
+                                <div>
+                                  <span className="font-extrabold uppercase text-slate-400">M-Pesa Phone</span>
+                                  <div className="mt-0.5 font-semibold">{row.receivedFromPhone}</div>
+                                </div>
+                              )}
+                              <div>
+                                <span className="font-extrabold uppercase text-slate-400">Reviewed By</span>
+                                <div className="mt-0.5 font-semibold">{row.reconciledBy?.name || row.reconciledBy?.username || row.reconciledBy?.email || "-"}</div>
+                              </div>
+                              <div>
+                                <span className="font-extrabold uppercase text-slate-400">Reviewed At</span>
+                                <div className="mt-0.5 font-semibold">{row.reconciledAt ? new Date(row.reconciledAt).toLocaleString("en-KE") : "-"}</div>
+                              </div>
+                              {row.reconciliationNote && (
+                                <div className="sm:col-span-3 lg:col-span-5">
+                                  <span className="font-extrabold uppercase text-slate-400">Reconciliation Note</span>
+                                  <div className="mt-0.5 font-semibold">{row.reconciliationNote}</div>
+                                </div>
                               )}
                             </div>
-                            <div><span className="font-extrabold uppercase text-slate-500">Service:</span> {row.job?.serviceName || "-"}</div>
-                            <div><span className="font-extrabold uppercase text-slate-500">Job Status:</span> {row.job?.status || "-"}</div>
-                            <div><span className="font-extrabold uppercase text-slate-500">Received By:</span> {row.receivedBy?.name || row.receivedBy?.username || row.receivedBy?.email || "-"}</div>
-                            <div><span className="font-extrabold uppercase text-slate-500">Cashbook:</span> {row.cashbookAccount ? `${row.cashbookAccount.code} - ${row.cashbookAccount.name}` : "-"}</div>
-                            <div><span className="font-extrabold uppercase text-slate-500">Reviewed By:</span> {row.reconciledBy?.name || row.reconciledBy?.username || row.reconciledBy?.email || "-"}</div>
-                            <div><span className="font-extrabold uppercase text-slate-500">Reviewed At:</span> {row.reconciledAt ? new Date(row.reconciledAt).toLocaleString("en-KE") : "-"}</div>
-                            <div className="md:col-span-3"><span className="font-extrabold uppercase text-slate-500">Reconciliation Note:</span> {row.reconciliationNote || "-"}</div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                );
-              })
-            ) : (
-              <tr>
-                <td colSpan={isConsolidated ? 10 : 9} className="px-3 py-10 text-center text-xs font-semibold text-slate-500">No Car Wash payments found for the selected filters.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-        </div>{/* end scroll */}
-        </div>{/* end desktop table wrapper */}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                }) : (
+                  <tr>
+                    <td colSpan={colCount} className="px-3 py-10 text-center text-xs font-semibold text-slate-500">
+                      No payments found for the selected filters.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <PaginationBar
           page={pagination.page}
           pages={pagination.pages}
@@ -392,11 +545,12 @@ const CarWashPayments = () => {
           loading={loading}
         />
       </div>
+
       {smsTarget && (
         <CwSmsModal
-          target={{ _id: smsTarget._id, name: smsTarget.job?.customerName, phone: resolvePaymentSmsPhone(smsTarget) }}
+          target={{ _id: smsTarget._id, name: smsTarget.job?.customerName, phone: resolvePhone(smsTarget) }}
           defaultBody={smsBody}
-          templates={buildPaymentTemplates(smsTarget)}
+          templates={buildTemplates(smsTarget)}
           context={`Payment · ${smsTarget.job?.jobNumber || ""}${smsTarget.receivedFromPhone ? ` · M-Pesa: ${smsTarget.receivedFromPhone}` : ""}`}
           onSend={sendSms}
           onClose={() => setSmsTarget(null)}

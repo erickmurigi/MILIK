@@ -142,22 +142,49 @@ export const listAccounts = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const filter = { business };
 
-    if (req.query.status) filter.status = req.query.status;
+    if (req.query.status)      filter.status      = req.query.status;
     if (req.query.accountType) filter.accountType = req.query.accountType;
-    if (req.query.search) {
-      const term = escapeRegex(String(req.query.search).trim());
-      filter.$or = [{ accountNumber: { $regex: term, $options: "i" } }];
-    }
 
+    // Fetch all accounts (balance computation requires the full set anyway)
     const accounts = await CarWashCreditAccount.find(filter)
       .populate("customer", "name phone plates")
       .sort({ status: 1, createdAt: -1 })
       .lean();
 
     const balances = await computeAllBalances(business, accounts);
-    const enriched = accounts.map((acc) => ({ ...acc, currentBalance: balances[String(acc._id)] ?? 0 }));
+    let enriched = accounts.map((acc) => ({ ...acc, currentBalance: balances[String(acc._id)] ?? 0 }));
 
-    res.json({ success: true, data: enriched });
+    // In-memory search across account number, customer name/phone, and plates
+    const search = String(req.query.search || "").trim().toLowerCase();
+    if (search) {
+      enriched = enriched.filter((acc) =>
+        acc.accountNumber?.toLowerCase().includes(search) ||
+        acc.customer?.name?.toLowerCase().includes(search) ||
+        acc.customer?.phone?.includes(search) ||
+        (acc.plates || []).some((p) => p.toLowerCase().includes(search)) ||
+        acc.contactPerson?.toLowerCase().includes(search)
+      );
+    }
+
+    // In-memory sort
+    const sortBy  = String(req.query.sortBy  || "");
+    const sortDir = req.query.sortDir === "asc" ? 1 : -1;
+    if (sortBy === "balance") {
+      enriched.sort((a, b) => sortDir * (a.currentBalance - b.currentBalance));
+    } else if (sortBy === "name") {
+      enriched.sort((a, b) => sortDir * (a.customer?.name || "").localeCompare(b.customer?.name || ""));
+    } else if (sortBy === "type") {
+      enriched.sort((a, b) => sortDir * a.accountType.localeCompare(b.accountType));
+    }
+
+    // Pagination
+    const limit  = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);
+    const page   = Math.max(Number(req.query.page || 1), 1);
+    const total  = enriched.length;
+    const pages  = Math.max(Math.ceil(total / limit), 1);
+    const data   = enriched.slice((page - 1) * limit, page * limit);
+
+    res.json({ success: true, data, total, page, limit, pages });
   } catch (err) {
     next(err);
   }

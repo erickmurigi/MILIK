@@ -14,6 +14,7 @@ import { sendAdHocSms, sendAdHocSmsToMasked } from '../../../services/communicat
 import { resolveCarWashSmsBody } from '../services/carwashSmsService.js';
 import { postCarWashLoyaltyDiscountLedger } from '../services/carwashAccountingService.js';
 import { normalizePlate, buildPlateRegex } from '../utils/plateUtils.js';
+import { recomputeCustomerStats } from '../services/customerStatsService.js';
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
@@ -89,8 +90,11 @@ export const upsertLoyaltyProgram = async (req, res, next) => {
 export const listCustomers = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const { search: rawSearch, page = 1, limit = 50 } = req.query;
+    const { search: rawSearch, page = 1, limit = 50, dormantDays = 0 } = req.query;
     const search = escapeRegex(rawSearch);
+    const dormant = Math.max(0, Number(dormantDays || 0));
+    const pageNum  = Math.max(Number(page), 1);
+    const limitNum = Math.min(Math.max(Number(limit), 1), 200);
 
     const filter = { business };
     if (search) {
@@ -100,28 +104,86 @@ export const listCustomers = async (req, res, next) => {
         { plates: { $regex: search, $options: 'i' } },
       ];
     }
+    if (dormant > 0) {
+      const cutoff = new Date(Date.now() - dormant * 86_400_000);
+      filter.$and = [{ $or: [{ 'stats.lastVisit': null }, { 'stats.lastVisit': { $lt: cutoff } }] }];
+    }
 
-    const [customers, total] = await Promise.all([
+    const [customers, total, rewardsReadyCount] = await Promise.all([
       CarWashCustomer.find(filter)
         .sort({ name: 1 })
-        .skip((Number(page) - 1) * Number(limit))
-        .limit(Number(limit))
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
         .lean(),
       CarWashCustomer.countDocuments(filter),
+      CarWashLoyaltyCard.countDocuments({ business, pendingRewards: { $gt: 0 } }),
     ]);
 
-    // Attach loyalty card stats for each customer
     const customerIds = customers.map(c => c._id);
-    const cards = await CarWashLoyaltyCard.find({ customer: { $in: customerIds }, business })
-      .lean();
+    const cards = await CarWashLoyaltyCard.find({ customer: { $in: customerIds }, business }).lean();
     const cardsByCustomer = new Map(cards.map(c => [String(c.customer), c]));
 
-    const enriched = customers.map(c => ({
-      ...c,
-      loyaltyCard: cardsByCustomer.get(String(c._id)) || null,
-    }));
+    const enriched = customers.map(c => ({ ...c, loyaltyCard: cardsByCustomer.get(String(c._id)) || null }));
 
-    res.json({ success: true, data: enriched, total, page: Number(page), limit: Number(limit) });
+    res.json({
+      success: true,
+      data: enriched,
+      total,
+      page: pageNum,
+      limit: limitNum,
+      pages: Math.max(Math.ceil(total / limitNum), 1),
+      rewardsReadyCount,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const awardManualStamp = async (req, res, next) => {
+  try {
+    const business  = resolveActiveBusinessId(req);
+    const count     = Math.min(Math.max(Number(req.body.count || 1), 1), 10);
+    const note      = String(req.body.note || '').trim();
+
+    const [customer, program] = await Promise.all([
+      CarWashCustomer.findOne({ _id: req.params.id, business }).lean(),
+      CarWashLoyaltyProgram.findOne({ business, isActive: true }).lean(),
+    ]);
+    if (!customer) return next(createError(404, 'Customer not found'));
+    if (!program)  return next(createError(400, 'No active loyalty program'));
+
+    let card = await CarWashLoyaltyCard.findOneAndUpdate(
+      { business, customer: req.params.id },
+      { $setOnInsert: { business, customer: req.params.id, program: program._id } },
+      { upsert: true, new: true }
+    );
+
+    const now   = new Date();
+    const plate = customer.plates?.[0] || '';
+    let rewardTriggered = false;
+
+    for (let i = 0; i < count; i++) {
+      card.currentStamps     += 1;
+      card.totalStampsEarned += 1;
+      card.lastStampAt        = now;
+      card.stampHistory.push({ jobNumber: 'Manual', plate, awardedAt: now, isManual: true, note });
+
+      if (card.currentStamps >= program.stampsRequired) {
+        card.pendingRewards     += 1;
+        card.totalRewardsEarned += 1;
+        card.currentStamps       = 0;
+        rewardTriggered          = true;
+      }
+    }
+
+    await card.save();
+
+    res.json({
+      success: true,
+      data: card,
+      rewardTriggered,
+      message: `${count} stamp${count !== 1 ? 's' : ''} awarded to ${customer.name}`,
+    });
   } catch (err) {
     next(err);
   }
@@ -135,13 +197,72 @@ export const listCustomersEnriched = async (req, res, next) => {
   try {
     res.set('Cache-Control', 'no-store');
     const business = resolveActiveBusinessId(req);
+    const businessOid = new mongoose.Types.ObjectId(String(business));
     const pageNum = Math.max(Number(req.query.page || 1), 1);
-    const limitNum = Math.min(Math.max(Number(req.query.limit || 30), 1), 100);
+    const limitNum = Math.min(Math.max(Number(req.query.limit || 30), 1), 200);
     const search = escapeRegex(String(req.query.search || '').trim());
 
     const wantsOutstanding = req.query.hasOutstanding === 'true';
     const wantsCredit     = req.query.hasCredit === 'true';
+    const dormantDays     = Math.max(0, Number(req.query.dormantDays || 0));
+    const loyaltyFilter   = String(req.query.loyaltyFilter || '');
+    const minSpend        = Number(req.query.minSpend || 0);
+    const maxSpend        = Number(req.query.maxSpend || 0);
+    const sortBy          = String(req.query.sortBy || 'name');
+    const sortDir         = req.query.sortDir === 'asc' ? 1 : -1;
+    const exportCsv       = req.query.export === 'csv';
 
+    // ── Phase 1: fetch loyalty program + run pre-queries that inform the DB filter ──
+    const loyaltyProgram = await CarWashLoyaltyProgram.findOne({ business, isActive: true })
+      .select('stampsRequired rewardType rewardValue isActive').lean();
+
+    const intersect = (a, b) => {
+      const bSet = new Set(b.map(String));
+      return a.filter((id) => bSet.has(String(id)));
+    };
+
+    let mandatoryIds = null; // null = no $in restriction
+    let excludeIds   = [];   // IDs to $nin (no_stamps case)
+
+    if (wantsCredit) {
+      const docs = await CarWashCustomerCredit.find(
+        { business: businessOid, status: 'active' }, { customer: 1 }
+      ).lean();
+      mandatoryIds = docs.map((d) => d.customer);
+    }
+
+    if (loyaltyFilter) {
+      const stampsRequired = loyaltyProgram?.stampsRequired || 10;
+      let cards;
+      switch (loyaltyFilter) {
+        case 'member':
+          cards = await CarWashLoyaltyCard.find({ business }, { customer: 1 }).lean();
+          mandatoryIds = mandatoryIds !== null ? intersect(mandatoryIds, cards.map((c) => c.customer)) : cards.map((c) => c.customer);
+          break;
+        case 'has_reward':
+          cards = await CarWashLoyaltyCard.find({ business, pendingRewards: { $gt: 0 } }, { customer: 1 }).lean();
+          mandatoryIds = mandatoryIds !== null ? intersect(mandatoryIds, cards.map((c) => c.customer)) : cards.map((c) => c.customer);
+          break;
+        case 'near_reward':
+          cards = await CarWashLoyaltyCard.find(
+            { business, currentStamps: { $gte: Math.max(1, stampsRequired - 2) }, pendingRewards: 0 },
+            { customer: 1 }
+          ).lean();
+          mandatoryIds = mandatoryIds !== null ? intersect(mandatoryIds, cards.map((c) => c.customer)) : cards.map((c) => c.customer);
+          break;
+        case 'no_stamps':
+          cards = await CarWashLoyaltyCard.find({ business, totalStampsEarned: { $gt: 0 } }, { customer: 1 }).lean();
+          if (mandatoryIds !== null) {
+            const excSet = new Set(cards.map((c) => String(c.customer)));
+            mandatoryIds = mandatoryIds.filter((id) => !excSet.has(String(id)));
+          } else {
+            excludeIds = cards.map((c) => c.customer);
+          }
+          break;
+      }
+    }
+
+    // ── Phase 2: build DB filter — all conditions resolved at DB level ────────
     const filter = { business };
     if (search) {
       filter.$or = [
@@ -150,83 +271,34 @@ export const listCustomersEnriched = async (req, res, next) => {
         { plates: { $regex: search, $options: 'i' } },
       ];
     }
-
-    // For hasOutstanding / hasCredit we must load all matching customers, enrich,
-    // then slice. These are uncommon filters so over-fetching a larger set is fine.
-    const fetchAll = wantsOutstanding || wantsCredit;
-
-    // fetchAll is only needed for post-enrichment filters (hasOutstanding/hasCredit).
-    // Cap at 3 000 to avoid unbounded memory use; large businesses should use server-side filters.
-    const FETCH_ALL_CAP = 3000;
-    const [customers, totalUnfiltered, loyaltyProgram] = await Promise.all([
-      fetchAll
-        ? CarWashCustomer.find(filter).sort({ name: 1 }).limit(FETCH_ALL_CAP).lean()
-        : CarWashCustomer.find(filter).sort({ name: 1 }).skip((pageNum - 1) * limitNum).limit(limitNum).lean(),
-      CarWashCustomer.countDocuments(filter),
-      CarWashLoyaltyProgram.findOne({ business, isActive: true })
-        .select('stampsRequired rewardType rewardValue isActive')
-        .lean(),
-    ]);
-
-    const businessOid = new mongoose.Types.ObjectId(String(business));
-
-    if (!customers.length) {
-      const [emptyCredit, emptyOutstanding] = await Promise.all([
-        CarWashCustomerCredit.aggregate([
-          { $match: { business: businessOid, status: 'active' } },
-          { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
-        ]),
-        Promise.all([
-          CarWashJob.aggregate([
-            { $match: { business: businessOid, status: { $nin: ['cancelled'] } } },
-            { $group: { _id: null, total: { $sum: { $subtract: ['$price', { $ifNull: ['$discountAmount', 0] }] } } } },
-          ]),
-          CarWashPayment.aggregate([
-            { $match: { business: businessOid } },
-            { $group: { _id: null, total: { $sum: '$amount' } } },
-          ]),
-        ]).then(([inv, paid]) => [{ total: Math.max(0, (inv[0]?.total || 0) - (paid[0]?.total || 0)) }]),
-      ]);
-      return res.json({
-        success: true, data: [], total: 0, page: pageNum, limit: limitNum, loyaltyProgram: loyaltyProgram || null,
-        globalStats: {
-          totalOutstanding: round2(emptyOutstanding[0]?.total || 0),
-          totalCreditBalance: round2(emptyCredit[0]?.total || 0),
-          creditCount: emptyCredit[0]?.count || 0,
-        },
-      });
+    if (wantsOutstanding) filter['stats.outstanding'] = { $gt: 0.01 };
+    if (dormantDays > 0) {
+      const cutoff = new Date(Date.now() - dormantDays * 86_400_000);
+      filter.$and = [{ $or: [{ 'stats.lastVisit': null }, { 'stats.lastVisit': { $lt: cutoff } }] }];
     }
+    if (minSpend > 0 || maxSpend > 0) {
+      filter['stats.totalPaid'] = {};
+      if (minSpend > 0) filter['stats.totalPaid'].$gte = minSpend;
+      if (maxSpend > 0) filter['stats.totalPaid'].$lte = maxSpend;
+    }
+    if (mandatoryIds !== null) filter._id = { $in: mandatoryIds };
+    else if (excludeIds.length) filter._id = { $nin: excludeIds };
 
-    const allPlates = [...new Set(customers.flatMap((c) => c.plates || []))];
-    const customerIds = customers.map((c) => c._id);
+    // Sort maps directly to compound-indexed stats fields
+    const sortFieldMap = { name: 'name', visits: 'stats.totalJobs', lastVisit: 'stats.lastVisit', spend: 'stats.totalPaid', outstanding: 'stats.outstanding' };
+    const dbSort = { [sortFieldMap[sortBy] || 'name']: sortDir };
 
-    // Six parallel batch queries — no N+1
-    // The last two compute business-wide totals for the summary strip
-    const [jobStats, loyaltyCards, creditAccounts, customerCredits, globalCreditAgg, globalOutstandingAgg] = await Promise.all([
-      CarWashJob.aggregate([
-        { $match: { business: businessOid, plateNumber: { $in: allPlates }, status: { $nin: ['cancelled'] } } },
-        { $group: {
-          _id: '$plateNumber',
-          totalJobs: { $sum: 1 },
-          totalInvoiced: { $sum: { $subtract: ['$price', { $ifNull: ['$discountAmount', 0] }] } },
-          lastVisit: { $max: '$createdAt' },
-          jobIds: { $push: '$_id' },
-        }},
-      ]),
-      CarWashLoyaltyCard.find({ customer: { $in: customerIds }, business }).lean(),
-      CarWashCreditAccount.find({ business, plates: { $in: allPlates }, status: { $ne: 'closed' } })
-        .select('plates accountNumber accountType status')
-        .lean(),
-      CarWashCustomerCredit.find({ business, customer: { $in: customerIds }, status: 'active' })
-        .select('customer amount')
-        .lean(),
-      // Global: total active credit liability across all customers
+    // ── Phase 3: count + customers + global stats (all parallel) ─────────────
+    const customerQuery = CarWashCustomer.find(filter).sort(dbSort);
+    if (!exportCsv) customerQuery.skip((pageNum - 1) * limitNum).limit(limitNum);
+
+    const [customers, totalCount, globalCreditAgg, globalOutstandingAgg] = await Promise.all([
+      customerQuery.lean(),
+      CarWashCustomer.countDocuments(filter),
       CarWashCustomerCredit.aggregate([
         { $match: { business: businessOid, status: 'active' } },
         { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
       ]),
-      // Global outstanding = total invoiced (non-cancelled) minus total collected
-      // Two fast aggregations avoids an expensive per-job $lookup across the full collection
       Promise.all([
         CarWashJob.aggregate([
           { $match: { business: businessOid, status: { $nin: ['cancelled'] } } },
@@ -236,43 +308,37 @@ export const listCustomersEnriched = async (req, res, next) => {
           { $match: { business: businessOid } },
           { $group: { _id: null, total: { $sum: '$amount' } } },
         ]),
-      ]).then(([inv, paid]) => [{
-        total: Math.max(0, (inv[0]?.total || 0) - (paid[0]?.total || 0)),
-      }]),
+      ]).then(([inv, paid]) => [{ total: Math.max(0, (inv[0]?.total || 0) - (paid[0]?.total || 0)) }]),
     ]);
 
-    // Batch payment totals — chunk $in to stay within BSON 16MB limit (500 IDs per batch)
-    const allJobIds = jobStats.flatMap((s) => s.jobIds);
-    let paymentTotals = [];
-    if (allJobIds.length) {
-      const CHUNK = 500;
-      const chunks = [];
-      for (let i = 0; i < allJobIds.length; i += CHUNK) chunks.push(allJobIds.slice(i, i + CHUNK));
-      const batches = await Promise.all(chunks.map((chunk) =>
-        CarWashPayment.aggregate([
-          { $match: { business: businessOid, job: { $in: chunk } } },
-          { $group: { _id: '$job', paid: { $sum: '$amount' } } },
-        ])
-      ));
-      paymentTotals = batches.flat();
+    const globalStats = {
+      totalOutstanding:   round2(globalOutstandingAgg[0]?.total || 0),
+      totalCreditBalance: round2(globalCreditAgg[0]?.total || 0),
+      creditCount:        globalCreditAgg[0]?.count || 0,
+    };
+
+    if (!customers.length) {
+      return res.json({ success: true, data: [], total: 0, page: pageNum, limit: limitNum, loyaltyProgram: loyaltyProgram || null, globalStats });
     }
 
-    const paidByJob = new Map(paymentTotals.map((p) => [String(p._id), Number(p.paid || 0)]));
+    // ── Phase 4: enrich page data — O(page_size), never O(all_customers) ─────
+    const customerIds = customers.map((c) => c._id);
+    const allPlates   = [...new Set(customers.flatMap((c) => c.plates || []))];
 
-    // Build per-plate stats map
-    const statsByPlate = new Map();
-    for (const s of jobStats) {
-      const totalPaid = s.jobIds.reduce((sum, jid) => sum + (paidByJob.get(String(jid)) || 0), 0);
-      statsByPlate.set(s._id, {
-        totalJobs: s.totalJobs,
-        totalInvoiced: round2(s.totalInvoiced || 0),
-        totalPaid: round2(totalPaid),
-        outstanding: round2(Math.max(0, (s.totalInvoiced || 0) - totalPaid)),
-        lastVisit: s.lastVisit || null,
-      });
+    const [loyaltyCards, creditAccounts, customerCredits] = await Promise.all([
+      CarWashLoyaltyCard.find({ customer: { $in: customerIds }, business }).lean(),
+      CarWashCreditAccount.find({ business, plates: { $in: allPlates }, status: { $ne: 'closed' } })
+        .select('plates accountNumber accountType status').lean(),
+      CarWashCustomerCredit.find({ business, customer: { $in: customerIds }, status: 'active' })
+        .select('customer amount').lean(),
+    ]);
+
+    const cardsByCustomer = new Map(loyaltyCards.map((c) => [String(c.customer), c]));
+    const creditByCustomer = new Map();
+    for (const cr of customerCredits) {
+      const key = String(cr.customer);
+      creditByCustomer.set(key, round2((creditByCustomer.get(key) || 0) + Number(cr.amount || 0)));
     }
-
-    // Build plate → credit account map (first account wins per plate)
     const creditByPlate = new Map();
     for (const acc of creditAccounts) {
       for (const plate of (acc.plates || [])) {
@@ -280,60 +346,47 @@ export const listCustomersEnriched = async (req, res, next) => {
       }
     }
 
-    const cardsByCustomer = new Map(loyaltyCards.map((c) => [String(c.customer), c]));
-
-    // Sum active credits per customer
-    const creditByCustomer = new Map();
-    for (const cr of customerCredits) {
-      const key = String(cr.customer);
-      creditByCustomer.set(key, round2((creditByCustomer.get(key) || 0) + Number(cr.amount || 0)));
-    }
-
-    let enriched = customers.map((c) => {
-      let totalJobs = 0, totalInvoiced = 0, totalPaid = 0, outstanding = 0, lastVisit = null;
+    // Stats read directly from the denormalized field — no per-customer aggregation
+    const enriched = customers.map((c) => {
+      const s = c.stats || {};
       let creditAccount = null;
       for (const plate of (c.plates || [])) {
-        const s = statsByPlate.get(plate);
-        if (s) {
-          totalJobs += s.totalJobs;
-          totalInvoiced += s.totalInvoiced;
-          totalPaid += s.totalPaid;
-          outstanding += s.outstanding;
-          if (!lastVisit || (s.lastVisit && s.lastVisit > lastVisit)) lastVisit = s.lastVisit;
-        }
-        if (!creditAccount) creditAccount = creditByPlate.get(plate) || null;
+        creditAccount = creditByPlate.get(plate) || null;
+        if (creditAccount) break;
       }
       return {
         ...c,
-        totalJobs,
-        totalInvoiced: round2(totalInvoiced),
-        totalPaid: round2(totalPaid),
-        outstanding: round2(outstanding),
+        totalJobs:     s.totalJobs     ?? 0,
+        totalInvoiced: s.totalInvoiced ?? 0,
+        totalPaid:     s.totalPaid     ?? 0,
+        outstanding:   s.outstanding   ?? 0,
+        lastVisit:     s.lastVisit     ?? null,
         creditBalance: creditByCustomer.get(String(c._id)) || 0,
-        lastVisit,
-        loyaltyCard: cardsByCustomer.get(String(c._id)) || null,
+        loyaltyCard:   cardsByCustomer.get(String(c._id)) || null,
         creditAccount: creditAccount
           ? { _id: creditAccount._id, accountNumber: creditAccount.accountNumber, accountType: creditAccount.accountType, status: creditAccount.status }
           : null,
       };
     });
 
-    // Apply post-enrichment filters
-    if (wantsOutstanding) enriched = enriched.filter((c) => c.outstanding > 0.01);
-    if (wantsCredit)      enriched = enriched.filter((c) => c.creditBalance > 0.01);
+    if (exportCsv) {
+      const stampsRequired = loyaltyProgram?.stampsRequired || 10;
+      const header = 'Name,Phone,Plates,Visits,Last Visit,Lifetime Spend (KES),Outstanding (KES),Loyalty Stamps,Pending Rewards';
+      const csvRows = enriched.map((c) => {
+        const lastVisitStr = c.lastVisit ? new Date(c.lastVisit).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+        const plates = (c.plates || []).join('; ');
+        const stamps = c.loyaltyCard ? `${c.loyaltyCard.currentStamps}/${stampsRequired}` : '';
+        const pending = c.loyaltyCard?.pendingRewards || 0;
+        return [c.name, c.phone, plates, c.totalJobs, lastVisitStr, c.totalPaid, c.outstanding, stamps, pending]
+          .map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`)
+          .join(',');
+      });
+      res.set('Content-Type', 'text/csv');
+      res.set('Content-Disposition', `attachment; filename="customers-${Date.now()}.csv"`);
+      return res.send([header, ...csvRows].join('\n'));
+    }
 
-    const filteredTotal = fetchAll ? enriched.length : totalUnfiltered;
-    const pageData = fetchAll
-      ? enriched.slice((pageNum - 1) * limitNum, (pageNum - 1) * limitNum + limitNum)
-      : enriched;
-
-    const globalStats = {
-      totalOutstanding:  round2(globalOutstandingAgg[0]?.total || 0),
-      totalCreditBalance: round2(globalCreditAgg[0]?.total || 0),
-      creditCount:       globalCreditAgg[0]?.count || 0,
-    };
-
-    res.json({ success: true, data: pageData, total: filteredTotal, page: pageNum, limit: limitNum, loyaltyProgram: loyaltyProgram || null, globalStats });
+    res.json({ success: true, data: enriched, total: totalCount, page: pageNum, limit: limitNum, loyaltyProgram: loyaltyProgram || null, globalStats });
   } catch (err) {
     next(err);
   }
@@ -1156,6 +1209,193 @@ export const getCustomerStatement = async (req, res, next) => {
     res.json({
       success: true,
       data: { customer, jobs: rows, totals: { invoiced: totalInvoiced, paid: totalPaid, outstanding: runningBalance } },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── Backfill denormalized stats for all existing customers ──────────────────
+// One-time migration endpoint — call once after deploying the stats schema change.
+// Processes in batches to avoid memory pressure.
+
+export const backfillCustomerStats = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const cursor = CarWashCustomer.find({ business }, { _id: 1, plates: 1 }).lean().cursor();
+    let processed = 0;
+    let failed = 0;
+    for await (const customer of cursor) {
+      const plates = (customer.plates || []).filter(Boolean);
+      if (!plates.length) { processed++; continue; }
+      try {
+        await recomputeCustomerStats(business, plates[0]);
+        processed++;
+      } catch {
+        failed++;
+      }
+    }
+    res.json({ success: true, processed, failed, message: `Backfill complete: ${processed} processed, ${failed} failed` });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── Bulk SMS to multiple customers ──────────────────────────────────────────
+
+export const bulkSendCustomerSms = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const { customerIds, body: msgBody } = req.body;
+
+    if (!Array.isArray(customerIds) || customerIds.length === 0)
+      return next(createError(400, 'No customers selected'));
+    if (!String(msgBody || '').trim())
+      return next(createError(400, 'Message body is required'));
+
+    const body = String(msgBody).trim();
+    const validIds = customerIds.filter((id) => mongoose.Types.ObjectId.isValid(String(id)));
+
+    const customers = await CarWashCustomer.find({ _id: { $in: validIds }, business })
+      .select('name phone maskedMsisdn')
+      .lean();
+
+    let sent = 0, skipped = 0;
+    for (const c of customers) {
+      const phone  = String(c.phone  || '').trim();
+      const masked = String(c.maskedMsisdn || '').trim();
+      if (phone) {
+        sendAdHocSms({ businessId: business, phone, body, templateKey: 'carwash_bulk_sms' }).catch(() => {});
+        sent++;
+      } else if (masked) {
+        sendAdHocSmsToMasked({ businessId: business, maskedNumber: masked, body, templateKey: 'carwash_bulk_sms', recipientName: c.name || 'Customer' }).catch(() => {});
+        sent++;
+      } else {
+        skipped++;
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `SMS sent to ${sent} customer${sent !== 1 ? 's' : ''}${skipped > 0 ? `, ${skipped} skipped (no phone)` : ''}`,
+      sent, skipped,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── Find duplicate customers (same plate in multiple records) ────────────────
+
+export const findDuplicateCustomers = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const businessOid = new mongoose.Types.ObjectId(String(business));
+
+    const dupPlates = await CarWashCustomer.aggregate([
+      { $match: { business: businessOid } },
+      { $unwind: '$plates' },
+      { $group: { _id: '$plates', customerIds: { $addToSet: '$_id' }, count: { $sum: 1 } } },
+      { $match: { count: { $gt: 1 } } },
+    ]);
+
+    if (!dupPlates.length) return res.json({ success: true, data: [], total: 0 });
+
+    const allIds = [...new Set(dupPlates.flatMap((d) => d.customerIds.map(String)))];
+    const customers = await CarWashCustomer.find({ _id: { $in: allIds }, business }).lean();
+    const customerMap = new Map(customers.map((c) => [String(c._id), c]));
+
+    const groups = dupPlates.map((d) => ({
+      plate: d._id,
+      customers: d.customerIds.map((id) => customerMap.get(String(id))).filter(Boolean),
+    }));
+
+    res.json({ success: true, data: groups, total: groups.length });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── Merge customers ──────────────────────────────────────────────────────────
+
+export const mergeCustomers = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const { keepId, mergeIds } = req.body;
+
+    if (!keepId || !Array.isArray(mergeIds) || mergeIds.length === 0)
+      return next(createError(400, 'keepId and mergeIds are required'));
+
+    const keepCustomer = await CarWashCustomer.findOne({ _id: keepId, business });
+    if (!keepCustomer) return next(createError(404, 'Primary customer not found'));
+
+    const toMerge = await CarWashCustomer.find({ _id: { $in: mergeIds }, business }).lean();
+    if (!toMerge.length) return next(createError(404, 'No customers to merge found'));
+
+    // Combine plates — add plates from merged records that the keeper doesn't have
+    const newPlates = toMerge.flatMap((c) => c.plates || [])
+      .filter((p) => !keepCustomer.plates.includes(p));
+    if (newPlates.length) keepCustomer.plates = [...keepCustomer.plates, ...newPlates];
+
+    // Fill in missing phone
+    if (!keepCustomer.phone) {
+      const donor = toMerge.find((c) => c.phone);
+      if (donor) keepCustomer.phone = donor.phone;
+    }
+    await keepCustomer.save();
+
+    const mergeOids = toMerge.map((c) => c._id);
+
+    // Combine stamp histories into keeper's loyalty card
+    const keepCard = await CarWashLoyaltyCard.findOne({ customer: keepCustomer._id, business });
+    if (keepCard) {
+      const mergedCards = await CarWashLoyaltyCard.find({ customer: { $in: mergeOids }, business }).lean();
+      if (mergedCards.length) {
+        const allHistory = [
+          ...keepCard.stampHistory,
+          ...mergedCards.flatMap((c) => c.stampHistory || []),
+        ].sort((a, b) => new Date(a.awardedAt) - new Date(b.awardedAt));
+
+        const program = keepCard.program
+          ? await CarWashLoyaltyProgram.findById(keepCard.program).lean()
+          : null;
+        const stampsRequired = Number(program?.stampsRequired || 10);
+        const stampExpiryDays = Number(program?.stampExpiryDays || 0);
+
+        let currentStamps = 0, rewardsEarned = 0, totalStamps = 0, lastStampAt = null, prevStampAt = null;
+        for (const entry of allHistory) {
+          if (entry.wasRedemption) continue;
+          if (prevStampAt && stampExpiryDays > 0) {
+            const daysSince = (new Date(entry.awardedAt) - new Date(prevStampAt)) / 86_400_000;
+            if (daysSince > stampExpiryDays) currentStamps = 0;
+          }
+          totalStamps++;
+          prevStampAt = entry.awardedAt || prevStampAt;
+          lastStampAt = entry.awardedAt || lastStampAt;
+          currentStamps++;
+          if (currentStamps >= stampsRequired) { rewardsEarned++; currentStamps = 0; }
+        }
+        const totalRedeemed = mergedCards.reduce((s, c) => s + (c.totalRewardsRedeemed || 0), 0) + (keepCard.totalRewardsRedeemed || 0);
+
+        keepCard.stampHistory = allHistory;
+        keepCard.currentStamps = currentStamps;
+        keepCard.totalStampsEarned = totalStamps;
+        keepCard.totalRewardsEarned = rewardsEarned;
+        keepCard.totalRewardsRedeemed = totalRedeemed;
+        keepCard.pendingRewards = Math.max(0, rewardsEarned - totalRedeemed);
+        keepCard.lastStampAt = lastStampAt;
+        await keepCard.save();
+      }
+    }
+
+    // Delete merged records' loyalty cards and customer records
+    await CarWashLoyaltyCard.deleteMany({ customer: { $in: mergeOids }, business });
+    await CarWashCustomer.deleteMany({ _id: { $in: mergeOids }, business });
+
+    res.json({
+      success: true,
+      message: `Merged ${toMerge.length} customer${toMerge.length !== 1 ? 's' : ''} into ${keepCustomer.name}`,
+      data: keepCustomer,
     });
   } catch (err) {
     next(err);

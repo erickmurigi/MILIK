@@ -631,8 +631,14 @@ export const getAccessibleCompanies = async (req, res, next) => {
     const includeDemoCompanies = shouldIncludeDemoCompanies(req);
     const companyFilter = includeDemoCompanies ? {} : buildLiveCompanyFilter();
 
+    // Never show archived companies in the switcher regardless of role or demo mode.
+    const notArchivedFilter = {
+      archived: { $ne: true },
+      accountStatus: { $ne: 'Archived' },
+    };
+
     if (req.user?.isSystemAdmin || req.user?.superAdminAccess) {
-      let companies = await Company.find(companyFilter)
+      let companies = await Company.find({ ...companyFilter, ...notArchivedFilter })
         .select(companyReferenceSelect)
         .sort({ companyName: 1 })
         .lean();
@@ -671,6 +677,7 @@ export const getAccessibleCompanies = async (req, res, next) => {
     let companies = await Company.find({
       _id: { $in: companyIds },
       ...companyFilter,
+      ...notArchivedFilter,
     })
       .select(companyReferenceSelect)
       .sort({ companyName: 1 })

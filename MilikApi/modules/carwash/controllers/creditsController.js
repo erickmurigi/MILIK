@@ -6,7 +6,7 @@ import ChartOfAccount from '../../../models/ChartOfAccount.js';
 import Company from '../../../models/Company.js';
 import FinancialLedgerEntry from '../../../models/FinancialLedgerEntry.js';
 import { createError } from '../../../utils/error.js';
-import { currentUserId, resolveActiveBusinessId } from '../services/businessScope.js';
+import { currentUserId, escapeRegex, resolveActiveBusinessId } from '../services/businessScope.js';
 import {
   postCarWashCreditAppliedLedger,
   postCarWashCreditWriteOffLedger,
@@ -21,9 +21,13 @@ const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 // ─── List active customer credits (with optional dormancy filter) ─────────────
 export const listCredits = async (req, res, next) => {
   try {
-    const business = resolveActiveBusinessId(req);
-    const status = req.query.status || 'active';
+    const business    = resolveActiveBusinessId(req);
+    const businessOid = new mongoose.Types.ObjectId(String(business));
+    const status      = req.query.status || 'active';
     const dormantDays = Number(req.query.dormantDays || 0);
+    const search      = String(req.query.search || '').trim();
+    const sortBy      = String(req.query.sortBy  || 'createdAt');
+    const sortDir     = req.query.sortDir === 'desc' ? -1 : 1;
 
     const filter = { business, status };
     if (dormantDays > 0 && status === 'active') {
@@ -31,12 +35,26 @@ export const listCredits = async (req, res, next) => {
       filter.createdAt = { $lte: cutoff };
     }
 
+    // Pre-query matching customer IDs when searching by name / phone / plate
+    if (search) {
+      const rx = new RegExp(escapeRegex(search), 'i');
+      const matchingCustomers = await CarWashCustomer.find(
+        { business, $or: [{ name: rx }, { phone: rx }, { plates: rx }] },
+        { _id: 1 }
+      ).lean();
+      filter.customer = { $in: matchingCustomers.map((c) => c._id) };
+    }
+
+    const SORT_FIELDS = { amount: 'amount', age: 'createdAt', createdAt: 'createdAt' };
+    const dbSortField = SORT_FIELDS[sortBy] || 'createdAt';
+    const sortSpec    = { [dbSortField]: dbSortField === 'createdAt' && sortBy !== 'age' ? 1 : sortDir };
+
     const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);
     const page  = Math.max(Number(req.query.page || 1), 1);
 
     const [credits, total, totalAmountAgg] = await Promise.all([
       CarWashCustomerCredit.find(filter)
-        .sort({ createdAt: 1 })
+        .sort(sortSpec)
         .skip((page - 1) * limit)
         .limit(limit)
         .populate('customer', 'name phone plates')
@@ -45,7 +63,7 @@ export const listCredits = async (req, res, next) => {
         .lean(),
       CarWashCustomerCredit.countDocuments(filter),
       CarWashCustomerCredit.aggregate([
-        { $match: filter },
+        { $match: { business: businessOid, status, ...(filter.createdAt && { createdAt: filter.createdAt }), ...(filter.customer && { customer: filter.customer }) } },
         { $group: { _id: null, total: { $sum: '$amount' } } },
       ]),
     ]);

@@ -3,8 +3,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import {
   FaCalendarAlt, FaCheckCircle, FaChevronDown, FaChevronRight,
-  FaEnvelope, FaFileInvoice, FaMoneyBillWave, FaPlus, FaPrint, FaRedoAlt, FaSms,
+  FaEnvelope, FaFileInvoice, FaMoneyBillWave, FaPlus, FaPrint, FaRedoAlt,
   FaTimes, FaUndo, FaUser, FaExclamationTriangle, FaWallet, FaHistory,
+  FaSearch, FaSort, FaSortUp, FaSortDown, FaBell,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, todayISO } from "../../services/carWashApi";
@@ -12,13 +13,58 @@ import CarWashShell from "./CarWashShell";
 import CwSmsModal from "./CwSmsModal";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 
-const GRN = "#0B3B2E";
-const ORG = "#FF8C00";
-
 const fmt = formatMoney;
-const fmtDate = (v) => v ? new Date(v).toLocaleDateString("en-KE") : "—";
+const fmtDate  = (v) => v ? new Date(v).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 const fmtMonth = (v) => v ? new Date(v).toLocaleString("en-KE", { month: "long", year: "numeric" }) : "—";
 
+const daysSince = (d) => d ? Math.floor((Date.now() - new Date(d).getTime()) / 86_400_000) : null;
+
+const statusPill = {
+  active:    "bg-emerald-100 text-emerald-700 border-emerald-200",
+  suspended: "bg-amber-100 text-amber-700 border-amber-200",
+  closed:    "bg-slate-100 text-slate-500 border-slate-200",
+};
+const typePill = {
+  credit:  "bg-blue-100 text-blue-700",
+  monthly: "bg-violet-100 text-violet-700",
+  prepaid: "bg-emerald-100 text-emerald-700",
+  voucher: "bg-amber-100 text-amber-700",
+};
+const stmtPill = {
+  draft: "bg-slate-100 text-slate-600",
+  sent:  "bg-blue-100 text-blue-700",
+  partial: "bg-amber-100 text-amber-700",
+  paid:  "bg-emerald-100 text-emerald-700",
+};
+const paymentMethods = ["cash", "mpesa", "bank", "card", "other"];
+const PLATE_RE = /^[A-Z]{2,3}\d{3}[A-Z]$/i;
+
+// ─── Sort header ───────────────────────────────────────────────────────────────
+const SortTh = React.memo(({ label, field, sortBy, sortDir, onSort, className = "" }) => {
+  const active = sortBy === field;
+  return (
+    <th className={`px-3 py-1.5 text-left font-bold uppercase tracking-wide cursor-pointer select-none group whitespace-nowrap ${className}`}
+      onClick={() => onSort(field)}>
+      <div className="flex items-center gap-1">
+        {label}
+        <span className={`transition-opacity ${active ? "opacity-100" : "opacity-0 group-hover:opacity-50"}`}>
+          {active ? (sortDir === "asc" ? <FaSortUp size={9} /> : <FaSortDown size={9} />) : <FaSort size={9} />}
+        </span>
+      </div>
+    </th>
+  );
+});
+
+// ─── Aging badge ───────────────────────────────────────────────────────────────
+const AgingBadge = ({ lastStatementAt, currentBalance }) => {
+  if (!currentBalance || currentBalance <= 0) return null;
+  const days = daysSince(lastStatementAt);
+  if (days === null) return <span className="text-[10px] text-slate-400">No stmt</span>;
+  const cls = days >= 90 ? "bg-red-100 text-red-700" : days >= 30 ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500";
+  return <span className={`inline-block rounded px-1.5 py-0.5 text-[9px] font-bold ${cls}`}>{days}d</span>;
+};
+
+// ─── Print statement ───────────────────────────────────────────────────────────
 const printCreditStatement = (acc, s) => {
   const fa  = (n) => `KES ${Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2 })}`;
   const fd  = (d) => new Date(d).toLocaleDateString("en-KE");
@@ -59,7 +105,7 @@ const printCreditStatement = (acc, s) => {
           <tr class="due"><td colspan="4">Amount Due</td><td colspan="3" class="r">${fa(s.totalOutstanding)}</td></tr>
         </tfoot>
       </table>
-      <p style="margin-top:16px;font-size:11px;color:#64748b">This is an automatically generated statement. Please contact us if you have any queries.</p>
+      <p style="margin-top:16px;font-size:11px;color:#64748b">Automatically generated statement. Contact us with any queries.</p>
     </div>
     <script>window.onload=()=>window.print();</script>
   </body></html>`;
@@ -67,29 +113,13 @@ const printCreditStatement = (acc, s) => {
   if (w) { w.document.write(html); w.document.close(); }
 };
 
-const statusPill = {
-  active:    "bg-emerald-100 text-emerald-700 border-emerald-200",
-  suspended: "bg-amber-100 text-amber-700 border-amber-200",
-  closed:    "bg-slate-100 text-slate-500 border-slate-200",
-};
-
-const stmtPill = {
-  draft:   "bg-slate-100 text-slate-600",
-  sent:    "bg-blue-100 text-blue-700",
-  partial: "bg-amber-100 text-amber-700",
-  paid:    "bg-emerald-100 text-emerald-700",
-};
-
-const paymentMethods = ["cash", "mpesa", "bank", "card", "other"];
-const PLATE_RE = /^[A-Z]{2,3}\d{3}[A-Z]$/i;
-
-// ─── Create/edit account modal ────────────────────────────────────────────────
+// ─── Modals ────────────────────────────────────────────────────────────────────
 const AccountModal = ({ customers, onSave, onClose }) => {
-  const [query, setQuery]                   = useState("");
-  const [dropdownOpen, setDropdownOpen]     = useState(false);
-  const [selectedCustomer, setSelected]     = useState(null);
-  const [isNew, setIsNew]                   = useState(false);
-  const [newPhone, setNewPhone]             = useState("");
+  const [query, setQuery]               = useState("");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [selectedCustomer, setSelected] = useState(null);
+  const [isNew, setIsNew]               = useState(false);
+  const [newPhone, setNewPhone]         = useState("");
   const [form, setForm] = useState({
     accountType: "credit", contactPerson: "", billingEmail: "",
     creditLimit: "", billingCycle: "monthly", billingDay: "1", notes: "", plates: "",
@@ -99,19 +129,16 @@ const AccountModal = ({ customers, onSave, onClose }) => {
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
 
   useEffect(() => {
-    const handler = (e) => {
-      if (comboRef.current && !comboRef.current.contains(e.target)) setDropdownOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    const h = (e) => { if (comboRef.current && !comboRef.current.contains(e.target)) setDropdownOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
   }, []);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return customers.slice(0, 20);
     return customers.filter((c) =>
-      c.name?.toLowerCase().includes(q) ||
-      c.phone?.includes(q) ||
+      c.name?.toLowerCase().includes(q) || c.phone?.includes(q) ||
       (c.plates || []).some((p) => p.toLowerCase().includes(q))
     ).slice(0, 15);
   }, [customers, query]);
@@ -127,27 +154,18 @@ const AccountModal = ({ customers, onSave, onClose }) => {
     try {
       let customerId = selectedCustomer?._id;
       if (isNew) {
-        const created = await carWashApi.registerLoyaltyCustomer({
-          name: query.trim(),
-          ...(newPhone.trim() && { phone: newPhone.trim() }),
-        });
+        const created = await carWashApi.registerLoyaltyCustomer({ name: query.trim(), ...(newPhone.trim() && { phone: newPhone.trim() }) });
         customerId = created?._id;
         if (!customerId) throw new Error("Failed to create customer");
       }
       await onSave({
-        customerId,
-        accountType: form.accountType,
-        contactPerson: form.contactPerson.trim(),
-        billingEmail: form.billingEmail.trim().toLowerCase(),
-        creditLimit: Number(form.creditLimit || 0),
-        billingCycle: form.billingCycle,
-        billingDay: Number(form.billingDay || 1),
-        notes: form.notes,
+        customerId, accountType: form.accountType,
+        contactPerson: form.contactPerson.trim(), billingEmail: form.billingEmail.trim().toLowerCase(),
+        creditLimit: Number(form.creditLimit || 0), billingCycle: form.billingCycle,
+        billingDay: Number(form.billingDay || 1), notes: form.notes,
         plates: form.plates.split(",").map((p) => p.trim()).filter(Boolean),
       });
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   };
 
   const lc = "mb-1 block text-[11px] font-extrabold uppercase tracking-widest text-slate-500";
@@ -160,9 +178,7 @@ const AccountModal = ({ customers, onSave, onClose }) => {
           <h2 className="text-sm font-extrabold uppercase tracking-wide">New Credit Account</h2>
           <button onClick={onClose}><FaTimes /></button>
         </div>
-        <div className="space-y-3 p-4">
-
-          {/* ── Customer combobox ── */}
+        <div className="max-h-[80vh] overflow-y-auto space-y-3 p-4">
           <div>
             <label className={lc}>Customer *</label>
             {selectedCustomer ? (
@@ -170,50 +186,40 @@ const AccountModal = ({ customers, onSave, onClose }) => {
                 <FaUser size={9} className="text-emerald-600 flex-shrink-0" />
                 <span className="flex-1 text-sm font-semibold text-emerald-800 truncate">{selectedCustomer.name}</span>
                 {selectedCustomer.phone && <span className="text-[10px] text-emerald-600 flex-shrink-0">{selectedCustomer.phone}</span>}
-                <button type="button" onClick={clearPick} className="text-emerald-400 hover:text-red-500 flex-shrink-0"><FaTimes size={10} /></button>
+                <button type="button" onClick={clearPick} className="text-emerald-400 hover:text-red-500"><FaTimes size={10} /></button>
               </div>
             ) : isNew ? (
               <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2.5 space-y-2">
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-700">New customer: <span className="normal-case">{query}</span></p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-700">New: <span className="normal-case">{query}</span></p>
                   <button type="button" onClick={clearPick} className="text-[10px] text-slate-400 hover:text-slate-600">← Back</button>
                 </div>
-                <input className={ic} type="tel" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="Phone (optional, e.g. 0712345678)" />
+                <input className={ic} type="tel" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="Phone (optional)" />
               </div>
             ) : (
               <div ref={comboRef} className="relative">
-                <input
-                  className={ic}
-                  value={query}
-                  onChange={(e) => { setQuery(e.target.value); setDropdownOpen(true); }}
-                  onFocus={() => setDropdownOpen(true)}
-                  placeholder="Search name, phone, or plate…"
-                  autoComplete="new-password"
-                />
+                <input className={ic} value={query} onChange={(e) => { setQuery(e.target.value); setDropdownOpen(true); }}
+                  onFocus={() => setDropdownOpen(true)} placeholder="Search name, phone, or plate…" autoComplete="new-password" />
                 {dropdownOpen && (
                   <div className="absolute left-0 right-0 top-full z-50 max-h-52 overflow-y-auto border border-slate-200 bg-white shadow-xl">
                     {filtered.length === 0 && !query.trim() ? (
-                      <p className="px-3 py-2 text-[11px] text-slate-400">Start typing to search customers…</p>
-                    ) : filtered.length === 0 ? null : (
-                      filtered.map((c) => (
-                        <button key={c._id} type="button" onMouseDown={() => pickCustomer(c)}
-                          className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 border-b border-slate-50 last:border-0">
-                          <FaUser size={9} className="text-slate-300 flex-shrink-0" />
-                          <div className="min-w-0">
-                            <div className="text-sm font-semibold text-slate-800 truncate">{c.name}</div>
-                            {(c.phone || (c.plates || []).length > 0) && (
-                              <div className="text-[10px] text-slate-400 truncate">
-                                {[c.phone, ...(c.plates || [])].filter(Boolean).join(" · ")}
-                              </div>
-                            )}
-                          </div>
-                        </button>
-                      ))
-                    )}
+                      <p className="px-3 py-2 text-[11px] text-slate-400">Start typing…</p>
+                    ) : filtered.map((c) => (
+                      <button key={c._id} type="button" onMouseDown={() => pickCustomer(c)}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 border-b border-slate-50 last:border-0">
+                        <FaUser size={9} className="text-slate-300" />
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-slate-800 truncate">{c.name}</div>
+                          {(c.phone || (c.plates||[]).length > 0) && (
+                            <div className="text-[10px] text-slate-400">{[c.phone, ...(c.plates||[])].filter(Boolean).join(" · ")}</div>
+                          )}
+                        </div>
+                      </button>
+                    ))}
                     {query.trim() && (
                       <button type="button" onMouseDown={pickNew}
                         className="flex w-full items-center gap-2 border-t border-slate-200 bg-emerald-50 px-3 py-2 text-left hover:bg-emerald-100">
-                        <FaPlus size={9} className="text-emerald-600 flex-shrink-0" />
+                        <FaPlus size={9} className="text-emerald-600" />
                         <span className="text-sm text-emerald-700">Create new: <b>{query.trim()}</b></span>
                       </button>
                     )}
@@ -222,8 +228,6 @@ const AccountModal = ({ customers, onSave, onClose }) => {
               </div>
             )}
           </div>
-
-          {/* ── Account type + limit ── */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={lc}>Account Type *</label>
@@ -234,7 +238,7 @@ const AccountModal = ({ customers, onSave, onClose }) => {
                 <option value="voucher">Voucher</option>
               </select>
             </div>
-            {form.accountType !== "prepaid" && form.accountType !== "voucher" && (
+            {!["prepaid","voucher"].includes(form.accountType) && (
               <div>
                 <label className={lc}>Credit Limit (KES)</label>
                 <input className={ic} type="number" min="0" value={form.creditLimit} onChange={(e) => set("creditLimit", e.target.value)} placeholder="0 = no limit" />
@@ -243,50 +247,42 @@ const AccountModal = ({ customers, onSave, onClose }) => {
           </div>
           {form.accountType === "prepaid" && (
             <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-              <FaWallet className="inline mr-1.5" />
-              Prepaid wallets are topped up in advance. When a job is created for a plate on this account, the balance is automatically deducted.
+              <FaWallet className="inline mr-1.5" />Prepaid wallets are topped up in advance and deducted automatically on each job.
             </div>
           )}
           {form.accountType === "voucher" && (
             <div className="border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              <strong>Voucher company account.</strong> Supervisors select this company when adding a voucher job — no payment is collected from the customer and no loyalty stamp is earned. Jobs accumulate on this account and are settled via statement.
+              <strong>Voucher company account.</strong> No payment is collected from the customer. Jobs accumulate and are settled via statement.
             </div>
           )}
           {form.accountType === "monthly" && (
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={lc}>Billing Cycle</label>
+              <div><label className={lc}>Billing Cycle</label>
                 <select className={ic} value={form.billingCycle} onChange={(e) => set("billingCycle", e.target.value)}>
-                  <option value="monthly">Monthly</option>
-                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option><option value="weekly">Weekly</option>
                 </select>
               </div>
-              <div>
-                <label className={lc}>Billing Day (1–28)</label>
+              <div><label className={lc}>Billing Day (1–28)</label>
                 <input className={ic} type="number" min="1" max="28" value={form.billingDay} onChange={(e) => set("billingDay", e.target.value)} />
               </div>
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={lc}>Contact Person</label>
-              <input className={ic} value={form.contactPerson} onChange={(e) => set("contactPerson", e.target.value)} placeholder="e.g. John Kamau (Fleet Mgr)" />
-            </div>
-            <div>
-              <label className={lc}>Billing Email</label>
-              <input className={ic} type="email" value={form.billingEmail} onChange={(e) => set("billingEmail", e.target.value)} placeholder="accounts@company.com" />
-            </div>
+            <div><label className={lc}>Contact Person</label>
+              <input className={ic} value={form.contactPerson} onChange={(e) => set("contactPerson", e.target.value)} placeholder="e.g. John Kamau" /></div>
+            <div><label className={lc}>Billing Email</label>
+              <input className={ic} type="email" value={form.billingEmail} onChange={(e) => set("billingEmail", e.target.value)} placeholder="accounts@company.com" /></div>
           </div>
           {form.accountType !== "voucher" && (
             <div>
               <label className={lc}>Plates (comma-separated)</label>
-              <input className={ic} value={form.plates} onChange={(e) => set("plates", e.target.value)} placeholder="KCA123A, KCB456B, KCC789C" />
+              <input className={ic} value={form.plates} onChange={(e) => set("plates", e.target.value)} placeholder="KCA123A, KCB456B" />
               <p className="mt-0.5 text-[10px] text-slate-400">Jobs for these plates auto-link to this account</p>
             </div>
           )}
-          <div>
-            <label className={lc}>Notes</label>
-            <textarea className="w-full border border-slate-300 px-2 py-2 text-sm text-slate-800 focus:outline-none" rows={2} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+          <div><label className={lc}>Notes</label>
+            <textarea className="w-full border border-slate-300 px-2 py-2 text-sm text-slate-800 focus:outline-none" rows={2}
+              value={form.notes} onChange={(e) => set("notes", e.target.value)} />
           </div>
         </div>
         <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
@@ -300,72 +296,54 @@ const AccountModal = ({ customers, onSave, onClose }) => {
   );
 };
 
-// ─── Record payment modal ─────────────────────────────────────────────────────
 const PaymentModal = ({ account, cashbooks, onSave, onClose }) => {
-  const [form, setForm] = useState({ amount: "", method: "cash", cashbookAccount: "", reference: "", receivedFromPhone: "", paymentDate: todayISO() });
+  const [form, setForm] = useState({ amount: "", method: "cash", cashbookAccount: cashbooks[0]?._id || "", reference: "", receivedFromPhone: "", paymentDate: todayISO() });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
-
   const handleSave = async () => {
     if (!form.amount || Number(form.amount) <= 0) return toast.warning("Enter a valid amount");
     setSaving(true);
     try { await onSave(form); } finally { setSaving(false); }
   };
-
   const lc = "mb-1 block text-[11px] font-extrabold uppercase tracking-widest text-slate-500";
   const ic = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
-
-  const balance = Number(account.currentBalance || 0);
-
   return (
     <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/50 px-4">
       <div className="w-full max-w-md border border-slate-200 bg-white shadow-2xl">
         <div className="flex items-center justify-between bg-[#0B3B2E] px-4 py-3 text-white">
           <div>
             <h2 className="text-sm font-extrabold uppercase tracking-wide">Record Payment</h2>
-            <p className="mt-0.5 text-xs text-emerald-100">{account.accountNumber} · Balance: {fmt(balance)}</p>
+            <p className="mt-0.5 text-xs text-emerald-100">{account.accountNumber} · Owed: {fmt(account.currentBalance)}</p>
           </div>
           <button onClick={onClose}><FaTimes /></button>
         </div>
         <div className="space-y-3 p-4">
           <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-            <strong>FIFO:</strong> Payment will be applied to oldest unpaid jobs first automatically.
+            <strong>FIFO:</strong> Payment will be applied to oldest unpaid jobs first.
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={lc}>Amount (KES) *</label>
-              <input className={ic} type="number" min="0" step="0.01" value={form.amount} onChange={(e) => set("amount", e.target.value)} placeholder={`Max: ${fmt(balance)}`} />
-            </div>
-            <div>
-              <label className={lc}>Method</label>
+            <div><label className={lc}>Amount (KES) *</label>
+              <input className={ic} type="number" min="0" step="0.01" autoFocus value={form.amount} onChange={(e) => set("amount", e.target.value)} /></div>
+            <div><label className={lc}>Method</label>
               <select className={ic} value={form.method} onChange={(e) => set("method", e.target.value)}>
                 {paymentMethods.map((m) => <option key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>)}
-              </select>
-            </div>
+              </select></div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={lc}>{form.method === "mpesa" ? "M-Pesa Code" : "Reference"}</label>
-              <input className={ic} value={form.reference} onChange={(e) => set("reference", e.target.value)} placeholder={form.method === "mpesa" ? "e.g. QJK1234ABC" : "Optional"} />
-            </div>
-            <div>
-              <label className={lc}>Payment Date</label>
-              <input className={ic} type="date" value={form.paymentDate} onChange={(e) => set("paymentDate", e.target.value)} />
-            </div>
+            <div><label className={lc}>{form.method === "mpesa" ? "M-Pesa Code" : "Reference"}</label>
+              <input className={ic} value={form.reference} onChange={(e) => set("reference", e.target.value)} placeholder={form.method === "mpesa" ? "QJK1234ABC" : "Optional"} /></div>
+            <div><label className={lc}>Payment Date</label>
+              <input className={ic} type="date" value={form.paymentDate} onChange={(e) => set("paymentDate", e.target.value)} /></div>
           </div>
           {form.method === "mpesa" && (
-            <div>
-              <label className={lc}>M-Pesa Sender Phone <span className="font-normal normal-case text-emerald-700">(SMS target)</span></label>
-              <input className={ic} type="tel" value={form.receivedFromPhone} onChange={(e) => set("receivedFromPhone", e.target.value)} placeholder="e.g. 0712345678" />
-            </div>
+            <div><label className={lc}>M-Pesa Sender Phone</label>
+              <input className={ic} type="tel" value={form.receivedFromPhone} onChange={(e) => set("receivedFromPhone", e.target.value)} placeholder="0712345678" /></div>
           )}
-          <div>
-            <label className={lc}>Cashbook Account</label>
+          <div><label className={lc}>Cashbook Account</label>
             <select className={ic} value={form.cashbookAccount} onChange={(e) => set("cashbookAccount", e.target.value)}>
               <option value="">Select cashbook</option>
               {cashbooks.map((cb) => <option key={cb._id} value={cb._id}>{cb.code} - {cb.name}</option>)}
-            </select>
-          </div>
+            </select></div>
         </div>
         <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
           <button onClick={onClose} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
@@ -378,71 +356,52 @@ const PaymentModal = ({ account, cashbooks, onSave, onClose }) => {
   );
 };
 
-// ─── Top-up modal ─────────────────────────────────────────────────────────────
 const TopUpModal = ({ account, cashbooks, onSave, onClose }) => {
-  const [form, setForm] = useState({ amount: "", method: "cash", cashbookAccount: "", reference: "", paymentDate: todayISO(), notes: "" });
+  const [form, setForm] = useState({ amount: "", method: "cash", cashbookAccount: cashbooks[0]?._id || "", reference: "", paymentDate: todayISO(), notes: "" });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
-
   const handleSave = async () => {
     if (!form.amount || Number(form.amount) <= 0) return toast.warning("Enter a valid top-up amount");
     setSaving(true);
     try { await onSave(form); } finally { setSaving(false); }
   };
-
   const lc = "mb-1 block text-[11px] font-extrabold uppercase tracking-widest text-slate-500";
   const ic = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
-  const credit = Number(account.accountCredit || 0);
-
   return (
     <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/50 px-4">
       <div className="w-full max-w-md border border-slate-200 bg-white shadow-2xl">
         <div className="flex items-center justify-between bg-emerald-700 px-4 py-3 text-white">
           <div>
-            <h2 className="text-sm font-extrabold uppercase tracking-wide flex items-center gap-2">
-              <FaWallet /> Top Up Prepaid Wallet
-            </h2>
-            <p className="mt-0.5 text-xs text-emerald-100">{account.accountNumber} · Current balance: KES {fmt(credit)}</p>
+            <h2 className="text-sm font-extrabold uppercase tracking-wide flex items-center gap-2"><FaWallet /> Top Up Wallet</h2>
+            <p className="mt-0.5 text-xs text-emerald-100">{account.accountNumber} · Balance: {fmt(account.accountCredit || 0)}</p>
           </div>
           <button onClick={onClose}><FaTimes /></button>
         </div>
         <div className="space-y-3 p-4">
           <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-            The amount entered will be added to the customer's wallet and automatically deducted when their next job is created.
+            Amount will be added to the wallet and deducted automatically on the next job.
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={lc}>Amount (KES) *</label>
-              <input className={ic} type="number" min="0" step="0.01" autoFocus value={form.amount} onChange={(e) => set("amount", e.target.value)} placeholder="e.g. 500" />
-            </div>
-            <div>
-              <label className={lc}>Method</label>
+            <div><label className={lc}>Amount (KES) *</label>
+              <input className={ic} type="number" min="0" step="0.01" autoFocus value={form.amount} onChange={(e) => set("amount", e.target.value)} /></div>
+            <div><label className={lc}>Method</label>
               <select className={ic} value={form.method} onChange={(e) => set("method", e.target.value)}>
                 {paymentMethods.map((m) => <option key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>)}
-              </select>
-            </div>
+              </select></div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={lc}>{form.method === "mpesa" ? "M-Pesa Code" : "Reference"}</label>
-              <input className={ic} value={form.reference} onChange={(e) => set("reference", e.target.value)} placeholder={form.method === "mpesa" ? "e.g. QJK1234ABC" : "Optional"} />
-            </div>
-            <div>
-              <label className={lc}>Payment Date</label>
-              <input className={ic} type="date" value={form.paymentDate} onChange={(e) => set("paymentDate", e.target.value)} />
-            </div>
+            <div><label className={lc}>{form.method === "mpesa" ? "M-Pesa Code" : "Reference"}</label>
+              <input className={ic} value={form.reference} onChange={(e) => set("reference", e.target.value)} placeholder={form.method === "mpesa" ? "QJK1234ABC" : "Optional"} /></div>
+            <div><label className={lc}>Payment Date</label>
+              <input className={ic} type="date" value={form.paymentDate} onChange={(e) => set("paymentDate", e.target.value)} /></div>
           </div>
-          <div>
-            <label className={lc}>Cashbook Account</label>
+          <div><label className={lc}>Cashbook Account</label>
             <select className={ic} value={form.cashbookAccount} onChange={(e) => set("cashbookAccount", e.target.value)}>
               <option value="">Select cashbook</option>
               {cashbooks.map((cb) => <option key={cb._id} value={cb._id}>{cb.code} - {cb.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className={lc}>Notes</label>
-            <input className={ic} value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Optional" />
-          </div>
+            </select></div>
+          <div><label className={lc}>Notes</label>
+            <input className={ic} value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Optional" /></div>
         </div>
         <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
           <button onClick={onClose} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
@@ -455,43 +414,183 @@ const TopUpModal = ({ account, cashbooks, onSave, onClose }) => {
   );
 };
 
+const EditAccountModal = ({ account, onSave, onClose }) => {
+  const [form, setForm] = useState({
+    contactPerson: account.contactPerson || "", billingEmail: account.billingEmail || "",
+    creditLimit: String(account.creditLimit || ""), billingCycle: account.billingCycle || "monthly",
+    billingDay: String(account.billingDay || "1"), status: account.status || "active",
+    notes: account.notes || "", plates: (account.plates || []).join(", "),
+  });
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await onSave({
+        contactPerson: form.contactPerson.trim(), billingEmail: form.billingEmail.trim().toLowerCase(),
+        creditLimit: Number(form.creditLimit || 0), billingCycle: form.billingCycle,
+        billingDay: Number(form.billingDay || 1), status: form.status, notes: form.notes,
+        plates: form.plates.split(",").map((p) => p.trim()).filter(Boolean),
+      });
+    } finally { setSaving(false); }
+  };
+  const lc = "mb-1 block text-[11px] font-extrabold uppercase tracking-widest text-slate-500";
+  const ic = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
+  return (
+    <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/50 px-4">
+      <div className="w-full max-w-lg border border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-center justify-between bg-[#0B3B2E] px-4 py-3 text-white">
+          <div>
+            <h2 className="text-sm font-extrabold uppercase tracking-wide">Edit Account</h2>
+            <p className="mt-0.5 text-xs text-emerald-100">{account.accountNumber} · {account.customer?.name}</p>
+          </div>
+          <button onClick={onClose}><FaTimes /></button>
+        </div>
+        <div className="space-y-3 p-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className={lc}>Status</label>
+              <select className={ic} value={form.status} onChange={(e) => set("status", e.target.value)}>
+                <option value="active">Active</option><option value="suspended">Suspended</option><option value="closed">Closed</option>
+              </select></div>
+            {!["prepaid","voucher"].includes(account.accountType) && (
+              <div><label className={lc}>Credit Limit (KES)</label>
+                <input className={ic} type="number" min="0" value={form.creditLimit} onChange={(e) => set("creditLimit", e.target.value)} placeholder="0 = no limit" /></div>
+            )}
+          </div>
+          {account.accountType === "monthly" && (
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className={lc}>Billing Cycle</label>
+                <select className={ic} value={form.billingCycle} onChange={(e) => set("billingCycle", e.target.value)}>
+                  <option value="monthly">Monthly</option><option value="weekly">Weekly</option>
+                </select></div>
+              <div><label className={lc}>Billing Day (1–28)</label>
+                <input className={ic} type="number" min="1" max="28" value={form.billingDay} onChange={(e) => set("billingDay", e.target.value)} /></div>
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className={lc}>Contact Person</label>
+              <input className={ic} value={form.contactPerson} onChange={(e) => set("contactPerson", e.target.value)} /></div>
+            <div><label className={lc}>Billing Email</label>
+              <input className={ic} type="email" value={form.billingEmail} onChange={(e) => set("billingEmail", e.target.value)} /></div>
+          </div>
+          {account.accountType !== "voucher" && (
+            <div>
+              <label className={lc}>Plates (comma-separated)</label>
+              <input className={ic} value={form.plates} onChange={(e) => set("plates", e.target.value)} />
+            </div>
+          )}
+          <div><label className={lc}>Notes</label>
+            <textarea className="w-full border border-slate-300 px-2 py-2 text-sm text-slate-800 focus:outline-none" rows={2}
+              value={form.notes} onChange={(e) => set("notes", e.target.value)} /></div>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <button onClick={onClose} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
+          <button onClick={handleSave} disabled={saving} className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50">
+            {saving ? "Saving…" : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Lazy job list ─────────────────────────────────────────────────────────────
+const AccountJobsList = ({ accId, accountType }) => {
+  const [jobs, setJobs] = useState(null);
+  useEffect(() => {
+    carWashApi.getCreditAccount(accId)
+      .then((d) => {
+        const all = d?.jobs || [];
+        setJobs(accountType === "prepaid" ? all : all.filter((j) => j.paymentStatus !== "paid"));
+      })
+      .catch(() => setJobs([]));
+  }, [accId, accountType]);
+
+  if (!jobs) return <div className="text-[11px] text-slate-400">Loading…</div>;
+  if (!jobs.length) return (
+    <div className="text-[11px] text-emerald-600 font-semibold">
+      {accountType === "prepaid" ? "No jobs yet" : "All jobs paid ✓"}
+    </div>
+  );
+  return (
+    <div className="space-y-1 max-h-48 overflow-y-auto">
+      {jobs.map((j) => (
+        <div key={j._id} className="flex items-center justify-between rounded border border-slate-200 bg-white px-3 py-1.5">
+          <div>
+            <div className="font-bold text-slate-900 text-[11px]">{j.jobNumber}</div>
+            <div className="text-[10px] text-slate-500">{j.plateNumber} · {j.serviceName} · {fmtDate(j.jobDate || j.createdAt)}</div>
+          </div>
+          <div className="text-right">
+            {accountType === "prepaid"
+              ? <div className="font-black text-emerald-700 text-[11px]">{formatMoney(j.paidAmount || 0)}</div>
+              : <div className="font-black text-red-600 text-[11px]">{formatMoney(j.outstanding)}</div>}
+            <div className={`text-[10px] font-bold ${j.paymentStatus === "paid" ? "text-emerald-600" : j.paymentStatus === "partial" ? "text-amber-600" : "text-slate-500"}`}>{j.paymentStatus}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 const CarWashAccounts = () => {
-  const queryClient = useQueryClient();
+  const queryClient  = useQueryClient();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
-  const businessId = currentCompany?._id;
+  const businessId   = currentCompany?._id;
+  const canManage    = useCarWashPermission("carwash-loyalty", "manage");
+  const canRecord    = useCarWashPermission("carwash-payments", "record");
 
-  const canManage = useCarWashPermission("carwash-loyalty", "manage");
-  const canRecord  = useCarWashPermission("carwash-payments", "record");
-
-  const [expandedId, setExpandedId] = useState(null);
-  const [expandedStatements, setExpandedStatements] = useState({});
-  const [showCreate, setShowCreate] = useState(false);
-  const [payTarget, setPayTarget] = useState(null);
-  const [topupTarget, setTopupTarget] = useState(null);
-  const [expandedTopups, setExpandedTopups] = useState({});
-  const [topupsLoading, setTopupsLoading] = useState({});
-  const [smsTarget, setSmsTarget] = useState(null);
-  const [smsBody, setSmsBody] = useState("");
-  const [smsSending, setSmsSending] = useState(false);
-  const [emailSending, setEmailSending] = useState(null); // statementId being emailed
-  const [stmtLoading, setStmtLoading] = useState({});
+  // ── Filters / sort / pagination ──
+  const [search, setSearch]         = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const debounceRef                 = useRef(null);
   const [filterStatus, setFilterStatus] = useState("active");
-  const [filterType, setFilterType] = useState("");
-  const [editTarget, setEditTarget] = useState(null);
+  const [filterType, setFilterType]     = useState("");
+  const [sortBy, setSortBy]             = useState("");
+  const [sortDir, setSortDir]           = useState("desc");
+  const [page, setPage]                 = useState(1);
+  const limit                           = 50;
 
-  const { data: accountsData, isLoading: loading, error, refetch: refetchAccounts } = useQuery({
-    queryKey: ["cw-credit-accounts", businessId, filterStatus, filterType],
-    queryFn: async () => {
-      const params = {};
-      if (filterStatus) params.status = filterStatus;
-      if (filterType) params.accountType = filterType;
-      return carWashApi.listCreditAccounts(params);
-    },
+  const handleSearch = (val) => {
+    setSearch(val);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => { setPage(1); setDebouncedSearch(val); }, 300);
+  };
+
+  const handleSort = useCallback((field) => {
+    setSortDir((prev) => sortBy === field ? (prev === "asc" ? "desc" : "asc") : "desc");
+    setSortBy(field);
+    setPage(1);
+  }, [sortBy]);
+
+  // ── UI state ──
+  const [expandedId, setExpandedId]               = useState(null);
+  const [expandedStatements, setExpandedStatements] = useState({});
+  const [expandedTopups, setExpandedTopups]         = useState({});
+  const [topupsLoading, setTopupsLoading]           = useState({});
+  const [stmtLoading, setStmtLoading]               = useState({});
+  const [showCreate, setShowCreate]                 = useState(false);
+  const [payTarget, setPayTarget]                   = useState(null);
+  const [topupTarget, setTopupTarget]               = useState(null);
+  const [editTarget, setEditTarget]                 = useState(null);
+  const [remindTarget, setRemindTarget]             = useState(null);
+  const [remindSending, setRemindSending]           = useState(false);
+  const [emailSending, setEmailSending]             = useState(null);
+
+  // ── Data ──
+  const queryKey = ["cw-credit-accounts", businessId, filterStatus, filterType, debouncedSearch, sortBy, sortDir, page];
+  const { data: accountsData, isLoading: loading, error, refetch } = useQuery({
+    queryKey,
+    queryFn: () => carWashApi.listCreditAccounts({
+      status: filterStatus || undefined, accountType: filterType || undefined,
+      search: debouncedSearch || undefined, sortBy: sortBy || undefined,
+      sortDir, page, limit,
+    }),
     enabled: !!businessId,
     placeholderData: (prev) => prev,
     staleTime: 30_000,
   });
+  useEffect(() => { if (error) toast.error("Failed to load credit accounts"); }, [error]);
 
   const { data: refData } = useQuery({
     queryKey: ["cw-accounts-ref", businessId],
@@ -506,15 +605,13 @@ const CarWashAccounts = () => {
     staleTime: 5 * 60_000,
   });
 
-  useEffect(() => { if (error) toast.error("Failed to load credit accounts"); }, [error]);
-
-  const accounts  = useMemo(() => Array.isArray(accountsData) ? accountsData : [], [accountsData]);
+  const accounts  = useMemo(() => (accountsData?.data ?? (Array.isArray(accountsData) ? accountsData : [])), [accountsData]);
+  const total     = accountsData?.total ?? accounts.length;
+  const pages     = accountsData?.pages ?? 1;
   const customers = useMemo(() => (refData?.customers ?? []).filter((c) => c.name && !PLATE_RE.test(c.name.trim())), [refData]);
   const cashbooks = useMemo(() => refData?.cashbooks ?? [], [refData]);
 
-  const toggleExpand = useCallback((acc) => {
-    setExpandedId((prev) => (prev === acc._id ? null : acc._id));
-  }, []);
+  const toggleExpand = useCallback((acc) => setExpandedId((prev) => prev === acc._id ? null : acc._id), []);
 
   const loadStatements = useCallback(async (accId) => {
     setStmtLoading((p) => ({ ...p, [accId]: true }));
@@ -550,13 +647,6 @@ const CarWashAccounts = () => {
     if (expandedId === targetId) loadStatements(targetId);
   }, [payTarget, expandedId, queryClient, loadStatements]);
 
-  const handleEdit = useCallback(async (form) => {
-    await carWashApi.updateCreditAccount(editTarget._id, form);
-    toast.success("Account updated");
-    setEditTarget(null);
-    queryClient.invalidateQueries({ queryKey: ["cw-credit-accounts"] });
-  }, [editTarget, queryClient]);
-
   const handleTopup = useCallback(async (form) => {
     const res = await carWashApi.recordAccountTopup(topupTarget._id, { ...form, amount: Number(form.amount) });
     toast.success(res?.message || "Wallet topped up");
@@ -565,6 +655,13 @@ const CarWashAccounts = () => {
     queryClient.invalidateQueries({ queryKey: ["cw-credit-accounts"] });
     if (expandedId === targetId) loadTopups(targetId);
   }, [topupTarget, expandedId, queryClient, loadTopups]);
+
+  const handleEdit = useCallback(async (form) => {
+    await carWashApi.updateCreditAccount(editTarget._id, form);
+    toast.success("Account updated");
+    setEditTarget(null);
+    queryClient.invalidateQueries({ queryKey: ["cw-credit-accounts"] });
+  }, [editTarget, queryClient]);
 
   const handleGenerateStatement = useCallback(async (acc) => {
     try {
@@ -577,30 +674,11 @@ const CarWashAccounts = () => {
     }
   }, [queryClient, loadStatements]);
 
-  const openStatementSms = useCallback((acc, stmt) => {
-    setSmsTarget({ _id: stmt._id, _accId: acc._id, name: acc.customer?.name, phone: acc.customer?.phone });
-    setSmsBody(`Hi ${acc.customer?.name || "Customer"}, your car wash statement for ${fmtMonth(stmt.periodStart)} is KES ${Number(stmt.totalOutstanding || 0).toLocaleString()} for ${stmt.totalJobs} wash(es). Ref: ${stmt.statementNumber}. Thank you!`);
-  }, []);
-
-  const sendStatementSms = useCallback(async (phone, body) => {
-    if (!smsTarget) return;
-    setSmsSending(true);
-    try {
-      await carWashApi.sendStatementSms(smsTarget._accId, smsTarget._id, { phone, body });
-      toast.success("Statement SMS sent");
-      setSmsTarget(null);
-      loadStatements(smsTarget._accId);
-    } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to send SMS");
-    } finally { setSmsSending(false); }
-  }, [smsTarget, loadStatements]);
-
   const sendStatementEmail = useCallback(async (acc, stmt) => {
-    const email = acc.billingEmail || "";
-    if (!email) return toast.warning("No billing email on this account. Add one via Edit.");
+    if (!acc.billingEmail) return toast.warning("No billing email — add one via Edit.");
     setEmailSending(stmt._id);
     try {
-      const res = await carWashApi.sendStatementEmail(acc._id, stmt._id, { email });
+      const res = await carWashApi.sendStatementEmail(acc._id, stmt._id, { email: acc.billingEmail });
       toast.success(res?.message || "Statement emailed");
       loadStatements(acc._id);
     } catch (err) {
@@ -608,18 +686,47 @@ const CarWashAccounts = () => {
     } finally { setEmailSending(null); }
   }, [loadStatements]);
 
-  // Summary stats
+  const sendStatementSms = useCallback(async (phone, body) => {
+    if (!remindTarget) return;
+    setRemindSending(true);
+    try {
+      if (remindTarget._stmtId) {
+        await carWashApi.sendStatementSms(remindTarget._id, remindTarget._stmtId, { phone, body });
+      } else {
+        await carWashApi.sendCustomerSms(remindTarget._customerId, { phone, body });
+      }
+      toast.success("SMS sent");
+      setRemindTarget(null);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to send SMS");
+    } finally { setRemindSending(false); }
+  }, [remindTarget]);
+
+  // Open reminder SMS (no statement required — direct balance nudge)
+  const openRemind = useCallback((e, acc) => {
+    e.stopPropagation();
+    const name    = acc.customer?.name || "Customer";
+    const balance = fmt(acc.currentBalance || 0);
+    setRemindTarget({
+      _id:        acc._id,
+      _customerId: acc.customer?._id,
+      name,
+      phone: acc.customer?.phone || "",
+    });
+  }, []);
+
+  // KPI strip
   const stats = useMemo(() => {
-    const total = accounts.length;
-    const totalOwed = accounts.reduce((s, a) => a.accountType !== "prepaid" ? s + Math.max(0, Number(a.currentBalance || 0)) : s, 0);
-    const totalPrepaidCredit = accounts.reduce((s, a) => a.accountType === "prepaid" ? s + Number(a.accountCredit || 0) : s, 0);
-    const overLimit = accounts.filter((a) => a.accountType !== "prepaid" && a.creditLimit > 0 && a.currentBalance > a.creditLimit).length;
-    return { total, totalOwed, totalPrepaidCredit, overLimit };
+    const totalOwed         = accounts.reduce((s, a) => a.accountType !== "prepaid" ? s + Math.max(0, Number(a.currentBalance || 0)) : s, 0);
+    const totalPrepaidFloat = accounts.reduce((s, a) => a.accountType === "prepaid" ? s + Number(a.accountCredit || 0) : s, 0);
+    const overLimit         = accounts.filter((a) => a.accountType !== "prepaid" && a.creditLimit > 0 && a.currentBalance > a.creditLimit).length;
+    return { totalOwed, totalPrepaidFloat, overLimit };
   }, [accounts]);
 
   return (
-    <CarWashShell activePage="accounts">
+    <CarWashShell title="Credit Accounts">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+
         {/* ── Header ── */}
         <div className="flex-shrink-0 border-b border-slate-200 bg-white px-2 py-1">
           <div className="flex flex-wrap items-center justify-between gap-1">
@@ -627,21 +734,37 @@ const CarWashAccounts = () => {
               <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Car Wash</div>
               <h1 className="text-sm font-bold text-slate-900 leading-tight">Credit Accounts</h1>
             </div>
-            <div className="flex items-center gap-1">
-              <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="h-7 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:border-[#0B3B2E]">
+            <div className="flex flex-wrap items-center gap-1">
+
+              {/* Search */}
+              <div className="relative">
+                <FaSearch className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" size={9} />
+                <input type="text" placeholder="Name / plate / account…" value={search} onChange={(e) => handleSearch(e.target.value)}
+                  className="h-7 w-44 rounded border border-slate-300 bg-white pl-6 pr-6 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+                {search && (
+                  <button type="button" onClick={() => handleSearch("")} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><FaTimes size={9} /></button>
+                )}
+              </div>
+
+              <select value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}
+                className="h-7 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:border-[#0B3B2E]">
                 <option value="">All Statuses</option>
                 <option value="active">Active</option>
                 <option value="suspended">Suspended</option>
                 <option value="closed">Closed</option>
               </select>
-              <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="h-7 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:border-[#0B3B2E]">
+              <select value={filterType} onChange={(e) => { setFilterType(e.target.value); setPage(1); }}
+                className="h-7 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:border-[#0B3B2E]">
                 <option value="">All Types</option>
                 <option value="credit">Credit</option>
                 <option value="monthly">Monthly</option>
                 <option value="prepaid">Prepaid</option>
                 <option value="voucher">Voucher</option>
               </select>
-              <button onClick={() => refetchAccounts()} className="flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50"><FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /></button>
+
+              <button onClick={() => refetch()} className="flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50">
+                <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} />
+              </button>
               {canManage && (
                 <button onClick={() => setShowCreate(true)} className="flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]">
                   <FaPlus size={9} /> New Account
@@ -652,24 +775,16 @@ const CarWashAccounts = () => {
 
           {/* KPI strip */}
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px]">
-            <span className="font-semibold text-slate-700">{stats.total} accounts</span>
+            <span className="font-semibold text-slate-700">{total} account{total !== 1 ? "s" : ""}</span>
             <span className="text-slate-300">·</span>
-            <span className="font-bold text-red-600">Credit owed: {fmt(stats.totalOwed)}</span>
-            {stats.totalPrepaidCredit > 0 && (
-              <>
-                <span className="text-slate-300">·</span>
-                <span className="font-semibold text-emerald-700">
-                  <FaWallet className="mr-1 inline" size={8} />Prepaid float: {fmt(stats.totalPrepaidCredit)}
-                </span>
-              </>
+            <span className="font-bold text-red-600">Owed: {fmt(stats.totalOwed)}</span>
+            {stats.totalPrepaidFloat > 0 && (
+              <><span className="text-slate-300">·</span>
+              <span className="font-semibold text-emerald-700"><FaWallet className="mr-1 inline" size={8} />Float: {fmt(stats.totalPrepaidFloat)}</span></>
             )}
             {stats.overLimit > 0 && (
-              <>
-                <span className="text-slate-300">·</span>
-                <span className="font-bold text-amber-700">
-                  <FaExclamationTriangle className="mr-1 inline" size={8} />{stats.overLimit} over limit
-                </span>
-              </>
+              <><span className="text-slate-300">·</span>
+              <span className="font-bold text-amber-700"><FaExclamationTriangle className="mr-1 inline" size={8} />{stats.overLimit} over limit</span></>
             )}
           </div>
         </div>
@@ -678,107 +793,106 @@ const CarWashAccounts = () => {
         <div className="min-h-0 flex-1 overflow-auto">
           <table className="w-full min-w-[860px] text-xs">
             <thead className="sticky top-0 z-10">
-              <tr className="bg-[#0B3B2E] text-white">
+              <tr className="bg-[#0B3B2E] text-white text-[10px]">
                 <th className="w-6 px-3 py-1.5" />
                 <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Account</th>
-                <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Customer / Plates</th>
+                <SortTh label="Customer / Plates" field="name"    sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
                 <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Type</th>
-                <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide">Balance</th>
+                <SortTh label="Balance"            field="balance" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} className="text-right" />
                 <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide">Limit</th>
                 <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Status</th>
-                <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide">Actions</th>
+                <th className="px-3 py-1.5 text-center font-bold uppercase tracking-wide">Debt Age</th>
+                <th className="px-3 py-1.5 text-right font-bold uppercase tracking-wide text-white/70">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {loading ? (
-                <tr><td colSpan={8} className="py-10 text-center text-slate-400">Loading…</td></tr>
+              {loading && !accounts.length ? (
+                <tr><td colSpan={9} className="py-10 text-center text-slate-400">Loading…</td></tr>
               ) : accounts.length === 0 ? (
-                <tr><td colSpan={8} className="py-14 text-center">
+                <tr><td colSpan={9} className="py-14 text-center">
                   <FaUser className="mx-auto mb-2 text-2xl text-slate-200" />
-                  <div className="text-sm font-semibold text-slate-400">No credit accounts yet</div>
-                  <div className="mt-1 text-xs text-slate-400">Create an account to start tracking credit customers</div>
+                  <div className="text-sm font-semibold text-slate-400">{debouncedSearch ? "No accounts match your search" : "No credit accounts yet"}</div>
+                  {!debouncedSearch && <div className="mt-1 text-xs text-slate-400">Create an account to start tracking credit customers</div>}
                 </td></tr>
               ) : accounts.map((acc) => {
-                const balance = Number(acc.currentBalance || 0);
-                const overLimit = acc.creditLimit > 0 && balance > acc.creditLimit;
-                const expanded = expandedId === acc._id;
+                const balance    = Number(acc.currentBalance || 0);
+                const overLimit  = acc.creditLimit > 0 && balance > acc.creditLimit;
+                const expanded   = expandedId === acc._id;
+                const isPrepaid  = acc.accountType === "prepaid";
                 return (
                   <React.Fragment key={acc._id}>
-                    <tr className={`border-b border-slate-100 ${overLimit ? "bg-amber-50/60" : "bg-white hover:bg-slate-50"} cursor-pointer`} onClick={() => toggleExpand(acc)}>
+                    <tr className={`border-b border-slate-100 ${overLimit ? "bg-amber-50/60" : "bg-white hover:bg-slate-50/60"} cursor-pointer`}
+                      onClick={() => toggleExpand(acc)}>
                       <td className="px-3 py-2 text-slate-400">
-                        {expanded ? <FaChevronDown className="text-[10px]" /> : <FaChevronRight className="text-[10px]" />}
+                        {expanded ? <FaChevronDown size={9} /> : <FaChevronRight size={9} />}
                       </td>
                       <td className="px-3 py-2">
                         <div className="font-black text-slate-900">{acc.accountNumber}</div>
-                        {acc.lastStatementAt && <div className="text-[10px] text-slate-400">Last stmt: {fmtDate(acc.lastStatementAt)}</div>}
+                        {acc.lastStatementAt && <div className="text-[10px] text-slate-400">Stmt: {fmtDate(acc.lastStatementAt)}</div>}
                       </td>
                       <td className="px-3 py-2">
                         <div className="font-semibold text-slate-900">{acc.customer?.name || "—"}</div>
                         <div className="flex flex-wrap gap-1 mt-0.5">
                           {(acc.plates || []).map((p) => (
-                            <span key={p} className="rounded bg-slate-100 px-1.5 py-0 text-[10px] font-bold text-slate-600">{p}</span>
+                            <span key={p} className="rounded bg-slate-100 px-1.5 py-0 text-[9px] font-bold text-slate-600">{p}</span>
                           ))}
                         </div>
                       </td>
                       <td className="px-3 py-2">
-                        <span className={`inline-flex rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
-                          acc.accountType === "monthly"  ? "bg-violet-100 text-violet-700"  :
-                          acc.accountType === "prepaid"  ? "bg-emerald-100 text-emerald-700" :
-                          acc.accountType === "voucher"  ? "bg-amber-100 text-amber-700"     :
-                          "bg-blue-100 text-blue-700"
-                        }`}>
+                        <span className={`inline-flex rounded px-2 py-0.5 text-[9px] font-bold uppercase ${typePill[acc.accountType] || "bg-slate-100 text-slate-600"}`}>
                           {acc.accountType}
                         </span>
-                        {acc.accountType === "monthly" && (
-                          <div className="text-[10px] text-slate-400 mt-0.5">Bills day {acc.billingDay}</div>
-                        )}
-                        {acc.accountType === "prepaid" && (
-                          <div className="text-[10px] text-slate-400 mt-0.5">Wallet</div>
-                        )}
-                        {acc.accountType === "voucher" && (
-                          <div className="text-[10px] text-slate-400 mt-0.5">Company voucher</div>
-                        )}
+                        {acc.accountType === "monthly" && <div className="text-[9px] text-slate-400 mt-0.5">Day {acc.billingDay}</div>}
                       </td>
-                      {acc.accountType === "prepaid" ? (
+                      {isPrepaid ? (
                         <td className="px-3 py-2 text-right font-black text-emerald-700">
-                          <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Available</div>
+                          <div className="text-[9px] font-bold text-slate-400 uppercase">Available</div>
                           {fmt(Number(acc.accountCredit || 0))}
                         </td>
                       ) : (
                         <td className={`px-3 py-2 text-right font-black ${balance > 0 ? "text-red-600" : "text-emerald-600"}`}>
                           {fmt(balance)}
-                          {overLimit && <div className="text-[10px] font-bold text-amber-600">Over limit</div>}
+                          {overLimit && <div className="text-[9px] font-bold text-amber-600">Over limit</div>}
                         </td>
                       )}
                       <td className="px-3 py-2 text-right text-slate-600">
-                        {acc.accountType === "prepaid"
-                          ? <span className="text-[10px] text-slate-400">—</span>
+                        {isPrepaid ? <span className="text-[10px] text-slate-400">—</span>
                           : acc.creditLimit > 0 ? fmt(acc.creditLimit) : <span className="text-slate-300">None</span>}
                       </td>
                       <td className="px-3 py-2">
-                        <span className={`inline-flex rounded border px-2 py-0.5 text-[10px] font-bold uppercase ${statusPill[acc.status] || statusPill.active}`}>
+                        <span className={`inline-flex rounded border px-2 py-0.5 text-[9px] font-bold uppercase ${statusPill[acc.status] || statusPill.active}`}>
                           {acc.status}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-right">
-                        <div className="inline-flex gap-1" onClick={(e) => e.stopPropagation()}>
-                          {acc.accountType === "prepaid" && acc.status === "active" && canRecord && (
-                            <button onClick={() => setTopupTarget(acc)} className="inline-flex items-center gap-1 border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100">
-                              <FaWallet /> Top Up
+                      <td className="px-3 py-2 text-center">
+                        {!isPrepaid && <AgingBadge lastStatementAt={acc.lastStatementAt} currentBalance={balance} />}
+                      </td>
+                      <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1 flex-wrap">
+                          {isPrepaid && acc.status === "active" && canRecord && (
+                            <button onClick={() => setTopupTarget(acc)} className="inline-flex items-center gap-1 border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700 hover:bg-emerald-100">
+                              <FaWallet size={8} /> Top Up
                             </button>
                           )}
-                          {acc.accountType !== "prepaid" && balance > 0 && acc.status === "active" && canRecord && (
-                            <button onClick={() => setPayTarget(acc)} className="inline-flex items-center gap-1 border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700 hover:bg-orange-100">
-                              <FaMoneyBillWave /> Pay
+                          {!isPrepaid && balance > 0 && acc.status === "active" && canRecord && (
+                            <button onClick={() => setPayTarget(acc)} className="inline-flex items-center gap-1 border border-orange-200 bg-orange-50 px-2 py-0.5 text-[9px] font-bold text-orange-700 hover:bg-orange-100">
+                              <FaMoneyBillWave size={8} /> Pay
                             </button>
                           )}
-                          {acc.accountType !== "prepaid" && acc.status === "active" && (
-                            <button onClick={() => handleGenerateStatement(acc)} className="inline-flex items-center gap-1 border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-700 hover:bg-violet-100">
-                              <FaFileInvoice /> Statement
+                          {!isPrepaid && acc.status === "active" && (
+                            <button onClick={() => handleGenerateStatement(acc)} className="inline-flex items-center gap-1 border border-violet-200 bg-violet-50 px-2 py-0.5 text-[9px] font-bold text-violet-700 hover:bg-violet-100">
+                              <FaFileInvoice size={8} /> Stmt
+                            </button>
+                          )}
+                          {/* Quick balance-reminder SMS — no statement required */}
+                          {acc.customer?.phone && balance > 0 && (
+                            <button onClick={(e) => openRemind(e, acc)} title="Send balance reminder SMS"
+                              className="inline-flex items-center gap-1 border border-slate-200 bg-white px-2 py-0.5 text-[9px] font-bold text-slate-600 hover:bg-slate-50">
+                              <FaBell size={8} /> Remind
                             </button>
                           )}
                           {canManage && (
-                            <button onClick={() => setEditTarget(acc)} className="inline-flex items-center gap-1 border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50">
+                            <button onClick={() => setEditTarget(acc)} className="inline-flex items-center gap-1 border border-slate-200 bg-white px-2 py-0.5 text-[9px] font-bold text-slate-600 hover:bg-slate-50">
                               Edit
                             </button>
                           )}
@@ -786,11 +900,11 @@ const CarWashAccounts = () => {
                             onClick={() => {
                               toggleExpand(acc);
                               if (!expanded) {
-                                if (acc.accountType === "prepaid") loadTopups(acc._id);
+                                if (isPrepaid) loadTopups(acc._id);
                                 else loadStatements(acc._id);
                               }
                             }}
-                            className="inline-flex items-center gap-1 border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50">
+                            className="inline-flex items-center gap-1 border border-slate-200 bg-white px-2 py-0.5 text-[9px] font-bold text-slate-600 hover:bg-slate-50">
                             {expanded ? "Hide" : "View"}
                           </button>
                         </div>
@@ -799,24 +913,20 @@ const CarWashAccounts = () => {
 
                     {/* ── Expanded detail ── */}
                     {expanded && (
-                      <tr className="border-b border-slate-100 bg-slate-50/70">
-                        <td colSpan={8} className="px-6 py-3">
-                          {acc.accountType === "prepaid" ? (
-                            /* Prepaid: show wallet summary + top-up history */
+                      <tr className="border-b border-slate-100 bg-slate-50/60">
+                        <td colSpan={9} className="px-6 py-3">
+                          {isPrepaid ? (
                             <div className="grid gap-4 md:grid-cols-2">
                               <div>
                                 <div className="mb-2 text-[11px] font-black uppercase tracking-wide text-slate-500">Wallet Summary</div>
-                                <div className="rounded border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
+                                <div className="rounded border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm mb-3">
                                   <div className="flex items-center justify-between">
                                     <span className="text-[11px] text-slate-500 font-semibold">Available Balance</span>
                                     <span className="font-black text-emerald-700 text-base">{fmt(Number(acc.accountCredit || 0))}</span>
                                   </div>
-                                  <div className="mt-2 text-[10px] text-slate-500">
-                                    Balance is automatically deducted when a new job is created for any plate on this account.
-                                  </div>
                                 </div>
-                                <div className="mt-3 text-[11px] font-black uppercase tracking-wide text-slate-500">Recent Jobs</div>
-                                <div className="mt-1"><AccountJobsList accId={acc._id} accountType={acc.accountType} /></div>
+                                <div className="text-[11px] font-black uppercase tracking-wide text-slate-500 mb-1">Recent Jobs</div>
+                                <AccountJobsList accId={acc._id} accountType="prepaid" />
                               </div>
                               <div>
                                 <div className="mb-2 flex items-center justify-between">
@@ -825,7 +935,7 @@ const CarWashAccounts = () => {
                                 </div>
                                 {topupsLoading[acc._id] ? (
                                   <div className="text-[11px] text-slate-400">Loading…</div>
-                                ) : (expandedTopups[acc._id] || []).length === 0 ? (
+                                ) : !(expandedTopups[acc._id] || []).length ? (
                                   <div className="text-[11px] text-slate-400">No top-ups yet</div>
                                 ) : (expandedTopups[acc._id] || []).map((t) => (
                                   <div key={t._id} className={`mb-1.5 flex items-center justify-between rounded border px-3 py-2 ${t.isVoided ? "border-red-200 bg-red-50" : "border-slate-200 bg-white"}`}>
@@ -835,23 +945,20 @@ const CarWashAccounts = () => {
                                       {t.isVoided && <div className="text-[10px] text-red-500 font-bold">VOIDED{t.voidReason ? ` — ${t.voidReason}` : ""}</div>}
                                     </div>
                                     {!t.isVoided && canRecord && (
-                                      <button
-                                        type="button"
+                                      <button type="button"
                                         onClick={async () => {
-                                          const reason = window.prompt(`Reason for voiding this top-up of ${fmt(t.amount)}?`, "");
+                                          const reason = window.prompt(`Reason for voiding ${fmt(t.amount)}?`, "");
                                           if (reason === null) return;
                                           try {
                                             await carWashApi.voidTopup(acc._id, t._id, reason);
-                                            toast.success("Top-up voided and ledger reversed");
+                                            toast.success("Top-up voided");
                                             loadTopups(acc._id);
                                             queryClient.invalidateQueries({ queryKey: ["cw-credit-accounts"] });
                                           } catch (err) {
                                             toast.error(err?.response?.data?.message || "Failed to void top-up");
                                           }
                                         }}
-                                        className="ml-2 inline-flex shrink-0 items-center gap-1 rounded border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-600 hover:bg-red-100"
-                                        title="Void this top-up"
-                                      >
+                                        className="ml-2 inline-flex shrink-0 items-center gap-1 rounded border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-600 hover:bg-red-100">
                                         <FaUndo size={8} /> Void
                                       </button>
                                     )}
@@ -860,7 +967,6 @@ const CarWashAccounts = () => {
                               </div>
                             </div>
                           ) : (
-                            /* Credit / Monthly: existing jobs + statements view */
                             <div className="grid gap-4 md:grid-cols-2">
                               <div>
                                 <div className="mb-2 text-[11px] font-black uppercase tracking-wide text-slate-500">Unpaid Jobs</div>
@@ -869,15 +975,11 @@ const CarWashAccounts = () => {
                               <div>
                                 <div className="mb-2 flex items-center justify-between">
                                   <span className="text-[11px] font-black uppercase tracking-wide text-slate-500">Statements</span>
-                                  {acc.accountType !== "prepaid" && (
-                                    <button onClick={() => handleGenerateStatement(acc)} className="text-[10px] font-bold text-violet-700 hover:underline">
-                                      + Generate
-                                    </button>
-                                  )}
+                                  <button onClick={() => handleGenerateStatement(acc)} className="text-[10px] font-bold text-violet-700 hover:underline">+ Generate</button>
                                 </div>
                                 {stmtLoading[acc._id] ? (
                                   <div className="text-[11px] text-slate-400">Loading…</div>
-                                ) : (expandedStatements[acc._id] || []).length === 0 ? (
+                                ) : !(expandedStatements[acc._id] || []).length ? (
                                   <div className="text-[11px] text-slate-400">No statements yet</div>
                                 ) : (expandedStatements[acc._id] || []).map((s) => (
                                   <div key={s._id} className="mb-1.5 flex items-center justify-between rounded border border-slate-200 bg-white px-3 py-2">
@@ -886,23 +988,18 @@ const CarWashAccounts = () => {
                                       <div className="text-[10px] text-slate-500">{fmtMonth(s.periodStart)} · {s.totalJobs} jobs</div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${stmtPill[s.status] || stmtPill.draft}`}>{s.status}</span>
+                                      <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${stmtPill[s.status] || stmtPill.draft}`}>{s.status}</span>
                                       <span className="font-black text-slate-900 text-[11px]">{fmt(s.totalOutstanding)}</span>
-                                      <button onClick={() => printCreditStatement(acc, s)} title="Print / View" className="text-[10px] text-slate-400 hover:text-slate-700">
-                                        <FaPrint />
-                                      </button>
+                                      <button onClick={() => printCreditStatement(acc, s)} title="Print" className="text-[10px] text-slate-400 hover:text-slate-700"><FaPrint /></button>
                                       {acc.customer?.phone && s.status !== "paid" && (
-                                        <button onClick={() => openStatementSms(acc, s)} title="Send SMS" className="text-[10px] text-emerald-700 hover:text-emerald-900">
-                                          <FaSms />
-                                        </button>
+                                        <button
+                                          onClick={() => setRemindTarget({ _id: acc._id, _stmtId: s._id, _customerId: acc.customer?._id, name: acc.customer?.name, phone: acc.customer?.phone })}
+                                          title="Send SMS" className="text-[10px] text-emerald-700 hover:text-emerald-900">SMS</button>
                                       )}
                                       {s.status !== "paid" && (
-                                        <button
-                                          onClick={() => sendStatementEmail(acc, s)}
-                                          disabled={emailSending === s._id}
-                                          title={acc.billingEmail ? `Email to ${acc.billingEmail}` : "No billing email — add one via Edit"}
-                                          className={`text-[10px] ${acc.billingEmail ? "text-blue-600 hover:text-blue-800" : "text-slate-300 cursor-not-allowed"}`}
-                                        >
+                                        <button onClick={() => sendStatementEmail(acc, s)} disabled={emailSending === s._id}
+                                          title={acc.billingEmail ? `Email to ${acc.billingEmail}` : "No billing email"}
+                                          className={`text-[10px] ${acc.billingEmail ? "text-blue-600 hover:text-blue-800" : "text-slate-300 cursor-not-allowed"}`}>
                                           {emailSending === s._id ? "…" : <FaEnvelope />}
                                         </button>
                                       )}
@@ -921,190 +1018,39 @@ const CarWashAccounts = () => {
             </tbody>
           </table>
         </div>
+
+        {/* ── Pagination ── */}
+        {pages > 1 && (
+          <div className="flex-shrink-0 flex items-center justify-between border-t border-slate-200 bg-white px-3 py-1.5 text-[11px]">
+            <span className="text-slate-500">Showing {((page - 1) * limit) + 1}–{Math.min(page * limit, total)} of {total}</span>
+            <div className="flex items-center gap-1">
+              <button type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}
+                className="h-6 px-3 border border-slate-300 rounded text-xs disabled:opacity-40 hover:bg-slate-50">Prev</button>
+              <span className="px-2 text-slate-500">Page {page} of {pages}</span>
+              <button type="button" disabled={page >= pages} onClick={() => setPage((p) => p + 1)}
+                className="h-6 px-3 border border-slate-300 rounded text-xs disabled:opacity-40 hover:bg-slate-50">Next</button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {showCreate && (
-        <AccountModal customers={customers} onSave={handleCreate} onClose={() => setShowCreate(false)} />
-      )}
+      {showCreate && <AccountModal customers={customers} onSave={handleCreate} onClose={() => setShowCreate(false)} />}
+      {payTarget   && <PaymentModal account={payTarget} cashbooks={cashbooks} onSave={handlePayment} onClose={() => setPayTarget(null)} />}
+      {topupTarget && <TopUpModal account={topupTarget} cashbooks={cashbooks} onSave={handleTopup} onClose={() => setTopupTarget(null)} />}
+      {editTarget  && <EditAccountModal account={editTarget} onSave={handleEdit} onClose={() => setEditTarget(null)} />}
 
-      {payTarget && (
-        <PaymentModal account={payTarget} cashbooks={cashbooks} onSave={handlePayment} onClose={() => setPayTarget(null)} />
-      )}
-
-      {topupTarget && (
-        <TopUpModal account={topupTarget} cashbooks={cashbooks} onSave={handleTopup} onClose={() => setTopupTarget(null)} />
-      )}
-
-      {smsTarget && (
+      {remindTarget && (
         <CwSmsModal
-          target={{ _id: smsTarget._id, name: smsTarget.name, phone: smsTarget.phone || "" }}
-          defaultBody={smsBody}
+          target={{ _id: remindTarget._customerId, name: remindTarget.name, phone: remindTarget.phone }}
+          defaultBody={`Hi ${remindTarget.name || "Customer"}, you have an outstanding balance on your car wash account. Please contact us to settle. Thank you.`}
           templates={[]}
-          context="Statement"
+          context="Balance Reminder"
           onSend={sendStatementSms}
-          onClose={() => setSmsTarget(null)}
-          sending={smsSending}
+          onClose={() => setRemindTarget(null)}
+          sending={remindSending}
         />
       )}
-
-      {editTarget && (
-        <EditAccountModal account={editTarget} onSave={handleEdit} onClose={() => setEditTarget(null)} />
-      )}
     </CarWashShell>
-  );
-};
-
-// ─── Edit account modal ───────────────────────────────────────────────────────
-const EditAccountModal = ({ account, onSave, onClose }) => {
-  const [form, setForm] = useState({
-    contactPerson: account.contactPerson || "",
-    billingEmail: account.billingEmail || "",
-    creditLimit: String(account.creditLimit || ""),
-    billingCycle: account.billingCycle || "monthly",
-    billingDay: String(account.billingDay || "1"),
-    status: account.status || "active",
-    notes: account.notes || "",
-    plates: (account.plates || []).join(", "),
-  });
-  const [saving, setSaving] = useState(false);
-  const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await onSave({
-        contactPerson: form.contactPerson.trim(),
-        billingEmail: form.billingEmail.trim().toLowerCase(),
-        creditLimit: Number(form.creditLimit || 0),
-        billingCycle: form.billingCycle,
-        billingDay: Number(form.billingDay || 1),
-        status: form.status,
-        notes: form.notes,
-        plates: form.plates.split(",").map((p) => p.trim()).filter(Boolean),
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const lc = "mb-1 block text-[11px] font-extrabold uppercase tracking-widest text-slate-500";
-  const ic = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
-
-  return (
-    <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/50 px-4">
-      <div className="w-full max-w-lg border border-slate-200 bg-white shadow-2xl">
-        <div className="flex items-center justify-between bg-[#0B3B2E] px-4 py-3 text-white">
-          <div>
-            <h2 className="text-sm font-extrabold uppercase tracking-wide">Edit Account</h2>
-            <p className="mt-0.5 text-xs text-emerald-100">{account.accountNumber} · {account.customer?.name}</p>
-          </div>
-          <button onClick={onClose}><FaTimes /></button>
-        </div>
-        <div className="space-y-3 p-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={lc}>Status</label>
-              <select className={ic} value={form.status} onChange={(e) => set("status", e.target.value)}>
-                <option value="active">Active</option>
-                <option value="suspended">Suspended</option>
-                <option value="closed">Closed</option>
-              </select>
-            </div>
-            {account.accountType !== "prepaid" && account.accountType !== "voucher" && (
-              <div>
-                <label className={lc}>Credit Limit (KES)</label>
-                <input className={ic} type="number" min="0" value={form.creditLimit} onChange={(e) => set("creditLimit", e.target.value)} placeholder="0 = no limit" />
-              </div>
-            )}
-          </div>
-          {account.accountType === "monthly" && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={lc}>Billing Cycle</label>
-                <select className={ic} value={form.billingCycle} onChange={(e) => set("billingCycle", e.target.value)}>
-                  <option value="monthly">Monthly</option>
-                  <option value="weekly">Weekly</option>
-                </select>
-              </div>
-              <div>
-                <label className={lc}>Billing Day (1–28)</label>
-                <input className={ic} type="number" min="1" max="28" value={form.billingDay} onChange={(e) => set("billingDay", e.target.value)} />
-              </div>
-            </div>
-          )}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={lc}>Contact Person</label>
-              <input className={ic} value={form.contactPerson} onChange={(e) => set("contactPerson", e.target.value)} placeholder="e.g. John Kamau" />
-            </div>
-            <div>
-              <label className={lc}>Billing Email</label>
-              <input className={ic} type="email" value={form.billingEmail} onChange={(e) => set("billingEmail", e.target.value)} placeholder="accounts@company.com" />
-            </div>
-          </div>
-          {account.accountType !== "voucher" && (
-            <div>
-              <label className={lc}>Plates (comma-separated)</label>
-              <input className={ic} value={form.plates} onChange={(e) => set("plates", e.target.value)} placeholder="KCA123A, KCB456B" />
-              <p className="mt-0.5 text-[10px] text-slate-400">Jobs for these plates auto-link to this account</p>
-            </div>
-          )}
-          <div>
-            <label className={lc}>Notes</label>
-            <textarea className="w-full border border-slate-300 px-2 py-2 text-sm text-slate-800 focus:outline-none" rows={2} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
-          </div>
-        </div>
-        <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
-          <button onClick={onClose} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
-          <button onClick={handleSave} disabled={saving} className="bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50">
-            {saving ? "Saving…" : "Save Changes"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ─── Lazy job list for expanded row ──────────────────────────────────────────
-const AccountJobsList = ({ accId, accountType }) => {
-  const [jobs, setJobs] = useState(null);
-  useEffect(() => {
-    carWashApi.getCreditAccount(accId)
-      .then((d) => {
-        const all = d?.jobs || [];
-        // Prepaid accounts: show all jobs (all auto-pay immediately — filtering to unpaid makes it always empty)
-        // Credit/monthly accounts: show only unpaid/partial jobs
-        setJobs(accountType === "prepaid" ? all : all.filter((j) => j.paymentStatus !== "paid"));
-      })
-      .catch(() => setJobs([]));
-  }, [accId, accountType]);
-
-  if (!jobs) return <div className="text-[11px] text-slate-400">Loading…</div>;
-  if (!jobs.length) return (
-    <div className="text-[11px] text-emerald-600 font-semibold">
-      {accountType === "prepaid" ? "No jobs yet" : "All jobs paid ✓"}
-    </div>
-  );
-
-  return (
-    <div className="space-y-1 max-h-48 overflow-y-auto">
-      {jobs.map((j) => (
-        <div key={j._id} className="flex items-center justify-between rounded border border-slate-200 bg-white px-3 py-1.5">
-          <div>
-            <div className="font-bold text-slate-900 text-[11px]">{j.jobNumber}</div>
-            <div className="text-[10px] text-slate-500">{j.plateNumber} · {j.serviceName} · {fmtDate(j.jobDate || j.createdAt)}</div>
-          </div>
-          <div className="text-right">
-            {accountType === "prepaid" ? (
-              <div className="font-black text-emerald-700 text-[11px]">{formatMoney(j.paidAmount || 0)}</div>
-            ) : (
-              <div className="font-black text-red-600 text-[11px]">{formatMoney(j.outstanding)}</div>
-            )}
-            <div className={`text-[10px] font-bold ${j.paymentStatus === "paid" ? "text-emerald-600" : j.paymentStatus === "partial" ? "text-amber-600" : "text-slate-500"}`}>{j.paymentStatus}</div>
-          </div>
-        </div>
-      ))}
-    </div>
   );
 };
 

@@ -16,7 +16,7 @@ const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-8
 const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
 
 // ─── Plate lookup ─────────────────────────────────────────────────────────────
-const PlateLookupWidget = ({ plate, onPlateChange, onCustomerFound, onRewardData, readOnly }) => {
+const PlateLookupWidget = ({ plate, onPlateChange, onCustomerFound, onCustomerCleared, onRewardData, readOnly }) => {
   const [lookupResult, setLookupResult] = useState(null);
   const [looking, setLooking] = useState(false);
   const timerRef = useRef(null);
@@ -25,20 +25,30 @@ const PlateLookupWidget = ({ plate, onPlateChange, onCustomerFound, onRewardData
 
   const lookup = useCallback(async (value) => {
     const p = value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-    if (p.length < 3) { setLookupResult(null); onRewardData?.(null); return; }
+    if (p.length < 3) {
+      setLookupResult(null);
+      onRewardData?.(null);
+      onCustomerCleared?.();
+      return;
+    }
     setLooking(true);
     try {
       const result = await carWashApi.lookupPlate(p);
       setLookupResult(result);
-      if (result?.customer) onCustomerFound({ name: result.customer.name, phone: result.customer.phone });
+      if (result?.customer) {
+        onCustomerFound({ name: result.customer.name, phone: result.customer.phone });
+      } else {
+        onCustomerCleared?.();
+      }
       onRewardData?.(result?.loyaltyCard || null);
     } catch (_) {
       setLookupResult(null);
       onRewardData?.(null);
+      onCustomerCleared?.();
     } finally {
       setLooking(false);
     }
-  }, [onCustomerFound, onRewardData]);
+  }, [onCustomerFound, onCustomerCleared, onRewardData]);
 
   const handleChange = (e) => {
     if (readOnly) return;
@@ -440,6 +450,7 @@ const CarWashAddJob = () => {
   const [jobPaymentStatus, setJobPaymentStatus] = useState(null);
   const [dupWarning, setDupWarning]   = useState(null); // { jobNumber, customerName, plateNumber }
   const skipDupCheckRef               = React.useRef(false);
+  const autoFilledCustomerRef         = React.useRef(false);
 
   // Voucher job state
   const [isVoucherJob, setIsVoucherJob]     = useState(false);
@@ -1000,6 +1011,14 @@ const CarWashAddJob = () => {
                       if (!isEditMode) {
                         setCustomerName((prev) => prev || name);
                         setPhone((prev) => prev || ph);
+                        autoFilledCustomerRef.current = true;
+                      }
+                    }}
+                    onCustomerCleared={() => {
+                      if (!isEditMode && autoFilledCustomerRef.current) {
+                        setCustomerName("");
+                        setPhone("");
+                        autoFilledCustomerRef.current = false;
                       }
                     }}
                     onRewardData={(card) => {
@@ -1101,7 +1120,7 @@ const CarWashAddJob = () => {
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <div>
                   <label className={labelClass}>Customer Name</label>
-                  <input className={inputClass} value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Customer name" />
+                  <input className={inputClass} value={customerName} onChange={(e) => { setCustomerName(e.target.value); autoFilledCustomerRef.current = false; }} placeholder="Customer name" />
                 </div>
                 <div>
                   <label className={labelClass}>
@@ -1204,12 +1223,15 @@ const CarWashAddJob = () => {
                         </div>
                       )}
                       <div>
-                        <label className={labelClass}>Price (KES) *</label>
+                        <label className={labelClass}>Price (KES)</label>
                         {isReward ? (
                           <div className="flex h-9 items-center border border-amber-200 bg-amber-50 px-2 text-xs font-black text-amber-700">FREE (KES 0)</div>
                         ) : (
-                          <input className="h-9 w-full border border-slate-300 px-2 text-right text-xs font-bold text-slate-900 focus:border-[#0B3B2E] focus:outline-none" type="number" min="0" step="1" value={line.price} onChange={(e) => updateLine(index, "price", e.target.value)} required />
+                          <div className="flex h-9 items-center justify-end border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 select-none">
+                            {line.price !== "" && line.price !== undefined ? Number(line.price).toLocaleString() : <span className="text-slate-400">—</span>}
+                          </div>
                         )}
+                        {!isReward && <p className="mt-0.5 text-[10px] text-slate-400">Set in Services Setup</p>}
                       </div>
                       <div>
                         <label className={labelClass}>Attendants {isReward && <span className="ml-1 font-normal normal-case text-amber-600">(no commission on free line)</span>}</label>
@@ -1374,13 +1396,9 @@ const CarWashAddJob = () => {
                           {isReward ? (
                             <div className="flex h-8 items-center justify-end px-2 text-xs font-black text-amber-700">FREE</div>
                           ) : (
-                            <input
-                              className="h-8 w-full border border-slate-300 px-2 text-right text-xs font-bold text-slate-900 focus:border-[#0B3B2E] focus:outline-none"
-                              type="number" min="0" step="1"
-                              value={line.price}
-                              onChange={(e) => updateLine(index, "price", e.target.value)}
-                              required
-                            />
+                            <div className="flex h-8 items-center justify-end border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 select-none" title="Price is set in Services Setup">
+                              {line.price !== "" && line.price !== undefined ? Number(line.price).toLocaleString() : <span className="text-slate-400">—</span>}
+                            </div>
                           )}
                         </td>
                         <td className="px-3 py-2">

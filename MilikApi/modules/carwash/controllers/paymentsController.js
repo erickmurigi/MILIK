@@ -18,6 +18,7 @@ import CarWashBranch from "../models/CarWashBranch.js";
 import { sendAdHocSms } from "../../../services/communicationService.js";
 import { postCarWashPaymentLedger, reverseCarWashPaymentLedger, reverseCarWashTopupLedger, reverseCarWashCustomerCreditCreationLedger } from "../services/carwashAccountingService.js";
 import { resolveCarWashSmsBody } from "../services/carwashSmsService.js";
+import { recomputeCustomerStats } from "../services/customerStatsService.js";
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 const AMOUNT_TOLERANCE = 0.01; // KES 0.01 tolerance for all amount comparisons
@@ -89,14 +90,30 @@ export const listPayments = async (req, res, next) => {
     if (req.query.job && mongoose.Types.ObjectId.isValid(req.query.job)) filter.job = req.query.job;
     if (req.query.reconciliationStatus) filter.reconciliationStatus = String(req.query.reconciliationStatus).trim().toLowerCase();
     if (req.query.reference) filter.reference = new RegExp(escapeRegex(String(req.query.reference).trim()), "i");
-    if (req.query.date) {
+
+    // Date filter: dateFrom + dateTo (custom range) OR legacy single date
+    if (req.query.dateFrom || req.query.dateTo) {
+      filter.paymentDate = {};
+      if (req.query.dateFrom) filter.paymentDate.$gte = parseDateRange(req.query.dateFrom).start;
+      if (req.query.dateTo)   filter.paymentDate.$lt  = parseDateRange(req.query.dateTo).end;
+    } else if (req.query.date) {
       const { start, end } = parseDateRange(req.query.date);
       filter.paymentDate = { $gte: start, $lt: end };
     }
+
     const limit = Math.min(Math.max(Number(req.query.limit || 30), 1), 100);
-    const page = Math.max(Number(req.query.page || 1), 1);
-    const skip = (page - 1) * limit;
-    const [payments, total] = await Promise.all([
+    const page  = Math.max(Number(req.query.page || 1), 1);
+    const skip  = (page - 1) * limit;
+
+    // Build ObjectId-safe aggregate filter (aggregate() doesn't coerce strings)
+    const toOid = (v) => mongoose.Types.ObjectId.isValid(String(v)) ? new mongoose.Types.ObjectId(String(v)) : null;
+    const aggFilter = { ...filter };
+    aggFilter.business = toOid(business);
+    if (branchId) aggFilter.branch = toOid(branchId);
+    if (aggFilter.cashbookAccount) aggFilter.cashbookAccount = toOid(aggFilter.cashbookAccount);
+    if (aggFilter.job) aggFilter.job = toOid(aggFilter.job);
+
+    const [payments, total, totalAmountAgg] = await Promise.all([
       CarWashPayment.find(filter)
         .populate("job", "jobNumber plateNumber customerName serviceName price status paymentStatus phone")
         .populate("cashbookAccount", "code name type subGroup")
@@ -107,8 +124,14 @@ export const listPayments = async (req, res, next) => {
         .limit(limit)
         .lean(),
       CarWashPayment.countDocuments(filter),
+      CarWashPayment.aggregate([
+        { $match: aggFilter },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ]),
     ]);
-    const pagination = { page, limit, total, pages: Math.max(Math.ceil(total / limit), 1) };
+
+    const totalAmount = Math.round((totalAmountAgg[0]?.total || 0) * 100) / 100;
+    const pagination  = { page, limit, total, pages: Math.max(Math.ceil(total / limit), 1), totalAmount };
     res.status(200).json({ success: true, data: { payments, pagination }, payments, pagination });
   } catch (error) {
     next(error);
@@ -267,6 +290,7 @@ export const recordPayment = async (req, res, next) => {
       }
     }
 
+    if (job.plateNumber) recomputeCustomerStats(business, job.plateNumber).catch(() => {});
     res.status(201).json({ success: true, data: payment, payment, job: updatedJob, creditCreated: !!creditDoc, creditAmount, message: "Car Wash payment recorded" });
   } catch (error) {
     next(error);
@@ -349,6 +373,7 @@ export const deletePayment = async (req, res, next) => {
     ).catch(() => {});
     const { job } = await refreshJobPaymentStatus(business, payment.job);
     await handleJobPaymentStatusAfterPaymentChange({ business, job });
+    if (jobBeforeDelete.plateNumber) recomputeCustomerStats(business, jobBeforeDelete.plateNumber).catch(() => {});
     res.status(200).json({ success: true, job, message: "Car Wash payment deleted" });
   } catch (error) {
     next(error);
