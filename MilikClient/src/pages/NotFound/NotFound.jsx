@@ -1,7 +1,15 @@
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { FaHome, FaArrowLeft } from "react-icons/fa";
+import { setRobots } from "../../utils/pageMeta";
 
 export default function NotFound() {
+  useEffect(() => {
+    document.title = "Page Not Found — Milik";
+    setRobots("noindex,nofollow");
+    return () => setRobots("index,follow");
+  }, []);
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[#f7f8f5] px-4 text-center">
       <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-[#0B3B2E]/10">

@@ -482,6 +482,9 @@ function Home() {
     );
     setOpenGraphContent("og:url", canonicalUrl);
     setOpenGraphContent("og:image", `${PUBLIC_SITE_URL}/logo.png`);
+    setOpenGraphContent("og:image:width", "512");
+    setOpenGraphContent("og:image:height", "512");
+    setOpenGraphContent("og:image:alt", "Milik — Business Management Software Kenya");
     setTwitterContent("twitter:card", "summary_large_image");
     setTwitterContent("twitter:site", "@milikproperty");
     setTwitterContent("twitter:title", "Milik | Business Management Software Kenya");
@@ -600,7 +603,7 @@ function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f6f8f7] text-slate-900">
+    <div className="min-h-screen overflow-x-hidden bg-[#f6f8f7] text-slate-900">
       {restoringDemoAccess ? (
         <div className="border-b border-[#0B3B2E]/10 bg-[#ECF6F1] px-4 py-3 text-sm text-[#0B3B2E]">
           <div className="mx-auto max-w-7xl font-semibold sm:px-2">Opening your MILIK demo workspace...</div>
@@ -634,9 +637,9 @@ function Home() {
 
       {/* Nav */}
       <nav className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-2 sm:px-6 lg:px-8">
           <div className="relative">
-            <img src="/logo.png" alt="Milik" className="h-11 w-auto object-contain" style={{ maxWidth: "160px" }} />
+            <img src="/logo.png" alt="Milik" className="h-9 w-auto object-contain" style={{ maxWidth: "140px" }} />
             <span className="nav-logo-live-dot" title="System live" />
           </div>
           <div className="hidden items-center gap-8 md:flex">
@@ -668,43 +671,43 @@ function Home() {
       </nav>
 
       {/* Hero */}
-      <section className="relative overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(11,59,46,0.18),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgba(255,140,0,0.15),_transparent_26%),linear-gradient(135deg,#ffffff_0%,#f7fbf8_45%,#eef5f1_100%)] lg:h-[calc(100vh-56px)] lg:min-h-[600px]">
+      <section className="relative overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(11,59,46,0.18),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgba(255,140,0,0.15),_transparent_26%),linear-gradient(135deg,#ffffff_0%,#f7fbf8_45%,#eef5f1_100%)] lg:h-[calc(100vh-48px)] lg:min-h-[500px]">
         <div className="hero-gridlines" aria-hidden="true" />
         <div className="hero-orb hero-orb-left" aria-hidden="true" />
         <div className="hero-orb hero-orb-right" aria-hidden="true" />
-        <div className="mx-auto grid max-w-[1720px] gap-12 px-4 pt-8 pb-16 sm:px-6 lg:grid-cols-[0.94fr_1.06fr] lg:h-full lg:items-center lg:gap-0 xl:gap-12 2xl:gap-16 lg:px-8 xl:px-10 2xl:px-14 lg:pt-0 lg:pb-0">
-          <div className="relative z-10 max-w-[760px]">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#0B3B2E]/10 bg-white px-4 py-2 text-xs font-bold uppercase tracking-[0.28em] text-[#0B3B2E] shadow-sm">
+        <div className="mx-auto grid max-w-7xl gap-8 px-4 pt-6 pb-12 sm:px-6 lg:grid-cols-[0.94fr_1.06fr] lg:h-full lg:items-center lg:gap-0 xl:gap-10 lg:px-8 xl:px-10 lg:pt-0 lg:pb-0">
+          <div className="relative z-10 max-w-[680px]">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#0B3B2E]/10 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.28em] text-[#0B3B2E] shadow-sm">
               <FaBolt className="text-[#FF8C00]" /> Business management suite
             </div>
-            <h1 className="mt-6 max-w-4xl text-4xl font-extrabold leading-[0.98] tracking-[-0.04em] text-slate-950 sm:text-5xl lg:text-[4.7rem] xl:text-[5.2rem]">
+            <h1 className="mt-4 max-w-3xl text-3xl font-extrabold leading-[1.02] tracking-[-0.03em] text-slate-950 sm:text-4xl lg:text-[2.8rem] xl:text-[3.2rem]">
               Run your entire business from one system — property, car wash, HR and inventory.
             </h1>
-            <p className="mt-6 max-w-3xl text-lg leading-8 text-slate-600 xl:text-[1.15rem]">
+            <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-600 xl:text-base">
               Take the module your business needs today. Property management, car wash, HR, inventory or property sales — each one runs independently, each one ships with a full Chart of Accounts, Trial Balance and financial reports. No add-ons, no surprises.
             </p>
 
-            <div className="mt-8 flex flex-wrap gap-4">
+            <div className="mt-5 flex flex-wrap gap-3">
               <button
                 type="button"
                 onClick={() => openTrialModal("property_manager")}
-                className="inline-flex items-center gap-2 rounded-full bg-[#0B3B2E] px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-[#0B3B2E]/20 transition hover:bg-[#0A3127]"
+                className="inline-flex items-center gap-2 rounded-full bg-[#0B3B2E] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-[#0B3B2E]/20 transition hover:bg-[#0A3127]"
               >
                 Get Free Trial
                 <FaArrowRight />
               </button>
               <Link
                 to="/login"
-                className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-6 py-3.5 text-sm font-bold text-slate-800 transition hover:border-[#0B3B2E] hover:text-[#0B3B2E]"
+                className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-5 py-2.5 text-sm font-bold text-slate-800 transition hover:border-[#0B3B2E] hover:text-[#0B3B2E]"
               >
                 Existing customer sign in
               </Link>
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-3">
+            <div className="mt-3 flex flex-wrap gap-2">
               <a
                 href="tel:+254141455841"
-                className="inline-flex items-center gap-2 rounded-full border border-[#0B3B2E]/15 bg-white/90 px-5 py-3 text-sm font-bold text-[#0B3B2E] shadow-sm transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"
+                className="inline-flex items-center gap-2 rounded-full border border-[#0B3B2E]/15 bg-white/90 px-4 py-2 text-xs font-bold text-[#0B3B2E] shadow-sm transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"
               >
                 <FaPhoneAlt />
                 Call 0141 455 841
@@ -713,20 +716,20 @@ function Home() {
                 href="https://wa.me/254141455841?text=Hello%20Milik,%20I%20need%20help."
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-full border border-[#18a06f]/20 bg-[#18a06f]/10 px-5 py-3 text-sm font-bold text-[#0B3B2E] shadow-sm transition hover:border-[#18a06f] hover:bg-[#18a06f] hover:text-white"
+                className="inline-flex items-center gap-2 rounded-full border border-[#18a06f]/20 bg-[#18a06f]/10 px-4 py-2 text-xs font-bold text-[#0B3B2E] shadow-sm transition hover:border-[#18a06f] hover:bg-[#18a06f] hover:text-white"
               >
                 <FaWhatsapp className="text-base" />
                 WhatsApp 0141 455 841
               </a>
             </div>
 
-            <div className="mt-8 grid gap-3 sm:grid-cols-2">
+            <div className="mt-5 grid gap-2 sm:grid-cols-2">
               {heroHighlights.map((highlight) => (
-                <div key={highlight} className="inline-flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white/80 px-4 py-3 shadow-sm backdrop-blur">
-                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#0B3B2E]/10 text-[#0B3B2E]">
-                    <FaCheckCircle />
+                <div key={highlight} className="inline-flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2 shadow-sm backdrop-blur">
+                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#0B3B2E]/10 text-[#0B3B2E]">
+                    <FaCheckCircle className="text-[10px]" />
                   </span>
-                  <span className="text-sm font-semibold text-slate-700">{highlight}</span>
+                  <span className="text-xs font-semibold text-slate-700">{highlight}</span>
                 </div>
               ))}
             </div>
@@ -745,11 +748,11 @@ function Home() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-2 divide-x divide-y divide-slate-100 lg:grid-cols-4 lg:divide-y-0">
             {statItems.map((s) => (
-              <div key={s.label} className="stat-count-card px-6 py-7 text-center">
-                <p className="stat-gradient-text text-4xl font-extrabold tracking-tight sm:text-5xl">
+              <div key={s.label} className="stat-count-card px-4 py-5 text-center">
+                <p className="stat-gradient-text text-3xl font-extrabold tracking-tight sm:text-4xl">
                   <AnimatedNumber target={s.target} suffix={s.suffix} formatK={s.formatK} />
                 </p>
-                <p className="mt-1.5 text-xs font-bold uppercase tracking-[0.2em] text-slate-500">{s.label}</p>
+                <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">{s.label}</p>
               </div>
             ))}
           </div>
@@ -757,39 +760,39 @@ function Home() {
       </section>
 
       {/* Demo entry cards */}
-      <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+      <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm reveal reveal-d1">
-            <FaBuilding className="text-2xl text-[#0B3B2E]" />
-            <h3 className="mt-4 text-xl font-extrabold text-slate-900">Property Manager</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-600">Explore the guided demo workspace with properties, tenants, receipts, owner statements and finance reports.</p>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm reveal reveal-d1">
+            <FaBuilding className="text-xl text-[#0B3B2E]" />
+            <h3 className="mt-3 text-base font-extrabold text-slate-900">Property Manager</h3>
+            <p className="mt-1.5 text-sm leading-6 text-slate-600">Explore the guided demo workspace with properties, tenants, receipts, owner statements and finance reports.</p>
             <button
               type="button"
               onClick={() => openTrialModal("property_manager")}
-              className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#0B3B2E] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#0A3127]"
+              className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#0A3127]"
             >
               Enter Demo <FaArrowRight />
             </button>
           </div>
-          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm reveal reveal-d2">
-            <FaUserFriends className="text-2xl text-[#FF8C00]" />
-            <h3 className="mt-4 text-xl font-extrabold text-slate-900">Landlord</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-600">Explore the self-managing landlord demo workspace with statements, remittances, advancements and reporting flows.</p>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm reveal reveal-d2">
+            <FaUserFriends className="text-xl text-[#FF8C00]" />
+            <h3 className="mt-3 text-base font-extrabold text-slate-900">Landlord</h3>
+            <p className="mt-1.5 text-sm leading-6 text-slate-600">Explore the self-managing landlord demo workspace with statements, remittances, advancements and reporting flows.</p>
             <button
               type="button"
               onClick={() => openTrialModal("landlord")}
-              className="mt-5 inline-flex items-center gap-2 rounded-full border border-[#0B3B2E] px-5 py-3 text-sm font-bold text-[#0B3B2E] transition hover:bg-[#0B3B2E] hover:text-white"
+              className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#0B3B2E] px-4 py-2 text-xs font-bold text-[#0B3B2E] transition hover:bg-[#0B3B2E] hover:text-white"
             >
               Enter Demo <FaArrowRight />
             </button>
           </div>
-          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm reveal reveal-d3">
-            <FaHeadset className="text-2xl text-[#0B3B2E]" />
-            <h3 className="mt-4 text-xl font-extrabold text-slate-900">Existing User</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-600">Go straight to the live app login when your company has already been onboarded into MILIK.</p>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm reveal reveal-d3">
+            <FaHeadset className="text-xl text-[#0B3B2E]" />
+            <h3 className="mt-3 text-base font-extrabold text-slate-900">Existing User</h3>
+            <p className="mt-1.5 text-sm leading-6 text-slate-600">Go straight to the live app login when your company has already been onboarded into MILIK.</p>
             <Link
               to="/login"
-              className="mt-5 inline-flex items-center gap-2 rounded-full border border-slate-300 px-5 py-3 text-sm font-bold text-slate-800 transition hover:border-[#0B3B2E] hover:text-[#0B3B2E]"
+              className="mt-4 inline-flex items-center gap-2 rounded-full border border-slate-300 px-4 py-2 text-xs font-bold text-slate-800 transition hover:border-[#0B3B2E] hover:text-[#0B3B2E]"
             >
               Open Login <FaArrowRight />
             </Link>
@@ -798,19 +801,19 @@ function Home() {
       </section>
 
       {/* ERP snapshots */}
-      <section className="mx-auto max-w-7xl px-4 pb-8 sm:px-6 lg:px-8">
-        <div className="rounded-[34px] border border-slate-200 bg-white px-6 py-8 shadow-sm sm:px-8">
+      <section className="mx-auto max-w-7xl px-4 pb-6 sm:px-6 lg:px-8">
+        <div className="rounded-2xl border border-slate-200 bg-white px-5 py-6 shadow-sm sm:px-7">
           <div className="max-w-2xl reveal">
-            <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">What every module shares</p>
-            <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">One accounting layer under everything — not an optional extra.</h2>
+            <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#FF8C00]">What every module shares</p>
+            <h2 className="mt-2 text-2xl font-extrabold text-slate-950 sm:text-3xl">One accounting layer under everything — not an optional extra.</h2>
           </div>
-          <div className="mt-8 grid gap-5 lg:grid-cols-3">
+          <div className="mt-5 grid gap-4 lg:grid-cols-3">
             {erpSnapshots.map((snapshot, index) => (
-              <div key={snapshot.title} className={`erp-snapshot-card erp-snapshot-card-${index + 1} rounded-[28px] border border-slate-200 p-6 shadow-sm reveal reveal-d${index + 1}`}>
-                <div className={`inline-flex rounded-2xl bg-slate-50 p-3 text-2xl ${snapshot.accent}`}>{snapshot.icon}</div>
-                <p className="mt-5 text-xs font-bold uppercase tracking-[0.22em] text-slate-500">{snapshot.title}</p>
-                <h3 className="mt-3 text-2xl font-extrabold text-slate-900">{snapshot.value}</h3>
-                <p className="mt-3 text-sm leading-7 text-slate-600">{snapshot.description}</p>
+              <div key={snapshot.title} className={`erp-snapshot-card erp-snapshot-card-${index + 1} rounded-2xl border border-slate-200 p-5 shadow-sm reveal reveal-d${index + 1}`}>
+                <div className={`inline-flex rounded-xl bg-slate-50 p-2.5 text-xl ${snapshot.accent}`}>{snapshot.icon}</div>
+                <p className="mt-4 text-[10px] font-bold uppercase tracking-[0.22em] text-slate-500">{snapshot.title}</p>
+                <h3 className="mt-2 text-xl font-extrabold text-slate-900">{snapshot.value}</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{snapshot.description}</p>
                 <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-100">
                   <div className="erp-snapshot-bar h-full rounded-full" />
                 </div>
@@ -821,24 +824,24 @@ function Home() {
       </section>
 
       {/* Modules section */}
-      <section id="modules" className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+      <section id="modules" className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
         <div className="max-w-2xl reveal">
-          <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Choose your module</p>
-          <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Pick the module that fits your business. Accounting comes with it.</h2>
-          <p className="mt-4 text-base leading-7 text-slate-600">Take one module or stack multiple — property, car wash, HR, inventory, property sales. Each runs independently and each includes a full accounting layer: Chart of Accounts, journals, Trial Balance and financial reports. Standard.</p>
+          <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Choose your module</p>
+          <h2 className="mt-2 text-2xl font-extrabold text-slate-950 sm:text-3xl">Pick the module that fits your business. Accounting comes with it.</h2>
+          <p className="mt-3 text-sm leading-7 text-slate-600">Take one module or stack multiple — property, car wash, HR, inventory, property sales. Each runs independently and each includes a full accounting layer: Chart of Accounts, journals, Trial Balance and financial reports. Standard.</p>
         </div>
-        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 reveal">
+        <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 reveal">
           {modules.map((mod, idx) => (
             <Link
               key={mod.title}
               to={mod.href}
-              className={`module-card group rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm transition reveal reveal-d${idx + 1}`}
+              className={`module-card group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition reveal reveal-d${idx + 1}`}
             >
-              <div className={`inline-flex rounded-2xl p-3 text-2xl ${mod.bg} ${mod.color}`}>{mod.icon}</div>
-              <h3 className="mt-4 text-base font-extrabold text-slate-900">{mod.title}</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">{mod.description}</p>
-              <p className={`mt-4 inline-flex items-center gap-1 text-xs font-bold uppercase tracking-[0.16em] ${mod.color}`}>
-                Explore module <FaArrowRight className="text-[10px]" />
+              <div className={`inline-flex rounded-xl p-2.5 text-xl ${mod.bg} ${mod.color}`}>{mod.icon}</div>
+              <h3 className="mt-3 text-sm font-extrabold text-slate-900">{mod.title}</h3>
+              <p className="mt-1.5 text-xs leading-5 text-slate-600">{mod.description}</p>
+              <p className={`mt-3 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.16em] ${mod.color}`}>
+                Explore module <FaArrowRight className="text-[9px]" />
               </p>
             </Link>
           ))}
@@ -846,51 +849,51 @@ function Home() {
       </section>
 
       {/* Features */}
-      <section id="features" className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
+      <section id="features" className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
         <div className="max-w-2xl reveal">
-          <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">What every module includes</p>
-          <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Every module ships with a full accounting backbone. It's not an add-on — it's built in.</h2>
+          <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#FF8C00]">What every module includes</p>
+          <h2 className="mt-2 text-2xl font-extrabold text-slate-950 sm:text-3xl">Every module ships with a full accounting backbone. It's not an add-on — it's built in.</h2>
         </div>
-        <div className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-7 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {features.map((feature, idx) => (
-            <div key={feature.title} className={`feature-card rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm reveal reveal-d${idx + 1}`}>
-              <div className="inline-flex rounded-2xl bg-[#0B3B2E]/10 p-3 text-2xl text-[#0B3B2E]">{feature.icon}</div>
-              <h3 className="mt-5 text-xl font-extrabold text-slate-900">{feature.title}</h3>
-              <p className="mt-3 text-sm leading-7 text-slate-600">{feature.description}</p>
+            <div key={feature.title} className={`feature-card rounded-2xl border border-slate-200 bg-white p-5 shadow-sm reveal reveal-d${idx + 1}`}>
+              <div className="inline-flex rounded-xl bg-[#0B3B2E]/10 p-2.5 text-xl text-[#0B3B2E]">{feature.icon}</div>
+              <h3 className="mt-4 text-base font-extrabold text-slate-900">{feature.title}</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">{feature.description}</p>
             </div>
           ))}
         </div>
       </section>
 
       {/* Pricing */}
-      <section id="pricing" className="bg-white py-20">
+      <section id="pricing" className="bg-white py-12">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
 
           {/* Section header */}
           <div className="max-w-3xl reveal">
-            <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Pricing</p>
-            <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">One price per module. Accounting always included.</h2>
-            <p className="mt-4 text-base leading-7 text-slate-600">Choose the module your business needs. Every module activates independently and ships with a full accounting backbone — Chart of Accounts, Trial Balance and financial reports — at no extra cost.</p>
+            <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Pricing</p>
+            <h2 className="mt-2 text-2xl font-extrabold text-slate-950 sm:text-3xl">One price per module. Accounting always included.</h2>
+            <p className="mt-3 text-sm leading-7 text-slate-600">Choose the module your business needs. Every module activates independently and ships with a full accounting backbone — Chart of Accounts, Trial Balance and financial reports — at no extra cost.</p>
           </div>
 
           {/* Module pricing overview cards */}
-          <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {modulePricing.map((mod, idx) => (
               <div
                 key={mod.title}
-                className={`flex flex-col rounded-[28px] border p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-xl reveal reveal-d${idx + 1} ${
+                className={`flex flex-col rounded-2xl border p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-xl reveal reveal-d${idx + 1} ${
                   mod.featured
                     ? "border-[#0B3B2E] bg-[linear-gradient(180deg,rgba(11,59,46,0.06)_0%,#ffffff_100%)] ring-1 ring-[#0B3B2E]/10"
                     : "border-slate-200 bg-[#f8faf9]"
                 }`}
               >
-                <div className={`inline-flex rounded-2xl p-3 text-2xl ${mod.bg} ${mod.color}`}>{mod.icon}</div>
-                <h3 className="mt-4 text-base font-extrabold text-slate-900">{mod.title}</h3>
-                <p className="mt-2 flex-1 text-sm leading-6 text-slate-600">{mod.desc}</p>
-                <div className="mt-5">
-                  <p className={`text-xl font-extrabold ${mod.featured ? "text-[#0B3B2E]" : "text-slate-800"}`}>{mod.price}</p>
+                <div className={`inline-flex rounded-xl p-2.5 text-xl ${mod.bg} ${mod.color}`}>{mod.icon}</div>
+                <h3 className="mt-3 text-sm font-extrabold text-slate-900">{mod.title}</h3>
+                <p className="mt-1.5 flex-1 text-xs leading-5 text-slate-600">{mod.desc}</p>
+                <div className="mt-4">
+                  <p className={`text-lg font-extrabold ${mod.featured ? "text-[#0B3B2E]" : "text-slate-800"}`}>{mod.price}</p>
                   {mod.priceMeta ? <p className="text-xs text-slate-500">{mod.priceMeta}</p> : null}
-                  <p className="mt-1 text-xs text-slate-400">{mod.note}</p>
+                  <p className="mt-0.5 text-xs text-slate-400">{mod.note}</p>
                 </div>
                 {mod.contact ? (
                   <a
@@ -902,7 +905,7 @@ function Home() {
                 ) : (
                   <a
                     href="#pricing-pm"
-                    className="mt-5 inline-flex items-center justify-center gap-2 rounded-full bg-[#0B3B2E] px-4 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-white transition hover:bg-[#0A3127]"
+                    className="mt-4 inline-flex items-center justify-center gap-2 rounded-full bg-[#0B3B2E] px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white transition hover:bg-[#0A3127]"
                   >
                     {mod.cta} <FaArrowRight className="text-[10px]" />
                   </a>
@@ -912,18 +915,18 @@ function Home() {
           </div>
 
           {/* PM detailed tiers */}
-          <div id="pricing-pm" className="mt-16 scroll-mt-24">
-            <div className="mb-8 flex items-center gap-4">
+          <div id="pricing-pm" className="mt-10 scroll-mt-24">
+            <div className="mb-6 flex items-center gap-4">
               <div className="h-px flex-1 bg-slate-200" />
-              <p className="flex-shrink-0 rounded-full border border-[#0B3B2E]/20 bg-[#0B3B2E]/5 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.18em] text-[#0B3B2E]">Property Management — Detailed Plans</p>
+              <p className="flex-shrink-0 rounded-full border border-[#0B3B2E]/20 bg-[#0B3B2E]/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[#0B3B2E]">Property Management — Detailed Plans</p>
               <div className="h-px flex-1 bg-slate-200" />
             </div>
-            <p className="mb-8 max-w-2xl text-sm leading-7 text-slate-600">All plans include the full accounting backbone — Chart of Accounts, journals, Trial Balance and financial reports. Pricing is tiered by the number of rental units you manage.</p>
-            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+            <p className="mb-6 max-w-2xl text-sm leading-7 text-slate-600">All plans include the full accounting backbone — Chart of Accounts, journals, Trial Balance and financial reports. Pricing is tiered by the number of rental units you manage.</p>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               {pricingTiers.map((tier, idx) => (
                 <div
                   key={tier.label}
-                  className={`flex h-full flex-col rounded-[28px] border p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-xl reveal reveal-d${idx + 1} ${
+                  className={`flex h-full flex-col rounded-2xl border p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-xl reveal reveal-d${idx + 1} ${
                     tier.featured
                       ? "pricing-featured border-[#0B3B2E] bg-[linear-gradient(180deg,rgba(11,59,46,0.06)_0%,#ffffff_100%)] ring-1 ring-[#0B3B2E]/10"
                       : "border-slate-200 bg-[#f8faf9]"
@@ -931,19 +934,19 @@ function Home() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-[#FF8C00]">{tier.label}</p>
-                      <h3 className="mt-3 text-lg font-extrabold text-slate-950">{tier.units}</h3>
+                      <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-[#FF8C00]">{tier.label}</p>
+                      <h3 className="mt-2 text-base font-extrabold text-slate-950">{tier.units}</h3>
                     </div>
                     {tier.featured ? (
-                      <span className="rounded-full bg-[#0B3B2E] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-white">Popular</span>
+                      <span className="rounded-full bg-[#0B3B2E] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-white">Popular</span>
                     ) : null}
                   </div>
-                  <p className="mt-5 text-3xl font-extrabold text-slate-950">{tier.price}</p>
-                  <p className="mt-4 flex-1 text-sm leading-7 text-slate-600">{tier.helper}</p>
+                  <p className="mt-4 text-2xl font-extrabold text-slate-950">{tier.price}</p>
+                  <p className="mt-3 flex-1 text-sm leading-6 text-slate-600">{tier.helper}</p>
                   <button
                     type="button"
                     onClick={() => openTrialModal("property_manager")}
-                    className={`mt-6 inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-bold transition ${
+                    className={`mt-5 inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-bold transition ${
                       tier.featured
                         ? "bg-[#0B3B2E] text-white hover:bg-[#0A3127]"
                         : "border border-slate-300 bg-white text-slate-800 hover:border-[#0B3B2E] hover:text-[#0B3B2E]"
@@ -957,11 +960,11 @@ function Home() {
           </div>
 
           {/* Other modules contact banner */}
-          <div className="mt-12 rounded-[28px] border border-slate-200 bg-gradient-to-r from-slate-900 via-[#0B3B2E] to-slate-900 px-8 py-10 text-white shadow-lg">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="mt-8 rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-900 via-[#0B3B2E] to-slate-900 px-6 py-8 text-white shadow-lg">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Car Wash · HR · Inventory &amp; POS · Property Sales</p>
-                <h3 className="mt-2 text-xl font-extrabold sm:text-2xl">Need pricing for another module? Talk to us.</h3>
+                <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Car Wash · HR · Inventory &amp; POS · Property Sales</p>
+                <h3 className="mt-2 text-lg font-extrabold sm:text-xl">Need pricing for another module? Talk to us.</h3>
                 <p className="mt-2 max-w-xl text-sm leading-6 text-white/80">Each module is priced per business based on size, usage and whether you're bundling multiple modules. Contact us for a tailored quote — same-day response.</p>
               </div>
               <div className="flex flex-shrink-0 flex-wrap gap-3">
@@ -987,17 +990,17 @@ function Home() {
       </section>
 
       {/* How it works */}
-      <section id="how-it-works" className="bg-white py-20">
+      <section id="how-it-works" className="bg-white py-12">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="max-w-2xl">
-            <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">How the demo works</p>
-            <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">From first look to live workspace — here's how it works.</h2>
+            <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#FF8C00]">How the demo works</p>
+            <h2 className="mt-2 text-2xl font-extrabold text-slate-950 sm:text-3xl">From first look to live workspace — here's how it works.</h2>
           </div>
-          <div className="mt-10 grid gap-6 lg:grid-cols-3">
+          <div className="mt-7 grid gap-4 lg:grid-cols-3">
             {steps.map((step) => (
-              <div key={step.title} className="rounded-[28px] border border-slate-200 bg-[#f7fbf8] p-6 shadow-sm">
-                <h3 className="text-xl font-extrabold text-slate-900">{step.title}</h3>
-                <p className="mt-3 text-sm leading-7 text-slate-600">{step.description}</p>
+              <div key={step.title} className="rounded-2xl border border-slate-200 bg-[#f7fbf8] p-5 shadow-sm">
+                <h3 className="text-base font-extrabold text-slate-900">{step.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{step.description}</p>
               </div>
             ))}
           </div>
@@ -1005,26 +1008,26 @@ function Home() {
       </section>
 
       {/* CTA banner */}
-      <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
-        <div className="rounded-[36px] bg-gradient-to-r from-[#0B3B2E] via-[#104F3E] to-[#0A3127] px-8 py-10 text-white shadow-2xl">
-          <div className="grid gap-8 lg:grid-cols-[1fr_0.8fr] lg:items-center">
+      <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+        <div className="rounded-2xl bg-gradient-to-r from-[#0B3B2E] via-[#104F3E] to-[#0A3127] px-6 py-8 text-white shadow-2xl">
+          <div className="grid gap-6 lg:grid-cols-[1fr_0.8fr] lg:items-center">
             <div>
-              <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#F8C471]">Built to convert</p>
-              <h2 className="mt-3 text-3xl font-extrabold sm:text-4xl">See the real system before you buy — not a slide deck.</h2>
-              <p className="mt-4 max-w-2xl text-sm leading-7 text-white/85 sm:text-base">
+              <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#F8C471]">Built to convert</p>
+              <h2 className="mt-2 text-2xl font-extrabold sm:text-3xl">See the real system before you buy — not a slide deck.</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-white/85">
                 The demo workspace has sample properties, tenants, receipts, landlord statements and finance reports — everything you'd actually use, so you can judge it honestly.
               </p>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur">
-                <FaChartLine className="text-2xl text-[#F8C471]" />
-                <p className="mt-4 text-lg font-extrabold">Financial clarity</p>
-                <p className="mt-2 text-sm text-white/80">Trial Balance and Income Statement reinforce reports.</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+                <FaChartLine className="text-xl text-[#F8C471]" />
+                <p className="mt-3 text-base font-extrabold">Financial clarity</p>
+                <p className="mt-1.5 text-sm text-white/80">Trial Balance and Income Statement reinforce reports.</p>
               </div>
-              <div className="rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur">
-                <FaClipboardList className="text-2xl text-[#F8C471]" />
-                <p className="mt-4 text-lg font-extrabold">Operational depth</p>
-                <p className="mt-2 text-sm text-white/80">Properties, tenants, receipts and statements show real daily value.</p>
+              <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+                <FaClipboardList className="text-xl text-[#F8C471]" />
+                <p className="mt-3 text-base font-extrabold">Operational depth</p>
+                <p className="mt-1.5 text-sm text-white/80">Properties, tenants, receipts and statements show real daily value.</p>
               </div>
             </div>
           </div>
@@ -1032,27 +1035,27 @@ function Home() {
       </section>
 
       {/* FAQ */}
-      <section id="faq" className="bg-white py-20">
+      <section id="faq" className="bg-white py-12">
         <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
           <div className="reveal text-center">
-            <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">FAQ</p>
-            <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Questions prospects often ask before they buy.</h2>
+            <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#FF8C00]">FAQ</p>
+            <h2 className="mt-2 text-2xl font-extrabold text-slate-950 sm:text-3xl">Questions prospects often ask before they buy.</h2>
           </div>
-          <div className="mt-10 space-y-4">
+          <div className="mt-7 space-y-3">
             {faqs.map((faq, index) => {
               const isOpen = activeFaq === index;
               return (
-                <div key={faq.question} className="overflow-hidden rounded-[24px] border border-slate-200 bg-[#f8faf9] shadow-sm">
+                <div key={faq.question} className="overflow-hidden rounded-2xl border border-slate-200 bg-[#f8faf9] shadow-sm">
                   <button
                     type="button"
-                    className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left"
+                    className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
                     onClick={() => setActiveFaq(isOpen ? null : index)}
                     aria-expanded={isOpen}
                   >
-                    <span className="text-base font-bold text-slate-900">{faq.question}</span>
-                    <span className="text-xl font-bold text-[#0B3B2E]">{isOpen ? "−" : "+"}</span>
+                    <span className="text-sm font-bold text-slate-900">{faq.question}</span>
+                    <span className="text-lg font-bold text-[#0B3B2E]">{isOpen ? "−" : "+"}</span>
                   </button>
-                  {isOpen && <div className="border-t border-slate-200 px-6 py-5 text-sm leading-7 text-slate-600">{faq.answer}</div>}
+                  {isOpen && <div className="border-t border-slate-200 px-5 py-4 text-sm leading-6 text-slate-600">{faq.answer}</div>}
                 </div>
               );
             })}
@@ -1061,27 +1064,27 @@ function Home() {
       </section>
 
       {/* Bottom CTA */}
-      <section className="px-4 pb-20 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-7xl rounded-[36px] border border-slate-200 bg-white px-8 py-10 shadow-sm">
-          <div className="grid gap-8 lg:grid-cols-[1fr_0.7fr] lg:items-center">
+      <section className="px-4 pb-12 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl rounded-2xl border border-slate-200 bg-white px-6 py-8 shadow-sm">
+          <div className="grid gap-6 lg:grid-cols-[1fr_0.7fr] lg:items-center">
             <div>
-              <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Ready to explore?</p>
-              <h2 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl">Open the guided demo and show your team what Milik feels like.</h2>
-              <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-600 sm:text-base">
+              <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Ready to explore?</p>
+              <h2 className="mt-2 text-2xl font-extrabold text-slate-950 sm:text-3xl">Open the guided demo and show your team what Milik feels like.</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
                 Start with the property manager workspace or the self-managing landlord workspace. Both demo experiences are available now.
               </p>
             </div>
-            <div className="flex flex-col gap-4 sm:flex-row lg:justify-end">
+            <div className="flex flex-col gap-3 sm:flex-row lg:justify-end">
               <button
                 type="button"
                 onClick={() => openTrialModal("property_manager")}
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-[#0B3B2E] px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-[#0B3B2E]/20 transition hover:bg-[#0A3127]"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-[#0B3B2E] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-[#0B3B2E]/20 transition hover:bg-[#0A3127]"
               >
                 Get Free Trial <FaArrowRight />
               </button>
               <Link
                 to="/login"
-                className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-300 px-6 py-3.5 text-sm font-bold text-slate-800 transition hover:border-[#0B3B2E] hover:text-[#0B3B2E]"
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-300 px-5 py-2.5 text-sm font-bold text-slate-800 transition hover:border-[#0B3B2E] hover:text-[#0B3B2E]"
               >
                 Existing customer sign in
               </Link>
@@ -1092,7 +1095,7 @@ function Home() {
 
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-[#0B3B2E] text-white">
-        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <div className="grid gap-10 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
             <div>
               <div className="flex items-center gap-3">

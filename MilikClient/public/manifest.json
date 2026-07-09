@@ -1,0 +1,18 @@
+{
+  "name": "Milik Business Suite",
+  "short_name": "Milik",
+  "description": "Kenya's business management platform — property, car wash, HR, inventory and sales in one workspace.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f8f7",
+  "theme_color": "#0B3B2E",
+  "lang": "en-KE",
+  "icons": [
+    { "src": "/logo.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "categories": ["business", "productivity"],
+  "screenshots": [
+    { "src": "/logo.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

@@ -13,11 +13,11 @@ export default function ModulePageShell({ children }) {
   };
 
   return (
-    <div className="min-h-screen bg-[#f6f8f7] text-slate-900">
+    <div className="min-h-screen overflow-x-hidden bg-[#f6f8f7] text-slate-900">
       <nav className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-2 sm:px-6 lg:px-8">
           <Link to="/" className="relative inline-block">
-            <img src="/logo.png" alt="Milik" className="h-11 w-auto object-contain" style={{ maxWidth: "160px" }} />
+            <img src="/logo.png" alt="Milik" className="h-9 w-auto object-contain" style={{ maxWidth: "140px" }} />
           </Link>
           <div className="hidden items-center gap-8 md:flex">
             <Link to="/" className="text-sm font-semibold text-slate-600 transition hover:text-[#0B3B2E]">Home</Link>
