@@ -1,4 +1,5 @@
-﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEntityCache } from "../../hooks/useEntityCache";
 import useDebounce from "../../hooks/useDebounce";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -134,6 +135,9 @@ const LandlordReceipts = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
   const landlords = ensureArray(useSelector(selectAllLandlords));
+  const entityCache = useEntityCache(currentCompany?._id);
+  const entityCacheRef = useRef(entityCache);
+  entityCacheRef.current = entityCache;
   const properties = ensureArray(useSelector(selectAllProperties));
   const activeLandlords = useMemo(() => landlords.filter((item) => String(item?.status || "active").toLowerCase() !== "archived"), [landlords]);
   const activeProperties = useMemo(() => properties.filter((item) => String(item?.status || "active").toLowerCase() !== "archived"), [properties]);
@@ -166,6 +170,7 @@ const LandlordReceipts = () => {
   const loadData = useCallback(async () => {
     if (!currentCompany?._id) return;
     setIsLoading(true);
+    const { propertiesLoaded } = entityCacheRef.current;
     try {
       const [chartRows, receiptRows] = await Promise.all([
         getChartOfAccounts({ business: currentCompany._id, type: "asset" }),
@@ -180,7 +185,7 @@ const LandlordReceipts = () => {
           ...(debouncedSearch ? { search: debouncedSearch } : {}),
         }),
         dispatch(getLandlords({ company: currentCompany._id })),
-        dispatch(getProperties({ business: currentCompany._id })),
+        ...(propertiesLoaded ? [] : [dispatch(getProperties({ business: currentCompany._id }))]),
       ]);
 
       setCashbooks(ensureArray(chartRows).filter(isCashbookAccount));

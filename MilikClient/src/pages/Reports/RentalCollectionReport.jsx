@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEntityCache } from '../../hooks/useEntityCache';
 import { useDispatch, useSelector } from 'react-redux';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { selectCurrentUser, selectCurrentCompany, selectAllProperties, selectAllTenants, selectAllLandlords } from '../../redux/selectors';
@@ -28,6 +29,7 @@ const RentalCollectionReport = () => {
   const landlords = useSelector(selectAllLandlords);
 
   const businessId = currentCompany?._id || currentUser?.company?._id || currentUser?.company || '';
+  const { propertiesLoaded, tenantsLoaded } = useEntityCache(businessId);
   const isLandlordMode = isSelfManagingLandlordCompany(currentCompany || currentUser?.company);
   const companyName = currentCompany?.name
     || currentCompany?.companyName
@@ -55,10 +57,10 @@ const RentalCollectionReport = () => {
 
   useEffect(() => {
     if (!businessId) return;
-    dispatch(getProperties({ business: businessId }));
-    dispatch(getTenants({ business: businessId }));
+    if (!propertiesLoaded) dispatch(getProperties({ business: businessId }));
+    if (!tenantsLoaded) dispatch(getTenants({ business: businessId }));
     if (!isLandlordMode) dispatch(getLandlords({ company: businessId }));
-  }, [businessId, dispatch, isLandlordMode]);
+  }, [businessId, isLandlordMode]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadReport = async (signal) => {
     if (!businessId) return;

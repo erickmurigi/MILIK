@@ -1,5 +1,6 @@
-﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useEntityCache } from "../../hooks/useEntityCache";
 import {
   selectCurrentCompany,
   selectAllLeases,
@@ -156,6 +157,9 @@ const TenantAgreements = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const leases = useSelector(selectAllLeases);
   const tenants = useSelector(selectAllTenants);
+  const entityCache = useEntityCache(currentCompany?._id);
+  const entityCacheRef = useRef(entityCache);
+  entityCacheRef.current = entityCache;
   const properties = useSelector(selectAllProperties);
   const units = useSelector(selectAllUnits);
   const isFetchingLeases = useSelector((state) => state.lease?.isFetching || false);
@@ -192,11 +196,12 @@ const TenantAgreements = () => {
 
   const loadData = useCallback(async () => {
     if (!currentCompany?._id) return;
+    const { propertiesLoaded, unitsLoaded, tenantsLoaded } = entityCacheRef.current;
     await Promise.all([
       getLeases(dispatch, currentCompany._id),
-      dispatch(getTenants({ business: currentCompany._id })),
-      dispatch(getProperties({ business: currentCompany._id })),
-      dispatch(getUnits({ business: currentCompany._id })),
+      ...(tenantsLoaded ? [] : [dispatch(getTenants({ business: currentCompany._id }))]),
+      ...(propertiesLoaded ? [] : [dispatch(getProperties({ business: currentCompany._id }))]),
+      ...(unitsLoaded ? [] : [dispatch(getUnits({ business: currentCompany._id }))]),
     ]);
   }, [currentCompany?._id, dispatch]);
 

@@ -55,6 +55,7 @@ export const deleteUnit = createAsyncThunk(
 const initialState = {
   units: [],
   pagination: { total: 0, page: 1, pages: 1, limit: 500 },
+  loadedFor: null,
   isFetching: false,
   error: false,
 };
@@ -211,6 +212,7 @@ export const unitSlice = createSlice({
             limit: p.limit ?? state.pagination.limit,
           };
         }
+        state.loadedFor = String(action.meta.arg?.business || '');
       })
       .addCase(getUnits.rejected, (state) => {
         state.isFetching = false;

@@ -1,4 +1,5 @@
 ﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEntityCache } from "../../hooks/useEntityCache";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import {
@@ -123,6 +124,7 @@ const PettyCash = () => {
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const currentUser = useSelector((s) => s.auth?.currentUser);
   const properties = useSelector((s) => s.property?.properties || []);
+  const { propertiesLoaded } = useEntityCache(currentCompany?._id);
 
   const [activeTab, setActiveTab] = useState("disbursements");
   const [accounts, setAccounts] = useState([]);
@@ -176,7 +178,7 @@ const PettyCash = () => {
   // ── Load COAs + properties
   useEffect(() => {
     if (!businessId) return;
-    dispatch(getProperties({ business: businessId }));
+    if (!propertiesLoaded) dispatch(getProperties({ business: businessId }));
     getChartOfAccounts({ business: businessId })
       .then((res) => {
         const list = Array.isArray(res) ? res : res?.data || [];

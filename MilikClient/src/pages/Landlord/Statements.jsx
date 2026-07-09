@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEntityCache } from "../../hooks/useEntityCache";
 import { useDispatch, useSelector } from "react-redux";
 import { useLocation, useNavigate } from "react-router-dom";
 import { FaCheckCircle, FaDownload, FaFileAlt, FaPrint, FaSyncAlt, FaTimes } from "react-icons/fa";
@@ -673,6 +674,7 @@ const Statements = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
   const properties = useSelector(selectAllProperties);
+  const { propertiesLoaded } = useEntityCache(currentCompany?._id);
   const landlords = useSelector(selectAllLandlords);
   const canCreateStatement = hasCompanyPermission(currentUser || {}, currentCompany, "statements", "create", "propertyManagement");
   const canApproveStatement = hasCompanyPermission(currentUser || {}, currentCompany, "statements", "approve", "propertyManagement");
@@ -746,9 +748,9 @@ const Statements = () => {
 
   useEffect(() => {
     if (!currentCompany?._id) return;
-    dispatch(getProperties({ business: currentCompany._id }));
+    if (!propertiesLoaded) dispatch(getProperties({ business: currentCompany._id }));
     dispatch(getLandlords({ company: currentCompany._id }));
-  }, [dispatch, currentCompany?._id]);
+  }, [currentCompany?._id]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectedProperty = useMemo(
     () => properties.find((item) => normalizeId(item?._id) === normalizeId(selectedPropertyId)) || null,

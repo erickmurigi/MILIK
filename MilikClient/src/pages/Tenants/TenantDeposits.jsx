@@ -1,5 +1,6 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useEntityCache } from "../../hooks/useEntityCache";
 import {
   selectCurrentUser,
   selectCurrentCompany,
@@ -195,6 +196,7 @@ const TenantDeposits = () => {
   const tenants = useSelector(selectAllTenants);
   const units = useSelector(selectAllUnits);
   const properties = useSelector(selectAllProperties);
+  const { propertiesLoaded, unitsLoaded, tenantsLoaded } = useEntityCache(currentCompany?._id);
 
   const isLandlordWorkspace = useMemo(() => isSelfManagingLandlordCompany(currentCompany || null), [currentCompany]);
   const holderColumnLabel = isLandlordWorkspace ? "Owner / Landlord" : "Deposit Holder";
@@ -349,12 +351,12 @@ const TenantDeposits = () => {
 
   useEffect(() => {
     if (!currentCompany?._id) return;
-    dispatch(getTenants({ business: currentCompany._id }));
-    dispatch(getUnits({ business: currentCompany._id }));
-    dispatch(getProperties({ business: currentCompany._id }));
+    if (!tenantsLoaded) dispatch(getTenants({ business: currentCompany._id }));
+    if (!unitsLoaded) dispatch(getUnits({ business: currentCompany._id }));
+    if (!propertiesLoaded) dispatch(getProperties({ business: currentCompany._id }));
     loadDepositInvoices();
     loadDepositTypes();
-  }, [currentCompany?._id, dispatch, loadDepositInvoices, loadDepositTypes]);
+  }, [currentCompany?._id, loadDepositInvoices, loadDepositTypes]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const handleRefresh = () => loadDepositInvoices();

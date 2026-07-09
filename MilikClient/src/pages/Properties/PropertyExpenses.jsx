@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEntityCache } from '../../hooks/useEntityCache';
 import { useDispatch, useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import {
@@ -203,6 +204,7 @@ const PropertyExpenses = () => {
   const loading        = useSelector((s) => s.expenseProperty?.isFetching);
 
   const businessId = currentCompany?._id || currentUser?.company?._id || currentUser?.company || '';
+  const { propertiesLoaded, unitsLoaded } = useEntityCache(businessId);
   const currency   = currentCompany?.baseCurrency || 'KES';
 
   const canCreateExpense = hasCompanyPermission(currentUser || {}, currentCompany, 'propertyExpenses', 'create', 'propertyManagement');
@@ -221,9 +223,9 @@ const PropertyExpenses = () => {
 
   useEffect(() => {
     if (!businessId) return;
-    dispatch(getProperties({ business: businessId }));
-    dispatch(getUnits({ business: businessId }));
-  }, [businessId, dispatch]);
+    if (!propertiesLoaded) dispatch(getProperties({ business: businessId }));
+    if (!unitsLoaded) dispatch(getUnits({ business: businessId }));
+  }, [businessId]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const load = useCallback(() => {
     if (!businessId) return;

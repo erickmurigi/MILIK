@@ -1,4 +1,5 @@
 ﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEntityCache } from "../../hooks/useEntityCache";
 import useDebounce from "../../hooks/useDebounce";
 import {
   FaCalendarAlt,
@@ -156,6 +157,7 @@ const LandlordStandingOrders = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
   const landlords = useSelector(selectAllLandlords);
+  const { propertiesLoaded } = useEntityCache(currentCompany?._id);
   const properties = useSelector(selectAllProperties);
   const activeLandlords = useMemo(
     () => landlords.filter((item) => String(item?.status || "active").toLowerCase() !== "archived"),
@@ -210,7 +212,7 @@ const LandlordStandingOrders = () => {
     if (!currentCompany?._id) return;
 
     dispatch(getLandlords({ business: currentCompany._id }));
-    dispatch(getProperties({ business: currentCompany._id }));
+    if (!propertiesLoaded) dispatch(getProperties({ business: currentCompany._id }));
 
     let mounted = true;
     getChartOfAccounts({ business: currentCompany._id, type: "asset" })

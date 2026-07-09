@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { useEntityCache } from "../../hooks/useEntityCache";
 import { useDispatch, useSelector } from "react-redux";
 import {
   selectCurrentUser,
@@ -351,6 +352,7 @@ const AddTenant = () => {
 
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
+  const { propertiesLoaded, unitsLoaded } = useEntityCache(currentCompany?._id);
   const canSaveTenant = isEditMode
     ? hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "update", "propertyManagement")
     : hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "create", "propertyManagement");
@@ -422,8 +424,8 @@ const AddTenant = () => {
 
   useEffect(() => {
     if (currentCompany?._id) {
-      dispatch(getProperties({ business: currentCompany._id }));
-      dispatch(getUnits({ business: currentCompany._id }));
+      if (!propertiesLoaded) dispatch(getProperties({ business: currentCompany._id }));
+      if (!unitsLoaded) dispatch(getUnits({ business: currentCompany._id }));
       adminRequests
         .get(`/company-settings/${currentCompany._id}`)
         .then((res) => {

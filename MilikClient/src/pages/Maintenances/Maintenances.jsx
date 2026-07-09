@@ -1,7 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useDebounce from "../../hooks/useDebounce";
-import { useSelector } from "react-redux";
-import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
+import { useDispatch, useSelector } from "react-redux";
+import {
+  selectCurrentCompany, selectCurrentUser,
+  selectAllProperties, selectAllUnits, selectAllTenants,
+} from "../../redux/selectors";
+import { getProperties } from "../../redux/propertyRedux";
+import { getUnits } from "../../redux/unitRedux";
+import { getTenants } from "../../redux/tenantsRedux";
+import { useEntityCache } from "../../hooks/useEntityCache";
 import {
   FaCheckCircle,
   FaClock,
@@ -112,6 +119,7 @@ const csvEscape = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
 
 const Maintenances = () => {
   const confirm = useConfirm();
+  const dispatch = useDispatch();
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
   const isDemoUser = Boolean(currentUser?.isDemoUser);
@@ -119,10 +127,13 @@ const Maintenances = () => {
   const canUpdate = hasCompanyPermission(currentUser, currentCompany, "maintenances", "update", "propertyManagement");
   const canDelete = hasCompanyPermission(currentUser, currentCompany, "maintenances", "delete", "propertyManagement");
 
+  // Form-dropdown data — read from Redux so re-visiting the page hits no extra API calls
+  const properties = useSelector(selectAllProperties);
+  const units = useSelector((s) => s.unit?.units || []);
+  const tenants = useSelector(selectAllTenants);
+  const { propertiesLoaded, unitsLoaded, tenantsLoaded } = useEntityCache(currentCompany?._id);
+
   const [requests, setRequests] = useState([]);
-  const [properties, setProperties] = useState([]);
-  const [units, setUnits] = useState([]);
-  const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -186,23 +197,14 @@ const Maintenances = () => {
     }
   }, [currentCompany?._id, currentPage, pageSize, statusFilter, priorityFilter, debouncedSearch]);
 
-  const loadFormData = useCallback(async () => {
-    if (!currentCompany?._id) return;
-    try {
-      const business = currentCompany._id;
-      const [unitsRes, tenantsRes, propertiesRes] = await Promise.all([
-        adminRequests.get(`/units?business=${business}&limit=1000`),
-        adminRequests.get(`/tenants?business=${business}&limit=1000`),
-        adminRequests.get(`/properties?business=${business}&limit=1000`),
-      ]);
-      setUnits(toList(unitsRes.data));
-      setTenants(toList(tenantsRes.data));
-      setProperties(toList(propertiesRes.data));
-    } catch { /* non-critical */ }
-  }, [currentCompany?._id]);
-
   useEffect(() => { loadRequests(); }, [loadRequests]);
-  useEffect(() => { loadFormData(); }, [loadFormData]);
+
+  useEffect(() => {
+    if (!currentCompany?._id) return;
+    if (!propertiesLoaded) dispatch(getProperties({ business: currentCompany._id }));
+    if (!unitsLoaded) dispatch(getUnits({ business: currentCompany._id }));
+    if (!tenantsLoaded) dispatch(getTenants({ business: currentCompany._id }));
+  }, [currentCompany?._id]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { setCurrentPage(1); }, [statusFilter, priorityFilter, debouncedSearch, pageSize]);
 

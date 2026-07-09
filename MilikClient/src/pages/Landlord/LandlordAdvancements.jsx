@@ -1,5 +1,6 @@
 ﻿
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEntityCache } from "../../hooks/useEntityCache";
 import useDebounce from "../../hooks/useDebounce";
 import {
   FaCheck,
@@ -196,6 +197,7 @@ const LandlordAdvancements = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
   const landlords = useSelector(selectAllLandlords);
+  const { propertiesLoaded } = useEntityCache(currentCompany?._id);
   const properties = useSelector(selectAllProperties);
 
   const activeLandlords = useMemo(
@@ -258,7 +260,7 @@ const LandlordAdvancements = () => {
   useEffect(() => {
     if (!currentCompany?._id) return;
     dispatch(getLandlords({ company: currentCompany._id }));
-    dispatch(getProperties({ business: currentCompany._id }));
+    if (!propertiesLoaded) dispatch(getProperties({ business: currentCompany._id }));
     (async () => {
       try {
         const accounts = await getChartOfAccounts({ business: currentCompany._id, type: "asset" });

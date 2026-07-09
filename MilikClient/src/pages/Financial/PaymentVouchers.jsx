@@ -1,4 +1,5 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useEntityCache } from "../../hooks/useEntityCache";
 import AppSelect from "../../components/common/AppSelect";
 import { adminRequests } from "../../utils/requestMethods";
 import useDebounce from "../../hooks/useDebounce";
@@ -88,6 +89,7 @@ const PaymentVouchers = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
   const properties = useSelector(selectAllProperties);
+  const { propertiesLoaded } = useEntityCache(currentCompany?._id);
   const hasPMS = Boolean(currentCompany?.modules?.propertyManagement);
   const isLandlordWorkspace = useMemo(
     () => isSelfManagingLandlordCompany(currentCompany || currentUser?.company || null),
@@ -175,8 +177,8 @@ const PaymentVouchers = () => {
 
   useEffect(() => {
     if (!currentCompany?._id || !hasPMS) return;
-    dispatch(getProperties({ business: currentCompany._id }));
-  }, [dispatch, currentCompany?._id, hasPMS]);
+    if (!propertiesLoaded) dispatch(getProperties({ business: currentCompany._id }));
+  }, [currentCompany?._id, hasPMS]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!location.state) return;

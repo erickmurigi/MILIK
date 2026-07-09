@@ -1,6 +1,7 @@
 ﻿// pages/Vacants/Vacants.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useEntityCache } from "../../hooks/useEntityCache";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import {
@@ -200,6 +201,7 @@ const Vacants = () => {
   const canCreateTenant = hasCompanyPermission(currentUser || {}, currentCompany, 'tenants', 'create', 'propertyManagement');
   const canCreateUnit   = hasCompanyPermission(currentUser || {}, currentCompany, 'units', 'create', 'propertyManagement');
   const canUpdateUnit   = hasCompanyPermission(currentUser || {}, currentCompany, 'units', 'update', 'propertyManagement');
+  const { propertiesLoaded, unitsLoaded, tenantsLoaded } = useEntityCache(currentCompany?._id);
 
   const units = useSelector((state) => state.unit?.units || []);
   const unitsLoading = useSelector((state) => state.unit?.isFetching || false);
@@ -233,13 +235,13 @@ const Vacants = () => {
 
   useEffect(() => {
     if (!currentCompany?._id) return;
-    dispatch(getUnits({ business: currentCompany._id }));
-    dispatch(getProperties({ business: currentCompany._id }));
-    dispatch(getTenants({ business: currentCompany._id }));
+    if (!unitsLoaded) dispatch(getUnits({ business: currentCompany._id }));
+    if (!propertiesLoaded) dispatch(getProperties({ business: currentCompany._id }));
+    if (!tenantsLoaded) dispatch(getTenants({ business: currentCompany._id }));
     getMaintenances(dispatch, currentCompany._id).catch(() => {
       // keep page usable even if maintenance fetch fails
     });
-  }, [dispatch, currentCompany]);
+  }, [currentCompany?._id]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setCurrentPage(1);
@@ -283,7 +285,22 @@ const Vacants = () => {
   }, [maintenances]);
 
   const availabilityRows = useMemo(() => {
-    return (Array.isArray(units) ? units : []).map((unit, index) => {
+    const unitList = Array.isArray(units) ? units : [];
+
+    // Precompute per-property sequential index so the inner loop is O(n) not O(n²)
+    const propertyCounter = new Map();
+    const unitIndexInPropertyArr = unitList.map((unit) => {
+      const propId = normalizeId(
+        typeof unit?.property === 'string'
+          ? unit.property
+          : (unit?.property?._id || unit?.property)
+      );
+      const next = (propertyCounter.get(propId) || 0) + 1;
+      propertyCounter.set(propId, next);
+      return next;
+    });
+
+    return unitList.map((unit, index) => {
       const propertyObj = typeof unit?.property === "string"
         ? properties.find((item) => normalizeId(item?._id) === normalizeId(unit?.property))
         : unit?.property;
@@ -361,13 +378,7 @@ const Vacants = () => {
       }
 
       const first2Letters = propertyName.substring(0, 2).toUpperCase();
-      const unitIndexInProperty = (Array.isArray(units) ? units : []).reduce((count, item, itemIndex) => {
-        const itemPropertyObj = typeof item?.property === "string"
-          ? properties.find((p) => normalizeId(p?._id) === normalizeId(item?.property))
-          : item?.property;
-        const itemPropertyId = normalizeId(itemPropertyObj?._id || item?.property);
-        return itemIndex < index && itemPropertyId === propertyId ? count + 1 : count;
-      }, 0) + 1;
+      const unitIndexInProperty = unitIndexInPropertyArr[index];
 
       return {
         id: unitId,

@@ -10,6 +10,7 @@ import {
   selectTenantPagination,
 } from "../../redux/selectors";
 import { useNavigate, useLocation } from "react-router-dom";
+import { useEntityCache } from "../../hooks/useEntityCache";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import {
   FaPlus,
@@ -678,6 +679,7 @@ const Tenants = ({ listingMode = "active" }) => {
   const units = useSelector(selectAllUnits);
   const properties = useSelector(selectAllProperties);
   const leases = useSelector(selectAllLeases);
+  const { propertiesLoaded, unitsLoaded } = useEntityCache(currentCompany?._id);
 
   const tenantPagination = useSelector(selectTenantPagination);
   const isFetchingTenants = useSelector((state) => state.tenant?.isFetching ?? false);
@@ -794,12 +796,12 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
 
   useEffect(() => {
     if (!currentCompany?._id) return;
-    dispatch(getUnits({ business: currentCompany._id }));
-    dispatch(getProperties({ business: currentCompany._id }));
+    if (!unitsLoaded) dispatch(getUnits({ business: currentCompany._id }));
+    if (!propertiesLoaded) dispatch(getProperties({ business: currentCompany._id }));
     getLeases(dispatch, currentCompany._id, "active").catch((error) => {
       console.error("Failed to load leases:", error);
     });
-  }, [dispatch, currentCompany?._id]);
+  }, [dispatch, currentCompany?._id]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!currentCompany?._id) return;

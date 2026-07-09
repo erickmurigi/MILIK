@@ -123,11 +123,10 @@ const ProcessedStatements = () => {
     }
   }, [businessId]);
 
-  useEffect(() => { loadStatements(1); }, [businessId]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-
   useEffect(() => {
     if (!businessId) return;
+    // Run both in parallel — previously two sequential useEffect waterfalls
+    loadStatements(1);
     getChartOfAccounts({ business: businessId, type: "asset" }).then((chartAccounts) => {
       const options = (Array.isArray(chartAccounts) ? chartAccounts : []).filter((account) => {
         const name = String(account?.name || "").toLowerCase();
@@ -141,7 +140,7 @@ const ProcessedStatements = () => {
       });
       setCashbookOptions(options);
     }).catch(() => {});
-  }, [businessId]);
+  }, [businessId]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Server handles all filtering/sorting — statements is the current page
   const filteredStatements = statements; // alias for JSX references

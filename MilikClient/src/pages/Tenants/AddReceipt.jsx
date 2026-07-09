@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEntityCache } from "../../hooks/useEntityCache";
 import { FaArrowLeft, FaSave, FaSpinner } from "react-icons/fa";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -135,6 +136,9 @@ const AddReceipt = () => {
   const prefilledPayerName = searchParams.get("payerName") || "";
   const currentCompany = useSelector(selectCurrentCompany);
   const isCompanyLandlordMode = isSelfManagingLandlordCompany(currentCompany);
+  const entityCache = useEntityCache(currentCompany?._id);
+  const entityCacheRef = useRef(entityCache);
+  entityCacheRef.current = entityCache;
   const currentUser = useSelector(selectCurrentUser);
   const canSaveReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "create", "propertyManagement");
   const rawProperties = useSelector(selectAllProperties);
@@ -245,12 +249,14 @@ const AddReceipt = () => {
     if (!currentCompany?._id) return;
 
     const load = async () => {
+      const { propertiesLoaded, tenantsLoaded } = entityCacheRef.current;
       try {
-        const [,, invoiceRows, chartRows] = await Promise.all([
-          dispatch(getProperties({ business: currentCompany._id })),
-          dispatch(getTenants({ business: currentCompany._id })),
+        // Keep invoiceRows/chartRows at fixed indices — entity dispatches run in parallel but don't affect position
+        const [invoiceRows, chartRows] = await Promise.all([
           getTenantInvoices({ business: currentCompany._id, includeSnapshots: true }),
           getChartOfAccounts({ business: currentCompany._id, type: "asset" }),
+          ...(propertiesLoaded ? [] : [dispatch(getProperties({ business: currentCompany._id }))]),
+          ...(tenantsLoaded ? [] : [dispatch(getTenants({ business: currentCompany._id }))]),
         ]);
 
         const normalizedInvoices = ensureArray(invoiceRows);

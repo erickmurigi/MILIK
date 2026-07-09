@@ -2,6 +2,7 @@
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useEntityCache } from "../../hooks/useEntityCache";
 import {
   selectCurrentUser,
   selectCurrentCompany,
@@ -317,6 +318,9 @@ const Receipts = ({ viewMode = "tenant" }) => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
   const isCompanyLandlordMode = isSelfManagingLandlordCompany(currentCompany);
+  const entityCache = useEntityCache(currentCompany?._id);
+  const entityCacheRef = useRef(entityCache);
+  entityCacheRef.current = entityCache;
   const canCreateReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "create", "propertyManagement");
   const canProcessReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "process", "propertyManagement");
   const canReverseReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "reverse", "propertyManagement");
@@ -437,11 +441,12 @@ const Receipts = ({ viewMode = "tenant" }) => {
     if (!isCompanyLandlordMode) {
       params.paidDirectToLandlord = isLandlordReceiptView;
     }
+    const { propertiesLoaded, tenantsLoaded } = entityCacheRef.current;
     try {
       const [receiptResult] = await Promise.all([
         listRentPaymentsPage(params),
-        getTenants(dispatch, currentCompany._id),
-        dispatch(getProperties({ business: currentCompany._id })),
+        ...(tenantsLoaded ? [] : [getTenants(dispatch, currentCompany._id)]),
+        ...(propertiesLoaded ? [] : [dispatch(getProperties({ business: currentCompany._id }))]),
         loadInvoices(),
       ]);
       setReceipts(receiptResult.items);

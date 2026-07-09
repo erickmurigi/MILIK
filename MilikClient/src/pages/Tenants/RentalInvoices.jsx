@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
+import { useEntityCache } from "../../hooks/useEntityCache";
 import {
   selectCurrentUser,
   selectCurrentCompany,
@@ -1052,6 +1053,7 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   const propertiesFromStore = useSelector(selectAllProperties);
   const unitsFromStore = useSelector(selectAllUnits);
   const tenantsFromStore = useMemo(() => ensureArray(rawTenantsFromStore), [rawTenantsFromStore]);
+  const { propertiesLoaded, unitsLoaded, tenantsLoaded } = useEntityCache(currentCompany?._id);
   const [companyTaxConfig, setCompanyTaxConfig] = useState(null);
   const [companyBillingPeriods, setCompanyBillingPeriods] = useState([]);
   const [leases, setLeases] = useState([]);
@@ -1208,11 +1210,10 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
 
   useEffect(() => {
     if (!currentCompany?._id) return;
-
-    dispatch(getTenants({ business: currentCompany._id }));
-    dispatch(getProperties({ business: currentCompany._id }));
-    dispatch(getUnits({ business: currentCompany._id }));
-  }, [dispatch, currentCompany?._id]);
+    if (!tenantsLoaded) dispatch(getTenants({ business: currentCompany._id }));
+    if (!propertiesLoaded) dispatch(getProperties({ business: currentCompany._id }));
+    if (!unitsLoaded) dispatch(getUnits({ business: currentCompany._id }));
+  }, [currentCompany?._id]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!tenantId) return;

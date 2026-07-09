@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useEntityCache } from "../../hooks/useEntityCache";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
@@ -156,6 +157,7 @@ const IncomeStatementReport = () => {
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const properties     = useSelector(selectAllProperties);
   const canExport      = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
+  const { propertiesLoaded } = useEntityCache(currentCompany?._id);
 
   const businessId = useMemo(() => {
     const activeId   = localStorage.getItem("milik_active_company_id");
@@ -184,8 +186,8 @@ const IncomeStatementReport = () => {
   });
 
   useEffect(() => {
-    if (businessId) dispatch(getProperties({ business: businessId }));
-  }, [businessId, dispatch]);
+    if (businessId && !propertiesLoaded) dispatch(getProperties({ business: businessId }));
+  }, [businessId]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectedProperty = useMemo(
     () => properties.find((p) => p._id === filters.propertyId) || null,

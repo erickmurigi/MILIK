@@ -1,4 +1,5 @@
 ﻿import React, { useCallback, useState, useEffect, useMemo } from "react";
+import { useEntityCache } from "../../hooks/useEntityCache";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -461,6 +462,7 @@ const TenantStatement = () => {
   const [companyTaxConfig, setCompanyTaxConfig] = useState(null);
 
   const currentCompany = useSelector(selectCurrentCompany);
+  const { propertiesLoaded, unitsLoaded } = useEntityCache(currentCompany?._id);
   const [tenantData, setTenantData] = useState(null);
   const leasesFromStore = useSelector(selectAllLeases);
   const [tenantPayments, setTenantPayments] = useState([]);
@@ -699,8 +701,8 @@ const TenantStatement = () => {
     if (!currentCompany?._id) return;
 
     adminRequests.get(`/tenants/${tenantId}`).then((res) => setTenantData(res.data?.data || res.data)).catch(() => {});
-    dispatch(getUnits({ business: currentCompany._id }));
-    dispatch(getProperties({ business: currentCompany._id }));
+    if (!unitsLoaded) dispatch(getUnits({ business: currentCompany._id }));
+    if (!propertiesLoaded) dispatch(getProperties({ business: currentCompany._id }));
     getLeases(dispatch, currentCompany._id, null, tenantId);
     getUtilities(dispatch, currentCompany._id);
     listRentPaymentsPage({ business: currentCompany._id, tenant: tenantId, status: "active", limit: 500, page: 1 })
