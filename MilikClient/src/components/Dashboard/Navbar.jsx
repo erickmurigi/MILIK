@@ -89,8 +89,8 @@ const Navbar = React.memo(({ setSidebarOpen, darkMode, setDarkMode }) => {
         darkMode ? "border-gray-700 bg-gray-900" : "border-[#dbe7e1] bg-white"
       }`}
     >
-      <div className="px-2 py-0.5 sm:px-3">
-        <div className="flex min-h-[28px] items-center justify-between gap-1.5 sm:gap-2">
+      <div className="px-2 py-0 sm:px-3">
+        <div className="flex min-h-[22px] items-center justify-between gap-1.5 sm:gap-2">
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <button
               onClick={() => setSidebarOpen?.(true)}
@@ -146,7 +146,7 @@ const Navbar = React.memo(({ setSidebarOpen, darkMode, setDarkMode }) => {
                 darkMode ? "border-gray-700" : "border-[#e3ece7]"
               }`}
             >
-              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-[#31694E] to-[#1f4a35] shadow-sm">
+              <div className="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-[#31694E] to-[#1f4a35] shadow-sm">
                 <span className="text-[10px] font-semibold text-white">
                   {userName
                     .split(" ")

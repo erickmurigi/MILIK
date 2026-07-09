@@ -258,7 +258,7 @@ const ModulesDashboard = () => {
               <button
                 key={m.id}
                 className={`odoo-tile ${m.status === "coming" ? "odoo-tile-soon" : ""}`}
-                style={{ animationDelay: `${i * 55}ms` }}
+                style={{ animationDelay: `${i * 20}ms` }}
                 onClick={() => handleOpen(m)}
                 aria-label={`${m.title} — ${m.subtitle}`}
               >
@@ -304,4 +304,4 @@ const ModulesDashboard = () => {
   );
 };
 
-export default ModulesDashboard;
+export default React.memo(ModulesDashboard);

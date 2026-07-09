@@ -192,7 +192,15 @@ const DashboardLayout = ({ children, lockContentScroll = false }) => {
   const location = useLocation();
   const currentUser = useSelector(selectCurrentUser);
   const currentCompany = useSelector(selectCurrentCompany);
-  const isCompanySwitching = useSelector((state) => state.company?.isSwitching);
+  // Only show the "Switching Company" banner when the company has NOT yet been
+  // optimistically set — i.e. currentCompany still differs from the target.
+  const isCompanySwitching = useSelector((state) => {
+    if (!state.company?.isSwitching) return false;
+    const targetId = state.company?.switchTargetCompanyId;
+    const currentId = state.company?.currentCompany?._id;
+    // If already showing the target company (optimistic update applied), stay silent.
+    return !targetId || String(currentId) !== String(targetId);
+  });
   const [renderTimestamp] = useState(() => Date.now());
   const currentWorkspace = useMemo(() => getWorkspaceFromRoute(location.pathname), [location.pathname]);
   const workspaceLabel = useMemo(() => getWorkspaceLabel(currentWorkspace), [currentWorkspace]);
@@ -227,7 +235,7 @@ const DashboardLayout = ({ children, lockContentScroll = false }) => {
   return (
     <div
       className={`${
-        lockContentScroll ? "h-screen overflow-hidden flex flex-col" : "min-h-screen"
+        lockContentScroll ? "h-screen overflow-hidden flex flex-col" : "min-h-screen overflow-x-hidden"
       } ${darkMode ? "dark bg-gray-900" : "bg-white"}`}
     >
       <Toaster
@@ -1756,7 +1764,7 @@ const TopToolbar = ({
     <div className="relative bg-[#a5c9b7]">
       <Navbar darkMode={darkMode} setDarkMode={setDarkMode} workspaceLabel={workspaceLabel} />
 
-      <div className={`relative z-50 flex min-h-[26px] items-center overflow-visible ${darkMode ? "bg-gray-800" : "bg-[#0A400C]"}`}>
+      <div className={`relative z-50 flex min-h-[22px] items-center overflow-visible ${darkMode ? "bg-gray-800" : "bg-[#0A400C]"}`}>
         <StartMenu darkMode={darkMode} variant="header" />
 
         {mainMenuItems.map((item) => (
@@ -1808,10 +1816,11 @@ const TopToolbar = ({
         <div className="flex items-center space-x-1 px-1.5 py-0 text-[11px]">
           <button
             onClick={() => navigate("/hr/employees/new")}
-            className={`rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
+            className={`flex items-center gap-1 rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
             title="Add Employee"
           >
-            + Employee
+            <FaUserPlus className="xl:hidden shrink-0" aria-hidden="true" />
+            <span className="hidden xl:inline">+ Employee</span>
           </button>
           <div className={`h-5 w-px ${darkMode ? "bg-gray-600" : "bg-gray-300"} mx-1`} />
           <button
@@ -1834,17 +1843,19 @@ const TopToolbar = ({
         <div className="flex items-center space-x-1 px-1.5 py-0 text-[11px]">
           <button
             onClick={() => navigate("/accounts/journals")}
-            className={`rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
+            className={`flex items-center gap-1 rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
             title="New Journal Entry"
           >
-            + Journal
+            <FaBook className="xl:hidden shrink-0" aria-hidden="true" />
+            <span className="hidden xl:inline">+ Journal</span>
           </button>
           <button
             onClick={() => navigate("/accounts/payment-vouchers")}
-            className={`rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
+            className={`flex items-center gap-1 rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
             title="New Payment Voucher"
           >
-            + Voucher
+            <FaFileInvoice className="xl:hidden shrink-0" aria-hidden="true" />
+            <span className="hidden xl:inline">+ Voucher</span>
           </button>
           <div className={`h-5 w-px ${darkMode ? "bg-gray-600" : "bg-gray-300"} mx-1`} />
           <button
@@ -1860,24 +1871,27 @@ const TopToolbar = ({
         <div className="flex items-center space-x-1 px-1.5 py-0 text-[11px]">
           <button
             onClick={() => navigate("/tenant/new")}
-            className={`rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
+            className={`flex items-center gap-1 rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
             title="New Tenant"
           >
-            + Tenant
+            <FaUserPlus className="xl:hidden shrink-0" aria-hidden="true" />
+            <span className="hidden xl:inline">+ Tenant</span>
           </button>
           <button
             onClick={() => navigate("/invoices/new")}
-            className={`rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
+            className={`flex items-center gap-1 rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
             title="New Invoice"
           >
-            + Invoice
+            <FaFileInvoice className="xl:hidden shrink-0" aria-hidden="true" />
+            <span className="hidden xl:inline">+ Invoice</span>
           </button>
           <button
             onClick={() => navigate("/receipts")}
-            className={`rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
+            className={`flex items-center gap-1 rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
             title="Receive Payment"
           >
-            + Payment
+            <FaReceipt className="xl:hidden shrink-0" aria-hidden="true" />
+            <span className="hidden xl:inline">+ Payment</span>
           </button>
           <div className={`h-5 w-px ${darkMode ? "bg-gray-600" : "bg-gray-300"} mx-1`} />
           <button

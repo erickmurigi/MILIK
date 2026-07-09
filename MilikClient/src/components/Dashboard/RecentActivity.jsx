@@ -4,6 +4,7 @@ import {
   FaBell, FaCalendarAlt, FaFileContract,
   FaMoneyBillWave, FaReceipt, FaTools, FaUsers,
 } from 'react-icons/fa';
+import { toast } from 'react-toastify';
 import { markAllNotificationsAsRead } from '../../redux/apiCalls';
 import { parseDate } from './dashboardUtils';
 import DashboardCard from './DashboardCard';
@@ -145,8 +146,8 @@ const RecentActivity = () => {
     setMarking(true);
     try {
       await markAllNotificationsAsRead(dispatch);
-    } catch {
-      // Redux already set error state; UI recovers on next notification refresh
+    } catch (err) {
+      toast.error(err?.response?.data?.message || err?.message || 'Failed to mark notifications as read');
     } finally {
       setMarking(false);
     }
@@ -165,8 +166,8 @@ const RecentActivity = () => {
           <button
             type="button"
             onClick={markAllRead}
-            disabled={marking || unreadCount === 0}
-            className="text-[10px] font-bold uppercase tracking-wide text-[#0B3B2E] transition hover:text-[#C8511A] disabled:opacity-40 disabled:cursor-default"
+            disabled={marking}
+            className="text-[10px] font-bold uppercase tracking-wide text-[#0B3B2E] transition hover:text-[#C8511A] disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {marking ? 'Marking…' : 'Mark all read'}
           </button>

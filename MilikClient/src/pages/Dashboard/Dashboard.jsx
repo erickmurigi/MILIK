@@ -105,7 +105,7 @@ const Dashboard = ({ darkMode }) => {
   return (
     <DashboardLayout>
       <div className="flex min-h-0 flex-1 bg-white">
-        <div className="flex-1 overflow-auto px-2 pt-2 pb-4 space-y-1.5">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-2 pt-2 pb-4 space-y-1.5">
 
           {dashboardError && (
             <div className="border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
@@ -118,7 +118,7 @@ const Dashboard = ({ darkMode }) => {
 
           {/* Row 2 — Financial chart + Portfolio Pulse (left) | Action Centre & Activity (right) */}
           <div className="grid grid-cols-1 items-start gap-1.5 xl:grid-cols-[1fr_320px]">
-            <div className="flex flex-col gap-1.5">
+            <div className="flex min-w-0 flex-col gap-1.5">
               <FinancialOverview summaryData={summaryData} />
               <PropertiesOverview
                 summaryData={summaryData}
@@ -127,7 +127,7 @@ const Dashboard = ({ darkMode }) => {
                 today={today}
               />
             </div>
-            <div className="flex flex-col gap-1.5">
+            <div className="flex min-w-0 flex-col gap-1.5">
               <QuickActions summaryData={summaryData} loading={summaryLoading} />
               <RecentActivity />
             </div>

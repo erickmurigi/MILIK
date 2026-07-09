@@ -12,6 +12,7 @@ import { selectCurrentUser, selectCurrentCompany } from "../../redux/selectors";
 import { toast } from "react-toastify";
 import { clearClientSessionStorage } from "../../utils/sessionCleanup";
 import { getAccessibleCompanies, switchCompany } from "../../redux/apiCalls";
+import { setCurrentCompany } from "../../redux/companiesRedux";
 import {
   getCompanyOperatingModeLabel, hasCompanyModule, hasAnyCompanyModule,
   GL_ACCESS_MODULES, isSelfManagingLandlordCompany,
@@ -89,6 +90,11 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
     };
     window.addEventListener("mousedown", onDown);
     return () => window.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  // Prefetch companies list when menu opens so "Switch Company" modal appears instantly
+  useEffect(() => {
+    if (open) getAccessibleCompanies().catch(() => {});
   }, [open]);
 
   useEffect(() => {
@@ -170,17 +176,27 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
       return;
     }
     if (isCompanySwitching || switchingId) return;
+
+    // Capture previous company for rollback if the API call fails
+    const prevCompany = currentCompany || null;
+
+    // Optimistic: set the new company instantly from the already-fetched list data,
+    // close the modal, and navigate — user sees new modules with zero wait
+    dispatch(setCurrentCompany(company));
     setSwitchingId(company._id);
+    setShowSwitchModal(false);
+    setOpen(false);
+    navigate("/moduleDashboard", { replace: true });
+
     try {
       await dispatch(switchCompany(company._id));
-      setShowSwitchModal(false); setOpen(false);
-      navigate("/moduleDashboard", { replace: true });
     } catch (err) {
+      if (prevCompany) dispatch(setCurrentCompany(prevCompany));
       toast.error(err?.response?.data?.message || err?.message || "Failed to switch company");
     } finally {
       setSwitchingId(null);
     }
-  }, [currentCompany?._id, currentUser?.company?._id, isCompanySwitching, switchingId, dispatch, navigate]);
+  }, [currentCompany, currentUser?.company?._id, isCompanySwitching, switchingId, dispatch, navigate]);
 
   const isBusy = isCompanySwitching;
 
