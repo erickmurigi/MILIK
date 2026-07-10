@@ -1,7 +1,11 @@
 import { createError } from "../../../utils/error.js";
 import SaleCommission from "../models/SaleCommission.js";
 import { currentUserId, resolveActiveBusinessId } from "../services/businessScope.js";
-import { postPropertySaleCommissionPayout, reversePropertySaleCommissionAccrual } from "../services/propertySaleAccountingService.js";
+import {
+  postPropertySaleCommissionPayout,
+  reversePropertySaleCommissionAccrual,
+  reversePropertySaleCommissionPayout,
+} from "../services/propertySaleAccountingService.js";
 
 const populateCommission = (query) =>
   query
@@ -12,10 +16,11 @@ const populateCommission = (query) =>
 
 // State machine: which transitions are permitted
 const ALLOWED_TRANSITIONS = {
-  pending:  ["approved", "cancelled"],
-  approved: ["paid", "cancelled"],
-  paid:     [],          // terminal — cannot be reversed via this endpoint
-  cancelled: [],         // terminal
+  pending:   ["approved", "cancelled"],
+  approved:  ["paid", "cancelled"],
+  paid:      ["reversed"],
+  cancelled: [],
+  reversed:  [],
 };
 
 export const listCommissions = async (req, res, next) => {
@@ -83,9 +88,25 @@ export const updateCommissionStatus = async (req, res, next) => {
 
     // GL hooks based on transition
     if (status === "paid") {
-      postPropertySaleCommissionPayout({ businessId: business, commission: oldCommission, userId, payoutMethod, payoutDate }).catch((err) =>
-        console.error("[PS GL] postPropertySaleCommissionPayout failed:", err.message)
-      );
+      try {
+        await postPropertySaleCommissionPayout({ businessId: business, commission: oldCommission, userId, payoutMethod, payoutDate });
+      } catch (glErr) {
+        // Roll back status change and surface the error
+        await SaleCommission.findByIdAndUpdate(req.params.id, { status: oldCommission.status, updatedBy: userId });
+        return next(createError(500, `GL posting failed: ${glErr.message}. Commission status not changed.`));
+      }
+    } else if (status === "reversed" && oldCommission.status === "paid") {
+      try {
+        await reversePropertySaleCommissionPayout({
+          businessId: business,
+          commission: oldCommission,
+          userId,
+          reason: `Commission ${oldCommission.commissionNumber} payout reversed`,
+        });
+      } catch (glErr) {
+        await SaleCommission.findByIdAndUpdate(req.params.id, { status: oldCommission.status, updatedBy: userId });
+        return next(createError(500, `GL reversal failed: ${glErr.message}. Commission status not changed.`));
+      }
     } else if (status === "cancelled" && oldCommission.status === "approved") {
       reversePropertySaleCommissionAccrual({ businessId: business, commission: oldCommission, userId, reason: `Commission ${oldCommission.commissionNumber} cancelled` }).catch((err) =>
         console.error("[PS GL] reversePropertySaleCommissionAccrual failed:", err.message)

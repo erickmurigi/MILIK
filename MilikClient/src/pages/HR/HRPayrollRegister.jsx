@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FaArrowLeft, FaPrint, FaRedoAlt, FaFileAlt, FaEnvelope } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
+import { useTabState } from "../../hooks/useTabState";
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import PrintLetterhead from '../../components/HR/PrintLetterhead';
 import EmailSendModal from '../../components/HR/EmailSendModal';
@@ -21,7 +22,7 @@ const STATUS_STYLE = {
 export default function HRPayrollRegister() {
   const navigate = useNavigate();
   const [periods, setPeriods]   = useState([]);
-  const [periodId, setPeriodId] = useState('');
+  const [periodId, setPeriodId] = useTabState('/hr/payroll/register:periodId', '');
   const [data, setData]         = useState(null);
   const [loading, setLoading]   = useState(false);
   const [showEmail, setShowEmail] = useState(false);

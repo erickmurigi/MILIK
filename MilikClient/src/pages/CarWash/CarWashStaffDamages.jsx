@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
+import { useTabState } from "../../hooks/useTabState";
 
 const icc = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const lc  = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
@@ -57,11 +58,11 @@ export default function CarWashStaffDamages() {
   const queryClient = useQueryClient();
   const canManage = useCarWashPermission("carwash-commissions", "manage");
 
-  const [page,         setPage]         = useState(1);
-  const [filterStaff,  setFilterStaff]  = useState("");
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [dateFrom,     setDateFrom]     = useState("");
-  const [dateTo,       setDateTo]       = useState("");
+  const [page,         setPage]         = useTabState("/carwash/commissions/damages:page", 1);
+  const [filterStaff,  setFilterStaff]  = useTabState("/carwash/commissions/damages:filterStaff", "");
+  const [filterStatus, setFilterStatus] = useTabState("/carwash/commissions/damages:filterStatus", "all");
+  const [dateFrom,     setDateFrom]     = useTabState("/carwash/commissions/damages:dateFrom", "");
+  const [dateTo,       setDateTo]       = useTabState("/carwash/commissions/damages:dateTo", "");
 
   const [showForm,     setShowForm]     = useState(false);
   const [form,         setForm]         = useState(emptyForm(null));

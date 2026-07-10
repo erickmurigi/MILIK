@@ -18,20 +18,26 @@ export const listAgents = async (req, res, next) => {
     if (search.trim()) {
       filter.$text = { $search: search.trim() };
     }
-    const [agents, total, statsRaw] = await Promise.all([
+    const [agents, total, statsRaw, dealCountsRaw] = await Promise.all([
       SaleAgent.find(filter).sort({ createdAt: -1 }).skip((pageNum - 1) * limitNum).limit(limitNum).lean(),
       SaleAgent.countDocuments(filter),
       SaleAgent.aggregate([
         { $match: { business: bId } },
         { $group: { _id: "$status", count: { $sum: 1 }, avgRate: { $avg: "$commissionRate" } } },
       ]),
+      SaleDeal.aggregate([
+        { $match: { business: bId, agent: { $exists: true, $ne: null } } },
+        { $group: { _id: "$agent", dealCount: { $sum: 1 } } },
+      ]),
     ]);
-    const statsMap = Object.fromEntries(statsRaw.map((s) => [s._id, { count: s.count, avgRate: s.avgRate }]));
+    const statsMap     = Object.fromEntries(statsRaw.map((s) => [s._id, { count: s.count, avgRate: s.avgRate }]));
+    const dealCountMap = Object.fromEntries(dealCountsRaw.map((d) => [String(d._id), d.dealCount]));
     const stats = {
       active:   statsMap.active   || { count: 0, avgRate: 0 },
       inactive: statsMap.inactive || { count: 0, avgRate: 0 },
     };
-    res.status(200).json({ data: agents, total, page: pageNum, pages: Math.ceil(total / limitNum) || 1, stats });
+    const data = agents.map((a) => ({ ...a, dealCount: dealCountMap[String(a._id)] || 0 }));
+    res.status(200).json({ data, total, page: pageNum, pages: Math.ceil(total / limitNum) || 1, stats });
   } catch (err) {
     next(err);
   }

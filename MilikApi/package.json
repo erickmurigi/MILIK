@@ -38,6 +38,7 @@
     "nodemailer": "^8.0.7",
     "puppeteer": "^22.15.0",
     "rate-limit-redis": "^4.3.1",
+    "sharp": "^0.33.5",
     "socket.io": "^4.8.1",
     "zod": "^4.3.6"
   },

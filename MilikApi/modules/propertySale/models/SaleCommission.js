@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const COMMISSION_STATUSES = ["pending", "approved", "paid", "cancelled"];
+const COMMISSION_STATUSES = ["pending", "approved", "paid", "cancelled", "reversed"];
 const PAYOUT_METHODS = ["cash", "mpesa", "bank_transfer", "cheque", "other"];
 
 const saleCommissionSchema = new mongoose.Schema(

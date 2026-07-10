@@ -12,6 +12,7 @@ import { carWashApi, formatMoney, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import CwSmsModal from "./CwSmsModal";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
+import { useTabState } from "../../hooks/useTabState";
 
 const fmt = formatMoney;
 const fmtDate  = (v) => v ? new Date(v).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
@@ -541,14 +542,14 @@ const CarWashAccounts = () => {
   const canRecord    = useCarWashPermission("carwash-payments", "record");
 
   // ── Filters / sort / pagination ──
-  const [search, setSearch]         = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [search, setSearch]         = useTabState("/carwash/accounts:search", "");
+  const [debouncedSearch, setDebouncedSearch] = useTabState("/carwash/accounts:debouncedSearch", "");
   const debounceRef                 = useRef(null);
-  const [filterStatus, setFilterStatus] = useState("active");
-  const [filterType, setFilterType]     = useState("");
-  const [sortBy, setSortBy]             = useState("");
-  const [sortDir, setSortDir]           = useState("desc");
-  const [page, setPage]                 = useState(1);
+  const [filterStatus, setFilterStatus] = useTabState("/carwash/accounts:filterStatus", "active");
+  const [filterType, setFilterType]     = useTabState("/carwash/accounts:filterType", "");
+  const [sortBy, setSortBy]             = useTabState("/carwash/accounts:sortBy", "");
+  const [sortDir, setSortDir]           = useTabState("/carwash/accounts:sortDir", "desc");
+  const [page, setPage]                 = useTabState("/carwash/accounts:page", 1);
   const limit                           = 50;
 
   const handleSearch = (val) => {

@@ -2,17 +2,19 @@ import React, { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
-import { FaCheck, FaMoneyBillWave, FaPrint, FaRedoAlt, FaSearch, FaTimes } from "react-icons/fa";
+import { FaCheck, FaMoneyBillWave, FaPrint, FaRedoAlt, FaSearch, FaTimes, FaUndo } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
 import PaginationBar from "../../components/PaginationBar";
 import { fmtKES, saleApi, todayISO } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
+import { useTabState } from "../../hooks/useTabState";
 
 const STATUS_BADGE = {
   pending:   "border-amber-200 bg-amber-50 text-amber-700",
   approved:  "border-blue-200 bg-blue-50 text-blue-700",
   paid:      "border-emerald-200 bg-emerald-50 text-emerald-700",
   cancelled: "border-rose-200 bg-rose-50 text-rose-600",
+  reversed:  "border-slate-200 bg-slate-50 text-slate-500",
 };
 
 const PAYOUT_METHODS  = ["cash", "mpesa", "bank_transfer", "cheque", "other"];
@@ -43,10 +45,10 @@ const SaleCommissions = () => {
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const biz            = currentCompany?._id;
 
-  const [statusFilter,  setStatusFilter]  = useState("");
-  const [search,        setSearch]        = useState("");
-  const [page,          setPage]          = useState(1);
-  const [pageSize,      setPageSize]      = useState(PAGE_SIZE);
+  const [statusFilter,  setStatusFilter]  = useTabState("/sale/commissions:statusFilter", "");
+  const [search,        setSearch]        = useTabState("/sale/commissions:search", "");
+  const [page,          setPage]          = useTabState("/sale/commissions:page", 1);
+  const [pageSize,      setPageSize]      = useTabState("/sale/commissions:pageSize", PAGE_SIZE);
   const [showPayout,    setShowPayout]    = useState(null);
   const [payoutForm,    setPayoutForm]    = useState(EMPTY_PAYOUT);
   const [saving,        setSaving]        = useState(false);
@@ -101,6 +103,26 @@ const SaleCommissions = () => {
       toast.error(err?.response?.data?.message || "Failed to record payout");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleReverse = async (commission) => {
+    if (!await confirm({
+      title: "Reverse Commission Payout",
+      message: `Reverse the payout of ${commission.commissionNumber} (${fmtKES(commission.commissionAmount)})? This will reverse the GL entry for the payout.`,
+      confirmText: "Reverse",
+      isDangerous: true,
+    })) return;
+    setActionKey(`${commission._id}:reverse`);
+    try {
+      await saleApi.updateCommissionStatus(commission._id, { status: "reversed", business: biz });
+      toast.success("Commission payout reversed");
+      invalidate();
+      queryClient.invalidateQueries({ queryKey: ["sale-dashboard"] });
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to reverse payout");
+    } finally {
+      setActionKey("");
     }
   };
 
@@ -253,6 +275,17 @@ ${c.payoutReference ? `<div class="row"><span class="lbl">Reference:</span><span
                       )}
                       {c.status === "paid" && c.payoutReference && (
                         <span className="text-[10px] font-mono text-slate-400">{c.payoutReference}</span>
+                      )}
+                      {c.status === "paid" && (
+                        <button
+                          type="button"
+                          onClick={() => handleReverse(c)}
+                          disabled={actionKey === `${c._id}:reverse`}
+                          className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600 hover:bg-rose-100 disabled:opacity-40"
+                          title="Reverse payout GL entry"
+                        >
+                          <FaUndo className="text-[9px]" />
+                        </button>
                       )}
                       <button
                         type="button"

@@ -8,6 +8,7 @@ import PaginationBar from "../../components/PaginationBar";
 import { saleApi, fmtKES } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
 import useDebounce from "../../hooks/useDebounce";
+import { useTabState } from "../../hooks/useTabState";
 
 const PAGE_SIZE = 50;
 
@@ -43,11 +44,11 @@ const SaleAgents = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState("");
   const [form,      setForm]      = useState(blankForm);
-  const [search,    setSearch]    = useState("");
+  const [search,    setSearch]    = useTabState("/sale/agents:search", "");
   const debouncedSearch = useDebounce(search, 400);
-  const [statusFilter, setStatusFilter] = useState("");
-  const [page,      setPage]      = useState(1);
-  const [pageSize,  setPageSize]  = useState(PAGE_SIZE);
+  const [statusFilter, setStatusFilter] = useTabState("/sale/agents:statusFilter", "");
+  const [page,      setPage]      = useTabState("/sale/agents:page", 1);
+  const [pageSize,  setPageSize]  = useTabState("/sale/agents:pageSize", PAGE_SIZE);
 
   const biz = currentCompany?._id;
 
@@ -225,16 +226,16 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
           <table className="w-full min-w-[640px] text-xs border-collapse">
             <thead>
               <tr className="bg-[#0B3B2E]">
-                {["Agent No.", "Name", "Phone", "Email", "Commission", "Status", "Actions"].map((h) => (
-                  <th key={h} className={`px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white ${h === "Actions" ? "text-right" : "text-left"}`}>{h}</th>
+                {["Agent No.", "Name", "Phone", "Email", "Commission", "Deals", "Status", "Actions"].map((h) => (
+                  <th key={h} className={`px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white ${h === "Actions" || h === "Deals" ? "text-right" : "text-left"}`}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} className="px-3 py-10 text-center text-xs text-slate-400">Loading agents…</td></tr>
+                <tr><td colSpan={8} className="px-3 py-10 text-center text-xs text-slate-400">Loading agents…</td></tr>
               ) : agents.length === 0 ? (
-                <tr><td colSpan={7} className="px-3 py-10 text-center text-xs text-slate-400">No agents found.</td></tr>
+                <tr><td colSpan={8} className="px-3 py-10 text-center text-xs text-slate-400">No agents found.</td></tr>
               ) : agents.map((row) => (
                 <tr key={row._id} className="border-b border-slate-100 hover:bg-slate-50">
                   <td className="px-3 py-2 font-mono font-black text-[#0B3B2E]">{row.agentNumber}</td>
@@ -245,6 +246,7 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
                     {row.commissionType === "percentage" ? `${row.commissionRate}%` : fmtKES(row.commissionRate)}
                     <span className="ml-1 text-[10px] font-normal text-slate-400">({row.commissionType})</span>
                   </td>
+                  <td className="px-3 py-2 text-right font-black text-slate-700">{row.dealCount ?? 0}</td>
                   <td className="px-3 py-2">
                     <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${row.status === "active" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
                       {row.status}

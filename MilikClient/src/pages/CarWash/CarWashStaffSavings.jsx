@@ -20,6 +20,7 @@ import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
+import { useTabState } from "../../hooks/useTabState";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const ic  = "h-7 border border-slate-300 bg-white px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
@@ -86,13 +87,13 @@ const CarWashStaffSavings = () => {
 
   const [balances,        setBalances]        = useState([]);
   const [balancesLoading, setBalancesLoading] = useState(false);
-  const [selectedStaff,   setSelectedStaff]   = useState(null);
+  const [selectedStaff,   setSelectedStaff]   = useTabState("/carwash/commissions/savings:selectedStaff", null);
   const [records,         setRecords]         = useState([]);
   const [recordsTotal,    setRecordsTotal]    = useState(0);
   const [recordsLoading,  setRecordsLoading]  = useState(false);
-  const [detailFrom,      setDetailFrom]      = useState("");
-  const [detailTo,        setDetailTo]        = useState(todayISO());
-  const [detailPage,      setDetailPage]      = useState(1);
+  const [detailFrom,      setDetailFrom]      = useTabState("/carwash/commissions/savings:detailFrom", "");
+  const [detailTo,        setDetailTo]        = useTabState("/carwash/commissions/savings:detailTo", todayISO());
+  const [detailPage,      setDetailPage]      = useTabState("/carwash/commissions/savings:detailPage", 1);
   const detailRef   = useRef(null);
   const prevStaffId = useRef(null);
 

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import useDebounce from '../../hooks/useDebounce';
+import { useTabState } from "../../hooks/useTabState";
 import {
   FaPlus, FaSearch, FaPrint, FaTrash, FaCheck, FaFileAlt,
   FaRedoAlt, FaChevronRight, FaTimes, FaArrowLeft, FaEnvelope, FaBan,
@@ -243,12 +244,12 @@ export default function HRLetters() {
   const [letters, setLetters]       = useState([]);
   const [employees, setEmployees]   = useState([]);
   const [letterMeta, setLetterMeta] = useState({});
-  const [selected, setSelected]     = useState(null);
+  const [selected, setSelected]     = useTabState('/hr/letters:selected', null);
   const [loading, setLoading]       = useState(true);
-  const [search, setSearch]         = useState('');
-  const [filterType, setFilterType] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
-  const [page, setPage]             = useState(1);
+  const [search, setSearch]         = useTabState('/hr/letters:search', '');
+  const [filterType, setFilterType] = useTabState('/hr/letters:filterType', '');
+  const [filterStatus, setFilterStatus] = useTabState('/hr/letters:filterStatus', '');
+  const [page, setPage]             = useTabState('/hr/letters:page', 1);
   const [total, setTotal]           = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [showCompose, setShowCompose] = useState(false);

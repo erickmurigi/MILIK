@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
-import { FaBan, FaCheck, FaEdit, FaFileAlt, FaPlus, FaPrint, FaRedoAlt, FaSearch, FaSms, FaTimes, FaTrash } from "react-icons/fa";
+import { FaBan, FaCheck, FaEdit, FaEnvelope, FaFileAlt, FaPlus, FaPrint, FaRedoAlt, FaSearch, FaSms, FaTimes, FaTrash } from "react-icons/fa";
 import CwSmsModal from "../CarWash/CwSmsModal";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
@@ -9,6 +9,7 @@ import PaginationBar from "../../components/PaginationBar";
 import { saleApi } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
 import useDebounce from "../../hooks/useDebounce";
+import { useTabState } from "../../hooks/useTabState";
 
 const SOURCES      = ["walk_in", "referral", "online", "agent", "other"];
 const KYC_STATUSES = ["pending", "verified", "rejected"];
@@ -55,16 +56,19 @@ const SaleBuyers = () => {
   const [editingId,     setEditingId]     = useState("");
   const [form,          setForm]          = useState(blankForm);
   const [docModalInput, setDocModalInput] = useState("");
-  const [selected,      setSelected]      = useState(null);
+  const [selected,      setSelected]      = useTabState("/sale/buyers:selected", null);
   const [docInput,      setDocInput]      = useState("");
   const [kycSaving,     setKycSaving]     = useState(false);
   const [smsTarget,     setSmsTarget]     = useState(null);
   const [smsSending,    setSmsSending]    = useState(false);
-  const [search,        setSearch]        = useState("");
+  const [emailTarget,   setEmailTarget]   = useState(null);
+  const [emailForm,     setEmailForm]     = useState({ subject: "", body: "" });
+  const [emailSending,  setEmailSending]  = useState(false);
+  const [search,        setSearch]        = useTabState("/sale/buyers:search", "");
   const debouncedSearch = useDebounce(search, 400);
-  const [kycFilter,     setKycFilter]     = useState("");
-  const [page,          setPage]          = useState(1);
-  const [pageSize,      setPageSize]      = useState(PAGE_SIZE);
+  const [kycFilter,     setKycFilter]     = useTabState("/sale/buyers:kycFilter", "");
+  const [page,          setPage]          = useTabState("/sale/buyers:page", 1);
+  const [pageSize,      setPageSize]      = useTabState("/sale/buyers:pageSize", PAGE_SIZE);
 
   const biz = currentCompany?._id;
 
@@ -196,6 +200,21 @@ const SaleBuyers = () => {
       toast.error(err?.response?.data?.message || "Failed to send SMS");
     } finally {
       setSmsSending(false);
+    }
+  };
+
+  const handleSendEmail = async () => {
+    if (!emailTarget?.email) { toast.warn("Buyer has no email address"); return; }
+    if (!emailForm.subject.trim() || !emailForm.body.trim()) { toast.warn("Subject and message are required"); return; }
+    setEmailSending(true);
+    try {
+      await saleApi.sendBuyerEmail(emailTarget._id, { to: emailTarget.email, ...emailForm });
+      toast.success("Email sent");
+      setEmailTarget(null);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to send email");
+    } finally {
+      setEmailSending(false);
     }
   };
 
@@ -369,6 +388,10 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
           <PaginationBar page={page} pages={totalPages} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} loading={isFetching} />
         </div>
 
+        {selected && (
+          <div className="absolute inset-0 z-[5]" onClick={() => setSelected(null)} />
+        )}
+
         {/* KYC Detail Panel */}
         {selected && (
           <div className="absolute right-0 top-0 bottom-0 w-[360px] flex flex-col bg-white border-l border-slate-200 shadow-xl z-10 overflow-hidden">
@@ -518,6 +541,15 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
                     <FaSms size={9} /> SMS
                   </button>
                 )}
+                {selected.email && (
+                  <button
+                    type="button"
+                    onClick={() => { setEmailTarget(selected); setEmailForm({ subject: "", body: "" }); }}
+                    className="inline-flex items-center gap-1 border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-100"
+                  >
+                    <FaEnvelope size={9} /> Email
+                  </button>
+                )}
               </div>
               <button
                 type="button"
@@ -547,6 +579,37 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
           onClose={() => setSmsTarget(null)}
           sending={smsSending}
         />
+      )}
+
+      {/* Email Modal */}
+      {emailTarget && (
+        <div className="fixed inset-0 z-[140] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
+          <div className="flex w-full max-w-md flex-col bg-white shadow-2xl sm:border sm:border-slate-200 rounded-t-2xl sm:rounded-none">
+            <div className="flex-shrink-0 flex items-start justify-between gap-3 border-b border-slate-200 bg-[#1a4069] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
+              <div>
+                <div className="text-sm font-extrabold uppercase tracking-wide">Send Email</div>
+                <div className="text-xs font-semibold text-white/70">To: {emailTarget.email}</div>
+              </div>
+              <button type="button" onClick={() => setEmailTarget(null)} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
+            </div>
+            <div className="flex flex-col gap-3 p-4">
+              <div>
+                <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Subject</label>
+                <input value={emailForm.subject} onChange={(e) => setEmailForm((f) => ({ ...f, subject: e.target.value }))} className="h-8 w-full border border-slate-200 bg-white px-3 text-xs focus:border-[#1a4069] focus:outline-none" placeholder="e.g. Property Sale Update" />
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Message</label>
+                <textarea rows={6} value={emailForm.body} onChange={(e) => setEmailForm((f) => ({ ...f, body: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#1a4069] focus:outline-none" />
+              </div>
+            </div>
+            <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+              <button type="button" onClick={() => setEmailTarget(null)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button type="button" onClick={handleSendEmail} disabled={emailSending} className="bg-[#1a4069] px-4 py-1.5 text-xs font-black text-white hover:bg-[#143354] disabled:opacity-60">
+                {emailSending ? "Sending…" : "Send Email"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* New / Edit Buyer Modal */}

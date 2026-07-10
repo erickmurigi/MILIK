@@ -9,6 +9,7 @@ import { fmtKES, saleApi, todayISO } from "../../services/propertySaleApi";
 import AmountInput from "./AmountInput";
 import { useConfirm } from "../../context/ConfirmContext";
 import useDebounce from "../../hooks/useDebounce";
+import { useTabState } from "../../hooks/useTabState";
 
 const STATUS_BADGE = {
   pending: "bg-amber-100 text-amber-700 border-amber-200",
@@ -30,11 +31,11 @@ const SaleOffers = () => {
   const confirm = useConfirm();
   const queryClient = useQueryClient();
 
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useTabState("/sale/offers:search", "");
   const debouncedSearch = useDebounce(search, 400);
-  const [statusFilter, setStatusFilter] = useState("");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(LIMIT);
+  const [statusFilter, setStatusFilter] = useTabState("/sale/offers:statusFilter", "");
+  const [page, setPage] = useTabState("/sale/offers:page", 1);
+  const [pageSize, setPageSize] = useTabState("/sale/offers:pageSize", LIMIT);
 
   const [showCreate, setShowCreate] = useState(false);
   const [showStatus, setShowStatus] = useState(null);
@@ -522,7 +523,7 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
                 <select value={form.listing} onChange={(e) => setForm((f) => ({ ...f, listing: e.target.value }))}
                   className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none" required>
                   <option value="">Select listing</option>
-                  {listings.filter((l) => ["available", "reserved"].includes(l.status)).map((l) => (
+                  {listings.filter((l) => ["available", "reserved", "under_contract"].includes(l.status)).map((l) => (
                     <option key={l._id} value={l._id}>{l.listingNumber} — {l.title}</option>
                   ))}
                 </select>

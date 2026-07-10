@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import { useTabState } from "../../hooks/useTabState";
 import {
   FaPlus, FaRedoAlt, FaFilter, FaSearch, FaCheck, FaTimes, FaBan,
   FaCalendarAlt, FaUser, FaTag, FaEye,
@@ -147,9 +148,9 @@ function ApplyLeaveModal({ onClose, onSaved }) {
 export default function LeaveApplications() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [page, setPage]         = useState(1);
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [typeFilter, setTypeFilter]     = useState('all');
+  const [page, setPage]         = useTabState('/hr/leave:page', 1);
+  const [statusFilter, setStatusFilter] = useTabState('/hr/leave:statusFilter', 'all');
+  const [typeFilter, setTypeFilter]     = useTabState('/hr/leave:typeFilter', 'all');
   const [showApply, setShowApply] = useState(false);
   const [confirm, setConfirm]   = useState({ isOpen: false });
 

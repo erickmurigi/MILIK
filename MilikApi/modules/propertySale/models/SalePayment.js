@@ -15,6 +15,7 @@ const salePaymentSchema = new mongoose.Schema(
     amount: { type: Number, required: true, min: 0 },
     paymentDate: { type: Date, default: Date.now },
     paymentMethod: { type: String, enum: PAYMENT_METHODS, default: "bank_transfer" },
+    cashbook: { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
     reference: { type: String, trim: true, default: "" },
     status: { type: String, enum: PAYMENT_STATUSES, default: "paid" },
     notes: { type: String, trim: true, default: "" },

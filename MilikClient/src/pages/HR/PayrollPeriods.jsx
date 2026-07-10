@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import { useTabState } from "../../hooks/useTabState";
 import {
   FaMoneyBillWave, FaPlus, FaRedoAlt, FaPlay, FaCheck,
   FaTrash, FaEye, FaTimes, FaFilter,
@@ -95,9 +96,9 @@ export default function PayrollPeriods() {
   const [running, setRunning]     = useState(null);
   const [showNew, setShowNew]     = useState(false);
   const [confirm, setConfirm]     = useState({ isOpen: false });
-  const [page, setPage]           = useState(1);
-  const [yearFilter, setYearFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [page, setPage]           = useTabState('/hr/payroll:page', 1);
+  const [yearFilter, setYearFilter] = useTabState('/hr/payroll:yearFilter', '');
+  const [statusFilter, setStatusFilter] = useTabState('/hr/payroll:statusFilter', '');
 
   // Reset page when filters change
   useEffect(() => { setPage(1); }, [yearFilter, statusFilter]);

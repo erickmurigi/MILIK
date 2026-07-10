@@ -12,6 +12,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { selectCurrentUser, selectCurrentCompany } from "../../redux/selectors";
 import { toast } from "react-toastify";
 import { clearClientSessionStorage } from "../../utils/sessionCleanup";
+import { clearAllTabCache } from "../../hooks/useTabState";
 import { getAccessibleCompanies, switchCompany } from "../../redux/apiCalls";
 import { setCurrentCompany } from "../../redux/companiesRedux";
 import {
@@ -186,6 +187,7 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
     // clear all React Query caches so the new company sees only fresh data,
     // close the modal, and navigate — user sees new modules with zero wait
     dispatch(setCurrentCompany(company));
+    clearAllTabCache();
     queryClient.clear();
     setSwitchingId(company._id);
     setShowSwitchModal(false);

@@ -7,6 +7,7 @@ import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
+import { useTabState } from "../../hooks/useTabState";
 
 const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
@@ -70,10 +71,10 @@ const CarWashCommissionPayouts = () => {
   const [payouts, setPayouts]           = useState([]);
   const [payableComms, setPayableComms] = useState([]);
   const [loading, setLoading]           = useState(false);
-  const [page, setPage]                 = useState(1);
+  const [page, setPage]                 = useTabState("/carwash/commissions/payouts:page", 1);
   const [pagination, setPagination]     = useState({ page: 1, total: 0, pages: 1 });
-  const [filters, setFilters]           = useState(emptyFilters);
-  const [applied, setApplied]           = useState(emptyFilters);
+  const [filters, setFilters]           = useTabState("/carwash/commissions/payouts:filters", emptyFilters());
+  const [applied, setApplied]           = useTabState("/carwash/commissions/payouts:applied", emptyFilters());
   const [showModal, setShowModal]       = useState(false);
   const [refError, setRefError]         = useState(false);
   const [pendingSavings, setPendingSavings]       = useState(0);

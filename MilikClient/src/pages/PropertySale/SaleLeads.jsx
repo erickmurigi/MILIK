@@ -11,6 +11,7 @@ import PaginationBar from "../../components/PaginationBar";
 import { fmtKES, saleApi } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
 import useDebounce from "../../hooks/useDebounce";
+import { useTabState } from "../../hooks/useTabState";
 
 const LEAD_STATUSES  = ["new", "contacted", "qualified", "site_visited", "proposal_sent", "negotiating", "converted", "lost"];
 const LEAD_SOURCES   = ["walk_in", "referral", "online", "social_media", "agent", "cold_call", "other"];
@@ -53,21 +54,21 @@ export default function SaleLeads() {
   const qc      = useQueryClient();
   const biz     = useSelector((s) => s.company?.currentCompany?._id);
 
-  const [search, setSearch]           = useState("");
+  const [search, setSearch]           = useTabState("/sale/crm/leads:search", "");
   const debSearch                     = useDebounce(search, 400);
-  const [statusFilter, setStatus]     = useState("");
-  const [sourceFilter, setSource]     = useState("");
-  const [agentFilter,  setAgent]      = useState("");
-  const [overdueOnly,  setOverdue]    = useState(false);
-  const [page,         setPage]       = useState(1);
-  const [pageSize,     setPageSize]   = useState(LIMIT);
+  const [statusFilter, setStatus]     = useTabState("/sale/crm/leads:statusFilter", "");
+  const [sourceFilter, setSource]     = useTabState("/sale/crm/leads:sourceFilter", "");
+  const [agentFilter,  setAgent]      = useTabState("/sale/crm/leads:agentFilter", "");
+  const [overdueOnly,  setOverdue]    = useTabState("/sale/crm/leads:overdueOnly", false);
+  const [page,         setPage]       = useTabState("/sale/crm/leads:page", 1);
+  const [pageSize,     setPageSize]   = useTabState("/sale/crm/leads:pageSize", LIMIT);
 
   const [showModal,    setShowModal]  = useState(false);
   const [editingId,    setEditingId]  = useState("");
   const [form,         setForm]       = useState(blankLead);
   const [saving,       setSaving]     = useState(false);
 
-  const [selected,     setSelected]   = useState(null);
+  const [selected,     setSelected]   = useTabState("/sale/crm/leads:selected", null);
   const [showActModal, setActModal]   = useState(false);
   const [editingAct,   setEditingAct] = useState(null);
   const [actForm,      setActForm]    = useState(blankAct);
@@ -106,6 +107,22 @@ export default function SaleLeads() {
     queryFn:  () => saleApi.listActivities({ business: biz, relatedLead: selected._id, limit: 100 }),
     enabled:  !!biz && !!selected?._id,
   });
+
+  const { data: leadDetail, refetch: refetchDetail } = useQuery({
+    queryKey: ["sale-lead-detail", biz, selected?._id],
+    queryFn:  () => saleApi.getLead(selected._id, { business: biz }),
+    enabled:  !!biz && !!selected?._id,
+  });
+
+  const { data: listingsRef } = useQuery({
+    queryKey: ["sale-listings-ref", biz],
+    queryFn:  () => saleApi.listListings({ business: biz, limit: 200 }),
+    enabled:  !!biz,
+    staleTime: 5 * 60_000,
+  });
+
+  const allListings       = listingsRef?.data ?? [];
+  const interestedListings = leadDetail?.interestedListings ?? [];
 
   const leads      = leadsData?.data ?? [];
   const total      = leadsData?.total ?? 0;
@@ -215,6 +232,21 @@ export default function SaleLeads() {
       toast.success("Lead converted to buyer");
     } catch (err) { toast.error(err?.response?.data?.message || "Conversion failed"); }
     finally { setConverting(false); }
+  };
+
+  // ── Interested Listings ───────────────────────────────────────────────────
+  const handleToggleListing = async (listingId, add) => {
+    const current = interestedListings.map((l) => l._id || l);
+    const updated = add
+      ? [...current, listingId]
+      : current.filter((id) => String(id) !== String(listingId));
+    try {
+      await saleApi.updateLead(selected._id, { interestedListings: updated, business: biz });
+      qc.invalidateQueries({ queryKey: ["sale-lead-detail", biz, selected._id] });
+      toast.success(add ? "Listing linked" : "Listing removed");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to update listings");
+    }
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -372,6 +404,10 @@ export default function SaleLeads() {
           </div>
         </div>
 
+        {selected && (
+          <div className="absolute inset-0 z-[5]" onClick={() => setSelected(null)} />
+        )}
+
         {/* ── Lead Detail Panel ─────────────────────────────────────────────── */}
         {selected && (
           <div className="absolute right-0 top-0 bottom-0 w-[352px] bg-white border-l border-slate-200 shadow-xl flex flex-col overflow-hidden">
@@ -407,6 +443,35 @@ export default function SaleLeads() {
               {selected.lastContactDate && <div className="text-slate-400">Last contact: {fmt(selected.lastContactDate)}</div>}
               {selected.notes && <div className="italic text-slate-500">{selected.notes}</div>}
               {selected.lostReason && <div className="text-rose-500">Lost: {selected.lostReason}</div>}
+            </div>
+
+            {/* Interested Listings */}
+            <div className="flex-shrink-0 border-b border-slate-100 px-4 py-3">
+              <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Interested Listings</div>
+              {interestedListings.length > 0 ? (
+                <div className="mb-2 space-y-1">
+                  {interestedListings.map((l) => (
+                    <div key={l._id} className="flex items-center gap-2 border border-slate-200 bg-[#F1F6F3] px-2.5 py-1.5">
+                      <span className="flex-1 min-w-0 truncate text-xs text-slate-800">{l.listingNumber} — {l.title}</span>
+                      <button type="button" onClick={() => handleToggleListing(l._id, false)} className="flex-shrink-0 p-0.5 text-rose-400 hover:text-rose-600">
+                        <FaTimes size={9} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="mb-2 text-[11px] text-slate-400">No listings linked yet.</div>
+              )}
+              <select
+                onChange={(e) => { if (e.target.value) { handleToggleListing(e.target.value, true); e.target.value = ""; } }}
+                className="h-7 w-full border border-slate-200 bg-white px-2 text-xs focus:border-[#0B3B2E] focus:outline-none"
+                defaultValue=""
+              >
+                <option value="">+ Link a listing…</option>
+                {allListings
+                  .filter((l) => !interestedListings.some((il) => String(il._id) === String(l._id)))
+                  .map((l) => <option key={l._id} value={l._id}>{l.listingNumber} — {l.title}</option>)}
+              </select>
             </div>
 
             {/* Actions */}

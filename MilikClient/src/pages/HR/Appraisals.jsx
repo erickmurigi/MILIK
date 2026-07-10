@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTabState } from "../../hooks/useTabState";
 import {
   FaRedoAlt, FaChevronRight, FaTimes, FaCheck,
   FaClipboardCheck, FaUser, FaBuilding, FaUserTie,
@@ -34,12 +35,12 @@ function MiniBar({ score, maxScore }) {
 
 export default function Appraisals() {
   const queryClient = useQueryClient();
-  const [cycleId, setCycleId]       = useState('');
-  const [statusFilter, setStatus]   = useState('');
-  const [search, setSearch]         = useState('');
-  const [page, setPage]             = useState(1);
+  const [cycleId, setCycleId]       = useTabState('/hr/appraisals:cycleId', '');
+  const [statusFilter, setStatus]   = useTabState('/hr/appraisals:statusFilter', '');
+  const [search, setSearch]         = useTabState('/hr/appraisals:search', '');
+  const [page, setPage]             = useTabState('/hr/appraisals:page', 1);
 
-  const [selected, setSelected]       = useState(null);
+  const [selected, setSelected]       = useTabState('/hr/appraisals:selected', null);
   const [scores, setScores]           = useState([]);
   const [notes, setNotes]             = useState('');
   const [empComments, setEmpComments] = useState('');

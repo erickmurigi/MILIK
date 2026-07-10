@@ -2,12 +2,13 @@ import React, { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
-import { FaBan, FaPlus, FaPrint, FaRedoAlt, FaTimes } from "react-icons/fa";
+import { FaBan, FaEdit, FaPlus, FaPrint, FaRedoAlt, FaTimes } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
 import PaginationBar from "../../components/PaginationBar";
 import { fmtKES, saleApi, todayISO } from "../../services/propertySaleApi";
 import AmountInput from "./AmountInput";
 import { useConfirm } from "../../context/ConfirmContext";
+import { useTabState } from "../../hooks/useTabState";
 
 const STATUS_BADGE = {
   paid:      "border-emerald-200 bg-emerald-50 text-emerald-700",
@@ -36,8 +37,8 @@ const fmtLabel = (s) => (s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.t
 
 const EMPTY_FORM = {
   deal: "", amount: "", paymentType: "installment",
-  paymentMethod: "bank_transfer", reference: "",
-  paymentDate: todayISO(), notes: "",
+  paymentMethod: "bank_transfer", cashbook: "",
+  reference: "", paymentDate: todayISO(), notes: "",
 };
 
 const Modal = ({ title, subtitle, headerCls = "bg-[#0B3B2E]", children, footer, onClose }) => (
@@ -67,14 +68,17 @@ const SalePayments = () => {
   const [selectedDeal, setSelectedDeal] = useState(null);
   const [saving,       setSaving]       = useState(false);
   const [voiding,      setVoiding]      = useState(null);
+  const [editTarget,   setEditTarget]   = useState(null);
+  const [editForm,     setEditForm]     = useState({});
+  const [editSaving,   setEditSaving]   = useState(false);
 
-  const [dealFilter,   setDealFilter]   = useState("");
-  const [typeFilter,   setTypeFilter]   = useState("");
-  const [methodFilter, setMethodFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [search,       setSearch]       = useState("");
-  const [page,         setPage]         = useState(1);
-  const [pageSize,     setPageSize]     = useState(PAGE_SIZE);
+  const [dealFilter,   setDealFilter]   = useTabState("/sale/payments:dealFilter", "");
+  const [typeFilter,   setTypeFilter]   = useTabState("/sale/payments:typeFilter", "");
+  const [methodFilter, setMethodFilter] = useTabState("/sale/payments:methodFilter", "");
+  const [statusFilter, setStatusFilter] = useTabState("/sale/payments:statusFilter", "");
+  const [search,       setSearch]       = useTabState("/sale/payments:search", "");
+  const [page,         setPage]         = useTabState("/sale/payments:page", 1);
+  const [pageSize,     setPageSize]     = useTabState("/sale/payments:pageSize", PAGE_SIZE);
 
   const { data: paymentsData, isLoading: loading, isFetching } = useQuery({
     queryKey: ["sale-payments", biz, dealFilter, typeFilter, methodFilter, statusFilter, search, page, pageSize],
@@ -98,6 +102,13 @@ const SalePayments = () => {
     staleTime: 5 * 60_000,
   });
 
+  const { data: cashbookAccounts = [] } = useQuery({
+    queryKey: ["sale-cashbook-accounts", biz],
+    queryFn:  () => saleApi.listCashbookAccounts({ business: biz }),
+    enabled:  !!biz,
+    staleTime: 10 * 60_000,
+  });
+
   const payments      = paymentsData?.payments ?? paymentsData?.data ?? [];
   const total         = paymentsData?.total ?? 0;
   const totalPages    = Math.max(1, Math.ceil(total / pageSize));
@@ -116,6 +127,10 @@ const SalePayments = () => {
       toast.warn("Deal, amount and date are required");
       return;
     }
+    if (!form.cashbook && cashbookAccounts.length > 0) {
+      toast.warn("Please select a receiving cashbook");
+      return;
+    }
     setSaving(true);
     try {
       await saleApi.createPayment({ ...form, business: biz });
@@ -130,6 +145,39 @@ const SalePayments = () => {
       toast.error(err?.response?.data?.message || "Failed to record payment");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const openEdit = (payment) => {
+    setEditTarget(payment);
+    setEditForm({
+      paymentType:   payment.paymentType   || "installment",
+      paymentMethod: payment.paymentMethod || "bank_transfer",
+      cashbook:      payment.cashbook?._id || payment.cashbook || "",
+      amount:        payment.amount        || "",
+      paymentDate:   payment.paymentDate ? new Date(payment.paymentDate).toISOString().slice(0, 10) : "",
+      reference:     payment.reference     || "",
+      notes:         payment.notes         || "",
+    });
+  };
+
+  const handleEditSave = async () => {
+    if (!editForm.amount || !editForm.paymentDate) {
+      toast.warn("Amount and date are required");
+      return;
+    }
+    setEditSaving(true);
+    try {
+      await saleApi.updatePayment(editTarget._id, { ...editForm, business: biz });
+      toast.success("Payment updated");
+      setEditTarget(null);
+      invalidate();
+      queryClient.invalidateQueries({ queryKey: ["sale-deals", biz] });
+      queryClient.invalidateQueries({ queryKey: ["sale-dashboard"] });
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to update payment");
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -358,6 +406,11 @@ ${payment.notes ? `<div class="sec">Notes</div><div style="border:1px solid #e5e
                       <button type="button" onClick={() => printReceipt(p)} className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
                         <FaPrint className="text-[9px]" />
                       </button>
+                      {p.status !== "cancelled" && (
+                        <button type="button" onClick={() => openEdit(p)} className="border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100">
+                          <FaEdit className="text-[9px]" />
+                        </button>
+                      )}
                       {p.status === "paid" && (
                         <button
                           type="button"
@@ -383,6 +436,73 @@ ${payment.notes ? `<div class="sec">Notes</div><div style="border:1px solid #e5e
 
         <PaginationBar page={page} pages={totalPages} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} loading={isFetching} />
       </div>
+
+      {/* Edit Payment Modal */}
+      {editTarget && (
+        <Modal
+          title="Edit Payment"
+          subtitle={`Editing ${editTarget.paymentNumber}`}
+          onClose={() => setEditTarget(null)}
+          footer={
+            <>
+              <button type="button" onClick={() => setEditTarget(null)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button type="button" onClick={handleEditSave} disabled={editSaving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+                {editSaving ? "Saving…" : "Save Changes"}
+              </button>
+            </>
+          }
+        >
+          <div className="flex flex-col gap-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Type</label>
+                <select value={editForm.paymentType} onChange={(e) => setEditForm((f) => ({ ...f, paymentType: e.target.value }))} className="h-8 w-full border border-slate-200 bg-white px-2 text-xs focus:border-[#0B3B2E] focus:outline-none">
+                  {PAYMENT_TYPES.map((t) => <option key={t} value={t}>{fmtLabel(t)}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Method</label>
+                <select value={editForm.paymentMethod} onChange={(e) => setEditForm((f) => ({ ...f, paymentMethod: e.target.value }))} className="h-8 w-full border border-slate-200 bg-white px-2 text-xs focus:border-[#0B3B2E] focus:outline-none">
+                  {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{fmtLabel(m)}</option>)}
+                </select>
+              </div>
+            </div>
+            {/* Cashbook — determines which bank/cash GL account is debited */}
+            <div>
+              <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Receiving Cashbook *</label>
+              <select
+                value={editForm.cashbook}
+                onChange={(e) => setEditForm((f) => ({ ...f, cashbook: e.target.value }))}
+                className="h-8 w-full border border-slate-200 bg-white px-2 text-xs focus:border-[#0B3B2E] focus:outline-none"
+              >
+                <option value="">— Select cashbook —</option>
+                {cashbookAccounts.map((a) => <option key={a._id} value={a._id}>{a.name}</option>)}
+              </select>
+              {cashbookAccounts.length === 0 && (
+                <p className="mt-1 text-[10px] text-amber-600">No cashbook accounts found — set up bank/cash accounts in Chart of Accounts first.</p>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Amount (KES) *</label>
+                <AmountInput value={editForm.amount} onChange={(v) => setEditForm((f) => ({ ...f, amount: v }))} className="h-8 w-full border border-slate-200 bg-white px-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Date *</label>
+                <input type="date" value={editForm.paymentDate} onChange={(e) => setEditForm((f) => ({ ...f, paymentDate: e.target.value }))} className="h-8 w-full border border-slate-200 bg-white px-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Reference</label>
+              <input type="text" value={editForm.reference} onChange={(e) => setEditForm((f) => ({ ...f, reference: e.target.value }))} className="h-8 w-full border border-slate-200 bg-white px-2 text-xs font-mono focus:border-[#0B3B2E] focus:outline-none" />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Notes</label>
+              <textarea rows={2} value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} className="w-full border border-slate-200 bg-white px-2 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {/* Record Payment Modal */}
       {showCreate && (
@@ -467,6 +587,23 @@ ${payment.notes ? `<div class="sec">Notes</div><div style="border:1px solid #e5e
                   {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{fmtLabel(m)}</option>)}
                 </select>
               </div>
+            </div>
+
+            {/* Cashbook — determines which bank/cash GL account is debited */}
+            <div>
+              <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Receiving Cashbook *</label>
+              <select
+                value={form.cashbook}
+                onChange={(e) => setForm((f) => ({ ...f, cashbook: e.target.value }))}
+                className="h-8 w-full border border-slate-200 bg-white px-2 text-xs focus:border-[#0B3B2E] focus:outline-none"
+                required
+              >
+                <option value="">— Select cashbook —</option>
+                {cashbookAccounts.map((a) => <option key={a._id} value={a._id}>{a.name}</option>)}
+              </select>
+              {cashbookAccounts.length === 0 && (
+                <p className="mt-1 text-[10px] text-amber-600">No cashbook accounts found — set up bank/cash accounts in Chart of Accounts first.</p>
+              )}
             </div>
 
             {/* Amount + Date */}

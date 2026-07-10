@@ -1,6 +1,7 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSelector } from 'react-redux';
+import { useTabState } from "../../hooks/useTabState";
 import { FaCalendarCheck, FaRedoAlt, FaPrint, FaFilter, FaUsers } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import PrintLetterhead from '../../components/HR/PrintLetterhead';
@@ -23,9 +24,9 @@ const utilText = (pct) => {
 };
 
 export default function LeaveBalances() {
-  const [year, setYear]           = useState(currentYear);
-  const [departmentId, setDeptId] = useState('');
-  const [leaveTypeId, setLtId]    = useState('');
+  const [year, setYear]           = useTabState('/hr/leave/balances:year', currentYear);
+  const [departmentId, setDeptId] = useTabState('/hr/leave/balances:departmentId', '');
+  const [leaveTypeId, setLtId]    = useTabState('/hr/leave/balances:leaveTypeId', '');
 
   const { data: departments = [] } = useQuery({
     queryKey: ['hr-departments-ref'],

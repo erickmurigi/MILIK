@@ -10,6 +10,7 @@ import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../s
 import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { selectCurrentCompany } from "../../redux/selectors";
+import { useTabState } from "../../hooks/useTabState";
 
 const PAGE_SIZE = 50;
 
@@ -873,9 +874,9 @@ export default function CarWashMpesaNotifications() {
   const company   = useSelector(selectCurrentCompany);
   const paybills  = company?.paymentIntegration?.mpesaPaybills || [];
 
-  const [filters, setFilters] = useState({ status: "", shortCode: "", plate: "", search: "", dateFrom: todayISO(), dateTo: todayISO() });
-  const [applied, setApplied] = useState({ status: "", shortCode: "", plate: "", search: "", dateFrom: todayISO(), dateTo: todayISO() });
-  const [page, setPage] = useState(1);
+  const [filters, setFilters] = useTabState("/carwash/mpesa-notifications:filters", { status: "", shortCode: "", plate: "", search: "", dateFrom: todayISO(), dateTo: todayISO() });
+  const [applied, setApplied] = useTabState("/carwash/mpesa-notifications:applied", { status: "", shortCode: "", plate: "", search: "", dateFrom: todayISO(), dateTo: todayISO() });
+  const [page, setPage] = useTabState("/carwash/mpesa-notifications:page", 1);
 
   const load = useCallback(async () => {
     setLoading(true);

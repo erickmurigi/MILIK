@@ -9,7 +9,7 @@ import SalePayment from "../models/SalePayment.js";
 import SaleCommission from "../models/SaleCommission.js";
 import { currentUserId, escapeRegex, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 import { postPropertySaleCommissionAccrual, reversePropertySaleCommissionAccrual } from "../services/propertySaleAccountingService.js";
-import { sendAdHocSms } from "../../../services/communicationService.js";
+import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationService.js";
 
 const populateDeal = (query) =>
   query
@@ -185,12 +185,14 @@ export const closeDeal = async (req, res, next) => {
       SaleCommission.find({ business, deal: deal._id, status: "pending" }).lean(),
     ]);
 
-    // Post GL accrual for each pending commission before approving them
-    for (const commission of pendingCommissions) {
-      postPropertySaleCommissionAccrual({ businessId: business, commission, userId }).catch((err) =>
-        console.error("[PS GL] postPropertySaleCommissionAccrual failed:", err.message)
-      );
-    }
+    // Post GL accrual for each pending commission — all must succeed before approving
+    await Promise.all(
+      pendingCommissions.map((commission) =>
+        postPropertySaleCommissionAccrual({ businessId: business, commission, userId }).catch((err) =>
+          console.error("[PS GL] postPropertySaleCommissionAccrual failed:", err.message)
+        )
+      )
+    );
     await SaleCommission.updateMany({ business, deal: deal._id, status: "pending" }, { status: "approved" });
 
     res.status(200).json({ ...deal.toObject(), totalPaid, balance: 0 });
@@ -225,11 +227,13 @@ export const cancelDeal = async (req, res, next) => {
 
     // Reverse GL accrual for any already-approved commissions before cancelling
     const cancellationReason = req.body.cancellationReason ? `Deal cancelled: ${req.body.cancellationReason}` : "Deal cancelled";
-    for (const commission of approvedCommissions) {
-      reversePropertySaleCommissionAccrual({ businessId: business, commission, userId, reason: cancellationReason }).catch((err) =>
-        console.error("[PS GL] reversePropertySaleCommissionAccrual failed:", err.message)
-      );
-    }
+    await Promise.all(
+      approvedCommissions.map((commission) =>
+        reversePropertySaleCommissionAccrual({ businessId: business, commission, userId, reason: cancellationReason }).catch((err) =>
+          console.error("[PS GL] reversePropertySaleCommissionAccrual failed:", err.message)
+        )
+      )
+    );
     await SaleCommission.updateMany({ business, deal: deal._id, status: { $in: ["pending", "approved"] } }, { status: "cancelled" });
 
     res.status(200).json(deal);
@@ -270,6 +274,26 @@ export const sendDealSms = async (req, res, next) => {
     if (!body)  return next(createError(400, "Message body is required"));
     await sendAdHocSms({ businessId: business, phone, body, templateKey: "sale_deal_manual" });
     res.json({ success: true, message: "SMS sent" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const sendDealEmail = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const deal = await SaleDeal.findOne({ _id: req.params.id, business })
+      .populate("buyer", "fullName email").lean();
+    if (!deal) return next(createError(404, "Deal not found"));
+    const to      = String(req.body.to      || deal.buyer?.email || "").trim();
+    const subject = String(req.body.subject || "").trim();
+    const body    = String(req.body.body    || "").trim();
+    if (!to)      return next(createError(400, "Buyer has no email address on this deal"));
+    if (!subject) return next(createError(400, "Email subject is required"));
+    if (!body)    return next(createError(400, "Email body is required"));
+    const escaped = body.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    await sendAdHocEmail({ businessId: business, to, subject, html: `<p style="white-space:pre-line">${escaped}</p>`, text: body });
+    res.json({ success: true, message: "Email sent" });
   } catch (err) {
     next(err);
   }

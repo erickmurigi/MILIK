@@ -10,6 +10,7 @@ import {
   getWorkspaceFromRoute,
 } from '../../utils/workspaceRoutes';
 import { getPageTitle } from '../../utils/tabRouteNames';
+import { clearTabCache, clearAllTabCache } from '../../hooks/useTabState';
 
 let tabIdCounter = 0;
 const generateUniqueTabId = (prefix = 'tab') => {
@@ -247,7 +248,9 @@ const TabManager = ({ darkMode }) => {
 
   const closeTab = useCallback((tabId, event) => {
     event?.stopPropagation?.();
-    if (!workspaceTabs.find((t) => t.id === tabId)?.closable) return;
+    const closingTab = workspaceTabs.find((t) => t.id === tabId);
+    if (!closingTab?.closable) return;
+    if (closingTab.route) clearTabCache(closingTab.route);
 
     const nextTabs = workspaceTabs.filter((t) => t.id !== tabId);
     const fallback = nextTabs.length > 0 ? nextTabs : [getWorkspaceDefaultTab(currentWorkspace)];
@@ -263,11 +266,12 @@ const TabManager = ({ darkMode }) => {
   }, [workspaceTabs, activeTab, sortedTabs, currentWorkspace, navigate]);
 
   const closeAllTabs = useCallback(() => {
+    workspaceTabs.filter((t) => t.closable && t.route).forEach((t) => clearTabCache(t.route));
     const defaultTab = getWorkspaceDefaultTab(currentWorkspace);
     setTabsByWorkspace((prev) => ({ ...prev, [currentWorkspace]: [defaultTab] }));
     setActiveTabsByWorkspace((prev) => ({ ...prev, [currentWorkspace]: defaultTab.id }));
     navigate(defaultTab.route);
-  }, [currentWorkspace, navigate]);
+  }, [currentWorkspace, navigate, workspaceTabs]);
 
   const scrollBtnCls = darkMode
     ? 'flex-shrink-0 px-2 py-2 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors duration-150'

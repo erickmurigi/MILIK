@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTabState } from "../../hooks/useTabState";
 import {
   FaTag, FaPlus, FaEdit, FaTrash, FaToggleOn, FaToggleOff,
   FaRedoAlt, FaCheck, FaTimes, FaSearch,
@@ -91,7 +92,7 @@ function LeaveTypeForm({ initial = BLANK, onSave, onCancel, saving }) {
 
 export default function LeaveTypes() {
   const queryClient = useQueryClient();
-  const [search, setSearch]     = useState('');
+  const [search, setSearch]     = useTabState('/hr/leave/types:search', '');
   const [showInactive, setShowInactive] = useState(false);
   const [saving, setSaving]     = useState(false);
   const [formMode, setFormMode] = useState(null);

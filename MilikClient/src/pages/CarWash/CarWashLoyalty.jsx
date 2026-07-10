@@ -10,6 +10,7 @@ import { carWashApi } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import CwSmsModal from "./CwSmsModal";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
+import { useTabState } from "../../hooks/useTabState";
 
 const inputCls = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelCls = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
@@ -605,11 +606,11 @@ const CarWashLoyalty = () => {
 
   // ── View state ───────────────────────────────────────────────────────────
   const [tab, setTab]             = useState("customers");
-  const [search, setSearch]       = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [page, setPage]           = useState(1);
-  const [pageSize, setPageSize]   = useState(25);
-  const [dormantDays, setDormantDays] = useState(0);
+  const [search, setSearch]       = useTabState("/carwash/loyalty:search", "");
+  const [debouncedSearch, setDebouncedSearch] = useTabState("/carwash/loyalty:debouncedSearch", "");
+  const [page, setPage]           = useTabState("/carwash/loyalty:page", 1);
+  const [pageSize, setPageSize]   = useTabState("/carwash/loyalty:pageSize", 25);
+  const [dormantDays, setDormantDays] = useTabState("/carwash/loyalty:dormantDays", 0);
   const [expandedId, setExpandedId]   = useState(null);
 
   // ── Selection for bulk SMS ────────────────────────────────────────────────

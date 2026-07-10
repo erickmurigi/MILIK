@@ -1,9 +1,13 @@
 import mongoose from "mongoose";
 import { createError } from "../../../utils/error.js";
+import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import SalePayment from "../models/SalePayment.js";
 import SaleDeal from "../models/SaleDeal.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
-import { postPropertySalePaymentLedger, reversePropertySalePaymentLedger } from "../services/propertySaleAccountingService.js";
+import {
+  postPropertySalePaymentLedger,
+  reversePropertySalePaymentLedger,
+} from "../services/propertySaleAccountingService.js";
 
 // Deep-populate: deal includes nested listing + buyer so receipt/table fields work
 const populatePayment = (query) =>
@@ -12,27 +16,37 @@ const populatePayment = (query) =>
     select: "dealNumber agreedPrice status",
     populate: [
       { path: "listing", select: "title listingNumber propertyType" },
-      { path: "buyer", select: "fullName buyerNumber phone email" },
+      { path: "buyer",   select: "fullName buyerNumber phone email" },
     ],
   });
+
+// Resolve a cashbook ChartOfAccount from an _id sent by the frontend
+const resolveCashbook = async (businessId, cashbookId) => {
+  if (!cashbookId || !mongoose.isValidObjectId(String(cashbookId))) return null;
+  return ChartOfAccount.findOne({
+    _id: cashbookId,
+    business: businessId,
+    isPosting: { $ne: false },
+    isHeader:  { $ne: true },
+  }).lean();
+};
 
 export const listPayments = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const bId = new mongoose.Types.ObjectId(String(business));
     const { deal = "", paymentType = "", paymentMethod = "", status = "", search = "" } = req.query;
-    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const page  = Math.max(1, parseInt(req.query.page)  || 1);
     const limit = Math.min(200, parseInt(req.query.limit) || 50);
-    const skip = (page - 1) * limit;
+    const skip  = (page - 1) * limit;
 
     const filter = { business };
-    if (deal) filter.deal = new mongoose.Types.ObjectId(String(deal));
-    if (paymentType) filter.paymentType = paymentType;
+    if (deal)          filter.deal          = new mongoose.Types.ObjectId(String(deal));
+    if (paymentType)   filter.paymentType   = paymentType;
     if (paymentMethod) filter.paymentMethod = paymentMethod;
-    if (status) filter.status = status;
-    if (search) filter.paymentNumber = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
+    if (status)        filter.status        = status;
+    if (search)        filter.paymentNumber = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
 
-    // totalCollected is the business-wide (or deal-scoped) sum of paid payments
     const collectedMatch = { business: bId, status: "paid" };
     if (deal) collectedMatch.deal = new mongoose.Types.ObjectId(String(deal));
 
@@ -54,7 +68,7 @@ export const listPayments = async (req, res, next) => {
 export const createPayment = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const userId = currentUserId(req);
+    const userId   = currentUserId(req);
 
     const deal = await SaleDeal.findOne({ _id: req.body.deal, business }).lean();
     if (!deal) return next(createError(400, "Deal not found"));
@@ -64,10 +78,16 @@ export const createPayment = async (req, res, next) => {
       { $match: { business: new mongoose.Types.ObjectId(String(business)), deal: deal._id, status: "paid" } },
       { $group: { _id: null, total: { $sum: "$amount" } } },
     ]);
-    const totalPaid = totalPaidResult[0]?.total || 0;
-    const remaining = deal.agreedPrice - totalPaid;
+    const totalPaid  = totalPaidResult[0]?.total || 0;
+    const remaining  = deal.agreedPrice - totalPaid;
     if (Number(req.body.amount) > remaining + 0.01) {
       return next(createError(400, `Payment of ${Number(req.body.amount).toLocaleString()} exceeds remaining balance of ${remaining.toLocaleString("en-KE", { minimumFractionDigits: 2 })}`));
+    }
+
+    // Resolve cashbook before saving — fail fast if invalid
+    const cashbookAcc = await resolveCashbook(business, req.body.cashbook);
+    if (req.body.cashbook && !cashbookAcc) {
+      return next(createError(400, "Selected cashbook account not found"));
     }
 
     const paymentNumber = await generateSequentialNumber(SalePayment, business, "PMT");
@@ -75,15 +95,26 @@ export const createPayment = async (req, res, next) => {
       ...req.body,
       business,
       paymentNumber,
-      listing: deal.listing,
-      buyer: deal.buyer,
-      status: "paid",
+      cashbook: cashbookAcc?._id || null,
+      listing:  deal.listing,
+      buyer:    deal.buyer,
+      status:   "paid",
       createdBy: userId,
       updatedBy: userId,
     });
-    postPropertySalePaymentLedger({ businessId: business, payment, userId }).catch((err) =>
-      console.error("[PS GL] postPropertySalePaymentLedger failed:", err.message)
-    );
+
+    try {
+      await postPropertySalePaymentLedger({
+        businessId: business,
+        payment,
+        userId,
+        cashbookAccountId: cashbookAcc?._id || null,
+      });
+    } catch (glErr) {
+      // GL failed — delete the payment so DB and ledger stay in sync
+      await SalePayment.deleteOne({ _id: payment._id });
+      return next(createError(500, `Payment saved but GL posting failed: ${glErr.message}. Payment has been rolled back.`));
+    }
 
     const populated = await populatePayment(SalePayment.findById(payment._id));
     res.status(201).json(populated);
@@ -95,8 +126,38 @@ export const createPayment = async (req, res, next) => {
 export const updatePayment = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const userId = currentUserId(req);
-    const { business: _b, paymentNumber: _n, createdBy: _c, deal: _d, listing: _l, buyer: _by, ...updates } = req.body;
+    const userId   = currentUserId(req);
+
+    const old = await SalePayment.findOne({ _id: req.params.id, business }).lean();
+    if (!old) return next(createError(404, "Payment not found"));
+    if (old.status === "cancelled") return next(createError(400, "Cannot edit a voided payment"));
+
+    const {
+      business: _b, paymentNumber: _n, createdBy: _c,
+      deal: _d, listing: _l, buyer: _by, status: _s,
+      ...updates
+    } = req.body;
+
+    // Resolve new cashbook if changed
+    const newCashbookId = updates.cashbook !== undefined ? updates.cashbook : String(old.cashbook || "");
+    const cashbookAcc   = await resolveCashbook(business, newCashbookId);
+    if (newCashbookId && !cashbookAcc) return next(createError(400, "Selected cashbook account not found"));
+    updates.cashbook = cashbookAcc?._id || null;
+
+    const amountChanged = updates.amount    !== undefined && Number(updates.amount)   !== Number(old.amount);
+    const dateChanged   = updates.paymentDate !== undefined && new Date(updates.paymentDate).toDateString() !== new Date(old.paymentDate).toDateString();
+    const cashbookChanged = String(updates.cashbook || "") !== String(old.cashbook || "");
+    const glCorrectionNeeded = amountChanged || dateChanged || cashbookChanged;
+
+    if (glCorrectionNeeded) {
+      // Reverse old GL entries first
+      try {
+        await reversePropertySalePaymentLedger({ businessId: business, payment: old, userId });
+      } catch (glErr) {
+        return next(createError(500, `GL reversal failed: ${glErr.message}. Payment not updated.`));
+      }
+    }
+
     const payment = await populatePayment(
       SalePayment.findOneAndUpdate(
         { _id: req.params.id, business },
@@ -105,6 +166,27 @@ export const updatePayment = async (req, res, next) => {
       )
     );
     if (!payment) return next(createError(404, "Payment not found"));
+
+    if (glCorrectionNeeded) {
+      try {
+        await postPropertySalePaymentLedger({
+          businessId: business,
+          payment,
+          userId,
+          cashbookAccountId: cashbookAcc?._id || null,
+        });
+      } catch (glErr) {
+        // Re-post of new GL failed — restore old GL so ledger isn't left empty
+        await postPropertySalePaymentLedger({
+          businessId: business,
+          payment: old,
+          userId,
+          cashbookAccountId: old.cashbook || null,
+        }).catch(() => {});
+        return next(createError(500, `GL re-posting failed: ${glErr.message}. Old GL has been restored.`));
+      }
+    }
+
     res.status(200).json(payment);
   } catch (err) {
     next(err);
@@ -114,16 +196,24 @@ export const updatePayment = async (req, res, next) => {
 export const voidPayment = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
+    const userId   = currentUserId(req);
+
     const payment = await SalePayment.findOne({ _id: req.params.id, business });
     if (!payment) return next(createError(404, "Payment not found"));
     if (payment.status === "cancelled") return next(createError(400, "Payment is already cancelled/voided"));
-    payment.status = "cancelled";
-    payment.updatedBy = currentUserId(req);
+
+    payment.status    = "cancelled";
+    payment.updatedBy = userId;
     await payment.save();
 
-    reversePropertySalePaymentLedger({ businessId: business, payment, userId: currentUserId(req) }).catch((err) =>
-      console.error("[PS GL] reversePropertySalePaymentLedger failed:", err.message)
-    );
+    try {
+      await reversePropertySalePaymentLedger({ businessId: business, payment, userId });
+    } catch (glErr) {
+      // GL reversal failed — restore payment status so records are consistent
+      payment.status = "paid";
+      await payment.save();
+      return next(createError(500, `GL reversal failed: ${glErr.message}. Payment void has been rolled back.`));
+    }
 
     const populated = await populatePayment(SalePayment.findById(payment._id));
     res.status(200).json(populated);
@@ -135,7 +225,7 @@ export const voidPayment = async (req, res, next) => {
 export const deletePayment = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const payment = await SalePayment.findOne({ _id: req.params.id, business });
+    const payment  = await SalePayment.findOne({ _id: req.params.id, business });
     if (!payment) return next(createError(404, "Payment not found"));
     if (payment.status === "paid") return next(createError(400, "Cannot delete a confirmed payment — void it first to reverse it"));
     await payment.deleteOne();

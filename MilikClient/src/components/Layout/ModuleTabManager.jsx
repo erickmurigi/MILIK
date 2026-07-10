@@ -9,6 +9,7 @@ import {
   getWorkspaceFromRoute,
 } from '../../utils/workspaceRoutes';
 import { hasCompanyModule } from '../../utils/companyModules';
+import { clearAllTabCache } from '../../hooks/useTabState';
 
 const MODULES = {
   [WORKSPACE_IDS.PROPERTY]: {
@@ -144,6 +145,7 @@ const ModuleTabManager = ({ darkMode }) => {
     const previousCompanyKey = previousCompanyKeyRef.current;
 
     if (previousCompanyKey !== currentCompanyKey) {
+      clearAllTabCache();
       setOpenModules([]);
       setActiveModule(null);
 
@@ -179,6 +181,7 @@ const ModuleTabManager = ({ darkMode }) => {
 
   const closeModule = (moduleId) => {
     if (!MODULES[moduleId]?.closable) return;
+    clearAllTabCache();
 
     const nextModules = openModules.filter((id) => id !== moduleId);
     setOpenModules(nextModules);

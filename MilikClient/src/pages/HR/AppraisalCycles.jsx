@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTabState } from "../../hooks/useTabState";
 import {
   FaPlus, FaRedoAlt, FaEdit, FaTrash, FaLock, FaUnlock,
   FaTimes, FaCheck, FaCalendarAlt,
@@ -40,10 +41,10 @@ function WeightBar({ total }) {
 
 export default function AppraisalCycles() {
   const queryClient = useQueryClient();
-  const [yearFilter, setYearFilter] = useState('');
-  const [statusFilter, setStatus]   = useState('');
-  const [pageSize, setPageSize]      = useState(DEFAULT_PAGE_SIZE);
-  const [page, setPage]             = useState(1);
+  const [yearFilter, setYearFilter] = useTabState('/hr/appraisals/cycles:yearFilter', '');
+  const [statusFilter, setStatus]   = useTabState('/hr/appraisals/cycles:statusFilter', '');
+  const [pageSize, setPageSize]      = useTabState('/hr/appraisals/cycles:pageSize', DEFAULT_PAGE_SIZE);
+  const [page, setPage]             = useTabState('/hr/appraisals/cycles:page', 1);
   const [modal, setModal]           = useState(null);
   const [form, setForm]             = useState(EMPTY);
   const [saving, setSaving]         = useState(false);

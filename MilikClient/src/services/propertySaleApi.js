@@ -23,7 +23,8 @@ export const saleApi = {
   createBuyer: async (payload) => unwrap(await adminRequests.post("/sale/buyers", payload)),
   updateBuyer: async (id, payload) => unwrap(await adminRequests.put(`/sale/buyers/${id}`, payload)),
   deleteBuyer: async (id) => unwrap(await adminRequests.delete(`/sale/buyers/${id}`)),
-  sendBuyerSms: async (id, payload) => unwrap(await adminRequests.post(`/sale/buyers/${id}/sms`, payload)),
+  sendBuyerSms:   async (id, payload) => unwrap(await adminRequests.post(`/sale/buyers/${id}/sms`,   payload)),
+  sendBuyerEmail: async (id, payload) => unwrap(await adminRequests.post(`/sale/buyers/${id}/email`, payload)),
 
   // Agents
   listAgents: async (params = {}) => unwrapPage(await adminRequests.get("/sale/agents", { params })),
@@ -48,7 +49,8 @@ export const saleApi = {
   closeDeal: async (id, payload = {}) => unwrap(await adminRequests.patch(`/sale/deals/${id}/close`, payload)),
   cancelDeal: async (id, payload = {}) => unwrap(await adminRequests.patch(`/sale/deals/${id}/cancel`, payload)),
   deleteDeal: async (id) => unwrap(await adminRequests.delete(`/sale/deals/${id}`)),
-  sendDealSms: async (id, payload) => unwrap(await adminRequests.post(`/sale/deals/${id}/sms`, payload)),
+  sendDealSms:   async (id, payload) => unwrap(await adminRequests.post(`/sale/deals/${id}/sms`,   payload)),
+  sendDealEmail: async (id, payload) => unwrap(await adminRequests.post(`/sale/deals/${id}/email`, payload)),
 
   // Payments
   listPayments: async (params = {}) => unwrapPage(await adminRequests.get("/sale/payments", { params })),
@@ -60,6 +62,17 @@ export const saleApi = {
   // Commissions
   listCommissions: async (params = {}) => unwrapPage(await adminRequests.get("/sale/commissions", { params })),
   updateCommissionStatus: async (id, payload) => unwrap(await adminRequests.patch(`/sale/commissions/${id}/status`, payload)),
+
+  // Cashbook accounts (for payment recording)
+  listCashbookAccounts: async (params = {}) => {
+    const res = await adminRequests.get("/chart-of-accounts", { params: { ...params, type: "asset" } });
+    const rows = res?.data?.data ?? res?.data ?? [];
+    return rows.filter((a) => {
+      if (!a || a.isHeader === true || a.isPosting === false) return false;
+      const text = `${a.name || ""} ${a.group || ""} ${a.subGroup || ""}`.toLowerCase();
+      return /cash|bank|m-?pesa|mobile money|wallet|petty|till|collection/.test(text);
+    });
+  },
 
   // Reports
   getDashboardStats: async (params = {}) => unwrap(await adminRequests.get("/sale/reports/dashboard", { params })),

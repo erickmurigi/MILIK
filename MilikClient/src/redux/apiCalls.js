@@ -1,6 +1,7 @@
 /* eslint-disable no-undef */
 import {adminRequests} from "../utils/requestMethods"
 import { clearClientSessionStorage } from "../utils/sessionCleanup";
+import { clearAllTabCache } from "../hooks/useTabState";
 
 
 
@@ -2516,6 +2517,7 @@ export const logoutUser = () => async (dispatch) => {
     invalidateAccessibleCompaniesCache();
     dispatch(clearCompanyState());
     clearClientSessionStorage();
+    clearAllTabCache();
 
     dispatch(logoutSuccess());
     return true;

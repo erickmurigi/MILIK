@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTabState } from "../../hooks/useTabState";
 import {
   FaPlus, FaRedoAlt, FaSearch, FaTimes, FaEdit, FaTrash, FaClock,
 } from 'react-icons/fa';
@@ -135,11 +136,11 @@ const PAGE_SIZE = 50;
 
 export default function HRAttendance() {
   const queryClient = useQueryClient();
-  const [empFilter,   setEmpFilter]   = useState('');
-  const [monthFilter, setMonthFilter] = useState(String(new Date().getMonth() + 1));
-  const [yearFilter,  setYearFilter]  = useState(String(thisYear));
-  const [search,      setSearch]      = useState('');
-  const [page,        setPage]        = useState(1);
+  const [empFilter,   setEmpFilter]   = useTabState('/hr/attendance:empFilter', '');
+  const [monthFilter, setMonthFilter] = useTabState('/hr/attendance:monthFilter', String(new Date().getMonth() + 1));
+  const [yearFilter,  setYearFilter]  = useTabState('/hr/attendance:yearFilter', String(thisYear));
+  const [search,      setSearch]      = useTabState('/hr/attendance:search', '');
+  const [page,        setPage]        = useTabState('/hr/attendance:page', 1);
   const [modal,       setModal]       = useState(null); // null | 'add' | record object
   const [delTarget,   setDelTarget]   = useState(null);
 

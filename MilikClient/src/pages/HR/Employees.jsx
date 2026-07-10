@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
+import { useTabState } from "../../hooks/useTabState";
 import {
   FaSearch, FaUserPlus, FaEdit, FaRedoAlt, FaUserTimes,
   FaUserCheck, FaEye, FaFilter, FaPrint,
@@ -43,11 +44,11 @@ const Pagination = ({ page, totalPages, total, onPage }) => (
 export default function Employees() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [search, setSearch] = useState('');
-  const [deptFilter, setDeptFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [typeFilter, setTypeFilter] = useState('all');
-  const [page, setPage] = useState(1);
+  const [search, setSearch] = useTabState('/hr/employees:search', '');
+  const [deptFilter, setDeptFilter] = useTabState('/hr/employees:deptFilter', 'all');
+  const [statusFilter, setStatusFilter] = useTabState('/hr/employees:statusFilter', 'all');
+  const [typeFilter, setTypeFilter] = useTabState('/hr/employees:typeFilter', 'all');
+  const [page, setPage] = useTabState('/hr/employees:page', 1);
   const [confirm, setConfirm] = useState({ isOpen: false });
 
   const { data: empData, isLoading: loading, error, refetch } = useQuery({

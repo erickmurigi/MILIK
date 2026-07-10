@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTabState } from "../../hooks/useTabState";
 import {
   FaPlus, FaRedoAlt, FaEdit, FaTrash, FaToggleOn, FaToggleOff,
   FaTimes, FaCheck,
@@ -27,10 +28,10 @@ const FW = `${F} w-full`;
 
 export default function KpiLibrary() {
   const queryClient = useQueryClient();
-  const [search, setSearch]         = useState('');
-  const [catFilter, setCatFilter]   = useState('');
+  const [search, setSearch]         = useTabState('/hr/appraisals/kpis:search', '');
+  const [catFilter, setCatFilter]   = useTabState('/hr/appraisals/kpis:catFilter', '');
   const [activeOnly, setActiveOnly] = useState(false);
-  const [page, setPage]             = useState(1);
+  const [page, setPage]             = useTabState('/hr/appraisals/kpis:page', 1);
   const [modal, setModal]           = useState(null);
   const [form, setForm]             = useState(EMPTY);
   const [saving, setSaving]         = useState(false);

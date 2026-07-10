@@ -12,6 +12,7 @@ import PaginationBar from "../../components/PaginationBar";
 import { saleApi, fmtKES, todayISO } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
 import useDebounce from "../../hooks/useDebounce";
+import { useTabState } from "../../hooks/useTabState";
 import AmountInput from "./AmountInput";
 
 // Normalise image URLs — strips absolute origin from legacy URLs so relative
@@ -72,12 +73,12 @@ const SaleListings = () => {
   const [showModal,  setShowModal]  = useState(false);
   const [editingId,  setEditingId]  = useState("");
   const [form,       setForm]       = useState(blankForm);
-  const [search,     setSearch]     = useState("");
-  const [statusFilt, setStatusFilt] = useState("");
-  const [typeFilt,   setTypeFilt]   = useState("");
-  const [page,       setPage]       = useState(1);
-  const [pageSize,   setPageSize]   = useState(PAGE_SIZE);
-  const [selected,   setSelected]   = useState(null);
+  const [search,     setSearch]     = useTabState("/sale/listings:search", "");
+  const [statusFilt, setStatusFilt] = useTabState("/sale/listings:statusFilt", "");
+  const [typeFilt,   setTypeFilt]   = useTabState("/sale/listings:typeFilt", "");
+  const [page,       setPage]       = useTabState("/sale/listings:page", 1);
+  const [pageSize,   setPageSize]   = useTabState("/sale/listings:pageSize", PAGE_SIZE);
+  const [selected,   setSelected]   = useTabState("/sale/listings:selected", null);
   const [uploading,  setUploading]  = useState(false);
   const [lightbox,   setLightbox]   = useState({ open: false, index: 0 });
 
@@ -453,6 +454,11 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
           <PaginationBar page={page} pages={totalPages} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} loading={isFetching} />
         </div>
 
+        {/* Dismiss overlay — clicking outside the panel closes it */}
+        {selected && (
+          <div className="absolute inset-0 z-[5]" onClick={() => setSelected(null)} />
+        )}
+
         {/* Images Detail Panel */}
         {selected && (
           <div className="absolute right-0 top-0 bottom-0 w-[360px] flex flex-col bg-white border-l border-slate-200 shadow-xl z-10 overflow-hidden">
@@ -512,6 +518,8 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
                         <img
                           src={imgSrc(url)}
                           alt={`Photo ${idx + 1}`}
+                          loading="lazy"
+                          decoding="async"
                           className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
                         />
                         {/* dark hover overlay */}
