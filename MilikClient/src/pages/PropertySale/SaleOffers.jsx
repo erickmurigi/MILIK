@@ -1,8 +1,10 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useState } from "react";
 import { useSelector } from "react-redux";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-toastify";
 import { FaCheck, FaEdit, FaHandshake, FaPlus, FaPrint, FaTimes } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
+import PaginationBar from "../../components/PaginationBar";
 import { fmtKES, saleApi, todayISO } from "../../services/propertySaleApi";
 import AmountInput from "./AmountInput";
 import { useConfirm } from "../../context/ConfirmContext";
@@ -26,17 +28,14 @@ const SaleOffers = () => {
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const biz = currentCompany?._id;
   const confirm = useConfirm();
+  const queryClient = useQueryClient();
 
-  const [offers, setOffers] = useState([]);
-  const [listings, setListings] = useState([]);
-  const [buyers, setBuyers] = useState([]);
-  const [agents, setAgents] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 400);
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
+  const [pageSize, setPageSize] = useState(LIMIT);
+
   const [showCreate, setShowCreate] = useState(false);
   const [showStatus, setShowStatus] = useState(null);
   const [showConvertDeal, setShowConvertDeal] = useState(null);
@@ -46,39 +45,48 @@ const SaleOffers = () => {
   const [saving, setSaving] = useState(false);
   const [converting, setConverting] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!biz) return;
-    setLoading(true);
-    try {
-      const res = await saleApi.listOffers({
-        business: biz, limit: LIMIT, page,
-        ...(statusFilter && { status: statusFilter }),
-        ...(debouncedSearch && { search: debouncedSearch }),
-      });
-      const items = Array.isArray(res) ? res : (res?.offers ?? []);
-      setOffers(items);
-      setTotal(res?.total ?? items.length);
-    } catch {
-      toast.error("Failed to load offers");
-    } finally {
-      setLoading(false);
-    }
-  }, [biz, page, statusFilter, debouncedSearch]);
+  // ── Queries ────────────────────────────────────────────────────────────────
+  const { data: offersPage, isFetching } = useQuery({
+    queryKey: ["sale-offers", biz, debouncedSearch, statusFilter, page, pageSize],
+    queryFn: () => saleApi.listOffers({
+      business: biz, limit: pageSize, page,
+      ...(statusFilter && { status: statusFilter }),
+      ...(debouncedSearch && { search: debouncedSearch }),
+    }),
+    enabled: !!biz,
+    placeholderData: (prev) => prev,
+    staleTime: 30_000,
+  });
+  const offers = offersPage?.data ?? [];
+  const total = offersPage?.total ?? 0;
 
-  useEffect(() => { load(); }, [load]);
+  const { data: listingsPage } = useQuery({
+    queryKey: ["sale-listings-ref", biz],
+    queryFn: () => saleApi.listListings({ business: biz, limit: 200 }),
+    enabled: !!biz,
+    staleTime: 60_000,
+  });
+  const listings = listingsPage?.data ?? [];
 
-  useEffect(() => {
-    if (!biz) return;
-    const p = { business: biz, limit: 200 };
-    Promise.all([saleApi.listListings(p), saleApi.listBuyers(p), saleApi.listAgents(p)])
-      .then(([{ data: l }, { data: b }, { data: a }]) => {
-        setListings(l ?? []);
-        setBuyers(b ?? []);
-        setAgents(a ?? []);
-      })
-      .catch(() => {});
-  }, [biz]);
+  const { data: buyersPage } = useQuery({
+    queryKey: ["sale-buyers-ref", biz],
+    queryFn: () => saleApi.listBuyers({ business: biz, limit: 200 }),
+    enabled: !!biz,
+    staleTime: 60_000,
+  });
+  const buyers = buyersPage?.data ?? [];
 
+  const { data: agentsPage } = useQuery({
+    queryKey: ["sale-agents-ref", biz],
+    queryFn: () => saleApi.listAgents({ business: biz, limit: 200 }),
+    enabled: !!biz,
+    staleTime: 60_000,
+  });
+  const agents = agentsPage?.data ?? [];
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["sale-offers", biz] });
+
+  // ── Handlers ───────────────────────────────────────────────────────────────
   const handleCreate = async (e) => {
     e.preventDefault();
     if (!form.listing || !form.buyer || !form.offerAmount) {
@@ -91,7 +99,7 @@ const SaleOffers = () => {
       toast.success("Offer recorded");
       setShowCreate(false);
       setForm(EMPTY_FORM);
-      load();
+      invalidate();
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to record offer");
     } finally {
@@ -108,7 +116,7 @@ const SaleOffers = () => {
       toast.success("Offer status updated");
       setShowStatus(null);
       setStatusForm(EMPTY_STATUS);
-      load();
+      invalidate();
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to update status");
     } finally {
@@ -130,7 +138,7 @@ const SaleOffers = () => {
         business: biz,
       });
       toast.success("Counter offer accepted — offer is now Accepted");
-      load();
+      invalidate();
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to accept counter offer");
     } finally {
@@ -153,7 +161,7 @@ const SaleOffers = () => {
         business: biz,
       });
       toast.success("Offer rejected");
-      load();
+      invalidate();
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to reject offer");
     } finally {
@@ -183,7 +191,7 @@ const SaleOffers = () => {
       toast.success("Deal created successfully! View it in the Deals section.");
       setShowConvertDeal(null);
       setDealForm(EMPTY_DEAL);
-      load();
+      invalidate();
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to create deal");
     } finally {
@@ -201,7 +209,7 @@ const SaleOffers = () => {
     try {
       await saleApi.deleteOffer(offer._id);
       toast.success("Offer deleted");
-      load();
+      invalidate();
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to delete");
     }
@@ -214,21 +222,21 @@ const SaleOffers = () => {
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;background:#fff}
 .page{max-width:210mm;margin:0 auto;padding:18mm 18mm 14mm}
-.hdr{border-bottom:3px solid #027333;padding-bottom:10px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:flex-start}
-.brand{font-size:22px;font-weight:900;color:#027333;letter-spacing:2px}
+.hdr{border-bottom:3px solid #0B3B2E;padding-bottom:10px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:flex-start}
+.brand{font-size:22px;font-weight:900;color:#0B3B2E;letter-spacing:2px}
 .brand img{height:52px;object-fit:contain}
 .co-info{text-align:right;font-size:9.5px;color:#444;line-height:1.7}
 .doc-title{text-align:center;margin:16px 0 18px}
-.doc-title h1{font-size:18px;font-weight:900;letter-spacing:3px;color:#027333;text-transform:uppercase}
+.doc-title h1{font-size:18px;font-weight:900;letter-spacing:3px;color:#0B3B2E;text-transform:uppercase}
 .doc-title p{font-size:10px;color:#555;margin-top:3px}
 .ref-bar{display:flex;justify-content:space-between;background:#f8fafb;border:1px solid #e0e7ef;border-radius:6px;padding:10px 14px;margin-bottom:18px;font-size:10px}
-.ref-bar span{font-weight:700;color:#027333}
-.sec{font-size:9px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#027333;border-bottom:1.5px solid #027333;padding-bottom:4px;margin:16px 0 10px}
+.ref-bar span{font-weight:700;color:#0B3B2E}
+.sec{font-size:9px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#0B3B2E;border-bottom:1.5px solid #0B3B2E;padding-bottom:4px;margin:16px 0 10px}
 .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 14px}
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
 .f label{font-size:8.5px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:2px}
 .f span{font-size:11px;font-weight:600;color:#111;display:block;padding:5px 8px;border:1px solid #e5e7eb;border-radius:4px;background:#fafafa;min-height:26px}
-.price-box{background:#027333;color:#fff;border-radius:8px;padding:14px 20px;margin:16px 0;display:flex;justify-content:space-between;align-items:center}
+.price-box{background:#0B3B2E;color:#fff;border-radius:8px;padding:14px 20px;margin:16px 0;display:flex;justify-content:space-between;align-items:center}
 .price-box .lbl{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;opacity:.8}
 .price-box .amt{font-size:22px;font-weight:900;font-family:monospace}
 .counter-box{background:#5b21b6;color:#fff;border-radius:8px;padding:10px 20px;margin:-8px 0 16px;display:flex;justify-content:space-between;align-items:center}
@@ -236,7 +244,7 @@ body{font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;background:#fff}
 .sigs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;margin-top:32px}
 .sig{border-top:1.5px solid #333;padding-top:6px}
 .sig p{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#555;margin-top:2px}
-.footer{margin-top:24px;padding-top:10px;border-top:1.5px solid #027333;font-size:8.5px;color:#777;text-align:center}
+.footer{margin-top:24px;padding-top:10px;border-top:1.5px solid #0B3B2E;font-size:8.5px;color:#777;text-align:center}
 @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style></head><body><div class="page">
 <div class="hdr">
@@ -301,10 +309,7 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
     w.onload = () => w.print();
   };
 
-  const pending = offers.filter((o) => o.status === "pending").length;
-  const countered = offers.filter((o) => o.status === "negotiating").length;
-  const accepted = offers.filter((o) => o.status === "accepted").length;
-  const totalPages = Math.ceil(total / LIMIT);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
     <PropertySaleShell
@@ -313,56 +318,41 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
       action={
         <button
           onClick={() => { setForm(EMPTY_FORM); setShowCreate(true); }}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#027333] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0c5d2b]"
+          className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
         >
-          <FaPlus /> New Offer
+          <FaPlus size={9} /> New Offer
         </button>
       }
     >
-      <div className="flex h-full flex-col gap-2">
-        {/* KPI Strip */}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {[
-            { label: "Total", value: loading ? "—" : total, cls: "bg-slate-900 text-white" },
-            { label: "Pending", value: loading ? "—" : pending, cls: "bg-amber-50 border border-amber-200 text-amber-800" },
-            { label: "Counter Active", value: loading ? "—" : countered, cls: "bg-violet-50 border border-violet-200 text-violet-800" },
-            { label: "Accepted", value: loading ? "—" : accepted, cls: "bg-emerald-50 border border-emerald-200 text-emerald-800" },
-          ].map((c) => (
-            <div key={c.label} className={`rounded-lg px-3 py-2 ${c.cls}`}>
-              <div className="text-[10px] font-black uppercase tracking-wider opacity-70">{c.label}</div>
-              <div className="mt-0.5 text-sm font-black">{c.value}</div>
-            </div>
-          ))}
-        </div>
-
+      <div className="flex-1 min-h-0 flex flex-col gap-1">
         {/* Filters */}
-        <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+        <div className="mb-1 flex flex-wrap items-center gap-1 border border-slate-200 bg-white px-2 py-1 shadow-sm">
           <input
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            placeholder="Search offer / listing / buyer..."
-            className="h-8 min-w-[180px] flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs focus:border-[#027333] focus:outline-none focus:ring-1 focus:ring-[#027333]"
+            placeholder="Search offer / listing / buyer…"
+            className="h-7 min-w-[180px] flex-1 border border-slate-300 px-2 text-xs focus:border-[#0B3B2E] focus:outline-none"
           />
           <select
             value={statusFilter}
             onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-            className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs focus:border-[#027333] focus:outline-none"
+            className="h-7 border border-[#B7C9C0] bg-[#F1F6F3] px-1.5 text-xs font-semibold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
           >
             <option value="">All Statuses</option>
             {["pending", "negotiating", "accepted", "rejected", "expired", "withdrawn"].map((s) => (
               <option key={s} value={s}>{s === "negotiating" ? "Counter Active" : s.charAt(0).toUpperCase() + s.slice(1)}</option>
             ))}
           </select>
-          <button onClick={load} className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-600 hover:bg-slate-100">
+          <button type="button" onClick={invalidate} className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
             Refresh
           </button>
         </div>
 
         {/* Table */}
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">
           <div className="min-h-0 flex-1 overflow-auto">
             <table className="min-w-full text-[11px] border-collapse">
-              <thead className="sticky top-0 z-10 bg-[#027333] text-white">
+              <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                 <tr>
                   <th className="px-3 py-1 text-left font-bold border-r border-white/10">Offer No.</th>
                   <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
@@ -376,7 +366,7 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
                 </tr>
               </thead>
               <tbody>
-                {loading ? (
+                {isFetching && offers.length === 0 ? (
                   <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-400">Loading offers...</td></tr>
                 ) : offers.length === 0 ? (
                   <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-400">No offers found.</td></tr>
@@ -384,13 +374,12 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
                   const hasCounter = !!o.counterOfferAmount;
                   const isCounterActive = o.status === "negotiating" && hasCounter;
                   const isAccepted = o.status === "accepted";
-                  const finalPrice = hasCounter ? o.counterOfferAmount : o.offerAmount;
                   const counterDelta = hasCounter
                     ? Math.round(((o.counterOfferAmount - o.offerAmount) / o.offerAmount) * 100)
                     : null;
 
                   return (
-                    <tr key={o._id} className={`border-b border-gray-100 transition ${isCounterActive ? "bg-violet-50/40" : i % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                    <tr key={o._id} className={`border-b border-slate-100 ${isCounterActive ? "bg-[#F1F6F3]" : i % 2 === 0 ? "bg-white hover:bg-[#F1F6F3]" : "bg-slate-50/60 hover:bg-[#F1F6F3]"}`}>
                       <td className="px-3 py-1 border-r border-gray-100 font-black text-slate-900">{o.offerNumber}</td>
                       <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{o.listing?.title || o.listing?.listingNumber || "—"}</td>
                       <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{o.buyer?.fullName || "—"}</td>
@@ -416,12 +405,12 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
                             </div>
                             <div className="mt-0.5 flex items-center justify-end gap-1">
                               {isCounterActive && (
-                                <span className="inline-flex rounded-full border border-violet-300 bg-violet-100 px-1.5 py-0 text-[9px] font-black uppercase tracking-wider text-violet-700">
+                                <span className="inline-flex border border-violet-300 bg-violet-100 px-1.5 py-0 text-[9px] font-black uppercase tracking-wider text-violet-700">
                                   counter
                                 </span>
                               )}
                               {isAccepted && (
-                                <span className="inline-flex rounded-full border border-emerald-300 bg-emerald-100 px-1.5 py-0 text-[9px] font-black uppercase tracking-wider text-emerald-700">
+                                <span className="inline-flex border border-emerald-300 bg-emerald-100 px-1.5 py-0 text-[9px] font-black uppercase tracking-wider text-emerald-700">
                                   final
                                 </span>
                               )}
@@ -435,7 +424,7 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
                         ) : isAccepted ? (
                           <div>
                             <div className="font-black text-emerald-700">{fmtKES(o.offerAmount)}</div>
-                            <span className="inline-flex rounded-full border border-emerald-300 bg-emerald-100 px-1.5 py-0 text-[9px] font-black uppercase tracking-wider text-emerald-700">final</span>
+                            <span className="inline-flex border border-emerald-300 bg-emerald-100 px-1.5 py-0 text-[9px] font-black uppercase tracking-wider text-emerald-700">final</span>
                           </div>
                         ) : (
                           <span className="text-slate-300">—</span>
@@ -446,7 +435,7 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
 
                       {/* Status badge */}
                       <td className="px-3 py-1 border-r border-gray-100">
-                        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${STATUS_BADGE[o.status] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
+                        <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${STATUS_BADGE[o.status] || "border-slate-200 bg-slate-100 text-slate-600"}`}>
                           {isCounterActive ? "Counter Active" : o.status}
                         </span>
                       </td>
@@ -454,57 +443,53 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
                       {/* Actions */}
                       <td className="px-3 py-1">
                         <div className="inline-flex flex-wrap justify-end gap-1">
-                          <button onClick={() => printOffer(o)} title="Print" className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50">
-                            <FaPrint />
+                          <button onClick={() => printOffer(o)} title="Print" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                            <FaPrint size={9} />
                           </button>
 
-                          {/* Counter active: Accept / Reject quick actions */}
                           {isCounterActive && (
                             <>
                               <button
                                 onClick={() => handleAcceptCounter(o)}
                                 disabled={saving}
                                 title="Accept Counter Offer"
-                                className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40"
+                                className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40"
                               >
-                                <FaCheck /> Accept
+                                <FaCheck size={9} /> Accept
                               </button>
                               <button
                                 onClick={() => handleRejectCounter(o)}
                                 disabled={saving}
                                 title="Reject Counter Offer"
-                                className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[10px] font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-40"
+                                className="inline-flex items-center gap-1 border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-40"
                               >
-                                <FaTimes /> Reject
+                                <FaTimes size={9} /> Reject
                               </button>
                             </>
                           )}
 
-                          {/* Accepted: Convert to Deal */}
                           {isAccepted && (
                             <button
                               onClick={() => handleOpenConvertDeal(o)}
                               title="Convert to Deal"
-                              className="inline-flex items-center gap-1 rounded-lg border border-[#027333]/30 bg-[#027333]/10 px-2.5 py-1.5 text-[10px] font-bold text-[#027333] hover:bg-[#027333]/20"
+                              className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-[#F1F6F3] px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#B7C9C0]/40"
                             >
-                              <FaHandshake /> Deal
+                              <FaHandshake size={9} /> Deal
                             </button>
                           )}
 
-                          {/* Edit status — available for pending and negotiating */}
                           {["pending", "negotiating"].includes(o.status) && (
                             <button
                               title={isCounterActive ? "Edit Counter / Change Status" : "Update Status"}
                               onClick={() => { setShowStatus(o); setStatusForm({ ...EMPTY_STATUS, counterOfferAmount: o.counterOfferAmount || "" }); }}
-                              className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[10px] font-bold text-blue-700 hover:bg-blue-100"
+                              className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
                             >
                               <FaEdit />
                             </button>
                           )}
 
-                          {/* Delete — only when terminal or not yet active */}
                           {["pending", "rejected", "expired", "withdrawn"].includes(o.status) && (
-                            <button onClick={() => handleDelete(o)} title="Delete" className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1.5 text-[10px] font-bold text-rose-700 hover:bg-rose-100">
+                            <button onClick={() => handleDelete(o)} title="Delete" className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600 hover:bg-rose-100">
                               <FaTimes />
                             </button>
                           )}
@@ -516,34 +501,26 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
               </tbody>
             </table>
           </div>
-          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-white px-4 py-2 text-xs text-slate-500">
-            <span>{total} offer(s)</span>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="rounded-lg border border-slate-200 px-3 py-1 font-semibold disabled:opacity-40">Prev</button>
-              <span>Page {page} of {Math.max(1, totalPages)}</span>
-              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="rounded-lg border border-slate-200 px-3 py-1 font-semibold disabled:opacity-40">Next</button>
-            </div>
-          </div>
+          <PaginationBar page={page} pages={totalPages} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} loading={isFetching} />
         </div>
       </div>
 
       {/* Create Offer Modal */}
       {showCreate && (
-        <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 sm:items-center">
-          <form onSubmit={handleCreate} className="flex w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
-            <div className="flex shrink-0 items-center justify-between bg-[#027333] px-5 py-4 text-white">
+        <div className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
+          <form onSubmit={handleCreate} className="flex w-full max-w-lg flex-col bg-white shadow-2xl sm:border sm:border-slate-200 max-h-[92dvh] rounded-t-2xl sm:rounded-none">
+            <div className="flex-shrink-0 flex items-start justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
               <div>
-                <div className="text-sm font-black tracking-wide">Record New Offer</div>
-                <div className="text-[10px] opacity-75">Formal purchase offer against a listing</div>
+                <div className="text-sm font-extrabold uppercase tracking-wide">Record New Offer</div>
+                <div className="text-xs font-semibold text-white/70">Formal purchase offer against a listing</div>
               </div>
-              <button type="button" onClick={() => setShowCreate(false)}
-                className="rounded-lg border border-white/20 px-3 py-1.5 text-xs hover:bg-white/10">Close</button>
+              <button type="button" onClick={() => setShowCreate(false)} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
             </div>
             <div className="grid gap-4 overflow-y-auto p-5 md:grid-cols-2">
               <div className="md:col-span-2">
                 <label className="mb-0.5 block text-xs font-semibold text-slate-700">Listing *</label>
                 <select value={form.listing} onChange={(e) => setForm((f) => ({ ...f, listing: e.target.value }))}
-                  className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" required>
+                  className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none" required>
                   <option value="">Select listing</option>
                   {listings.filter((l) => ["available", "reserved"].includes(l.status)).map((l) => (
                     <option key={l._id} value={l._id}>{l.listingNumber} — {l.title}</option>
@@ -553,7 +530,7 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
               <div>
                 <label className="mb-0.5 block text-xs font-semibold text-slate-700">Buyer *</label>
                 <select value={form.buyer} onChange={(e) => setForm((f) => ({ ...f, buyer: e.target.value }))}
-                  className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" required>
+                  className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none" required>
                   <option value="">Select buyer</option>
                   {buyers.map((b) => <option key={b._id} value={b._id}>{b.buyerNumber} — {b.fullName}</option>)}
                 </select>
@@ -561,7 +538,7 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
               <div>
                 <label className="mb-0.5 block text-xs font-semibold text-slate-700">Sales Agent</label>
                 <select value={form.agent} onChange={(e) => setForm((f) => ({ ...f, agent: e.target.value }))}
-                  className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20">
+                  className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none">
                   <option value="">Unassigned</option>
                   {agents.filter((a) => a.status === "active").map((a) => (
                     <option key={a._id} value={a._id}>{a.agentNumber} — {a.fullName}</option>
@@ -573,7 +550,7 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
                 <AmountInput
                   value={form.offerAmount}
                   onChange={(v) => setForm((f) => ({ ...f, offerAmount: v }))}
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs outline-none focus:border-[#027333]"
+                  className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none"
                   placeholder="e.g. 5,000,000"
                   required
                 />
@@ -582,20 +559,18 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
                 <label className="mb-0.5 block text-xs font-semibold text-slate-700">Validity Date</label>
                 <input type="date" value={form.validityDate}
                   onChange={(e) => setForm((f) => ({ ...f, validityDate: e.target.value }))}
-                  className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
+                  className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none" />
               </div>
               <div className="md:col-span-2">
                 <label className="mb-0.5 block text-xs font-semibold text-slate-700">Notes</label>
                 <textarea rows={2} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                  className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
+                  className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none" />
               </div>
             </div>
-            <div className="flex shrink-0 items-center justify-end gap-3 border-t border-slate-200 bg-white px-5 py-4">
-              <button type="button" onClick={() => setShowCreate(false)}
-                className="rounded-lg border border-slate-200 px-4 py-2 text-xs text-slate-600 hover:bg-slate-50">Cancel</button>
-              <button type="submit" disabled={saving}
-                className="rounded-lg bg-[#027333] px-5 py-2 text-xs font-bold text-white hover:bg-[#0c5d2b] disabled:opacity-50">
-                {saving ? "Saving..." : "Record Offer"}
+            <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+              <button type="button" onClick={() => setShowCreate(false)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button type="submit" disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+                {saving ? "Saving…" : "Record Offer"}
               </button>
             </div>
           </form>
@@ -604,30 +579,28 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
 
       {/* Status Update Modal */}
       {showStatus && (
-        <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 sm:items-center">
-          <form onSubmit={handleStatusUpdate} className="flex w-full max-w-md flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
-            <div className="flex shrink-0 items-center justify-between bg-slate-800 px-5 py-4 text-white">
+        <div className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
+          <form onSubmit={handleStatusUpdate} className="flex w-full max-w-md flex-col bg-white shadow-2xl sm:border sm:border-slate-200 max-h-[92dvh] rounded-t-2xl sm:rounded-none">
+            <div className="flex-shrink-0 flex items-start justify-between gap-3 border-b border-slate-200 bg-slate-800 px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
               <div>
-                <div className="text-sm font-black tracking-wide">Update Offer Status</div>
-                <div className="text-[10px] opacity-75">{showStatus.offerNumber} — {showStatus.listing?.title || ""}</div>
+                <div className="text-sm font-extrabold uppercase tracking-wide">Update Offer Status</div>
+                <div className="text-xs font-semibold text-white/70">{showStatus.offerNumber} — {showStatus.listing?.title || ""}</div>
               </div>
-              <button type="button" onClick={() => setShowStatus(null)}
-                className="rounded-lg border border-white/20 px-3 py-1.5 text-xs hover:bg-white/10">Close</button>
+              <button type="button" onClick={() => setShowStatus(null)} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
             </div>
             <div className="grid gap-4 overflow-y-auto p-5">
-              {/* Price context */}
               <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs">
+                <div className="border border-slate-100 bg-slate-50 px-3 py-2 text-xs">
                   <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">Buyer's Offer</div>
                   <div className="font-black text-slate-900">{fmtKES(showStatus.offerAmount)}</div>
                 </div>
                 {showStatus.counterOfferAmount ? (
-                  <div className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs">
+                  <div className="border border-violet-200 bg-violet-50 px-3 py-2 text-xs">
                     <div className="text-[10px] font-black uppercase tracking-wider text-violet-500">Current Counter</div>
                     <div className="font-black text-violet-800">{fmtKES(showStatus.counterOfferAmount)}</div>
                   </div>
                 ) : (
-                  <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs">
+                  <div className="border border-slate-100 bg-slate-50 px-3 py-2 text-xs">
                     <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">Asking Price</div>
                     <div className="font-black text-slate-900">{fmtKES(showStatus.listing?.askingPrice)}</div>
                   </div>
@@ -637,7 +610,7 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
               <div>
                 <label className="mb-0.5 block text-xs font-semibold text-slate-700">New Status *</label>
                 <select value={statusForm.status} onChange={(e) => setStatusForm((f) => ({ ...f, status: e.target.value }))}
-                  className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" required>
+                  className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none" required>
                   <option value="">Select status</option>
                   <option value="negotiating">Send Counter Offer</option>
                   <option value="accepted">Accept Offer / Counter</option>
@@ -649,13 +622,11 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
 
               {statusForm.status === "negotiating" && (
                 <div>
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">
-                    Counter-Offer Amount (KES) *
-                  </label>
+                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Counter-Offer Amount (KES) *</label>
                   <AmountInput
                     value={statusForm.counterOfferAmount}
                     onChange={(v) => setStatusForm((f) => ({ ...f, counterOfferAmount: v }))}
-                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs outline-none focus:border-[#027333]"
+                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none"
                     placeholder="e.g. 5,500,000"
                   />
                   {statusForm.counterOfferAmount && showStatus.offerAmount && (
@@ -668,14 +639,10 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
               )}
 
               {statusForm.status === "accepted" && (
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px] text-emerald-800">
+                <div className="border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px] text-emerald-800">
                   <span className="font-black">Accepted price: </span>
-                  <span className="font-bold">
-                    {fmtKES(showStatus.counterOfferAmount || showStatus.offerAmount)}
-                  </span>
-                  {showStatus.counterOfferAmount && (
-                    <span className="ml-1 opacity-70">(counter offer)</span>
-                  )}
+                  <span className="font-bold">{fmtKES(showStatus.counterOfferAmount || showStatus.offerAmount)}</span>
+                  {showStatus.counterOfferAmount && <span className="ml-1 opacity-70">(counter offer)</span>}
                   <div className="mt-1 opacity-80">After accepting, use the <strong>Deal</strong> button to convert this offer into a transaction.</div>
                 </div>
               )}
@@ -684,15 +651,13 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
                 <label className="mb-0.5 block text-xs font-semibold text-slate-700">Notes</label>
                 <textarea rows={2} value={statusForm.negotiationNotes}
                   onChange={(e) => setStatusForm((f) => ({ ...f, negotiationNotes: e.target.value }))}
-                  className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
+                  className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none" />
               </div>
             </div>
-            <div className="flex shrink-0 items-center justify-end gap-3 border-t border-slate-200 bg-white px-5 py-4">
-              <button type="button" onClick={() => setShowStatus(null)}
-                className="rounded-lg border border-slate-200 px-4 py-2 text-xs text-slate-600 hover:bg-slate-50">Cancel</button>
-              <button type="submit" disabled={saving}
-                className="rounded-lg bg-[#027333] px-5 py-2 text-xs font-bold text-white hover:bg-[#0c5d2b] disabled:opacity-50">
-                {saving ? "Saving..." : "Update Status"}
+            <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+              <button type="button" onClick={() => setShowStatus(null)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button type="submit" disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+                {saving ? "Saving…" : "Update Status"}
               </button>
             </div>
           </form>
@@ -701,20 +666,18 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
 
       {/* Convert to Deal Modal */}
       {showConvertDeal && (
-        <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 sm:items-center">
-          <form onSubmit={handleConvertDeal} className="flex w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
-            <div className="flex shrink-0 items-center justify-between bg-[#027333] px-5 py-4 text-white">
+        <div className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
+          <form onSubmit={handleConvertDeal} className="flex w-full max-w-lg flex-col bg-white shadow-2xl sm:border sm:border-slate-200 max-h-[92dvh] rounded-t-2xl sm:rounded-none">
+            <div className="flex-shrink-0 flex items-start justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
               <div>
-                <div className="text-sm font-black tracking-wide">Convert Offer to Deal</div>
-                <div className="text-[10px] opacity-75">{showConvertDeal.offerNumber} — {showConvertDeal.buyer?.fullName || ""}</div>
+                <div className="text-sm font-extrabold uppercase tracking-wide">Convert Offer to Deal</div>
+                <div className="text-xs font-semibold text-white/70">{showConvertDeal.offerNumber} — {showConvertDeal.buyer?.fullName || ""}</div>
               </div>
-              <button type="button" onClick={() => setShowConvertDeal(null)}
-                className="rounded-lg border border-white/20 px-3 py-1.5 text-xs hover:bg-white/10">Close</button>
+              <button type="button" onClick={() => setShowConvertDeal(null)} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
             </div>
             <div className="grid gap-4 overflow-y-auto p-5 md:grid-cols-2">
-              {/* Price summary */}
               <div className="md:col-span-2">
-                <div className="grid grid-cols-3 gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                <div className="grid grid-cols-3 gap-2 border border-emerald-200 bg-emerald-50 p-3">
                   <div className="text-center">
                     <div className="text-[10px] font-black uppercase tracking-wider text-emerald-500">Asking</div>
                     <div className="font-black text-emerald-900">{fmtKES(showConvertDeal.listing?.askingPrice)}</div>
@@ -739,7 +702,7 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
                 <AmountInput
                   value={dealForm.agreedPrice}
                   onChange={(v) => setDealForm((f) => ({ ...f, agreedPrice: v }))}
-                  className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20"
+                  className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none"
                   placeholder="Confirmed sale price"
                   required
                 />
@@ -750,12 +713,12 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
                 <label className="mb-0.5 block text-xs font-semibold text-slate-700">Deal Date *</label>
                 <input type="date" value={dealForm.dealDate}
                   onChange={(e) => setDealForm((f) => ({ ...f, dealDate: e.target.value }))}
-                  className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" required />
+                  className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none" required />
               </div>
               <div>
                 <label className="mb-0.5 block text-xs font-semibold text-slate-700">Assign Agent</label>
                 <select value={dealForm.agent} onChange={(e) => setDealForm((f) => ({ ...f, agent: e.target.value }))}
-                  className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20">
+                  className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none">
                   <option value="">Unassigned</option>
                   {agents.filter((a) => a.status === "active").map((a) => (
                     <option key={a._id} value={a._id}>{a.agentNumber} — {a.fullName}</option>
@@ -766,15 +729,13 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
                 <label className="mb-0.5 block text-xs font-semibold text-slate-700">Deal Notes</label>
                 <textarea rows={2} value={dealForm.notes}
                   onChange={(e) => setDealForm((f) => ({ ...f, notes: e.target.value }))}
-                  className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" />
+                  className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none" />
               </div>
             </div>
-            <div className="flex shrink-0 items-center justify-end gap-3 border-t border-slate-200 bg-white px-5 py-4">
-              <button type="button" onClick={() => setShowConvertDeal(null)}
-                className="rounded-lg border border-slate-200 px-4 py-2 text-xs text-slate-600 hover:bg-slate-50">Cancel</button>
-              <button type="submit" disabled={converting}
-                className="inline-flex items-center gap-2 rounded-lg bg-[#027333] px-5 py-2 text-xs font-bold text-white hover:bg-[#0c5d2b] disabled:opacity-50">
-                <FaHandshake /> {converting ? "Creating Deal..." : "Create Deal"}
+            <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+              <button type="button" onClick={() => setShowConvertDeal(null)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button type="submit" disabled={converting} className="inline-flex items-center gap-1 bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+                <FaHandshake className="text-[9px]" /> {converting ? "Creating…" : "Create Deal"}
               </button>
             </div>
           </form>

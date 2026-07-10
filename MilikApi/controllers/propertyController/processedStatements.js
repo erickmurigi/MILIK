@@ -992,11 +992,17 @@ export const closeStatement = async (req, res) => {
     }
 
     if (approvedStatement?._id && numberOrZero(snapshotData.commissionAmount) > 0) {
-      await postCommissionAccrualForProcessedStatement({
-        processedStatement: savedStatement,
-        approvedStatement,
-        userId,
-      });
+      try {
+        await postCommissionAccrualForProcessedStatement({
+          processedStatement: savedStatement,
+          approvedStatement,
+          userId,
+        });
+      } catch (glError) {
+        // Roll back the saved statement so there's no orphaned record without GL entries.
+        await ProcessedStatement.deleteOne({ _id: savedStatement._id }).catch(() => {});
+        throw glError;
+      }
     }
 
     savedStatement = (await hydrateProcessedStatementForResponse(savedStatement)) || savedStatement;

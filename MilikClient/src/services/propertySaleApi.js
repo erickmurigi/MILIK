@@ -14,6 +14,8 @@ export const saleApi = {
   updateListing: async (id, payload) => unwrap(await adminRequests.put(`/sale/listings/${id}`, payload)),
   updateListingStatus: async (id, status) => unwrap(await adminRequests.patch(`/sale/listings/${id}/status`, { status })),
   deleteListing: async (id) => unwrap(await adminRequests.delete(`/sale/listings/${id}`)),
+  uploadListingImages: async (id, formData) => (await adminRequests.post(`/sale/listings/${id}/images`, formData))?.data,
+  deleteListingImage: async (id, url) => (await adminRequests.delete(`/sale/listings/${id}/images`, { data: { url } }))?.data,
 
   // Buyers
   listBuyers: async (params = {}) => unwrapPage(await adminRequests.get("/sale/buyers", { params })),
@@ -21,6 +23,7 @@ export const saleApi = {
   createBuyer: async (payload) => unwrap(await adminRequests.post("/sale/buyers", payload)),
   updateBuyer: async (id, payload) => unwrap(await adminRequests.put(`/sale/buyers/${id}`, payload)),
   deleteBuyer: async (id) => unwrap(await adminRequests.delete(`/sale/buyers/${id}`)),
+  sendBuyerSms: async (id, payload) => unwrap(await adminRequests.post(`/sale/buyers/${id}/sms`, payload)),
 
   // Agents
   listAgents: async (params = {}) => unwrapPage(await adminRequests.get("/sale/agents", { params })),
@@ -45,6 +48,7 @@ export const saleApi = {
   closeDeal: async (id, payload = {}) => unwrap(await adminRequests.patch(`/sale/deals/${id}/close`, payload)),
   cancelDeal: async (id, payload = {}) => unwrap(await adminRequests.patch(`/sale/deals/${id}/cancel`, payload)),
   deleteDeal: async (id) => unwrap(await adminRequests.delete(`/sale/deals/${id}`)),
+  sendDealSms: async (id, payload) => unwrap(await adminRequests.post(`/sale/deals/${id}/sms`, payload)),
 
   // Payments
   listPayments: async (params = {}) => unwrapPage(await adminRequests.get("/sale/payments", { params })),

@@ -9,6 +9,7 @@ import SalePayment from "../models/SalePayment.js";
 import SaleCommission from "../models/SaleCommission.js";
 import { currentUserId, escapeRegex, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 import { postPropertySaleCommissionAccrual, reversePropertySaleCommissionAccrual } from "../services/propertySaleAccountingService.js";
+import { sendAdHocSms } from "../../../services/communicationService.js";
 
 const populateDeal = (query) =>
   query
@@ -252,6 +253,23 @@ export const deleteDeal = async (req, res, next) => {
     await SaleDeal.findByIdAndDelete(deal._id);
 
     res.status(200).json({ message: "Deal deleted" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const sendDealSms = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const deal = await SaleDeal.findOne({ _id: req.params.id, business })
+      .populate("buyer", "fullName phone").lean();
+    if (!deal) return next(createError(404, "Deal not found"));
+    const phone = String(req.body.phone || deal.buyer?.phone || "").trim();
+    const body  = String(req.body.body || "").trim();
+    if (!phone) return next(createError(400, "Buyer has no phone number on this deal"));
+    if (!body)  return next(createError(400, "Message body is required"));
+    await sendAdHocSms({ businessId: business, phone, body, templateKey: "sale_deal_manual" });
+    res.json({ success: true, message: "SMS sent" });
   } catch (err) {
     next(err);
   }

@@ -192,6 +192,7 @@ export const ensurePropertyChartOfAccounts = async ({
   const pctrl = await ChartOfAccount.findOneAndUpdate(
     { business: businessId, code: pctrlCode },
     {
+      $set: { isPosting: true, isHeader: false },
       $setOnInsert: {
         business: businessId,
         code: pctrlCode,
@@ -199,8 +200,6 @@ export const ensurePropertyChartOfAccounts = async ({
         type: "asset",
         group: "assets",
         subGroup: "Property Control Accounts",
-        isHeader: false,
-        isPosting: false,
         isSystem: true,
         isControl: true,
         property: property._id,

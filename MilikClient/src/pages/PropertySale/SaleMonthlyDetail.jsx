@@ -40,7 +40,7 @@ const STATUS_BADGE = {
 };
 
 const Badge = ({ text, cls }) => (
-  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black ${cls || "bg-slate-100 text-slate-600 border-slate-200"}`}>
+  <span className={`inline-flex border px-1.5 py-0.5 text-[9px] font-bold uppercase ${cls || "bg-slate-100 text-slate-600 border-slate-200"}`}>
     {text}
   </span>
 );
@@ -118,8 +118,8 @@ const SaleMonthlyDetail = () => {
       <div class="card"><div class="cl">Commissions</div><div class="cv" style="color:#FF8C00">${fmt(summary.totalCommission)}</div></div>
     </div>
     ${payments.length > 0 ? `<h3>Payments (${payments.length})</h3><table><thead><tr><th>Payment #</th><th>Deal</th><th>Type</th><th>Method</th><th class="r">Amount</th><th>Date</th><th>Status</th></tr></thead><tbody>${payments.map((p) => `<tr><td>${p.paymentNumber || '—'}</td><td>${p.deal?.dealNumber || p.deal || '—'}</td><td>${fmtLabel(p.paymentType || p.type)}</td><td>${fmtLabel(p.method || p.paymentMethod)}</td><td class="r"><strong>${fmt(p.amount)}</strong></td><td>${fmtDate(p.paymentDate || p.date)}</td><td>${fmtLabel(p.status)}</td></tr>`).join('')}</tbody></table>` : ''}
-    ${deals.length > 0 ? `<h3>Deals (${deals.length})</h3><table><thead><tr><th>Deal #</th><th>Property</th><th>Buyer</th><th>Agent</th><th class="r">Value</th><th>Date</th><th>Status</th></tr></thead><tbody>${deals.map((d) => `<tr><td>${d.dealNumber || '—'}</td><td>${d.listing?.property?.propertyName || d.propertyName || '—'}</td><td>${d.buyer?.name || '—'}</td><td>${d.agent?.name || '—'}</td><td class="r">${fmt(d.agreedPrice || d.dealValue)}</td><td>${fmtDate(d.closedAt || d.createdAt)}</td><td>${fmtLabel(d.status)}</td></tr>`).join('')}</tbody></table>` : ''}
-    ${commissions.length > 0 ? `<h3>Commissions (${commissions.length})</h3><table><thead><tr><th>Deal</th><th>Agent</th><th class="r">Commission</th><th>Date</th><th>Status</th></tr></thead><tbody>${commissions.map((c) => `<tr><td>${c.deal?.dealNumber || '—'}</td><td>${c.agent?.name || '—'}</td><td class="r">${fmt(c.amount || c.commissionAmount)}</td><td>${fmtDate(c.createdAt)}</td><td>${fmtLabel(c.status)}</td></tr>`).join('')}</tbody></table>` : ''}
+    ${deals.length > 0 ? `<h3>Deals (${deals.length})</h3><table><thead><tr><th>Deal #</th><th>Property</th><th>Buyer</th><th>Agent</th><th class="r">Value</th><th>Date</th><th>Status</th></tr></thead><tbody>${deals.map((d) => `<tr><td>${d.dealNumber || '—'}</td><td>${d.listing?.title || d.listing?.property?.propertyName || '—'}</td><td>${d.buyer?.fullName || '—'}</td><td>${d.agent?.fullName || '—'}</td><td class="r">${fmt(d.agreedPrice || d.dealValue)}</td><td>${fmtDate(d.closedAt || d.createdAt)}</td><td>${fmtLabel(d.status)}</td></tr>`).join('')}</tbody></table>` : ''}
+    ${commissions.length > 0 ? `<h3>Commissions (${commissions.length})</h3><table><thead><tr><th>Deal</th><th>Agent</th><th class="r">Commission</th><th>Date</th><th>Status</th></tr></thead><tbody>${commissions.map((c) => `<tr><td>${c.deal?.dealNumber || '—'}</td><td>${c.agent?.fullName || '—'}</td><td class="r">${fmt(c.amount || c.commissionAmount)}</td><td>${fmtDate(c.createdAt)}</td><td>${fmtLabel(c.status)}</td></tr>`).join('')}</tbody></table>` : ''}
     </body></html>`);
     win.document.close();
     win.onload = () => { win.focus(); win.print(); };
@@ -140,39 +140,22 @@ const SaleMonthlyDetail = () => {
     >
       <div className="flex h-full flex-col gap-2">
 
-        {/* KPI Strip */}
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-          {[
-            { label: "Listings", value: loading ? "—" : (summary.listings ?? 0), cls: "bg-slate-900 text-white" },
-            { label: "Offers", value: loading ? "—" : (summary.offers ?? 0), cls: "bg-amber-50 border border-amber-200 text-amber-900" },
-            { label: "Deals", value: loading ? "—" : (summary.deals ?? 0), cls: "bg-blue-50 border border-blue-200 text-blue-900" },
-            { label: "Deals Closed", value: loading ? "—" : (summary.dealsClosed ?? 0), cls: "bg-emerald-50 border border-emerald-200 text-emerald-900" },
-            { label: "Total Revenue", value: loading ? "—" : fmtKES(summary.totalRevenue || 0), cls: "bg-[#027333] text-white" },
-            { label: "Commissions", value: loading ? "—" : fmtKES(summary.totalCommissions || 0), cls: "bg-violet-50 border border-violet-200 text-violet-900" },
-          ].map((c) => (
-            <div key={c.label} className={`rounded-lg px-3 py-2 ${c.cls}`}>
-              <div className="text-[10px] font-black uppercase tracking-wider opacity-70">{c.label}</div>
-              <div className="mt-0.5 text-sm font-black truncate">{c.value}</div>
-            </div>
-          ))}
-        </div>
-
         {/* Tab Bar */}
-        <div className="flex gap-0 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="flex gap-0 border border-slate-200 bg-white shadow-sm overflow-hidden">
           {TABS.map((t) => (
             <button
               key={t.key}
               onClick={() => setActiveTab(t.key)}
               className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 text-xs font-black transition border-b-2 ${
                 activeTab === t.key
-                  ? "border-[#027333] text-[#027333] bg-emerald-50/50"
+                  ? "border-[#0B3B2E] text-[#0B3B2E] bg-[#EDF5F1]"
                   : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50"
               }`}
             >
               {t.label}
               {!loading && (
-                <span className={`rounded-full px-1.5 py-0 text-[9px] font-black ${
-                  activeTab === t.key ? "bg-[#027333] text-white" : "bg-slate-100 text-slate-500"
+                <span className={`px-1.5 py-0 text-[9px] font-black ${
+                  activeTab === t.key ? "bg-[#0B3B2E] text-white" : "bg-slate-100 text-slate-500"
                 }`}>
                   {t.count}
                 </span>
@@ -182,13 +165,13 @@ const SaleMonthlyDetail = () => {
         </div>
 
         {/* Tab Content */}
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">
           <div className="min-h-0 flex-1 overflow-auto">
 
             {/* PAYMENTS TAB */}
             {activeTab === "payments" && (
               <table className="min-w-full text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 bg-[#027333] text-white">
+                <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                   <tr>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Receipt No.</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Deal</th>
@@ -239,7 +222,7 @@ const SaleMonthlyDetail = () => {
             {/* DEALS TAB */}
             {activeTab === "deals" && (
               <table className="min-w-full text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 bg-[#027333] text-white">
+                <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                   <tr>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Deal No.</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
@@ -278,7 +261,7 @@ const SaleMonthlyDetail = () => {
             {/* OFFERS TAB */}
             {activeTab === "offers" && (
               <table className="min-w-full text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 bg-[#027333] text-white">
+                <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                   <tr>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Offer No.</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
@@ -316,7 +299,7 @@ const SaleMonthlyDetail = () => {
             {/* LISTINGS TAB */}
             {activeTab === "listings" && (
               <table className="min-w-full text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 bg-[#027333] text-white">
+                <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                   <tr>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Listing No.</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Title</th>
@@ -352,7 +335,7 @@ const SaleMonthlyDetail = () => {
             {/* COMMISSIONS TAB */}
             {activeTab === "commissions" && (
               <table className="min-w-full text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 bg-[#027333] text-white">
+                <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                   <tr>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Comm. No.</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Agent</th>
@@ -374,7 +357,7 @@ const SaleMonthlyDetail = () => {
                       <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{c.agent?.fullName || "—"}</td>
                       <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-700">{c.deal?.dealNumber || "—"}</td>
                       <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{c.deal?.listing?.title || "—"}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-[#027333]">
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-[#0B3B2E]">
                         {c.commissionRate}{c.commissionType === "percentage" ? "%" : " KES"}
                       </td>
                       <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">{fmtKES(c.commissionAmount)}</td>

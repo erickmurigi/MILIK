@@ -1402,13 +1402,14 @@ export const getCashFlowReport = async (req, res, next) => {
       }],
     };
 
+    const cashOnlyMatch = { status: "approved", category: { $ne: "REVERSAL" } };
     const [openingAgg, periodAgg] = await Promise.all([
       FinancialLedgerEntry.aggregate([
-        { $match: { business: businessId, accountId: { $in: cashAccountIds }, status: { $in: REPORT_LEDGER_STATUSES }, transactionDate: { $lte: openingEndDate } } },
+        { $match: { business: businessId, accountId: { $in: cashAccountIds }, ...cashOnlyMatch, transactionDate: { $lte: openingEndDate } } },
         { $group: { _id: "$accountId", debit: { $sum: debitExpr }, credit: { $sum: creditExpr } } },
       ]),
       FinancialLedgerEntry.aggregate([
-        { $match: { business: businessId, accountId: { $in: cashAccountIds }, status: { $in: REPORT_LEDGER_STATUSES }, transactionDate: { $gte: startDate, $lte: endDate } } },
+        { $match: { business: businessId, accountId: { $in: cashAccountIds }, ...cashOnlyMatch, transactionDate: { $gte: startDate, $lte: endDate } } },
         { $group: { _id: "$sourceTransactionType", debit: { $sum: debitExpr }, credit: { $sum: creditExpr } } },
       ]),
     ]);
@@ -1816,9 +1817,8 @@ export const getCashMonthlySummary = async (req, res, next) => {
           business: businessOid,
           accountId: { $in: accountIds },
           transactionDate: { $gte: from },
-          status: { $in: REPORT_LEDGER_STATUSES },
-          // Do NOT exclude category:"REVERSAL" — omitting reversal entries leaves reversed receipts
-          // inflating cashIn and reversed vouchers inflating cashOut with no correcting offset.
+          status: "approved",
+          category: { $ne: "REVERSAL" },
         },
       },
       {

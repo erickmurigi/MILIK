@@ -1,522 +1,1043 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
-import { FaBan, FaCheck, FaEdit, FaHandshake, FaPlus, FaPrint, FaSearch, FaTimes } from "react-icons/fa";
+import {
+  FaBan, FaBuilding, FaCheck, FaEdit, FaFileAlt, FaHandshake, FaMoneyBillWave,
+  FaPlus, FaPrint, FaRedoAlt, FaSearch, FaSms, FaTimes, FaUser,
+} from "react-icons/fa";
+import CwSmsModal from "../CarWash/CwSmsModal";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
+import PaginationBar from "../../components/PaginationBar";
 import { saleApi, fmtKES, todayISO } from "../../services/propertySaleApi";
 import AmountInput from "./AmountInput";
 import { useConfirm } from "../../context/ConfirmContext";
 
-const DEFAULT_PAGE_SIZE = 50;
+const PAGE_SIZE = 25;
 
-const statusColors = {
-  active: "bg-blue-100 border-blue-200 text-blue-700",
-  closed: "bg-emerald-100 border-emerald-200 text-emerald-700",
-  cancelled: "bg-rose-100 border-rose-200 text-rose-700",
-};
+const statusBadge = (status) => ({
+  active:    "border-[#B7C9C0] bg-[#F1F6F3] text-[#0B3B2E]",
+  closed:    "border-emerald-200 bg-emerald-50 text-emerald-700",
+  cancelled: "border-slate-200 bg-slate-50 text-slate-500",
+}[status] || "border-slate-200 bg-slate-50 text-slate-500");
 
-const blankForm = {
+const blankDealForm = {
   listing: "", buyer: "", agent: "", agreedPrice: "",
   dealDate: todayISO(), expectedClosingDate: "", notes: "",
 };
 
+const PAYMENT_TYPES   = ["deposit", "installment", "final_payment", "other"];
+const PAYMENT_METHODS = ["cash", "mpesa", "bank_transfer", "cheque", "other"];
+const fmtLabel        = (s) => (s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+const blankPayForm    = { amount: "", paymentType: "installment", paymentMethod: "bank_transfer", reference: "", paymentDate: todayISO(), notes: "" };
+
+const Modal = ({ title, subtitle, headerCls = "bg-[#0B3B2E]", children, footer, onClose }) => (
+  <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
+    <div className="flex w-full flex-col bg-white shadow-2xl sm:max-w-2xl sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
+      <div className={`flex-shrink-0 flex items-start justify-between gap-3 border-b border-slate-200 ${headerCls} px-4 py-3 text-white rounded-t-2xl sm:rounded-none`}>
+        <div>
+          <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
+          {subtitle && <p className="mt-0.5 text-xs font-semibold text-white/70">{subtitle}</p>}
+        </div>
+        <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-4">{children}</div>
+      {footer && <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{footer}</div>}
+    </div>
+  </div>
+);
+
+const inputCls = "h-8 w-full border border-slate-200 bg-white px-3 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none";
+const labelCls = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
+
 const SaleDeals = () => {
-  const confirm = useConfirm();
+  const confirm        = useConfirm();
+  const queryClient    = useQueryClient();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
-  const currentUser = useSelector((s) => s.auth?.currentUser);
-  const [deals, setDeals] = useState([]);
-  const [listings, setListings] = useState([]);
-  const [buyers, setBuyers] = useState([]);
-  const [agents, setAgents] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [actionKey, setActionKey] = useState("");
-  const [showModal, setShowModal] = useState(false);
+  const currentUser    = useSelector((s) => s.auth?.currentUser);
+
+  const [saving,         setSaving]         = useState(false);
+  const [actionKey,      setActionKey]      = useState("");
+  const [showModal,      setShowModal]      = useState(false);
   const [showCloseModal, setShowCloseModal] = useState(false);
-  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showCancelModal,setShowCancelModal]= useState(false);
+  const [editingId,      setEditingId]      = useState("");
+  const [form,           setForm]           = useState(blankDealForm);
+  const [closingDeal,    setClosingDeal]    = useState(null);
+  const [closeForm,      setCloseForm]      = useState({ actualClosingDate: todayISO(), titleTransferDate: "", handoverNotes: "" });
   const [cancellingDeal, setCancellingDeal] = useState(null);
-  const [cancelReason, setCancelReason] = useState("");
-  const [closingDeal, setClosingDeal] = useState(null);
-  const [closeForm, setCloseForm] = useState({ actualClosingDate: todayISO(), titleTransferDate: "", handoverNotes: "" });
-  const [editingId, setEditingId] = useState("");
-  const [form, setForm] = useState(blankForm);
-  const [statusFilter, setStatusFilter] = useState("");
-  const [search, setSearch] = useState("");
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [page, setPage] = useState(1);
+  const [cancelReason,   setCancelReason]   = useState("");
+  const [search,         setSearch]         = useState("");
+  const [appliedSearch,  setAppliedSearch]  = useState("");
+  const [statusFilter,   setStatusFilter]   = useState("");
+  const [page,           setPage]           = useState(1);
+  const [pageSize,       setPageSize]       = useState(PAGE_SIZE);
+
+  const [showPayModal,   setShowPayModal]   = useState(false);
+  const [payingDeal,     setPayingDeal]     = useState(null);
+  const [payForm,        setPayForm]        = useState(blankPayForm);
+  const [payingSave,     setPayingSave]     = useState(false);
+  const [printingStmt,   setPrintingStmt]   = useState("");
+  const [selected,       setSelected]       = useState(null);
+  const [smsTarget,      setSmsTarget]      = useState(null);
+  const [smsSending,     setSmsSending]     = useState(false);
 
   const biz = currentCompany?._id;
 
-  const load = useCallback(async () => {
-    if (!biz) return;
-    setLoading(true);
-    try {
-      const { data: dealRows } = await saleApi.listDeals({ business: biz, status: statusFilter, limit: 200 });
-      setDeals(dealRows ?? []);
-    } catch { toast.error("Failed to load deals"); }
-    finally { setLoading(false); }
-  }, [biz, statusFilter]);
+  const { data: dealsData, isLoading: loading, isFetching } = useQuery({
+    queryKey: ["sale-deals", biz, appliedSearch, statusFilter, page, pageSize],
+    queryFn:  () => saleApi.listDeals({ business: biz, search: appliedSearch, status: statusFilter, page, limit: pageSize }),
+    enabled:  !!biz,
+    placeholderData: (prev) => prev,
+    staleTime: 30_000,
+  });
 
-  useEffect(() => { load(); }, [load]);
+  const { data: listingsData } = useQuery({
+    queryKey: ["sale-listings-ref", biz],
+    queryFn:  () => saleApi.listListings({ business: biz, limit: 500 }),
+    enabled:  !!biz,
+    staleTime: 5 * 60_000,
+  });
+  const { data: buyersData } = useQuery({
+    queryKey: ["sale-buyers-ref", biz],
+    queryFn:  () => saleApi.listBuyers({ business: biz, limit: 500 }),
+    enabled:  !!biz,
+    staleTime: 5 * 60_000,
+  });
+  const { data: agentsData } = useQuery({
+    queryKey: ["sale-agents-ref", biz],
+    queryFn:  () => saleApi.listAgents({ business: biz, status: "active", limit: 500 }),
+    enabled:  !!biz,
+    staleTime: 5 * 60_000,
+  });
 
-  // Reference data (listings, buyers, agents) only changes when business changes — load once, not on every filter change
-  useEffect(() => {
-    if (!biz) return;
-    Promise.all([
-      saleApi.listListings({ business: biz, limit: 500 }),
-      saleApi.listBuyers({ business: biz, limit: 500 }),
-      saleApi.listAgents({ business: biz, status: "active", limit: 500 }),
-    ]).then(([{ data: listingRows }, { data: buyerRows }, { data: agentRows }]) => {
-      setListings(listingRows ?? []);
-      setBuyers(buyerRows ?? []);
-      setAgents(agentRows ?? []);
-    }).catch(() => toast.error("Failed to load reference data"));
-  }, [biz]);
-  useEffect(() => setPage(1), [statusFilter, search, pageSize]);
+  const { data: dealPmtsData, isLoading: loadingDealPmts } = useQuery({
+    queryKey: ["deal-detail-payments", selected?._id],
+    queryFn:  () => saleApi.listPayments({ deal: selected._id, limit: 200 }),
+    enabled:  !!selected?._id,
+    staleTime: 30_000,
+  });
+  const { data: dealCommData } = useQuery({
+    queryKey: ["deal-detail-commission", selected?._id],
+    queryFn:  () => saleApi.listCommissions({ business: biz, deal: selected._id }),
+    enabled:  !!selected?._id,
+    staleTime: 30_000,
+  });
 
-  const filtered = useMemo(() => {
-    if (!search.trim()) return deals;
-    const rx = new RegExp(search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-    return deals.filter((d) => rx.test(d.dealNumber) || rx.test(d.listing?.title) || rx.test(d.buyer?.fullName));
-  }, [deals, search]);
+  const deals      = dealsData?.data ?? [];
+  const total      = dealsData?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const listings   = listingsData?.data ?? [];
+  const buyers     = buyersData?.data   ?? [];
+  const agents     = agentsData?.data   ?? [];
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const safePage = Math.min(page, totalPages);
-  const pageRows = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const dealPmts   = (dealPmtsData?.payments ?? dealPmtsData?.data ?? []).filter((p) => p.status === "paid");
+  const dealComm   = (dealCommData?.commissions ?? dealCommData?.data ?? [])[0] ?? null;
+  const fmtDate    = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
-  const stats = useMemo(() => {
-    let active = 0, closed = 0, activeValue = 0, closedValue = 0, totalValue = 0;
-    for (const d of deals) {
-      totalValue += d.agreedPrice;
-      if (d.status === "active") { active++; activeValue += d.agreedPrice; }
-      else if (d.status === "closed") { closed++; closedValue += d.agreedPrice; }
-    }
-    return { active, closed, activeValue, closedValue, totalValue };
-  }, [deals]);
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["sale-deals", biz] });
+    queryClient.invalidateQueries({ queryKey: ["sale-dashboard"] });
+  };
 
-  const openCreate = () => { setEditingId(""); setForm(blankForm); setShowModal(true); };
-  const openEdit = (row) => {
+  const openCreate = () => { setEditingId(""); setForm(blankDealForm); setShowModal(true); };
+  const openEdit   = (row) => {
     setEditingId(row._id);
     setForm({
       listing: row.listing?._id || row.listing || "",
-      buyer: row.buyer?._id || row.buyer || "",
-      agent: row.agent?._id || row.agent || "",
-      agreedPrice: row.agreedPrice || "",
-      dealDate: row.dealDate ? new Date(row.dealDate).toISOString().split("T")[0] : todayISO(),
+      buyer:   row.buyer?._id   || row.buyer   || "",
+      agent:   row.agent?._id   || row.agent   || "",
+      agreedPrice:         row.agreedPrice || "",
+      dealDate:            row.dealDate ? new Date(row.dealDate).toISOString().split("T")[0] : todayISO(),
       expectedClosingDate: row.expectedClosingDate ? new Date(row.expectedClosingDate).toISOString().split("T")[0] : "",
-      notes: row.notes || "",
+      notes:               row.notes || "",
     });
     setShowModal(true);
   };
 
   const handleSave = async () => {
     if (!form.listing) return toast.warning("Select a listing");
-    if (!form.buyer) return toast.warning("Select a buyer");
+    if (!form.buyer)   return toast.warning("Select a buyer");
     if (!form.agreedPrice || Number(form.agreedPrice) <= 0) return toast.warning("Valid agreed price required");
     setSaving(true);
     try {
       const payload = { ...form, business: biz, agreedPrice: Number(form.agreedPrice), agent: form.agent || undefined, expectedClosingDate: form.expectedClosingDate || undefined };
-      const saved = editingId ? await saleApi.updateDeal(editingId, payload) : await saleApi.createDeal(payload);
-      setDeals((prev) => editingId ? prev.map((r) => r._id === editingId ? saved : r) : [saved, ...prev]);
+      if (editingId) await saleApi.updateDeal(editingId, payload);
+      else await saleApi.createDeal(payload);
+      invalidate();
       setShowModal(false);
-      toast.success(`Deal ${editingId ? "updated" : "created"} successfully`);
-    } catch (err) { toast.error(err?.response?.data?.message || "Failed to save deal"); }
-    finally { setSaving(false); }
+      toast.success(`Deal ${editingId ? "updated" : "created"}`);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to save deal");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleClose = async () => {
     if (!closingDeal) return;
     setActionKey(`${closingDeal._id}:close`);
     try {
-      const updated = await saleApi.closeDeal(closingDeal._id, { ...closeForm, business: biz });
-      setDeals((prev) => prev.map((d) => d._id === closingDeal._id ? { ...d, ...updated } : d));
+      await saleApi.closeDeal(closingDeal._id, { ...closeForm, business: biz });
+      invalidate();
       setShowCloseModal(false);
       setClosingDeal(null);
-      toast.success("Deal closed successfully");
-    } catch (err) { toast.error(err?.response?.data?.message || "Failed to close deal"); }
-    finally { setActionKey(""); }
-  };
-
-  const openCancelModal = (row) => {
-    setCancellingDeal(row);
-    setCancelReason("");
-    setShowCancelModal(true);
+      toast.success("Deal closed");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to close deal");
+    } finally {
+      setActionKey("");
+    }
   };
 
   const handleCancel = async () => {
     if (!cancellingDeal) return;
     setActionKey(`${cancellingDeal._id}:cancel`);
     try {
-      const updated = await saleApi.cancelDeal(cancellingDeal._id, { cancellationReason: cancelReason, business: biz });
-      setDeals((prev) => prev.map((d) => d._id === cancellingDeal._id ? { ...d, ...updated } : d));
+      await saleApi.cancelDeal(cancellingDeal._id, { cancellationReason: cancelReason, business: biz });
+      invalidate();
       setShowCancelModal(false);
       setCancellingDeal(null);
       toast.success("Deal cancelled");
-    } catch (err) { toast.error(err?.response?.data?.message || "Failed to cancel deal"); }
-    finally { setActionKey(""); }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to cancel deal");
+    } finally {
+      setActionKey("");
+    }
   };
 
   const handleDelete = async (row) => {
-    if (!await confirm({
-      title: "Delete Deal",
-      message: `Permanently delete deal ${row.dealNumber}? All associated pending payments and commissions will also be removed. This cannot be undone.`,
-      confirmText: "Delete",
-      isDangerous: true,
-    })) return;
+    if (!await confirm({ title: "Delete Deal", message: `Permanently delete deal ${row.dealNumber}? All associated pending payments and commissions will also be removed.`, confirmText: "Delete", isDangerous: true })) return;
     setActionKey(`${row._id}:delete`);
     try {
       await saleApi.deleteDeal(row._id);
-      setDeals((prev) => prev.filter((d) => d._id !== row._id));
+      invalidate();
       toast.success("Deal deleted");
-    } catch (err) { toast.error(err?.response?.data?.message || "Failed to delete deal"); }
-    finally { setActionKey(""); }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to delete deal");
+    } finally {
+      setActionKey("");
+    }
+  };
+
+  const printPaymentReceipt = (payment) => {
+    const co      = currentCompany || {};
+    const coName  = co.companyName || co.name || "MILIK";
+    const deal    = payment.deal    || {};
+    const listing = deal.listing    || {};
+    const buyer   = deal.buyer      || {};
+    const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const fmtD = (d) => d ? new Date(d).toLocaleDateString("en-KE") : "—";
+    const fmtAmt = (n) => `KES ${Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Receipt — ${esc(payment.paymentNumber)}</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#0f172a}
+.page{max-width:148mm;margin:0 auto;padding:14mm 14mm 10mm}
+.hdr{border-bottom:3px solid #0B3B2E;padding-bottom:10px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:flex-start}
+.brand{font-size:20px;font-weight:900;color:#0B3B2E;letter-spacing:2px}.co-info{text-align:right;font-size:9px;color:#555;line-height:1.7}
+.doc-title{text-align:center;margin:12px 0 14px}.doc-title h1{font-size:20px;font-weight:900;letter-spacing:4px;color:#0B3B2E;text-transform:uppercase}
+.doc-title p{font-size:9px;color:#777;margin-top:2px}
+.receipt-bar{background:#0B3B2E;color:#fff;padding:8px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center}
+.receipt-bar span{font-weight:900;font-size:14px;font-family:monospace}.receipt-bar small{font-size:9px;opacity:.8}
+.amount-box{background:#0B3B2E;color:#fff;padding:14px 20px;margin:14px 0;text-align:center}
+.amount-box .lbl{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;opacity:.7}
+.amount-box .amt{font-size:28px;font-weight:900;font-family:monospace;margin-top:2px}
+.sec{font-size:9px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#0B3B2E;border-bottom:1.5px solid #0B3B2E;padding-bottom:4px;margin:12px 0 8px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px}
+.f label{font-size:8px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:2px}
+.f span{font-size:11px;font-weight:600;color:#0f172a;display:block;padding:4px 8px;border:1px solid #e2e8f0;background:#f8fafc;min-height:24px}
+.thanks{text-align:center;margin:16px 0 8px;font-size:13px;font-weight:900;letter-spacing:3px;color:#0B3B2E;text-transform:uppercase}
+.sig-box{border-top:1.5px solid #334155;padding-top:6px;margin-top:24px;max-width:200px}
+.sig-box p{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#64748b;margin-top:2px}
+.footer{margin-top:16px;padding-top:8px;border-top:1px solid #e2e8f0;font-size:8px;color:#94a3b8;text-align:center}
+@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}@page{size:A5 portrait;margin:8mm}}</style></head><body><div class="page">
+<div class="hdr"><div class="brand">${esc(coName)}</div><div class="co-info"><strong>${esc(coName)}</strong><br/>${esc([co.physicalAddress, co.telephone, co.email].filter(Boolean).join(" | "))}</div></div>
+<div class="doc-title"><h1>Payment Receipt</h1><p>Official Receipt — Property Sale Transaction</p></div>
+<div class="receipt-bar"><div><small>Receipt No.</small><br/><span>${esc(payment.paymentNumber)}</span></div><div style="text-align:right"><small>Date</small><br/><span>${esc(fmtD(payment.paymentDate))}</span></div></div>
+<div class="amount-box"><div class="lbl">Amount Received</div><div class="amt">${esc(fmtAmt(payment.amount))}</div><div style="font-size:10px;opacity:.75;margin-top:4px">${esc(fmtLabel(payment.paymentType))} via ${esc(fmtLabel(payment.paymentMethod))}</div></div>
+<div class="sec">Deal Reference</div>
+<div class="g2">
+  <div class="f"><label>Deal No.</label><span>${esc(deal.dealNumber || "—")}</span></div>
+  <div class="f"><label>Property</label><span>${esc(listing.title || listing.listingNumber || "—")}</span></div>
+  <div class="f"><label>Buyer</label><span>${esc(buyer.fullName || "—")}</span></div>
+  <div class="f"><label>Agreed Price</label><span>${esc(fmtAmt(deal.agreedPrice))}</span></div>
+</div>
+<div class="sec">Payment Details</div>
+<div class="g2">
+  <div class="f"><label>Type</label><span>${esc(fmtLabel(payment.paymentType))}</span></div>
+  <div class="f"><label>Method</label><span>${esc(fmtLabel(payment.paymentMethod))}</span></div>
+  ${payment.reference ? `<div class="f" style="grid-column:1/-1"><label>Reference / Code</label><span style="font-family:monospace;font-weight:900">${esc(payment.reference)}</span></div>` : ""}
+</div>
+${payment.notes ? `<div class="sec">Notes</div><div style="border:1px solid #e2e8f0;padding:8px;background:#f8fafc;font-size:10px">${esc(payment.notes)}</div>` : ""}
+<div class="thanks">— Received With Thanks —</div>
+<div class="sig-box"><br/><p>Authorized Signature</p><p style="color:#0f172a">${esc(coName)}</p></div>
+<div class="footer">Computer-generated receipt. Generated: ${new Date().toLocaleString("en-KE")} | MILIK Property Sales</div>
+</div></body></html>`;
+    const w = window.open("", "_blank", "width=780,height=640");
+    if (!w) return;
+    w.document.write(html);
+    w.document.close();
+    w.onload = () => w.print();
+  };
+
+  const handleRecordPayment = async () => {
+    if (!payingDeal) return;
+    if (!payForm.amount || Number(payForm.amount) <= 0) return toast.warning("Valid amount required");
+    setPayingSave(true);
+    try {
+      const payment = await saleApi.createPayment({
+        ...payForm, deal: payingDeal._id, business: biz, amount: Number(payForm.amount),
+      });
+      invalidate();
+      queryClient.invalidateQueries({ queryKey: ["sale-payments", biz] });
+      queryClient.invalidateQueries({ queryKey: ["deal-detail-payments", payingDeal._id] });
+      setShowPayModal(false);
+      setPayForm(blankPayForm);
+      toast.success("Payment recorded");
+      printPaymentReceipt(payment);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to record payment");
+    } finally {
+      setPayingSave(false);
+    }
+  };
+
+  const handleSendSms = async (phone, body) => {
+    if (!smsTarget) return;
+    setSmsSending(true);
+    try {
+      await saleApi.sendDealSms(smsTarget._id, { phone, body });
+      toast.success("SMS sent");
+      setSmsTarget(null);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to send SMS");
+    } finally {
+      setSmsSending(false);
+    }
+  };
+
+  const printStatement = async (row) => {
+    setPrintingStmt(row._id);
+    try {
+      const res  = await saleApi.listPayments({ deal: row._id, limit: 500 });
+      const pmts = (res.payments ?? res.data ?? []).filter((p) => p.status === "paid");
+      const co   = currentCompany || {};
+      const coName = co.companyName || co.name || "MILIK";
+      const esc  = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const fmtD = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "long", year: "numeric" }) : "—";
+      const fmtAmt = (n) => Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+      const totalPaid   = pmts.reduce((s, p) => s + (p.amount || 0), 0);
+      const outstanding = (row.agreedPrice || 0) - totalPaid;
+
+      let running = row.agreedPrice || 0;
+      const payRows = pmts.map((p, i) => {
+        running -= (p.amount || 0);
+        return `<tr>
+          <td class="n">${i + 1}</td>
+          <td>${esc(fmtD(p.paymentDate))}</td>
+          <td>${esc(fmtLabel(p.paymentType))}</td>
+          <td>${esc(fmtLabel(p.paymentMethod))}${p.reference ? `<br/><span style="font-family:monospace;font-size:9px;color:#64748b">${esc(p.reference)}</span>` : ""}</td>
+          <td class="r">${esc(fmtAmt(p.amount))}</td>
+          <td class="r ${running > 0 ? "red" : "grn"}">${esc(fmtAmt(running))}</td>
+        </tr>`;
+      }).join("");
+
+      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Statement — ${esc(row.dealNumber)}</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#0f172a}
+.page{max-width:210mm;margin:0 auto;padding:14mm 16mm 12mm}
+.hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0B3B2E;padding-bottom:12px;margin-bottom:16px}
+.brand{font-size:22px;font-weight:900;color:#0B3B2E;letter-spacing:2px}
+.co-info{text-align:right;font-size:9px;color:#555;line-height:1.7}
+.doc-title{text-align:center;margin-bottom:16px}
+.doc-title h1{font-size:18px;font-weight:900;color:#0B3B2E;text-transform:uppercase;letter-spacing:4px}
+.doc-title p{font-size:9px;color:#777;margin-top:3px}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#e2e8f0;border:1px solid #e2e8f0;margin-bottom:14px}
+.ic{background:#fff;padding:8px 12px}
+.ic label{font-size:8px;font-weight:900;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;display:block;margin-bottom:2px}
+.ic span{font-size:11px;font-weight:600;color:#0f172a}
+.bal-bar{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border:0;margin-bottom:14px}
+.bc{padding:10px 14px;color:#fff}
+.bc .lbl{font-size:8px;font-weight:900;text-transform:uppercase;letter-spacing:1px;opacity:.7}
+.bc .val{font-size:17px;font-weight:900;font-family:monospace;margin-top:3px}
+table{width:100%;border-collapse:collapse;margin-bottom:14px;font-size:11px}
+thead tr{background:#0B3B2E;color:#fff}
+th{padding:7px 10px;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:1px;text-align:left}
+th.r,td.r{text-align:right}
+td{padding:7px 10px;border-bottom:1px solid #f1f5f9}
+td.n{color:#94a3b8;font-size:9px;text-align:center;width:28px}
+td.r{font-family:monospace;font-weight:700}
+td.red{color:#dc2626}td.grn{color:#0B3B2E}
+tr:nth-child(even){background:#f8fafc}
+.empty{padding:20px;text-align:center;color:#94a3b8;font-style:italic;font-size:11px}
+.sig-grid{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-top:22px;padding-top:14px;border-top:1px solid #e2e8f0}
+.sig-line{border-bottom:1.5px solid #334155;height:28px;margin-bottom:4px}
+.sig-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#64748b}
+.footer{margin-top:14px;border-top:1px solid #e2e8f0;padding-top:8px;font-size:8px;color:#94a3b8;text-align:center;line-height:1.7}
+@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}@page{size:A4 portrait;margin:8mm}}</style></head><body><div class="page">
+<div class="hdr">
+  <div><div class="brand">${esc(coName)}</div><div style="font-size:9px;color:#64748b;margin-top:4px">Property Sales Division</div></div>
+  <div class="co-info"><strong>${esc(coName)}</strong><br/>${esc([co.physicalAddress, co.telephone, co.email].filter(Boolean).join(" | "))}</div>
+</div>
+<div class="doc-title">
+  <h1>Statement of Account</h1>
+  <p>Payment history for sale transaction &bull; Generated: ${new Date().toLocaleDateString("en-KE", { day: "2-digit", month: "long", year: "numeric" })}</p>
+</div>
+<div class="info-grid">
+  <div class="ic"><label>Deal No.</label><span>${esc(row.dealNumber)}</span></div>
+  <div class="ic"><label>Deal Date</label><span>${esc(fmtD(row.dealDate))}</span></div>
+  <div class="ic"><label>Property</label><span>${esc(row.listing?.title || "—")}</span></div>
+  <div class="ic"><label>Listing No.</label><span>${esc(row.listing?.listingNumber || "—")}</span></div>
+  <div class="ic"><label>Buyer</label><span>${esc(row.buyer?.fullName || "—")}</span></div>
+  <div class="ic"><label>Sales Agent</label><span>${esc(row.agent?.fullName || "—")}</span></div>
+</div>
+<div class="bal-bar">
+  <div class="bc" style="background:#0B3B2E"><div class="lbl">Agreed Sale Price</div><div class="val">KES ${esc(fmtAmt(row.agreedPrice))}</div></div>
+  <div class="bc" style="background:#07271e"><div class="lbl">Total Received</div><div class="val">KES ${esc(fmtAmt(totalPaid))}</div></div>
+  <div class="bc" style="background:${outstanding > 0 ? "#7f1d1d" : "#064e3b"}"><div class="lbl">Outstanding Balance</div><div class="val">KES ${esc(fmtAmt(outstanding))}</div></div>
+</div>
+<table>
+  <thead><tr>
+    <th style="width:28px">#</th><th>Date</th><th>Type</th><th>Method / Reference</th><th class="r">Amount (KES)</th><th class="r">Balance (KES)</th>
+  </tr></thead>
+  <tbody>${pmts.length === 0 ? `<tr><td colspan="6" class="empty">No payments recorded against this deal.</td></tr>` : payRows}</tbody>
+</table>
+<div class="sig-grid">
+  <div><div class="sig-line"></div><div class="sig-lbl">Authorized by — ${esc(coName)}</div></div>
+  <div><div class="sig-line"></div><div class="sig-lbl">Acknowledged by — Buyer</div></div>
+</div>
+<div class="footer">
+  Statement of Account for Deal ${esc(row.dealNumber)} &bull; All amounts in Kenya Shillings (KES)<br/>
+  Issued by MILIK Property Sales System &bull; ${new Date().toLocaleString("en-KE")}
+</div>
+</div></body></html>`;
+      const w = window.open("", "_blank", "width=900,height=760");
+      if (!w) return;
+      w.document.write(html);
+      w.document.close();
+      w.onload = () => w.print();
+    } catch {
+      toast.error("Failed to load payment history");
+    } finally {
+      setPrintingStmt("");
+    }
   };
 
   const printDeal = (row) => {
     const co = currentCompany || {};
     const coName = co.companyName || co.name || "MILIK";
-    const esc = (v) => String(v ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-    const fmtD = (d) => d ? new Date(d).toLocaleDateString("en-KE",{day:"2-digit",month:"long",year:"numeric"}) : "—";
-    const logoHtml = co.logo ? `<img src="${co.logo}" alt="logo" style="width:72px;height:72px;object-fit:contain;border-radius:10px;border:1px solid #cbd5e1;" />` : `<div style="width:72px;height:72px;background:#027333;color:#fff;font-size:26px;font-weight:900;display:flex;align-items:center;justify-content:center;border-radius:10px;">${coName.slice(0,1)}</div>`;
-    const coInfo = [co.phone||co.phoneNumber, co.email||co.companyEmail].filter(Boolean).join(" • ");
-    const statusC = {active:"#1e40af",closed:"#166534",cancelled:"#9f1239"}[row.status]||"#334155";
-    const statusBg = {active:"#dbeafe",closed:"#dcfce7",cancelled:"#ffe4e6"}[row.status]||"#f1f5f9";
-    const balance = row.agreedPrice - (row.totalPaid || 0);
-    const printedOn = new Date().toLocaleDateString("en-KE",{day:"2-digit",month:"long",year:"numeric"});
-    const field = (label, value) => `<div class="field"><div class="fl">${esc(label)}</div><div class="fv">${esc(value||"—")}</div></div>`;
-
-    const preparedByName = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(' ') || currentUser?.email || 'Milik Admin';
-
-    const win = window.open("","_blank","width=900,height=760");
+    const esc  = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const fmtD = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "long", year: "numeric" }) : "—";
+    const coInfo   = [co.phone || co.phoneNumber, co.email || co.companyEmail].filter(Boolean).join(" • ");
+    const statusC  = { active: "#1e40af", closed: "#166534", cancelled: "#9f1239" }[row.status] || "#334155";
+    const statusBg2 = { active: "#dbeafe", closed: "#dcfce7", cancelled: "#ffe4e6" }[row.status] || "#f1f5f9";
+    const balance  = row.agreedPrice - (row.totalPaid || 0);
+    const prepBy   = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(" ") || currentUser?.email || "Milik Admin";
+    const win = window.open("", "_blank", "width=900,height=760");
     if (!win) return;
-    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
-<title>Sale Agreement — ${esc(row.dealNumber)}</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 32px;font-size:12px}
-.hdr{display:grid;grid-template-columns:80px 1fr 170px;align-items:start;border-bottom:3px solid #027333;padding-bottom:14px;margin-bottom:18px;gap:12px}
-.co-name{font-size:18px;font-weight:900;color:#027333}
-.co-sub{font-size:9px;color:#64748b;line-height:1.5}
-.doc-type{font-size:13px;font-weight:900;color:#027333;text-transform:uppercase;letter-spacing:.05em;text-align:right}
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Sale Agreement – ${esc(row.dealNumber)}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 32px;font-size:12px}
+.hdr{display:grid;grid-template-columns:1fr 180px;align-items:start;border-bottom:3px solid #0B3B2E;padding-bottom:14px;margin-bottom:18px}
+.co-name{font-size:18px;font-weight:900;color:#0B3B2E}.co-sub{font-size:9px;color:#64748b;line-height:1.5}
+.doc-type{font-size:13px;font-weight:900;color:#0B3B2E;text-transform:uppercase;letter-spacing:.05em;text-align:right}
 .doc-no{font-family:monospace;font-size:15px;font-weight:700;text-align:right;margin-top:3px}
-.badge{display:inline-block;padding:3px 12px;border-radius:999px;font-size:10px;font-weight:800;float:right;margin-top:6px;background:${statusBg};color:${statusC}}
+.badge{display:inline-block;padding:3px 12px;font-size:10px;font-weight:800;float:right;margin-top:6px;background:${statusBg2};color:${statusC}}
 .price-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px}
-.price-box{border:1.5px solid #e2e8f0;border-radius:8px;padding:10px 14px}
-.price-box.main{border-color:#027333;background:#f0faf5}
+.price-box{border:1.5px solid #e2e8f0;padding:10px 14px}.price-box.main{border-color:#0B3B2E;background:#f0faf5}
 .pl{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:3px}
-.pv{font-size:18px;font-weight:900;color:#0f172a;font-family:monospace}
-.pv.green{color:#027333}
-.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:#e2e8f0;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:14px}
-.field{background:#fff;padding:9px 12px}
-.fl{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:2px}
-.fv{font-size:11px;font-weight:600;color:#1e293b}
-.sig-section{border-top:2px solid #027333;padding-top:18px;margin-top:24px}
+.pv{font-size:18px;font-weight:900;color:#0f172a;font-family:monospace}.pv.green{color:#0B3B2E}
+.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:#e2e8f0;border:1px solid #e2e8f0;overflow:hidden;margin-bottom:14px}
+.field{background:#fff;padding:9px 12px}.fl{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:2px}
+.fv{font-size:11px;font-weight:600;color:#1e293b}.st{font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.12em;color:#0B3B2E;margin:14px 0 6px}
+.sig-section{border-top:2px solid #0B3B2E;padding-top:18px;margin-top:24px}
 .sig-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:16px}
-.sig-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#027333;margin-bottom:14px}
-.sig-line{border-bottom:1.5px solid #94a3b8;height:28px;margin-bottom:4px}
-.sig-sub{font-size:9px;color:#94a3b8;margin-bottom:10px}
+.sig-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#0B3B2E;margin-bottom:14px}
+.sig-line{border-bottom:1.5px solid #94a3b8;height:28px;margin-bottom:4px}.sig-sub{font-size:9px;color:#94a3b8;margin-bottom:10px}
 .notice{font-size:9px;color:#94a3b8;text-align:center;margin-top:18px;border-top:1px solid #f1f5f9;padding-top:10px;line-height:1.6}
-@media print{body{padding:14px 16px}@page{size:A4 portrait;margin:10mm}}
-</style></head><body>
-<div class="hdr">
-  <div>${logoHtml}</div>
-  <div><div class="co-name">${esc(coName)}</div>${coInfo?`<div class="co-sub">${esc(coInfo)}</div>`:""}<div style="margin-top:4px;font-size:11px;font-weight:700;color:#334155">Property Sale Transaction</div></div>
-  <div>
-    <div class="doc-type">Sale Agreement</div>
-    <div class="doc-no">${esc(row.dealNumber)}</div>
-    <div class="badge">${esc(String(row.status||"").toUpperCase())}</div>
-  </div>
-</div>
-
+@media print{body{padding:14px 16px}@page{size:A4 portrait;margin:10mm}}</style></head><body>
+<div class="hdr"><div><div class="co-name">${esc(coName)}</div>${coInfo ? `<div class="co-sub">${esc(coInfo)}</div>` : ""}</div>
+<div><div class="doc-type">Sale Agreement</div><div class="doc-no">${esc(row.dealNumber)}</div><div class="badge">${esc(String(row.status || "").toUpperCase())}</div></div></div>
 <div class="price-row">
-  <div class="price-box main"><div class="pl">Agreed Sale Price</div><div class="pv green">${esc(fmtKES(row.agreedPrice))}</div></div>
-  <div class="price-box"><div class="pl">Amount Paid</div><div class="pv">${esc(fmtKES(row.totalPaid||0))}</div></div>
-  <div class="price-box${balance > 0?' ':''}"><div class="pl">Outstanding Balance</div><div class="pv${balance > 0?' pv':''}${balance > 0?' ':'green'}">${esc(fmtKES(balance))}</div></div>
-</div>
-
-<div style="font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.12em;color:#027333;margin:14px 0 6px">Transaction Details</div>
-<div class="grid">
-  ${field("Deal No.", row.dealNumber)}
-  ${field("Deal Date", fmtD(row.dealDate))}
-  ${field("Expected Closing", fmtD(row.expectedClosingDate))}
-  ${field("Actual Closing", fmtD(row.actualClosingDate))}
-  ${field("Title Transfer", fmtD(row.titleTransferDate))}
-</div>
-
-<div style="font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.12em;color:#027333;margin:14px 0 6px">Property</div>
-<div class="grid">
-  ${field("Listing No.", row.listing?.listingNumber)}
-  ${field("Property Title", row.listing?.title)}
-  ${field("Property Type", row.listing?.propertyType)}
-  ${field("Location", row.listing?.location||row.listing?.town)}
-</div>
-
-<div style="font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.12em;color:#027333;margin:14px 0 6px">Parties</div>
-<div class="grid">
-  ${field("Buyer", row.buyer?.fullName)}
-  ${field("Buyer Code", row.buyer?.buyerNumber)}
-  ${field("Buyer Phone", row.buyer?.phone)}
-  ${field("Sales Agent", row.agent?.fullName||"N/A")}
-  ${field("Agent Code", row.agent?.agentNumber||"N/A")}
-</div>
-
-${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;font-size:11px;color:#334155;line-height:1.6;margin-bottom:14px"><div style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:4px">Notes / Handover</div>${esc(row.notes||row.handoverNotes||"")}</div>`:""}
-
-<div class="sig-section">
-  <div class="sig-grid">
-    <div><div class="sig-title">Prepared By</div><div class="sig-line" style="display:flex;align-items:flex-end;padding-bottom:3px;"><span style="font-size:11px;font-weight:700;color:#0f172a;">${esc(preparedByName)}</span></div><div class="sig-sub">Signature &amp; Date</div></div>
-    <div><div class="sig-title">Buyer</div><div class="sig-line"></div><div class="sig-sub">Signature &amp; Date</div><div class="sig-line"></div><div class="sig-sub">Full Name</div></div>
-    <div><div class="sig-title">Sales Agent</div><div class="sig-line"></div><div class="sig-sub">Signature &amp; Date</div><div class="sig-line"></div><div class="sig-sub">Full Name</div></div>
-    <div><div class="sig-title">Authorized Officer</div><div class="sig-line"></div><div class="sig-sub">Signature &amp; Date</div><div class="sig-line"></div><div class="sig-sub">Name &amp; Stamp</div></div>
-  </div>
-</div>
-
-<div class="notice">Official sale agreement record issued by ${esc(coName)} • Printed: ${esc(printedOn)} • This document does not substitute a formal legal sale agreement</div>
+<div class="price-box main"><div class="pl">Agreed Sale Price</div><div class="pv green">${esc(fmtKES(row.agreedPrice))}</div></div>
+<div class="price-box"><div class="pl">Amount Paid</div><div class="pv">${esc(fmtKES(row.totalPaid || 0))}</div></div>
+<div class="price-box"><div class="pl">Outstanding Balance</div><div class="pv ${balance > 0 ? "" : "green"}">${esc(fmtKES(balance))}</div></div></div>
+<div class="st">Transaction Details</div><div class="grid">
+<div class="field"><div class="fl">Deal No.</div><div class="fv">${esc(row.dealNumber)}</div></div>
+<div class="field"><div class="fl">Deal Date</div><div class="fv">${esc(fmtD(row.dealDate))}</div></div>
+<div class="field"><div class="fl">Expected Closing</div><div class="fv">${esc(fmtD(row.expectedClosingDate))}</div></div>
+<div class="field"><div class="fl">Actual Closing</div><div class="fv">${esc(fmtD(row.actualClosingDate))}</div></div>
+<div class="field"><div class="fl">Title Transfer</div><div class="fv">${esc(fmtD(row.titleTransferDate))}</div></div></div>
+<div class="st">Property</div><div class="grid">
+<div class="field"><div class="fl">Listing No.</div><div class="fv">${esc(row.listing?.listingNumber)}</div></div>
+<div class="field"><div class="fl">Title</div><div class="fv">${esc(row.listing?.title)}</div></div>
+<div class="field"><div class="fl">Location</div><div class="fv">${esc(row.listing?.location || row.listing?.town)}</div></div></div>
+<div class="st">Parties</div><div class="grid">
+<div class="field"><div class="fl">Buyer</div><div class="fv">${esc(row.buyer?.fullName)}</div></div>
+<div class="field"><div class="fl">Buyer Code</div><div class="fv">${esc(row.buyer?.buyerNumber)}</div></div>
+<div class="field"><div class="fl">Buyer Phone</div><div class="fv">${esc(row.buyer?.phone)}</div></div>
+<div class="field"><div class="fl">Sales Agent</div><div class="fv">${esc(row.agent?.fullName || "N/A")}</div></div></div>
+${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:11px;color:#334155;line-height:1.6;margin-bottom:14px"><div style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:4px">Notes</div>${esc(row.notes)}</div>` : ""}
+<div class="sig-section"><div class="sig-grid">
+<div><div class="sig-title">Prepared By</div><div class="sig-line" style="display:flex;align-items:flex-end;padding-bottom:3px;"><span style="font-size:11px;font-weight:700;">${esc(prepBy)}</span></div><div class="sig-sub">Signature &amp; Date</div></div>
+<div><div class="sig-title">Buyer</div><div class="sig-line"></div><div class="sig-sub">Signature &amp; Date</div><div class="sig-line"></div><div class="sig-sub">Full Name</div></div>
+<div><div class="sig-title">Sales Agent</div><div class="sig-line"></div><div class="sig-sub">Signature &amp; Date</div></div>
+<div><div class="sig-title">Authorized Officer</div><div class="sig-line"></div><div class="sig-sub">Signature &amp; Date</div></div></div></div>
+<div class="notice">Official sale agreement record issued by ${esc(coName)} • Printed: ${new Date().toLocaleDateString("en-KE", { day: "2-digit", month: "long", year: "numeric" })} • Does not substitute a formal legal agreement</div>
 </body></html>`);
     win.document.close();
-    setTimeout(()=>{win.focus();win.print();},400);
+    setTimeout(() => { win.focus(); win.print(); }, 400);
   };
 
-  const inputCls = "mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20";
+  const applySearch = (e) => { e.preventDefault(); setAppliedSearch(search); setPage(1); };
+  const resetFilters = () => { setSearch(""); setAppliedSearch(""); setStatusFilter(""); setPage(1); };
 
   return (
     <PropertySaleShell
       title="Deals & Transactions"
-      subtitle={`${deals.length} deal(s)`}
-      action={<button onClick={openCreate} className="inline-flex items-center gap-1.5 rounded-lg bg-[#027333] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0c5d2b]"><FaPlus /> New Deal</button>}
+      subtitle={`${total} deal(s)`}
+      action={
+        <>
+          <button
+            type="button"
+            onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-deals", biz] })}
+            className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+          >
+            <FaRedoAlt size={9} className={isFetching ? "animate-spin" : ""} /> Refresh
+          </button>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
+          >
+            <FaPlus size={9} /> New Deal
+          </button>
+        </>
+      }
     >
-      <div className="flex h-full flex-col gap-2">
-        {/* KPI */}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {[
-            { label: "Active Deals", value: stats.active, sub: fmtKES(stats.activeValue), cls: "bg-blue-600 text-white" },
-            { label: "Closed Deals", value: stats.closed, sub: fmtKES(stats.closedValue), cls: "bg-[#027333] text-white" },
-            { label: "Total Listed", value: deals.length, cls: "bg-slate-900 text-white" },
-            { label: "Total Deal Value", value: fmtKES(stats.totalValue), cls: "bg-emerald-50 border border-emerald-200 text-emerald-900" },
-          ].map((c) => (
-            <div key={c.label} className={`rounded-lg px-3 py-2 ${c.cls}`}>
-              <div className="text-[10px] font-black uppercase tracking-wider opacity-70">{c.label}</div>
-              <div className="mt-0.5 text-sm font-black">{c.value}</div>
-              {c.sub && <div className="text-[10px] opacity-60">{c.sub}</div>}
-            </div>
-          ))}
+      <div className="relative flex flex-col flex-1 min-h-0 overflow-hidden">
+
+      {/* ── Filter bar ───────────────────────────────────────────────────── */}
+      <form onSubmit={applySearch} className="mb-1 flex flex-wrap items-center gap-1 border border-slate-200 bg-white px-2 py-1 shadow-sm flex-shrink-0">
+        <input
+          className="h-7 w-[160px] grow border border-slate-300 px-2 text-xs text-slate-700 placeholder:text-slate-400 focus:border-[#0B3B2E] focus:outline-none"
+          placeholder="Deal no. / property / buyer"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <select
+          className="h-7 w-[120px] grow border border-[#B7C9C0] bg-[#F1F6F3] px-1.5 text-xs font-semibold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
+          value={statusFilter}
+          onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+        >
+          <option value="">All Statuses</option>
+          <option value="active">Active</option>
+          <option value="closed">Closed</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+        <button type="submit" className="inline-flex h-7 items-center gap-1 bg-[#C8511A] px-3 text-xs font-bold text-white hover:bg-[#a84115]">
+          <FaSearch size={9} /> Search
+        </button>
+        <button type="button" onClick={resetFilters} className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]">
+          <FaRedoAlt size={9} /> Reset
+        </button>
+      </form>
+
+      {/* ── Table ────────────────────────────────────────────────────────── */}
+      <div className={`flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm transition-all ${selected ? "mr-[364px]" : ""}`}>
+        <div className="flex-1 min-h-0 overflow-auto">
+          <table className="w-full min-w-[780px] text-xs">
+            <thead>
+              <tr className="bg-[#0B3B2E]">
+                <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Deal No.</th>
+                <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Property</th>
+                <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Buyer</th>
+                <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Agent</th>
+                <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-white">Agreed Price</th>
+                <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-white">Paid</th>
+                <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-white">Balance</th>
+                <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Status</th>
+                <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-white">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={9} className="px-3 py-10 text-center text-xs font-semibold text-slate-400">Loading deals…</td></tr>
+              ) : deals.length === 0 ? (
+                <tr><td colSpan={9} className="px-3 py-10 text-center text-xs font-semibold text-slate-400">No deals found.</td></tr>
+              ) : deals.map((row) => {
+                const balance = row.agreedPrice - (row.totalPaid || 0);
+                const pct = row.agreedPrice > 0 ? Math.min(100, Math.round(((row.totalPaid || 0) / row.agreedPrice) * 100)) : 0;
+                return (
+                  <tr
+                    key={row._id}
+                    onClick={() => setSelected(selected?._id === row._id ? null : row)}
+                    className={`border-b border-slate-100 cursor-pointer ${selected?._id === row._id ? "bg-[#F1F6F3] border-l-2 border-l-[#0B3B2E]" : "hover:bg-[#F1F6F3]"}`}
+                  >
+                    <td className="px-3 py-2 font-mono font-bold text-[#0B3B2E]">{row.dealNumber}</td>
+                    <td className="px-3 py-2">
+                      <div className="max-w-[140px] truncate font-semibold text-slate-800">{row.listing?.title || "—"}</div>
+                      <div className="text-[10px] text-slate-400">{row.listing?.listingNumber}</div>
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="font-semibold text-slate-800">{row.buyer?.fullName || "—"}</div>
+                      <div className="text-[10px] text-slate-400">{row.buyer?.buyerNumber}</div>
+                    </td>
+                    <td className="px-3 py-2 text-slate-600">{row.agent?.fullName || <span className="italic text-slate-400">None</span>}</td>
+                    <td className="px-3 py-2 text-right">
+                      <div className="font-bold text-slate-900">{fmtKES(row.agreedPrice)}</div>
+                      <div className="mt-0.5 h-1 w-full overflow-hidden bg-slate-100">
+                        <div className="h-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-right font-bold text-emerald-700">{fmtKES(row.totalPaid || 0)}</td>
+                    <td className={`px-3 py-2 text-right font-black ${balance > 0 ? "text-rose-700" : "text-emerald-700"}`}>{fmtKES(balance)}</td>
+                    <td className="px-3 py-2">
+                      <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${statusBadge(row.status)}`}>
+                        {row.status}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="inline-flex items-center gap-1">
+                        <button type="button" onClick={() => printDeal(row)} title="Print Agreement" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                          <FaPrint className="text-[9px]" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => printStatement(row)}
+                          disabled={printingStmt === row._id}
+                          title="Statement of Account"
+                          className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-40"
+                        >
+                          <FaFileAlt className="text-[9px]" />
+                        </button>
+                        {row.status === "active" && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => { setPayingDeal(row); setPayForm(blankPayForm); setShowPayModal(true); }}
+                              className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100"
+                            >
+                              <FaMoneyBillWave className="text-[9px]" /> Pay
+                            </button>
+                            <button type="button" onClick={() => openEdit(row)} className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                              <FaEdit className="text-[9px]" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setClosingDeal(row); setCloseForm({ actualClosingDate: todayISO(), titleTransferDate: "", handoverNotes: "" }); setShowCloseModal(true); }}
+                              className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100"
+                            >
+                              <FaCheck className="text-[9px]" /> Close
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setCancellingDeal(row); setCancelReason(""); setShowCancelModal(true); }}
+                              className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600 hover:bg-rose-100"
+                            >
+                              <FaBan className="text-[9px]" />
+                            </button>
+                          </>
+                        )}
+                        {row.status === "cancelled" && (
+                          <button type="button" onClick={() => handleDelete(row)} disabled={!!actionKey} className="border border-red-200 bg-white px-2 py-0.5 text-[11px] font-bold text-red-600 hover:bg-red-50 disabled:opacity-50">
+                            <FaTimes className="text-[9px]" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
 
-        {/* Filters */}
-        <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-          <div className="relative flex-1 min-w-[180px]">
-            <FaSearch className="absolute left-3 top-2.5 text-[10px] text-slate-400" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search deals..." className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-3 text-xs focus:border-[#027333] focus:outline-none" />
-          </div>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs focus:border-[#027333] focus:outline-none">
-            <option value="">All Statuses</option>
-            <option value="active">Active</option>
-            <option value="closed">Closed</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-        </div>
-
-        {/* Table */}
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="min-h-0 flex-1 overflow-auto">
-            <table className="min-w-full text-[11px] border-collapse">
-              <thead className="sticky top-0 z-10 bg-[#027333] text-white">
-                <tr>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Deal No.</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Buyer</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Agent</th>
-                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Agreed Price</th>
-                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Paid</th>
-                  <th className="px-3 py-1 text-right font-bold border-r border-white/10">Balance</th>
-                  <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
-                  <th className="px-3 py-1 text-right font-bold">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-400">Loading deals...</td></tr>
-                : pageRows.length === 0 ? <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-400">No deals found.</td></tr>
-                : pageRows.map((row, i) => {
-                  const balance = row.agreedPrice - (row.totalPaid || 0);
-                  const pct = row.agreedPrice > 0
-                    ? Math.min(100, Math.round(((row.totalPaid || 0) / row.agreedPrice) * 100))
-                    : 0;
-                  return (
-                    <tr key={row._id} className={`border-b border-gray-100 transition ${i % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
-                      <td className="px-3 py-1 border-r border-gray-100 font-black text-slate-900">{row.dealNumber}</td>
-                      <td className="px-3 py-1 border-r border-gray-100">
-                        <div className="max-w-[140px] truncate font-bold text-slate-900">{row.listing?.title || "—"}</div>
-                        <div className="text-[10px] text-slate-400">{row.listing?.listingNumber}</div>
-                      </td>
-                      <td className="px-3 py-1 border-r border-gray-100">
-                        <div className="font-bold text-slate-900">{row.buyer?.fullName || "—"}</div>
-                        <div className="text-[10px] text-slate-400">{row.buyer?.buyerNumber}</div>
-                      </td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{row.agent?.fullName || <span className="italic text-slate-400">None</span>}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-right">
-                        <div className="font-black text-slate-900">{fmtKES(row.agreedPrice)}</div>
-                        <div className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-slate-100" title={`${pct}% paid`}>
-                          <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
-                        </div>
-                      </td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-emerald-700">{fmtKES(row.totalPaid || 0)}</td>
-                      <td className={`px-3 py-1 border-r border-gray-100 text-right font-black ${balance > 0 ? "text-rose-700" : "text-emerald-700"}`}>{fmtKES(balance)}</td>
-                      <td className="px-3 py-1 border-r border-gray-100"><span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${statusColors[row.status] || ""}`}>{row.status}</span></td>
-                      <td className="px-3 py-1 text-right">
-                        <div className="inline-flex flex-wrap justify-end gap-1.5">
-                          <button onClick={() => printDeal(row)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-bold text-slate-600"><FaPrint /></button>
-                          {row.status === "active" && <button onClick={() => openEdit(row)} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[10px] font-bold text-blue-700"><FaEdit /></button>}
-                          {row.status === "active" && (
-                            <button onClick={() => { setClosingDeal(row); setCloseForm({ actualClosingDate: todayISO(), titleTransferDate: "", handoverNotes: "" }); setShowCloseModal(true); }} className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[10px] font-bold text-emerald-700">
-                              <FaCheck /> Close
-                            </button>
-                          )}
-                          {row.status === "active" && (
-                            <button onClick={() => openCancelModal(row)} disabled={actionKey === `${row._id}:cancel`} className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[10px] font-bold text-rose-700 disabled:opacity-50">
-                              <FaBan /> Cancel
-                            </button>
-                          )}
-                          {row.status === "cancelled" && (
-                            <button onClick={() => handleDelete(row)} disabled={actionKey === `${row._id}:delete`} title="Delete cancelled deal" className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[10px] font-bold text-rose-700 disabled:opacity-50">
-                              <FaTimes /> Delete
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <div className="flex items-center justify-between border-t border-slate-100 bg-white px-4 py-2 text-xs text-slate-500">
-            <span>Showing <strong className="text-slate-900">{filtered.length === 0 ? 0 : (safePage - 1) * pageSize + 1}</strong>–<strong className="text-slate-900">{Math.min(safePage * pageSize, filtered.length)}</strong> of <strong className="text-slate-900">{filtered.length}</strong></span>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5">
-                <span className="font-semibold text-slate-500">Per page:</span>
-                <select
-                  value={pageSize}
-                  onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-                  className="h-7 rounded border border-slate-200 bg-slate-50 px-2 mb-0.5 block text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition"
-                >
-                  {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
-                </select>
-              </div>
-              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} className="rounded-lg border border-slate-200 px-3 py-1 font-semibold disabled:opacity-40">Prev</button>
-              <span>Page {safePage} of {totalPages}</span>
-              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages} className="rounded-lg border border-slate-200 px-3 py-1 font-semibold disabled:opacity-40">Next</button>
-            </div>
-          </div>
-        </div>
+        <PaginationBar page={page} pages={totalPages} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} loading={isFetching} />
       </div>
 
-      {/* New Deal Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 sm:items-center">
-          <div className="flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
-            <div className="flex shrink-0 items-center justify-between bg-[#027333] px-6 py-4 text-white">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-100">Property Sale</p>
-                <h3 className="text-lg font-black">{editingId ? "Edit Deal" : "New Sale Deal"}</h3>
+      {/* ── Deal Detail Panel ─────────────────────────────────────────────── */}
+      {selected && (
+        <div className="absolute right-0 top-0 bottom-0 w-[360px] flex flex-col bg-white border-l border-slate-200 shadow-xl overflow-hidden">
+          {/* Header */}
+          <div className="flex-shrink-0 flex items-start justify-between gap-2 bg-[#0B3B2E] px-4 py-3 text-white">
+            <div className="min-w-0">
+              <div className="font-black text-sm leading-tight font-mono">{selected.dealNumber}</div>
+              <div className="flex items-center gap-2 mt-1">
+                <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${statusBadge(selected.status)}`}>{selected.status}</span>
+                <span className="text-[10px] text-white/60">{fmtDate(selected.dealDate)}</span>
               </div>
-              <button onClick={() => setShowModal(false)} className="rounded-full border border-white/30 p-2 hover:bg-white/10"><FaTimes /></button>
             </div>
-            <div className="grid gap-4 overflow-y-auto p-6 md:grid-cols-2">
-              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Listing / Property</span>
-                <select value={form.listing} onChange={(e) => setForm((p) => ({ ...p, listing: e.target.value }))} className={`mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20`}>
-                  <option value="">Select listing...</option>
-                  {listings.filter((l) => ["available","reserved","under_contract"].includes(l.status)).map((l) => <option key={l._id} value={l._id}>{l.listingNumber} — {l.title}</option>)}
-                </select>
-              </label>
-              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Buyer</span>
-                <select value={form.buyer} onChange={(e) => setForm((p) => ({ ...p, buyer: e.target.value }))} className={`mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20`}>
-                  <option value="">Select buyer...</option>
-                  {buyers.map((b) => <option key={b._id} value={b._id}>{b.fullName} ({b.buyerNumber})</option>)}
-                </select>
-              </label>
-              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Sales Agent (Optional)</span>
-                <select value={form.agent} onChange={(e) => setForm((p) => ({ ...p, agent: e.target.value }))} className={`mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20`}>
-                  <option value="">No agent</option>
-                  {agents.map((a) => <option key={a._id} value={a._id}>{a.fullName} ({a.agentNumber})</option>)}
-                </select>
-              </label>
-              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Agreed Price (KES)</span>
-                <AmountInput value={form.agreedPrice} onChange={(v) => setForm((p) => ({ ...p, agreedPrice: v }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" placeholder="e.g. 8,500,000" required />
-              </label>
-              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Deal Date</span><input type="date" value={form.dealDate} onChange={(e) => setForm((p) => ({ ...p, dealDate: e.target.value }))} className={`mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20`} /></label>
-              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Expected Closing Date</span><input type="date" value={form.expectedClosingDate} onChange={(e) => setForm((p) => ({ ...p, expectedClosingDate: e.target.value }))} className={`mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20`} /></label>
-              <label className="block md:col-span-2"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Notes</span><textarea rows={2} value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} className={`mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20`} /></label>
+            <button onClick={() => setSelected(null)} className="flex-shrink-0 p-1 text-white/70 hover:bg-white/10 hover:text-white"><FaTimes size={13} /></button>
+          </div>
+
+          {/* Buyer + Property */}
+          <div className="flex-shrink-0 border-b border-slate-100 px-4 py-3 space-y-1.5 text-xs">
+            <div className="flex items-center gap-2 text-slate-700">
+              <FaUser size={9} className="text-slate-400 flex-shrink-0" />
+              <span className="font-semibold">{selected.buyer?.fullName || "—"}</span>
+              {selected.buyer?.buyerNumber && <span className="text-slate-400 font-mono text-[10px]">{selected.buyer.buyerNumber}</span>}
             </div>
-            <div className="flex shrink-0 items-center justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
-              <button onClick={() => setShowModal(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-[#027333] px-4 py-2 text-xs font-black text-white hover:bg-[#0c5d2b] disabled:opacity-60">{saving ? "Saving..." : editingId ? "Update Deal" : "Create Deal"}</button>
+            {selected.buyer?.phone && <div className="pl-4 text-[10px] text-slate-500">{selected.buyer.phone}</div>}
+            <div className="flex items-center gap-2 text-slate-700 mt-1">
+              <FaBuilding size={9} className="text-slate-400 flex-shrink-0" />
+              <span className="font-semibold truncate">{selected.listing?.title || "—"}</span>
+            </div>
+            {selected.listing?.listingNumber && <div className="pl-4 text-[10px] font-mono text-slate-400">{selected.listing.listingNumber}</div>}
+            {selected.agent && <div className="text-[10px] text-slate-500 pt-0.5">Agent: <span className="font-semibold text-slate-700">{selected.agent.fullName}</span></div>}
+          </div>
+
+          {/* Financial summary */}
+          <div className="flex-shrink-0 border-b border-slate-100">
+            <div className="grid grid-cols-3 border-b border-slate-100">
+              {[
+                { label: "Agreed", value: fmtKES(selected.agreedPrice), cls: "text-slate-800" },
+                { label: "Paid", value: fmtKES(selected.totalPaid || 0), cls: "text-emerald-700" },
+                { label: "Balance", value: fmtKES((selected.agreedPrice || 0) - (selected.totalPaid || 0)), cls: (selected.agreedPrice - (selected.totalPaid || 0)) > 0 ? "text-rose-700" : "text-emerald-700" },
+              ].map(({ label, value, cls }) => (
+                <div key={label} className="px-3 py-2 text-center text-[10px] border-r border-slate-100 last:border-r-0">
+                  <div className="font-black uppercase tracking-wide text-slate-400">{label}</div>
+                  <div className={`mt-0.5 font-black text-xs ${cls}`}>{value}</div>
+                </div>
+              ))}
+            </div>
+            <div className="px-4 py-2">
+              {(() => {
+                const pct = selected.agreedPrice > 0 ? Math.min(100, Math.round(((selected.totalPaid || 0) / selected.agreedPrice) * 100)) : 0;
+                return (
+                  <div>
+                    <div className="mb-1 flex justify-between text-[9px] text-slate-400"><span>Collected</span><span>{pct}%</span></div>
+                    <div className="h-1.5 w-full bg-slate-100"><div className="h-full bg-emerald-500" style={{ width: `${pct}%` }} /></div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
+
+          {/* Dates */}
+          {(selected.expectedClosingDate || selected.actualClosingDate || selected.titleTransferDate) && (
+            <div className="flex-shrink-0 border-b border-slate-100 px-4 py-2 grid grid-cols-2 gap-1 text-[10px]">
+              {selected.expectedClosingDate && <div><span className="text-slate-400">Expected Close: </span><span className="font-semibold text-slate-700">{fmtDate(selected.expectedClosingDate)}</span></div>}
+              {selected.actualClosingDate && <div><span className="text-slate-400">Closed: </span><span className="font-semibold text-emerald-700">{fmtDate(selected.actualClosingDate)}</span></div>}
+              {selected.titleTransferDate && <div><span className="text-slate-400">Title Transfer: </span><span className="font-semibold text-slate-700">{fmtDate(selected.titleTransferDate)}</span></div>}
+            </div>
+          )}
+
+          {/* Payments */}
+          <div className="flex-shrink-0 flex items-center justify-between border-b border-slate-100 px-4 py-1.5">
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Payments</span>
+            {selected.status === "active" && (
+              <button
+                onClick={() => { setPayingDeal(selected); setPayForm(blankPayForm); setShowPayModal(true); }}
+                className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100"
+              >
+                <FaMoneyBillWave size={8} /> Record
+              </button>
+            )}
+          </div>
+
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            {loadingDealPmts ? (
+              <div className="py-6 text-center text-[10px] text-slate-400">Loading…</div>
+            ) : dealPmts.length === 0 ? (
+              <div className="py-6 text-center text-[10px] text-slate-400">No payments recorded yet.</div>
+            ) : (
+              <div className="divide-y divide-slate-50">
+                {dealPmts.map((p) => (
+                  <div key={p._id} className="flex items-center gap-2 px-4 py-2 hover:bg-slate-50">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-[10px] font-bold text-[#0B3B2E]">{p.paymentNumber}</span>
+                        <span className="border border-slate-200 bg-slate-50 px-1 py-0 text-[8px] font-bold uppercase text-slate-500">{(p.paymentType || "").replace(/_/g, " ")}</span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">{fmtDate(p.paymentDate)} · {(p.paymentMethod || "").replace(/_/g, " ")}{p.reference ? ` · ${p.reference}` : ""}</div>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <span className="font-black text-xs text-slate-900">{fmtKES(p.amount)}</span>
+                      <button
+                        onClick={() => printPaymentReceipt({ ...p, deal: { ...selected, listing: selected.listing, buyer: selected.buyer } })}
+                        className="border border-[#B7C9C0] bg-white p-0.5 text-[#0B3B2E] hover:bg-[#F1F6F3]"
+                        title="Print Receipt"
+                      >
+                        <FaPrint size={8} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Commission */}
+            {dealComm && (
+              <>
+                <div className="flex-shrink-0 flex items-center border-t border-slate-200 px-4 py-1.5 mt-1">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Commission</span>
+                </div>
+                <div className="px-4 py-2 text-xs space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500">{dealComm.agent?.fullName || "—"}</span>
+                    <span className="font-black text-slate-900">{fmtKES(dealComm.commissionAmount)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-slate-400">Rate: {dealComm.commissionRate}{dealComm.commissionType === "percentage" ? "%" : " KES flat"}</span>
+                    <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${
+                      dealComm.status === "paid" ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : dealComm.status === "approved" ? "border-[#B7C9C0] bg-[#F1F6F3] text-[#0B3B2E]"
+                      : "border-amber-200 bg-amber-50 text-amber-700"
+                    }`}>{dealComm.status}</span>
+                  </div>
+                  {dealComm.payoutDate && <div className="text-[10px] text-slate-400">Paid: {fmtDate(dealComm.payoutDate)}</div>}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Panel footer actions */}
+          <div className="flex-shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-2 flex items-center gap-1.5">
+            <button onClick={() => printDeal(selected)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+              <FaPrint size={8} /> Agreement
+            </button>
+            <button onClick={() => printStatement(selected)} disabled={printingStmt === selected._id} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-40">
+              <FaFileAlt size={8} /> Statement
+            </button>
+            {selected.buyer?.phone && (
+              <button onClick={() => setSmsTarget(selected)} className="inline-flex items-center gap-1 border border-teal-200 bg-teal-50 px-2.5 py-1 text-[10px] font-bold text-teal-700 hover:bg-teal-100">
+                <FaSms size={8} /> SMS Buyer
+              </button>
+            )}
+            {selected.status === "active" && (
+              <>
+                <button onClick={() => openEdit(selected)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                  <FaEdit size={8} /> Edit
+                </button>
+                <button
+                  onClick={() => { setClosingDeal(selected); setCloseForm({ actualClosingDate: todayISO(), titleTransferDate: "", handoverNotes: "" }); setShowCloseModal(true); }}
+                  className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100"
+                >
+                  <FaCheck size={8} /> Close
+                </button>
+              </>
+            )}
+          </div>
         </div>
+      )}
+
+      </div>{/* end relative wrapper */}
+
+      {/* New / Edit Deal Modal */}
+      {showModal && (
+        <Modal
+          title={editingId ? "Edit Deal" : "New Sale Deal"}
+          subtitle="Property Sale Module"
+          onClose={() => setShowModal(false)}
+          footer={
+            <>
+              <button type="button" onClick={() => setShowModal(false)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button type="button" onClick={handleSave} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+                {saving ? "Saving…" : editingId ? "Update Deal" : "Create Deal"}
+              </button>
+            </>
+          }
+        >
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <label className={labelCls}>Listing / Property</label>
+              <select value={form.listing} onChange={(e) => setForm((p) => ({ ...p, listing: e.target.value }))} className={inputCls}>
+                <option value="">Select listing…</option>
+                {listings.filter((l) => ["available", "reserved", "under_contract"].includes(l.status)).map((l) => (
+                  <option key={l._id} value={l._id}>{l.listingNumber} — {l.title}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Buyer</label>
+              <select value={form.buyer} onChange={(e) => setForm((p) => ({ ...p, buyer: e.target.value }))} className={inputCls}>
+                <option value="">Select buyer…</option>
+                {buyers.map((b) => <option key={b._id} value={b._id}>{b.fullName} ({b.buyerNumber})</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Sales Agent (Optional)</label>
+              <select value={form.agent} onChange={(e) => setForm((p) => ({ ...p, agent: e.target.value }))} className={inputCls}>
+                <option value="">No agent</option>
+                {agents.map((a) => <option key={a._id} value={a._id}>{a.fullName} ({a.agentNumber})</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Agreed Price (KES)</label>
+              <AmountInput value={form.agreedPrice} onChange={(v) => setForm((p) => ({ ...p, agreedPrice: v }))} className={inputCls} placeholder="e.g. 8,500,000" />
+            </div>
+            <div>
+              <label className={labelCls}>Deal Date</label>
+              <input type="date" value={form.dealDate} onChange={(e) => setForm((p) => ({ ...p, dealDate: e.target.value }))} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Expected Closing Date</label>
+              <input type="date" value={form.expectedClosingDate} onChange={(e) => setForm((p) => ({ ...p, expectedClosingDate: e.target.value }))} className={inputCls} />
+            </div>
+            <div className="md:col-span-2">
+              <label className={labelCls}>Notes</label>
+              <textarea rows={2} value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* Cancel Deal Modal */}
       {showCancelModal && cancellingDeal && (
-        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-center justify-between rounded-t-2xl bg-rose-600 px-5 py-4 text-white">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-100">Cancel Deal</p>
-                <h3 className="text-lg font-black">{cancellingDeal.dealNumber}</h3>
-              </div>
-              <button onClick={() => setShowCancelModal(false)} className="rounded-full border border-white/30 p-2 hover:bg-white/10"><FaTimes /></button>
-            </div>
-            <div className="space-y-3 p-5">
-              <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-800">
-                Cancelling will revert the listing to <strong>Available</strong> and cancel any pending commissions.
-              </div>
-              <label className="block">
-                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Reason for Cancellation</span>
-                <textarea
-                  rows={3}
-                  value={cancelReason}
-                  onChange={(e) => setCancelReason(e.target.value)}
-                  placeholder="Optional — e.g. buyer withdrew, financing fell through..."
-                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-rose-500 focus:ring-1 focus:ring-rose-500/20"
-                />
-              </label>
-            </div>
-            <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-5 py-4">
-              <button onClick={() => setShowCancelModal(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Back</button>
-              <button onClick={handleCancel} disabled={!!actionKey} className="inline-flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-xs font-black text-white hover:bg-rose-700 disabled:opacity-60">
-                <FaBan /> {actionKey ? "Cancelling..." : "Cancel Deal"}
+        <Modal
+          title={`Cancel Deal — ${cancellingDeal.dealNumber}`}
+          subtitle="This will revert the listing to Available"
+          headerCls="bg-rose-700"
+          onClose={() => setShowCancelModal(false)}
+          footer={
+            <>
+              <button type="button" onClick={() => setShowCancelModal(false)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Back</button>
+              <button type="button" onClick={handleCancel} disabled={!!actionKey} className="bg-rose-700 px-4 py-1.5 text-xs font-black text-white hover:bg-rose-800 disabled:opacity-60">
+                {actionKey ? "Cancelling…" : "Cancel Deal"}
               </button>
-            </div>
+            </>
+          }
+        >
+          <div className="mb-3 border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+            Cancelling will revert the listing to <strong>Available</strong> and cancel any pending commissions.
           </div>
-        </div>
+          <label className={labelCls}>Reason for Cancellation</label>
+          <textarea rows={3} value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} placeholder="Optional — e.g. buyer withdrew, financing fell through…" className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-rose-500 focus:outline-none" />
+        </Modal>
+      )}
+
+      {/* SMS Modal */}
+      {smsTarget && (
+        <CwSmsModal
+          target={{ name: smsTarget.buyer?.fullName, phone: smsTarget.buyer?.phone }}
+          context={smsTarget.dealNumber}
+          defaultBody={`Dear ${smsTarget.buyer?.fullName || "Client"}, `}
+          templates={[
+            { label: "Payment Reminder", color: "amber",  body: `Dear ${smsTarget.buyer?.fullName || "Client"}, this is a friendly reminder that your next installment for deal ${smsTarget.dealNumber} is due. Kindly settle the outstanding balance to avoid delays. Contact us for assistance.` },
+            { label: "Deal Update",      color: "green",  body: `Dear ${smsTarget.buyer?.fullName || "Client"}, there is an update on your property purchase (${smsTarget.dealNumber}). Please contact us at your earliest convenience.` },
+            { label: "Closing Notice",   color: "violet", body: `Dear ${smsTarget.buyer?.fullName || "Client"}, congratulations! Your property deal ${smsTarget.dealNumber} is ready for closing. Please contact us to schedule the final handover.` },
+            { label: "Document Request", color: "slate",  body: `Dear ${smsTarget.buyer?.fullName || "Client"}, kindly submit the required documents for your property transaction (${smsTarget.dealNumber}) at your earliest convenience. Contact us for details.` },
+          ]}
+          onSend={handleSendSms}
+          onClose={() => setSmsTarget(null)}
+          sending={smsSending}
+        />
       )}
 
       {/* Close Deal Modal */}
       {showCloseModal && closingDeal && (
-        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-center justify-between bg-[#027333] px-5 py-4 text-white rounded-t-2xl">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-100">Close Deal</p>
-                <h3 className="text-lg font-black">{closingDeal.dealNumber}</h3>
-              </div>
-              <button onClick={() => setShowCloseModal(false)} className="rounded-full border border-white/30 p-2 hover:bg-white/10"><FaTimes /></button>
+        <Modal
+          title={`Close Deal — ${closingDeal.dealNumber}`}
+          subtitle={`Balance: ${fmtKES(closingDeal.agreedPrice - (closingDeal.totalPaid || 0))}`}
+          onClose={() => setShowCloseModal(false)}
+          footer={
+            <>
+              <button type="button" onClick={() => setShowCloseModal(false)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button type="button" onClick={handleClose} disabled={!!actionKey} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+                <FaCheck className="inline mr-1 text-[9px]" />{actionKey ? "Closing…" : "Confirm Close"}
+              </button>
+            </>
+          }
+        >
+          <div className="grid gap-3">
+            <div>
+              <label className={labelCls}>Actual Closing Date</label>
+              <input type="date" value={closeForm.actualClosingDate} onChange={(e) => setCloseForm((p) => ({ ...p, actualClosingDate: e.target.value }))} className={inputCls} />
             </div>
-            <div className="space-y-3 p-5">
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-                <p className="text-xs font-bold text-emerald-800">Balance: <span className="text-sm font-black">{fmtKES(closingDeal.agreedPrice - (closingDeal.totalPaid || 0))}</span></p>
-                <p className="mt-1 text-[11px] text-emerald-700">Closing requires full payment to be cleared.</p>
-              </div>
-              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Actual Closing Date</span><input type="date" value={closeForm.actualClosingDate} onChange={(e) => setCloseForm((p) => ({ ...p, actualClosingDate: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" /></label>
-              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Title Transfer Date</span><input type="date" value={closeForm.titleTransferDate} onChange={(e) => setCloseForm((p) => ({ ...p, titleTransferDate: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" /></label>
-              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Handover Notes</span><textarea rows={3} value={closeForm.handoverNotes} onChange={(e) => setCloseForm((p) => ({ ...p, handoverNotes: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20" /></label>
+            <div>
+              <label className={labelCls}>Title Transfer Date</label>
+              <input type="date" value={closeForm.titleTransferDate} onChange={(e) => setCloseForm((p) => ({ ...p, titleTransferDate: e.target.value }))} className={inputCls} />
             </div>
-            <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-5 py-4">
-              <button onClick={() => setShowCloseModal(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button onClick={handleClose} disabled={!!actionKey} className="inline-flex items-center gap-2 rounded-lg bg-[#027333] px-4 py-2 text-xs font-black text-white hover:bg-[#0c5d2b] disabled:opacity-60"><FaCheck /> {actionKey ? "Closing..." : "Confirm Close"}</button>
+            <div>
+              <label className={labelCls}>Handover Notes</label>
+              <textarea rows={3} value={closeForm.handoverNotes} onChange={(e) => setCloseForm((p) => ({ ...p, handoverNotes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
             </div>
           </div>
-        </div>
+        </Modal>
+      )}
+      {/* Record Payment Modal */}
+      {showPayModal && payingDeal && (
+        <Modal
+          title={`Record Payment — ${payingDeal.dealNumber}`}
+          subtitle={`${payingDeal.buyer?.fullName || ""} • Balance: KES ${((payingDeal.agreedPrice || 0) - (payingDeal.totalPaid || 0)).toLocaleString("en-KE", { minimumFractionDigits: 2 })}`}
+          onClose={() => setShowPayModal(false)}
+          footer={
+            <>
+              <button type="button" onClick={() => setShowPayModal(false)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button type="button" onClick={handleRecordPayment} disabled={payingSave} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+                {payingSave ? "Saving…" : "Record & Print Receipt"}
+              </button>
+            </>
+          }
+        >
+          {/* Balance summary */}
+          <div className="mb-3 grid grid-cols-3 border border-slate-200">
+            <div className="border-r border-slate-200 px-3 py-2 text-center text-[10px]">
+              <div className="font-black uppercase tracking-wide text-slate-400">Agreed</div>
+              <div className="mt-0.5 font-black text-slate-800">{fmtKES(payingDeal.agreedPrice)}</div>
+            </div>
+            <div className="border-r border-slate-200 px-3 py-2 text-center text-[10px]">
+              <div className="font-black uppercase tracking-wide text-slate-400">Paid</div>
+              <div className="mt-0.5 font-black text-emerald-700">{fmtKES(payingDeal.totalPaid || 0)}</div>
+            </div>
+            <div className="px-3 py-2 text-center text-[10px]">
+              <div className="font-black uppercase tracking-wide text-slate-400">Balance</div>
+              <div className="mt-0.5 font-black text-rose-700">{fmtKES((payingDeal.agreedPrice || 0) - (payingDeal.totalPaid || 0))}</div>
+            </div>
+          </div>
+          {/* Progress bar */}
+          <div className="mb-3">
+            {(() => {
+              const pct = payingDeal.agreedPrice > 0 ? Math.min(100, Math.round(((payingDeal.totalPaid || 0) / payingDeal.agreedPrice) * 100)) : 0;
+              return (
+                <>
+                  <div className="mb-1 flex justify-between text-[9px] text-slate-400"><span>Payment Progress</span><span>{pct}% paid</span></div>
+                  <div className="h-1.5 w-full overflow-hidden bg-slate-200"><div className="h-full bg-emerald-500" style={{ width: `${pct}%` }} /></div>
+                </>
+              );
+            })()}
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <label className={labelCls}>Payment Type</label>
+              <select value={payForm.paymentType} onChange={(e) => setPayForm((f) => ({ ...f, paymentType: e.target.value }))} className={inputCls}>
+                {PAYMENT_TYPES.map((t) => <option key={t} value={t}>{fmtLabel(t)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Method</label>
+              <select value={payForm.paymentMethod} onChange={(e) => setPayForm((f) => ({ ...f, paymentMethod: e.target.value }))} className={inputCls}>
+                {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{fmtLabel(m)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Amount (KES)</label>
+              <AmountInput value={payForm.amount} onChange={(v) => setPayForm((f) => ({ ...f, amount: v }))} className={inputCls} placeholder="e.g. 500,000" />
+            </div>
+            <div>
+              <label className={labelCls}>Payment Date</label>
+              <input type="date" value={payForm.paymentDate} onChange={(e) => setPayForm((f) => ({ ...f, paymentDate: e.target.value }))} className={inputCls} />
+            </div>
+            <div className="md:col-span-2">
+              <label className={labelCls}>
+                {payForm.paymentMethod === "mpesa" ? "M-Pesa Code" : payForm.paymentMethod === "cheque" ? "Cheque No." : payForm.paymentMethod === "bank_transfer" ? "EFT / Ref No." : "Reference (Optional)"}
+              </label>
+              <input
+                type="text"
+                value={payForm.reference}
+                onChange={(e) => setPayForm((f) => ({ ...f, reference: e.target.value }))}
+                className={`${inputCls} font-mono ${["mpesa", "cheque", "bank_transfer"].includes(payForm.paymentMethod) ? "border-amber-300 bg-amber-50 focus:border-amber-500" : ""}`}
+                placeholder={payForm.paymentMethod === "mpesa" ? "e.g. QJ1X23ABC4D" : "Optional…"}
+              />
+              {["mpesa", "cheque", "bank_transfer"].includes(payForm.paymentMethod) && (
+                <div className="mt-1 text-[10px] font-semibold text-amber-600">Reference required for {fmtLabel(payForm.paymentMethod)} — used for reconciliation</div>
+              )}
+            </div>
+            <div className="md:col-span-2">
+              <label className={labelCls}>Notes</label>
+              <textarea rows={2} value={payForm.notes} onChange={(e) => setPayForm((f) => ({ ...f, notes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+            </div>
+          </div>
+        </Modal>
       )}
     </PropertySaleShell>
   );

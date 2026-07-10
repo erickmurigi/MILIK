@@ -3,6 +3,7 @@ import SaleBuyer from "../models/SaleBuyer.js";
 import SaleDeal from "../models/SaleDeal.js";
 import SaleOffer from "../models/SaleOffer.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
+import { sendAdHocSms } from "../../../services/communicationService.js";
 
 export const listBuyers = async (req, res, next) => {
   try {
@@ -88,6 +89,22 @@ export const deleteBuyer = async (req, res, next) => {
 
     await buyer.deleteOne();
     res.status(200).json({ message: "Buyer deleted" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const sendBuyerSms = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const buyer = await SaleBuyer.findOne({ _id: req.params.id, business }).lean();
+    if (!buyer) return next(createError(404, "Buyer not found"));
+    const phone = String(req.body.phone || buyer.phone || "").trim();
+    const body  = String(req.body.body || "").trim();
+    if (!phone) return next(createError(400, "Buyer has no phone number"));
+    if (!body)  return next(createError(400, "Message body is required"));
+    await sendAdHocSms({ businessId: business, phone, body, templateKey: "sale_buyer_manual" });
+    res.json({ success: true, message: "SMS sent" });
   } catch (err) {
     next(err);
   }

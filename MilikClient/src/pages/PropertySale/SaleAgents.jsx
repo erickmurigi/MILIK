@@ -1,56 +1,82 @@
-﻿import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
-import { FaEdit, FaPlus, FaPrint, FaSearch, FaTimes, FaTrash, FaUserTie } from "react-icons/fa";
+import { FaEdit, FaPlus, FaPrint, FaRedoAlt, FaSearch, FaTimes, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
+import PaginationBar from "../../components/PaginationBar";
 import { saleApi, fmtKES } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
 import useDebounce from "../../hooks/useDebounce";
 
-const ITEMS_PER_PAGE = 50;
+const PAGE_SIZE = 50;
 
 const blankForm = {
   fullName: "", phone: "", email: "", idNumber: "",
   commissionRate: 3, commissionType: "percentage", status: "active", notes: "",
 };
 
+const Modal = ({ title, subtitle, children, footer, onClose }) => (
+  <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
+    <div className="flex w-full flex-col bg-white shadow-2xl sm:max-w-xl sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
+      <div className="flex-shrink-0 flex items-start justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
+        <div>
+          <h2 className="text-sm font-extrabold uppercase tracking-wide">{title}</h2>
+          {subtitle && <p className="mt-0.5 text-xs font-semibold text-white/70">{subtitle}</p>}
+        </div>
+        <button type="button" onClick={onClose} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-4">{children}</div>
+      {footer && <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">{footer}</div>}
+    </div>
+  </div>
+);
+
+const inputCls = "h-8 w-full border border-slate-200 bg-white px-3 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none";
+const labelCls = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
+
 const SaleAgents = () => {
-  const confirm = useConfirm();
-  const queryClient = useQueryClient();
+  const confirm        = useConfirm();
+  const queryClient    = useQueryClient();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
-  const [saving, setSaving] = useState(false);
+  const [saving,    setSaving]    = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState("");
-  const [form, setForm] = useState(blankForm);
-  const [search, setSearch] = useState("");
+  const [form,      setForm]      = useState(blankForm);
+  const [search,    setSearch]    = useState("");
   const debouncedSearch = useDebounce(search, 400);
-  const [page, setPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [page,      setPage]      = useState(1);
+  const [pageSize,  setPageSize]  = useState(PAGE_SIZE);
 
   const biz = currentCompany?._id;
 
-  const queryKey = ["sale-agents", biz, debouncedSearch, page];
-  const { data: agentsData, isLoading: loading, error } = useQuery({
-    queryKey,
-    queryFn: () => saleApi.listAgents({ business: biz, search: debouncedSearch, page, limit: ITEMS_PER_PAGE }),
-    enabled: !!biz,
+  useEffect(() => setPage(1), [debouncedSearch, statusFilter]);
+
+  const { data: agentsData, isLoading: loading, isFetching, error } = useQuery({
+    queryKey: ["sale-agents", biz, debouncedSearch, statusFilter, page, pageSize],
+    queryFn:  () => saleApi.listAgents({ business: biz, search: debouncedSearch, status: statusFilter || undefined, page, limit: pageSize }),
+    enabled:  !!biz,
     placeholderData: (prev) => prev,
+    staleTime: 30_000,
   });
 
   useEffect(() => { if (error) toast.error("Failed to load agents"); }, [error]);
-  useEffect(() => setPage(1), [debouncedSearch]);
 
-  const agents = agentsData?.data ?? [];
-  const serverTotal = agentsData?.total ?? 0;
-  const backendStats = agentsData?.stats ?? null;
-  const totalPages = Math.max(1, Math.ceil(serverTotal / ITEMS_PER_PAGE));
-  const safePage = page;
-  const pageRows = agents;
+  const agents     = agentsData?.data   ?? [];
+  const total      = agentsData?.total  ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["sale-agents", biz] });
 
   const openCreate = () => { setEditingId(""); setForm(blankForm); setShowModal(true); };
-  const openEdit = (row) => {
+  const openEdit   = (row) => {
     setEditingId(row._id);
-    setForm({ fullName: row.fullName || "", phone: row.phone || "", email: row.email || "", idNumber: row.idNumber || "", commissionRate: row.commissionRate ?? 3, commissionType: row.commissionType || "percentage", status: row.status || "active", notes: row.notes || "" });
+    setForm({
+      fullName: row.fullName || "", phone: row.phone || "", email: row.email || "",
+      idNumber: row.idNumber || "", commissionRate: row.commissionRate ?? 3,
+      commissionType: row.commissionType || "percentage", status: row.status || "active", notes: row.notes || "",
+    });
     setShowModal(true);
   };
 
@@ -62,63 +88,67 @@ const SaleAgents = () => {
       const payload = { ...form, business: biz, commissionRate: Number(form.commissionRate) };
       if (editingId) await saleApi.updateAgent(editingId, payload);
       else await saleApi.createAgent(payload);
-      await queryClient.invalidateQueries({ queryKey: ["sale-agents", biz] });
+      invalidate();
       setShowModal(false);
       toast.success(`Agent ${editingId ? "updated" : "registered"}`);
-    } catch (err) { toast.error(err?.response?.data?.message || "Failed to save agent"); }
-    finally { setSaving(false); }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to save agent");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDelete = async (row) => {
     if (!await confirm({ title: "Remove Agent", message: `Remove agent "${row.fullName}"?`, confirmText: "Remove", isDangerous: true })) return;
     try {
       await saleApi.deleteAgent(row._id);
-      await queryClient.invalidateQueries({ queryKey: ["sale-agents", biz] });
+      invalidate();
       toast.success("Agent removed");
-    } catch (err) { toast.error(err?.response?.data?.message || "Cannot remove this agent"); }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Cannot remove this agent");
+    }
   };
 
   const printAgent = (row) => {
-    const co = currentCompany || {};
-    const coName = co.companyName || co.name || "MILIK";
-    const esc = (v) => String(v ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-    const logoHtml = co.logo ? `<img src="${co.logo}" alt="logo" style="width:72px;height:72px;object-fit:contain;border-radius:10px;border:1px solid #cbd5e1;" />` : `<div style="width:72px;height:72px;background:#027333;color:#fff;font-size:26px;font-weight:900;display:flex;align-items:center;justify-content:center;border-radius:10px;">${coName.slice(0,1)}</div>`;
-    const coInfo = [co.phone||co.phoneNumber, co.email||co.companyEmail].filter(Boolean).join(" â€¢ ");
-    const printedOn = new Date().toLocaleDateString("en-KE",{day:"2-digit",month:"long",year:"numeric"});
-    const statusBg = row.status === "active" ? "#dcfce7" : "#f1f5f9";
-    const statusC = row.status === "active" ? "#166534" : "#64748b";
-    const commDisplay = row.commissionType === "percentage" ? `${row.commissionRate}%` : fmtKES(row.commissionRate) + " flat";
-
-    const win = window.open("","_blank","width=900,height=680");
+    const co        = currentCompany || {};
+    const coName    = co.companyName || co.name || "MILIK";
+    const esc       = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const logoHtml  = co.logo
+      ? `<img src="${co.logo}" alt="logo" style="width:72px;height:72px;object-fit:contain;border:1px solid #cbd5e1;" />`
+      : `<div style="width:72px;height:72px;background:#0B3B2E;color:#fff;font-size:26px;font-weight:900;display:flex;align-items:center;justify-content:center;">${coName.slice(0, 1)}</div>`;
+    const coInfo    = [co.phone || co.phoneNumber, co.email || co.companyEmail].filter(Boolean).join(" • ");
+    const statusBg  = row.status === "active" ? "#dcfce7" : "#f1f5f9";
+    const statusC   = row.status === "active" ? "#166534" : "#64748b";
+    const commDisplay = row.commissionType === "percentage" ? `${row.commissionRate}%` : `${fmtKES(row.commissionRate)} flat`;
+    const printedOn = new Date().toLocaleDateString("en-KE", { day: "2-digit", month: "long", year: "numeric" });
+    const win = window.open("", "_blank", "width=900,height=680");
     if (!win) return;
     win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
-<title>Agent Profile â€” ${esc(row.agentNumber)}</title>
+<title>Agent Profile — ${esc(row.agentNumber)}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 32px;font-size:12px}
-.hdr{display:grid;grid-template-columns:80px 1fr 170px;align-items:start;border-bottom:3px solid #027333;padding-bottom:14px;margin-bottom:18px;gap:12px}
-.co-name{font-size:18px;font-weight:900;color:#027333}
-.co-sub{font-size:9px;color:#64748b;line-height:1.5}
-.doc-type{font-size:13px;font-weight:900;color:#027333;text-transform:uppercase;letter-spacing:.05em;text-align:right}
+.hdr{display:grid;grid-template-columns:80px 1fr 170px;align-items:start;border-bottom:3px solid #0B3B2E;padding-bottom:14px;margin-bottom:18px;gap:12px}
+.co-name{font-size:18px;font-weight:900;color:#0B3B2E}.co-sub{font-size:9px;color:#64748b;line-height:1.5}
+.doc-type{font-size:13px;font-weight:900;color:#0B3B2E;text-transform:uppercase;letter-spacing:.05em;text-align:right}
 .doc-no{font-family:monospace;font-size:15px;font-weight:700;text-align:right;margin-top:3px}
-.badge{display:inline-block;padding:3px 12px;border-radius:999px;font-size:10px;font-weight:800;float:right;margin-top:6px;background:${statusBg};color:${statusC}}
-.comm-box{border:2px solid #027333;border-radius:8px;padding:12px 16px;margin-bottom:16px;background:#f0faf5;display:flex;align-items:center;justify-content:space-between}
+.badge{display:inline-block;padding:3px 12px;font-size:10px;font-weight:800;float:right;margin-top:6px;background:${statusBg};color:${statusC}}
+.comm-box{border:2px solid #0B3B2E;padding:12px 16px;margin-bottom:16px;background:#f0fdf4;display:flex;align-items:center;justify-content:space-between}
 .comm-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#64748b}
-.comm-val{font-size:24px;font-weight:900;color:#027333;font-family:monospace}
-.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:#e2e8f0;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:14px}
-.field{background:#fff;padding:9px 12px}
-.fl{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:2px}
+.comm-val{font-size:24px;font-weight:900;color:#0B3B2E;font-family:monospace}
+.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:#e2e8f0;border:1px solid #e2e8f0;overflow:hidden;margin-bottom:14px}
+.field{background:#fff;padding:9px 12px}.fl{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:2px}
 .fv{font-size:11px;font-weight:600;color:#1e293b}
 .notice{font-size:9px;color:#94a3b8;text-align:center;margin-top:20px;border-top:1px solid #f1f5f9;padding-top:10px}
 @media print{body{padding:14px 16px}@page{size:A4 portrait;margin:10mm}}
 </style></head><body>
 <div class="hdr">
   <div>${logoHtml}</div>
-  <div><div class="co-name">${esc(coName)}</div>${coInfo?`<div class="co-sub">${esc(coInfo)}</div>`:""}</div>
+  <div><div class="co-name">${esc(coName)}</div>${coInfo ? `<div class="co-sub">${esc(coInfo)}</div>` : ""}</div>
   <div>
     <div class="doc-type">Sales Agent</div>
     <div class="doc-no">${esc(row.agentNumber)}</div>
-    <div class="badge">${esc(String(row.status||"").toUpperCase())}</div>
+    <div class="badge">${esc(String(row.status || "").toUpperCase())}</div>
   </div>
 </div>
 <div class="comm-box">
@@ -127,136 +157,171 @@ body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 32px;font
 </div>
 <div class="grid">
   <div class="field"><div class="fl">Full Name</div><div class="fv">${esc(row.fullName)}</div></div>
-  <div class="field"><div class="fl">Phone</div><div class="fv">${esc(row.phone||"â€”")}</div></div>
-  <div class="field"><div class="fl">Email</div><div class="fv">${esc(row.email||"â€”")}</div></div>
-  <div class="field"><div class="fl">ID Number</div><div class="fv">${esc(row.idNumber||"â€”")}</div></div>
+  <div class="field"><div class="fl">Phone</div><div class="fv">${esc(row.phone || "—")}</div></div>
+  <div class="field"><div class="fl">Email</div><div class="fv">${esc(row.email || "—")}</div></div>
+  <div class="field"><div class="fl">ID Number</div><div class="fv">${esc(row.idNumber || "—")}</div></div>
   <div class="field"><div class="fl">Status</div><div class="fv">${esc(row.status)}</div></div>
 </div>
-${row.notes?`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;font-size:11px;color:#334155;line-height:1.6"><div style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:4px">Notes</div>${esc(row.notes)}</div>`:""}
-<div class="notice">Agent profile issued by ${esc(coName)} â€¢ Printed: ${esc(printedOn)}</div>
+${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:11px;color:#334155;line-height:1.6"><div style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:4px">Notes</div>${esc(row.notes)}</div>` : ""}
+<div class="notice">Agent profile issued by ${esc(coName)} • Printed: ${esc(printedOn)}</div>
 </body></html>`);
     win.document.close();
-    setTimeout(()=>{win.focus();win.print();},400);
+    setTimeout(() => { win.focus(); win.print(); }, 400);
   };
 
-  const inputCls = "mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#027333] focus:ring-1 focus:ring-[#027333]/20";
   const f = (key) => (e) => setForm((p) => ({ ...p, [key]: e.target.value }));
 
   return (
     <PropertySaleShell
       title="Sales Agents"
-      subtitle={`${serverTotal} agent(s)`}
-      action={<button onClick={openCreate} className="inline-flex items-center gap-1.5 rounded-lg bg-[#027333] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0c5d2b]"><FaPlus /> New Agent</button>}
+      subtitle={`${total} agent(s)`}
+      action={
+        <>
+          <button
+            type="button"
+            onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-agents", biz] })}
+            className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+          >
+            <FaRedoAlt size={9} className={isFetching ? "animate-spin" : ""} /> Refresh
+          </button>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
+          >
+            <FaPlus size={9} /> New Agent
+          </button>
+        </>
+      }
     >
-      <div className="flex h-full flex-col gap-2">
-        {/* KPI Strip */}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {[
-            { label: "Total Agents", value: serverTotal, cls: "bg-slate-900 text-white" },
-            { label: "Active", value: backendStats?.active?.count ?? agents.filter((a) => a.status === "active").length, cls: "bg-[#027333] text-white" },
-            { label: "Inactive", value: backendStats?.inactive?.count ?? agents.filter((a) => a.status !== "active").length, cls: "bg-slate-100 border border-slate-200 text-slate-700" },
-            {
-              label: "Avg Commission",
-              value: backendStats?.active?.avgRate != null
-                ? `${Number(backendStats.active.avgRate).toFixed(1)}%`
-                : agents.length > 0
-                  ? `${(agents.reduce((s, a) => s + Number(a.commissionRate || 0), 0) / agents.length).toFixed(1)}%`
-                  : "â€”",
-              cls: "bg-emerald-50 border border-emerald-200 text-emerald-900",
-            },
-          ].map((c) => (
-            <div key={c.label} className={`rounded-lg px-3 py-2 ${c.cls}`}>
-              <div className="text-[10px] font-black uppercase tracking-wider opacity-70">{c.label}</div>
-              <div className="mt-0.5 text-sm font-black">{c.value}</div>
-            </div>
-          ))}
+      {/* Filter bar */}
+      <div className="mb-1 flex flex-wrap items-center gap-1 border border-slate-200 bg-white px-2 py-1 shadow-sm">
+        <div className="relative min-w-[180px] flex-1">
+          <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search agents…"
+            className="h-7 w-full border border-slate-300 pl-7 pr-2 text-xs placeholder:text-slate-400 focus:border-[#0B3B2E] focus:outline-none"
+          />
         </div>
-        <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-          <div className="relative flex-1 min-w-[180px]">
-            <FaSearch className="absolute left-3 top-2.5 text-[10px] text-slate-400" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search agents..." className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-3 text-xs focus:border-[#027333] focus:outline-none" />
-          </div>
-        </div>
-
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="min-h-0 flex-1 overflow-auto">
-            <table className="min-w-full text-xs">
-              <thead className="bg-[#027333] text-white">
-                <tr>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Agent No.</th>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Name</th>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Phone</th>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Email</th>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Commission</th>
-                  <th className="px-3 py-2.5 text-left font-black tracking-wide">Status</th>
-                  <th className="px-3 py-2.5 text-right font-black tracking-wide">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">Loading agents...</td></tr>
-                : pageRows.length === 0 ? <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">No agents found.</td></tr>
-                : pageRows.map((row, i) => (
-                  <tr key={row._id} className={`border-t border-slate-100 transition ${i % 2 === 0 ? "bg-white hover:bg-slate-50" : "bg-slate-50/60 hover:bg-slate-100/40"}`}>
-                    <td className="px-3 py-2 font-black text-slate-900">{row.agentNumber}</td>
-                    <td className="px-3 py-2 font-bold text-slate-900">{row.fullName}</td>
-                    <td className="px-3 py-2 text-slate-600">{row.phone || "â€”"}</td>
-                    <td className="px-3 py-2 text-slate-600">{row.email || "â€”"}</td>
-                    <td className="px-3 py-2 font-black text-[#027333]">
-                      {row.commissionType === "percentage" ? `${row.commissionRate}%` : fmtKES(row.commissionRate)}
-                      <span className="ml-1 text-[10px] font-normal text-slate-400">({row.commissionType})</span>
-                    </td>
-                    <td className="px-3 py-2">
-                      <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[10px] font-black ${row.status === "active" ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-slate-50 border-slate-200 text-slate-600"}`}>{row.status}</span>
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <div className="inline-flex gap-1.5">
-                        <button onClick={() => printAgent(row)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-bold text-slate-600"><FaPrint /></button>
-                        <button onClick={() => openEdit(row)} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[10px] font-bold text-blue-700"><FaEdit /></button>
-                        <button onClick={() => handleDelete(row)} className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[10px] font-bold text-rose-700"><FaTrash /></button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="flex items-center justify-between border-t border-slate-100 bg-white px-4 py-2 text-xs text-slate-500">
-            <span><strong className="text-slate-900">{serverTotal}</strong> agent(s)</span>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} className="rounded-lg border border-slate-200 px-3 py-1 font-semibold disabled:opacity-40">Prev</button>
-              <span>Page {safePage} of {totalPages}</span>
-              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages} className="rounded-lg border border-slate-200 px-3 py-1 font-semibold disabled:opacity-40">Next</button>
-            </div>
-          </div>
-        </div>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="h-7 border border-[#B7C9C0] bg-[#F1F6F3] px-1.5 text-xs font-semibold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
+        >
+          <option value="">All Statuses</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+        {(search || statusFilter) && (
+          <button type="button" onClick={() => { setSearch(""); setStatusFilter(""); }} className="h-7 border border-rose-200 bg-rose-50 px-2.5 text-xs font-bold text-rose-600 hover:bg-rose-100">Clear</button>
+        )}
       </div>
 
+      {/* Table */}
+      <div className="flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm">
+        <div className="flex-1 min-h-0 overflow-auto">
+          <table className="w-full min-w-[640px] text-xs border-collapse">
+            <thead>
+              <tr className="bg-[#0B3B2E]">
+                {["Agent No.", "Name", "Phone", "Email", "Commission", "Status", "Actions"].map((h) => (
+                  <th key={h} className={`px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white ${h === "Actions" ? "text-right" : "text-left"}`}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={7} className="px-3 py-10 text-center text-xs text-slate-400">Loading agents…</td></tr>
+              ) : agents.length === 0 ? (
+                <tr><td colSpan={7} className="px-3 py-10 text-center text-xs text-slate-400">No agents found.</td></tr>
+              ) : agents.map((row) => (
+                <tr key={row._id} className="border-b border-slate-100 hover:bg-slate-50">
+                  <td className="px-3 py-2 font-mono font-black text-[#0B3B2E]">{row.agentNumber}</td>
+                  <td className="px-3 py-2 font-bold text-slate-900">{row.fullName}</td>
+                  <td className="px-3 py-2 text-slate-600">{row.phone || "—"}</td>
+                  <td className="px-3 py-2 text-slate-600">{row.email || "—"}</td>
+                  <td className="px-3 py-2 font-black text-[#0B3B2E]">
+                    {row.commissionType === "percentage" ? `${row.commissionRate}%` : fmtKES(row.commissionRate)}
+                    <span className="ml-1 text-[10px] font-normal text-slate-400">({row.commissionType})</span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${row.status === "active" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
+                      {row.status}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <div className="inline-flex gap-1">
+                      <button type="button" onClick={() => printAgent(row)} className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"><FaPrint className="text-[9px]" /></button>
+                      <button type="button" onClick={() => openEdit(row)} className="border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100"><FaEdit className="text-[9px]" /></button>
+                      <button type="button" onClick={() => handleDelete(row)} className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-700 hover:bg-rose-100"><FaTrash className="text-[9px]" /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <PaginationBar page={page} pages={totalPages} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} loading={isFetching} />
+      </div>
+
+      {/* New / Edit Agent Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 sm:items-center">
-          <div className="flex w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
-            <div className="flex shrink-0 items-center justify-between bg-[#027333] px-6 py-4 text-white">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-100">Property Sale</p>
-                <h3 className="text-lg font-black">{editingId ? "Edit Agent" : "New Sales Agent"}</h3>
-              </div>
-              <button onClick={() => setShowModal(false)} className="rounded-full border border-white/30 p-2 hover:bg-white/10"><FaTimes /></button>
+        <Modal
+          title={editingId ? "Edit Agent" : "New Sales Agent"}
+          subtitle="Property Sale Module"
+          onClose={() => setShowModal(false)}
+          footer={
+            <>
+              <button type="button" onClick={() => setShowModal(false)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button type="button" onClick={handleSave} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+                {saving ? "Saving…" : editingId ? "Update Agent" : "Save Agent"}
+              </button>
+            </>
+          }
+        >
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="md:col-span-2">
+              <label className={labelCls}>Full Name</label>
+              <input value={form.fullName} onChange={f("fullName")} className={inputCls} />
             </div>
-            <div className="grid gap-4 overflow-y-auto p-6 md:grid-cols-2">
-              <label className="block md:col-span-2"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Full Name</span><input value={form.fullName} onChange={f("fullName")} className={inputCls} /></label>
-              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Phone</span><input value={form.phone} onChange={f("phone")} className={inputCls} /></label>
-              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Email</span><input type="email" value={form.email} onChange={f("email")} className={inputCls} /></label>
-              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">National ID</span><input value={form.idNumber} onChange={f("idNumber")} className={inputCls} /></label>
-              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Status</span><select value={form.status} onChange={f("status")} className={inputCls}><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
-              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Commission Type</span><select value={form.commissionType} onChange={f("commissionType")} className={inputCls}><option value="percentage">Percentage (%)</option><option value="flat">Flat Amount (KES)</option></select></label>
-              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Commission Rate {form.commissionType === "percentage" ? "(%)" : "(KES)"}</span><input type="number" value={form.commissionRate} onChange={f("commissionRate")} className={inputCls} /></label>
-              <label className="block md:col-span-2"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Notes</span><textarea rows={2} value={form.notes} onChange={f("notes")} className={inputCls} /></label>
+            <div>
+              <label className={labelCls}>Phone</label>
+              <input value={form.phone} onChange={f("phone")} className={inputCls} />
             </div>
-            <div className="flex shrink-0 items-center justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
-              <button onClick={() => setShowModal(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-[#027333] px-4 py-2 text-xs font-black text-white hover:bg-[#0c5d2b] disabled:opacity-60">{saving ? "Saving..." : editingId ? "Update Agent" : "Save Agent"}</button>
+            <div>
+              <label className={labelCls}>Email</label>
+              <input type="email" value={form.email} onChange={f("email")} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>National ID</label>
+              <input value={form.idNumber} onChange={f("idNumber")} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Status</label>
+              <select value={form.status} onChange={f("status")} className={inputCls}>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Commission Type</label>
+              <select value={form.commissionType} onChange={f("commissionType")} className={inputCls}>
+                <option value="percentage">Percentage (%)</option>
+                <option value="flat">Flat Amount (KES)</option>
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Rate {form.commissionType === "percentage" ? "(%)" : "(KES)"}</label>
+              <input type="number" value={form.commissionRate} onChange={f("commissionRate")} className={inputCls} />
+            </div>
+            <div className="md:col-span-2">
+              <label className={labelCls}>Notes</label>
+              <textarea rows={2} value={form.notes} onChange={f("notes")} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </PropertySaleShell>
   );

@@ -7,6 +7,7 @@ import {
   FaUserTie, FaCity, FaChevronRight, FaSync,
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useDispatch, useSelector } from "react-redux";
 import { selectCurrentUser, selectCurrentCompany } from "../../redux/selectors";
 import { toast } from "react-toastify";
@@ -53,8 +54,9 @@ const moduleRegistry = [
 // ─────────────────────────────────────────────────────────────────────────────
 
 const StartMenu = ({ darkMode = false, variant = "floating" }) => {
-  const dispatch   = useDispatch();
-  const navigate   = useNavigate();
+  const dispatch     = useDispatch();
+  const navigate     = useNavigate();
+  const queryClient  = useQueryClient();
   const currentUser    = useSelector(selectCurrentUser);
   const currentCompany = useSelector(selectCurrentCompany);
   const isCompanySwitching = useSelector((state) => state.company?.isSwitching);
@@ -181,8 +183,10 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
     const prevCompany = currentCompany || null;
 
     // Optimistic: set the new company instantly from the already-fetched list data,
+    // clear all React Query caches so the new company sees only fresh data,
     // close the modal, and navigate — user sees new modules with zero wait
     dispatch(setCurrentCompany(company));
+    queryClient.clear();
     setSwitchingId(company._id);
     setShowSwitchModal(false);
     setOpen(false);
@@ -191,12 +195,15 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
     try {
       await dispatch(switchCompany(company._id));
     } catch (err) {
-      if (prevCompany) dispatch(setCurrentCompany(prevCompany));
+      if (prevCompany) {
+        dispatch(setCurrentCompany(prevCompany));
+        queryClient.clear();
+      }
       toast.error(err?.response?.data?.message || err?.message || "Failed to switch company");
     } finally {
       setSwitchingId(null);
     }
-  }, [currentCompany, currentUser?.company?._id, isCompanySwitching, switchingId, dispatch, navigate]);
+  }, [currentCompany, currentUser?.company?._id, isCompanySwitching, switchingId, dispatch, navigate, queryClient]);
 
   const isBusy = isCompanySwitching;
 

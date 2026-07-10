@@ -151,7 +151,7 @@ const TabManager = ({ darkMode }) => {
     localStorage.setItem(getActiveStorageKey(currentCompanyKey), JSON.stringify(cleanActiveTabs));
 
     previousCompanyKeyRef.current = currentCompanyKey;
-    if (location.pathname !== '/dashboard') navigate('/dashboard', { replace: true });
+    if (location.pathname !== '/moduleDashboard') navigate('/moduleDashboard', { replace: true });
   }, [currentCompanyKey, location.pathname, navigate]);
 
   // Sync route navigation → tab state

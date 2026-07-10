@@ -1,6 +1,6 @@
 import express from "express";
 import { verifyUser, requireCompanyModule, requireCompanyPermission } from "../../../controllers/verifyToken.js";
-import { cancelDeal, closeDeal, createDeal, deleteDeal, getDeal, listDeals, updateDeal } from "../controllers/dealsController.js";
+import { cancelDeal, closeDeal, createDeal, deleteDeal, getDeal, listDeals, updateDeal, sendDealSms } from "../controllers/dealsController.js";
 
 const router = express.Router();
 
@@ -12,5 +12,6 @@ router.put("/:id", requireCompanyPermission("sale-deals", "update", "propertySal
 router.patch("/:id/close", requireCompanyPermission("sale-deals", "process", "propertySale"), closeDeal);
 router.patch("/:id/cancel", requireCompanyPermission("sale-deals", "process", "propertySale"), cancelDeal);
 router.delete("/:id", requireCompanyPermission("sale-deals", "delete", "propertySale"), deleteDeal);
+router.post("/:id/sms", requireCompanyPermission("sale-deals", "view", "propertySale"), sendDealSms);
 
 export default router;

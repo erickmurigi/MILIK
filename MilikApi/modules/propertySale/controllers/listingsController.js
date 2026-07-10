@@ -3,6 +3,7 @@ import { createError } from "../../../utils/error.js";
 import SaleListing from "../models/SaleListing.js";
 import SaleAgent from "../models/SaleAgent.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
+import { deleteImageFile } from "../middleware/listingImageUpload.js";
 
 export const listListings = async (req, res, next) => {
   try {
@@ -116,6 +117,41 @@ export const deleteListing = async (req, res, next) => {
     }
     await listing.deleteOne();
     res.status(200).json({ message: "Listing deleted" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const uploadListingImages = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const userId = currentUserId(req);
+    if (!req.files?.length) return next(createError(400, "No valid images uploaded"));
+    const listing = await SaleListing.findOne({ _id: req.params.id, business });
+    if (!listing) return next(createError(404, "Listing not found"));
+    const newUrls = req.files.map((f) => `/uploads/sale-listings/${f.filename}`);
+    listing.images.push(...newUrls);
+    listing.updatedBy = userId;
+    await listing.save();
+    res.status(200).json({ images: listing.images });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const removeListingImage = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const userId = currentUserId(req);
+    const { url } = req.body;
+    if (!url) return next(createError(400, "Image URL required"));
+    const listing = await SaleListing.findOne({ _id: req.params.id, business });
+    if (!listing) return next(createError(404, "Listing not found"));
+    listing.images = listing.images.filter((u) => u !== url);
+    listing.updatedBy = userId;
+    await listing.save();
+    deleteImageFile(url);
+    res.status(200).json({ images: listing.images });
   } catch (err) {
     next(err);
   }

@@ -118,7 +118,7 @@ const EMAIL_TEMPLATE_DEFINITIONS = [
     description: 'Notify the landlord that a processed statement is ready.',
     subject: '{statementType} Statement – {propertyName} ({statementPeriod})',
     body:
-      'Hello {landlordName} ({landlordCode}),\n\nYour {statementType} statement for {propertyName} covering {statementPeriod} is ready for review.\n\nStatement Reference: {statementNumber}\nStatement Date: {statementDate}\n\nFinancial Summary:\nTotal Rent Invoiced: {totalRentInvoiced}\nTotal Rent Received: {totalRentReceived}\nManagement Commission ({commissionPercentage}): {commissionAmount}\nTotal Expenses: {totalExpenses}\nNet Amount Due to Landlord: {netAmountDue}\n\nPlease review and contact us if you have any questions.\n\nRegards,\n{companyName}\n{companyPhone}',
+      'Hello {landlordName} ({landlordCode}),\n\nYour {statementType} statement for {propertyName} covering {statementPeriod} is ready for review.\n\nStatement Reference: {statementNumber}\nStatement Date: {statementDate}\n\nFinancial Summary:\nTotal Rent Invoiced: {totalRentInvoiced}\nTotal Rent Received: {totalRentReceived}\nManagement Commission ({commissionPercentage}): {commissionAmount}{commissionVatLine}\nTotal Expenses: {totalExpenses}\nNet Amount Due to Landlord: {netAmountDue}\n\nPlease review and contact us if you have any questions.\n\nRegards,\n{companyName}\n{companyPhone}',
   },
   {
     key: 'landlord_payment_email',
@@ -184,12 +184,12 @@ const CONTEXT_PERMISSION_MAP = {
   sale_buyer_bulk:       { resource: 'saleBuyers',       moduleKey: 'propertySale' },
   sale_agent_bulk:       { resource: 'saleAgents',       moduleKey: 'propertySale' },
   inv_supplier_bulk:     { resource: 'invSuppliers',     moduleKey: 'inventory' },
-  processed_statement: { resource: 'processedStatements', moduleKey: 'accounts' },
+  processed_statement: { resource: 'processedStatements', moduleKey: 'propertyManagement' },
   receipt: { resource: 'receipts', moduleKey: 'propertyManagement' },
   invoice: { resource: 'tenantInvoices', moduleKey: 'propertyManagement' },
   meter_reading: { resource: 'meterReadings', moduleKey: 'propertyManagement' },
   penalty_invoice: { resource: 'latePenalties', moduleKey: 'propertyManagement' },
-  landlord_payment: { resource: 'landlordPayments', moduleKey: 'accounts' },
+  landlord_payment: { resource: 'landlordPayments', moduleKey: 'propertyManagement' },
 };
 
 const normalizePhoneNumber = (value = '', defaultCountryCode = '+254') => {
@@ -316,6 +316,14 @@ const buildProcessedStatementPayload = ({ statement, company, channel }) => ({
   totalRentReceived: formatCurrency(statement?.totalRentReceived || 0, company?.baseCurrency || 'KES'),
   commissionAmount: formatCurrency(statement?.commissionAmount || 0, company?.baseCurrency || 'KES'),
   commissionPercentage: `${round2(statement?.commissionPercentage || 0)}%`,
+  commissionVatLine: (() => {
+    const vat = round2(statement?.commissionTaxAmount || 0);
+    if (vat <= 0) return '';
+    const rate = round2(statement?.commissionTaxRate || 0);
+    const currency = company?.baseCurrency || 'KES';
+    const label = rate > 0 ? `VAT on Commission (${rate}%)` : 'VAT on Commission';
+    return `\n${label}: ${formatCurrency(vat, currency)}`;
+  })(),
   totalExpenses: formatCurrency(statement?.totalExpenses || 0, company?.baseCurrency || 'KES'),
   netAfterExpenses: formatCurrency(statement?.netAfterExpenses || 0, company?.baseCurrency || 'KES'),
 });

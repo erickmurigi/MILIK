@@ -1,310 +1,407 @@
-import React, { useEffect, useState } from "react";
-import { useSelector } from "react-redux";
+import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  FaArrowRight, FaBuilding, FaChartLine, FaFileAlt,
-  FaHandshake, FaMoneyBillWave, FaTag, FaUserFriends,
-  FaUserTie, FaUsers, FaClipboard, FaExclamationTriangle,
+  FaBuilding, FaChartLine, FaCheck, FaClipboard, FaClock,
+  FaFileAlt, FaHandshake, FaMoneyBillWave, FaPlus,
+  FaRedoAlt, FaTag, FaTimesCircle, FaUserFriends, FaUsers, FaUserTie,
 } from "react-icons/fa";
-import { toast } from "react-toastify";
-import PropertySaleShell from "./PropertySaleShell";
 import { saleApi, fmtKES } from "../../services/propertySaleApi";
+import PropertySaleShell from "./PropertySaleShell";
 
-const DEAL_STATUS_CLS = {
-  active:    "bg-blue-100 text-blue-700 border-blue-200",
-  closed:    "bg-emerald-100 text-emerald-700 border-emerald-200",
-  cancelled: "bg-rose-100 text-rose-700 border-rose-200",
+const ACC = "#0B3B2E";
+
+const StatCard = ({ label, value, sub, icon: Icon, tone = "green" }) => {
+  const bg = {
+    green:  "bg-[#0B3B2E] border-[#0B3B2E]",
+    orange: "bg-[#C8511A] border-[#C8511A]",
+    slate:  "bg-slate-700 border-slate-700",
+    red:    "bg-rose-700 border-rose-700",
+    blue:   "bg-blue-700 border-blue-700",
+  }[tone] || "bg-[#0B3B2E] border-[#0B3B2E]";
+  return (
+    <div className={`relative overflow-hidden border ${bg} px-4 py-3 shadow-sm`}>
+      {Icon && <Icon className="absolute right-3 top-2.5 h-10 w-10 text-white/10" />}
+      <p className="text-[9px] font-extrabold uppercase tracking-widest text-white/60">{label}</p>
+      <p className="mt-1.5 text-2xl font-black leading-none text-white">{value}</p>
+      {sub && <p className="mt-1 text-[10px] text-white/50">{sub}</p>}
+    </div>
+  );
 };
-const LISTING_STATUS_CLS = {
-  available:     "bg-emerald-100 text-emerald-700 border-emerald-200",
-  reserved:      "bg-amber-100 text-amber-700 border-amber-200",
-  under_contract:"bg-blue-100 text-blue-700 border-blue-200",
-  sold:          "bg-slate-800 text-white border-slate-700",
-  withdrawn:     "bg-rose-100 text-rose-700 border-rose-200",
-};
-const LEAD_FUNNEL = [
-  { key: "new",          label: "New" },
-  { key: "contacted",    label: "Contacted" },
-  { key: "qualified",    label: "Qualified" },
-  { key: "siteVisited",  label: "Site Visited" },
-  { key: "proposalSent", label: "Proposal Sent" },
-  { key: "negotiating",  label: "Negotiating" },
-  { key: "converted",    label: "Converted" },
+
+const Card = ({ title, right, children, className = "" }) => (
+  <div className={`border border-slate-200 bg-white shadow-sm ${className}`}>
+    <div className="flex min-h-8 flex-wrap items-center justify-between gap-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5">
+      <h2 className="text-[10px] font-black uppercase tracking-widest text-[#0B3B2E]">{title}</h2>
+      {right && <div className="flex items-center gap-2">{right}</div>}
+    </div>
+    {children}
+  </div>
+);
+
+const dealStatusBadge = (status) => ({
+  active:    "border-blue-200 bg-blue-50 text-blue-700",
+  closed:    "border-emerald-200 bg-emerald-50 text-emerald-700",
+  cancelled: "border-slate-200 bg-slate-50 text-slate-500",
+}[status] || "border-slate-200 bg-slate-50 text-slate-500");
+
+const pipelineStages = [
+  { key: "available",      label: "Available",      icon: FaBuilding,    ring: "border-emerald-400", num: "text-emerald-700", bg: "bg-emerald-50",  hover: "hover:bg-emerald-50",  link: "/sale/listings?status=available"      },
+  { key: "reserved",       label: "Reserved",       icon: FaClock,       ring: "border-amber-400",   num: "text-amber-600",   bg: "bg-amber-50",    hover: "hover:bg-amber-50",    link: "/sale/listings?status=reserved"       },
+  { key: "underContract",  label: "Under Contract", icon: FaTag,         ring: "border-blue-400",    num: "text-blue-600",    bg: "bg-blue-50",     hover: "hover:bg-blue-50",     link: "/sale/deals?status=active"            },
+  { key: "closedDeals",    label: "Deals Closed",   icon: FaHandshake,   ring: "border-indigo-400",  num: "text-indigo-600",  bg: "bg-indigo-50",   hover: "hover:bg-indigo-50",   link: "/sale/deals?status=closed"            },
+  { key: "sold",           label: "Sold",           icon: FaCheck,       ring: "border-slate-400",   num: "text-slate-600",   bg: "bg-slate-100",   hover: "hover:bg-slate-100",   link: "/sale/listings?status=sold"           },
 ];
-const LINKS = [
-  { label: "Sale Listings",    to: "/sale/listings",       Icon: FaBuilding },
-  { label: "Buyers",           to: "/sale/buyers",         Icon: FaUsers },
-  { label: "Agents",           to: "/sale/agents",         Icon: FaUserTie },
-  { label: "Offers",           to: "/sale/offers",         Icon: FaTag },
-  { label: "Deals",            to: "/sale/deals",          Icon: FaHandshake },
-  { label: "Payments",         to: "/sale/payments",       Icon: FaMoneyBillWave },
-  { label: "Commissions",      to: "/sale/commissions",    Icon: FaChartLine },
-  { label: "Reports",          to: "/sale/reports",        Icon: FaFileAlt },
-  { label: "Leads Pipeline",   to: "/sale/crm/leads",      Icon: FaUserFriends },
-  { label: "Activity Log",     to: "/sale/crm/activities", Icon: FaClipboard },
+
+const QUICK_LINKS = [
+  { label: "Sale Listings",  to: "/sale/listings",       Icon: FaBuilding    },
+  { label: "Buyers",         to: "/sale/buyers",         Icon: FaUsers       },
+  { label: "Agents",         to: "/sale/agents",         Icon: FaUserTie     },
+  { label: "Offers",         to: "/sale/offers",         Icon: FaTag         },
+  { label: "Deals",          to: "/sale/deals",          Icon: FaHandshake   },
+  { label: "Payments",       to: "/sale/payments",       Icon: FaMoneyBillWave },
+  { label: "Commissions",    to: "/sale/commissions",    Icon: FaChartLine   },
+  { label: "Reports",        to: "/sale/reports",        Icon: FaFileAlt     },
+  { label: "Leads Pipeline", to: "/sale/crm/leads",      Icon: FaUserFriends },
+  { label: "Activity Log",   to: "/sale/crm/activities", Icon: FaClipboard   },
 ];
 
 const PropertySaleDashboard = () => {
-  const navigate       = useNavigate();
-  const currentCompany = useSelector((s) => s.company?.currentCompany);
-  const [stats,   setStats]   = useState(null);
-  const [loading, setLoading] = useState(true);
+  const navigate    = useNavigate();
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    if (!currentCompany?._id) return;
-    setLoading(true);
-    saleApi
-      .getDashboardStats({ business: currentCompany._id })
-      .then(setStats)
-      .catch(() => toast.error("Failed to load dashboard stats"))
-      .finally(() => setLoading(false));
-  }, [currentCompany?._id]);
+  const { data, isFetching: loading } = useQuery({
+    queryKey: ["sale-dashboard"],
+    queryFn:  () => saleApi.getDashboardStats(),
+    placeholderData: (prev) => prev,
+    staleTime: 60_000,
+  });
 
-  const s = stats || {};
+  const s    = data || {};
   const leads = s.leads || {};
 
-  const kpi = [
-    { label: "Available Listings",  value: loading ? "—" : (s.listings?.available ?? 0),              sub: "Ready to sell",    cls: "bg-[#027333] text-white" },
-    { label: "Active Deals",        value: loading ? "—" : (s.deals?.active ?? 0),                    sub: loading ? "" : fmtKES(s.deals?.activeValue ?? 0), cls: "bg-blue-600 text-white" },
-    { label: "Total Collected",     value: loading ? "—" : fmtKES(s.payments?.totalCollected ?? 0),   sub: `${s.payments?.count ?? 0} payment(s)`,           cls: "bg-slate-900 text-white" },
-    { label: "Commissions Due",     value: loading ? "—" : fmtKES((s.commissions?.pending ?? 0) + (s.commissions?.approved ?? 0)), sub: "Pending payout", cls: "bg-rose-600 text-white" },
-  ];
-
-  const pipeline = [
-    { label: "Available",      count: loading ? "—" : (s.listings?.available ?? 0),  sub: "Listings ready",                        cls: "bg-[#027333] text-white" },
-    { label: "Reserved",       count: loading ? "—" : (s.listings?.reserved ?? 0),   sub: "Offers placed",                         cls: "bg-amber-500 text-white" },
-    { label: "Under Contract", count: loading ? "—" : (s.deals?.active ?? 0),        sub: loading ? "" : fmtKES(s.deals?.activeValue ?? 0), cls: "bg-blue-600 text-white" },
-    { label: "Closed",         count: loading ? "—" : (s.deals?.closed ?? 0),        sub: loading ? "" : fmtKES(s.deals?.closedValue ?? 0), cls: "bg-slate-800 text-white" },
-  ];
+  // Pipeline counts
+  const pipelineCounts = useMemo(() => ({
+    available:     s.listings?.available     ?? 0,
+    reserved:      s.listings?.reserved      ?? 0,
+    underContract: s.deals?.active           ?? 0,
+    closedDeals:   s.deals?.closed           ?? 0,
+    sold:          s.listings?.sold          ?? 0,
+  }), [s]);
 
   const recentDeals    = s.recentDeals    || [];
   const recentListings = s.recentListings || [];
 
-  return (
-    <PropertySaleShell title="Dashboard">
-      <div className="flex flex-col gap-2">
+  const totalCollected   = s.payments?.totalCollected ?? 0;
+  const commissionsDue   = (s.commissions?.pending ?? 0) + (s.commissions?.approved ?? 0);
+  const activeDealsValue = s.deals?.activeValue ?? 0;
+  const closedValue      = s.deals?.closedValue ?? 0;
 
-        {/* KPI Strip */}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {kpi.map((c) => (
-            <div key={c.label} className={`rounded-lg px-3 py-2 ${c.cls}`}>
-              <div className="text-[10px] font-black uppercase tracking-wider opacity-70">{c.label}</div>
-              <div className="mt-0.5 text-sm font-black">{c.value}</div>
-              {c.sub && <div className="mt-0.5 text-[10px] font-semibold opacity-60">{c.sub}</div>}
-            </div>
-          ))}
+  return (
+    <PropertySaleShell
+      title="Dashboard"
+      action={
+        <>
+          <button
+            type="button"
+            onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-dashboard"] })}
+            className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+          >
+            <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate("/sale/listings")}
+            className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
+          >
+            <FaPlus size={9} /> New Listing
+          </button>
+        </>
+      }
+    >
+      <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5">
+
+        {/* ── KPI stat cards ─────────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 xl:grid-cols-5">
+          <StatCard label="Available Listings" value={loading ? "…" : (s.listings?.available ?? 0)} icon={FaBuilding}      tone="green"  sub="Ready to sell" />
+          <StatCard label="Active Deals"       value={loading ? "…" : (s.deals?.active ?? 0)}       icon={FaHandshake}     tone="orange" sub={loading ? "" : fmtKES(activeDealsValue)} />
+          <StatCard label="Total Collected"    value={loading ? "…" : fmtKES(totalCollected)}        icon={FaMoneyBillWave} tone="green"  sub={`${s.payments?.count ?? 0} payments`} />
+          <StatCard label="Commissions Due"    value={loading ? "…" : fmtKES(commissionsDue)}        icon={FaChartLine}     tone="orange" sub="Pending payout" />
+          <StatCard label="Active Leads"       value={loading ? "…" : (leads.active ?? 0)}            icon={FaUserFriends}   tone="green"  sub={`${leads.total ?? 0} total`} />
         </div>
 
-        {/* Deal Pipeline Funnel */}
-        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
-          <div className="mb-2 text-[9px] font-black uppercase tracking-[0.25em] text-slate-400">Deal Pipeline</div>
-          <div className="flex items-stretch gap-1.5">
-            {pipeline.map((stage, i) => (
-              <React.Fragment key={stage.label}>
-                <div className={`flex flex-1 flex-col rounded-lg px-3 py-2 ${stage.cls}`}>
-                  <div className="text-[9px] font-black uppercase tracking-wider opacity-75">{stage.label}</div>
-                  <div className="mt-0.5 text-xl font-black leading-none">{stage.count}</div>
-                  {stage.sub && <div className="mt-0.5 truncate text-[9px] font-semibold opacity-60">{stage.sub}</div>}
+        {/* ── Pipeline strip ─────────────────────────────────────────────── */}
+        <Card title="Sales Pipeline" right={
+          <span className="text-[10px] font-bold text-slate-400">
+            {closedValue > 0 ? `${fmtKES(closedValue)} closed` : "No closed deals yet"}
+          </span>
+        }>
+          <div className="grid grid-cols-5 divide-x divide-slate-100">
+            {pipelineStages.map(({ key, label, icon: Icon, ring, num, bg, hover, link }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => navigate(link)}
+                className={`group flex flex-col items-center justify-between gap-1 px-2 py-3 transition ${hover} sm:flex-row sm:gap-2 sm:px-3`}
+              >
+                <div className="flex flex-col items-center gap-1 sm:flex-row sm:gap-2">
+                  <span className={`inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border-2 ${ring} ${bg}`}>
+                    <Icon className={`h-3 w-3 ${num}`} />
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</span>
                 </div>
-                {i < pipeline.length - 1 && (
-                  <div className="flex shrink-0 items-center">
-                    <FaArrowRight className="text-[10px] text-slate-300" />
-                  </div>
-                )}
-              </React.Fragment>
+                <span className={`text-xl font-black leading-none tabular-nums ${num}`}>
+                  {loading ? "…" : pipelineCounts[key]}
+                </span>
+              </button>
             ))}
           </div>
-        </div>
+        </Card>
 
-        {/* CRM Leads Section */}
-        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
-          <div className="flex items-center justify-between mb-2">
-            <div className="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400 flex items-center gap-1.5">
-              <FaUserFriends className="text-indigo-400" size={11} /> CRM — Leads Pipeline
-            </div>
-            <div className="flex items-center gap-3">
-              {!loading && leads.overdue > 0 && (
-                <button onClick={() => navigate("/sale/crm/leads")} className="flex items-center gap-1 text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full hover:bg-rose-100">
-                  <FaExclamationTriangle size={9} /> {leads.overdue} overdue
-                </button>
-              )}
-              <button onClick={() => navigate("/sale/crm/leads")} className="text-[9px] font-bold text-indigo-600 opacity-70 hover:opacity-100">
-                View all →
-              </button>
-            </div>
-          </div>
-          <div className="flex items-stretch gap-1">
-            {LEAD_FUNNEL.map((stage, i) => {
-              const count = loading ? "—" : (leads[stage.key] ?? 0);
-              const isConverted = stage.key === "converted";
-              return (
-                <React.Fragment key={stage.key}>
-                  <button
-                    onClick={() => navigate("/sale/crm/leads")}
-                    className={`flex flex-1 flex-col rounded-lg px-2 py-1.5 text-left transition-all hover:scale-[1.02] ${
-                      isConverted
-                        ? "bg-emerald-600 text-white"
-                        : count > 0
-                        ? "bg-indigo-50 border border-indigo-200 text-indigo-900"
-                        : "bg-slate-50 border border-slate-200 text-slate-400"
-                    }`}
-                  >
-                    <div className={`text-[8px] font-black uppercase tracking-wide leading-tight ${isConverted ? "opacity-80" : "opacity-70"}`}>{stage.label}</div>
-                    <div className="mt-0.5 text-base font-black leading-none">{count}</div>
-                  </button>
-                  {i < LEAD_FUNNEL.length - 1 && (
-                    <div className="flex shrink-0 items-center">
-                      <FaArrowRight className="text-[9px] text-slate-200" />
-                    </div>
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </div>
-          {!loading && (
-            <div className="mt-2 flex items-center gap-3 text-[10px] text-slate-500">
-              <span>Active leads: <strong className="text-slate-700">{leads.active ?? 0}</strong></span>
-              <span className="text-slate-300">·</span>
-              <span>Total: <strong className="text-slate-700">{leads.total ?? 0}</strong></span>
-              <span className="text-slate-300">·</span>
-              <span>Lost: <strong className="text-slate-700">{leads.lost ?? 0}</strong></span>
-            </div>
-          )}
-        </div>
+        {/* ── Main two-column area ────────────────────────────────────────── */}
+        <div className="grid grid-cols-1 items-start gap-1.5 xl:grid-cols-[1fr_280px]">
 
-        {/* Two-column: Quick Nav + Recent Deals */}
-        <div className="grid gap-2 lg:grid-cols-5">
-
-          {/* Quick Nav */}
-          <div className="lg:col-span-2">
-            <div className="mb-1.5 text-[9px] font-black uppercase tracking-[0.25em] text-slate-400">Quick Access</div>
-            <div className="grid grid-cols-2 gap-1.5">
-              {LINKS.map(({ label, to, Icon }) => (
+          {/* Left: Recent Deals */}
+          <div className="flex flex-col gap-1.5">
+            <Card
+              title="Recent Deals"
+              right={
                 <button
-                  key={to}
-                  onClick={() => navigate(to)}
-                  className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-left shadow-sm transition hover:border-[#027333] hover:shadow-md"
+                  type="button"
+                  onClick={() => navigate("/sale/deals")}
+                  className="text-[10px] font-extrabold uppercase tracking-wide text-[#0B3B2E] hover:text-[#FF8C00]"
                 >
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-[#027333]/10 text-xs text-[#027333]">
-                    <Icon />
-                  </span>
-                  <span className="text-xs font-bold leading-tight text-slate-800">{label}</span>
+                  View All →
                 </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Recent Deals */}
-          <div className="lg:col-span-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center justify-between bg-[#027333] px-3 py-2.5 text-white">
-              <span className="text-[9px] font-black uppercase tracking-[0.2em]">Recent Deals</span>
-              <button onClick={() => navigate("/sale/deals")} className="text-[9px] font-bold opacity-70 hover:opacity-100">View all →</button>
-            </div>
-            {loading ? (
-              <div className="px-3 py-8 text-center text-xs text-slate-400">Loading...</div>
-            ) : recentDeals.length === 0 ? (
-              <div className="px-3 py-8 text-center text-xs text-slate-400">
-                No deals yet.{" "}
-                <button onClick={() => navigate("/sale/deals")} className="font-bold text-[#027333] underline">Create your first deal →</button>
+              }
+            >
+              {/* Mobile cards */}
+              <div className="divide-y divide-slate-100 xl:hidden">
+                {recentDeals.length ? recentDeals.slice(0, 8).map((deal) => {
+                  const pct = deal.agreedPrice > 0 ? Math.min(100, Math.round(((deal.totalPaid || 0) / deal.agreedPrice) * 100)) : 0;
+                  return (
+                    <div key={deal._id} className="flex items-center justify-between gap-2 px-3 py-2.5 hover:bg-slate-50 cursor-pointer" onClick={() => navigate("/sale/deals")}>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 text-xs">
+                          <span className="font-mono font-bold text-[#0B3B2E]">{deal.dealNumber}</span>
+                          <span className="font-extrabold text-slate-800 truncate">{deal.listing?.title || deal.listing?.listingNumber || "—"}</span>
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-slate-500">{deal.buyer?.fullName || "—"}</div>
+                      </div>
+                      <div className="flex flex-shrink-0 flex-col items-end gap-1">
+                        <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${dealStatusBadge(deal.status)}`}>
+                          {deal.status}
+                        </span>
+                        <span className="text-xs font-extrabold text-slate-900">{fmtKES(deal.agreedPrice)}</span>
+                      </div>
+                    </div>
+                  );
+                }) : (
+                  <p className="px-3 py-8 text-center text-xs font-semibold text-slate-400">No deals yet.</p>
+                )}
               </div>
-            ) : (
-              <table className="min-w-full text-xs">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="px-3 py-2 text-left text-[10px] font-black text-slate-500">Deal No.</th>
-                    <th className="px-3 py-2 text-left text-[10px] font-black text-slate-500">Property</th>
-                    <th className="px-3 py-2 text-left text-[10px] font-black text-slate-500">Buyer</th>
-                    <th className="px-3 py-2 text-right text-[10px] font-black text-slate-500">Agreed Price</th>
-                    <th className="px-3 py-2 text-left text-[10px] font-black text-slate-500">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentDeals.map((deal) => {
-                    const pct = deal.agreedPrice > 0
-                      ? Math.min(100, Math.round(((deal.totalPaid || 0) / deal.agreedPrice) * 100))
-                      : 0;
-                    return (
-                      <tr key={deal._id} onClick={() => navigate("/sale/deals")}
-                        className="cursor-pointer border-t border-slate-100 transition hover:bg-emerald-50/40">
-                        <td className="px-3 py-2 font-black text-slate-900">{deal.dealNumber}</td>
-                        <td className="max-w-[110px] truncate px-3 py-2 text-slate-700">{deal.listing?.title || deal.listing?.listingNumber || "—"}</td>
-                        <td className="px-3 py-2 text-slate-700">{deal.buyer?.fullName || "—"}</td>
-                        <td className="px-3 py-2 text-right">
-                          <div className="font-black text-slate-900">{fmtKES(deal.agreedPrice)}</div>
-                          <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-slate-100">
-                            <div className="h-full rounded-full bg-emerald-500" style={{ width: `${pct}%` }} />
-                          </div>
-                        </td>
-                        <td className="px-3 py-2">
-                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black ${DEAL_STATUS_CLS[deal.status] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
-                            {deal.status}
-                          </span>
+              {/* Desktop table */}
+              <div className="hidden overflow-x-auto xl:block">
+                <table className="w-full min-w-[640px] text-xs">
+                  <thead>
+                    <tr className="bg-[#0B3B2E]">
+                      <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Deal No.</th>
+                      <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Property</th>
+                      <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Buyer</th>
+                      <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Agent</th>
+                      <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Status</th>
+                      <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-white">Agreed Price</th>
+                      <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-white">Collected %</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentDeals.length ? recentDeals.map((deal) => {
+                      const pct = deal.agreedPrice > 0 ? Math.min(100, Math.round(((deal.totalPaid || 0) / deal.agreedPrice) * 100)) : 0;
+                      return (
+                        <tr
+                          key={deal._id}
+                          className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer"
+                          onClick={() => navigate("/sale/deals")}
+                        >
+                          <td className="px-3 py-2 font-mono font-bold text-[#0B3B2E]">{deal.dealNumber}</td>
+                          <td className="max-w-[160px] truncate px-3 py-2 font-semibold text-slate-800">
+                            {deal.listing?.title || deal.listing?.listingNumber || "—"}
+                          </td>
+                          <td className="px-3 py-2 text-slate-600">{deal.buyer?.fullName || "—"}</td>
+                          <td className="px-3 py-2 text-slate-600">{deal.agent?.fullName || "—"}</td>
+                          <td className="px-3 py-2">
+                            <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${dealStatusBadge(deal.status)}`}>
+                              {deal.status}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-right font-bold text-slate-900">{fmtKES(deal.agreedPrice)}</td>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-1.5">
+                              <div className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-100">
+                                <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+                              </div>
+                              <span className="text-[10px] font-bold text-slate-500">{pct}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    }) : (
+                      <tr>
+                        <td colSpan={7} className="px-3 py-10 text-center text-xs font-semibold text-slate-400">
+                          No deals recorded yet.
                         </td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+
+            {/* Recent Listings */}
+            {recentListings.length > 0 && (
+              <Card
+                title="New Listings"
+                right={
+                  <button
+                    type="button"
+                    onClick={() => navigate("/sale/listings")}
+                    className="text-[10px] font-extrabold uppercase tracking-wide text-[#0B3B2E] hover:text-[#FF8C00]"
+                  >
+                    View All →
+                  </button>
+                }
+              >
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[560px] text-xs">
+                    <thead>
+                      <tr className="bg-slate-800">
+                        <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">No.</th>
+                        <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Title</th>
+                        <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Type</th>
+                        <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Agent</th>
+                        <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest text-white">Asking Price</th>
+                        <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentListings.slice(0, 6).map((listing) => (
+                        <tr
+                          key={listing._id}
+                          className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer"
+                          onClick={() => navigate("/sale/listings")}
+                        >
+                          <td className="px-3 py-2 font-mono font-bold text-slate-600">{listing.listingNumber}</td>
+                          <td className="max-w-[180px] truncate px-3 py-2 font-semibold text-slate-800">{listing.title}</td>
+                          <td className="px-3 py-2 capitalize text-slate-500">{listing.propertyType}</td>
+                          <td className="px-3 py-2 text-slate-600">{listing.assignedAgent?.fullName || <span className="italic text-slate-400">Unassigned</span>}</td>
+                          <td className="px-3 py-2 text-right font-bold text-slate-900">{fmtKES(listing.askingPrice)}</td>
+                          <td className="px-3 py-2">
+                            <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${
+                              listing.status === "available"      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : listing.status === "reserved"    ? "border-amber-200 bg-amber-50 text-amber-700"
+                              : listing.status === "under_contract" ? "border-blue-200 bg-blue-50 text-blue-700"
+                              : listing.status === "sold"        ? "border-slate-600 bg-slate-800 text-white"
+                              : "border-slate-200 bg-slate-50 text-slate-500"
+                            }`}>
+                              {(listing.status || "").replace(/_/g, " ")}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
             )}
           </div>
-        </div>
 
-        {/* Recent Listings */}
-        {!loading && recentListings.length > 0 && (
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center justify-between bg-slate-800 px-3 py-2.5 text-white">
-              <span className="text-[9px] font-black uppercase tracking-[0.2em]">New Listings</span>
-              <button onClick={() => navigate("/sale/listings")} className="text-[9px] font-bold opacity-70 hover:opacity-100">View all →</button>
-            </div>
-            <table className="min-w-full text-xs">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-3 py-2 text-left text-[10px] font-black text-slate-500">Listing No.</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-black text-slate-500">Title</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-black text-slate-500">Type</th>
-                  <th className="px-3 py-2 text-right text-[10px] font-black text-slate-500">Asking Price</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-black text-slate-500">Agent</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-black text-slate-500">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentListings.map((listing) => (
-                  <tr key={listing._id} onClick={() => navigate("/sale/listings")}
-                    className="cursor-pointer border-t border-slate-100 transition hover:bg-slate-50">
-                    <td className="px-3 py-2 font-black text-slate-900">{listing.listingNumber}</td>
-                    <td className="px-3 py-2 text-slate-700">{listing.title}</td>
-                    <td className="px-3 py-2 capitalize text-slate-500">{listing.propertyType}</td>
-                    <td className="px-3 py-2 text-right font-black text-slate-900">{fmtKES(listing.askingPrice)}</td>
-                    <td className="px-3 py-2 text-slate-700">{listing.assignedAgent?.fullName || <span className="italic text-slate-400">Unassigned</span>}</td>
-                    <td className="px-3 py-2">
-                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black ${LISTING_STATUS_CLS[listing.status] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
-                        {(listing.status || "").replace(/_/g, " ")}
-                      </span>
-                    </td>
-                  </tr>
+          {/* Right sidebar */}
+          <div className="flex flex-col gap-1.5">
+
+            {/* Portfolio Summary */}
+            <Card title="Portfolio Summary">
+              <div className="divide-y divide-slate-100">
+                {[
+                  { label: "Total Listings",      value: s.listings?.total ?? 0,                     note: "all statuses" },
+                  { label: "Available",            value: s.listings?.available ?? 0,                 note: "ready to sell",      bold: true },
+                  { label: "Under Negotiation",    value: (s.listings?.reserved ?? 0) + (s.deals?.active ?? 0), note: "offers + active deals", warn: true },
+                  { label: "Closed Deals Value",   value: fmtKES(closedValue),                        note: "total revenue closed", money: true },
+                  { label: "Outstanding Balance",  value: fmtKES((activeDealsValue || 0) - (totalCollected || 0)), note: "still to collect",    warn: activeDealsValue > totalCollected },
+                ].map(({ label, value, note, bold, warn, money }) => (
+                  <div key={label} className="flex items-center justify-between gap-2 px-3 py-2">
+                    <div>
+                      <p className="text-xs font-bold text-slate-700">{label}</p>
+                      <p className="text-[10px] text-slate-400">{note}</p>
+                    </div>
+                    <span className={`text-right font-extrabold tabular-nums ${
+                      bold ? "text-emerald-700 text-base"
+                      : warn ? "text-orange-600 text-base"
+                      : money ? "text-sm text-[#0B3B2E]"
+                      : "text-slate-900 text-base"
+                    }`}>
+                      {loading ? "…" : value}
+                    </span>
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Secondary stats row */}
-        {!loading && (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {[
-              { label: "Properties Sold",  value: s.listings?.sold ?? 0,          cls: "bg-slate-800 text-white" },
-              { label: "Reserved",         value: s.listings?.reserved ?? 0,       cls: "bg-amber-50 border border-amber-200 text-amber-900" },
-              { label: "Under Contract",   value: s.listings?.underContract ?? 0,  cls: "bg-blue-50 border border-blue-200 text-blue-900" },
-              { label: "Deals Closed",     value: s.deals?.closed ?? 0,            cls: "bg-emerald-50 border border-emerald-200 text-emerald-900" },
-            ].map((c) => (
-              <div key={c.label} className={`rounded-lg px-3 py-2 ${c.cls}`}>
-                <div className="text-[9px] font-black uppercase tracking-wider opacity-70">{c.label}</div>
-                <div className="mt-0.5 text-sm font-black">{c.value}</div>
               </div>
-            ))}
-          </div>
-        )}
+            </Card>
 
+            {/* Leads Funnel */}
+            <Card title="CRM Leads Funnel" right={
+              <button
+                type="button"
+                onClick={() => navigate("/sale/crm/leads")}
+                className="text-[10px] font-extrabold uppercase tracking-wide text-[#0B3B2E] hover:text-[#FF8C00]"
+              >
+                View All →
+              </button>
+            }>
+              <div className="divide-y divide-slate-100">
+                {[
+                  { label: "New",           count: leads.new           ?? 0 },
+                  { label: "Contacted",     count: leads.contacted     ?? 0 },
+                  { label: "Qualified",     count: leads.qualified     ?? 0 },
+                  { label: "Site Visited",  count: leads.siteVisited   ?? 0 },
+                  { label: "Negotiating",   count: leads.negotiating   ?? 0 },
+                  { label: "Converted",     count: leads.converted     ?? 0, bold: true },
+                ].map(({ label, count, bold }) => (
+                  <div key={label} className="flex items-center justify-between gap-2 px-3 py-1.5">
+                    <p className={`text-xs ${bold ? "font-extrabold text-emerald-700" : "font-semibold text-slate-700"}`}>{label}</p>
+                    <span className={`tabular-nums font-extrabold ${bold ? "text-emerald-700" : count > 0 ? "text-slate-900" : "text-slate-300"}`}>
+                      {loading ? "…" : count}
+                    </span>
+                  </div>
+                ))}
+                {leads.overdue > 0 && (
+                  <div className="flex items-center justify-between gap-2 bg-rose-50 px-3 py-1.5">
+                    <p className="text-xs font-extrabold text-rose-600">Overdue Follow-ups</p>
+                    <span className="font-extrabold tabular-nums text-rose-600">{leads.overdue}</span>
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            {/* Quick Access */}
+            <Card title="Quick Access">
+              <div className="grid grid-cols-2 gap-px bg-slate-100">
+                {QUICK_LINKS.map(({ label, to, Icon }) => (
+                  <button
+                    key={to}
+                    type="button"
+                    onClick={() => navigate(to)}
+                    className="flex items-center gap-2 bg-white px-3 py-2.5 text-left hover:bg-[#F1F6F3]"
+                  >
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center bg-[#0B3B2E]/10 text-xs text-[#0B3B2E]">
+                      <Icon />
+                    </span>
+                    <span className="text-xs font-bold leading-tight text-slate-800">{label}</span>
+                  </button>
+                ))}
+              </div>
+            </Card>
+
+          </div>
+        </div>
       </div>
     </PropertySaleShell>
   );

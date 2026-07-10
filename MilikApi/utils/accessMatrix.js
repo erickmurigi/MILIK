@@ -20,7 +20,7 @@ const DEFINITIONS = [
   { resource: 'receipts',         moduleKey: 'propertyManagement',  actions: ['view', 'create', 'import', 'reverse', 'delete', 'export'] },
   { resource: 'prepayments',      moduleKey: 'propertyManagement',  actions: ['view', 'create'] },
   { resource: 'statements',       moduleKey: 'propertyManagement',  actions: ['view', 'create', 'approve', 'update', 'send', 'reverse', 'delete', 'export'] },
-  { resource: 'processedStatements', moduleKey: 'accounts',         actions: ['view', 'reverse', 'send', 'export'] },
+  { resource: 'processedStatements', moduleKey: 'propertyManagement', actions: ['view', 'reverse', 'send', 'export'] },
 
   // ─── Accounting & General Ledger ─────────────────────────────────────────
   { resource: 'chartOfAccounts',     moduleKey: 'accounts',         actions: ['view', 'create', 'update', 'delete'] },
@@ -36,7 +36,7 @@ const DEFINITIONS = [
   { resource: 'landlordAdvancements',moduleKey: 'accounts',         actions: ['view', 'create'] },
   { resource: 'standingOrders',      moduleKey: 'accounts',         actions: ['view', 'create'] },
   { resource: 'landlordReceipts',    moduleKey: 'accounts',         actions: ['view', 'create', 'reverse'] },
-  { resource: 'landlordPayments',    moduleKey: 'accounts',         actions: ['view', 'process', 'export'] },
+  { resource: 'landlordPayments',    moduleKey: 'propertyManagement', actions: ['view', 'process', 'export'] },
 
   // ─── PM Reports ──────────────────────────────────────────────────────────
   { resource: 'pmReports',           moduleKey: 'propertyManagement', actions: ['view', 'export'] },
