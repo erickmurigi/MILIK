@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { FaFileDownload, FaFilePdf, FaSearch, FaSyncAlt, FaTimes } from "react-icons/fa";
@@ -75,10 +76,10 @@ const PaymentAgedAnalysis = () => {
   const [asOf, setAsOf] = useState(todayString());
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [search, setSearch] = useState("");
-  const [selectedProperty, setSelectedProperty] = useState("");
-  const [selectedStatus, setSelectedStatus] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("");
+  const [search, setSearch] = useTabState("/accounts/payment-aged-analysis:search", "");
+  const [selectedProperty, setSelectedProperty] = useTabState("/accounts/payment-aged-analysis:selectedProperty", "");
+  const [selectedStatus, setSelectedStatus] = useTabState("/accounts/payment-aged-analysis:selectedStatus", "");
+  const [selectedCategory, setSelectedCategory] = useTabState("/accounts/payment-aged-analysis:selectedCategory", "");
 
   const fetchData = useCallback(async () => {
     if (!businessId) return;

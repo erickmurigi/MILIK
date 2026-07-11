@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { FaPrint, FaRedoAlt, FaSearch } from "react-icons/fa";
 import { carWashApi, formatMoney, getActiveBranchId, todayISO } from "../../services/carWashApi";
@@ -14,10 +15,10 @@ const pct = (value) => `${Number(value || 0).toFixed(1)}%`;
 
 const CarWashStaffReport = () => {
   const currentCompany = useSelector(selectCurrentCompany);
-  const [from, setFrom] = useState(startOfMonthISO());
-  const [to, setTo] = useState(todayISO());
-  const [search, setSearch] = useState("");
-  const [applied, setApplied] = useState({ from: startOfMonthISO(), to: todayISO() });
+  const [from, setFrom] = useTabState("/carwash/reports/staff:from", () => startOfMonthISO());
+  const [to, setTo] = useTabState("/carwash/reports/staff:to", () => todayISO());
+  const [search, setSearch] = useTabState("/carwash/reports/staff:search", "");
+  const [applied, setApplied] = useTabState("/carwash/reports/staff:applied", () => ({ from: startOfMonthISO(), to: todayISO() }));
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
 

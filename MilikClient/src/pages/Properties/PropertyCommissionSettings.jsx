@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTabState } from '../../hooks/useTabState';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -83,7 +84,7 @@ const PropertyCommissionSettings = () => {
     : [];
 
   const businessId = currentCompany?._id || currentUser?.company?._id || currentUser?.company;
-  const [selectedPropertyId, setSelectedPropertyId] = useState('');
+  const [selectedPropertyId, setSelectedPropertyId] = useTabState('/properties/commission-settings:selectedPropertyId', '');
   const [formData, setFormData] = useState(defaultForm);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);

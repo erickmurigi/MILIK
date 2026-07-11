@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useEntityCache } from "../../hooks/useEntityCache";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
@@ -179,11 +180,7 @@ const IncomeStatementReport = () => {
     exclusions:  [],
     reportBasis: "",
   });
-  const [filters, setFilters] = useState({
-    startDate: firstDayOfMonth(),
-    endDate:   todayString(),
-    propertyId: "",
-  });
+  const [filters, setFilters] = useTabState("/accounts/income-statement:filters", () => ({ startDate: firstDayOfMonth(), endDate: todayString(), propertyId: "" }));
 
   useEffect(() => {
     if (businessId && !propertiesLoaded) dispatch(getProperties({ business: businessId }));

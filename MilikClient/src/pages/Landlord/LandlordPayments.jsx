@@ -1,5 +1,6 @@
 ﻿import { propertyBelongsToLandlord } from "./propertyUtils";
 import React, { useState, useEffect, useMemo } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -49,12 +50,8 @@ const LandlordPayments = ({ mode = "payments" }) => {
   const canExportPayment = hasCompanyPermission(currentUser || {}, currentCompany, "landlordPayments", "export", "accounts");
 
   // Local state
-  const [filters, setFilters] = useState({
-    search: "",
-    status: "all",
-    paymentStatus: "all",
-  });
-  const [currentPage, setCurrentPage] = useState(1);
+  const [filters, setFilters] = useTabState("/landlord-payments:filters", { search: "", status: "all", paymentStatus: "all" });
+  const [currentPage, setCurrentPage] = useTabState("/landlord-payments:currentPage", 1);
   const [selectedLandlords, setSelectedLandlords] = useState([]);
   const [showSmsModal, setShowSmsModal] = useState(false);
   const [activeDetail, setActiveDetail] = useState(null);

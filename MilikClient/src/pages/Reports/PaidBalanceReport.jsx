@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTabState } from '../../hooks/useTabState';
 import { useDispatch, useSelector } from 'react-redux';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { selectCurrentUser, selectCurrentCompany, selectAllProperties } from '../../redux/selectors';
@@ -32,15 +33,15 @@ const PaidBalanceReport = () => {
   const [loading, setLoading] = useState(false);
   const [filtersChanged, setFiltersChanged] = useState(false);
   const filtersInitialized = useRef(false);
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useTabState("/reports/paid-balance:filters", () => ({
     asOfDate: toDateInputValue(new Date()),
     propertyId: '',
     status: 'all',
     search: '',
-  });
+  }));
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [report, setReport] = useState({ summary: {}, rows: [] });
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useTabState("/reports/paid-balance:currentPage", 1);
 
   useEffect(() => {
     if (!businessId) return;

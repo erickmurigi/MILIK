@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
@@ -156,7 +157,7 @@ const BalanceSheetReport = () => {
   );
 
   const [loading, setLoading] = useState(false);
-  const [filters, setFilters] = useState({ asOfDate: todayString(), includeZeroBalances: false });
+  const [filters, setFilters] = useTabState("/accounts/balance-sheet:filters", { asOfDate: todayString(), includeZeroBalances: false });
   const [report, setReport]   = useState({
     assets:      { sections: [], total: 0, count: 0 },
     liabilities: { sections: [], total: 0, count: 0 },

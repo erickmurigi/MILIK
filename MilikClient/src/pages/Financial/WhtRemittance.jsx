@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import {
@@ -169,8 +170,8 @@ export default function WhtRemittance() {
   const canReverse = hasCompanyPermission(currentUser, company, "financialReports", "reverse", "accounts");
 
   const now = new Date();
-  const [year,  setYear]  = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [year,  setYear]  = useTabState("/accounts/wht-remittance:year",  now.getFullYear());
+  const [month, setMonth] = useTabState("/accounts/wht-remittance:month", now.getMonth() + 1);
 
   const [summary,    setSummary]    = useState(null);
   const [history,    setHistory]    = useState([]);

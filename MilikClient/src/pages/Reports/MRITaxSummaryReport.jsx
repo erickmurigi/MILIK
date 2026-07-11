@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTabState } from '../../hooks/useTabState';
 import { useDispatch, useSelector } from 'react-redux';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { selectCurrentUser, selectCurrentCompany, selectAllProperties } from '../../redux/selectors';
@@ -36,11 +37,11 @@ const MRITaxSummaryReport = () => {
   const [loading, setLoading] = useState(false);
   const [filtersChanged, setFiltersChanged] = useState(false);
   const filtersInitialized = useRef(false);
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useTabState("/reports/mri-tax-summary:filters", () => ({
     startDate: toDateInputValue(new Date(currentYear, 0, 1)),
     endDate: toDateInputValue(new Date(currentYear, 11, 31)),
     propertyId: '',
-  });
+  }));
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [report, setReport] = useState({ summary: {}, byProperty: [], byMonth: [], mriRate: 0.075 });
 

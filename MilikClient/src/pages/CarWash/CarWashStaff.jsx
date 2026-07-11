@@ -10,6 +10,7 @@ import { carWashApi, formatMoney, normalizeListPayload } from "../../services/ca
 import CarWashShell from "./CarWashShell";
 import PaginationBar from "../../components/PaginationBar";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
+import { useTabState } from "../../hooks/useTabState";
 
 const GRN = "#0B3B2E";
 const emptyForm = { name: "", phone: "", role: "", active: true, branch: "" };
@@ -246,12 +247,12 @@ const CarWashStaff = () => {
   const queryClient = useQueryClient();
   const [form, setForm]         = useState(emptyForm);
   const [editingId, setEditingId] = useState("");
-  const [filters, setFilters]   = useState({ search: "", status: "" });
+  const [filters, setFilters]   = useTabState("/carwash/staff:filters", { search: "", status: "" });
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
-  const [appliedFilters, setAppliedFilters] = useState({ search: "", status: "" });
+  const [appliedFilters, setAppliedFilters] = useTabState("/carwash/staff:appliedFilters", { search: "", status: "" });
   const [expandedIds, setExpandedIds] = useState([]);
-  const [page, setPage]         = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [page, setPage]         = useTabState("/carwash/staff:page", 1);
+  const [pageSize, setPageSize] = useTabState("/carwash/staff:pageSize", DEFAULT_PAGE_SIZE);
   const [showModal, setShowModal] = useState(false);
   const canManage = useCarWashPermission("carwash-staff", "manage");
 

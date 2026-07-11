@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
@@ -140,7 +141,7 @@ const CashFlowReport = () => {
 
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState(null);
-  const [filters, setFilters] = useState({ startDate: firstDayOfMonth(), endDate: todayString() });
+  const [filters, setFilters] = useTabState("/accounts/cash-flow:filters", () => ({ startDate: firstDayOfMonth(), endDate: todayString() }));
 
   const loadReport = useCallback(async () => {
     if (!businessId) return;

@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { FaArrowRight, FaCoins, FaReceipt, FaSearch } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { listRentPaymentsPage } from "../../redux/apiCalls";
+import { useTabState } from "../../hooks/useTabState";
 import { getProperties } from "../../redux/propertyRedux";
 
 const ITEMS_PER_PAGE = 50;
@@ -70,10 +71,10 @@ const TenantPrepayments = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const properties = useSelector(selectAllProperties);
 
-  const [search, setSearch] = useState("");
-  const [propertyFilter, setPropertyFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [search, setSearch] = useTabState("/receipts/prepayments:search", "");
+  const [propertyFilter, setPropertyFilter] = useTabState("/receipts/prepayments:propertyFilter", "all");
+  const [statusFilter, setStatusFilter] = useTabState("/receipts/prepayments:statusFilter", "all");
+  const [currentPage, setCurrentPage] = useTabState("/receipts/prepayments:currentPage", 1);
   const [rows, setRows] = useState([]);
   const [pagination, setPagination] = useState({
     page: 1,

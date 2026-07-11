@@ -1,4 +1,5 @@
 ﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useDispatch, useSelector } from "react-redux";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -79,11 +80,11 @@ const ProcessedStatements = () => {
   const [pagination, setPagination] = useState({ total: 0, page: 1, pages: 1, limit: ITEMS_PER_PAGE });
   const [loading, setLoading] = useState(false);
 
-  const [activeTab, setActiveTab] = useState("outstanding");
+  const [activeTab, setActiveTab] = useTabState("/landlord/processed-statements:activeTab", "outstanding");
   const [expandedRow, setExpandedRow] = useState(null);
-  const [searchText, setSearchText] = useState(fromLedger ? (location.state?.propertyName || "") : "");
-  const [sortBy, setSortBy] = useState("date-desc");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [searchText, setSearchText] = useTabState("/landlord/processed-statements:searchText", fromLedger ? (location.state?.propertyName || "") : "");
+  const [sortBy, setSortBy] = useTabState("/landlord/processed-statements:sortBy", "date-desc");
+  const [currentPage, setCurrentPage] = useTabState("/landlord/processed-statements:currentPage", 1);
 
   // Refs so loadStatements always reads current values without stale closure
   const tabRef = useRef("outstanding");

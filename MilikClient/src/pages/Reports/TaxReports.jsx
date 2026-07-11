@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTabState } from '../../hooks/useTabState';
 import { useDispatch, useSelector } from 'react-redux';
 import { selectCurrentCompany, selectCurrentUser } from '../../redux/selectors';
 import { FaFileDownload, FaFilter, FaPrint, FaReceipt } from 'react-icons/fa';
@@ -52,17 +53,17 @@ const TaxReports = () => {
     ? propertyState.properties
     : [];
 
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useTabState("/accounts/tax-reports:filters", () => ({
     startDate: toDateInput(new Date(new Date().getFullYear(), new Date().getMonth(), 1)),
     endDate: toDateInput(new Date()),
     propertyId: '',
-  });
+  }));
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [loading, setLoading] = useState(false);
   const [companyTaxConfig, setCompanyTaxConfig] = useState({ taxSettings: { defaultVatRate: DEFAULT_RATE } });
   const [invoices, setInvoices] = useState([]);
   const [processedStatements, setProcessedStatements] = useState([]);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useTabState("/accounts/tax-reports:currentPage", 1);
 
   useEffect(() => {
     if (!currentCompany?._id) return;

@@ -11,6 +11,7 @@ import { toast } from "react-toastify";
 import { adminRequests } from "../../utils/requestMethods";
 import { selectCurrentCompany } from "../../redux/selectors";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import { useTabState } from "../../hooks/useTabState";
 
 const PAGE_SIZE   = 50;
 const AUTO_RELOAD = 30; // seconds
@@ -521,9 +522,9 @@ export default function PmsMpesaNotifications() {
   const [unignoringId,  setUnignoringId]  = useState(null);
   const [countdown,     setCountdown]     = useState(AUTO_RELOAD);
 
-  const [filters, setFilters] = useState({ status: "", ref: "", search: "", dateFrom: todayISO(), dateTo: todayISO() });
-  const [applied, setApplied] = useState({ status: "", ref: "", search: "", dateFrom: todayISO(), dateTo: todayISO() });
-  const [page,    setPage]    = useState(1);
+  const [filters, setFilters] = useTabState("/receipts/mpesa-collections:filters", () => ({ status: "", ref: "", search: "", dateFrom: todayISO(), dateTo: todayISO() }));
+  const [applied, setApplied] = useTabState("/receipts/mpesa-collections:applied", () => ({ status: "", ref: "", search: "", dateFrom: todayISO(), dateTo: todayISO() }));
+  const [page,    setPage]    = useTabState("/receipts/mpesa-collections:page", 1);
 
   const load = useCallback(async (silent = false) => {
     if (!businessId) return;

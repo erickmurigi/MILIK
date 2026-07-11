@@ -29,6 +29,7 @@ import {
   updateTakeOnBalance,
 } from "../../redux/invoiceApi";
 import { createRentPayment, reverseRentPayment, getChartOfAccounts } from "../../redux/apiCalls";
+import { useTabState } from "../../hooks/useTabState";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -533,13 +534,13 @@ const TakeOnBalances = () => {
   const [saving, setSaving] = useState(false);
   const [draftFilters, setDraftFilters] = useState(emptyFilters);
   const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
-  const [appliedFilters, setAppliedFilters] = useState(emptyFilters);
+  const [appliedFilters, setAppliedFilters] = useTabState("/tenants/take-on-balances:appliedFilters", emptyFilters);
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState("create");
   const [form, setForm] = useState(emptyForm);
-  const [selectedRow, setSelectedRow] = useState(null);
+  const [selectedRow, setSelectedRow] = useTabState("/tenants/take-on-balances:selectedRow", null);
   const [rowToDelete, setRowToDelete] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useTabState("/tenants/take-on-balances:currentPage", 1);
   const [expandedBalanceId, setExpandedBalanceId] = useState(null);
   const [chartAccounts, setChartAccounts] = useState([]);
   const propertyOptions = useMemo(() => {

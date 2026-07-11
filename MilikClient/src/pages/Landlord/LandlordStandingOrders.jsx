@@ -1,6 +1,7 @@
 ﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEntityCache } from "../../hooks/useEntityCache";
 import useDebounce from "../../hooks/useDebounce";
+import { useTabState } from "../../hooks/useTabState";
 import {
   FaCalendarAlt,
   FaCheck,
@@ -175,7 +176,7 @@ const LandlordStandingOrders = () => {
   const [saving, setSaving] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState("");
-  const [filters, setFilters] = useState({ search: "", status: "all", landlordId: "all", propertyId: "all" });
+  const [filters, setFilters] = useTabState("/landlords/standing-orders:filters", { search: "", status: "all", landlordId: "all", propertyId: "all" });
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const debouncedSearch = useDebounce(filters.search, 400);
   const [form, setForm] = useState(blankForm);
@@ -206,7 +207,7 @@ const LandlordStandingOrders = () => {
   const [bulkRunning, setBulkRunning] = useState(false);
   const [cashbooks, setCashbooks] = useState([]);
   const [reversingRunId, setReversingRunId] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useTabState("/landlords/standing-orders:currentPage", 1);
 
   useEffect(() => {
     if (!currentCompany?._id) return;

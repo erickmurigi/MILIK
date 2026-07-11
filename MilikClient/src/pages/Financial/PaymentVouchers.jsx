@@ -36,6 +36,7 @@ import {
   updatePaymentVoucherStatus,
 } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
+import { useTabState } from "../../hooks/useTabState";
 
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -131,8 +132,8 @@ const PaymentVouchers = () => {
   const [settlementAccounts, setSettlementAccounts] = useState([]);
   const [serviceProvidersList, setServiceProvidersList] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useTabState("/accounts/payment-vouchers:pageSize", DEFAULT_PAGE_SIZE);
+  const [currentPage, setCurrentPage] = useTabState("/accounts/payment-vouchers:currentPage", 1);
   const [serverTotal, setServerTotal] = useState(0);
   const [serverPages, setServerPages] = useState(1);
   const [pendingPayVoucher, setPendingPayVoucher] = useState(null);

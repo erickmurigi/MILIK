@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import {
@@ -68,10 +69,10 @@ export default function SaleFinancials() {
   const [journalsLoading, setJournalsLoading] = useState(false);
   const [accountsLoading, setAccountsLoading] = useState(false);
   const [acctLoaded,     setAcctLoaded]    = useState(false);
-  const [search,         setSearch]        = useState("");
-  const [statusFilter,   setStatusFilter]  = useState("all");
-  const [startDate,      setStartDate]     = useState(firstOfMonth());
-  const [endDate,        setEndDate]       = useState(todayISO());
+  const [search,         setSearch]        = useTabState("/sale/financials:search", "");
+  const [statusFilter,   setStatusFilter]  = useTabState("/sale/financials:statusFilter", "all");
+  const [startDate,      setStartDate]     = useTabState("/sale/financials:startDate", () => firstOfMonth());
+  const [endDate,        setEndDate]       = useTabState("/sale/financials:endDate", () => todayISO());
 
   const debouncedSearch = useDebounce(search, 350);
 

@@ -1,4 +1,5 @@
 ﻿import React, { useEffect, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaCheck, FaFileInvoice, FaPlus, FaRedoAlt, FaSearch, FaTimes, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -41,9 +42,9 @@ const Modal = ({ title, onClose, children, footer, wide }) => (
 
 const InvPurchaseOrders = () => {
   const queryClient = useQueryClient();
-  const [statusFilter, setStatusFilter] = useState("");
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useTabState("/inventory/purchase-orders:statusFilter", "");
+  const [search, setSearch] = useTabState("/inventory/purchase-orders:search", "");
+  const [page, setPage] = useTabState("/inventory/purchase-orders:page", 1);
 
   // Create modal
   const [showCreate, setShowCreate] = useState(false);

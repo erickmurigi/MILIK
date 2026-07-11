@@ -1,6 +1,7 @@
 ﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEntityCache } from "../../hooks/useEntityCache";
 import useDebounce from "../../hooks/useDebounce";
+import { useTabState } from "../../hooks/useTabState";
 import { useDispatch, useSelector } from "react-redux";
 import {
   FaArrowLeft,
@@ -151,14 +152,8 @@ const LandlordReceipts = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [advancements, setAdvancements] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [filters, setFilters] = useState({
-    search: "",
-    status: "all",
-    category: "all",
-    landlord: "all",
-    property: "all",
-  });
-  const [currentPage, setCurrentPage] = useState(1);
+  const [filters, setFilters] = useTabState("/receipts/landlord:filters", { search: "", status: "all", category: "all", landlord: "all", property: "all" });
+  const [currentPage, setCurrentPage] = useTabState("/receipts/landlord:currentPage", 1);
   const debouncedSearch = useDebounce(filters.search, 400);
   const [showFormModal, setShowFormModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);

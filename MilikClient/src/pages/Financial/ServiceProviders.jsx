@@ -12,6 +12,7 @@ import {
 } from "../../redux/apiCalls";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { useConfirm } from "../../context/ConfirmContext";
+import { useTabState } from "../../hooks/useTabState";
 
 const blankForm = {
   name: "",
@@ -51,15 +52,15 @@ const ServiceProviders = () => {
   const currentUser = useSelector(selectCurrentUser);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [search, setSearch] = useState("");
-  const [nameFilter, setNameFilter] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [search, setSearch] = useTabState("/accounts/service-providers:search", "");
+  const [nameFilter, setNameFilter] = useTabState("/accounts/service-providers:nameFilter", "");
+  const [categoryFilter, setCategoryFilter] = useTabState("/accounts/service-providers:categoryFilter", "all");
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState("");
   const [form, setForm] = useState(blankForm);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useTabState("/accounts/service-providers:pageSize", DEFAULT_PAGE_SIZE);
+  const [currentPage, setCurrentPage] = useTabState("/accounts/service-providers:currentPage", 1);
   const [serverTotal, setServerTotal] = useState(0);
   const [serverPages, setServerPages] = useState(1);
 

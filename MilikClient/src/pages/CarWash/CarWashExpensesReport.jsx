@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { FaPrint, FaRedoAlt, FaSearch } from "react-icons/fa";
 import { carWashApi, formatMoney, getActiveBranchId } from "../../services/carWashApi";
@@ -31,7 +32,7 @@ const CarWashExpensesReport = () => {
 
   const [from,    setFrom]    = useState(monthStart());
   const [to,      setTo]      = useState(todayISO());
-  const [applied, setApplied] = useState({ from: monthStart(), to: todayISO() });
+  const [applied, setApplied] = useTabState("/carwash/reports/expenses:applied", () => ({ from: monthStart(), to: todayISO() }));
   const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(false);
 

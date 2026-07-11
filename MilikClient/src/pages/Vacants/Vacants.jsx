@@ -1,5 +1,6 @@
 ﻿// pages/Vacants/Vacants.jsx
 import React, { useEffect, useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useDispatch, useSelector } from "react-redux";
 import { useEntityCache } from "../../hooks/useEntityCache";
 import { useNavigate } from "react-router-dom";
@@ -209,9 +210,9 @@ const Vacants = () => {
   const tenants = useSelector(selectAllTenants);
   const maintenances = useSelector(selectAllMaintenances);
 
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useTabState("/vacants:currentPage", 1);
   const [expandedRows, setExpandedRows] = useState([]);
-  const [selectedRowId, setSelectedRowId] = useState(null);
+  const [selectedRowId, setSelectedRowId] = useTabState("/vacants:selectedRowId", null);
   const [confirmDialog, setConfirmDialog] = useState({
     isOpen: false,
     title: "",
@@ -231,7 +232,7 @@ const Vacants = () => {
   };
 
   const [draftFilters, setDraftFilters] = useState(emptyFilters);
-  const [appliedFilters, setAppliedFilters] = useState(emptyFilters);
+  const [appliedFilters, setAppliedFilters] = useTabState("/vacants:appliedFilters", emptyFilters);
 
   useEffect(() => {
     if (!currentCompany?._id) return;

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import {
@@ -40,7 +41,7 @@ const BankReconciliation = () => {
   const [cleared,       setCleared]       = useState(new Set()); // Set of entry _id strings
   const [loadingEntries, setLoadingEntries] = useState(false);
   const [saving,        setSaving]        = useState(false);
-  const [search,        setSearch]        = useState("");
+  const [search,        setSearch]        = useTabState("/accounts/bank-reconciliation:search", "");
 
   // ── New reconciliation form ────────────────────────────────────────────────
   const [formAccount,   setFormAccount]   = useState("");

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import {
@@ -52,9 +53,9 @@ const FixedAssets = () => {
   const [assets, setAssets]               = useState([]);
   const [accounts, setAccounts]           = useState([]);
   const [loading, setLoading]             = useState(false);
-  const [filterStatus, setFilterStatus]   = useState("");
-  const [filterCategory, setFilterCategory] = useState("");
-  const [search, setSearch]               = useState("");
+  const [filterStatus, setFilterStatus]   = useTabState("/accounts/fixed-assets:filterStatus", "");
+  const [filterCategory, setFilterCategory] = useTabState("/accounts/fixed-assets:filterCategory", "");
+  const [search, setSearch]               = useTabState("/accounts/fixed-assets:search", "");
 
   // Add / edit form panel
   const [showForm, setShowForm]           = useState(false);

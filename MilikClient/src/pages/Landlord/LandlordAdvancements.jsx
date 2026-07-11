@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEntityCache } from "../../hooks/useEntityCache";
 import useDebounce from "../../hooks/useDebounce";
+import { useTabState } from "../../hooks/useTabState";
 import {
   FaCheck,
   FaChevronDown,
@@ -218,13 +219,8 @@ const LandlordAdvancements = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState("");
   const [expandedId, setExpandedId] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [filters, setFilters] = useState({
-    search: "",
-    status: "all",
-    landlordId: "all",
-    advanceType: "all",
-  });
+  const [currentPage, setCurrentPage] = useTabState("/landlords/advancement:currentPage", 1);
+  const [filters, setFilters] = useTabState("/landlords/advancement:filters", { search: "", status: "all", landlordId: "all", advanceType: "all" });
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const debouncedSearch = useDebounce(filters.search, 400);
   const [form, setForm] = useState(blankForm);

@@ -1,5 +1,6 @@
 ﻿// pages/Units.js
 import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -105,7 +106,7 @@ const Units = () => {
   // ---------------------------
   // UI STATE
   // ---------------------------
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useTabState("/units:currentPage", 1);
   const [expandedUnits, setExpandedUnits] = useState([]); // Array to track multiple expanded units
 
   const [selectedUnits, setSelectedUnits] = useState([]);
@@ -193,7 +194,7 @@ const Units = () => {
   };
 
   const [draftFilters, setDraftFilters] = useState(emptyFilters);
-  const [appliedFilters, setAppliedFilters] = useState(emptyFilters);
+  const [appliedFilters, setAppliedFilters] = useTabState("/units:appliedFilters", emptyFilters);
 
   const buildUnitParams = useCallback((overridePage = 1, overrideFilters = null) => {
     const f = overrideFilters || appliedFilters;

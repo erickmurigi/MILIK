@@ -1,4 +1,5 @@
 ﻿import React, { useState, useEffect, useMemo } from 'react';
+import { useTabState } from '../../hooks/useTabState';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { getProperties, updateProperty } from '../../redux/propertyRedux';
@@ -25,10 +26,10 @@ const CommissionsList = () => {
 
   const canWrite = hasCompanyPermission(currentUser || {}, currentCompany, "commissions", "create", "propertyManagement");
 
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterMode, setFilterMode] = useState('all'); // all, configured, unconfigured
+  const [searchTerm, setSearchTerm] = useTabState('/properties/commissions-list:searchTerm', '');
+  const [filterMode, setFilterMode] = useTabState('/properties/commissions-list:filterMode', 'all');
   const [loading, setLoading] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useTabState('/properties/commissions-list:currentPage', 1);
   const [expandedPropertyId, setExpandedPropertyId] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editFormData, setEditFormData] = useState(null);

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTabState } from '../../hooks/useTabState';
 import { useEntityCache } from '../../hooks/useEntityCache';
 import { useDispatch, useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
@@ -213,8 +214,8 @@ const PropertyExpenses = () => {
 
   // ─── filters ──────────────────────────────────────────────────────────────
   const defaultStart = toInput(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
-  const [filters, setFilters] = useState({ startDate: defaultStart, endDate: today(), propertyId: '', category: '', search: '' });
-  const [page, setPage] = useState(1);
+  const [filters, setFilters] = useTabState("/property-expenses:filters", () => ({ startDate: defaultStart, endDate: today(), propertyId: '', category: '', search: '' }));
+  const [page, setPage] = useTabState("/property-expenses:page", 1);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);

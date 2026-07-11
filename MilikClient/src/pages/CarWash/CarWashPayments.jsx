@@ -9,6 +9,7 @@ import CarWashShell from "./CarWashShell";
 import CwSmsModal from "./CwSmsModal";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import PaginationBar from "../../components/PaginationBar";
+import { useTabState } from "../../hooks/useTabState";
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 const isoDate = (d) => d.toISOString().slice(0, 10);
@@ -61,11 +62,11 @@ const CarWashPayments = () => {
   const isConsolidated = !getActiveBranchId();
   const canReconcile   = useCarWashPermission("carwash-payments", "reconcile");
 
-  const [filters,        setFilters]        = useState(defaultFilters);
-  const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
+  const [filters,        setFilters]        = useTabState("/carwash/payments:filters", defaultFilters);
+  const [appliedFilters, setAppliedFilters] = useTabState("/carwash/payments:appliedFilters", defaultFilters);
   const [expandedIds,    setExpandedIds]    = useState([]);
-  const [page,           setPage]           = useState(1);
-  const [pageSize,       setPageSize]       = useState(DEFAULT_PAGE_SIZE);
+  const [page,           setPage]           = useTabState("/carwash/payments:page", 1);
+  const [pageSize,       setPageSize]       = useTabState("/carwash/payments:pageSize", DEFAULT_PAGE_SIZE);
   const [smsTarget,      setSmsTarget]      = useState(null);
   const [smsBody,        setSmsBody]        = useState("");
   const [smsSending,     setSmsSending]     = useState(false);

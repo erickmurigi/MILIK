@@ -1,5 +1,6 @@
 // pages/ModulesDashboard/ModulesDashboard.jsx
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { selectCurrentUser, selectCurrentCompany } from "../../redux/selectors";
@@ -132,8 +133,8 @@ const ModulesDashboard = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
   const isFetchingCompany = useSelector((state) => state.company?.isFetching || false);
-  const [search, setSearch] = useState("");
-  const [activeCategory, setActiveCategory] = useState("All");
+  const [search, setSearch] = useTabState("/moduleDashboard:search", "");
+  const [activeCategory, setActiveCategory] = useTabState("/moduleDashboard:activeCategory", "All");
 
   const activeCompanyContext = currentCompany || currentUser?.company || null;
   const isLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);

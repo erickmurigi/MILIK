@@ -1,4 +1,5 @@
 ﻿import React, { useEffect, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaArrowDown, FaArrowUp, FaClipboardCheck, FaPlus, FaRedoAlt, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -46,9 +47,9 @@ const emptyForm = () => ({ location: "", product: "", type: "adjustment", qty: "
 
 const InvStockAdjustments = () => {
   const queryClient = useQueryClient();
-  const [locFilter,  setLocFilter]  = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
-  const [page,       setPage]       = useState(1);
+  const [locFilter,  setLocFilter]  = useTabState("/inventory/adjustments:locFilter", "");
+  const [typeFilter, setTypeFilter] = useTabState("/inventory/adjustments:typeFilter", "");
+  const [page,       setPage]       = useTabState("/inventory/adjustments:page", 1);
   const [showModal,  setShowModal]  = useState(false);
   const [form,       setForm]       = useState(emptyForm());
   const [balance,    setBalance]    = useState(null);

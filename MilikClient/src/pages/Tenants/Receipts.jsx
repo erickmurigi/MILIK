@@ -58,6 +58,7 @@ import {
 import { getProperties } from "../../redux/propertyRedux";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { printTabularList } from "../../utils/printList";
+import { useTabState } from "../../hooks/useTabState";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -355,10 +356,10 @@ const Receipts = ({ viewMode = "tenant" }) => {
   };
 
   const [draftFilters, setDraftFilters] = useState(initialFilters);
-  const [appliedFilters, setAppliedFilters] = useState(initialFilters);
+  const [appliedFilters, setAppliedFilters] = useTabState("/receipts:appliedFilters", initialFilters);
   const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [selectedIds, setSelectedIds] = useState([]);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useTabState("/receipts:currentPage", 1);
   const [showForm, setShowForm] = useState(false);
   const [showSmsModal, setShowSmsModal] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);

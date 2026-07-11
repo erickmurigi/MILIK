@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTabState } from '../../hooks/useTabState';
 import { useDispatch, useSelector } from 'react-redux';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { selectCurrentUser, selectCurrentCompany, selectAllProperties, selectAllLandlords } from '../../redux/selectors';
@@ -38,12 +39,12 @@ const PropertyIncomeSummaryReport = () => {
   const [loading, setLoading] = useState(false);
   const [filtersChanged, setFiltersChanged] = useState(false);
   const filtersInitialized = useRef(false);
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useTabState("/reports/property-income-summary:filters", () => ({
     startDate: toDateInputValue(new Date(new Date().getFullYear(), new Date().getMonth(), 1)),
     endDate: toDateInputValue(new Date()),
     propertyId: '',
     landlordId: '',
-  });
+  }));
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [report, setReport] = useState({ summary: {}, byProperty: [], expensesByCategory: [] });
 

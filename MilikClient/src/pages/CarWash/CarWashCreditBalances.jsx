@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import {
@@ -368,18 +369,18 @@ export default function CarWashCreditBalances() {
   const businessId  = useSelector((s) => s.company?.currentCompany?._id);
   const canManage   = useCarWashPermission("carwash-loyalty", "manage");
 
-  const [tab, setTab]               = useState("active");
-  const [dormantDays, setDormantDays] = useState(0);
+  const [tab, setTab]               = useTabState("/carwash/customers/credit-balances:tab", "active");
+  const [dormantDays, setDormantDays] = useTabState("/carwash/customers/credit-balances:dormantDays", 0);
   const [selected, setSelected]       = useState(new Set());
-  const [page, setPage]               = useState(1);
+  const [page, setPage]               = useTabState("/carwash/customers/credit-balances:page", 1);
   const limit                         = 50;
 
   // Search / sort
-  const [search, setSearch]               = useState("");
+  const [search, setSearch]               = useTabState("/carwash/customers/credit-balances:search", "");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const debounceRef                       = useRef(null);
-  const [sortBy, setSortBy]               = useState("createdAt");
-  const [sortDir, setSortDir]             = useState("desc");
+  const [sortBy, setSortBy]               = useTabState("/carwash/customers/credit-balances:sortBy", "createdAt");
+  const [sortDir, setSortDir]             = useTabState("/carwash/customers/credit-balances:sortDir", "desc");
 
   // View toggles
   const [grouped, setGrouped]   = useState(false);

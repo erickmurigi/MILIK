@@ -1,4 +1,5 @@
 ﻿import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { selectCurrentUser, selectCurrentCompany, selectAllProperties } from "../../redux/selectors";
 import { adminRequests } from "../../utils/requestMethods";
@@ -110,22 +111,22 @@ export default function LandlordStatementAllocations() {
   const bizId          = currentCompany?._id;
 
   // ── Search state ─────────────────────────────────────────────────────────────
-  const [activeTab,  setActiveTab]  = useState("all");
+  const [activeTab,  setActiveTab]  = useTabState("/landlord/statement-allocations:activeTab", "all");
   const [refSearch,  setRefSearch]  = useState("");
-  const [dateFrom,   setDateFrom]   = useState("");
-  const [dateTo,     setDateTo]     = useState("");
-  const [property,   setProperty]   = useState("");
+  const [dateFrom,   setDateFrom]   = useTabState("/landlord/statement-allocations:dateFrom", "");
+  const [dateTo,     setDateTo]     = useTabState("/landlord/statement-allocations:dateTo", "");
+  const [property,   setProperty]   = useTabState("/landlord/statement-allocations:property", "");
   const [results,       setResults]       = useState([]);
   const [loading,       setLoading]       = useState(false);
   const [searched,      setSearched]      = useState(false);
-  const [currentPage,   setCurrentPage]   = useState(1);
-  const [groupsPerPage, setGroupsPerPage] = useState(20);
-  const [showReversed,  setShowReversed]  = useState(false);
+  const [currentPage,   setCurrentPage]   = useTabState("/landlord/statement-allocations:currentPage", 1);
+  const [groupsPerPage, setGroupsPerPage] = useTabState("/landlord/statement-allocations:groupsPerPage", 20);
+  const [showReversed,  setShowReversed]  = useTabState("/landlord/statement-allocations:showReversed", false);
   const [openActionRow, setOpenActionRow] = useState(null); // rowKey of open actions dropdown
 
   // ── Tenant combobox ───────────────────────────────────────────────────────────
   const [tenantQuery,    setTenantQuery]    = useState("");
-  const [selectedTenant, setSelectedTenant] = useState(null);
+  const [selectedTenant, setSelectedTenant] = useTabState("/landlord/statement-allocations:selectedTenant", null);
   const [tenantDropOpen, setTenantDropOpen] = useState(false);
   const [dropPos,        setDropPos]        = useState({ top: 0, left: 0 });
   const [localTenants,   setLocalTenants]   = useState([]);

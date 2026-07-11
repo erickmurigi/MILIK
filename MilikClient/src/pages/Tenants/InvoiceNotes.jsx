@@ -6,6 +6,7 @@ import {
   selectAllTenants,
 } from "../../redux/selectors";
 import { useSearchParams } from "react-router-dom";
+import { useTabState } from "../../hooks/useTabState";
 import { LISTING_UI } from "../../utils/listingPageUtils";
 import {
   FaEnvelope,
@@ -298,7 +299,7 @@ const InvoiceNotes = () => {
   const [properties, setProperties] = useState([]);
   const noteType = invoiceNotesDraft.noteType || initialNoteType;
   const setNoteType = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, noteType: typeof value === "function" ? value(prev.noteType || initialNoteType) : value }));
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useTabState("/invoices/notes:currentPage", 1);
   const filters = invoiceNotesDraft.filters || { propertyId: "", tenantId: "", tenantScope: "active", noteType: initialNoteType, search: "", status: "active" };
   const setFilters = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, filters: typeof value === "function" ? value(prev.filters || filters) : value }));
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));

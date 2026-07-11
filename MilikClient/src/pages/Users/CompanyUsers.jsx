@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTabState } from '../../hooks/useTabState';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
@@ -59,8 +60,8 @@ export default function CompanyUsers({ darkMode }) {
   const users = useSelector((s) => s.user?.users || []);
   const isFetching = useSelector((s) => s.user?.isFetching);
 
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All');
+  const [search, setSearch] = useTabState('/users:search', '');
+  const [statusFilter, setStatusFilter] = useTabState('/users:statusFilter', 'All');
   const [actionMenuId, setActionMenuId] = useState(null);
   const [togglingId, setTogglingId] = useState(null);
 

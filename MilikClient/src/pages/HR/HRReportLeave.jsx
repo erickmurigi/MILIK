@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useTabState } from '../../hooks/useTabState';
 import { useSelector } from 'react-redux';
 import { FaCalendarAlt, FaRedoAlt, FaPrint, FaFilter, FaTag, FaUsers } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
@@ -15,11 +16,7 @@ function isoDate(d) {
 
 export default function HRReportLeave() {
   const [leaveTypes, setLeaveTypes] = useState([]);
-  const [filters, setFilters] = useState({
-    startDate: `${currentYear}-01-01`,
-    endDate: `${currentYear}-12-31`,
-    leaveTypeId: '',
-  });
+  const [filters, setFilters] = useTabState('/hr/reports/leave:filters', { startDate: `${currentYear}-01-01`, endDate: `${currentYear}-12-31`, leaveTypeId: '' });
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(false);
 

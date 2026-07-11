@@ -18,6 +18,7 @@ import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getChartOfAccounts } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 import { hasCompanyPermission } from "../../utils/permissions";
+import { useTabState } from "../../hooks/useTabState";
 import {
   approvePettyCashReplenishment,
   createPettyCashAccount,
@@ -126,9 +127,9 @@ const PettyCash = () => {
   const properties = useSelector((s) => s.property?.properties || []);
   const { propertiesLoaded } = useEntityCache(currentCompany?._id);
 
-  const [activeTab, setActiveTab] = useState("disbursements");
+  const [activeTab, setActiveTab] = useTabState("/accounts/petty-cash:activeTab", "disbursements");
   const [accounts, setAccounts] = useState([]);
-  const [selectedAccountId, setSelectedAccountId] = useState("");
+  const [selectedAccountId, setSelectedAccountId] = useTabState("/accounts/petty-cash:selectedAccountId", "");
   const [disbursements, setDisbursements] = useState([]);
   const [replenishments, setReplenishments] = useState([]);
   const [coas, setCoas] = useState([]);
@@ -141,11 +142,11 @@ const PettyCash = () => {
   const [draftFrom, setDraftFrom] = useState("");
   const [draftTo, setDraftTo] = useState("");
   // applied filters
-  const [search, setSearch] = useState("");
-  const [filterCategory, setFilterCategory] = useState("any");
-  const [filterStatus, setFilterStatus] = useState("any");
-  const [filterFrom, setFilterFrom] = useState("");
-  const [filterTo, setFilterTo] = useState("");
+  const [search, setSearch] = useTabState("/accounts/petty-cash:search", "");
+  const [filterCategory, setFilterCategory] = useTabState("/accounts/petty-cash:filterCategory", "any");
+  const [filterStatus, setFilterStatus] = useTabState("/accounts/petty-cash:filterStatus", "any");
+  const [filterFrom, setFilterFrom] = useTabState("/accounts/petty-cash:filterFrom", "");
+  const [filterTo, setFilterTo] = useTabState("/accounts/petty-cash:filterTo", "");
 
   // Modals
   const [showNewAccount, setShowNewAccount] = useState(false);
@@ -154,9 +155,9 @@ const PettyCash = () => {
   const [showVoidModal, setShowVoidModal] = useState(null);
   const [showRejectModal, setShowRejectModal] = useState(null);
   const [submitting, setSubmitting] = useState(false);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [disbPage, setDisbPage] = useState(1);
-  const [repPage, setRepPage] = useState(1);
+  const [pageSize, setPageSize] = useTabState("/accounts/petty-cash:pageSize", DEFAULT_PAGE_SIZE);
+  const [disbPage, setDisbPage] = useTabState("/accounts/petty-cash:disbPage", 1);
+  const [repPage, setRepPage] = useTabState("/accounts/petty-cash:repPage", 1);
   const [disbTotal, setDisbTotal] = useState(0);
   const [disbPages, setDisbPages] = useState(1);
   const [repTotal, setRepTotal] = useState(0);

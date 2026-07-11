@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTabState } from '../../hooks/useTabState';
 import { useEntityCache } from '../../hooks/useEntityCache';
 import { useDispatch, useSelector } from 'react-redux';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
@@ -41,7 +42,7 @@ const RentalCollectionReport = () => {
   const [loading, setLoading] = useState(false);
   const [filtersChanged, setFiltersChanged] = useState(false);
   const filtersInitialized = useRef(false);
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useTabState("/reports/rental-collection:filters", () => ({
     startDate: toDateInputValue(new Date(new Date().getFullYear(), new Date().getMonth(), 1)),
     endDate: toDateInputValue(new Date()),
     propertyId: '',
@@ -50,10 +51,10 @@ const RentalCollectionReport = () => {
     landlordId: '',
     paymentMethod: '',
     cashbook: '',
-  });
+  }));
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [report, setReport] = useState({ summary: {}, byProperty: [], rows: [] });
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useTabState("/reports/rental-collection:currentPage", 1);
 
   useEffect(() => {
     if (!businessId) return;

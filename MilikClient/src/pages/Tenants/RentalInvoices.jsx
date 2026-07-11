@@ -50,6 +50,7 @@ import {
   resolveTaxSelectionPayload,
 } from "./invoiceTaxUtils";
 import { hasCompanyPermission } from "../../utils/permissions";
+import { useTabState } from "../../hooks/useTabState";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -980,7 +981,7 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
 
   const [refreshTick, setRefreshTick] = useState(0);
   const [draftFilters, setDraftFilters] = useState(initialFilters);
-  const [appliedFilters, setAppliedFilters] = useState(initialFilters);
+  const [appliedFilters, setAppliedFilters] = useTabState("/invoices/rental:appliedFilters", initialFilters);
   const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const actionBtnCls = (enabled, activeCls) =>
     `h-7 shrink-0 flex items-center rounded px-2 text-xs text-white ${enabled ? activeCls : "bg-gray-400 cursor-not-allowed"}`;
@@ -988,7 +989,7 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   const [selectAll, setSelectAll] = useState(false);
   const [showSmsModal, setShowSmsModal] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useTabState("/invoices/rental:currentPage", 1);
   const [bookingAction, setBookingAction] = useState("");
   const [showSingleBooking, setShowSingleBooking] = useState(false);
   const [showBatchBooking, setShowBatchBooking] = useState(false);

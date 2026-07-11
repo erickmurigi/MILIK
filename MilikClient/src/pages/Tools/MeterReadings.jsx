@@ -1,4 +1,5 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import { toast } from "react-toastify";
@@ -295,11 +296,11 @@ const MeterReadings = () => {
   const [selectedReadingIds, setSelectedReadingIds] = useState([]);
   const [draftFilters, setDraftFilters] = useState(emptyFilters);
   const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
-  const [appliedFilters, setAppliedFilters] = useState(emptyFilters);
+  const [appliedFilters, setAppliedFilters] = useTabState("/meter-readings:appliedFilters", emptyFilters);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState("");
   const [communicationModal, setCommunicationModal] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useTabState("/meter-readings:currentPage", 1);
   const [rowActionKey, setRowActionKey] = useState("");
 
   const loadPageData = useCallback(async () => {

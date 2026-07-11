@@ -30,6 +30,7 @@ import {
 } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 import { hasCompanyPermission } from "../../utils/permissions";
+import { useTabState } from "../../hooks/useTabState";
 
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -75,9 +76,9 @@ const ExpenseRequisition = () => {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState("");
   const [selectedIds, setSelectedIds] = useState([]);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [filters, setFilters] = useState({ search: "", status: "all", propertyId: "all" });
+  const [pageSize, setPageSize] = useTabState("/accounts/expenses:pageSize", DEFAULT_PAGE_SIZE);
+  const [currentPage, setCurrentPage] = useTabState("/accounts/expenses:currentPage", 1);
+  const [filters, setFilters] = useTabState("/accounts/expenses:filters", { search: "", status: "all", propertyId: "all" });
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const debouncedSearch = useDebounce(filters.search, 400);
   const [form, setForm] = useState(blankForm);

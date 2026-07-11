@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useDebounce from "../../hooks/useDebounce";
+import { useTabState } from "../../hooks/useTabState";
 import { useDispatch, useSelector } from "react-redux";
 import {
   selectCurrentCompany, selectCurrentUser,
@@ -136,14 +137,14 @@ const Maintenances = () => {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [priorityFilter, setPriorityFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = useTabState("/maintenances:searchTerm", "");
+  const [statusFilter, setStatusFilter] = useTabState("/maintenances:statusFilter", "all");
+  const [priorityFilter, setPriorityFilter] = useTabState("/maintenances:priorityFilter", "all");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRequest, setEditingRequest] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useTabState("/maintenances:pageSize", DEFAULT_PAGE_SIZE);
+  const [currentPage, setCurrentPage] = useTabState("/maintenances:currentPage", 1);
   const [serverTotal, setServerTotal] = useState(0);
   const [serverPages, setServerPages] = useState(1);
   const [updatingId, setUpdatingId] = useState("");

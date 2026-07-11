@@ -1,4 +1,5 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useConfirm } from "../../context/ConfirmContext";
 import {
   FaBolt,
@@ -131,7 +132,7 @@ const LatePenalties = () => {
   const [accounts, setAccounts] = useState([]);
   const [rules, setRules] = useState([]);
   const [batches, setBatches] = useState([]);
-  const [selectedRuleId, setSelectedRuleId] = useState("");
+  const [selectedRuleId, setSelectedRuleId] = useTabState("/invoices/late-penalties:selectedRuleId", "");
   const [ruleForm, setRuleForm] = useState(defaultRuleForm);
   const [editingRuleId, setEditingRuleId] = useState("");
   const [showRuleModal, setShowRuleModal] = useState(false);
@@ -141,18 +142,18 @@ const LatePenalties = () => {
   const [loading, setLoading] = useState(false);
   const [savingRule, setSavingRule] = useState(false);
   const [batchDetail, setBatchDetail] = useState(null);
-  const [workspaceView, setWorkspaceView] = useState("processed_penalties");
+  const [workspaceView, setWorkspaceView] = useTabState("/invoices/late-penalties:workspaceView", "processed_penalties");
   const [communicationModal, setCommunicationModal] = useState(null);
   const [selectedBatchRows, setSelectedBatchRows] = useState({});
   const [processingBatchAction, setProcessingBatchAction] = useState(false);
-  const [penaltySearch, setPenaltySearch] = useState("");
-  const [penaltyStatusFilter, setPenaltyStatusFilter] = useState("all");
-  const [penaltyRuleFilter, setPenaltyRuleFilter] = useState("all");
-  const [penaltyPropertyFilter, setPenaltyPropertyFilter] = useState("all");
-  const [batchSearch, setBatchSearch] = useState("");
-  const [batchStatusFilter, setBatchStatusFilter] = useState("all");
-  const [processedPenaltyPage, setProcessedPenaltyPage] = useState(1);
-  const [processedBatchPage, setProcessedBatchPage] = useState(1);
+  const [penaltySearch, setPenaltySearch] = useTabState("/invoices/late-penalties:penaltySearch", "");
+  const [penaltyStatusFilter, setPenaltyStatusFilter] = useTabState("/invoices/late-penalties:penaltyStatusFilter", "all");
+  const [penaltyRuleFilter, setPenaltyRuleFilter] = useTabState("/invoices/late-penalties:penaltyRuleFilter", "all");
+  const [penaltyPropertyFilter, setPenaltyPropertyFilter] = useTabState("/invoices/late-penalties:penaltyPropertyFilter", "all");
+  const [batchSearch, setBatchSearch] = useTabState("/invoices/late-penalties:batchSearch", "");
+  const [batchStatusFilter, setBatchStatusFilter] = useTabState("/invoices/late-penalties:batchStatusFilter", "all");
+  const [processedPenaltyPage, setProcessedPenaltyPage] = useTabState("/invoices/late-penalties:processedPenaltyPage", 1);
+  const [processedBatchPage, setProcessedBatchPage] = useTabState("/invoices/late-penalties:processedBatchPage", 1);
 
   const incomeAccounts = useMemo(
     () => (Array.isArray(accounts) ? accounts.filter((account) => String(account?.type || "").toLowerCase() === "income") : []),

@@ -1,4 +1,5 @@
 ﻿import React, { useEffect, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaReceipt, FaRedoAlt, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -35,11 +36,11 @@ const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wid
 const POSSalesHistory = () => {
   const queryClient = useQueryClient();
   const [locationFilter, setLocationFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [date, setDate] = useState(todayISO());
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState(null);
+  const [statusFilter, setStatusFilter] = useTabState("/pos/sales:statusFilter", "");
+  const [date, setDate] = useTabState("/pos/sales:date", () => todayISO());
+  const [search, setSearch] = useTabState("/pos/sales:search", "");
+  const [page, setPage] = useTabState("/pos/sales:page", 1);
+  const [selected, setSelected] = useTabState("/pos/sales:selected", null);
   const [showVoid, setShowVoid] = useState(false);
   const [voidReason, setVoidReason] = useState("");
   const [voiding, setVoiding] = useState(false);

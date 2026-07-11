@@ -14,6 +14,7 @@ import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../s
 import CarWashShell from "./CarWashShell";
 import CwSmsModal from "./CwSmsModal";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
+import { useTabState } from "../../hooks/useTabState";
 
 const GRN = "#0B3B2E";
 const fmt = formatMoney;
@@ -347,27 +348,27 @@ export default function CarWashCustomers() {
   const canManage = useCarWashPermission("carwash-loyalty", "manage");
 
   // ── Pagination / search ──
-  const [page, setPage]           = useState(1);
-  const [limit, setLimit]         = useState(25);
-  const [search, setSearch]       = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [page, setPage]           = useTabState("/carwash/customers:page", 1);
+  const [limit, setLimit]         = useTabState("/carwash/customers:limit", 25);
+  const [search, setSearch]       = useTabState("/carwash/customers:search", "");
+  const [debouncedSearch, setDebouncedSearch] = useTabState("/carwash/customers:debouncedSearch", "");
   const searchRef  = useRef(null);
   const debounceRef = useRef(null);
 
   // ── Basic filters ──
-  const [filterOutstanding, setFilterOutstanding] = useState(false);
-  const [filterCredit, setFilterCredit]           = useState(false);
+  const [filterOutstanding, setFilterOutstanding] = useTabState("/carwash/customers:filterOutstanding", false);
+  const [filterCredit, setFilterCredit]           = useTabState("/carwash/customers:filterCredit", false);
 
   // ── Advanced filters ──
   const [filtersOpen, setFiltersOpen]   = useState(false);
-  const [dormantDays, setDormantDays]   = useState(0);
-  const [loyaltyFilter, setLoyaltyFilter] = useState("");
-  const [minSpend, setMinSpend]         = useState("");
-  const [maxSpend, setMaxSpend]         = useState("");
+  const [dormantDays, setDormantDays]   = useTabState("/carwash/customers:dormantDays", 0);
+  const [loyaltyFilter, setLoyaltyFilter] = useTabState("/carwash/customers:loyaltyFilter", "");
+  const [minSpend, setMinSpend]         = useTabState("/carwash/customers:minSpend", "");
+  const [maxSpend, setMaxSpend]         = useTabState("/carwash/customers:maxSpend", "");
 
   // ── Sort ──
-  const [sortBy, setSortBy]   = useState("name");
-  const [sortDir, setSortDir] = useState("asc");
+  const [sortBy, setSortBy]   = useTabState("/carwash/customers:sortBy", "name");
+  const [sortDir, setSortDir] = useTabState("/carwash/customers:sortDir", "asc");
 
   const handleSort = useCallback((field) => {
     setSortBy((prev) => {
@@ -402,7 +403,7 @@ export default function CarWashCustomers() {
   // ── Misc UI state ──
   const [syncing, setSyncing]       = useState(false);
   const [exporting, setExporting]   = useState(false);
-  const [expandedId, setExpandedId] = useState(null);
+  const [expandedId, setExpandedId] = useTabState("/carwash/customers:expandedId", null);
 
   // ── Edit modal ──
   const [editTarget, setEditTarget] = useState(null);

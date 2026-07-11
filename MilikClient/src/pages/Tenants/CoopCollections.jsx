@@ -9,6 +9,7 @@ import { toast } from "react-toastify";
 import { adminRequests } from "../../utils/requestMethods";
 import { selectCurrentCompany } from "../../redux/selectors";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import { useTabState } from "../../hooks/useTabState";
 
 const PAGE_SIZE   = 50;
 const AUTO_RELOAD = 30;
@@ -154,13 +155,13 @@ export default function CoopCollections() {
   const [items,    setItems]    = useState([]);
   const [total,    setTotal]    = useState(0);
   const [summary,  setSummary]  = useState({ unmatched: 0, matched_tenant: 0, captured: 0, ignored: 0, totalAmount: 0 });
-  const [page,     setPage]     = useState(1);
+  const [page,     setPage]     = useTabState("/receipts/coop-collections:page", 1);
   const [pages,    setPages]    = useState(1);
   const [loading,  setLoading]  = useState(false);
-  const [statusFilter, setStatusFilter] = useState("");
-  const [search,   setSearch]   = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo,   setDateTo]   = useState(todayISO());
+  const [statusFilter, setStatusFilter] = useTabState("/receipts/coop-collections:statusFilter", "");
+  const [search,   setSearch]   = useTabState("/receipts/coop-collections:search", "");
+  const [dateFrom, setDateFrom] = useTabState("/receipts/coop-collections:dateFrom", "");
+  const [dateTo,   setDateTo]   = useTabState("/receipts/coop-collections:dateTo", () => todayISO());
   const [countdown, setCountdown] = useState(AUTO_RELOAD);
   const [assignTarget, setAssignTarget] = useState(null);
   const [ignoreTarget, setIgnoreTarget] = useState(null);

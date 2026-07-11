@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
@@ -45,10 +46,10 @@ const BudgetVsActual = () => {
   const { pathname } = useLocation();
   const isAnalysisRoute = pathname === "/accounts/budget/analysis";
 
-  const [view,       setView]       = useState(VIEW.LIST);
+  const [view,       setView]       = useTabState("/accounts/budget:view", VIEW.LIST);
   const [budgets,    setBudgets]    = useState([]);
   const [accounts,   setAccounts]   = useState([]);
-  const [activeBudget, setActiveBudget] = useState(null);
+  const [activeBudget, setActiveBudget] = useTabState("/accounts/budget:activeBudget", null);
   const [loadingList,  setLoadingList]  = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
 

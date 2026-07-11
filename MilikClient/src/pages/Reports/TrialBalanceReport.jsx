@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
@@ -74,10 +75,7 @@ const TrialBalanceReport = () => {
     asOfDate: new Date().toISOString(),
     count: 0,
   });
-  const [filters, setFilters] = useState({
-    asOfDate: todayString(),
-    includeZeroBalances: false,
-  });
+  const [filters, setFilters] = useTabState("/accounts/trial-balance:filters", { asOfDate: todayString(), includeZeroBalances: false });
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
 
   const loadReport = useCallback(async () => {

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import {
@@ -118,13 +119,8 @@ const CommissionReports = () => {
     status: "recognized",
   });
   const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
-  const [appliedFilters, setAppliedFilters] = useState({
-    monthFrom: currentMonth,
-    monthTo: currentMonth,
-    search: "",
-    status: "recognized",
-  });
-  const [currentPage, setCurrentPage] = useState(1);
+  const [appliedFilters, setAppliedFilters] = useTabState("/reports/commissions:appliedFilters", { monthFrom: currentMonth, monthTo: currentMonth, search: "", status: "recognized" });
+  const [currentPage, setCurrentPage] = useTabState("/reports/commissions:currentPage", 1);
 
   const loadData = useCallback(async () => {
     if (!currentCompany?._id) {

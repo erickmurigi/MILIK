@@ -64,6 +64,7 @@ import {
 } from "../../redux/apiCalls";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
+import { useTabState } from "../../hooks/useTabState";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
@@ -694,8 +695,8 @@ const Tenants = ({ listingMode = "active" }) => {
   const defaultStatusFilter = isTerminatedView ? "terminated" : "active";
 
   // ===== UI STATE =====
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useTabState("/tenants:pageSize", DEFAULT_PAGE_SIZE);
+  const [currentPage, setCurrentPage] = useTabState("/tenants:currentPage", 1);
   const [expandedTenants, setExpandedTenants] = useState([]);
   const [selectedTenants, setSelectedTenants] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
@@ -745,7 +746,7 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
     tenantName: "",
     tenantCode: "",
   });
-  const [appliedFilters, setAppliedFilters] = useState({
+  const [appliedFilters, setAppliedFilters] = useTabState("/tenants:appliedFilters", {
     property: "any",
     status: defaultStatusFilter,
     balanceScope: "any",

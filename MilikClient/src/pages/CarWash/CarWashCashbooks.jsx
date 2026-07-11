@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
@@ -18,9 +19,9 @@ const isCashbookAccount = (account = {}) =>
 const CarWashCashbooks = () => {
   const navigate = useNavigate();
   const currentCompany = useSelector((state) => state.company?.currentCompany);
-  const [filters, setFilters] = useState(defaultFilters);
-  const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
-  const [page, setPage] = useState(1);
+  const [filters, setFilters] = useTabState("/carwash/cashbooks:filters", defaultFilters);
+  const [appliedFilters, setAppliedFilters] = useTabState("/carwash/cashbooks:appliedFilters", defaultFilters);
+  const [page, setPage] = useTabState("/carwash/cashbooks:page", 1);
 
   const { data: rawAccounts, isLoading: loading, error, refetch } = useQuery({
     queryKey: ["cw-cashbooks", currentCompany?._id],

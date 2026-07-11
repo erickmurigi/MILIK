@@ -4,6 +4,7 @@ import { clearDraft, readDraft, writeDraft } from "../../hooks/useFormDraft";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
+import { useTabState } from "../../hooks/useTabState";
 import { FaChevronDown, FaChevronRight, FaPlus, FaRedoAlt, FaSearch, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, todayISO } from "../../services/carWashApi";
@@ -49,13 +50,13 @@ const CarWashDeposits = () => {
   const queryClient = useQueryClient();
   const currentCompany = useSelector(selectCurrentCompany);
   const isConsolidated = !getActiveBranchId();
-  const [filters, setFilters] = useState(defaultFilters);
-  const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
+  const [filters, setFilters] = useTabState("/carwash/deposits:filters", defaultFilters);
+  const [appliedFilters, setAppliedFilters] = useTabState("/carwash/deposits:appliedFilters", defaultFilters);
   const [form, setForm] = useState(() => readDraft("cw-deposits-form") || emptyForm);
   const [expandedIds, setExpandedIds] = useState([]);
   const [showModal, setShowModal] = useState(false);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [page, setPage] = useTabState("/carwash/deposits:page", 1);
+  const [pageSize, setPageSize] = useTabState("/carwash/deposits:pageSize", DEFAULT_PAGE_SIZE);
   const canCreate = useCarWashPermission("carwash-deposits", "create");
   const canUpdate = useCarWashPermission("carwash-deposits", "update");
 

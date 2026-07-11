@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { FaArrowLeft, FaBook, FaSync, FaAddressCard } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -22,7 +23,7 @@ const CreditorLedger = () => {
   const [view, setView] = useState("list");
   const [providers, setProviders] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useTabState("/accounts/creditor-ledger:search", "");
 
   const [selectedProvider, setSelectedProvider] = useState(null);
   const [statement, setStatement] = useState(null);

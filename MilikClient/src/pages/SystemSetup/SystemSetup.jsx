@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useDispatch, useSelector } from "react-redux";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -465,11 +466,11 @@ const OverviewPanel = ({ companies, users, companyReadiness, companyUserCounts, 
 
 // ─── Companies Panel ───────────────────────────────────────────────────────────
 const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, pendingId, onAddCompany, onEditCompany, onDeleteCompany, onToggleCompanyLock, onOpenCompanySetup, onOpenOperationalSettings, onOpenWorkspace, onManageUsers }) => {
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [modeFilter, setModeFilter] = useState("all");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [search, setSearch] = useTabState("/system-setup/companies:search", "");
+  const [statusFilter, setStatusFilter] = useTabState("/system-setup/companies:statusFilter", "all");
+  const [modeFilter, setModeFilter] = useTabState("/system-setup/companies:modeFilter", "all");
+  const [page, setPage] = useTabState("/system-setup/companies:page", 1);
+  const [pageSize, setPageSize] = useTabState("/system-setup/companies:pageSize", DEFAULT_PAGE_SIZE);
 
   const filtered = useMemo(() => {
     return companies.filter((company) => {
@@ -616,10 +617,10 @@ const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, pendin
 
 // ─── Users Panel ───────────────────────────────────────────────────────────────
 const UsersPanel = ({ users, companies, companyMap, selectedCompanyId, onSelectedCompanyIdChange, onAddUser, onEditUser, onToggleUserLock, onDeleteUser, onResetPassword }) => {
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [search, setSearch] = useTabState("/system-setup/users:search", "");
+  const [statusFilter, setStatusFilter] = useTabState("/system-setup/users:statusFilter", "all");
+  const [page, setPage] = useTabState("/system-setup/users:page", 1);
+  const [pageSize, setPageSize] = useTabState("/system-setup/users:pageSize", DEFAULT_PAGE_SIZE);
 
   const filtered = useMemo(() => {
     return users.filter((user) => {
@@ -730,8 +731,8 @@ const UsersPanel = ({ users, companies, companyMap, selectedCompanyId, onSelecte
 
 // ─── Trials Panel ──────────────────────────────────────────────────────────────
 const TrialsPanel = ({ companies, companyReadiness, companyUserCounts, onOpenWorkspace, onOpenCompanySetup }) => {
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [page, setPage] = useTabState("/system-setup/trials:page", 1);
+  const [pageSize, setPageSize] = useTabState("/system-setup/trials:pageSize", DEFAULT_PAGE_SIZE);
 
   const { spotlightCompanies, demoCount, inactiveCount, attentionCount } = useMemo(() => {
     const demoCompanies = companies.filter((c) => c?.isDemoWorkspace);
@@ -830,10 +831,10 @@ const TrialsPanel = ({ companies, companyReadiness, companyUserCounts, onOpenWor
 
 // ─── Audit Panel ───────────────────────────────────────────────────────────────
 const AuditPanel = ({ companies, users, companyMap }) => {
-  const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [search, setSearch] = useTabState("/system-setup/audit:search", "");
+  const [typeFilter, setTypeFilter] = useTabState("/system-setup/audit:typeFilter", "all");
+  const [page, setPage] = useTabState("/system-setup/audit:page", 1);
+  const [pageSize, setPageSize] = useTabState("/system-setup/audit:pageSize", DEFAULT_PAGE_SIZE);
 
   const allEvents = useMemo(() => {
     const rows = [];

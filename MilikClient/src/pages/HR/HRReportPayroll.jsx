@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useTabState } from '../../hooks/useTabState';
 import { useSelector } from 'react-redux';
 import { FaMoneyBillWave, FaRedoAlt, FaPrint, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
@@ -22,7 +23,7 @@ const currentYear = new Date().getFullYear();
 const YEARS = Array.from({ length: 6 }, (_, i) => currentYear - 5 + i);
 
 export default function HRReportPayroll() {
-  const [year, setYear]     = useState(currentYear);
+  const [year, setYear]     = useTabState("/hr/reports/payroll:year", currentYear);
   const [data, setData]     = useState(null);
   const [loading, setLoading] = useState(true);
 

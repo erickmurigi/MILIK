@@ -44,12 +44,12 @@ export default function SaleActivities() {
   const qc      = useQueryClient();
   const biz     = useSelector((s) => s.company?.currentCompany?._id);
 
-  const [typeFilter,    setType]      = useState("");
-  const [outcomeFilter, setOutcome]   = useState("");
-  const [from,          setFrom]      = useState("");
-  const [to,            setTo]        = useState("");
-  const [page,          setPage]      = useState(1);
-  const [pageSize,      setPageSize]  = useState(LIMIT);
+  const [typeFilter,    setType]      = useTabState("/sale/crm/activities:typeFilter", "");
+  const [outcomeFilter, setOutcome]   = useTabState("/sale/crm/activities:outcomeFilter", "");
+  const [from,          setFrom]      = useTabState("/sale/crm/activities:from", "");
+  const [to,            setTo]        = useTabState("/sale/crm/activities:to", "");
+  const [page,          setPage]      = useTabState("/sale/crm/activities:page", 1);
+  const [pageSize,      setPageSize]  = useTabState("/sale/crm/activities:pageSize", LIMIT);
 
   const [showModal, setShowModal]     = useState(false);
   const [editingId, setEditingId]     = useState("");

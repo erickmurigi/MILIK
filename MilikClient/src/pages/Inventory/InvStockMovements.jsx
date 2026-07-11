@@ -1,4 +1,5 @@
 ﻿import React, { useEffect, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaArrowDown, FaArrowUp, FaExchangeAlt, FaPlus, FaRedoAlt, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -44,10 +45,10 @@ const Modal = ({ title, onClose, children, footer }) => (
 const InvStockMovements = () => {
   const queryClient = useQueryClient();
   const [locationFilter, setLocationFilter] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  const [page, setPage] = useState(1);
+  const [typeFilter, setTypeFilter] = useTabState("/inventory/stock-movements:typeFilter", "");
+  const [from, setFrom] = useTabState("/inventory/stock-movements:from", "");
+  const [to, setTo] = useTabState("/inventory/stock-movements:to", "");
+  const [page, setPage] = useTabState("/inventory/stock-movements:page", 1);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);

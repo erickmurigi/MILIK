@@ -1,4 +1,5 @@
 ﻿import React, { useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useDispatch, useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
 import { toast } from "react-toastify";
@@ -62,7 +63,7 @@ const UnitTypesPage = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const isSavingCompany = useSelector((state) => state.company?.isFetching);
 
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useTabState("/units/space-types:search", "");
   const [draftValue, setDraftValue] = useState("");
   const [editingValue, setEditingValue] = useState("");
   const [formError, setFormError] = useState("");

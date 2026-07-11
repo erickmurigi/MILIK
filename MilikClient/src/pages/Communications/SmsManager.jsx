@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -140,7 +141,7 @@ const ComposePanel = ({ open, onClose, businessId, hasPM, hasCarWash, hasHR, has
     [hasPM, hasCarWash, hasHR, hasPropertySale, hasInventory]
   );
 
-  const [selectedType,    setSelectedType]    = useState("manual");
+  const [selectedType,    setSelectedType]    = useTabState("/communications/sms:selectedType", "manual");
   const [selectedIds,     setSelectedIds]     = useState([]);
   const [manualPhone,     setManualPhone]     = useState("");
   const [body,            setBody]            = useState("");
@@ -440,7 +441,7 @@ const SmsManager = () => {
   const setPage   = (p) => setSearchParams({ status: activeStatus, page: String(p) }, { replace: true });
 
   // ── Local state ───────────────────────────────────────────────────────────
-  const [search,         setSearch]         = useState("");
+  const [search,         setSearch]         = useTabState("/communications/sms:search", "");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [compose,        setCompose]        = useState(false);
   const [expandedId,     setExpanded]       = useState(null);

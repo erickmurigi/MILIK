@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import {
@@ -188,7 +189,7 @@ export default function GLIntegrityReport() {
   // Repair actions are write operations — require Full Access on accounts module
   const canRepair = hasCompanyPermission(currentUser, company, "financialReports", "process", "accounts");
 
-  const [activeTab,  setActiveTab]  = useState("check");
+  const [activeTab,  setActiveTab]  = useTabState("/accounts/gl-integrity:activeTab", "check");
   const [loading,    setLoading]    = useState(false);
   const [report,     setReport]     = useState(null);
   const [history,    setHistory]    = useState([]);

@@ -1,4 +1,5 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import { FaClock, FaFileDownload, FaFilter, FaPrint, FaSyncAlt } from "react-icons/fa";
@@ -46,9 +47,9 @@ const RentalAgedAnalysisReport = () => {
   const [loading, setLoading] = useState(false);
   const [properties, setProperties] = useState([]);
   const [rows, setRows] = useState([]);
-  const [filters, setFilters] = useState({ propertyId: "all", category: "all", search: "" });
+  const [filters, setFilters] = useTabState("/reports/rental-aged-analysis:filters", { propertyId: "all", category: "all", search: "" });
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useTabState("/reports/rental-aged-analysis:currentPage", 1);
 
   const loadData = useCallback(async () => {
     if (!businessId) return;

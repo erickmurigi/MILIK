@@ -1,5 +1,6 @@
 ﻿// pages/Landlord/Landlord.jsx
 import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -66,8 +67,8 @@ const Landlords = () => {
   // Table + UI state
   const [selectedLandlords, setSelectedLandlords] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useTabState("/landlords:pageSize", DEFAULT_PAGE_SIZE);
+  const [currentPage, setCurrentPage] = useTabState("/landlords:currentPage", 1);
   const [isResizing, setIsResizing] = useState(false);
 
   // Modals (keeping edit mode for future edit functionality)
@@ -90,7 +91,7 @@ const Landlords = () => {
   };
 
   const [draftFilters, setDraftFilters] = useState(emptyFilters);
-  const [appliedFilters, setAppliedFilters] = useState(emptyFilters);
+  const [appliedFilters, setAppliedFilters] = useTabState("/landlords:appliedFilters", emptyFilters);
 
   // Milik Confirm Dialog
   const [confirmDialog, setConfirmDialog] = useState({

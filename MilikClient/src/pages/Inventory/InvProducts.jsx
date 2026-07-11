@@ -1,4 +1,5 @@
 ﻿import React, { useMemo, useEffect, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaArrowDown, FaArrowUp, FaBarcode, FaBoxOpen, FaChartLine, FaEdit, FaPlus, FaRedoAlt, FaSearch, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -153,9 +154,9 @@ const StockCardModal = ({ product, onClose }) => {
 
 const InvProducts = () => {
   const queryClient = useQueryClient();
-  const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("");
-  const [page, setPage] = useState(1);
+  const [search, setSearch] = useTabState("/inventory/products:search", "");
+  const [categoryFilter, setCategoryFilter] = useTabState("/inventory/products:categoryFilter", "");
+  const [page, setPage] = useTabState("/inventory/products:page", 1);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm());

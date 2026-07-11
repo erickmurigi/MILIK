@@ -1,4 +1,5 @@
 ﻿import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
@@ -109,9 +110,9 @@ const POSTerminal = () => {
 
   /* Location / session state */
   const [locations,        setLocations]        = useState([]);
-  const [selectedLocation, setSelectedLocation] = useState("");
+  const [selectedLocation, setSelectedLocation] = useTabState("/pos/terminal:selectedLocation", "");
   const [tills,            setTills]            = useState([]);
-  const [selectedTill,     setSelectedTill]     = useState("");
+  const [selectedTill,     setSelectedTill]     = useTabState("/pos/terminal:selectedTill", "");
   const [session,          setSession]          = useState(null);
   const [loadingSession,   setLoadingSession]   = useState(false);
   const [openingFloat,     setOpeningFloat]     = useState("");
@@ -119,7 +120,7 @@ const POSTerminal = () => {
   /* Product catalog state */
   const [gridProducts,  setGridProducts]  = useState([]);
   const [categories,    setCategories]    = useState([]);
-  const [catFilter,     setCatFilter]     = useState("all");
+  const [catFilter,     setCatFilter]     = useTabState("/pos/terminal:catFilter", "all");
   const [loadingGrid,   setLoadingGrid]   = useState(false);
 
   /* Search state */

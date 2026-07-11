@@ -32,6 +32,7 @@ import {
 import { hasCompanyPermission } from "../../utils/permissions";
 import useScopedSessionDraft, { buildScopedDraftKey } from "../../hooks/useScopedSessionDraft";
 import { useConfirm } from "../../context/ConfirmContext";
+import { useTabState } from "../../hooks/useTabState";
 
 const JOURNAL_TYPES = [
   {
@@ -169,8 +170,8 @@ const JournalEntries = () => {
 
   const form = journalDraft.form || buildInitialForm();
   const setForm = (value) => setJournalDraft((prev) => ({ ...prev, form: typeof value === "function" ? value(prev.form || buildInitialForm()) : value }));
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useTabState("/accounts/journals:pageSize", DEFAULT_PAGE_SIZE);
+  const [currentPage, setCurrentPage] = useTabState("/accounts/journals:currentPage", 1);
   const [serverTotal, setServerTotal] = useState(0);
   const [serverPages, setServerPages] = useState(1);
 

@@ -1,4 +1,5 @@
 import React, { useCallback, useState } from 'react';
+import { useTabState } from '../../hooks/useTabState';
 import { useSelector } from 'react-redux';
 import { useQuery } from '@tanstack/react-query';
 import { FaSearch, FaRedoAlt, FaPrint, FaChartBar } from 'react-icons/fa';
@@ -30,9 +31,9 @@ function MiniBar({ pct }) {
 
 export default function HRReportAttendance() {
   const company    = useSelector(selectCurrentCompany) || {};
-  const [month,    setMonth]    = useState(String(thisMonth));
-  const [year,     setYear]     = useState(String(thisYear));
-  const [search,   setSearch]   = useState('');
+  const [month,    setMonth]    = useTabState('/hr/reports/attendance:month', String(thisMonth));
+  const [year,     setYear]     = useTabState('/hr/reports/attendance:year', String(thisYear));
+  const [search,   setSearch]   = useTabState('/hr/reports/attendance:search', '');
   const [committed, setCommitted] = useState({ month: String(thisMonth), year: String(thisYear) });
 
   const { data, isLoading, refetch } = useQuery({

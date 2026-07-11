@@ -1,4 +1,5 @@
 ﻿import React, { useEffect, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaCashRegister, FaRedoAlt, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -21,9 +22,9 @@ const fmtDateTime = (iso) =>
 
 const POSSessions = () => {
   const queryClient = useQueryClient();
-  const [locationFilter, setLocationFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [page, setPage] = useState(1);
+  const [locationFilter, setLocationFilter] = useTabState("/pos/sessions:locationFilter", "");
+  const [statusFilter, setStatusFilter] = useTabState("/pos/sessions:statusFilter", "");
+  const [page, setPage] = useTabState("/pos/sessions:page", 1);
   const [closing, setClosing] = useState(null);
   const [closingFloat, setClosingFloat] = useState("");
   const [showClose, setShowClose] = useState(false);

@@ -12,6 +12,7 @@ import CarWashShell from "./CarWashShell";
 import { useConfirm } from "../../context/ConfirmContext";
 import CwSmsModal from "./CwSmsModal";
 import { clearDraft, readDraft, writeDraft } from "../../hooks/useFormDraft";
+import { useTabState } from "../../hooks/useTabState";
 import PaginationBar from "../../components/PaginationBar";
 
 const Lightbox = ({ src, onClose }) => (
@@ -660,7 +661,7 @@ const CarWashJobs = () => {
     return defs;
   }, [settingsAndBranch]);
   const [paymentForm, setPaymentForm] = useState(emptyPaymentForm);
-  const [filters, setFilters] = useState(() => {
+  const [filters, setFilters] = useTabState("/carwash/jobs:filters", () => {
     const p      = new URLSearchParams(location.search);
     const plate  = p.get("plate");
     const status = p.get("status");
@@ -670,7 +671,7 @@ const CarWashJobs = () => {
     if (status || from) return { ...defaultFilters, status: status || "", dateFrom: from || defaultFilters.dateFrom, dateTo: to || defaultFilters.dateTo };
     return defaultFilters;
   });
-  const [appliedFilters, setAppliedFilters] = useState(() => {
+  const [appliedFilters, setAppliedFilters] = useTabState("/carwash/jobs:appliedFilters", () => {
     const p      = new URLSearchParams(location.search);
     const plate  = p.get("plate");
     const status = p.get("status");
@@ -686,8 +687,8 @@ const CarWashJobs = () => {
   const [applyCredit, setApplyCredit] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [expandedIds, setExpandedIds] = useState([]);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useTabState("/carwash/jobs:pageSize", DEFAULT_PAGE_SIZE);
+  const [page, setPage] = useTabState("/carwash/jobs:page", 1);
   const [pagination, setPagination] = useState({ page: 1, limit: DEFAULT_PAGE_SIZE, total: 0, pages: 1 });
   const [loading, setLoading] = useState(false);
   const [modalUnpaidJobs, setModalUnpaidJobs] = useState([]);

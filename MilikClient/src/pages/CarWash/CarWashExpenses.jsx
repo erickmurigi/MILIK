@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { clearDraft, readDraft, writeDraft } from "../../hooks/useFormDraft";
 import { useSelector } from "react-redux";
@@ -236,11 +237,11 @@ const CarWashExpenses = () => {
   const canDelete = useCarWashPermission("carwash-expenses", "delete");
 
   const [rows,         setRows]         = useState([]);
-  const [filters,      setFilters]      = useState(defaultFilters);
-  const [applied,      setApplied]      = useState(defaultFilters);
+  const [filters,      setFilters]      = useTabState("/carwash/expenses:filters", defaultFilters);
+  const [applied,      setApplied]      = useTabState("/carwash/expenses:applied", defaultFilters);
   const [expandedIds,  setExpandedIds]  = useState([]);
-  const [page,         setPage]         = useState(1);
-  const [pageSize,     setPageSize]     = useState(25);
+  const [page,         setPage]         = useTabState("/carwash/expenses:page", 1);
+  const [pageSize,     setPageSize]     = useTabState("/carwash/expenses:pageSize", 25);
   const [pagination,   setPagination]   = useState({ page: 1, limit: 25, total: 0, pages: 1 });
   const [summary,      setSummary]      = useState({ draft: {}, approved: {}, paid: {}, cancelled: {}, totalAmount: 0 });
   const [loading,      setLoading]      = useState(false);

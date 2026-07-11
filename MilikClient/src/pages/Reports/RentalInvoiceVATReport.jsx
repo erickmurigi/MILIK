@@ -1,4 +1,5 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import { FaFileDownload, FaFilter, FaPercent, FaPrint, FaSyncAlt } from "react-icons/fa";
@@ -26,9 +27,9 @@ const RentalInvoiceVATReport = () => {
   const [loading, setLoading] = useState(false);
   const [properties, setProperties] = useState([]);
   const [rows, setRows] = useState([]);
-  const [filters, setFilters] = useState({ propertyId: "all", category: "all", search: "" });
+  const [filters, setFilters] = useTabState("/invoices/vat:filters", { propertyId: "all", category: "all", search: "" });
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useTabState("/invoices/vat:currentPage", 1);
 
   const loadData = useCallback(async () => {
     if (!businessId) return;

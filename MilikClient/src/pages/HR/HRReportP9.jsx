@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTabState } from '../../hooks/useTabState';
 import { useSelector } from 'react-redux';
 import { FaFileAlt, FaRedoAlt, FaPrint, FaSearch } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
@@ -27,7 +28,7 @@ export default function HRReportP9() {
   const [year, setYear]   = useState(currentYear);
   const [data, setData]   = useState(null);
   const [loading, setLoading] = useState(false);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useTabState('/hr/reports/p9:search', '');
 
   useEffect(() => {
     adminRequests.get('/hr/reports/employees-list')

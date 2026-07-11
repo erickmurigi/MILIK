@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { FaRedoAlt, FaSearch, FaUndo } from "react-icons/fa";
@@ -37,9 +38,9 @@ const CarWashCommissions = () => {
   const queryClient = useQueryClient();
   const canManage = useCarWashPermission("carwash-commissions", "manage");
 
-  const [filters, setFilters]         = useState(emptyFilters);
-  const [applied, setApplied]         = useState(emptyFilters);
-  const [page, setPage]               = useState(1);
+  const [filters, setFilters]         = useTabState("/carwash/commissions:filters", emptyFilters);
+  const [applied, setApplied]         = useTabState("/carwash/commissions:applied", emptyFilters);
+  const [page, setPage]               = useTabState("/carwash/commissions:page", 1);
 
   // Reversal modal state
   const [reverseTarget, setReverseTarget] = useState(null);

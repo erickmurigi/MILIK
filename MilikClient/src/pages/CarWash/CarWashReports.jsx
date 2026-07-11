@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { FaExternalLinkAlt, FaPrint, FaRedoAlt, FaSearch } from "react-icons/fa";
@@ -101,7 +102,7 @@ const CarWashReports = () => {
   const [branch, setBranch] = useState(() => getActiveBranchId() || "");
 
   // committed filters (trigger data load)
-  const [applied, setApplied] = useState(() => ({
+  const [applied, setApplied] = useTabState("/carwash/reports:applied", () => ({
     mode: "daily", date: today, month: monthISO(), fromDate: today, toDate: today, branch: getActiveBranchId() || "",
   }));
 

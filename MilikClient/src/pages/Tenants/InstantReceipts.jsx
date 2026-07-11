@@ -18,6 +18,7 @@ import {
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import { useTabState } from "../../hooks/useTabState";
 import { getTenants } from "../../redux/tenantsRedux";
 import {
   confirmRentPayment,
@@ -89,12 +90,12 @@ const InstantReceipts = () => {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [search, setSearch] = useTabState("/receipts/instant:search", "");
+  const [statusFilter, setStatusFilter] = useTabState("/receipts/instant:statusFilter", "all");
   const [sourceFilter, setSourceFilter] = useState("callback_confirmation");
-  const [selectedShortCode, setSelectedShortCode] = useState("");
+  const [selectedShortCode, setSelectedShortCode] = useTabState("/receipts/instant:selectedShortCode", "");
   const [confirmModal, setConfirmModal] = useState({ open: false, row: null, tenantCode: "" });
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useTabState("/receipts/instant:currentPage", 1);
 
   const mpesaConfigs = useMemo(() => getMpesaConfigs(currentCompany), [currentCompany]);
 

@@ -38,6 +38,7 @@ import { adminRequests } from "../../utils/requestMethods";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtils";
+import { useTabState } from "../../hooks/useTabState";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -211,13 +212,13 @@ const TenantDeposits = () => {
   const [deleting, setDeleting] = useState(false);
   const [draftFilters, setDraftFilters] = useState(emptyFilters);
   const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
-  const [appliedFilters, setAppliedFilters] = useState(emptyFilters);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [appliedFilters, setAppliedFilters] = useTabState("/tenants/deposits:appliedFilters", emptyFilters);
+  const [currentPage, setCurrentPage] = useTabState("/tenants/deposits:currentPage", 1);
   const [selectedInvoices, setSelectedInvoices] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
   const [showDepositModal, setShowDepositModal] = useState(false);
   const [communicationModal, setCommunicationModal] = useState(null);
-  const [tenantPropertyFilter, setTenantPropertyFilter] = useState("any");
+  const [tenantPropertyFilter, setTenantPropertyFilter] = useTabState("/tenants/deposits:tenantPropertyFilter", "any");
   const [depositForm, setDepositForm] = useState({
     tenantId: "",
     depositTypeId: "",

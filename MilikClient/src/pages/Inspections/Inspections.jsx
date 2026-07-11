@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useDebounce from "../../hooks/useDebounce";
+import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import {
@@ -134,14 +135,14 @@ const Inspections = () => {
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [typeFilter, setTypeFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = useTabState("/inspections:searchTerm", "");
+  const [statusFilter, setStatusFilter] = useTabState("/inspections:statusFilter", "all");
+  const [typeFilter, setTypeFilter] = useTabState("/inspections:typeFilter", "all");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingInspection, setEditingInspection] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useTabState("/inspections:pageSize", DEFAULT_PAGE_SIZE);
+  const [currentPage, setCurrentPage] = useTabState("/inspections:currentPage", 1);
   const [serverTotal, setServerTotal] = useState(0);
   const [serverPages, setServerPages] = useState(1);
 

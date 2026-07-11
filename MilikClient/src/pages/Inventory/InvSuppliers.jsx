@@ -1,4 +1,5 @@
 ﻿import React, { useEffect, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaEdit, FaPlus, FaRedoAlt, FaSearch, FaTimes, FaTruck } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -33,8 +34,8 @@ const Modal = ({ title, onClose, children, footer }) => (
 
 const InvSuppliers = () => {
   const queryClient = useQueryClient();
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const [search, setSearch] = useTabState("/inventory/suppliers:search", "");
+  const [page, setPage] = useTabState("/inventory/suppliers:page", 1);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm());

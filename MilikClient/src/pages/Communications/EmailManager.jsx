@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -260,7 +261,7 @@ const EmailManager = () => {
   const setStatus = (s) => setSearchParams({ status: s, page: "1" }, { replace: true });
   const setPage   = (p) => setSearchParams({ status: activeStatus, page: String(p) }, { replace: true });
 
-  const [search, setSearch]                   = useState("");
+  const [search, setSearch]                   = useTabState("/communications/email:search", "");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [compose, setCompose]                 = useState(false);
   const [expandedId, setExpanded]             = useState(null);

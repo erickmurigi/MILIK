@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   FaSearch, FaPlus, FaEdit, FaTrash, FaSyncAlt,
@@ -112,8 +113,8 @@ const ChartOfAccounts = () => {
   const canDeleteCOA   = hasCompanyPermission(currentUser, currentCompany, "chartOfAccounts", "delete", "accounts");
 
   const [accounts,            setAccounts]          = useState([]);
-  const [searchInput,         setSearchInput]       = useState("");
-  const [search,              setSearch]            = useState("");
+  const [search,              setSearch]            = useTabState(`${activityBase}:search`, "");
+  const [searchInput,         setSearchInput]       = useState(search);
   const [moduleScope,         setModuleScope]       = useState(() => searchParams.get("scope") || "");
   const [loading,             setLoading]           = useState(false);
   const [refreshing,          setRefreshing]        = useState(false);

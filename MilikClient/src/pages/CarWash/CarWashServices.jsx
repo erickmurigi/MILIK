@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { clearDraft, readDraft, writeDraft } from "../../hooks/useFormDraft";
 import { FaChevronDown, FaChevronRight, FaCopy, FaEdit, FaMinus, FaPlus, FaRedoAlt, FaSearch, FaTimes } from "react-icons/fa";
@@ -33,11 +34,11 @@ const CarWashServices = () => {
   const queryClient = useQueryClient();
   const [form, setForm]               = useState(emptyForm);
   const [editingId, setEditingId]     = useState("");
-  const [filters, setFilters]         = useState({ search: "", status: "" });
-  const [appliedFilters, setApplied]  = useState({ search: "", status: "" });
+  const [filters, setFilters]         = useTabState("/carwash/services:filters", { search: "", status: "" });
+  const [appliedFilters, setApplied]  = useTabState("/carwash/services:appliedFilters", { search: "", status: "" });
   const [expandedIds, setExpandedIds] = useState([]);
-  const [page, setPage]               = useState(1);
-  const [pageSize, setPageSize]       = useState(DEFAULT_PAGE_SIZE);
+  const [page, setPage]               = useTabState("/carwash/services:page", 1);
+  const [pageSize, setPageSize]       = useTabState("/carwash/services:pageSize", DEFAULT_PAGE_SIZE);
   const [showModal, setShowModal]     = useState(false);
   const [categoryMode, setCategoryMode] = useState("select");
   const addAnotherRef = React.useRef(false);

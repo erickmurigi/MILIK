@@ -38,6 +38,7 @@ import { adminRequests } from "../../utils/requestMethods";
 import { getTenants } from "../../redux/tenantsRedux";
 import { getProperties } from "../../redux/propertyRedux";
 import { getUnits } from "../../redux/unitRedux";
+import { useTabState } from "../../hooks/useTabState";
 import {
   createLease,
   deleteLease,
@@ -164,7 +165,7 @@ const TenantAgreements = () => {
   const units = useSelector(selectAllUnits);
   const isFetchingLeases = useSelector((state) => state.lease?.isFetching || false);
 
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useTabState("/agreements:filters", {
     status: "any",
     property: "any",
     search: "",
@@ -176,7 +177,7 @@ const TenantAgreements = () => {
     search: "",
     expiringOnly: false,
   });
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useTabState("/agreements:currentPage", 1);
   const [expandedAgreements, setExpandedAgreements] = useState(new Set());
   const [selectedAgreements, setSelectedAgreements] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);

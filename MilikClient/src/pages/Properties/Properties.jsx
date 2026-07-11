@@ -64,8 +64,8 @@ const Properties = () => {
   [landlords]);
 
   // Pagination
-  const [pageSize, setPageSize] = useState(50);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useTabState("/properties:pageSize", 50);
+  const [currentPage, setCurrentPage] = useTabState("/properties:currentPage", 1);
 
   // Selection + table UI
   const [selectedProperties, setSelectedProperties] = useState([]);
@@ -116,7 +116,7 @@ const Properties = () => {
   };
 
   const [draftFilters, setDraftFilters] = useState(emptyFilters);
-  const [appliedFilters, setAppliedFilters] = useState(emptyFilters);
+  const [appliedFilters, setAppliedFilters] = useTabState("/properties:appliedFilters", emptyFilters);
 
   // Milik Confirm Dialog
   const [confirmDialog, setConfirmDialog] = useState({
