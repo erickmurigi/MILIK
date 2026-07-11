@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { FaPrint } from "react-icons/fa";
@@ -12,7 +13,7 @@ const SaleReports = () => {
   const biz = currentCompany?._id;
 
   const currentYear = new Date().getFullYear();
-  const [year, setYear] = useState(String(currentYear));
+  const [year, setYear] = useTabState("/sale/reports:year", String(currentYear));
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
 

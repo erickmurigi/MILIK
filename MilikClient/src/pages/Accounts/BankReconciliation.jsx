@@ -30,7 +30,7 @@ const BankReconciliation = () => {
   const companyName    = String(currentCompany?.companyName || currentCompany?.name || "").trim();
 
   // ── Global state ──────────────────────────────────────────────────────────
-  const [view,     setView]     = useState(VIEW.LIST);
+  const [view,     setView]     = useTabState("/accounts/bank-reconciliation:view", VIEW.LIST);
   const [accounts, setAccounts] = useState([]);
   const [history,  setHistory]  = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);

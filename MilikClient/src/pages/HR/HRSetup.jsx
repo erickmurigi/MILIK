@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useTabState } from '../../hooks/useTabState';
 import {
   FaBuilding, FaTag, FaPlus, FaEdit, FaTrash, FaRedoAlt,
   FaToggleOn, FaToggleOff, FaSearch, FaCheck, FaTimes,
@@ -175,16 +176,16 @@ function PayCompForm({ type, initial = COMP_BLANK, onSave, onCancel, saving }) {
 // Main component
 // ─────────────────────────────────────────────────────────────────────────────
 export default function HRSetup() {
-  const [tab, setTab] = useState('org');
+  const [tab, setTab] = useTabState('/hr/setup:tab', 'org');
   const [confirm, setConfirm] = useState({ isOpen: false });
 
   // ── Tab 1 state ─────────────────────────────────────────────────────────────
   const [departments,  setDepartments]  = useState([]);
   const [designations, setDesignations] = useState([]);
-  const [selectedDept, setSelectedDept] = useState(null);
-  const [deptSearch,   setDeptSearch]   = useState('');
-  const [desigSearch,  setDesigSearch]  = useState('');
-  const [showInactive, setShowInactive] = useState(false);
+  const [selectedDept, setSelectedDept] = useTabState('/hr/setup:selectedDept', null);
+  const [deptSearch,   setDeptSearch]   = useTabState('/hr/setup:deptSearch', '');
+  const [desigSearch,  setDesigSearch]  = useTabState('/hr/setup:desigSearch', '');
+  const [showInactive, setShowInactive] = useTabState('/hr/setup:showInactive', false);
   const [loadingDepts, setLoadingDepts] = useState(true);
   const [loadingDesigs,setLoadingDesigs]= useState(false);
   const [saving,       setSaving]       = useState(false);

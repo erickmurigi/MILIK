@@ -94,12 +94,12 @@ const CarWashReports = () => {
   const today = todayISO();
 
   // draft filters (controlled inputs, not yet applied)
-  const [mode, setMode] = useState("daily");
-  const [date, setDate] = useState(today);
-  const [month, setMonth] = useState(monthISO());
-  const [fromDate, setFromDate] = useState(today);
-  const [toDate, setToDate] = useState(today);
-  const [branch, setBranch] = useState(() => getActiveBranchId() || "");
+  const [mode, setMode] = useTabState("/carwash/reports:mode", "daily");
+  const [date, setDate] = useTabState("/carwash/reports:date", () => todayISO());
+  const [month, setMonth] = useTabState("/carwash/reports:month", () => monthISO());
+  const [fromDate, setFromDate] = useTabState("/carwash/reports:fromDate", () => todayISO());
+  const [toDate, setToDate] = useTabState("/carwash/reports:toDate", () => todayISO());
+  const [branch, setBranch] = useTabState("/carwash/reports:branch", () => getActiveBranchId() || "");
 
   // committed filters (trigger data load)
   const [applied, setApplied] = useTabState("/carwash/reports:applied", () => ({

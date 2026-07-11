@@ -98,7 +98,7 @@ export default function HRFinancials() {
   const hasFullAccounts = useMemo(() => hasCompanyModule(currentCompany, "accounts"), [currentCompany]);
 
   // ── State ──────────────────────────────────────────────────────────────────
-  const [tab, setTab]           = useState("journals");
+  const [tab, setTab]           = useTabState("/hr/financials:tab", "journals");
   const [journals, setJournals] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [journalsLoading, setJournalsLoading] = useState(false);

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { FaBoxOpen, FaExclamationTriangle, FaFileInvoice, FaRedoAlt } from "react-icons/fa";
@@ -12,7 +13,7 @@ const Pill = ({ children, color }) => (
 
 const InvLowStock = () => {
   const navigate = useNavigate();
-  const [categoryFilter, setCategoryFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useTabState("/inventory/low-stock:categoryFilter", "");
 
   const { data: rawItems = [], isLoading: loading, error, refetch } = useQuery({
     queryKey: ["inv-low-stock"],

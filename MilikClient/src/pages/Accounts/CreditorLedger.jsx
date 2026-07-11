@@ -20,12 +20,12 @@ const CreditorLedger = () => {
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const businessId = currentCompany?._id;
 
-  const [view, setView] = useState("list");
+  const [view, setView] = useTabState("/accounts/creditor-ledger:view", "list");
   const [providers, setProviders] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
   const [search, setSearch] = useTabState("/accounts/creditor-ledger:search", "");
 
-  const [selectedProvider, setSelectedProvider] = useState(null);
+  const [selectedProvider, setSelectedProvider] = useTabState("/accounts/creditor-ledger:selectedProvider", null);
   const [statement, setStatement] = useState(null);
   const [loadingStatement, setLoadingStatement] = useState(false);
 

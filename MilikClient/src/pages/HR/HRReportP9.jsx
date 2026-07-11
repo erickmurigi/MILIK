@@ -24,8 +24,8 @@ const STATUS_STYLE = {
 
 export default function HRReportP9() {
   const [employees, setEmployees] = useState([]);
-  const [employeeId, setEmployeeId] = useState('');
-  const [year, setYear]   = useState(currentYear);
+  const [employeeId, setEmployeeId] = useTabState('/hr/reports/p9:employeeId', '');
+  const [year, setYear]   = useTabState('/hr/reports/p9:year', currentYear);
   const [data, setData]   = useState(null);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useTabState('/hr/reports/p9:search', '');

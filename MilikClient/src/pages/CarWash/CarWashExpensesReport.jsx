@@ -30,8 +30,8 @@ const CarWashExpensesReport = () => {
   const isConsolidated = !getActiveBranchId();
   const currentCompany = useSelector(selectCurrentCompany);
 
-  const [from,    setFrom]    = useState(monthStart());
-  const [to,      setTo]      = useState(todayISO());
+  const [from,    setFrom]    = useTabState("/carwash/reports/expenses:from", () => monthStart());
+  const [to,      setTo]      = useTabState("/carwash/reports/expenses:to", () => todayISO());
   const [applied, setApplied] = useTabState("/carwash/reports/expenses:applied", () => ({ from: monthStart(), to: todayISO() }));
   const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(false);

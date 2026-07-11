@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
@@ -65,7 +66,7 @@ const SalePayments = () => {
 
   const [showCreate,   setShowCreate]   = useState(false);
   const [form,         setForm]         = useState(EMPTY_FORM);
-  const [selectedDeal, setSelectedDeal] = useState(null);
+  const [selectedDeal, setSelectedDeal] = useTabState("/sale/payments:selectedDeal", null);
   const [saving,       setSaving]       = useState(false);
   const [voiding,      setVoiding]      = useState(null);
   const [editTarget,   setEditTarget]   = useState(null);

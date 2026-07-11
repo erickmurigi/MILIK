@@ -63,7 +63,7 @@ export default function SaleFinancials() {
 
   const canViewAccounts = hasCompanyPermission(currentUser || {}, currentCompany, "chartOfAccounts", "view", GL_ACCESS_MODULES);
 
-  const [tab,            setTab]           = useState("journals");
+  const [tab,            setTab]           = useTabState("/sale/financials:tab", "journals");
   const [journals,       setJournals]      = useState([]);
   const [accounts,       setAccounts]      = useState([]);
   const [journalsLoading, setJournalsLoading] = useState(false);

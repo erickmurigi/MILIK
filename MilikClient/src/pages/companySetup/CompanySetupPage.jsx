@@ -959,11 +959,11 @@ export default function CompanySetupPage() {
   const [loadingCashbooks, setLoadingCashbooks] = useState(false);
   const [cashbookOptions, setCashbookOptions] = useState([]);
   const [company, setCompany] = useState(normalizeForm(currentCompany));
-  const [selectedPaymentConfigId, setSelectedPaymentConfigId] = useState(PAYMENT_DRAFT_ID);
+  const [selectedPaymentConfigId, setSelectedPaymentConfigId] = useTabState("/company-setup:selectedPaymentConfigId", PAYMENT_DRAFT_ID);
   const [paymentForm, setPaymentForm] = useState(createBlankPaymentForm(1));
-  const [selectedEmailProfileId, setSelectedEmailProfileId] = useState(EMAIL_DRAFT_ID);
+  const [selectedEmailProfileId, setSelectedEmailProfileId] = useTabState("/company-setup:selectedEmailProfileId", EMAIL_DRAFT_ID);
   const [emailForm, setEmailForm] = useState(createBlankEmailForm(1, currentCompany?.companyName || ""));
-  const [selectedSmsProfileId, setSelectedSmsProfileId] = useState(SMS_DRAFT_ID);
+  const [selectedSmsProfileId, setSelectedSmsProfileId] = useTabState("/company-setup:selectedSmsProfileId", SMS_DRAFT_ID);
   const [smsForm, setSmsForm] = useState(createBlankSmsForm(1));
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [emailModalOpen, setEmailModalOpen] = useState(false);
@@ -990,7 +990,7 @@ export default function CompanySetupPage() {
   const SMS_LOGS_PAGE_SIZE = 30;
   const [paymentSearch, setPaymentSearch] = useTabState("/company-setup:paymentSearch", "");
   const [coopModalOpen, setCoopModalOpen] = useState(false);
-  const [selectedCoopConfigId, setSelectedCoopConfigId] = useState("__new_coop__");
+  const [selectedCoopConfigId, setSelectedCoopConfigId] = useTabState("/company-setup:selectedCoopConfigId", "__new_coop__");
   const [savingCoop, setSavingCoop] = useState(false);
   const COOP_DRAFT_ID = "__new_coop__";
   const [coopForm, setCoopForm] = useState({

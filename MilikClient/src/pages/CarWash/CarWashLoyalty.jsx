@@ -605,7 +605,7 @@ const CarWashLoyalty = () => {
   const canManage      = useCarWashPermission("carwash-loyalty", "manage");
 
   // ── View state ───────────────────────────────────────────────────────────
-  const [tab, setTab]             = useState("customers");
+  const [tab, setTab]             = useTabState("/carwash/loyalty:tab", "customers");
   const [search, setSearch]       = useTabState("/carwash/loyalty:search", "");
   const [debouncedSearch, setDebouncedSearch] = useTabState("/carwash/loyalty:debouncedSearch", "");
   const [page, setPage]           = useTabState("/carwash/loyalty:page", 1);
