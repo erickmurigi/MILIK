@@ -30,7 +30,7 @@ export default function KpiLibrary() {
   const queryClient = useQueryClient();
   const [search, setSearch]         = useTabState('/hr/appraisals/kpis:search', '');
   const [catFilter, setCatFilter]   = useTabState('/hr/appraisals/kpis:catFilter', '');
-  const [activeOnly, setActiveOnly] = useState(false);
+  const [activeOnly, setActiveOnly] = useTabState('/hr/appraisals/kpis:activeOnly', false);
   const [page, setPage]             = useTabState('/hr/appraisals/kpis:page', 1);
   const [modal, setModal]           = useState(null);
   const [form, setForm]             = useState(EMPTY);

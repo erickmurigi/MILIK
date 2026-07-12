@@ -54,7 +54,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
   const [currentPage, setCurrentPage] = useTabState("/landlord-payments:currentPage", 1);
   const [selectedLandlords, setSelectedLandlords] = useState([]);
   const [showSmsModal, setShowSmsModal] = useState(false);
-  const [activeDetail, setActiveDetail] = useState(null);
+  const [activeDetail, setActiveDetail] = useTabState("/landlord-payments:activeDetail", null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   // Landlord payment vouchers from backend
   const [landlordPayments, setLandlordPayments] = useState([]);
