@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
@@ -527,7 +528,7 @@ const CompanySettings = () => {
   const [loadedChartAccountCompanyId, setLoadedChartAccountCompanyId] = useState("");
   const requestedTab = searchParams.get("tab");
   const activeTab = (requestedTab && visibleTabKeys.has(requestedTab)) ? requestedTab : firstVisibleTab;
-  const [showInactive, setShowInactive] = useState(false);
+  const [showInactive, setShowInactive] = useTabState("/settings:showInactive", false);
   const [loading, setLoading] = useState(false);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [saving, setSaving] = useState(false);

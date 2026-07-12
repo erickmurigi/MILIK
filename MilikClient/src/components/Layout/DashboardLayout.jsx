@@ -1850,9 +1850,9 @@ const TopToolbar = ({
             <span className="hidden xl:inline">+ Journal</span>
           </button>
           <button
-            onClick={() => navigate("/accounts/payment-vouchers")}
+            onClick={() => navigate("/accounts/payment-vouchers/new")}
             className={`flex items-center gap-1 rounded px-1.5 py-0.5 ${darkMode ? "hover:bg-gray-700 text-gray-300" : "hover:bg-gray-500 text-gray-200"}`}
-            title="New Payment Voucher"
+            title="New Voucher"
           >
             <FaFileInvoice className="xl:hidden shrink-0" aria-hidden="true" />
             <span className="hidden xl:inline">+ Voucher</span>

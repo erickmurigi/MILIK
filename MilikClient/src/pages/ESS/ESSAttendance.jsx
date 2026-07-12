@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { essRequests } from '../../utils/essRequests';
+import { useTabState } from '../../hooks/useTabState';
 import './ESS.css';
 
 const fmtTime  = (d) => d ? new Date(d).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' }) : '—';
@@ -12,13 +13,12 @@ const fmtDuration = (mins) => {
 };
 
 export default function ESSAttendance() {
-  const now = new Date();
-  const [month,    setMonth]    = useState(now.getMonth() + 1);
-  const [year,     setYear]     = useState(now.getFullYear());
+  const [month,    setMonth]    = useTabState("/ess/attendance:month", () => new Date().getMonth() + 1);
+  const [year,     setYear]     = useTabState("/ess/attendance:year", () => new Date().getFullYear());
   const [records,  setRecords]  = useState([]);
   const [total,    setTotal]    = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const [page,     setPage]     = useState(1);
+  const [page,     setPage]     = useTabState("/ess/attendance:page", 1);
   const [today,    setToday]    = useState(null);
   const [loading,  setLoading]  = useState(true);
   const [checking, setChecking] = useState(false);

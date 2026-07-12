@@ -141,26 +141,21 @@ const JournalEntries = () => {
     companyId: currentCompany?._id,
     userId: currentUser?._id || currentUser?.id || currentUser?.email,
   });
-  const [journalDraft, setJournalDraft, clearJournalDraft] = useScopedSessionDraft(journalDraftKey, {
-    showCreateModal: false,
-    editingJournalId: "",
+  const [journalDraft, setJournalDraft] = useScopedSessionDraft(journalDraftKey, {
     filters: {
       search: "",
       status: "all",
       journalType: "all",
       propertyId: "all",
     },
-    form: buildInitialForm(),
   });
 
   const [journals, setJournals] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [rowActionKey, setRowActionKey] = useState("");
-  const showCreateModal = Boolean(journalDraft.showCreateModal);
-  const setShowCreateModal = (value) => setJournalDraft((prev) => ({ ...prev, showCreateModal: typeof value === "function" ? value(Boolean(prev.showCreateModal)) : Boolean(value) }));
-  const editingJournalId = journalDraft.editingJournalId || "";
-  const setEditingJournalId = (value) => setJournalDraft((prev) => ({ ...prev, editingJournalId: typeof value === "function" ? value(prev.editingJournalId || "") : value }));
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingJournalId, setEditingJournalId] = useState("");
   const [saving, setSaving] = useState(false);
 
   const filters = journalDraft.filters || { search: "", status: "all", journalType: "all", propertyId: "all" };
@@ -168,8 +163,7 @@ const JournalEntries = () => {
   const setFilters = (value) => setJournalDraft((prev) => ({ ...prev, filters: typeof value === "function" ? value(prev.filters || filters) : value }));
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
 
-  const form = journalDraft.form || buildInitialForm();
-  const setForm = (value) => setJournalDraft((prev) => ({ ...prev, form: typeof value === "function" ? value(prev.form || buildInitialForm()) : value }));
+  const [form, setForm] = useState(buildInitialForm);
   const [pageSize, setPageSize] = useTabState("/accounts/journals:pageSize", DEFAULT_PAGE_SIZE);
   const [currentPage, setCurrentPage] = useTabState("/accounts/journals:currentPage", 1);
   const [serverTotal, setServerTotal] = useState(0);
@@ -300,8 +294,8 @@ const JournalEntries = () => {
   const statementVisibilityLocked = isCompanyJournal || isInternalTransferJournal || isForcedLandlordStatementJournal;
   const controlAccountWarning = useMemo(() => {
     const warnings = [];
-    if (selectedDebitAccountRecord?.isControl) warnings.push(`Dr: "${selectedDebitAccountRecord.name}" is a control account managed by a module. Post through the module instead, or select a different account.`);
-    if (selectedCreditAccountRecord?.isControl) warnings.push(`Cr: "${selectedCreditAccountRecord.name}" is a control account managed by a module. Post through the module instead, or select a different account.`);
+    if (selectedDebitAccountRecord?.isControl) warnings.push(`Dr: "${selectedDebitAccountRecord.name}" is a control account — module transactions post here automatically. Use only for corrections and manual fixes.`);
+    if (selectedCreditAccountRecord?.isControl) warnings.push(`Cr: "${selectedCreditAccountRecord.name}" is a control account — module transactions post here automatically. Use only for corrections and manual fixes.`);
     return warnings;
   }, [selectedDebitAccountRecord, selectedCreditAccountRecord]);
 
@@ -346,7 +340,6 @@ const JournalEntries = () => {
   const resetForm = () => {
     setEditingJournalId("");
     setForm(buildInitialForm());
-    clearJournalDraft();
   };
 
   const openCreateModal = () => {
@@ -752,182 +745,226 @@ const JournalEntries = () => {
       </div>
 
       {showCreateModal && (
-        <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-slate-900/45 p-4 sm:items-center sm:p-6">
-          <div className="flex w-full max-w-5xl max-h-[calc(100vh-2rem)] flex-col overflow-y-auto overscroll-contain rounded-3xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100vh-3rem)]">
-            <div className="sticky top-0 z-20 flex shrink-0 items-center justify-between bg-[#0B3B2E] px-6 py-4 text-white">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+          <div className="flex w-full max-w-3xl max-h-[92vh] flex-col overflow-hidden bg-white shadow-2xl">
+
+            {/* ── Header ── */}
+            <div className="flex shrink-0 items-start justify-between bg-[#0B3B2E] px-5 py-4">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100">Financial Accounts</p>
-                <h3 className="text-xl font-black">{editingJournalId ? "Edit Draft Journal" : "Create Journal Entry"}</h3>
-                <p className="mt-1 text-xs text-emerald-50">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-400">Financial Accounts</p>
+                <h3 className="mt-0.5 text-lg font-black text-white">
+                  {editingJournalId ? "Edit Draft Journal" : "Create Journal Entry"}
+                </h3>
+                <p className="mt-1 text-[11px] text-emerald-100/70">
                   {editingJournalId
-                    ? "Only draft journals can be edited directly. Posted journals must be reversed to preserve audit integrity."
-                    : "Draft first, then review and post from the journal list."}
+                    ? "Only draft journals can be edited. Posted journals must be reversed."
+                    : "Save as draft, then post from the journal list."}
                 </p>
               </div>
-              <button
-                onClick={closeCreateModal}
-                className="rounded-full border border-white/30 p-2 hover:bg-white/10"
-              >
-                <FaTimes />
+              <button onClick={closeCreateModal} className="mt-0.5 text-white/50 transition hover:text-white">
+                <FaTimes size={14} />
               </button>
             </div>
 
-            <div className="grid gap-4 p-6 lg:grid-cols-[1.15fr,0.85fr]">
-              <div className="space-y-4">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Journal type</p>
-                  <div className="mt-2">
-                    <AppSelect
-                      value={form.journalType}
-                      onChange={(val) => applyJournalTypeDefaults(val ?? "general_manual_journal")}
-                      options={JOURNAL_TYPES.map((t) => ({
-                        value: t.value,
-                        label: getJournalTypePresentation(t.value)?.label || t.label,
-                        description: t.description,
-                      }))}
-                      size="sm"
-                    />
-                  </div>
-                  <p className="mt-3 text-xs leading-6 text-slate-600">{activeJournalTypePresentation.description}</p>
+            {/* ── Body ── */}
+            <div className="flex min-h-0 flex-1 overflow-hidden">
+
+              {/* Left — form */}
+              <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
+
+                {/* Journal Type */}
+                <div>
+                  <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Journal Type</p>
+                  <AppSelect
+                    value={form.journalType}
+                    onChange={(val) => applyJournalTypeDefaults(val ?? "general_manual_journal")}
+                    options={JOURNAL_TYPES.map((t) => ({
+                      value: t.value,
+                      label: getJournalTypePresentation(t.value)?.label || t.label,
+                      description: t.description,
+                    }))}
+                  />
+                  <p className="mt-1.5 text-[11px] text-slate-400">{activeJournalTypePresentation.shortDescription ?? activeJournalTypePresentation.description?.split(".")[0]}</p>
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <label className="block">
-                    <span className="text-xs font-bold text-slate-700">Journal Date</span>
-                    <input
-                      type="date"
-                      value={form.date}
-                      onChange={(e) => setForm((prev) => ({ ...prev, date: e.target.value }))}
-                      className="mt-1 w-full border border-slate-200 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none"
-                    />
-                  </label>
-
-                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-900">
-                    <p className="font-black uppercase tracking-[0.16em] text-emerald-700">Account-Driven Context</p>
-                    <p className="mt-1 leading-6">
-                      Property and owner context are derived automatically from the selected accounts.
-                      Select property-specific accounts (e.g. <span className="font-mono font-bold">2110-PARK</span>) to link a journal to a property and owner — no dropdown needed.
-                    </p>
-                  </div>
+                {/* Date */}
+                <div>
+                  <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Journal Date</p>
+                  <input
+                    type="date"
+                    value={form.date}
+                    onChange={(e) => setForm((prev) => ({ ...prev, date: e.target.value }))}
+                    className="w-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-[#0B3B2E]"
+                  />
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="block">
-                    <AppSelect
-                      label="Debit Account"
-                      value={form.debitAccount}
-                      onChange={(val) => setForm((prev) => ({ ...prev, debitAccount: val ?? "" }))}
-                      options={accountOptions}
-                      placeholder="Search debit account..."
-                      searchable
-                      warning={selectedDebitAccountRecord?.isControl ? "⚠ Control account — post through the module to maintain reconciliation." : ""}
-                    />
-                  </div>
-
-                  <div className="block">
-                    <AppSelect
-                      label="Credit Account"
-                      value={form.creditAccount}
-                      onChange={(val) => setForm((prev) => ({ ...prev, creditAccount: val ?? "" }))}
-                      options={accountOptions}
-                      placeholder="Search credit account..."
-                      searchable
-                      warning={selectedCreditAccountRecord?.isControl ? "⚠ Control account — post through the module to maintain reconciliation." : ""}
-                    />
-                  </div>
+                {/* Debit Account */}
+                <div>
+                  <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Debit Account</p>
+                  <AppSelect
+                    value={form.debitAccount}
+                    onChange={(val) => setForm((prev) => ({ ...prev, debitAccount: val ?? "" }))}
+                    options={accountOptions}
+                    placeholder="Search debit account..."
+                    searchable
+                    warning={selectedDebitAccountRecord?.isControl ? "ℹ Control account — module entries post here automatically. Manual entries are allowed for corrections." : ""}
+                  />
                 </div>
-              </div>
 
-              <div className="space-y-4">
-                <label className="block">
-                  <span className="text-xs font-bold text-slate-700">Amount</span>
+                {/* Credit Account */}
+                <div>
+                  <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Credit Account</p>
+                  <AppSelect
+                    value={form.creditAccount}
+                    onChange={(val) => setForm((prev) => ({ ...prev, creditAccount: val ?? "" }))}
+                    options={accountOptions}
+                    placeholder="Search credit account..."
+                    searchable
+                    warning={selectedCreditAccountRecord?.isControl ? "ℹ Control account — module entries post here automatically. Manual entries are allowed for corrections." : ""}
+                  />
+                </div>
+
+                {/* Amount */}
+                <div>
+                  <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Amount (KES)</p>
                   <input
                     type="number"
                     min="0"
                     value={form.amount}
                     onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
-                    className="mt-1 w-full border border-slate-200 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none"
+                    placeholder="0.00"
+                    className="w-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-[#0B3B2E]"
                   />
-                </label>
+                </div>
 
-                <label className="block">
-                  <span className="text-xs font-bold text-slate-700">Reference</span>
+                {/* Reference */}
+                <div>
+                  <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Reference</p>
                   <input
                     value={form.reference}
                     onChange={(e) => setForm((prev) => ({ ...prev, reference: e.target.value }))}
-                    className="mt-1 w-full border border-slate-200 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none"
+                    placeholder="e.g. INV-001, CHQ-202"
+                    className="w-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-300 focus:border-[#0B3B2E]"
                   />
-                </label>
+                </div>
 
-                <label className="block">
-                  <span className="text-xs font-bold text-slate-700">Narration</span>
+                {/* Narration */}
+                <div>
+                  <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Narration</p>
                   <textarea
-                    rows={5}
+                    rows={3}
                     value={form.narration}
                     onChange={(e) => setForm((prev) => ({ ...prev, narration: e.target.value }))}
-                    className="mt-1 w-full border border-slate-200 px-3 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none"
+                    placeholder="Brief description of this journal entry…"
+                    className="w-full resize-none border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-300 focus:border-[#0B3B2E]"
                   />
-                </label>
+                </div>
 
-                <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-700">
+                {/* Include in statement */}
+                <label className="flex cursor-pointer items-start gap-3 border border-slate-200 bg-slate-50 px-4 py-3">
                   <input
                     type="checkbox"
                     checked={isInternalTransferJournal ? false : isForcedLandlordStatementJournal ? true : form.includeInLandlordStatement}
                     disabled={statementVisibilityLocked}
-                    onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        includeInLandlordStatement: e.target.checked,
-                      }))
-                    }
-                    className="mt-1"
+                    onChange={(e) => setForm((prev) => ({ ...prev, includeInLandlordStatement: e.target.checked }))}
+                    className="mt-0.5"
                   />
-                  <span>
-                    Include in owner statement metadata
-                    <span className="mt-1 block text-xs text-slate-500">
+                  <span className="text-xs text-slate-700">
+                    <span className="font-bold">Include in owner statement metadata</span>
+                    <span className="mt-0.5 block text-slate-500">
                       {isCompanyJournal
-                        ? "Always off for company journals — never linked to any owner statement."
+                        ? "Always off for company journals."
                         : isInternalTransferJournal
-                        ? "Disabled for internal ledger transfers — same-company movements only."
+                        ? "Disabled for internal transfers."
                         : isForcedLandlordStatementJournal
-                        ? "Locked on — this journal type always creates a clean owner addition or deduction."
-                        : "Turn on only when exactly one side is Owner Remittance Payable. Debit = deduction. Credit = addition."}
+                        ? "Locked on — this journal type always affects owner statements."
+                        : "Turn on only when one side is Owner Remittance Payable."}
                     </span>
                   </span>
                 </label>
 
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
-                  <p className="font-black">Posting note</p>
-                  <p className="mt-1 leading-6">{journalStructureHint}</p>
+              </div>
+
+              {/* Right — live preview */}
+              <div className="w-[240px] shrink-0 overflow-y-auto border-l border-slate-200 bg-slate-50 px-4 py-4 space-y-3">
+
+                {/* Amount hero */}
+                <div className="bg-[#0B3B2E] px-4 py-3 text-white">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-emerald-400">Amount</p>
+                  <p className="mt-1 text-2xl font-black tabular-nums leading-tight">
+                    {form.amount && Number(form.amount) > 0
+                      ? `${Number(form.amount).toLocaleString("en-KE", { minimumFractionDigits: 2 })}`
+                      : <span className="text-xl text-emerald-600">—</span>}
+                  </p>
+                  <p className="mt-0.5 text-[10px] text-emerald-400">KES</p>
+                </div>
+
+                {/* T-account preview */}
+                <div className="border border-slate-200 bg-white p-3">
+                  <p className="mb-2 text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Journal Preview</p>
+                  <div className="space-y-1.5">
+                    <div className="flex items-start gap-1.5 bg-slate-50 px-2 py-1.5">
+                      <span className="mt-0.5 shrink-0 bg-blue-100 px-1 py-0.5 text-[8px] font-black text-blue-700">DR</span>
+                      <span className="min-w-0 flex-1 text-[10px] font-semibold text-slate-700 break-words leading-snug">
+                        {selectedDebitAccountRecord
+                          ? `${selectedDebitAccountRecord.code} – ${selectedDebitAccountRecord.name}`
+                          : <span className="italic text-slate-400">Debit account</span>}
+                      </span>
+                    </div>
+                    <div className="ml-3 flex items-start gap-1.5 bg-slate-50 px-2 py-1.5">
+                      <span className="mt-0.5 shrink-0 bg-emerald-100 px-1 py-0.5 text-[8px] font-black text-emerald-700">CR</span>
+                      <span className="min-w-0 flex-1 text-[10px] font-semibold text-slate-700 break-words leading-snug">
+                        {selectedCreditAccountRecord
+                          ? `${selectedCreditAccountRecord.code} – ${selectedCreditAccountRecord.name}`
+                          : <span className="italic text-slate-400">Credit account</span>}
+                      </span>
+                    </div>
+                  </div>
+                  {form.amount && Number(form.amount) > 0 && (
+                    <div className="mt-2 flex justify-between border-t border-slate-100 pt-2 text-[10px] font-bold">
+                      <span className="text-blue-600">DR {Number(form.amount).toLocaleString("en-KE", { minimumFractionDigits: 2 })}</span>
+                      <span className="text-emerald-600">CR {Number(form.amount).toLocaleString("en-KE", { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Posting note */}
+                <div className="border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-amber-600">Posting Note</p>
+                  <p className="mt-1 text-[10px] text-amber-900">{journalStructureHint?.split(".")[0]}.</p>
                   {!isCompanyJournal && (
-                    <p className="mt-2 text-xs font-semibold text-amber-800">
-                      Current selection: debit {debitTouchesLandlordPayable ? "touches" : "does not touch"} Owner Remittance Payable · credit {creditTouchesLandlordPayable ? "touches" : "does not touch"} Owner Remittance Payable.
+                    <p className="mt-1 text-[10px] font-semibold text-amber-800">
+                      Dr {debitTouchesLandlordPayable ? "✓" : "✗"} payable · Cr {creditTouchesLandlordPayable ? "✓" : "✗"} payable
                     </p>
                   )}
                   {controlAccountWarning.length > 0 && (
-                    <div className="mt-2 space-y-1">
+                    <div className="mt-1.5 border border-blue-200 bg-blue-50 px-2 py-1.5 space-y-0.5">
                       {controlAccountWarning.map((w, i) => (
-                        <p key={i} className="text-xs font-bold text-amber-900">{w}</p>
+                        <p key={i} className="text-[10px] font-semibold text-blue-800">{w}</p>
                       ))}
                     </div>
                   )}
                 </div>
+
               </div>
             </div>
 
-            <div className="sticky bottom-0 z-20 flex shrink-0 items-center justify-end gap-3 border-t border-slate-200 bg-white/95 px-6 py-4 backdrop-blur-sm">
+            {/* ── Footer ── */}
+            <div className="flex shrink-0 gap-3 border-t border-slate-200 px-5 py-4">
               <button
+                type="button"
                 onClick={closeCreateModal}
-                className="border border-slate-300 px-3 py-1.5 text-xs font-black text-slate-700"
+                className="flex-1 border border-slate-300 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleSaveJournal}
                 disabled={!(editingJournalId ? canUpdateJournal : canCreateJournal) || saving}
-                className="inline-flex items-center gap-2 bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white disabled:opacity-60"
+                className="flex-1 flex items-center justify-center gap-2 bg-[#0B3B2E] py-2 text-sm font-black text-white transition hover:bg-[#0A3127] disabled:opacity-50"
               >
-                <FaPlus /> {saving ? "Saving..." : editingJournalId ? "Update Draft Journal" : "Save Draft Journal"}
+                <FaPlus size={10} /> {saving ? "Saving…" : editingJournalId ? "Update Draft Journal" : "Save Draft Journal"}
               </button>
             </div>
           </div>

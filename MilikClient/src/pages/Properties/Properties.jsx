@@ -115,8 +115,8 @@ const Properties = () => {
     location: "",
   };
 
-  const [draftFilters, setDraftFilters] = useState(emptyFilters);
   const [appliedFilters, setAppliedFilters] = useTabState("/properties:appliedFilters", emptyFilters);
+  const [draftFilters, setDraftFilters] = useState(appliedFilters);
 
   // Milik Confirm Dialog
   const [confirmDialog, setConfirmDialog] = useState({

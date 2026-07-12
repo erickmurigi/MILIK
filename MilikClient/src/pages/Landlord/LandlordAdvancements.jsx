@@ -114,6 +114,14 @@ const STATUS_STYLES = {
 
 const ITEMS_PER_PAGE = 50;
 
+const CASHBOOK_PATTERN = /cash|bank|m-?pesa|mobile money|wallet|petty|till|collection/i;
+const isCashbookAccount = (a) =>
+  String(a?.type || "").toLowerCase() === "asset" &&
+  !a.isHeader &&
+  a.isPosting !== false &&
+  !a.isControl &&
+  CASHBOOK_PATTERN.test(`${a?.name || ""} ${a?.group || ""} ${a?.subGroup || ""}`);
+
 const TYPE_OPTIONS = [
   {
     value: "against_payable",
@@ -260,7 +268,7 @@ const LandlordAdvancements = () => {
     (async () => {
       try {
         const accounts = await getChartOfAccounts({ business: currentCompany._id, type: "asset" });
-        setCashbooks(Array.isArray(accounts) ? accounts : []);
+        setCashbooks(Array.isArray(accounts) ? accounts.filter(isCashbookAccount) : []);
       } catch (error) {
         toast.error(error?.response?.data?.message || "Failed to load cashbooks");
       }

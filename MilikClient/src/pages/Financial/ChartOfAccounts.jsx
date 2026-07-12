@@ -119,7 +119,7 @@ const ChartOfAccounts = () => {
   const [loading,             setLoading]           = useState(false);
   const [refreshing,          setRefreshing]        = useState(false);
   const [saving,              setSaving]            = useState(false);
-  const [showControlAccounts, setShowControlAccounts] = useState(false);
+  const [showControlAccounts, setShowControlAccounts] = useState(true);
   const [selectedIds,         setSelectedIds]       = useState([]);
   const [showForm,            setShowForm]          = useState(false);
   const [editingAccountId,    setEditingAccountId]  = useState(null);

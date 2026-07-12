@@ -210,9 +210,9 @@ const TenantDeposits = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [draftFilters, setDraftFilters] = useState(emptyFilters);
-  const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [appliedFilters, setAppliedFilters] = useTabState("/tenants/deposits:appliedFilters", emptyFilters);
+  const [draftFilters, setDraftFilters] = useState(appliedFilters);
+  const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [currentPage, setCurrentPage] = useTabState("/tenants/deposits:currentPage", 1);
   const [selectedInvoices, setSelectedInvoices] = useState([]);
   const [selectAll, setSelectAll] = useState(false);

@@ -294,9 +294,9 @@ const MeterReadings = () => {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedReadingIds, setSelectedReadingIds] = useState([]);
-  const [draftFilters, setDraftFilters] = useState(emptyFilters);
-  const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [appliedFilters, setAppliedFilters] = useTabState("/meter-readings:appliedFilters", emptyFilters);
+  const [draftFilters, setDraftFilters] = useState(appliedFilters);
+  const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState("");
   const [communicationModal, setCommunicationModal] = useState(null);

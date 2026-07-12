@@ -980,8 +980,8 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   const initialFilters = fromLedger ? { ...emptyFilters, property: ledgerProperty } : emptyFilters;
 
   const [refreshTick, setRefreshTick] = useState(0);
-  const [draftFilters, setDraftFilters] = useState(initialFilters);
   const [appliedFilters, setAppliedFilters] = useTabState("/invoices/rental:appliedFilters", initialFilters);
+  const [draftFilters, setDraftFilters] = useState(appliedFilters);
   const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const actionBtnCls = (enabled, activeCls) =>
     `h-7 shrink-0 flex items-center rounded px-2 text-xs text-white ${enabled ? activeCls : "bg-gray-400 cursor-not-allowed"}`;

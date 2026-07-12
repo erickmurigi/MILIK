@@ -193,8 +193,8 @@ const Units = () => {
     tenant: "",
   };
 
-  const [draftFilters, setDraftFilters] = useState(emptyFilters);
   const [appliedFilters, setAppliedFilters] = useTabState("/units:appliedFilters", emptyFilters);
+  const [draftFilters, setDraftFilters] = useState(appliedFilters);
 
   const buildUnitParams = useCallback((overridePage = 1, overrideFilters = null) => {
     const f = overrideFilters || appliedFilters;

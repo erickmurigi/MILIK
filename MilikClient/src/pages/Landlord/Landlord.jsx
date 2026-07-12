@@ -90,8 +90,8 @@ const Landlords = () => {
     phone: "",
   };
 
-  const [draftFilters, setDraftFilters] = useState(emptyFilters);
   const [appliedFilters, setAppliedFilters] = useTabState("/landlords:appliedFilters", emptyFilters);
+  const [draftFilters, setDraftFilters] = useState(appliedFilters);
 
   // Milik Confirm Dialog
   const [confirmDialog, setConfirmDialog] = useState({

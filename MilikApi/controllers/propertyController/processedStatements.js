@@ -6,7 +6,7 @@ import LandlordStatement from "../../models/LandlordStatement.js";
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import PaymentVoucher from "../../models/PaymentVoucher.js";
-import { ensurePropertyControlAccount } from "../../services/propertyAccountingService.js";
+import { ensurePropertyControlAccount, resolveLandlordRemittancePayableAccount } from "../../services/propertyAccountingService.js";
 import { ensureSystemChartOfAccounts, findSystemAccountByCode } from "../../services/chartOfAccountsService.js";
 import { resolveConfiguredAccountingDefaultAccount } from "../../services/companyAccountingDefaultsService.js";
 import { getCompanyTaxConfiguration, resolveOutputVatAccount } from "../../services/taxCalculationService.js";
@@ -383,6 +383,84 @@ const postCommissionAccrualForProcessedStatement = async ({ processedStatement, 
     });
     entries.push(taxLeg);
     touchedAccounts.push(String(outputVatAccount._id));
+  }
+
+  // Post landlord remittance payable (CR 2110 / DR PCTRL) for the net amount due.
+  // This creates the GL liability entry that matches what ProcessedStatement.balanceDue tracks.
+  const netAmountDue = numberOrZero(processedStatement?.netAmountDue);
+  if (netAmountDue > 0) {
+    const alreadyHasPayable = await FinancialLedgerEntry.findOne({
+      business: processedStatement.business,
+      sourceTransactionType: "processed_statement",
+      sourceTransactionId: String(processedStatement._id),
+      "metadata.postingKind": "landlord_payable_creation",
+      status: { $ne: "reversed" },
+    }).select("_id").lean();
+
+    if (!alreadyHasPayable) {
+      const landlordPayableAccount = await resolveLandlordRemittancePayableAccount(processedStatement.business);
+      const payableJournalGroupId = new mongoose.Types.ObjectId();
+      const payableMeta = {
+        processedStatementId: String(processedStatement._id),
+        postingKind: "landlord_payable_creation",
+        autoPostedOnProcessing: true,
+      };
+
+      const payableDebit = await postEntry({
+        business: processedStatement.business,
+        property: processedStatement.property,
+        landlord: processedStatement.landlord,
+        sourceTransactionType: "processed_statement",
+        sourceTransactionId: processedStatement._id,
+        transactionDate,
+        statementPeriodStart: processedStatement.periodStart,
+        statementPeriodEnd: processedStatement.periodEnd,
+        category: "LANDLORD_PAYABLE",
+        amount: netAmountDue,
+        debit: netAmountDue,
+        credit: 0,
+        direction: "debit",
+        accountId: propertyControlAccount._id,
+        journalGroupId: payableJournalGroupId,
+        payer: "manager",
+        receiver: "landlord",
+        notes: `Landlord payable created for processed statement ${processedStatement._id}`,
+        metadata: { ...payableMeta, postingRole: "property_control_payable_transfer" },
+        createdBy: userId,
+        approvedBy: userId,
+        approvedAt: transactionDate,
+        status: "approved",
+      });
+
+      const payableCredit = await postEntry({
+        business: processedStatement.business,
+        property: processedStatement.property,
+        landlord: processedStatement.landlord,
+        sourceTransactionType: "processed_statement",
+        sourceTransactionId: processedStatement._id,
+        transactionDate,
+        statementPeriodStart: processedStatement.periodStart,
+        statementPeriodEnd: processedStatement.periodEnd,
+        category: "LANDLORD_PAYABLE",
+        amount: netAmountDue,
+        debit: 0,
+        credit: netAmountDue,
+        direction: "credit",
+        accountId: landlordPayableAccount._id,
+        journalGroupId: payableJournalGroupId,
+        payer: "manager",
+        receiver: "system",
+        notes: `Landlord payable created for processed statement ${processedStatement._id}`,
+        metadata: { ...payableMeta, postingRole: "landlord_remittance_payable", offsetOfEntryId: String(payableDebit._id) },
+        createdBy: userId,
+        approvedBy: userId,
+        approvedAt: transactionDate,
+        status: "approved",
+      });
+
+      entries.push(payableDebit, payableCredit);
+      touchedAccounts.push(String(landlordPayableAccount._id));
+    }
   }
 
   // Also refresh the PCTRL control account for this property so the CoA view

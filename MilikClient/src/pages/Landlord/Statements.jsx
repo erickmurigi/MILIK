@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useEntityCache } from "../../hooks/useEntityCache";
 import { useDispatch, useSelector } from "react-redux";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -1153,8 +1154,8 @@ const Statements = () => {
         )
       );
   }, [collapseAdditionalUnitRows, preparedRows, statementColumns, tenantUnitMeta]);
-  const [rowFilter, setRowFilter] = useState("all"); // all | unpaid | partial | paid | vacant
-  const [kpiExpanded, setKpiExpanded] = useState(false);
+  const [rowFilter, setRowFilter] = useTabState(`${location.pathname}:rowFilter`, "all");
+  const [kpiExpanded, setKpiExpanded] = useTabState(`${location.pathname}:kpiExpanded`, false);
 
   const collectionStats = useMemo(() => {
     if (!draftStatement || !preparedRows.length) return null;

@@ -41,6 +41,14 @@ import AppSelect from "../../components/common/AppSelect";
 const ITEMS_PER_PAGE = 50;
 const todayIso = () => new Date().toISOString().split("T")[0];
 
+const CASHBOOK_PATTERN = /cash|bank|m-?pesa|mobile money|wallet|petty|till|collection/i;
+const isCashbookAccount = (a) =>
+  String(a?.type || "").toLowerCase() === "asset" &&
+  !a.isHeader &&
+  a.isPosting !== false &&
+  !a.isControl &&
+  CASHBOOK_PATTERN.test(`${a?.name || ""} ${a?.group || ""} ${a?.subGroup || ""}`);
+
 const blankForm = {
   landlord: "",
   property: "",
@@ -219,7 +227,7 @@ const LandlordStandingOrders = () => {
     getChartOfAccounts({ business: currentCompany._id, type: "asset" })
       .then((accounts) => {
         if (!mounted) return;
-        setCashbooks(Array.isArray(accounts) ? accounts : []);
+        setCashbooks(Array.isArray(accounts) ? accounts.filter(isCashbookAccount) : []);
       })
       .catch(() => {
         if (!mounted) return;

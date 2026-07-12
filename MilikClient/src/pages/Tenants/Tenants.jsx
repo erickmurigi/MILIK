@@ -738,14 +738,6 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
   const [isProcessingDepositSettlement, setIsProcessingDepositSettlement] = useState(false);
 
   // ===== FILTERS =====
-  const [draftFilters, setDraftFilters] = useState({
-    property: "any",
-    status: defaultStatusFilter,
-    balanceScope: "any",
-    search: "",
-    tenantName: "",
-    tenantCode: "",
-  });
   const [appliedFilters, setAppliedFilters] = useTabState("/tenants:appliedFilters", {
     property: "any",
     status: defaultStatusFilter,
@@ -754,6 +746,7 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
     tenantName: "",
     tenantCode: "",
   });
+  const [draftFilters, setDraftFilters] = useState(appliedFilters);
 
   // Pre-select property filter when navigated from Portfolio Pulse (or similar)
   useEffect(() => {

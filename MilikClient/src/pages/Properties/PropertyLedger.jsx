@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { useTabState } from "../../hooks/useTabState";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import {
@@ -464,12 +465,13 @@ const PropertyLedger = () => {
   const { id }      = useParams();
   const dispatch    = useDispatch();
   const navigate    = useNavigate();
+  const location    = useLocation();
   const currentUser    = useSelector((s) => s.auth?.currentUser);
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const { currentProperty, loading: propLoading } = useSelector((s) => s.property);
 
-  const [activeTab, setActiveTab] = useState("overview");
-  const [dates, setDates] = useState({ startDate: firstOfMonth(), endDate: today(), asOfDate: today() });
+  const [activeTab, setActiveTab] = useTabState(`${location.pathname}:activeTab`, "overview");
+  const [dates, setDates] = useTabState(`${location.pathname}:dates`, () => ({ startDate: firstOfMonth(), endDate: today(), asOfDate: today() }));
 
   const businessId = useMemo(() => businessIdFromState(currentCompany, currentUser), [currentCompany, currentUser]);
 

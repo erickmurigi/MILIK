@@ -171,12 +171,7 @@ const TenantAgreements = () => {
     search: "",
     expiringOnly: false,
   });
-  const [draftFilters, setDraftFilters] = useState({
-    status: "any",
-    property: "any",
-    search: "",
-    expiringOnly: false,
-  });
+  const [draftFilters, setDraftFilters] = useState(filters);
   const [currentPage, setCurrentPage] = useTabState("/agreements:currentPage", 1);
   const [expandedAgreements, setExpandedAgreements] = useState(new Set());
   const [selectedAgreements, setSelectedAgreements] = useState([]);

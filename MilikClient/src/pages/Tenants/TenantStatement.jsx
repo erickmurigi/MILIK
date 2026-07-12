@@ -1,4 +1,5 @@
 ﻿import React, { useCallback, useState, useEffect, useMemo } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useEntityCache } from "../../hooks/useEntityCache";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
@@ -411,14 +412,13 @@ const TenantStatement = () => {
   const dispatch = useDispatch();
 
   const initialRequestedTab = String(location.state?.initialTab || "statement").trim().toLowerCase();
-  const [activeTab, setActiveTab] = useState(
-    ["statement", "billing", "reviews"].includes(initialRequestedTab)
-      ? initialRequestedTab
-      : "statement"
+  const [activeTab, setActiveTab] = useTabState(
+    `${location.pathname}:activeTab`,
+    ["statement", "billing", "reviews"].includes(initialRequestedTab) ? initialRequestedTab : "statement"
   );
-  const [startDate, setStartDate] = useState(() => `${new Date().getFullYear()}-01-01`);
-  const [endDate, setEndDate] = useState(() => formatInputDate(new Date()));
-  const [transactionType, setTransactionType] = useState("ALL");
+  const [startDate, setStartDate] = useTabState(`${location.pathname}:startDate`, () => `${new Date().getFullYear()}-01-01`);
+  const [endDate, setEndDate] = useTabState(`${location.pathname}:endDate`, () => formatInputDate(new Date()));
+  const [transactionType, setTransactionType] = useTabState(`${location.pathname}:transactionType`, "ALL");
   const [reviewFormOpen, setReviewFormOpen] = useState(false);
   const [allocationTraceTarget, setAllocationTraceTarget] = useState(null);
   const [editingReviewId, setEditingReviewId] = useState(null);

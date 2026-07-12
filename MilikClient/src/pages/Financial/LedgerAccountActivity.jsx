@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTabState } from "../../hooks/useTabState";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
@@ -78,15 +79,17 @@ const LedgerAccountActivity = () => {
   const [loading,        setLoading]        = useState(false);
   const [refreshing,     setRefreshing]     = useState(false);
   const [actingKey,      setActingKey]      = useState("");
-  const [pageSize,       setPageSize]       = useState(DEFAULT_PAGE_SIZE);
-  const [currentPage,    setCurrentPage]    = useState(1);
+  const [pageSize,       setPageSize]       = useTabState(`${location.pathname}:pageSize`, DEFAULT_PAGE_SIZE);
+  const [currentPage,    setCurrentPage]    = useTabState(`${location.pathname}:currentPage`, 1);
 
-  const today = new Date();
-  const [filters, setFilters] = useState({
-    startDate:       inputDate(new Date(today.getFullYear(), today.getMonth(), 1)),
-    endDate:         inputDate(today),
-    direction:       "all",
-    includeReversed: false,
+  const [filters, setFilters] = useTabState(`${location.pathname}:filters`, () => {
+    const now = new Date();
+    return {
+      startDate:       inputDate(new Date(now.getFullYear(), now.getMonth(), 1)),
+      endDate:         inputDate(now),
+      direction:       "all",
+      includeReversed: false,
+    };
   });
   const [moveModal, setMoveModal] = useState({ open: false, entry: null, newAccountId: "", reason: "" });
   const [reverseModal, setReverseModal] = useState({ open: false, entry: null, reason: "", loading: false });

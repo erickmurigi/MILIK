@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
+import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { FaPrint } from "react-icons/fa";
@@ -51,12 +52,13 @@ const EmptyRow = ({ cols, label }) => (
 
 const SaleMonthlyDetail = () => {
   const { year, month } = useParams();
+  const location = useLocation();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const biz = currentCompany?._id;
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("payments");
+  const [activeTab, setActiveTab] = useTabState(`${location.pathname}:activeTab`, "payments");
 
   const monthName = MONTH_NAMES[Number(month) - 1] || "—";
 

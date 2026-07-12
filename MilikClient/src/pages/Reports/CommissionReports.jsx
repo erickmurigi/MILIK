@@ -112,14 +112,9 @@ const CommissionReports = () => {
   const [loading, setLoading] = useState(false);
   const [statementRows, setStatementRows] = useState([]);
   const currentMonth = useMemo(() => toInputMonth(new Date()), []);
-  const [draftFilters, setDraftFilters] = useState({
-    monthFrom: currentMonth,
-    monthTo: currentMonth,
-    search: "",
-    status: "recognized",
-  });
-  const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [appliedFilters, setAppliedFilters] = useTabState("/reports/commissions:appliedFilters", { monthFrom: currentMonth, monthTo: currentMonth, search: "", status: "recognized" });
+  const [draftFilters, setDraftFilters] = useState(appliedFilters);
+  const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [currentPage, setCurrentPage] = useTabState("/reports/commissions:currentPage", 1);
 
   const loadData = useCallback(async () => {

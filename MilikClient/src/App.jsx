@@ -612,6 +612,7 @@ function App() {
             <Route path="/accounts/chart-of-accounts/:accountId/activity"  element={<Guard moduleKey="accounts" resource="chartOfAccounts"><LedgerAccountActivity /></Guard>} />
             <Route path="/accounts/journals"                               element={<Guard moduleKey="accounts" resource="journals"><JournalEntries /></Guard>} />
             <Route path="/accounts/payment-vouchers"                       element={<Guard moduleKey="accounts" resource="paymentVouchers"><PaymentVouchers /></Guard>} />
+            <Route path="/accounts/payment-vouchers/new"                   element={<Guard moduleKey="accounts" resource="paymentVouchers"><PaymentVouchers /></Guard>} />
             <Route path="/accounts/petty-cash"                             element={<Guard moduleKey="accounts" resource="pettyCash"><PettyCash /></Guard>} />
             <Route path="/accounts/expenses"                               element={<Guard moduleKey="accounts" resource="expenses"><ExpenseRequisition /></Guard>} />
             <Route path="/accounts/service-providers"                      element={<Guard moduleKey="accounts" resource="expenses"><ServiceProviders /></Guard>} />

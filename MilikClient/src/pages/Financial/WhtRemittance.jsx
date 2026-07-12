@@ -205,8 +205,9 @@ export default function WhtRemittance() {
 
   useEffect(() => {
     if (!company?._id) return;
+    const CB_PAT = /cash|bank|m-?pesa|mobile money|wallet|petty|till|collection/i;
     getChartOfAccounts({ business: company._id, type: "asset", isPosting: true })
-      .then((accs) => setCashbooks(Array.isArray(accs) ? accs.filter((a) => !a.isHeader) : []))
+      .then((accs) => setCashbooks(Array.isArray(accs) ? accs.filter((a) => !a.isHeader && !a.isControl && CB_PAT.test(`${a?.name || ""} ${a?.subGroup || ""}`)) : []))
       .catch(() => {});
   }, [company?._id]);
 

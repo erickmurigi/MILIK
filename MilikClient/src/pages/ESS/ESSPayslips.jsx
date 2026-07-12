@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { essRequests } from '../../utils/essRequests';
 import { useESS } from '../../context/ESSContext';
+import { useTabState } from '../../hooks/useTabState';
 import './ESS.css';
 
 const fmtC = (n) => `KES ${Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
@@ -17,7 +18,7 @@ export default function ESSPayslips() {
   const [payslips,  setPayslips]  = useState([]);
   const [total,     setTotal]     = useState(0);
   const [totalPages,setTotalPages]= useState(1);
-  const [page,      setPage]      = useState(1);
+  const [page,      setPage]      = useTabState("/ess/payslips:page", 1);
   const [loading,   setLoading]   = useState(true);
   const [selected,  setSelected]  = useState(null);
   const printRef = useRef(null);

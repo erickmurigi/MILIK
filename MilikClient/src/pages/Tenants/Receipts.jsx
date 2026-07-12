@@ -355,8 +355,8 @@ const Receipts = ({ viewMode = "tenant" }) => {
     to: "",
   };
 
-  const [draftFilters, setDraftFilters] = useState(initialFilters);
   const [appliedFilters, setAppliedFilters] = useTabState("/receipts:appliedFilters", initialFilters);
+  const [draftFilters, setDraftFilters] = useState(appliedFilters);
   const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [selectedIds, setSelectedIds] = useState([]);
   const [currentPage, setCurrentPage] = useTabState("/receipts:currentPage", 1);

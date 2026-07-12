@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { essRequests } from '../../utils/essRequests';
+import { useTabState } from '../../hooks/useTabState';
 import './ESS.css';
 
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
@@ -8,7 +9,7 @@ export default function ESSLetters() {
   const [letters,    setLetters]    = useState([]);
   const [total,      setTotal]      = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const [page,       setPage]       = useState(1);
+  const [page,       setPage]       = useTabState("/ess/letters:page", 1);
   const [loading,    setLoading]    = useState(true);
   const [selected,   setSelected]   = useState(null);
 

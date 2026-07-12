@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
+import { useTabState } from "../../hooks/useTabState";
 
 const API_BASE = String(import.meta.env?.VITE_API_URL || "/api").replace(/\/$/, "");
 
@@ -183,7 +184,7 @@ const RentalListings = () => {
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [filters, setFilters] = useState({ unitType: "", maxRent: "", furnished: "", area: "" });
+  const [filters, setFilters] = useTabState(`/listings/${businessId}:filters`, { unitType: "", maxRent: "", furnished: "", area: "" });
   const rentRef = useRef(null);
 
   const load = useCallback(async () => {

@@ -231,8 +231,8 @@ const Vacants = () => {
     tenant: "",
   };
 
-  const [draftFilters, setDraftFilters] = useState(emptyFilters);
   const [appliedFilters, setAppliedFilters] = useTabState("/vacants:appliedFilters", emptyFilters);
+  const [draftFilters, setDraftFilters] = useState(appliedFilters);
 
   useEffect(() => {
     if (!currentCompany?._id) return;

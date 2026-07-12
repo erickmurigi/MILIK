@@ -163,6 +163,121 @@ const resolveCommissionIncomeAccount = async (businessId) => {
 };
 
 
+const postPayableCreationIfMissing = async ({ statement, actorUserId, transactionDate }) => {
+  const netAmountDue = Number(statement?.netAmountDue || 0);
+  if (!statement?._id || !actorUserId || netAmountDue <= 0) return;
+
+  const existing = await FinancialLedgerEntry.findOne({
+    business: statement.business,
+    sourceTransactionType: "processed_statement",
+    sourceTransactionId: String(statement._id),
+    "metadata.postingKind": "landlord_payable_creation",
+    status: { $ne: "reversed" },
+  }).select("_id").lean();
+
+  if (existing) return;
+
+  const propertyControlAccount = await ensurePropertyControlAccount({
+    businessId: statement.business,
+    propertyId: statement.property,
+  });
+  const landlordPayableAccount = await resolveLandlordRemittancePayableAccount(statement.business);
+  const journalGroupId = new mongoose.Types.ObjectId();
+  const meta = {
+    processedStatementId: String(statement._id),
+    postingKind: "landlord_payable_creation",
+    autoPostedOnProcessing: false,
+  };
+
+  const debitLeg = await postEntry({
+    business: statement.business,
+    property: statement.property,
+    landlord: statement.landlord,
+    sourceTransactionType: "processed_statement",
+    sourceTransactionId: String(statement._id),
+    transactionDate,
+    statementPeriodStart: statement.periodStart,
+    statementPeriodEnd: statement.periodEnd,
+    category: "LANDLORD_PAYABLE",
+    amount: netAmountDue,
+    debit: netAmountDue,
+    credit: 0,
+    direction: "debit",
+    accountId: propertyControlAccount._id,
+    journalGroupId,
+    payer: "manager",
+    receiver: "landlord",
+    notes: `Landlord payable created (retroactive) for processed statement ${statement._id}`,
+    metadata: { ...meta, postingRole: "property_control_payable_transfer" },
+    createdBy: actorUserId,
+    approvedBy: actorUserId,
+    approvedAt: transactionDate,
+    status: "approved",
+  });
+
+  await postEntry({
+    business: statement.business,
+    property: statement.property,
+    landlord: statement.landlord,
+    sourceTransactionType: "processed_statement",
+    sourceTransactionId: String(statement._id),
+    transactionDate,
+    statementPeriodStart: statement.periodStart,
+    statementPeriodEnd: statement.periodEnd,
+    category: "LANDLORD_PAYABLE",
+    amount: netAmountDue,
+    debit: 0,
+    credit: netAmountDue,
+    direction: "credit",
+    accountId: landlordPayableAccount._id,
+    journalGroupId,
+    payer: "manager",
+    receiver: "system",
+    notes: `Landlord payable created (retroactive) for processed statement ${statement._id}`,
+    metadata: { ...meta, postingRole: "landlord_remittance_payable", offsetOfEntryId: String(debitLeg._id) },
+    createdBy: actorUserId,
+    approvedBy: actorUserId,
+    approvedAt: transactionDate,
+    status: "approved",
+  });
+
+  await aggregateChartOfAccountBalances(statement.business, [
+    String(propertyControlAccount._id),
+    String(landlordPayableAccount._id),
+  ]);
+};
+
+export const listLandlordPayments = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    const { landlordId, landlord: landlordQ, page: pageQ, limit: limitQ } = req.query;
+    const page = Math.max(Number(pageQ || 1), 1);
+    const limit = Math.min(Math.max(Number(limitQ || 50), 1), 200);
+
+    const PaymentVoucher = (await import("../../models/PaymentVoucher.js")).default;
+    const query = { category: "landlord_other" };
+    if (businessId) query.business = new mongoose.Types.ObjectId(businessId);
+    const lid = landlordId || landlordQ;
+    if (isValidObjectId(lid)) query.landlord = new mongoose.Types.ObjectId(lid);
+
+    const [data, total] = await Promise.all([
+      PaymentVoucher.find(query)
+        .populate("landlord", "landlordName landlordCode")
+        .populate("property", "propertyName propertyCode")
+        .populate("debitAccount", "name code")
+        .sort({ paidDate: -1, createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      PaymentVoucher.countDocuments(query),
+    ]);
+
+    res.status(200).json({ success: true, data, count: total, total, page, pages: Math.ceil(total / limit) });
+  } catch (err) {
+    next(err);
+  }
+};
+
 const findAccountLinkedCommissionAccrualEntries = async (statement) => {
   if (!statement?._id) return [];
 
@@ -392,6 +507,8 @@ export const payLandlord = async (req, res, next) => {
       transactionDate: postingDate,
       notes: `Commission accrued during landlord payment for processed statement ${statement._id}`,
     });
+
+    await postPayableCreationIfMissing({ statement, actorUserId, transactionDate: postingDate });
 
     const netAmountDue = Number(statement.netAmountDue || 0);
     const alreadyPaid = Number(statement.amountPaid || 0);
@@ -929,6 +1046,7 @@ export const postCommission = async (req, res, next) => {
 };
 
 export default {
+  listLandlordPayments,
   payLandlord,
   recordRecoveryFromLandlord,
   postCommission,

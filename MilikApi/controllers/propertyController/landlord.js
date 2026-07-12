@@ -2,10 +2,7 @@ import mongoose from "mongoose";
 import { escapeRegex } from "../../utils/escapeRegex.js";
 import Landlord from "../../models/Landlord.js";
 import Property from "../../models/Property.js";
-import { resolveLandlordRemittancePayableAccount } from "../../services/propertyAccountingService.js";
-import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import ProcessedStatement from "../../models/ProcessedStatement.js";
-import LandlordPayment from "../../models/LandlordPayment.js";
 import Unit from "../../models/Unit.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 
@@ -316,11 +313,7 @@ export const getLandlords = async (req, res, next) => {
     );
     const landlordIds = landlords.map((l) => l._id);
 
-    // Batch-fetch properties and resolve payable account in parallel
-    const [allProperties, payableAccount] = await Promise.all([
-      Property.find({ business: businessId }).select("landlords status").lean(),
-      resolveLandlordRemittancePayableAccount(businessId).catch(() => null),
-    ]);
+    const allProperties = await Property.find({ business: businessId }).select("landlords status").lean();
 
     // Build in-memory property count maps
     const landlordById = new Map(landlords.map((l) => [String(l._id), l]));
@@ -344,69 +337,28 @@ export const getLandlords = async (req, res, next) => {
       }
     }
 
-    // Batch balance aggregations — 3 parallel queries covering all landlords at once
     const baseMatch = { business: businessId, landlord: { $in: landlordIds } };
-    const [ledgerRows, statementRows, paymentRows] = await Promise.all([
-      payableAccount
-        ? FinancialLedgerEntry.aggregate([
-            {
-              $match: {
-                ...baseMatch,
-                accountId: payableAccount._id,
-                status: { $ne: "reversed" },
-                $or: [{ reversalOf: { $exists: false } }, { reversalOf: null }],
-              },
-            },
-            {
-              $group: {
-                _id: "$landlord",
-                debit: { $sum: "$debit" },
-                credit: { $sum: "$credit" },
-                count: { $sum: 1 },
-              },
-            },
-          ])
-        : Promise.resolve([]),
-      ProcessedStatement.aggregate([
-        {
-          $match: {
-            ...baseMatch,
-            status: { $ne: "reversed" },
-            isNegativeStatement: { $ne: true },
-          },
+    const statementRows = await ProcessedStatement.aggregate([
+      {
+        $match: {
+          ...baseMatch,
+          status: { $ne: "reversed" },
+          isNegativeStatement: { $ne: true },
+          balanceDue: { $gt: 0 },
         },
-        { $group: { _id: "$landlord", payable: { $sum: "$netAmountDue" } } },
-      ]),
-      LandlordPayment.aggregate([
-        { $match: { ...baseMatch, status: { $ne: "reversed" } } },
-        { $group: { _id: "$landlord", paid: { $sum: "$amount" } } },
-      ]),
+      },
+      { $group: { _id: "$landlord", balance: { $sum: "$balanceDue" } } },
     ]);
 
-    const ledgerByLandlord = new Map(ledgerRows.map((r) => [String(r._id), r]));
-    const statementByLandlord = new Map(statementRows.map((r) => [String(r._id), r]));
-    const paymentByLandlord = new Map(paymentRows.map((r) => [String(r._id), r]));
+    const balanceByLandlord = new Map(statementRows.map((r) => [String(r._id), Number(r.balance || 0)]));
 
     const landlordsWithCounts = landlords.map((landlord) => {
       const lid = String(landlord._id);
-      const activeProperties = activeCounts.get(lid) || 0;
-      const archivedProperties = archivedCounts.get(lid) || 0;
-
-      let balance = 0;
-      const ledgerRow = ledgerByLandlord.get(lid);
-      if (ledgerRow?.count > 0) {
-        balance = Math.max(Number(ledgerRow.credit || 0) - Number(ledgerRow.debit || 0), 0);
-      } else {
-        const statPayable = Number(statementByLandlord.get(lid)?.payable || 0);
-        const paid = Number(paymentByLandlord.get(lid)?.paid || 0);
-        balance = Math.max(statPayable - paid, 0);
-      }
-
       return {
         ...landlord,
-        activeProperties,
-        archivedProperties,
-        balance,
+        activeProperties: activeCounts.get(lid) || 0,
+        archivedProperties: archivedCounts.get(lid) || 0,
+        balance: balanceByLandlord.get(lid) || 0,
       };
     });
 

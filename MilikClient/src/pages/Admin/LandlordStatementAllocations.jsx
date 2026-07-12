@@ -29,6 +29,10 @@ const round2     = (n) => Math.round(Number(n || 0) * 100) / 100;
 const fmtPeriod  = (d) => { if (!d) return "—"; const dt = new Date(d); return `${dt.toLocaleString("en", { month: "short" })}/${dt.getFullYear()}`; };
 
 const tName = (t) => t?.name || `${t?.firstName || ""} ${t?.lastName || ""}`.trim() || "Unknown";
+const isTerminatedTenant = (t) => {
+  const s = String(t?.status || t?.tenantStatus || t?.lifecycleStatus || "").toLowerCase().replace(/[^a-z]/g, "_");
+  return ["terminated", "inactive", "moved_out", "movedout", "closed"].includes(s) || Boolean(t?.terminatedAt);
+};
 
 const TABS = [
   { id: "all",           label: "All",          icon: null },
@@ -112,7 +116,7 @@ export default function LandlordStatementAllocations() {
 
   // ── Search state ─────────────────────────────────────────────────────────────
   const [activeTab,  setActiveTab]  = useTabState("/landlord/statement-allocations:activeTab", "all");
-  const [refSearch,  setRefSearch]  = useState("");
+  const [refSearch,  setRefSearch]  = useTabState("/landlord/statement-allocations:refSearch", "");
   const [dateFrom,   setDateFrom]   = useTabState("/landlord/statement-allocations:dateFrom", "");
   const [dateTo,     setDateTo]     = useTabState("/landlord/statement-allocations:dateTo", "");
   const [property,   setProperty]   = useTabState("/landlord/statement-allocations:property", "");
@@ -125,8 +129,9 @@ export default function LandlordStatementAllocations() {
   const [openActionRow, setOpenActionRow] = useState(null); // rowKey of open actions dropdown
 
   // ── Tenant combobox ───────────────────────────────────────────────────────────
-  const [tenantQuery,    setTenantQuery]    = useState("");
-  const [selectedTenant, setSelectedTenant] = useTabState("/landlord/statement-allocations:selectedTenant", null);
+  const [tenantQuery,      setTenantQuery]      = useState("");
+  const [selectedTenant,   setSelectedTenant]   = useTabState("/landlord/statement-allocations:selectedTenant", null);
+  const [showTerminated,   setShowTerminated]   = useTabState("/landlord/statement-allocations:showTerminated", false);
   const [tenantDropOpen, setTenantDropOpen] = useState(false);
   const [dropPos,        setDropPos]        = useState({ top: 0, left: 0 });
   const [localTenants,   setLocalTenants]   = useState([]);
@@ -180,15 +185,16 @@ export default function LandlordStatementAllocations() {
 
   // ── Tenant combobox derived data ──────────────────────────────────────────────
   const tenantDropList = useMemo(() => {
+    const base = showTerminated ? localTenants : localTenants.filter((t) => !isTerminatedTenant(t));
     const q = tenantQuery.trim().toLowerCase();
-    if (!q) return localTenants.slice(0, 60);
-    return localTenants.filter((t) => {
+    if (!q) return base.slice(0, 60);
+    return base.filter((t) => {
       const name = tName(t).toLowerCase();
       const code = (t.tenantCode || "").toLowerCase();
       const unit = (t.unit?.unitNumber || "").toLowerCase();
       return name.includes(q) || code.includes(q) || unit.includes(q);
     }).slice(0, 60);
-  }, [localTenants, tenantQuery]);
+  }, [localTenants, tenantQuery, showTerminated]);
 
   // Close tenant dropdown on outside click.
   // dropdownRef covers the fixed panel which is no longer a DOM child of tenantRef.
@@ -672,7 +678,7 @@ export default function LandlordStatementAllocations() {
                       className="fixed z-[999] w-72 rounded-lg border border-slate-200 bg-white shadow-xl overflow-hidden"
                       style={{ top: dropPos.top, left: dropPos.left }}>
                       {/* Search input inside dropdown */}
-                      <div className="border-b border-slate-100 p-2">
+                      <div className="border-b border-slate-100 p-2 space-y-1.5">
                         <div className="relative">
                           <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" size={9} />
                           <input
@@ -684,6 +690,24 @@ export default function LandlordStatementAllocations() {
                             className="h-7 w-full rounded border border-slate-200 bg-slate-50 pl-6 pr-2 text-xs text-slate-700 outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                           />
                         </div>
+                        <label className="flex items-center gap-1.5 cursor-pointer select-none px-0.5">
+                          <input
+                            type="checkbox"
+                            checked={showTerminated}
+                            onChange={(e) => {
+                              setShowTerminated(e.target.checked);
+                              if (!e.target.checked && selectedTenant) {
+                                const full = localTenants.find((t) => String(t._id) === String(selectedTenant._id));
+                                if (full && isTerminatedTenant(full)) {
+                                  setSelectedTenant(null);
+                                  setTenantQuery("");
+                                }
+                              }
+                            }}
+                            className="h-3 w-3 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
+                          />
+                          <span className="text-[10px] text-slate-500">Include terminated tenants</span>
+                        </label>
                       </div>
                       {/* All tenants option */}
                       <div className="max-h-52 overflow-y-auto">
@@ -703,12 +727,16 @@ export default function LandlordStatementAllocations() {
                         )}
                         {tenantDropList.map((t) => {
                           const isSelected = selectedTenant != null && String(selectedTenant._id) === String(t._id);
+                          const terminated = isTerminatedTenant(t);
                           return (
                             <button key={t._id} onMouseDown={() => selectTenant(t)}
                               className={`flex w-full items-start gap-2 border-b border-slate-50 px-3 py-2 text-left last:border-0 hover:bg-slate-50 ${isSelected ? "bg-[#0B3B2E]/5" : ""}`}>
-                              <FaUser className={`mt-0.5 shrink-0 ${isSelected ? "text-[#0B3B2E]" : "text-slate-300"}`} size={9} />
-                              <div className="min-w-0">
-                                <p className={`truncate text-xs font-bold ${isSelected ? "text-[#0B3B2E]" : "text-slate-800"}`}>{tName(t)}</p>
+                              <FaUser className={`mt-0.5 shrink-0 ${isSelected ? "text-[#0B3B2E]" : terminated ? "text-rose-300" : "text-slate-300"}`} size={9} />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                  <p className={`truncate text-xs font-bold ${isSelected ? "text-[#0B3B2E]" : terminated ? "text-slate-500" : "text-slate-800"}`}>{tName(t)}</p>
+                                  {terminated && <span className="shrink-0 rounded bg-rose-50 px-1 py-px text-[8px] font-bold uppercase tracking-wide text-rose-500">Terminated</span>}
+                                </div>
                                 <p className="text-[10px] text-slate-500">
                                   {t.tenantCode && <span className="mr-2 font-mono">{t.tenantCode}</span>}
                                   {t.unit?.unitNumber && <span>Unit {t.unit.unitNumber}</span>}

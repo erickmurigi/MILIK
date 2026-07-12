@@ -57,6 +57,7 @@ const routeNames = {
   '/accounts/chart-of-accounts': 'Chart of Accounts',
   '/accounts/journals': 'Journal Entries',
   '/accounts/payment-vouchers': 'Payment Vouchers',
+  '/accounts/payment-vouchers/new': 'New Voucher',
   '/accounts/petty-cash': 'Petty Cash',
   '/accounts/expenses': 'Expense Requisitions',
   '/accounts/service-providers': 'Service Providers',
