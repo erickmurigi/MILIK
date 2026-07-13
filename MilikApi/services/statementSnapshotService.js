@@ -238,6 +238,29 @@ export const createDraftStatement = async ({
   }
 
   if (!statement) {
+    const existingApproved = await LandlordStatement.findOne({
+      business: businessId,
+      property: propertyId,
+      landlord: landlordId,
+      periodStart: statementData.periodStart,
+      periodEnd: statementData.periodEnd,
+      status: { $in: ["approved", "sent"] },
+    })
+      .select("_id statementNumber status")
+      .lean();
+
+    if (existingApproved) {
+      const err = new Error(
+        `An approved statement (${existingApproved.statementNumber}) already exists for this exact period. ` +
+          `Reverse the processed statement first, then use 'Create Revision' on the approved statement.`
+      );
+      err.statusCode = 409;
+      err.code = "APPROVED_STATEMENT_EXISTS";
+      err.existingStatementId = String(existingApproved._id);
+      err.existingStatementNumber = existingApproved.statementNumber;
+      throw err;
+    }
+
     throw lastDuplicateError || new Error("Could not create a unique landlord statement draft. Please retry.");
   }
 

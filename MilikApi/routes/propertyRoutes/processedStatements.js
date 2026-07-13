@@ -1,6 +1,6 @@
 // routes/propertyRoutes/processedStatements.js
 import express from "express";
-import { verifyToken } from "../../controllers/verifyToken.js";
+import { verifyToken, verifyAdmin } from "../../controllers/verifyToken.js";
 import {
   closeStatement,
   getStatementsByBusiness,
@@ -8,6 +8,8 @@ import {
   updateStatement,
   deleteStatement,
   reverseStatement,
+  adminForceReverseStatement,
+  adminCleanupOrphanedGLEntries,
   getStatementStats,
 } from "../../controllers/propertyController/processedStatements.js";
 
@@ -33,6 +35,12 @@ router.put("/:statementId", updateStatement);
 
 // Reverse statement
 router.post("/:statementId/reverse", reverseStatement);
+
+// Admin force-reverse: bypasses hasLaterProcessedStatements for data-correction scenarios
+router.post("/:statementId/admin-reverse", verifyAdmin, adminForceReverseStatement);
+
+// Admin: delete orphaned GL entries whose source ProcessedStatement no longer exists
+router.post("/admin-cleanup-orphaned-gl/:businessId", verifyAdmin, adminCleanupOrphanedGLEntries);
 
 // Delete statement
 router.delete("/:statementId", deleteStatement);

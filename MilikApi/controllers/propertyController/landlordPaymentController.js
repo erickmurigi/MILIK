@@ -589,9 +589,10 @@ export const payLandlord = async (req, res, next) => {
       amount: paymentAmount,
       dueDate: postingDate,
       paidDate: postingDate,
-      reference: String(statement._id),
-      narration: `Landlord payment for processed statement ${statement._id}${
-        cashbookAccount?.name ? ` from ${cashbookAccount.name}` : ""
+      reference: referenceNumber || null,
+      sourceProcessedStatement: statement._id,
+      narration: `Landlord payment for statement ${statement.sourceStatementNumber || statement._id}${
+        cashbookAccount?.name ? ` via ${cashbookAccount.name}` : ""
       }`,
       liabilityAccount: landlordPayableAccount?._id || null,
       debitAccount: cashbookAccount?._id || null,

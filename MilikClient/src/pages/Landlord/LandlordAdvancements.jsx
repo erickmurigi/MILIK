@@ -4,6 +4,7 @@ import { useEntityCache } from "../../hooks/useEntityCache";
 import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
 import {
+  FaBook,
   FaCheck,
   FaChevronDown,
   FaClock,
@@ -24,6 +25,7 @@ import {
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import JournalEntriesDrawer from "../../components/Accounting/JournalEntriesDrawer";
 import AppSelect from "../../components/common/AppSelect";
 import { useConfirm } from "../../context/ConfirmContext";
 import {
@@ -224,6 +226,7 @@ const LandlordAdvancements = () => {
   const [cashbooks, setCashbooks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [glAdvancement, setGlAdvancement] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState("");
   const [expandedId, setExpandedId] = useState("");
@@ -640,6 +643,17 @@ const LandlordAdvancements = () => {
         </button>
       );
     }
+
+    actions.push(
+      <button
+        key="gl"
+        onClick={() => setGlAdvancement(row)}
+        className="inline-flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-black text-teal-700"
+        title="View GL Entries"
+      >
+        <FaBook /> GL
+      </button>
+    );
 
     return actions;
   };
@@ -1079,6 +1093,52 @@ const LandlordAdvancements = () => {
           </div>
         </div>
       )}
+      <JournalEntriesDrawer
+        open={!!glAdvancement}
+        onClose={() => setGlAdvancement(null)}
+        title="Landlord Advancement"
+        transactionRef={glAdvancement?.referenceNo}
+        date={glAdvancement ? new Date(glAdvancement.disbursementDate || glAdvancement.createdAt).toLocaleDateString("en-GB") : ""}
+        amount={glAdvancement?.amount}
+        status={glAdvancement?.status}
+        statusColors={
+          glAdvancement?.status === "disbursed" || glAdvancement?.status === "recovering" ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+          : glAdvancement?.status === "reversed" ? "bg-amber-100 text-amber-700 border-amber-200"
+          : "bg-slate-100 text-slate-700 border-slate-200"
+        }
+        contextFields={glAdvancement ? [
+          { label: "Landlord", value: glAdvancement.landlord?.landlordName || [glAdvancement.landlord?.firstName, glAdvancement.landlord?.lastName].filter(Boolean).join(" ") },
+          { label: "Property", value: glAdvancement.property?.propertyName || glAdvancement.property?.name },
+          { label: "Type", value: TYPE_OPTIONS.find((o) => o.value === glAdvancement.advanceType)?.label || glAdvancement.advanceType },
+          { label: "Narration", value: glAdvancement.narration },
+        ].filter((f) => f.value) : []}
+        businessId={currentCompany?._id}
+        sourceType="advance"
+        sourceId={glAdvancement?._id}
+        scheduleTitle="Recovery Schedule"
+        scheduleColumns={[
+          { key: "periodLabel", label: "Period", bold: true },
+          { key: "amount",         label: "Amount (KES)",    align: "right" },
+          { key: "principalAmount",label: "Principal (KES)", align: "right" },
+          { key: "interestAmount", label: "Interest (KES)",  align: "right" },
+          { key: "referenceNo",    label: "Ref #" },
+          { key: "_status",        label: "Status", align: "center" },
+        ]}
+        schedule={(glAdvancement?.recoveryHistory || []).map((r) => ({
+          ...r,
+          amount:          Number(r.amount || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+          principalAmount: Number(r.principalAmount || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+          interestAmount:  Number(r.interestAmount || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+          _status: r.cancelledAt ? "Cancelled" : r.processedAt ? "Processed" : "Pending",
+          _rowClass: r.cancelledAt ? "opacity-50 line-through" : r.processedAt ? "text-emerald-700" : "",
+        }))}
+        scheduleSummary={glAdvancement ? [
+          { label: "Advanced",    value: `KES ${Number(glAdvancement.amount || 0).toLocaleString()}`, color: "blue" },
+          { label: "Recovered",   value: `KES ${Number(glAdvancement.totalRecoveredAmount || 0).toLocaleString()}`, color: "emerald" },
+          { label: "Outstanding", value: `KES ${Number(glAdvancement.outstandingRecoverableAmount || 0).toLocaleString()}`, color: "amber" },
+        ] : []}
+      />
+
     </DashboardLayout>
   );
 };

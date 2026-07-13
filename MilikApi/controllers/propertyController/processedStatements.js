@@ -266,6 +266,15 @@ const postCommissionAccrualForProcessedStatement = async ({ processedStatement, 
     return;
   }
 
+  const existingCommission = await FinancialLedgerEntry.findOne({
+    business: processedStatement.business,
+    sourceTransactionType: "processed_statement",
+    sourceTransactionId: String(processedStatement._id),
+    category: "COMMISSION_CHARGE",
+    status: { $ne: "reversed" },
+  }).select("_id").lean();
+  if (existingCommission) return;
+
   const { postEntry } = await import("../../services/ledgerPostingService.js");
   const transactionDate = processedStatement.cutoffAt || processedStatement.closedAt || new Date();
   const propertyControlAccount = await ensurePropertyControlAccount({
@@ -525,7 +534,10 @@ const hasActiveDownstreamPayments = async (statement) => {
 
   const paymentVoucherCount = await PaymentVoucher.countDocuments({
     business: statement.business,
-    reference: String(statement._id),
+    $or: [
+      { sourceProcessedStatement: statement._id },
+      { reference: String(statement._id) },
+    ],
     status: { $ne: "reversed" },
   });
 
@@ -1077,8 +1089,14 @@ export const closeStatement = async (req, res) => {
           userId,
         });
       } catch (glError) {
-        // Roll back the saved statement so there's no orphaned record without GL entries.
-        await ProcessedStatement.deleteOne({ _id: savedStatement._id }).catch(() => {});
+        // Roll back both the saved statement and any GL entries partially posted before the failure.
+        await Promise.all([
+          ProcessedStatement.deleteOne({ _id: savedStatement._id }).catch(() => {}),
+          FinancialLedgerEntry.deleteMany({
+            sourceTransactionType: "processed_statement",
+            sourceTransactionId: String(savedStatement._id),
+          }).catch(() => {}),
+        ]);
         throw glError;
       }
     }
@@ -1091,8 +1109,13 @@ export const closeStatement = async (req, res) => {
       statement: savedStatement,
     });
   } catch (error) {
-    console.error("Close statement error:", error);
-    res.status(500).json({ message: "Error closing statement", error: error.message });
+    console.error("Close statement error:", error?.message || error, error?.stack || "");
+    const statusCode = error?.statusCode || error?.status || 500;
+    res.status(statusCode).json({
+      message: error?.message || "Error closing statement",
+      error: error?.message,
+      code: error?.code || undefined,
+    });
   }
 };
 
@@ -1354,6 +1377,135 @@ export const reverseStatement = async (req, res) => {
   } catch (error) {
     console.error("Reverse statement error:", error);
     res.status(500).json({ message: "Error reversing statement", error: error.message });
+  }
+};
+
+/**
+ * Admin-only force-reverse: bypasses hasLaterProcessedStatements so an operator can
+ * reverse an out-of-order PS (e.g. triple-posted commission cleanup). Still blocks on
+ * active downstream payments/recoveries.
+ */
+export const adminForceReverseStatement = async (req, res) => {
+  try {
+    const { statementId } = req.params;
+    const reason = String(req.body?.reason || "Admin force-reverse: correcting data error").trim();
+    const statement = await findScopedProcessedStatementById(req, statementId);
+
+    if (!statement) return res.status(404).json({ message: "Statement not found" });
+    if (statement.status === "reversed") {
+      return res.status(400).json({ message: "Statement is already reversed" });
+    }
+
+    const { blocked, hasRecoveryActivity } = await hasActiveDownstreamPayments(statement);
+    if (blocked) {
+      return res.status(400).json({
+        message: hasRecoveryActivity
+          ? "This processed statement already has landlord recovery activity. Reverse the related recovery posting(s) first."
+          : "This processed statement already has landlord payment activity. Reverse the related payment voucher(s) first.",
+      });
+    }
+
+    const actorUserId = await resolveActorUserId(req, String(statement.business || ""));
+    const reversals = await reverseProcessedStatementLedgerEntries({
+      statement,
+      userId: actorUserId,
+      reason,
+    });
+
+    const reversalTimestamp = new Date();
+
+    statement.status = "reversed";
+    statement.reversedAt = reversalTimestamp;
+    statement.reversedBy = actorUserId;
+    statement.reversalReason = reason;
+    if (!statement.reversedSourceStatement && statement.sourceStatement) {
+      statement.reversedSourceStatement = statement.sourceStatement;
+    }
+    if (!statement.reversedSourceStatementNumber && statement.sourceStatementNumber) {
+      statement.reversedSourceStatementNumber = statement.sourceStatementNumber;
+    }
+    statement.sourceStatement = null;
+    await statement.save();
+
+    await statement.populate([
+      { path: "landlord", select: "landlordName firstName lastName" },
+      { path: "property", select: "propertyCode propertyName name commissionPaymentMode commissionFixedAmount commissionPercentage commissionRecognitionBasis" },
+      { path: "business", select: "companyName name" },
+      { path: "reversedSourceStatement", select: "statementNumber status approvedAt" },
+      { path: "reversedBy", select: "username email surname otherNames" },
+    ]);
+
+    res.status(200).json({
+      success: true,
+      message: "Processed statement force-reversed successfully",
+      statement,
+      reversedLedgerEntries: reversals.map((row) => row?.reversalEntry?._id).filter(Boolean),
+    });
+  } catch (error) {
+    console.error("Admin force-reverse error:", error);
+    const statusCode = error?.statusCode || error?.status || 500;
+    res.status(statusCode).json({ message: error?.statusCode ? error.message : "Error force-reversing statement", error: error.message });
+  }
+};
+
+/**
+ * Admin: find and hard-delete GL entries that reference a ProcessedStatement that no longer
+ * exists (orphaned by a failed processing attempt). Scoped to a single business.
+ * Returns the count and account IDs so balances can be recalculated.
+ */
+export const adminCleanupOrphanedGLEntries = async (req, res) => {
+  try {
+    const { businessId } = req.params;
+    const scopedBusinessId = resolveScopedBusinessId(req, businessId);
+
+    // distinct() returns unique sourceTransactionIds without loading full entry docs
+    const referencedPsIds = await FinancialLedgerEntry.distinct("sourceTransactionId", {
+      business: scopedBusinessId,
+      sourceTransactionType: "processed_statement",
+    });
+
+    if (!referencedPsIds.length) {
+      return res.status(200).json({ success: true, message: "No processed-statement GL entries found.", deleted: 0 });
+    }
+
+    // Which of those PS ids actually exist?
+    const validIds = referencedPsIds.filter((id) => isValidObjectId(String(id)));
+    const existingPs = await ProcessedStatement.find(
+      { _id: { $in: validIds.map((id) => toObjectId(String(id))) } },
+      { _id: 1 }
+    ).lean();
+    const existingPsIds = new Set(existingPs.map((ps) => String(ps._id)));
+
+    const orphanedPsIds = validIds.filter((id) => !existingPsIds.has(String(id)));
+    if (!orphanedPsIds.length) {
+      return res.status(200).json({ success: true, message: "No orphaned GL entries found. DB is clean.", deleted: 0 });
+    }
+
+    // Load only the orphaned entries (far smaller than the full set)
+    const orphanedEntries = await FinancialLedgerEntry.find(
+      { business: scopedBusinessId, sourceTransactionType: "processed_statement", sourceTransactionId: { $in: orphanedPsIds.map(String) } },
+      { _id: 1, accountId: 1 }
+    ).lean();
+
+    const orphanedIds = orphanedEntries.map((e) => e._id);
+    const affectedAccountIds = [...new Set(orphanedEntries.map((e) => String(e.accountId)).filter(Boolean))];
+
+    await FinancialLedgerEntry.deleteMany({ _id: { $in: orphanedIds } });
+
+    // Recalculate balances for all affected accounts
+    if (affectedAccountIds.length) {
+      await aggregateChartOfAccountBalances(scopedBusinessId, affectedAccountIds);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Deleted ${orphanedIds.length} orphaned GL entries linked to ${referencedPsIds.length - existingPsIds.size} non-existent processed statement(s). Account balances recalculated.`,
+      deleted: orphanedIds.length,
+      affectedAccounts: affectedAccountIds.length,
+    });
+  } catch (error) {
+    console.error("Cleanup orphaned GL error:", error);
+    res.status(error?.statusCode || 500).json({ message: error.message || "Cleanup failed", error: error.message });
   }
 };
 

@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   FaArrowLeft,
+  FaBook,
   FaCheckCircle,
   FaChevronDown,
   FaChevronUp,
@@ -17,6 +18,7 @@ import {
 import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import JournalEntriesDrawer from "../../components/Accounting/JournalEntriesDrawer";
 import {
   reverseStatement,
   updateStatement,
@@ -79,6 +81,7 @@ const ProcessedStatements = () => {
   const [statements, setStatements] = useState([]);
   const [pagination, setPagination] = useState({ total: 0, page: 1, pages: 1, limit: ITEMS_PER_PAGE });
   const [loading, setLoading] = useState(false);
+  const [glStatement, setGlStatement] = useState(null);
 
   const [activeTab, setActiveTab] = useTabState("/landlord/processed-statements:activeTab", "outstanding");
   const [expandedRow, setExpandedRow] = useState(null);
@@ -564,6 +567,7 @@ const ProcessedStatements = () => {
                 <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Paid: {activeTab === "paid" ? pagination.total : "—"} • {activeTab === "paid" ? money(stats.totalAmountPaid) : "—"}</span>
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 <button onClick={() => navigate(-1)} className="h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white bg-slate-600 hover:bg-slate-700"><FaArrowLeft /> Back</button>
+
               </div>
             </div>
 
@@ -772,6 +776,14 @@ const ProcessedStatements = () => {
 
                                     <div className="flex flex-wrap gap-2">
                                       <button
+                                        onClick={() => setGlStatement(statement)}
+                                        className="flex items-center gap-2 rounded border border-teal-300 bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-700 transition hover:bg-teal-100"
+                                        title="View GL Journal Entries"
+                                      >
+                                        <FaBook /> GL Entries
+                                      </button>
+
+                                      <button
                                         onClick={() => handlePrintStatement(statement)}
                                         disabled={!canExportProcessedStatement}
                                         title={canExportProcessedStatement ? "Print" : "You do not have permission to print processed statements"}
@@ -842,6 +854,7 @@ const ProcessedStatements = () => {
                                           <FaUndo /> Reverse
                                         </button>
                                       )}
+
                                     </div>
                                   </div>
                                 </td>
@@ -869,6 +882,30 @@ const ProcessedStatements = () => {
           </div>
         </div>
       </DashboardLayout>
+
+      <JournalEntriesDrawer
+        open={!!glStatement}
+        onClose={() => setGlStatement(null)}
+        title="Processed Statement"
+        transactionRef={glStatement?.sourceStatementNumber}
+        date={glStatement ? new Date(glStatement.closedAt || glStatement.createdAt).toLocaleDateString("en-GB") : ""}
+        amount={glStatement ? Math.abs(getStatementDisplayAmount(glStatement)) : undefined}
+        status={glStatement?.status}
+        statusColors={
+          glStatement?.status === "paid" ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+          : glStatement?.status === "reversed" ? "bg-amber-100 text-amber-700 border-amber-200"
+          : "bg-slate-100 text-slate-700 border-slate-200"
+        }
+        contextFields={glStatement ? [
+          { label: "Landlord", value: glStatement.landlord?.landlordName },
+          { label: "Property", value: glStatement.property?.propertyCode ? `${glStatement.property.propertyCode} — ${glStatement.property.propertyName || ""}` : glStatement.property?.propertyName },
+          { label: "Period",   value: formatPeriodRange(glStatement) },
+          { label: "Commission", value: glStatement.commissionAmount ? `KES ${Number(glStatement.commissionAmount).toLocaleString()}` : undefined },
+        ].filter((f) => f.value) : []}
+        businessId={businessId}
+        sourceType="processed_statement"
+        sourceId={glStatement?._id}
+      />
 
       {showPayModal && (
         <PayLandlordModal

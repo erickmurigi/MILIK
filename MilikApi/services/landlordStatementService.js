@@ -256,7 +256,15 @@ const resolveEffectiveStatementWindow = async ({
   }
 
   if (effectiveStartAt.getTime() > effectiveEndAt.getTime()) {
-    effectiveStartAt = new Date(effectiveEndAt);
+    const err = new Error(
+      "This period has already been fully processed. Reverse the processed statement first, then use 'Create Revision' on the approved statement to re-generate it."
+    );
+    err.statusCode = 409;
+    err.code = "PERIOD_ALREADY_PROCESSED";
+    err.latestProcessedStatementId = latestProcessedStatement?._id
+      ? String(latestProcessedStatement._id)
+      : null;
+    throw err;
   }
 
   return {

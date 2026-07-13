@@ -4,6 +4,7 @@ import AppSelect from "../../components/common/AppSelect";
 import { adminRequests } from "../../utils/requestMethods";
 import useDebounce from "../../hooks/useDebounce";
 import {
+  FaBook,
   FaCheck,
   FaEdit,
   FaFileInvoiceDollar,
@@ -21,6 +22,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { useLocation, useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import JournalEntriesDrawer from "../../components/Accounting/JournalEntriesDrawer";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "../../redux/selectors";
 import { hasCompanyPermission } from "../../utils/permissions";
@@ -39,6 +41,7 @@ import { getProperties } from "../../redux/propertyRedux";
 import { useTabState } from "../../hooks/useTabState";
 
 const DEFAULT_PAGE_SIZE = 50;
+const isRawObjectId = (s) => /^[a-f\d]{24}$/i.test(String(s || ""));
 
 const PMS_CATEGORIES = [
   { value: "landlord_maintenance", label: "Accounts Payable – Maintenance", landlordLabel: "Accounts Payable – Maintenance", propertyRequired: true,  explicitDebitAccount: false, pmsOnly: true },
@@ -137,6 +140,7 @@ const PaymentVouchers = () => {
   const [pendingPaySettlementId, setPendingPaySettlementId] = useState("");
   const [showModal, setShowModal] = useState(() => location.pathname === "/accounts/payment-vouchers/new");
   const [editingVoucherId, setEditingVoucherId] = useState("");
+  const [glVoucher, setGlVoucher] = useState(null);
   const [form, setForm] = useState(blankForm);
   const selectedCategoryMeta = useMemo(
     () => categories.find((category) => category.value === form.category) || categories[0] || BASE_CATEGORIES[0],
@@ -524,7 +528,7 @@ const PaymentVouchers = () => {
     ${field("Due Date", fmtDate(voucher.dueDate))}
     ${field("Property", voucher.propertyName)}
     ${field("Landlord / Owner", voucher.landlordName)}
-    ${field("Reference", voucher.reference)}
+    ${field("Reference", isRawObjectId(voucher.reference) ? "" : voucher.reference)}
     ${field("Liability Account", voucher.liabilityAccountName)}
     ${field("Debit Account", voucher.debitAccountName)}
     ${field("Settlement Account", voucher.settlementAccountName)}
@@ -971,129 +975,100 @@ const PaymentVouchers = () => {
           </div>
         </div>
       ) : (
-      <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
-        <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col gap-2">
-
-          {/* KPI Strip */}
-          <div className="grid flex-shrink-0 grid-cols-2 gap-2 md:grid-cols-4">
-            {[
-              { label: "Total Vouchers", value: stats.count, sub: `KES ${stats.total.toLocaleString()}`, cls: "bg-slate-900 text-white" },
-              { label: "Paid", value: filtered.filter((v) => v.status === "paid").length, sub: `KES ${stats.paid.toLocaleString()}`, cls: "bg-emerald-50 text-emerald-800 border border-emerald-200" },
-              { label: "Draft", value: stats.draft, sub: "Awaiting action", cls: "bg-amber-50 text-amber-800 border border-amber-200" },
-              { label: "Approved", value: filtered.filter((v) => v.status === "approved").length, sub: "Pending settlement", cls: "bg-blue-50 text-blue-800 border border-blue-200" },
-            ].map((card) => (
-              <div key={card.label} className={`rounded-lg px-3 py-1.5 shadow-sm ${card.cls}`}>
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider opacity-75">{card.label}</span>
-                  <span className="text-sm font-black">{card.value}</span>
-                </div>
-                <p className="truncate text-[9px] font-semibold opacity-50">{card.sub}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="flex-none sticky top-0 z-20 border-b border-gray-200 bg-white shadow-sm">
-            <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-              <div className="relative shrink-0">
-                <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
-                <input
-                  value={filters.search}
-                  onChange={setFilter("search")}
-                  placeholder={isLandlordWorkspace ? "Voucher, narration, owner, property" : "Voucher, narration, landlord, property"}
-                  className="h-7 w-52 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-                />
-              </div>
-              <select
-                value={filters.category}
-                onChange={setFilter("category")}
-                className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-              >
-                <option value="all">All categories</option>
-                {categories.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={filters.status}
-                onChange={setFilter("status")}
-                className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-              >
-                <option value="all">All statuses</option>
-                <option value="draft">Draft</option>
-                <option value="approved">Approved</option>
-                <option value="paid">Paid</option>
-                <option value="reversed">Reversed</option>
-              </select>
-              {hasPMS && (
-                <select
-                  value={filters.propertyId}
-                  onChange={setFilter("propertyId")}
-                  className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-                >
-                  <option value="all">All properties</option>
-                  {properties.map((property) => (
-                    <option key={property._id} value={property._id}>
-                      {property.propertyName || property.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-              <button
-                onClick={() => setFilters({ search: "", category: "all", status: "all", propertyId: "all" })}
-                className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]"
-              >
-                <FaFilter size={9} /> Reset
-              </button>
-              <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-              <button onClick={bulkDeleteSelected} className="h-7 shrink-0 flex items-center gap-1 rounded border border-rose-300 bg-rose-50 px-2.5 text-xs font-semibold text-rose-700 hover:bg-rose-100">Delete Selected</button>
-              <button onClick={openCreate} disabled={!canCreateVoucher} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127] disabled:opacity-60"><FaPlus size={9} /> New Voucher</button>
-            </div>
-          </div>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-1 sm:p-2">
+        <div className="mx-auto flex h-full w-full max-w-none flex-col overflow-hidden">
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
-            <div className="min-h-0 flex-1 overflow-auto">
-              <table className="min-w-full text-[11px] border-collapse">
+            <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
+              <div className="filter-bar flex items-center gap-1 overflow-x-auto px-2 py-1.5">
+                <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">Vouchers: {serverTotal}</span>
+                <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">Total: KES {stats.total.toLocaleString()}</span>
+                <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">Paid: KES {stats.paid.toLocaleString()}</span>
+                <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">Draft: {stats.draft}</span>
+                <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+                <div className="relative shrink-0">
+                  <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
+                  <input
+                    value={filters.search}
+                    onChange={setFilter("search")}
+                    placeholder={isLandlordWorkspace ? "Voucher, narration, owner, property" : "Voucher, narration, landlord, property"}
+                    className="h-7 w-48 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
+                  />
+                </div>
+                <select value={filters.category} onChange={setFilter("category")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
+                  <option value="all">All categories</option>
+                  {categories.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                </select>
+                <select value={filters.status} onChange={setFilter("status")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
+                  <option value="all">All statuses</option>
+                  <option value="draft">Draft</option>
+                  <option value="approved">Approved</option>
+                  <option value="paid">Paid</option>
+                  <option value="reversed">Reversed</option>
+                </select>
+                {hasPMS && (
+                  <select value={filters.propertyId} onChange={setFilter("propertyId")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
+                    <option value="all">All properties</option>
+                    {properties.map((p) => <option key={p._id} value={p._id}>{p.propertyName || p.name}</option>)}
+                  </select>
+                )}
+                <button onClick={() => setFilters({ search: "", category: "all", status: "all", propertyId: "all" })} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                  <FaFilter size={9} /> Reset
+                </button>
+                <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+                <button onClick={bulkDeleteSelected} className="h-7 shrink-0 flex items-center gap-1 rounded border border-rose-300 bg-rose-50 px-2.5 text-xs font-semibold text-rose-700 hover:bg-rose-100">Delete Selected</button>
+                <button onClick={openCreate} disabled={!canCreateVoucher} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127] disabled:opacity-60"><FaPlus size={9} /> New Voucher</button>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
+              <table className="w-full min-w-[1200px] text-[11px] border-collapse">
                 <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
                   <tr>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10"><button type="button" onClick={toggleSelectAll}>{selectedIds.length === filtered.length && filtered.length > 0 ? <FaCheck /> : <FaSquare />}</button></th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Voucher</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10 w-8"><button type="button" onClick={toggleSelectAll}>{selectedIds.length === filtered.length && filtered.length > 0 ? <FaCheck /> : <FaSquare />}</button></th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Voucher #</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Ref #</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Category</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">{isLandlordWorkspace ? "Owner" : "Payee"}</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">{isLandlordWorkspace ? "Owner" : "Landlord"}</th>
-                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount (KES)</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Due Date</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Paid Date</th>
+                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
                     <th className="px-3 py-1 text-right font-bold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
-                    <tr><td colSpan="9" className="px-4 py-10 text-center text-slate-500">Loading vouchers...</td></tr>
+                    <tr><td colSpan="11" className="px-4 py-10 text-center text-slate-500">Loading vouchers...</td></tr>
                   ) : filtered.length === 0 ? (
-                    <tr><td colSpan="9" className="px-4 py-10 text-center text-slate-500">No payment vouchers found.</td></tr>
+                    <tr><td colSpan="11" className="px-4 py-10 text-center text-slate-500">No payment vouchers found.</td></tr>
                   ) : currentPageRows.map((voucher, index) => {
                     const isBusy = (action) => rowActionKey === `${voucher._id}:${action}`;
+                    const isOverdue = voucher.dueDate && voucher.status !== "paid" && voucher.status !== "reversed" && new Date(voucher.dueDate) < new Date();
                     return (
                       <tr key={voucher._id} className={`cursor-pointer border-b border-gray-100 transition-colors ${selectedIds.includes(voucher._id) ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50" : index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
                         <td className="px-3 py-1 border-r border-gray-100"><button type="button" onClick={() => toggleSelect(voucher._id)}>{selectedIds.includes(voucher._id) ? <FaCheck className="text-[#0B3B2E]" /> : <FaSquare className="text-slate-400" />}</button></td>
-                        <td className="px-3 py-1 border-r border-gray-100"><div className="font-black text-slate-900">{voucher.voucherNo}</div><div className="text-[10px] text-slate-500">{voucher.reference || voucher.narration || "No reference"}</div></td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{categories.find((item) => item.value === voucher.category)?.label || voucher.category}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{voucher.propertyName}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{voucher.landlordName}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">KES {Number(voucher.amount || 0).toLocaleString()}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{voucher.dueDate ? new Date(voucher.dueDate).toLocaleDateString() : "-"}</td>
-                        <td className="px-3 py-1 border-r border-gray-100"><span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${statusColors[voucher.status] || statusColors.draft}`}>{voucher.status}</span></td>
+                        <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900 whitespace-nowrap" title={voucher.narration || ""}>{voucher.voucherNo}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-600 max-w-[110px] truncate">{isRawObjectId(voucher.reference) ? "—" : voucher.reference || "—"}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[160px] truncate">{categories.find((c) => c.value === voucher.category)?.label || voucher.category}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900 max-w-[160px] truncate">{voucher.landlordName || "—"}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[140px] truncate">{voucher.propertyName || "—"}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{Number(voucher.amount || 0).toLocaleString()}</td>
+                        <td className={`px-3 py-1 border-r border-gray-100 whitespace-nowrap ${isOverdue ? "text-red-600 font-semibold" : "text-slate-700"}`}>{voucher.dueDate ? new Date(voucher.dueDate).toLocaleDateString("en-GB") : "—"}{isOverdue && <span className="ml-1 text-[9px] font-bold">OVERDUE</span>}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-slate-700 whitespace-nowrap">{voucher.paidDate ? new Date(voucher.paidDate).toLocaleDateString("en-GB") : "—"}</td>
+                        <td className="px-3 py-1 border-r border-gray-100 text-center">
+                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusColors[voucher.status] || statusColors.draft}`}>{voucher.status}</span>
+                        </td>
                         <td className="px-3 py-1 text-right">
-                          <div className="inline-flex flex-wrap justify-end gap-2">
-                            <button onClick={() => handlePrintVoucher(voucher)} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50"><FaPrint /> Print</button>
-                            <button onClick={() => downloadVoucherPdf(voucher)} className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100"><FaFilePdf /> PDF</button>
-                            {voucher.status === "draft" && canUpdateVoucher && <button onClick={() => openEdit(voucher)} className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700"><FaEdit /> Edit</button>}
-                            {voucher.status === "draft" && canApproveVoucher && <button onClick={() => updateStatus(voucher, "approved")} disabled={!!rowActionKey} className="inline-flex items-center gap-1 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-black text-indigo-700 disabled:opacity-60"><FaCheck /> {isBusy("approved") ? "Working..." : "Approve"}</button>}
-                            {(voucher.status === "draft" || voucher.status === "approved") && canUpdateVoucher && <button onClick={() => updateStatus(voucher, "paid")} disabled={!!rowActionKey} className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 disabled:opacity-60"><FaCheck /> {isBusy("paid") ? "Working..." : "Mark Paid"}</button>}
-                            {voucher.status !== "reversed" && canReverseVoucher && <button onClick={() => updateStatus(voucher, "reversed")} disabled={!!rowActionKey} className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-black text-amber-700 disabled:opacity-60"><FaUndo /> {isBusy("reversed") ? "Working..." : "Reverse"}</button>}
-                            {canDeleteVoucher && <button onClick={() => removeVoucher(voucher)} disabled={!!rowActionKey} className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 disabled:opacity-60"><FaTrash /> {isBusy("delete") ? "Working..." : "Delete"}</button>}
+                          <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                            <button onClick={() => setGlVoucher(voucher)} className="rounded p-1 text-teal-600 hover:bg-teal-50 hover:text-teal-800" title="View GL Entries"><FaBook size={12} /></button>
+                            <button onClick={() => handlePrintVoucher(voucher)} className="rounded p-1 text-purple-600 hover:bg-purple-50 hover:text-purple-800" title="Print"><FaPrint size={12} /></button>
+                            <button onClick={() => downloadVoucherPdf(voucher)} className="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800" title="Download PDF"><FaFilePdf size={12} /></button>
+                            {voucher.status === "draft" && canUpdateVoucher && <button onClick={() => openEdit(voucher)} className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800" title="Edit"><FaEdit size={12} /></button>}
+                            {voucher.status === "draft" && canApproveVoucher && <button onClick={() => updateStatus(voucher, "approved")} disabled={!!rowActionKey} className="rounded p-1 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800 disabled:opacity-40" title={isBusy("approved") ? "Working…" : "Approve"}><FaCheck size={12} /></button>}
+                            {(voucher.status === "draft" || voucher.status === "approved") && canUpdateVoucher && <button onClick={() => updateStatus(voucher, "paid")} disabled={!!rowActionKey} className="rounded p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800 disabled:opacity-40" title={isBusy("paid") ? "Working…" : "Mark Paid"}><FaSave size={12} /></button>}
+                            {voucher.status !== "reversed" && canReverseVoucher && <button onClick={() => updateStatus(voucher, "reversed")} disabled={!!rowActionKey} className="rounded p-1 text-amber-600 hover:bg-amber-50 hover:text-amber-800 disabled:opacity-40" title={isBusy("reversed") ? "Working…" : "Reverse"}><FaUndo size={12} /></button>}
+                            {canDeleteVoucher && <button onClick={() => removeVoucher(voucher)} disabled={!!rowActionKey} className="rounded p-1 text-rose-600 hover:bg-rose-50 hover:text-rose-800 disabled:opacity-40" title={isBusy("delete") ? "Working…" : "Delete"}><FaTrash size={12} /></button>}
                           </div>
                         </td>
                       </tr>
@@ -1162,6 +1137,28 @@ const PaymentVouchers = () => {
           </div>
         </div>
       )}
+
+      <JournalEntriesDrawer
+        open={!!glVoucher}
+        onClose={() => setGlVoucher(null)}
+        title="Payment Voucher"
+        transactionRef={glVoucher?.voucherNo}
+        date={glVoucher?.dueDate ? new Date(glVoucher.dueDate).toLocaleDateString("en-GB") : undefined}
+        amount={glVoucher?.amount}
+        status={glVoucher?.status}
+        statusColors={statusColors[glVoucher?.status] || statusColors.draft}
+        contextFields={glVoucher ? [
+          { label: "Category",   value: categories.find((c) => c.value === glVoucher.category)?.label || glVoucher.category },
+          { label: "Reference",  value: isRawObjectId(glVoucher.reference) ? undefined : (glVoucher.reference || undefined) },
+          { label: isLandlordWorkspace ? "Owner" : "Payee", value: glVoucher.landlordName },
+          { label: "Property",   value: glVoucher.propertyName },
+          { label: "Narration",  value: glVoucher.narration },
+          { label: "Paid Date",  value: glVoucher.paidDate ? new Date(glVoucher.paidDate).toLocaleDateString("en-GB") : "—" },
+        ] : []}
+        businessId={currentCompany?._id}
+        sourceType="payment_voucher"
+        sourceId={glVoucher?._id}
+      />
 
     </DashboardLayout>
   );

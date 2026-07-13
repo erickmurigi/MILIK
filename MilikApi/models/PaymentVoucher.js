@@ -31,6 +31,12 @@ const PaymentVoucherSchema = new mongoose.Schema(
     dueDate: { type: Date, required: true },
     paidDate: { type: Date },
     reference: { type: String },
+    sourceProcessedStatement: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ProcessedStatement",
+      default: null,
+      index: true,
+    },
     narration: { type: String, trim: true, maxlength: 1000 },
     sourceRequisition: {
       type: mongoose.Schema.Types.ObjectId,

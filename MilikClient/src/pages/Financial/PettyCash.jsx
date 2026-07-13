@@ -3,6 +3,7 @@ import { useEntityCache } from "../../hooks/useEntityCache";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import {
+  FaBook,
   FaBoxOpen,
   FaCheck,
   FaMoneyBillWave,
@@ -15,6 +16,7 @@ import {
 } from "react-icons/fa";
 import { printPettyCashVoucher, printReplenishmentSummary } from "../../utils/printPettyCash";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import JournalEntriesDrawer from "../../components/Accounting/JournalEntriesDrawer";
 import { getChartOfAccounts } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 import { hasCompanyPermission } from "../../utils/permissions";
@@ -134,6 +136,7 @@ const PettyCash = () => {
   const [replenishments, setReplenishments] = useState([]);
   const [coas, setCoas] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [glEntry, setGlEntry] = useState(null);
 
   // draft filters (apply on Search)
   const [draftSearch, setDraftSearch] = useState("");
@@ -656,6 +659,13 @@ const PettyCash = () => {
                             >
                               <FaPrint size={9} />
                             </button>
+                            <button
+                              onClick={() => setGlEntry({ data: row, sourceType: "petty_cash_disbursement" })}
+                              className="rounded p-1 text-teal-600 hover:bg-teal-50 hover:text-teal-800"
+                              title="View GL Entries"
+                            >
+                              <FaBook size={10} />
+                            </button>
                             {row.status === "active" && canApprove && (
                               <button
                                 onClick={() => setShowVoidModal(row)}
@@ -735,6 +745,13 @@ const PettyCash = () => {
                               title="Print reimbursement form"
                             >
                               <FaPrint size={9} />
+                            </button>
+                            <button
+                              onClick={() => setGlEntry({ data: row, sourceType: "petty_cash_replenishment" })}
+                              className="rounded p-1 text-teal-600 hover:bg-teal-50 hover:text-teal-800"
+                              title="View GL Entries"
+                            >
+                              <FaBook size={10} />
                             </button>
                             {row.status === "pending" && canApprove && (
                               <button
@@ -1009,6 +1026,25 @@ const PettyCash = () => {
           </div>
         )}
       </Modal>
+
+      <JournalEntriesDrawer
+        open={!!glEntry}
+        onClose={() => setGlEntry(null)}
+        title={glEntry?.sourceType === "petty_cash_replenishment" ? "Petty Cash Replenishment" : "Petty Cash Disbursement"}
+        transactionRef={glEntry?.data?.voucherNumber || glEntry?.data?.replenishmentNumber || glEntry?.data?._id}
+        date={glEntry ? new Date(glEntry.data.date || glEntry.data.requestDate || glEntry.data.createdAt).toLocaleDateString("en-GB") : ""}
+        amount={glEntry?.data?.amount}
+        status={glEntry?.data?.status}
+        statusColors={glEntry?.data?.status === "active" ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-700 border-slate-200"}
+        contextFields={glEntry ? [
+          { label: "Category", value: glEntry.data.category },
+          { label: "Description", value: glEntry.data.description || glEntry.data.narration },
+          { label: "Requested By", value: glEntry.data.requestedBy?.name || glEntry.data.createdBy?.name },
+        ].filter((f) => f.value) : []}
+        businessId={currentCompany?._id}
+        sourceType={glEntry?.sourceType}
+        sourceId={glEntry?.data?._id}
+      />
 
     </DashboardLayout>
   );

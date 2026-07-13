@@ -494,6 +494,26 @@ const generateNextTenantCode = async (businessId) => {
   return `TT${String(counter.sequence).padStart(4, "0")}`;
 };
 
+// On a tenantCode E11000, resync the counter to the actual highest code in the
+// DB so subsequent retries skip any gap left by imports or previously failed saves.
+const resyncTenantCodeCounter = async (businessId) => {
+  const latest = await Tenant.findOne(
+    { business: String(businessId), tenantCode: { $regex: /^TT\d+$/i } },
+    { tenantCode: 1 }
+  ).sort({ tenantCode: -1 }).lean();
+
+  const maxSeq = latest?.tenantCode
+    ? parseInt(String(latest.tenantCode).replace(/^TT/i, ""), 10) || 0
+    : 0;
+
+  if (maxSeq > 0) {
+    await SequenceCounter.updateOne(
+      { business: String(businessId), key: "tenant_code", sequence: { $lt: maxSeq } },
+      { $set: { sequence: maxSeq } }
+    );
+  }
+};
+
 export const updatePropertyUnitCounts = async (propertyId) => {
   try {
     const [agg] = await Unit.aggregate([
@@ -864,13 +884,18 @@ export const createTenant = async (req, res, next) => {
     };
 
     let savedTenant;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 10; attempt++) {
       const tenantCode = normalizedTenantCode || (await generateNextTenantCode(businessId));
       try {
         savedTenant = await new Tenant({ ...tenantBase, tenantCode }).save();
         break;
       } catch (err) {
-        if (err.code === 11000 && err.keyPattern?.tenantCode && !normalizedTenantCode && attempt < 2) continue;
+        if (err.code === 11000 && err.keyPattern?.tenantCode && !normalizedTenantCode && attempt < 9) {
+          // On the first collision resync the counter to the actual DB max so the
+          // next increment lands above any gap left by imports or failed saves.
+          if (attempt === 0) await resyncTenantCodeCounter(businessId);
+          continue;
+        }
         throw err;
       }
     }

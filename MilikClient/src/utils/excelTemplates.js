@@ -1960,6 +1960,230 @@ export const parseTenantsExcel = (file) => {
   });
 };
 
+// ============================================
+// INVOICE NOTES (DEBIT / CREDIT) EXCEL TEMPLATES
+// ============================================
+
+export const generateInvoiceNotesTemplate = () => {
+  const dataSheet = XLSX.utils.aoa_to_sheet([
+    ['Note Type *', 'Tenant Code', 'Tenant Name *', 'Category *', 'Amount *', 'Note Date *', 'Source Invoice No', 'Narration'],
+  ]);
+
+  dataSheet['!cols'] = [
+    { wch: 16 }, { wch: 16 }, { wch: 28 }, { wch: 22 }, { wch: 14 }, { wch: 16 }, { wch: 22 }, { wch: 40 },
+  ];
+
+  const instructionsSheet = XLSX.utils.aoa_to_sheet([
+    ['CREDIT & DEBIT NOTE IMPORT INSTRUCTIONS'],
+    [''],
+    ['REQUIRED FIELDS (marked with *)'],
+    ['• Note Type: DEBIT_NOTE or CREDIT_NOTE'],
+    ['• Tenant Name (or Tenant Code): must match an existing tenant in MILIK'],
+    ['• Category: must be a valid invoice charge category (see Valid Values sheet)'],
+    ['• Amount: positive number (KES)'],
+    ['• Note Date: YYYY-MM-DD format'],
+    [''],
+    ['CONDITIONAL FIELDS'],
+    ['• Source Invoice No: REQUIRED for CREDIT_NOTE — must be a posted, open invoice for that tenant'],
+    ['• Source Invoice No: optional for DEBIT_NOTE — leave blank for standalone debit note'],
+    [''],
+    ['OPTIONAL FIELDS'],
+    ['• Tenant Code: preferred over Tenant Name if provided — must match exactly'],
+    ['• Narration: description text for the note'],
+    [''],
+    ['CREDIT NOTE RULES'],
+    ['• Source Invoice must be in "pending" or "partially_paid" status'],
+    ['• Amount cannot exceed the remaining creditable amount on the source invoice'],
+    [''],
+    ['EXAMPLE DATA'],
+    [''],
+    ['Note Type', 'Tenant Code', 'Tenant Name', 'Category', 'Amount', 'Note Date', 'Source Invoice No', 'Narration'],
+    ['CREDIT_NOTE', 'TT0012', 'John Mwangi', 'RENT', '5000', '2026-07-01', 'INV-2026-001', 'Credit for overpayment'],
+    ['DEBIT_NOTE', 'TT0045', 'Sarah Kipchoge', 'SERVICE_CHARGE', '2500', '2026-07-01', '', 'Annual service charge adjustment'],
+    ['DEBIT_NOTE', '', 'Michael Okonkwo', 'WATER', '1200', '2026-07-01', 'INV-2026-050', 'Debit against water invoice'],
+    [''],
+    ['IMPORTANT NOTES'],
+    ['• Either Tenant Code or Tenant Name must be provided (Tenant Code takes priority)'],
+    ['• Use YYYY-MM-DD for Note Date (e.g. 2026-07-01)'],
+    ['• Maximum 500 notes per import'],
+    ['• Delete these instruction rows before uploading'],
+  ]);
+
+  instructionsSheet['!cols'] = [{ wch: 80 }, { wch: 20 }, { wch: 28 }, { wch: 22 }, { wch: 14 }, { wch: 16 }, { wch: 22 }, { wch: 40 }];
+
+  const dropdownSheet = XLSX.utils.aoa_to_sheet([
+    ['VALID VALUES FOR DROPDOWNS'],
+    [''],
+    ['Note Type Options:'],
+    ['DEBIT_NOTE'],
+    ['CREDIT_NOTE'],
+    [''],
+    ['Common Category Options:'],
+    ['RENT'],
+    ['WATER'],
+    ['ELECTRICITY'],
+    ['GARBAGE'],
+    ['SERVICE_CHARGE'],
+    ['SECURITY'],
+    ['PARKING'],
+    ['INTERNET'],
+    ['GAS'],
+    ['AMENITY'],
+    ['MANAGEMENT_FEE'],
+    ['CARETAKER'],
+    ['LATE_PENALTY'],
+    ['OTHER'],
+    [''],
+    ['TIPS:'],
+    ['• Category must match exactly (UPPERCASE, underscores as shown)'],
+    ['• Use Tenant Code when possible to avoid ambiguous name matches'],
+    ['• Leave Source Invoice No blank for standalone DEBIT_NOTEs'],
+  ]);
+
+  dropdownSheet['!cols'] = [{ wch: 50 }];
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, dataSheet, 'Data');
+  XLSX.utils.book_append_sheet(workbook, instructionsSheet, 'Instructions & Examples');
+  XLSX.utils.book_append_sheet(workbook, dropdownSheet, 'Valid Values');
+
+  const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+  return new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+};
+
+export const downloadInvoiceNotesTemplate = () => {
+  const blob = generateInvoiceNotesTemplate();
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `MILIK_InvoiceNotes_Import_Template_${new Date().toISOString().split('T')[0]}.xlsx`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
+};
+
+const normalizeNoteImportKey = (key = '') =>
+  String(key).trim().toLowerCase().replace(/\*/g, '').replace(/[\s_\-\/]+/g, '');
+
+const getNoteImportValue = (row, aliases = []) => {
+  const normalizedRow = {};
+  Object.keys(row || {}).forEach((key) => { normalizedRow[normalizeNoteImportKey(key)] = row[key]; });
+  for (const alias of aliases) {
+    const match = normalizedRow[normalizeNoteImportKey(alias)];
+    if (match !== undefined && match !== null && String(match).trim() !== '') return match;
+  }
+  return '';
+};
+
+export const parseInvoiceNotesExcel = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array', cellDates: false });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: true, defval: '' });
+
+        if (jsonData.length === 0) {
+          reject(new Error('No data found in Excel file'));
+          return;
+        }
+
+        const parseNoteDate = (value) => {
+          if (value === '' || value === null || value === undefined) return '';
+          if (typeof value === 'number') {
+            const parsed = XLSX.SSF.parse_date_code(value);
+            if (parsed) {
+              const d = new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d));
+              return Number.isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+            }
+          }
+          const raw = String(value).trim();
+          if (!raw) return '';
+          const native = new Date(raw);
+          if (!Number.isNaN(native.getTime())) return native.toISOString().split('T')[0];
+          return raw;
+        };
+
+        const mappedData = jsonData.map((row, index) => ({
+          rowNumber: index + 2,
+          noteType: String(getNoteImportValue(row, ['Note Type', 'noteType', 'NoteType']) || '').trim().toUpperCase(),
+          tenantCode: String(getNoteImportValue(row, ['Tenant Code', 'tenantCode']) || '').trim(),
+          tenantName: String(getNoteImportValue(row, ['Tenant Name', 'tenantName']) || '').trim(),
+          category: String(getNoteImportValue(row, ['Category', 'category']) || '').trim().toUpperCase(),
+          amount: (() => {
+            const raw = getNoteImportValue(row, ['Amount', 'amount']);
+            const n = parseFloat(String(raw || '').replace(/,/g, ''));
+            return Number.isFinite(n) ? n : Number.NaN;
+          })(),
+          noteDate: parseNoteDate(getNoteImportValue(row, ['Note Date', 'noteDate', 'NoteDate'])),
+          sourceInvoiceNo: String(getNoteImportValue(row, ['Source Invoice No', 'sourceInvoiceNo', 'SourceInvoiceNo', 'Invoice No']) || '').trim(),
+          narration: String(getNoteImportValue(row, ['Narration', 'narration', 'Description', 'description']) || '').trim(),
+        }));
+
+        const validNoteTypes = ['DEBIT_NOTE', 'CREDIT_NOTE'];
+        const validRecords = [];
+        const errors = [];
+
+        mappedData.forEach((record) => {
+          const rowErrors = [];
+
+          if (!validNoteTypes.includes(record.noteType)) {
+            rowErrors.push(`Note Type must be DEBIT_NOTE or CREDIT_NOTE (got "${record.noteType || '(blank)'}")`);
+          }
+          if (!record.tenantCode && !record.tenantName) {
+            rowErrors.push('Either Tenant Code or Tenant Name is required');
+          }
+          if (!record.category) {
+            rowErrors.push('Category is required');
+          }
+          if (!Number.isFinite(record.amount) || record.amount <= 0) {
+            rowErrors.push('Amount must be a positive number');
+          }
+          if (!record.noteDate) {
+            rowErrors.push('Note Date is required and must be a valid date (YYYY-MM-DD)');
+          }
+          if (record.noteType === 'CREDIT_NOTE' && !record.sourceInvoiceNo) {
+            rowErrors.push('Source Invoice No is required for CREDIT_NOTE');
+          }
+
+          if (rowErrors.length > 0) {
+            errors.push({ row: record.rowNumber, errors: rowErrors, data: record });
+          } else {
+            validRecords.push({
+              noteType: record.noteType,
+              tenantCode: record.tenantCode || undefined,
+              tenantName: record.tenantName || undefined,
+              category: record.category,
+              amount: record.amount,
+              noteDate: record.noteDate,
+              sourceInvoiceNo: record.sourceInvoiceNo || undefined,
+              narration: record.narration || undefined,
+            });
+          }
+        });
+
+        resolve({
+          valid: validRecords,
+          errors,
+          total: mappedData.length,
+          validCount: validRecords.length,
+          errorCount: errors.length,
+        });
+      } catch (error) {
+        reject(new Error(`Failed to parse Excel file: ${error.message}`));
+      }
+    };
+
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsArrayBuffer(file);
+  });
+};
+
 /**
  * Export current tenants to Excel
  */

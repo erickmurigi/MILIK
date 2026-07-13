@@ -209,18 +209,89 @@ export const createDraft = async (req, res, next) => {
       });
     }
 
-    // Create new draft
-    const result = await createDraftStatement({
-      businessId,
-      propertyId,
-      landlordId,
-      statementPeriodStart: periodStart,
-      statementPeriodEnd: periodEnd,
-      cutoffAt: hasExplicitCutoffAt ? requestedCutoffAt : null,
-      statementType,
-      userId,
-      notes: notes || "",
-    });
+    // Create new draft — if an approved statement already covers this exact period
+    // and its processed statement was reversed, automatically create a revision so the
+    // user doesn't have to manually navigate to "Create Revision".
+    let result;
+    try {
+      result = await createDraftStatement({
+        businessId,
+        propertyId,
+        landlordId,
+        statementPeriodStart: periodStart,
+        statementPeriodEnd: periodEnd,
+        cutoffAt: hasExplicitCutoffAt ? requestedCutoffAt : null,
+        statementType,
+        userId,
+        notes: notes || "",
+      });
+    } catch (draftErr) {
+      if (draftErr?.code === "APPROVED_STATEMENT_EXISTS" && draftErr?.existingStatementId) {
+        // Simpler check: no active PS directly linked to this approved statement AND it hasn't
+        // already been superseded by a revision. This avoids the strict reversedSourceStatement
+        // linkage requirement that fails when intermediate PSs were created for different statements.
+        const [hasActivePS, isAlreadySuperseded, existingRevisionDraft] = await Promise.all([
+          ProcessedStatement.exists({
+            business: businessId,
+            sourceStatement: draftErr.existingStatementId,
+            status: { $ne: "reversed" },
+          }),
+          LandlordStatement.exists({
+            _id: draftErr.existingStatementId,
+            supersededByStatementId: { $exists: true, $ne: null },
+          }),
+          LandlordStatement.findOne({
+            business: businessId,
+            property: propertyId,
+            landlord: landlordId,
+            supersedesStatementId: draftErr.existingStatementId,
+            status: "draft",
+          })
+            .sort({ version: -1, createdAt: -1 })
+            .lean(),
+        ]);
+        const canAutoRevise = !hasActivePS && !isAlreadySuperseded;
+        if (canAutoRevise) {
+
+          let revisionStatementId;
+
+          if (existingRevisionDraft) {
+            revisionStatementId = String(existingRevisionDraft._id);
+          } else {
+            const revisionResult = await createRevision(
+              draftErr.existingStatementId,
+              userId,
+              "Auto-revision: processed statement was reversed — regenerating for the same period."
+            );
+            emitToCompany(businessId, "statement:revised", {
+              originalStatementId: revisionResult.originalStatement._id,
+              newStatementId: revisionResult.statement._id,
+              landlordId,
+              propertyId,
+            });
+            revisionStatementId = String(revisionResult.statement._id);
+          }
+
+          const full = await getStatementById(revisionStatementId, {
+            includeLines: true,
+            populateRefs: true,
+          });
+          return res.status(201).json({
+            success: true,
+            message:
+              "The previous processed statement was reversed, so a revision draft has been loaded for this period. Review and approve when ready.",
+            data: {
+              statement: full.statement,
+              lines: full.lines || [],
+              lineCount: full.lines.length,
+              isExisting: Boolean(existingRevisionDraft),
+              isRevision: true,
+            },
+          });
+        }
+      }
+      throw draftErr;
+    }
 
     emitToCompany(businessId, "statement:created", {
       statementId: result.statement._id,
@@ -315,20 +386,36 @@ export const approve = async (req, res, next) => {
     });
 
     if (existingApproved) {
-      const canSupersede = await canSupersedeReversedApprovedStatement({
-        businessId,
-        statementId: existingApproved._id,
-      });
+      // Allow if this draft explicitly supersedes the blocking approved statement (it IS the revision).
+      // Also allow when no active PS is linked and the statement hasn't already been superseded —
+      // same relaxed check as createDraft's canAutoRevise path.
+      const isExplicitRevision =
+        statement.supersedesStatementId &&
+        String(statement.supersedesStatementId) === String(existingApproved._id);
 
-      if (!canSupersede) {
-        return res.status(400).json({
-          success: false,
-          message: `An approved statement already exists for this period (${existingApproved.statementNumber}). Please create a revision instead.`,
-          data: {
-            existingStatementId: existingApproved._id,
-            existingStatementNumber: existingApproved.statementNumber,
-          },
-        });
+      if (!isExplicitRevision) {
+        const [hasActivePS, isAlreadySuperseded] = await Promise.all([
+          ProcessedStatement.exists({
+            business: businessId,
+            sourceStatement: existingApproved._id,
+            status: { $ne: "reversed" },
+          }),
+          LandlordStatement.exists({
+            _id: existingApproved._id,
+            supersededByStatementId: { $exists: true, $ne: null },
+          }),
+        ]);
+
+        if (hasActivePS || isAlreadySuperseded) {
+          return res.status(400).json({
+            success: false,
+            message: `An approved statement already exists for this period (${existingApproved.statementNumber}). Please create a revision instead.`,
+            data: {
+              existingStatementId: existingApproved._id,
+              existingStatementNumber: existingApproved.statementNumber,
+            },
+          });
+        }
       }
 
       await markSupersededApprovedStatementRevised({
@@ -576,6 +663,57 @@ export const markAsSent = async (req, res, next) => {
       success: true,
       message: "Statement marked as sent",
       data: { statement },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Admin backdoor: force-mark an approved statement as "revised" so it stops blocking
+ * new approvals for the same period. Use only to fix data errors (e.g. orphaned approved
+ * statement with no processed statement). Optionally links a replacement draft via body.replacementStatementId.
+ */
+export const adminMarkRevised = async (req, res, next) => {
+  try {
+    const { statementId } = req.params;
+    const { replacementStatementId, reason } = req.body || {};
+
+    if (!isValidObjectId(statementId)) {
+      return res.status(400).json({ success: false, message: "Invalid statementId" });
+    }
+
+    const statement = await LandlordStatement.findById(statementId)
+      .select("_id statementNumber status business property landlord periodStart periodEnd")
+      .lean();
+
+    if (!statement) {
+      return res.status(404).json({ success: false, message: "Statement not found" });
+    }
+
+    if (statement.status === "revised") {
+      return res.status(200).json({ success: true, message: "Statement is already marked as revised", statementNumber: statement.statementNumber });
+    }
+
+    if (!["approved", "sent", "draft"].includes(statement.status)) {
+      return res.status(400).json({ success: false, message: `Cannot mark a ${statement.status} statement as revised` });
+    }
+
+    const $set = {
+      status: "revised",
+      revisionReason: reason || "Admin force-marked as revised to correct data error",
+    };
+
+    if (replacementStatementId && isValidObjectId(replacementStatementId)) {
+      $set.supersededByStatementId = new mongoose.Types.ObjectId(String(replacementStatementId));
+    }
+
+    await LandlordStatement.findByIdAndUpdate(statement._id, { $set });
+
+    return res.status(200).json({
+      success: true,
+      message: `Statement ${statement.statementNumber} has been force-marked as revised. The pending revision draft can now be approved.`,
+      statementNumber: statement.statementNumber,
     });
   } catch (err) {
     next(err);

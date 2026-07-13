@@ -3,6 +3,7 @@ import AppSelect from "../../components/common/AppSelect";
 import { useLocation } from "react-router-dom";
 import useDebounce from "../../hooks/useDebounce";
 import {
+  FaBook,
   FaBookOpen,
   FaCheck,
   FaEdit,
@@ -17,6 +18,7 @@ import {
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import JournalEntriesDrawer from "../../components/Accounting/JournalEntriesDrawer";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "../../redux/selectors";
 import { getProperties } from "../../redux/propertyRedux";
@@ -156,6 +158,7 @@ const JournalEntries = () => {
   const [rowActionKey, setRowActionKey] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingJournalId, setEditingJournalId] = useState("");
+  const [glJournal, setGlJournal] = useState(null);
   const [saving, setSaving] = useState(false);
 
   const filters = journalDraft.filters || { search: "", status: "all", journalType: "all", propertyId: "all" };
@@ -554,178 +557,101 @@ const JournalEntries = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
-        <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-1 sm:p-2">
+        <div className="mx-auto flex h-full w-full max-w-none flex-col overflow-hidden">
 
-          {/* KPI Strip */}
-          <div className="grid flex-shrink-0 grid-cols-2 gap-2 md:grid-cols-4">
-            {[
-              { label: "Total Entries", value: journals.length, sub: `KES ${totals.total.toLocaleString()}`, cls: "bg-slate-900 text-white" },
-              { label: "Draft", value: journals.filter((j) => j.status === "draft").length, sub: `KES ${totals.draft.toLocaleString()}`, cls: "bg-amber-50 text-amber-800 border border-amber-200" },
-              { label: "Posted", value: journals.filter((j) => j.status === "posted").length, sub: `KES ${totals.posted.toLocaleString()}`, cls: "bg-emerald-50 text-emerald-800 border border-emerald-200" },
-              { label: "Reversed", value: journals.filter((j) => j.status === "reversed").length, sub: `KES ${totals.reversed.toLocaleString()}`, cls: "bg-rose-50 text-rose-800 border border-rose-200" },
-            ].map((card) => (
-              <div key={card.label} className={`px-3 py-2 shadow-sm ${card.cls}`}>
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider opacity-75">{card.label}</span>
-                  <span className="text-sm font-black">{card.value}</span>
-                </div>
-                <p className="truncate text-[9px] font-semibold opacity-50">{card.sub}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">
-            <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
-              <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
+            <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
+              <div className="filter-bar flex items-center gap-1 overflow-x-auto px-2 py-1.5">
+                <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">Journals: {serverTotal}</span>
+                <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">Total: KES {totals.total.toLocaleString()}</span>
+                <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">Posted: KES {totals.posted.toLocaleString()}</span>
+                <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">Draft: {journals.filter((j) => j.status === "draft").length}</span>
+                <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
                 <div className="relative shrink-0">
                   <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
                   <input
                     value={filters.search}
                     onChange={setFilter("search")}
                     placeholder="Journal no, reference, narration"
-                    className="h-7 w-44 border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:border-[#0B3B2E]"
+                    className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
-                <select
-                  value={filters.status}
-                  onChange={setFilter("status")}
-                  className="h-7 shrink-0 border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:border-[#0B3B2E]"
-                >
+                <select value={filters.status} onChange={setFilter("status")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
                   <option value="all">All Statuses</option>
                   <option value="draft">Draft</option>
                   <option value="posted">Posted</option>
                   <option value="reversed">Reversed</option>
                 </select>
-                <select
-                  value={filters.journalType}
-                  onChange={setFilter("journalType")}
-                  className="h-7 shrink-0 border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:border-[#0B3B2E]"
-                >
+                <select value={filters.journalType} onChange={setFilter("journalType")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
                   <option value="all">All Journal Types</option>
                   {JOURNAL_TYPES.map((type) => (
-                    <option key={type.value} value={type.value}>
-                      {getJournalTypePresentation(type.value)?.label || type.label}
-                    </option>
+                    <option key={type.value} value={type.value}>{getJournalTypePresentation(type.value)?.label || type.label}</option>
                   ))}
                 </select>
-                <select
-                  value={filters.propertyId}
-                  onChange={setFilter("propertyId")}
-                  className="h-7 shrink-0 border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:border-[#0B3B2E]"
-                >
+                <select value={filters.propertyId} onChange={setFilter("propertyId")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
                   <option value="all">All Properties</option>
-                  {propertyOptions.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
+                  {propertyOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                 </select>
-                <button
-                  onClick={() => setFilters({ search: "", status: "all", journalType: "all", propertyId: "all" })}
-                  className="h-7 shrink-0 flex items-center gap-1 border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                >
+                <button onClick={() => setFilters({ search: "", status: "all", journalType: "all", propertyId: "all" })} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
                   <FaFilter size={9} /> Reset
                 </button>
-                <button onClick={loadJournals} className="h-7 shrink-0 flex items-center gap-1 border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaRedoAlt size={9} /></button>
-                <button onClick={openCreateModal} className="h-7 shrink-0 flex items-center gap-1 bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]"><FaPlus size={9} /> New Journal</button>
+                <button onClick={loadJournals} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaRedoAlt size={9} /></button>
+                <button onClick={openCreateModal} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]"><FaPlus size={9} /> New Journal</button>
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-auto">
-              <table className="w-full min-w-[1440px] text-[11px] border-collapse">
-                <thead className="sticky top-0 z-10 shadow-sm">
-                  <tr className="bg-[#0B3B2E] text-white">
-                    <th className="px-3 py-1 text-left font-black border-r border-white/10">Journal</th>
-                    <th className="px-3 py-1 text-left font-black border-r border-white/10">Date</th>
-                    <th className="px-3 py-1 text-left font-black border-r border-white/10">Type</th>
-                    <th className="px-3 py-1 text-left font-black border-r border-white/10">Property</th>
-                    <th className="px-3 py-1 text-left font-black border-r border-white/10">{isLandlordWorkspace ? "Owner" : "Landlord"}</th>
-                    <th className="px-3 py-1 text-left font-black border-r border-white/10">Debit</th>
-                    <th className="px-3 py-1 text-left font-black border-r border-white/10">Credit</th>
-                    <th className="px-3 py-1 text-right font-black border-r border-white/10">Amount</th>
-                    <th className="px-3 py-1 text-left font-black border-r border-white/10">Status</th>
-                    <th className="px-3 py-1 text-right font-black">Actions</th>
+            <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
+              <table className="w-full min-w-[1100px] text-[11px] border-collapse">
+                <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+                  <tr>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Journal #</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Debit Account</th>
+                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Credit Account</th>
+                    <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount (KES)</th>
+                    <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
+                    <th className="px-3 py-1 text-right font-bold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
-                    <tr>
-                      <td colSpan={10} className="px-4 py-10 text-center text-slate-500">Loading journals...</td>
-                    </tr>
+                    <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-500">Loading journals...</td></tr>
                   ) : journals.length === 0 ? (
-                    <tr>
-                      <td colSpan={10} className="px-4 py-10 text-center text-slate-500">No journals found.</td>
-                    </tr>
+                    <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-500">No journals found.</td></tr>
                   ) : (
                     currentPageRows.map((journal, index) => {
                       const busyPost = rowActionKey === `${journal._id}:post`;
                       const busyReverse = rowActionKey === `${journal._id}:reverse`;
                       const busyDelete = rowActionKey === `${journal._id}:delete`;
-
                       return (
-                        <tr
-                          key={journal._id}
-                          className={`border-b border-gray-100 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/60"} hover:bg-blue-50/40`}
-                        >
-                          <td className="px-3 py-1 border-r border-gray-100">
-                            <div className="font-black text-slate-900">{journal.journalNo}</div>
-                            <div className="text-[10px] text-slate-500">{journal.reference || journal.narration || "No reference"}</div>
-                          </td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{journal.date ? new Date(journal.date).toLocaleDateString() : "-"}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{getJournalTypePresentation(journal.journalType)?.label || journal.journalType}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{journal.property?.propertyName || journal.property?.name || "N/A"}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{journal.landlord?.landlordName || journal.landlord?.name || "-"}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{journal.debitAccount?.code} - {journal.debitAccount?.name}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{journal.creditAccount?.code} - {journal.creditAccount?.name}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">KES {Number(journal.amount || 0).toLocaleString()}</td>
-                          <td className="px-3 py-1 border-r border-gray-100">
-                            <div className="flex flex-col gap-0.5">
-                              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${STATUS_STYLES[journal.status] || STATUS_STYLES.draft}`}>
-                                {journal.status}
-                              </span>
-                              {journal.approvalStatus && journal.approvalStatus !== "not_required" && (
-                                <span className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-bold ${APPROVAL_STYLES[journal.approvalStatus] || ""}`}>
-                                  {APPROVAL_LABELS[journal.approvalStatus] || journal.approvalStatus}
-                                </span>
-                              )}
-                            </div>
+                        <tr key={journal._id} className={`cursor-pointer border-b border-gray-100 transition-colors ${index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                          <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900 whitespace-nowrap" title={[journal.narration, journal.reference, journal.property?.propertyName || journal.property?.name, journal.landlord?.landlordName || journal.landlord?.name].filter(Boolean).join(" | ")}>{journal.journalNo}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700 whitespace-nowrap">{journal.date ? new Date(journal.date).toLocaleDateString("en-GB") : "—"}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[130px] truncate">{getJournalTypePresentation(journal.journalType)?.label || journal.journalType}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[200px] truncate" title={journal.debitAccount?.name}><span className="font-mono font-bold text-slate-400 mr-1">{journal.debitAccount?.code}</span>{journal.debitAccount?.name || "—"}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[200px] truncate" title={journal.creditAccount?.name}><span className="font-mono font-bold text-slate-400 mr-1">{journal.creditAccount?.code}</span>{journal.creditAccount?.name || "—"}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{Number(journal.amount || 0).toLocaleString()}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 text-center" title={journal.approvalStatus && journal.approvalStatus !== "not_required" ? (APPROVAL_LABELS[journal.approvalStatus] || journal.approvalStatus) : undefined}>
+                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${STATUS_STYLES[journal.status] || STATUS_STYLES.draft}`}>{journal.status}</span>
                           </td>
                           <td className="px-3 py-1 text-right">
-                            <div className="inline-flex flex-wrap justify-end gap-2">
-                              {journal.status === "draft" && (
-                                <>
-                                  <button
-                                    onClick={() => openEditModal(journal)}
-                                    disabled={!canUpdateJournal || !!rowActionKey}
-                                    className="inline-flex items-center gap-1 border border-blue-300 bg-blue-50 px-3 py-1.5 text-[10px] font-black text-blue-700 disabled:opacity-60"
-                                  >
-                                    <FaEdit /> Edit
-                                  </button>
-                                  <button
-                                    onClick={() => handlePostJournal(journal)}
-                                    disabled={!canPostJournal || !!rowActionKey}
-                                    className="inline-flex items-center gap-1 border border-green-300 bg-green-50 px-3 py-1.5 text-[10px] font-black text-green-700 disabled:opacity-60"
-                                  >
-                                    <FaCheck /> {busyPost ? "Posting..." : "Post"}
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteJournal(journal)}
-                                    disabled={!canDeleteJournal || !!rowActionKey}
-                                    className="inline-flex items-center gap-1 border border-rose-300 bg-rose-50 px-3 py-1.5 text-[10px] font-black text-rose-700 disabled:opacity-60"
-                                  >
-                                    <FaTrash /> {busyDelete ? "Deleting..." : "Delete"}
-                                  </button>
-                                </>
-                              )}
+                            <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                               {journal.status === "posted" && (
-                                <button
-                                  onClick={() => handleReverseJournal(journal)}
-                                  disabled={!canReverseJournal || !!rowActionKey}
-                                  className="inline-flex items-center gap-1 border border-amber-300 bg-amber-50 px-3 py-1.5 text-[10px] font-black text-amber-700 disabled:opacity-60"
-                                >
-                                  <FaUndo /> {busyReverse ? "Reversing..." : "Reverse"}
-                                </button>
+                                <button onClick={() => setGlJournal(journal)} className="rounded p-1 text-teal-600 hover:bg-teal-50 hover:text-teal-800" title="View GL Entries"><FaBook size={12} /></button>
+                              )}
+                              {journal.status === "draft" && canUpdateJournal && (
+                                <button onClick={() => openEditModal(journal)} disabled={!canUpdateJournal || !!rowActionKey} className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800 disabled:opacity-40" title="Edit"><FaEdit size={12} /></button>
+                              )}
+                              {journal.status === "draft" && canPostJournal && (
+                                <button onClick={() => handlePostJournal(journal)} disabled={!canPostJournal || !!rowActionKey} className="rounded p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800 disabled:opacity-40" title={busyPost ? "Posting…" : "Post Journal"}><FaCheck size={12} /></button>
+                              )}
+                              {journal.status === "posted" && canReverseJournal && (
+                                <button onClick={() => handleReverseJournal(journal)} disabled={!canReverseJournal || !!rowActionKey} className="rounded p-1 text-amber-600 hover:bg-amber-50 hover:text-amber-800 disabled:opacity-40" title={busyReverse ? "Reversing…" : "Reverse"}><FaUndo size={12} /></button>
+                              )}
+                              {journal.status === "draft" && canDeleteJournal && (
+                                <button onClick={() => handleDeleteJournal(journal)} disabled={!canDeleteJournal || !!rowActionKey} className="rounded p-1 text-rose-600 hover:bg-rose-50 hover:text-rose-800 disabled:opacity-40" title={busyDelete ? "Deleting…" : "Delete"}><FaTrash size={12} /></button>
                               )}
                             </div>
                           </td>
@@ -738,7 +664,7 @@ const JournalEntries = () => {
             </div>
             <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
               <div className="font-semibold">Showing <span className="font-bold text-slate-900">{journals.length === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1}</span> to <span className="font-bold text-slate-900">{Math.min(safeCurrentPage * pageSize, serverTotal)}</span> of <span className="font-bold text-slate-900">{serverTotal}</span> journal(s)</div>
-              <div className="flex items-center gap-3"><div className="flex items-center gap-1.5"><span className="font-semibold text-slate-500">Per page:</span><select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }} className="h-7 border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none">{[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}</select></div><button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="border border-slate-300 px-3 py-1 font-semibold hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button><span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span><button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="border border-slate-300 px-3 py-1 font-semibold hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button></div>
+              <div className="flex items-center gap-3"><div className="flex items-center gap-1.5"><span className="font-semibold text-slate-500">Per page:</span><select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }} className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none">{[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}</select></div><button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button><span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span><button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button></div>
             </div>
           </div>
         </div>
@@ -970,6 +896,27 @@ const JournalEntries = () => {
           </div>
         </div>
       )}
+      <JournalEntriesDrawer
+        open={!!glJournal}
+        onClose={() => setGlJournal(null)}
+        title="Journal Entry"
+        transactionRef={glJournal?.journalNo}
+        date={glJournal?.date ? new Date(glJournal.date).toLocaleDateString("en-GB") : undefined}
+        amount={glJournal?.amount}
+        status={glJournal?.status}
+        statusColors={STATUS_STYLES[glJournal?.status] || STATUS_STYLES.draft}
+        contextFields={glJournal ? [
+          { label: "Type",      value: getJournalTypePresentation(glJournal.journalType)?.label || glJournal.journalType },
+          { label: "Reference", value: glJournal.reference },
+          { label: "Narration", value: glJournal.narration },
+          { label: isLandlordWorkspace ? "Owner" : "Landlord", value: glJournal.landlord?.landlordName || glJournal.landlord?.name },
+          { label: "Property",  value: glJournal.property?.propertyName || glJournal.property?.name },
+        ] : []}
+        businessId={currentCompany?._id}
+        sourceType="manual_adjustment"
+        sourceId={glJournal?._id}
+      />
+
     </DashboardLayout>
   );
 

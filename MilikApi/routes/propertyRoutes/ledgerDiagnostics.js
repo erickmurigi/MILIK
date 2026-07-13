@@ -11,6 +11,7 @@ import {
   repairBalanceGroup,
   repairRecomputeBalances,
   repairRepostInvoices,
+  getEntriesBySource,
 } from "../../controllers/propertyController/ledgerDiagnostics.js";
 
 const router = express.Router();
@@ -28,5 +29,8 @@ router.get("/health-history", verifyUser, requireCompanyModule("accounts"), getH
 router.post("/repair/balance-group/:groupId", verifyUser, requireCompanyModule("accounts"), repairBalanceGroup);
 router.post("/repair/recompute-balances", verifyUser, requireCompanyModule("accounts"), repairRecomputeBalances);
 router.post("/repair/repost-invoices", verifyUser, requireCompanyModule("accounts"), repairRepostInvoices);
+
+// ─── UNIVERSAL GL-by-source lookup (used by all transaction detail drawers) ──
+router.get("/entries", verifyToken, getEntriesBySource);
 
 export default router;

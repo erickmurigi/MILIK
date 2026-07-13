@@ -3,6 +3,7 @@ import { useEntityCache } from "../../hooks/useEntityCache";
 import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
 import {
+  FaBook,
   FaCalendarAlt,
   FaCheck,
   FaChevronDown,
@@ -20,6 +21,7 @@ import {
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import JournalEntriesDrawer from "../../components/Accounting/JournalEntriesDrawer";
 import { useConfirm } from "../../context/ConfirmContext";
 import {
   createLandlordStandingOrder,
@@ -182,6 +184,7 @@ const LandlordStandingOrders = () => {
   const [serverPages, setServerPages] = useState(1);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [glOrder, setGlOrder] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState("");
   const [filters, setFilters] = useTabState("/landlords/standing-orders:filters", { search: "", status: "all", landlordId: "all", propertyId: "all" });
@@ -768,6 +771,13 @@ const LandlordStandingOrders = () => {
                               >
                                 <FaTrash /> Delete
                               </button>
+                              <button
+                                onClick={() => setGlOrder(row)}
+                                className="inline-flex h-7 items-center gap-1 rounded border border-teal-300 bg-teal-50 px-2.5 text-[11px] font-bold text-teal-700"
+                                title="View GL Entries"
+                              >
+                                <FaBook /> GL
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -1240,6 +1250,31 @@ const LandlordStandingOrders = () => {
           </div>
         </div>
       )}
+      <JournalEntriesDrawer
+        open={!!glOrder}
+        onClose={() => setGlOrder(null)}
+        title="Standing Order"
+        transactionRef={glOrder?.standingOrderNo || glOrder?.referenceNo}
+        date={glOrder ? new Date(glOrder.startDate || glOrder.createdAt).toLocaleDateString("en-GB") : ""}
+        amount={glOrder?.amount}
+        status={glOrder?.status}
+        statusColors={
+          glOrder?.status === "active" ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+          : glOrder?.status === "paused" ? "bg-amber-100 text-amber-700 border-amber-200"
+          : glOrder?.status === "stopped" ? "bg-rose-100 text-rose-700 border-rose-200"
+          : "bg-slate-100 text-slate-700 border-slate-200"
+        }
+        contextFields={glOrder ? [
+          { label: "Title",     value: glOrder.title },
+          { label: "Landlord",  value: getLandlordLabel(glOrder.landlord) },
+          { label: "Property",  value: glOrder.property?.propertyName || glOrder.property?.name },
+          { label: "Frequency", value: frequencyLabel(glOrder.frequency) },
+        ].filter((f) => f.value) : []}
+        businessId={currentCompany?._id}
+        sourceType="recurring_deduction"
+        sourceId={glOrder?._id}
+      />
+
     </DashboardLayout>
   );
 };

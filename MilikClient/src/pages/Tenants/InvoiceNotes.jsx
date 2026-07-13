@@ -18,10 +18,12 @@ import {
   FaSms,
   FaTimes,
   FaUndo,
+  FaUpload,
 } from "react-icons/fa";
 import toast from "react-hot-toast";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
+import InvoiceNotesImportModal from "../../components/Modals/InvoiceNotesImportModal";
 import { getTenants } from "../../redux/tenantsRedux";
 import { getChartOfAccounts, getTenantInvoices } from "../../redux/apiCalls";
 import {
@@ -30,6 +32,7 @@ import {
   getCreditableTenantInvoices,
   getTenantInvoiceNoteChargeTypes,
   getTenantInvoiceNotes,
+  bulkImportInvoiceNotes,
 } from "../../redux/invoiceApi";
 import { adminRequests } from "../../utils/requestMethods";
 import useScopedSessionDraft, { buildScopedDraftKey } from "../../hooks/useScopedSessionDraft";
@@ -339,6 +342,7 @@ const InvoiceNotes = () => {
   const [expandedNotes, setExpandedNotes] = useState(new Set());
   const [communicationModal, setCommunicationModal] = useState(null);
   const [reverseNoteModal, setReverseNoteModal] = useState({ open: false, note: null, reason: "", loading: false });
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const selectedNoteTenantIds = useMemo(() => {
     const objs = notes.filter((n) => selectedNotes.includes(String(n._id)));
@@ -844,6 +848,7 @@ const InvoiceNotes = () => {
                 <button type="button" onClick={resetWorkspaceFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} hover:bg-[#0A3127]`}><FaRedoAlt size={10} /></button>
                 <button type="button" onClick={loadData} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} hover:bg-[#0A3127]`}><FaRedoAlt size={10} /></button>
                 <button type="button" onClick={openAddModal} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_ORANGE} hover:bg-[#e67e00]`}><FaPlus size={10} /> Add Note</button>
+                <button type="button" onClick={() => setShowImportModal(true)} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} hover:bg-[#0A3127]`}><FaUpload size={10} /> Import</button>
                 <button
                   type="button"
                   onClick={() => setCommunicationModal({ contextType: "tenant_bulk", recordIds: selectedNoteTenantIds, title: `Notify ${selectedNoteTenantIds.length} Tenant${selectedNoteTenantIds.length !== 1 ? "s" : ""}`, subtitle: "Send credit/debit note notification via SMS.", allowedChannels: ["sms", "email"], defaultChannel: "sms" })}
@@ -1301,6 +1306,18 @@ const InvoiceNotes = () => {
           </div>
         </div>
       )}
+
+      <InvoiceNotesImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImport={async (notes) => {
+          const result = await bulkImportInvoiceNotes({ notes });
+          if ((result?.data?.successful?.length ?? 0) > 0) {
+            await loadData();
+          }
+          return result;
+        }}
+      />
     </DashboardLayout>
   );
 };

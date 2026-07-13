@@ -12,6 +12,7 @@ import {
   getTenantInvoicesList,
   getTakeOnBalances,
   updateTakeOnBalance,
+  bulkImportInvoiceNotes,
 } from "../../controllers/propertyController/tenantInvoices.js";
 import TenantInvoice from "../../models/TenantInvoice.js";
 import { generateInvoicePdf } from "../../services/invoicePdfService.js";
@@ -28,6 +29,7 @@ router.get("/take-on-balances", verifyUser, getTakeOnBalances);
 router.post("/", verifyUser, createTenantInvoice);
 router.post("/batch", verifyUser, createTenantInvoicesBatch);
 router.post("/notes", verifyUser, createTenantInvoiceNote);
+router.post("/notes/bulk-import", verifyUser, bulkImportInvoiceNotes);
 router.post("/notes/:id/reverse", verifyUser, reverseTenantInvoiceNote);
 
 // Parameterised routes

@@ -61,6 +61,15 @@ export const createTenantInvoiceNote = async (noteData) => {
   }
 };
 
+export const bulkImportInvoiceNotes = async ({ notes = [], business = null } = {}) => {
+  try {
+    const res = await adminRequests.post("/tenant-invoices/notes/bulk-import", { notes, business }, { timeout: 0 });
+    return res;
+  } catch (err) {
+    throw extractApiError(err);
+  }
+};
+
 export const reverseTenantInvoiceNote = async (noteId, payload = {}) => {
   try {
     const res = await adminRequests.post(`/tenant-invoices/notes/${noteId}/reverse`, payload);

@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
-import { FaCalculator, FaEye, FaPlay, FaSyncAlt } from "react-icons/fa";
+import { FaBook, FaCalculator, FaEye, FaPlay, FaSyncAlt } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import JournalEntriesDrawer from "../../components/Accounting/JournalEntriesDrawer";
 import { previewDepreciation, runDepreciation } from "../../redux/apiCalls";
 
 const GRN = "#0B3B2E";
@@ -28,6 +29,7 @@ const FixedAssetsDepreciation = () => {
 
   const [preview, setPreview]               = useState(null);
   const [depPeriodStart, setDepPeriodStart] = useState("");
+  const [glAsset, setGlAsset]              = useState(null);
   const [depPeriodEnd, setDepPeriodEnd]     = useState("");
   const [previewLoading, setPreviewLoading] = useState(false);
   const [depRunning, setDepRunning]         = useState(false);
@@ -172,7 +174,10 @@ const FixedAssetsDepreciation = () => {
                         : "Never"}
                     </td>
                     <td className="px-3 py-1 text-center">
-                      <span className="inline-block rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Yes</span>
+                      <div className="flex items-center justify-center gap-2">
+                        <span className="inline-block rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Yes</span>
+                        <button onClick={() => setGlAsset(p)} className="rounded p-1 text-teal-600 hover:bg-teal-50 hover:text-teal-800" title="View past GL entries for this asset"><FaBook size={10} /></button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -245,6 +250,24 @@ const FixedAssetsDepreciation = () => {
 
         </div>
       </div>
+
+      <JournalEntriesDrawer
+        open={!!glAsset}
+        onClose={() => setGlAsset(null)}
+        title="Fixed Asset Depreciation"
+        transactionRef={glAsset?.code ? `${glAsset.code} — ${glAsset.name}` : glAsset?.name}
+        amount={glAsset?.bookValue}
+        contextFields={glAsset ? [
+          { label: "Category",   value: glAsset.category },
+          { label: "Method",     value: methodLabel(glAsset.depreciationMethod) },
+          { label: "Book Value", value: `KES ${fmt(glAsset.bookValue)}` },
+          { label: "Monthly Dep", value: `KES ${fmt(glAsset.monthlyDepreciation)}` },
+        ].filter((f) => f.value) : []}
+        businessId={businessId}
+        sourceType="fixed_asset_depreciation"
+        sourceId={glAsset?._id}
+      />
+
     </DashboardLayout>
   );
 };

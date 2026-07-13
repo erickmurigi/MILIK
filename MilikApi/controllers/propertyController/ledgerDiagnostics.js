@@ -784,3 +784,46 @@ export const repairRepostInvoices = async (req, res) => {
 
   return res.status(capturedCode).json(capturedData);
 };
+
+// ─── GL ENTRIES BY SOURCE TRANSACTION ────────────────────────────────────────
+// GET /api/ledger/entries?businessId=X&sourceType=Y&sourceId=Z
+export const getEntriesBySource = async (req, res) => {
+  const { businessId, sourceType, sourceId } = req.query;
+  if (!businessId || !sourceType || !sourceId) {
+    return res.status(400).json({ error: "businessId, sourceType, and sourceId are required" });
+  }
+  try {
+    const entries = await FinancialLedgerEntry.find({
+      business: businessId,
+      sourceTransactionType: sourceType,
+      sourceTransactionId: String(sourceId),
+    })
+      .populate({ path: "accountId", select: "code name type" })
+      .sort({ transactionDate: 1, createdAt: 1 })
+      .lean();
+
+    const formatted = entries.map((e) => ({
+      _id:             e._id,
+      accountCode:     e.accountId?.code     || "—",
+      accountName:     e.accountId?.name     || "—",
+      accountType:     e.accountId?.type     || "—",
+      direction:       e.direction,
+      debit:           e.debit  || 0,
+      credit:          e.credit || 0,
+      amount:          e.amount,
+      category:        e.category,
+      status:          e.status,
+      transactionDate: e.transactionDate,
+      notes:           e.notes  || "",
+      reversalOf:      e.reversalOf  ?? null,
+      journalGroupId:  e.journalGroupId ?? null,
+    }));
+
+    const totalDebit  = formatted.reduce((s, e) => s + e.debit,  0);
+    const totalCredit = formatted.reduce((s, e) => s + e.credit, 0);
+
+    return res.status(200).json({ entries: formatted, totalDebit, totalCredit });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+};

@@ -10,8 +10,9 @@ import {
   validateAudit,
   generatePdf,
   getStatementSummary,
+  adminMarkRevised,
 } from "../../controllers/propertyController/statementController.js";
-import { verifyToken, verifyCompanyScope } from "../../controllers/verifyToken.js";
+import { verifyToken, verifyCompanyScope, verifyAdmin } from "../../controllers/verifyToken.js";
 
 const router = express.Router();
 
@@ -74,6 +75,12 @@ router.delete("/:statementId", deleteDraft);
  * Validate statement audit integrity (header counts vs actual lines)
  */
 router.get("/:statementId/validate", validateAudit);
+
+/**
+ * POST /api/statements/:statementId/admin-mark-revised
+ * Admin backdoor: force-mark an approved statement as revised to unblock duplicate-period errors
+ */
+router.post("/:statementId/admin-mark-revised", verifyAdmin, adminMarkRevised);
 
 /**
  * GET /api/statements/summary

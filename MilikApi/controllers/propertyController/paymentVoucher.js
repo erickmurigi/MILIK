@@ -460,7 +460,10 @@ const isCashbookLikeAccount = (account = {}) => {
 
 
 const syncLinkedProcessedStatementForVoucher = async ({ voucher, businessId = null } = {}) => {
-  const referenceId = String(voucher?.reference || "").trim();
+  // Prefer the dedicated field; fall back to legacy reference-as-ObjectId for old records.
+  const referenceId = String(
+    voucher?.sourceProcessedStatement || voucher?.reference || ""
+  ).trim();
   if (!referenceId || !mongoose.Types.ObjectId.isValid(referenceId)) return null;
 
   try {
