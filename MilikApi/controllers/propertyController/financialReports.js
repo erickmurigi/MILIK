@@ -2299,13 +2299,13 @@ export const getLiabilitySubledger = async (req, res, next) => {
         { $match: glMatch },
         {
           $group: {
-            _id:             "$sourceTransactionId",
-            credit:          { $sum: creditExpr },
-            debit:           { $sum: debitExpr },
-            transactionDate: { $last: "$transactionDate" },
-            narration:       { $last: "$narration" },
-            reference:       { $last: "$reference" },
-            property:        { $last: "$property" },
+            _id:                   "$sourceTransactionId",
+            credit:                { $sum: creditExpr },
+            debit:                 { $sum: debitExpr },
+            transactionDate:       { $last: "$transactionDate" },
+            notes:                 { $last: "$notes" },
+            sourceTransactionType: { $last: "$sourceTransactionType" },
+            property:              { $last: "$property" },
           },
         },
       ]);
@@ -2315,14 +2315,30 @@ export const getLiabilitySubledger = async (req, res, next) => {
           sourceId:   r._id,
           balance:    round2(r.credit - r.debit),
           date:       r.transactionDate,
-          narration:  r.narration  || "",
-          reference:  r.reference  || "",
+          notes:      r.notes || "",
+          sourceType: r.sourceTransactionType || "",
           propertyId: r.property,
         }))
         .filter((r) => r.balance > 0.005);
 
       const total = round2(rows.reduce((s, r) => s + r.balance, 0));
       if (!rows.length) return res.json({ success: true, tab, accountCode, accountName: account.name, total: 0, groups: [] });
+
+      // Resolve reference numbers from source documents
+      const invoiceIds   = rows.filter((r) => r.sourceType === "invoice"              && r.sourceId).map((r) => r.sourceId);
+      const statementIds = rows.filter((r) => r.sourceType === "processed_statement"  && r.sourceId).map((r) => r.sourceId);
+
+      const [invoiceDocs, statementDocs] = await Promise.all([
+        invoiceIds.length
+          ? TenantInvoice.find({ _id: { $in: invoiceIds } }).select("invoiceNumber description").lean()
+          : [],
+        statementIds.length
+          ? (await import("../../models/ProcessedStatement.js")).default
+              .find({ _id: { $in: statementIds } }).select("sourceStatementNumber periodStart periodEnd").lean()
+          : [],
+      ]);
+      const invoiceMap   = new Map(invoiceDocs.map((d) => [String(d._id), d]));
+      const statementMap = new Map(statementDocs.map((d) => [String(d._id), d]));
 
       const propIds = [...new Set(rows.map((r) => r.propertyId).filter(Boolean))];
       const props   = propIds.length
@@ -2332,6 +2348,17 @@ export const getLiabilitySubledger = async (req, res, next) => {
 
       const byMonth = new Map();
       rows.forEach((r) => {
+        let reference = "";
+        let narration = r.notes;
+        if (r.sourceType === "invoice") {
+          const inv = invoiceMap.get(String(r.sourceId));
+          reference = inv?.invoiceNumber || "";
+          narration = narration || inv?.description || "";
+        } else if (r.sourceType === "processed_statement") {
+          const stmt = statementMap.get(String(r.sourceId));
+          reference = stmt?.sourceStatementNumber || "";
+        }
+
         const d     = new Date(r.date || new Date());
         const key   = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
         const label = d.toLocaleString("en-KE", { month: "long", year: "numeric" });
@@ -2340,8 +2367,8 @@ export const getLiabilitySubledger = async (req, res, next) => {
         g.subtotal = round2(g.subtotal + r.balance);
         g.rows.push({
           sourceId:   String(r.sourceId || ""),
-          reference:  r.reference,
-          narration:  r.narration,
+          reference,
+          narration,
           property:   r.propertyId ? (propNameMap.get(String(r.propertyId)) || "") : "",
           vatBalance: r.balance,
           date:       r.date,
