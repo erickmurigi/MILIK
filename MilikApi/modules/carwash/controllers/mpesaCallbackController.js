@@ -1336,19 +1336,23 @@ export const registerCarWashPaybillUrls = async (req, res, next) => {
 
     try {
       safaricomResponse = await tryRegisterC2BUrls(safaricomBase, "v1", accessToken, shortCode, responseType, confirmationURL, validationURL);
+      console.log("[RegisterURLs] v1 succeeded for %s: %j", shortCode, safaricomResponse);
     } catch (err) {
       v1Error = extractSafaricomError(err);
       console.warn("[RegisterURLs] v1 failed (%s) — retrying with v2", v1Error);
       try {
         safaricomResponse = await tryRegisterC2BUrls(safaricomBase, "v2", accessToken, shortCode, responseType, confirmationURL, validationURL);
         v1Error = null;
+        console.log("[RegisterURLs] v2 succeeded for %s: %j", shortCode, safaricomResponse);
       } catch (err2) {
         const v2Error = extractSafaricomError(err2);
+        console.warn("[RegisterURLs] v2 also failed for %s — v1: %s | v2: %s", shortCode, v1Error, v2Error);
         // "URLs already registered" — Safaricom has existing URLs for this shortcode.
         // Treat as soft success: re-registration often still updates the target URLs.
         if (isAlreadyRegistered(v2Error) || isAlreadyRegistered(v1Error)) {
           alreadyRegistered = true;
           safaricomResponse = { note: "already_registered" };
+          console.warn("[RegisterURLs] 'already registered' for %s — Safaricom may still have old URLs. Manual Daraja portal update required if callbacks don't arrive.", shortCode);
         } else {
           return res.status(502).json({
             success: false,
@@ -1361,6 +1365,8 @@ export const registerCarWashPaybillUrls = async (req, res, next) => {
       }
     }
 
+    console.log("[RegisterURLs] Final result for %s — alreadyRegistered=%s confirmationURL=%s", shortCode, alreadyRegistered, confirmationURL);
+
     res.json({
       success: true,
       alreadyRegistered,
@@ -1369,7 +1375,7 @@ export const registerCarWashPaybillUrls = async (req, res, next) => {
           `The system has submitted the updated URLs (${confirmationURL}) — ` +
           `do a test payment to confirm callbacks are arriving. ` +
           `If they are not, log in to the Daraja portal and manually update the C2B confirmation URL to: ${confirmationURL}`
-        : "Callback URLs registered with Safaricom successfully. Payments will now flow through.",
+        : `Callback URLs registered with Safaricom successfully. Confirmation URL: ${confirmationURL}`,
       data: { validationURL, confirmationURL, safaricomResponse },
     });
   } catch (err) {
