@@ -1474,7 +1474,11 @@ export default function CompanySetupPage() {
     setRegisteringUrls(true);
     try {
       const result = await carWashApi.registerMpesaUrls(shortCode);
-      toast.success(result?.message || "URLs registered with Safaricom. Payments will now flow through.");
+      if (result?.alreadyRegistered) {
+        toast.warning(result.message, { autoClose: 12000 });
+      } else {
+        toast.success(result?.message || "URLs registered with Safaricom. Payments will now flow through.");
+      }
     } catch (err) {
       toast.error(err?.response?.data?.message || err?.message || "URL registration failed. Check your Consumer Key and Secret.");
     } finally {

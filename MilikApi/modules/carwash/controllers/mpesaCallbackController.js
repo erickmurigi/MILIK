@@ -1325,9 +1325,15 @@ export const registerCarWashPaybillUrls = async (req, res, next) => {
     }
 
     // Register validation and confirmation URLs — try v1 first, fall back to v2.
-    // Some Daraja apps/paybills only accept one version; we try both before failing.
+    // "URLs are already registered" is treated as a soft success: Safaricom still
+    // updates the URLs in many cases even when returning this error code.
+    const isAlreadyRegistered = (msg = "") =>
+      /already.registered|url.*registered|registered.*url/i.test(msg);
+
     let safaricomResponse;
     let v1Error;
+    let alreadyRegistered = false;
+
     try {
       safaricomResponse = await tryRegisterC2BUrls(safaricomBase, "v1", accessToken, shortCode, responseType, confirmationURL, validationURL);
     } catch (err) {
@@ -1335,22 +1341,35 @@ export const registerCarWashPaybillUrls = async (req, res, next) => {
       console.warn("[RegisterURLs] v1 failed (%s) — retrying with v2", v1Error);
       try {
         safaricomResponse = await tryRegisterC2BUrls(safaricomBase, "v2", accessToken, shortCode, responseType, confirmationURL, validationURL);
-        v1Error = null; // v2 succeeded
+        v1Error = null;
       } catch (err2) {
         const v2Error = extractSafaricomError(err2);
-        return res.status(502).json({
-          success: false,
-          message:
-            `Safaricom rejected the URL registration. ` +
-            `v1: ${v1Error} | v2: ${v2Error}. ` +
-            `Ensure your Daraja app has the C2B API product enabled and the Consumer Key belongs to shortcode ${shortCode}.`,
-        });
+        // "URLs already registered" — Safaricom has existing URLs for this shortcode.
+        // Treat as soft success: re-registration often still updates the target URLs.
+        if (isAlreadyRegistered(v2Error) || isAlreadyRegistered(v1Error)) {
+          alreadyRegistered = true;
+          safaricomResponse = { note: "already_registered" };
+        } else {
+          return res.status(502).json({
+            success: false,
+            message:
+              `Safaricom rejected the URL registration. ` +
+              `v1: ${v1Error} | v2: ${v2Error}. ` +
+              `Ensure your Daraja app has the C2B API product enabled and the Consumer Key belongs to shortcode ${shortCode}.`,
+          });
+        }
       }
     }
 
     res.json({
       success: true,
-      message: "Callback URLs registered with Safaricom successfully. Payments will now flow through.",
+      alreadyRegistered,
+      message: alreadyRegistered
+        ? `Safaricom reports URLs are already registered for shortcode ${shortCode}. ` +
+          `The system has submitted the updated URLs (${confirmationURL}) — ` +
+          `do a test payment to confirm callbacks are arriving. ` +
+          `If they are not, log in to the Daraja portal and manually update the C2B confirmation URL to: ${confirmationURL}`
+        : "Callback URLs registered with Safaricom successfully. Payments will now flow through.",
       data: { validationURL, confirmationURL, safaricomResponse },
     });
   } catch (err) {
