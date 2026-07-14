@@ -6,6 +6,7 @@ import Unit from "../../models/Unit.js";
 import Property from "../../models/Property.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
+import MpesaCollection from "../../models/MpesaCollection.js";
 import { emitToCompany } from "../../utils/socketManager.js";
 import { postEntry, postReversal } from "../../services/ledgerPostingService.js";
 import {
@@ -2317,6 +2318,313 @@ export const createPayment = async (req, res, next) => {
         return res.status(400).json({ success: false, message: "Receipt number already exists in this company." });
       }
     }
+    return next(err);
+  }
+};
+
+/**
+ * POST /api/rent-payments/batch
+ * Create up to 100 receipts in one request. Each item succeeds or fails
+ * independently — a single bad row never aborts the whole batch.
+ *
+ * Body:
+ *   {
+ *     business?: ObjectId,        // fallback to req.user.company
+ *     cashbook: string,           // shared default (overridable per item)
+ *     paymentMethod: string,      // shared default
+ *     paymentDate: Date,          // shared default
+ *     month: number,              // shared default
+ *     year: number,               // shared default
+ *     isConfirmed?: boolean,      // default true
+ *     items: [{
+ *       tenant: ObjectId,
+ *       unit: ObjectId,
+ *       amount: number,
+ *       referenceNumber: string,
+ *       cashbook?: string,        // per-item override
+ *       paymentMethod?: string,
+ *       paymentDate?: Date,
+ *       month?: number,
+ *       year?: number,
+ *       description?: string,
+ *       collectionId?: ObjectId,  // MpesaCollection to mark as captured
+ *     }]
+ *   }
+ */
+export const batchCreatePayments = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId || !isValidObjectId(businessId)) {
+      return res.status(400).json({ success: false, message: "Valid business is required." });
+    }
+
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    if (!items.length) {
+      return res.status(400).json({ success: false, message: "No items provided in the batch." });
+    }
+    if (items.length > 100) {
+      return res.status(400).json({ success: false, message: "Batch limit is 100 receipts per request." });
+    }
+
+    // Shared defaults (each item can override individually)
+    const sharedCashbook            = String(req.body?.cashbook || "").trim();
+    const sharedMethod              = String(req.body?.paymentMethod || "mobile_money");
+    const sharedPaymentDate         = req.body?.paymentDate;
+    const sharedMonth               = req.body?.month;
+    const sharedYear                = req.body?.year;
+    const sharedPaidDirectToLandlord = req.body?.paidDirectToLandlord === true;
+    const isConfirmedOnCreate        = req.body?.isConfirmed !== false; // default true for batch
+
+    // Validate: catch within-batch duplicate refNumbers early
+    const batchRefs = items.map((it) => String(it?.referenceNumber || "").trim()).filter(Boolean);
+    if (new Set(batchRefs).size !== batchRefs.length) {
+      return res.status(400).json({ success: false, message: "Batch contains duplicate reference numbers." });
+    }
+
+    // Resolve actor and shared cashbook account once for the whole batch
+    let actorUserId = null;
+    if (isConfirmedOnCreate) {
+      try {
+        actorUserId = await resolveActorUserId({ req, business: businessId });
+      } catch (e) {
+        return res.status(400).json({ success: false, message: e.message });
+      }
+    }
+
+    let sharedCashbookAccount = null;
+    if (!sharedPaidDirectToLandlord && sharedCashbook && isConfirmedOnCreate) {
+      try {
+        sharedCashbookAccount = await resolveCashbookAccount(businessId, {
+          cashbook: sharedCashbook,
+          paymentMethod: sharedMethod,
+          paidDirectToLandlord: false,
+        });
+      } catch (e) {
+        return res.status(400).json({ success: false, message: e.message });
+      }
+    }
+
+    // One query to find all ref-number conflicts in the DB at once
+    const existingRefs = await RentPayment.find(
+      { business: businessId, referenceNumber: { $in: batchRefs } },
+      { referenceNumber: 1 }
+    ).lean();
+    const usedRefSet = new Set(existingRefs.map((p) => p.referenceNumber));
+
+    // Atomically reserve N receipt numbers in one findOneAndUpdate
+    const counter = await SequenceCounter.findOneAndUpdate(
+      { business: String(businessId), key: "rent_receipt" },
+      { $inc: { sequence: items.length } },
+      { upsert: true, new: true }
+    ).lean();
+    const firstSeq = counter.sequence - items.length + 1;
+    const receiptNumbers = items.map((_, i) => `REC${String(firstSeq + i).padStart(5, "0")}`);
+
+    // Process each item sequentially (preserves invoice-snapshot accuracy for same-tenant items)
+    const succeeded = [];
+    const failed    = [];
+    const tenantDeltas      = new Map(); // tenantId → cumulative negative delta
+    const affectedAccountIds = new Set();
+    const capturedCollections = [];    // { collectionId, receiptId, tenantId }
+
+    for (let i = 0; i < items.length; i++) {
+      const item          = items[i];
+      const receiptNumber = receiptNumbers[i];
+
+      try {
+        const tenantId  = item?.tenant;
+        const unitId    = item?.unit;
+        const refNumber = String(item?.referenceNumber || "").trim();
+        const itemAmount  = Number(item?.amount || 0);
+        const itemCashbook = String(item?.cashbook || sharedCashbook).trim();
+        const itemMethod   = String(item?.paymentMethod || sharedMethod);
+        const itemDate     = item?.paymentDate || sharedPaymentDate;
+        const itemMonth    = item?.month != null ? Number(item.month) : (sharedMonth != null ? Number(sharedMonth) : undefined);
+        const itemYear     = item?.year  != null ? Number(item.year)  : (sharedYear  != null ? Number(sharedYear)  : undefined);
+        const collectionId = item?.collectionId && isValidObjectId(item.collectionId) ? item.collectionId : null;
+        const itemPaidDirectToLandlord = item?.paidDirectToLandlord != null
+          ? item.paidDirectToLandlord === true
+          : sharedPaidDirectToLandlord;
+
+        if (!isValidObjectId(tenantId) || !isValidObjectId(unitId)) {
+          throw Object.assign(new Error("Valid tenant and unit are required."), { statusCode: 400 });
+        }
+        if (!refNumber) {
+          throw Object.assign(new Error("Reference number is required."), { statusCode: 400 });
+        }
+        if (itemAmount <= 0) {
+          throw Object.assign(new Error("Amount must be greater than 0."), { statusCode: 400 });
+        }
+        if (!itemPaidDirectToLandlord && !itemCashbook) {
+          throw Object.assign(new Error("Cashbook is required."), { statusCode: 400 });
+        }
+        if (usedRefSet.has(refNumber)) {
+          throw Object.assign(new Error(`Reference number "${refNumber}" already exists.`), { statusCode: 400 });
+        }
+
+        // Tenant + unit lookup in parallel
+        const [tenant, unit] = await Promise.all([
+          Tenant.findOne({ _id: tenantId, business: businessId }).select("_id unit business depositHeldBy").lean(),
+          Unit.findOne({ _id: unitId, business: businessId }).select("_id property business").lean(),
+        ]);
+
+        if (!tenant) throw Object.assign(new Error("Tenant not found."), { statusCode: 404 });
+        if (!unit)   throw Object.assign(new Error("Unit not found."), { statusCode: 404 });
+        if (String(tenant.unit) !== String(unit._id)) {
+          throw Object.assign(new Error("Tenant does not belong to the selected unit."), { statusCode: 400 });
+        }
+
+        // Allocation + property in parallel
+        const baseMetadata = { allocationMode: "auto" };
+        const [allocationData, property] = await Promise.all([
+          buildReceiptAllocationData({
+            businessId,
+            tenantId,
+            amount: itemAmount,
+            metadata: baseMetadata,
+            prepaymentLines: [],
+          }),
+          unit.property
+            ? Property.findOne({ _id: unit.property, business: businessId }).select("_id depositHeldBy").lean()
+            : Promise.resolve(null),
+        ]);
+
+        const depositContext = buildResolvedDepositMetadata({
+          tenant,
+          property,
+          metadata: baseMetadata,
+          paymentType: allocationData.primaryPaymentType,
+          allocationData,
+        });
+
+        // Reuse shared cashbook account when possible; resolve fresh only on per-item override
+        let cashbookAccount = sharedCashbookAccount;
+        if (!itemPaidDirectToLandlord && (!cashbookAccount || itemCashbook !== sharedCashbook)) {
+          cashbookAccount = await resolveCashbookAccount(businessId, {
+            cashbook: itemCashbook,
+            paymentMethod: itemMethod,
+            paidDirectToLandlord: false,
+          });
+        }
+
+        const paymentDate = normalizeDate(itemDate);
+        const month = itemMonth || (paymentDate.getMonth() + 1);
+        const year  = itemYear  || paymentDate.getFullYear();
+
+        const mpesaMeta = collectionId
+          ? { mpesa: { collectionId: String(collectionId), transactionCode: refNumber, source: "batch_receipt" } }
+          : {};
+
+        const payment = new RentPayment({
+          business:          businessId,
+          tenant:            tenantId,
+          unit:              unitId,
+          cashbook:          itemPaidDirectToLandlord ? "" : itemCashbook,
+          paidDirectToLandlord: itemPaidDirectToLandlord,
+          paymentType:       allocationData.primaryPaymentType,
+          breakdown:         allocationData.breakdown,
+          allocations:       depositContext.allocations,
+          allocationSummary: allocationData.allocationSummary,
+          ledgerType:        "receipts",
+          referenceNumber:   refNumber,
+          receiptNumber,
+          paymentDate,
+          paymentMethod:     itemMethod,
+          bankingDate:       paymentDate,
+          recordDate:        new Date(),
+          month,
+          year,
+          description:       item?.description || item?.notes || "",
+          isConfirmed:       isConfirmedOnCreate,
+          confirmedBy:       isConfirmedOnCreate ? actorUserId : null,
+          confirmedAt:       isConfirmedOnCreate ? new Date() : null,
+          postingStatus:     "unposted",
+          postingError:      null,
+          ledgerEntries:     [],
+          metadata:          { ...depositContext.metadata, ...mpesaMeta },
+        });
+
+        const savedPayment = await payment.save();
+        usedRefSet.add(refNumber); // prevent subsequent items in the same batch from reusing it
+
+        if (savedPayment.isConfirmed) {
+          const posting = itemPaidDirectToLandlord
+            ? await confirmNonCashDirectToLandlordReceipt(savedPayment, actorUserId)
+            : await postReceiptJournal(savedPayment, actorUserId);
+          (posting.entries || []).forEach((e) => {
+            if (e?.accountId) affectedAccountIds.add(String(e.accountId));
+          });
+        }
+
+        // Accumulate per-tenant balance delta (deferred to batch end)
+        const tKey = String(tenantId);
+        tenantDeltas.set(tKey, round2((tenantDeltas.get(tKey) || 0) - Math.abs(itemAmount)));
+
+        if (collectionId) {
+          capturedCollections.push({ collectionId, receiptId: savedPayment._id, tenantId: tKey });
+        }
+
+        succeeded.push({
+          index:           i,
+          receiptId:       String(savedPayment._id),
+          receiptNumber:   savedPayment.receiptNumber,
+          referenceNumber: refNumber,
+          amount:          itemAmount,
+          tenantId:        tKey,
+          tenantName:      tenant?.name || "",
+        });
+      } catch (itemErr) {
+        failed.push({
+          index:           i,
+          referenceNumber: String(items[i]?.referenceNumber || ""),
+          tenantId:        String(items[i]?.tenant || ""),
+          error:           itemErr.message || "Unknown error",
+        });
+      }
+    }
+
+    // Batch post-processing — all in parallel after the loop
+    await Promise.all([
+      // Recompute all touched tenant balances concurrently
+      ...[...tenantDeltas.keys()].map((tenantId) =>
+        recomputeTenantBalance(tenantId, businessId).catch((err) =>
+          console.error(`[batchReceipts] recompute failed for tenant ${tenantId}:`, err)
+        )
+      ),
+      // One aggregation call for all touched GL accounts
+      affectedAccountIds.size > 0
+        ? aggregateChartOfAccountBalances(businessId, [...affectedAccountIds]).catch((err) =>
+            console.error("[batchReceipts] chart account aggregation failed:", err)
+          )
+        : Promise.resolve(),
+      // Mark MpesaCollection rows as captured in one bulkWrite
+      capturedCollections.length > 0
+        ? MpesaCollection.bulkWrite(
+            capturedCollections.map(({ collectionId, receiptId, tenantId }) => ({
+              updateOne: {
+                filter: { _id: collectionId, business: businessId },
+                update: { $set: { matchingStatus: "captured", matchedReceipt: receiptId, tenant: tenantId } },
+              },
+            }))
+          ).catch((err) => console.error("[batchReceipts] MpesaCollection bulkWrite failed:", err))
+        : Promise.resolve(),
+    ]);
+
+    if (succeeded.length > 0) {
+      emitToCompany(businessId, "receipts:batch_posted", {
+        count:       succeeded.length,
+        totalAmount: succeeded.reduce((sum, s) => sum + (s.amount || 0), 0),
+      });
+    }
+
+    return res.status(200).json({
+      success:     true,
+      succeeded,
+      failed,
+      totalPosted: succeeded.length,
+      totalFailed: failed.length,
+    });
+  } catch (err) {
     return next(err);
   }
 };

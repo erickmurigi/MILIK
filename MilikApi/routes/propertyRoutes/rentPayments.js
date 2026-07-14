@@ -1,6 +1,7 @@
 // routes/rentPayment.js
 import express from "express"
 import {
+  batchCreatePayments,
   createPayment,
   getPayment,
   getPayments,
@@ -18,6 +19,9 @@ import { verifyUser } from "../../controllers/verifyToken.js"
 import { generateReceiptPdf } from "../../services/receiptPdfService.js"
 
 const router = express.Router()
+
+// Batch create receipts (must be before /:id routes)
+router.post("/batch", verifyUser, batchCreatePayments)
 
 // Create payment
 router.post("/", verifyUser, createPayment)

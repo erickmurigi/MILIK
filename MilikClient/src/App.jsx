@@ -96,6 +96,7 @@ const AddTenant           = lazy(() => import("./pages/Tenants/AddTenant"));
 const TenantStatement     = lazy(() => import("./pages/Tenants/TenantStatement"));
 const RentalInvoices      = lazy(() => import("./pages/Tenants/RentalInvoices"));
 const Receipts            = lazy(() => import("./pages/Tenants/Receipts"));
+const BatchReceipts       = lazy(() => import("./pages/Tenants/BatchReceipts"));
 const InvoiceNotes        = lazy(() => import("./pages/Tenants/InvoiceNotes"));
 const AddReceipt          = lazy(() => import("./pages/Tenants/AddReceipt"));
 const TenantDeposits      = lazy(() => import("./pages/Tenants/TenantDeposits"));
@@ -800,6 +801,7 @@ function App() {
             <Route path="/invoices/withholding-tax" element={<Navigate to="/reports/tax-reports" replace />} />
             <Route path="/receipts"                 element={<Guard resource="receipts" moduleKey="propertyManagement"><Receipts /></Guard>} />
             <Route path="/receipts/new"             element={<Guard resource="receipts" action="create" moduleKey="propertyManagement"><AddReceipt /></Guard>} />
+            <Route path="/receipts/batch"           element={<Guard resource="receipts" action="create" moduleKey="propertyManagement"><BatchReceipts /></Guard>} />
             <Route path="/receipts/prepayments"     element={<Guard resource="prepayments" moduleKey="propertyManagement"><TenantPrepayments /></Guard>} />
             <Route path="/receipts/mpesa-collections"   element={<Guard resource="receipts" action="view"   moduleKey="propertyManagement"><PmsMpesaNotifications /></Guard>} />
             <Route path="/receipts/coop-collections"    element={<Guard resource="receipts" action="view"   moduleKey="propertyManagement"><CoopCollections /></Guard>} />

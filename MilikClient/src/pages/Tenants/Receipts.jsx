@@ -35,6 +35,7 @@ import {
   FaSms,
   FaEnvelope,
   FaDownload,
+  FaListAlt,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -1798,6 +1799,11 @@ const Receipts = ({ viewMode = "tenant" }) => {
               {canExportReceipt && <button onClick={handlePrintList} title="Print list" className="h-7 shrink-0 flex items-center rounded bg-indigo-600 px-2 text-xs text-white hover:bg-indigo-700"><FaPrint size={10} /></button>}
               <button onClick={() => setShowSmsModal(true)} disabled={selectedIds.length === 0} title={selectedIds.length > 0 ? `SMS ${selectedIds.length} receipt${selectedIds.length !== 1 ? "s" : ""}` : "Select receipts to SMS"} className="h-7 shrink-0 flex items-center rounded bg-teal-600 px-2 text-xs text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"><FaSms size={10} /></button>
               <button onClick={() => setShowEmailModal(true)} disabled={selectedIds.length === 0} title={selectedIds.length > 0 ? `Email ${selectedIds.length} receipt${selectedIds.length !== 1 ? "s" : ""}` : "Select receipts to email"} className="h-7 shrink-0 flex items-center rounded bg-blue-600 px-2 text-xs text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><FaEnvelope size={10} /></button>
+              {canCreateReceipt && !isLandlordReceiptView && (
+                <button onClick={() => navigate("/receipts/batch")} title="Batch Receipt Entry" className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2 text-xs text-white hover:bg-[#0d4a38]">
+                  <FaListAlt size={10} /> Batch
+                </button>
+              )}
               {canCreateReceipt && <button onClick={openCreateForm} title={pageCreateLabel} className={`h-7 shrink-0 flex items-center rounded px-2 text-xs text-white ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaPlus size={10} /></button>}
             </div>
           </div>
@@ -1819,9 +1825,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Tenant</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Unit</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Ledger</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Cashbook</th>
-                    <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Method</th>
                     <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount</th>
                     <th className="px-3 py-1 text-left font-bold border-r border-white/10">Status</th>
@@ -1834,7 +1838,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 <tbody>
                   {receipts.length === 0 ? (
                     <tr>
-                      <td colSpan="16" className="px-3 py-10 text-center text-slate-500">
+                      <td colSpan="14" className="px-3 py-10 text-center text-slate-500">
                         No receipts found.
                       </td>
                     </tr>
@@ -1874,13 +1878,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
                           <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getTenantName(receipt, tenants)}</td>
                           <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getPropertyName(receipt, tenants)}</td>
                           <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getUnitName(receipt, tenants)}</td>
-                          <td className="px-3 py-1 border-r border-gray-100">
-                            <span className="inline-flex rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-700">
-                              {getLedgerType(receipt)}
-                            </span>
-                          </td>
                           <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getCashbookLabel(receipt)}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getReceiptDisplayType(receipt)}</td>
                           <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900 capitalize">{(receipt.paymentMethod || "-").replace("_", " ")}</td>
                           <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">
                             Ksh {Math.abs(Number(receipt.amount || 0)).toLocaleString()}
