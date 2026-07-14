@@ -1237,6 +1237,32 @@ export const allocateNotification = async (req, res, next) => {
   }
 };
 
+// Extracts the most useful message from a Safaricom error response.
+// Safaricom uses at least three different error body shapes across their APIs.
+const extractSafaricomError = (err) => {
+  const d = err?.response?.data;
+  if (!d) return err?.message || "Unknown error";
+  // Shape 1: { errorMessage: "..." }
+  if (d.errorMessage) return String(d.errorMessage).trim();
+  // Shape 2: { fault: { faultstring: "...", detail: { errorcode: "..." } } }
+  if (d.fault?.faultstring) return String(d.fault.faultstring).trim();
+  // Shape 3: { ResultDesc: "..." }  (STK push callbacks)
+  if (d.ResultDesc) return String(d.ResultDesc).trim();
+  // Shape 4: { error_description: "..." }  (OAuth errors)
+  if (d.error_description) return String(d.error_description).trim();
+  return err?.message || JSON.stringify(d).slice(0, 200);
+};
+
+// Attempt C2B URL registration against one endpoint; throws on failure.
+const tryRegisterC2BUrls = async (safaricomBase, version, accessToken, shortCode, responseType, confirmationURL, validationURL) => {
+  const { data } = await axios.post(
+    `${safaricomBase}/mpesa/c2b/${version}/registerurl`,
+    { ShortCode: shortCode, ResponseType: responseType, ConfirmationURL: confirmationURL, ValidationURL: validationURL },
+    { headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" }, timeout: 15000 }
+  );
+  return data;
+};
+
 // ─── Register C2B validation/confirmation URLs with Safaricom ─────────────────
 export const registerCarWashPaybillUrls = async (req, res, next) => {
   try {
@@ -1268,8 +1294,7 @@ export const registerCarWashPaybillUrls = async (req, res, next) => {
 
     // Build public-facing callback base URL
     const envBase  = normalizeText(process.env.MPESA_CALLBACK_BASE_URL || "");
-    const reqBase  = `${req.protocol}://${req.get("host")}`;
-    const apiBase  = (envBase || reqBase).replace(/\/$/, "");
+    const apiBase  = (envBase || `${req.protocol}://${req.get("host")}`).replace(/\/$/, "");
 
     const validationURL   = `${apiBase}/api/carwash/pay/validation/${shortCode}`;
     const confirmationURL = `${apiBase}/api/carwash/pay/confirmation/${shortCode}`;
@@ -1286,12 +1311,12 @@ export const registerCarWashPaybillUrls = async (req, res, next) => {
         headers: { Authorization: `Basic ${auth}` },
         timeout: 15000,
       });
-      accessToken = tokenRes.data?.access_token;
+      // Trim — Safaricom has been observed returning tokens with trailing whitespace
+      accessToken = String(tokenRes.data?.access_token || "").trim();
     } catch (tokenErr) {
-      const detail = tokenErr.response?.data?.errorMessage || tokenErr.message;
       return res.status(502).json({
         success: false,
-        message: `Failed to authenticate with Safaricom. Verify your Consumer Key and Secret. (${detail})`,
+        message: `Failed to authenticate with Safaricom. Verify your Consumer Key and Secret. (${extractSafaricomError(tokenErr)})`,
       });
     }
 
@@ -1299,18 +1324,28 @@ export const registerCarWashPaybillUrls = async (req, res, next) => {
       return res.status(502).json({ success: false, message: "No access token returned by Safaricom. Check your credentials." });
     }
 
-    // Register validation and confirmation URLs
+    // Register validation and confirmation URLs — try v1 first, fall back to v2.
+    // Some Daraja apps/paybills only accept one version; we try both before failing.
     let safaricomResponse;
+    let v1Error;
     try {
-      const regRes = await axios.post(
-        `${safaricomBase}/mpesa/c2b/v1/registerurl`,
-        { ShortCode: shortCode, ResponseType: responseType, ConfirmationURL: confirmationURL, ValidationURL: validationURL },
-        { headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" }, timeout: 15000 }
-      );
-      safaricomResponse = regRes.data;
-    } catch (regErr) {
-      const detail = regErr.response?.data?.errorMessage || regErr.response?.data?.ResultDesc || regErr.message;
-      return res.status(502).json({ success: false, message: `Safaricom rejected the URL registration: ${detail}` });
+      safaricomResponse = await tryRegisterC2BUrls(safaricomBase, "v1", accessToken, shortCode, responseType, confirmationURL, validationURL);
+    } catch (err) {
+      v1Error = extractSafaricomError(err);
+      console.warn("[RegisterURLs] v1 failed (%s) — retrying with v2", v1Error);
+      try {
+        safaricomResponse = await tryRegisterC2BUrls(safaricomBase, "v2", accessToken, shortCode, responseType, confirmationURL, validationURL);
+        v1Error = null; // v2 succeeded
+      } catch (err2) {
+        const v2Error = extractSafaricomError(err2);
+        return res.status(502).json({
+          success: false,
+          message:
+            `Safaricom rejected the URL registration. ` +
+            `v1: ${v1Error} | v2: ${v2Error}. ` +
+            `Ensure your Daraja app has the C2B API product enabled and the Consumer Key belongs to shortcode ${shortCode}.`,
+        });
+      }
     }
 
     res.json({
