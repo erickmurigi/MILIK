@@ -80,6 +80,7 @@ const MENU_PERMISSION_MAP = {
   "trial-balance": { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "income-statement": { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "balance-sheet": { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "liability-subledger": { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "tax-reports": { resource: "financialReports", action: "view", moduleKey: "accounts" },
   settings: { resource: "companySettings", action: "view" },
   "meter-readings": { resource: "meterReadings", action: "view", moduleKey: "propertyManagement" },
@@ -133,6 +134,7 @@ const MENU_PERMISSION_MAP = {
   "acc-trial-balance":        { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "acc-income-statement":     { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "acc-balance-sheet":        { resource: "financialReports", action: "view", moduleKey: "accounts" },
+  "acc-liability-subledger":  { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "acc-tax-reports":          { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "acc-vat-remittance":       { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "acc-wht-remittance":       { resource: "financialReports", action: "view", moduleKey: "accounts" },
@@ -845,7 +847,8 @@ const TopToolbar = ({
         "acc-service-providers": "/accounts/service-providers",
         "acc-trial-balance":     "/accounts/trial-balance",
         "acc-income-statement":  "/accounts/income-statement",
-        "acc-balance-sheet":     "/accounts/balance-sheet",
+        "acc-balance-sheet":          "/accounts/balance-sheet",
+        "acc-liability-subledger":    "/accounts/liability-subledger",
         "acc-tax-reports":       "/accounts/tax-reports",
         "acc-vat-remittance":    "/accounts/vat-remittance",
         "acc-wht-remittance":    "/accounts/wht-remittance",
@@ -1204,8 +1207,9 @@ const TopToolbar = ({
           submenu: [
             { id: "acc-trial-balance",    label: "Trial Balance",          icon: FaBook },
             { id: "acc-income-statement", label: "Income Statement (P&L)", icon: FaFileAlt },
-            { id: "acc-balance-sheet",    label: "Balance Sheet",          icon: FaBalanceScale },
-            { id: "acc-cash-flow",        label: "Cash Flow Statement",    icon: FaExchangeAlt },
+            { id: "acc-balance-sheet",       label: "Balance Sheet",          icon: FaBalanceScale },
+            { id: "acc-liability-subledger", label: "Liability Sub-Ledger",   icon: FaLayerGroup },
+            { id: "acc-cash-flow",           label: "Cash Flow Statement",    icon: FaExchangeAlt },
             { id: "acc-financial-ratios", label: "Financial Ratios",       icon: FaChartPie },
             ...(hasCompanyModule(activeCompanyContext, "propertyManagement")
               ? [{ id: "acc-arrears-analysis", label: "Arrears Aged Analysis", icon: FaChartBar }]

@@ -15,6 +15,7 @@ import {
   getTrialBalanceExceptions,
   getFinancialRatios,
   performYearEndClose,
+  getLiabilitySubledger,
 } from "../../controllers/propertyController/financialReports.js";
 
 const router = express.Router();
@@ -33,6 +34,8 @@ router.get("/ar-aging", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), get
 router.get("/ap-aging", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getAPAgingReport);
 router.get("/trial-balance-exceptions", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getTrialBalanceExceptions);
 router.get("/financial-ratios", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getFinancialRatios);
+
+router.get("/liability-subledger", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getLiabilitySubledger);
 
 // Year-end close — write operation, requires dedicated accounts module
 router.post("/year-end-close", verifyUser, requireCompanyModule("accounts"), performYearEndClose);

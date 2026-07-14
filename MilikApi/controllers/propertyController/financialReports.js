@@ -2192,6 +2192,309 @@ export const performYearEndClose = async (req, res, next) => {
   }
 };
 
+// ─── Liability Sub-Ledger ──────────────────────────────────────────────────────
+// Breaks down each liability account into its constituent entries so the
+// Balance Sheet total can be reconciled to individual tenants / landlords.
+// tabs: deposits (2100) | landlord (2110) | unallocated (2130) | tax (2140) | wht (2141)
+export const getLiabilitySubledger = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) return res.status(400).json({ success: false, message: "Business context is required." });
+
+    const tab       = String(req.query.tab || "deposits").toLowerCase();
+    const asOfDate  = req.query.asOf ? normalizeDate(req.query.asOf, true) : null;
+    const propertyOid =
+      req.query.property && mongoose.Types.ObjectId.isValid(String(req.query.property))
+        ? new mongoose.Types.ObjectId(String(req.query.property))
+        : null;
+
+    await ensureSystemChartOfAccounts(businessId);
+
+    const codeMap   = { deposits: "2100", landlord: "2110", unallocated: "2130", tax: "2140", wht: "2141" };
+    const accountCode = codeMap[tab] ?? "2100";
+    const account   = await findSystemAccountByCode(businessId, accountCode);
+
+    if (!account) {
+      return res.json({ success: true, tab, accountCode, accountName: "", total: 0, groups: [] });
+    }
+
+    const glMatch = {
+      business:  businessId,
+      accountId: account._id,
+      status:    { $in: REPORT_LEDGER_STATUSES },
+      ...(asOfDate    ? { transactionDate: { $lte: asOfDate } } : {}),
+      ...(propertyOid ? { property: propertyOid }               : {}),
+    };
+
+    // Mirrors buildLedgerMap's debit/credit normalisation for legacy entries
+    const debitExpr = {
+      $cond: [
+        { $gt: ["$debit", 0] }, "$debit",
+        { $cond: [{ $eq: [{ $toLower: { $ifNull: ["$direction", ""] } }, "debit"] }, { $ifNull: ["$amount", 0] }, 0] },
+      ],
+    };
+    const creditExpr = {
+      $cond: [
+        { $gt: ["$credit", 0] }, "$credit",
+        { $cond: [{ $eq: [{ $toLower: { $ifNull: ["$direction", ""] } }, "credit"] }, { $ifNull: ["$amount", 0] }, 0] },
+      ],
+    };
+
+    // ── 2110 Landlord Payables — group by property ─────────────────────────────
+    if (tab === "landlord") {
+      const agg = await FinancialLedgerEntry.aggregate([
+        { $match: glMatch },
+        { $group: { _id: "$property", credit: { $sum: creditExpr }, debit: { $sum: debitExpr } } },
+      ]);
+
+      const rows = agg
+        .map((r) => ({ propertyId: r._id, balance: round2(r.credit - r.debit) }))
+        .filter((r) => r.balance > 0.005 && r.propertyId);
+
+      const total = round2(rows.reduce((s, r) => s + r.balance, 0));
+      if (!rows.length) return res.json({ success: true, tab, accountCode, accountName: account.name, total: 0, groups: [] });
+
+      const properties = await Property.find({ _id: { $in: rows.map((r) => r.propertyId) }, business: businessId })
+        .select("propertyName propertyCode landlords")
+        .lean();
+      const propMap = new Map(properties.map((p) => [String(p._id), p]));
+
+      const landlordIds = [
+        ...new Set(
+          properties.flatMap((p) =>
+            (Array.isArray(p.landlords) ? p.landlords : [])
+              .map((l) => String(l?.landlordId || ""))
+              .filter(Boolean)
+          )
+        ),
+      ].filter(mongoose.Types.ObjectId.isValid);
+
+      const Landlord = (await import("../../models/Landlord.js")).default;
+      const landlordDocs = landlordIds.length
+        ? await Landlord.find({ _id: { $in: landlordIds } }).select("landlordName").lean()
+        : [];
+      const landlordMap = new Map(landlordDocs.map((l) => [String(l._id), l.landlordName || ""]));
+
+      const groups = rows
+        .sort((a, b) => b.balance - a.balance)
+        .map((r) => {
+          const prop  = propMap.get(String(r.propertyId));
+          const refs  = Array.isArray(prop?.landlords) ? prop.landlords : [];
+          const primary = refs.find((l) => l.isPrimary && l.landlordId) || refs.find((l) => l.landlordId);
+          return {
+            propertyId:   String(r.propertyId),
+            propertyName: prop?.propertyName || "Unknown Property",
+            propertyCode: prop?.propertyCode || "",
+            landlordName: primary?.landlordId ? (landlordMap.get(String(primary.landlordId)) || "") : "",
+            balance:      r.balance,
+          };
+        });
+
+      return res.json({ success: true, tab, accountCode, accountName: account.name, total, groups });
+    }
+
+    // ── 2140 Tax Payable — group by source transaction then by month ──────────
+    if (tab === "tax") {
+      const agg = await FinancialLedgerEntry.aggregate([
+        { $match: glMatch },
+        {
+          $group: {
+            _id:             "$sourceTransactionId",
+            credit:          { $sum: creditExpr },
+            debit:           { $sum: debitExpr },
+            transactionDate: { $last: "$transactionDate" },
+            narration:       { $last: "$narration" },
+            reference:       { $last: "$reference" },
+            property:        { $last: "$property" },
+          },
+        },
+      ]);
+
+      const rows = agg
+        .map((r) => ({
+          sourceId:   r._id,
+          balance:    round2(r.credit - r.debit),
+          date:       r.transactionDate,
+          narration:  r.narration  || "",
+          reference:  r.reference  || "",
+          propertyId: r.property,
+        }))
+        .filter((r) => r.balance > 0.005);
+
+      const total = round2(rows.reduce((s, r) => s + r.balance, 0));
+      if (!rows.length) return res.json({ success: true, tab, accountCode, accountName: account.name, total: 0, groups: [] });
+
+      const propIds = [...new Set(rows.map((r) => r.propertyId).filter(Boolean))];
+      const props   = propIds.length
+        ? await Property.find({ _id: { $in: propIds } }).select("propertyName").lean()
+        : [];
+      const propNameMap = new Map(props.map((p) => [String(p._id), p.propertyName]));
+
+      const byMonth = new Map();
+      rows.forEach((r) => {
+        const d     = new Date(r.date || new Date());
+        const key   = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        const label = d.toLocaleString("en-KE", { month: "long", year: "numeric" });
+        if (!byMonth.has(key)) byMonth.set(key, { month: key, monthLabel: label, subtotal: 0, rows: [] });
+        const g = byMonth.get(key);
+        g.subtotal = round2(g.subtotal + r.balance);
+        g.rows.push({
+          sourceId:   String(r.sourceId || ""),
+          reference:  r.reference,
+          narration:  r.narration,
+          property:   r.propertyId ? (propNameMap.get(String(r.propertyId)) || "") : "",
+          vatBalance: r.balance,
+          date:       r.date,
+        });
+      });
+
+      const groups = [...byMonth.entries()]
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .map(([, g]) => g);
+
+      return res.json({ success: true, tab, accountCode, accountName: account.name, total, groups });
+    }
+
+    // ── 2141 WHT Payable — group by source voucher then by month ──────────────
+    if (tab === "wht") {
+      const agg = await FinancialLedgerEntry.aggregate([
+        { $match: glMatch },
+        {
+          $group: {
+            _id:             "$sourceTransactionId",
+            credit:          { $sum: creditExpr },
+            debit:           { $sum: debitExpr },
+            transactionDate: { $last: "$transactionDate" },
+          },
+        },
+      ]);
+
+      const rows = agg
+        .map((r) => ({ sourceId: r._id, balance: round2(r.credit - r.debit), date: r.transactionDate }))
+        .filter((r) => r.balance > 0.005);
+
+      const total = round2(rows.reduce((s, r) => s + r.balance, 0));
+      if (!rows.length) return res.json({ success: true, tab, accountCode, accountName: account.name, total: 0, groups: [] });
+
+      const voucherIds = rows.map((r) => r.sourceId).filter(Boolean);
+      const vouchers   = voucherIds.length
+        ? await PaymentVoucher.find({ _id: { $in: voucherIds } })
+            .populate("serviceProvider", "name")
+            .populate("property", "propertyName")
+            .select("voucherNo narration amount whtAmount paidDate serviceProvider property")
+            .lean()
+        : [];
+      const vMap = new Map(vouchers.map((v) => [String(v._id), v]));
+
+      const byMonth = new Map();
+      rows.forEach((r) => {
+        const v = vMap.get(String(r.sourceId));
+        const d = new Date(v?.paidDate || r.date || new Date());
+        const key   = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        const label = d.toLocaleString("en-KE", { month: "long", year: "numeric" });
+        if (!byMonth.has(key)) byMonth.set(key, { month: key, monthLabel: label, subtotal: 0, rows: [] });
+        const g = byMonth.get(key);
+        g.subtotal = round2(g.subtotal + r.balance);
+        g.rows.push({
+          sourceId:    String(r.sourceId),
+          voucherNo:   v?.voucherNo   || "—",
+          narration:   v?.narration   || "",
+          vendor:      v?.serviceProvider?.name || "",
+          property:    v?.property?.propertyName || "",
+          grossAmount: round2(Math.abs(Number(v?.amount    || 0))),
+          whtBalance:  r.balance,
+          date:        v?.paidDate || r.date,
+        });
+      });
+
+      const groups = [...byMonth.entries()]
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .map(([, g]) => g);
+
+      return res.json({ success: true, tab, accountCode, accountName: account.name, total, groups });
+    }
+
+    // ── 2100 Deposits / 2130 Unallocated — group by tenant then by property ───
+    const agg = await FinancialLedgerEntry.aggregate([
+      { $match: glMatch },
+      {
+        $group: {
+          _id:      "$tenant",
+          credit:   { $sum: creditExpr },
+          debit:    { $sum: debitExpr },
+          property: { $last: "$property" },
+        },
+      },
+    ]);
+
+    const rows = agg
+      .map((r) => ({ tenantId: r._id, balance: round2(r.credit - r.debit), propertyId: r.property }))
+      .filter((r) => r.balance > 0.005 && r.tenantId);
+
+    const total = round2(rows.reduce((s, r) => s + r.balance, 0));
+    if (!rows.length) return res.json({ success: true, tab, accountCode, accountName: account.name, total: 0, groups: [] });
+
+    const tenants = await Tenant.find({ _id: { $in: rows.map((r) => r.tenantId) }, business: businessId })
+      .populate({ path: "unit", select: "unitNumber property", populate: { path: "property", select: "propertyName propertyCode" } })
+      .select("name unit")
+      .lean();
+    const tenantMap = new Map(tenants.map((t) => [String(t._id), t]));
+
+    // For deposits: fetch the latest DEPOSIT_CHARGE invoice per tenant for reference
+    let invoiceMap = new Map();
+    if (tab === "deposits") {
+      const invs = await TenantInvoice.find({
+        business: businessId,
+        tenant:   { $in: rows.map((r) => r.tenantId) },
+        category: "DEPOSIT_CHARGE",
+        ...(asOfDate ? { invoiceDate: { $lte: asOfDate } } : {}),
+      })
+        .select("tenant invoiceNumber amount invoiceDate")
+        .sort({ invoiceDate: -1 })
+        .lean();
+      invs.forEach((inv) => {
+        const key = String(inv.tenant);
+        if (!invoiceMap.has(key)) invoiceMap.set(key, inv);
+      });
+    }
+
+    const byProp = new Map();
+    rows.forEach((r) => {
+      const tenant = tenantMap.get(String(r.tenantId));
+      const prop   = tenant?.unit?.property;
+      const propId   = String(prop?._id || r.propertyId || "unknown");
+      const propName = prop?.propertyName || "Unknown Property";
+      const propCode = prop?.propertyCode || "";
+
+      if (!byProp.has(propId)) {
+        byProp.set(propId, { propertyId: propId, propertyName: propName, propertyCode: propCode, subtotal: 0, rows: [] });
+      }
+      const g   = byProp.get(propId);
+      g.subtotal = round2(g.subtotal + r.balance);
+
+      const row = {
+        tenantId:   String(r.tenantId),
+        tenantName: tenant?.name || "Unknown Tenant",
+        unitNumber: tenant?.unit?.unitNumber || "",
+        balance:    r.balance,
+      };
+      if (tab === "deposits") {
+        const inv = invoiceMap.get(String(r.tenantId));
+        row.invoiceNumber = inv?.invoiceNumber || "";
+        row.invoiceDate   = inv?.invoiceDate   || null;
+        row.depositAmount = round2(Math.abs(Number(inv?.amount || 0)));
+      }
+      g.rows.push(row);
+    });
+
+    const groups = [...byProp.values()].sort((a, b) => b.subtotal - a.subtotal);
+
+    return res.json({ success: true, tab, accountCode, accountName: account.name, total, groups });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export default {
   getTrialBalanceReport,
   getIncomeStatementReport,
@@ -2207,4 +2510,5 @@ export default {
   getTrialBalanceExceptions,
   getFinancialRatios,
   performYearEndClose,
+  getLiabilitySubledger,
 };

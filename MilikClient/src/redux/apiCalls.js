@@ -3186,6 +3186,12 @@ export const getFinancialRatios = async (params = {}) => {
   return res.data;
 };
 
+// ─── LIABILITY SUB-LEDGER ─────────────────────────────────────────────────────
+export const getLiabilitySubledger = async (params = {}) => {
+  const res = await adminRequests.get("/financial-reports/liability-subledger", { params });
+  return res.data;
+};
+
 // ─── YEAR-END CLOSE ───────────────────────────────────────────────────────────
 export const performYearEndClose = async (payload = {}) => {
   const res = await adminRequests.post("/financial-reports/year-end-close", payload);
