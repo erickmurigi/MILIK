@@ -54,6 +54,7 @@ import bankReconciliationRoutes from "./routes/propertyRoutes/bankReconciliation
 import fixedAssetsRoutes from "./routes/propertyRoutes/fixedAssets.js";
 import budgetRoutes from "./routes/propertyRoutes/budgets.js";
 import mpesaCollectionsRoutes from "./routes/propertyRoutes/mpesaCollections.js";
+import pmsPublicCallbacksRoutes from "./routes/propertyRoutes/pmsPublicCallbacks.js";
 import coopB2BRoutes          from "./routes/propertyRoutes/coopB2B.js";
 import coopCollectionsRoutes  from "./routes/propertyRoutes/coopCollections.js";
 import expenseRequisitionRoutes from "./routes/propertyRoutes/expenseRequisitions.js";
@@ -542,6 +543,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/trial", trialLimiter, trialRoutes);
 app.use("/api/public/listings", publicListingsLimiter, publicListingsRoute);
 app.use("/api/coop-b2b",       coopB2BRoutes);
+app.use("/api/pms/pay",        pmsPublicCallbacksRoutes);
 app.use("/api", tryAttachUserFromToken, enforceRequestedCompanyScope, enforceRoutePermissions);
 app.use("/api/chart-of-accounts", chartOfAccountsRoutes);
 app.use("/api/users", userRoutes);

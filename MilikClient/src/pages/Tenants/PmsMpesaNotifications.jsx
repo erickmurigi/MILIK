@@ -73,8 +73,12 @@ function AssignTenantModal({ notif, businessId, onClose, onAssigned }) {
     setSaving(true);
     try {
       const res = await adminRequests.post(`/mpesa-collections/${notif._id}/assign-tenant`, { tenantId: selected._id, business: businessId });
-      toast.success(`Assigned to ${selected.name}`);
-      onAssigned(res?.data?.data || res?.data);
+      const updated = res?.data?.data || res?.data;
+      const autoCaptured = updated?.matchingStatus === "captured" && updated?.matchedReceipt;
+      toast.success(autoCaptured
+        ? `Receipt created for ${selected.name}`
+        : `Assigned to ${selected.name}`);
+      onAssigned(updated);
       onClose();
     } catch (err) {
       toast.error(err?.response?.data?.message || "Assignment failed");

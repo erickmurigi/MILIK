@@ -329,14 +329,20 @@ export const handleStkCallback = async (req, res) => {
     }
 
     const company = await Company.findById(businessId).select("paymentIntegration").lean();
-    const config = getPrimaryMpesaPaybillConfig(getRawMpesaPaybillConfigs(company?.paymentIntegration));
+    const allConfigs = getRawMpesaPaybillConfigs(company?.paymentIntegration);
+    // Use the paybill that was used for this STK push (stored on the notification) so the correct cashbook is picked
+    const config = (notif.shortCode
+      ? allConfigs.find((c) => String(c?.shortCode || "").trim() === String(notif.shortCode || "").trim())
+      : null) || getPrimaryMpesaPaybillConfig(allConfigs);
     const cashbookId = config?.defaultCashbookAccountId;
     if (!cashbookId || !mongoose.Types.ObjectId.isValid(String(cashbookId))) {
+      console.error("[STK] Cashbook not configured for shortCode=%s businessId=%s", notif.shortCode, businessId);
       await CarWashMpesaNotification.updateOne({ _id: notif._id }, { $set: { status: "error", resultDesc: "Cashbook not configured" } });
       return;
     }
     const cashbook = await ChartOfAccount.findOne({ _id: cashbookId, business: businessId, type: "asset", isPosting: true }).lean();
     if (!cashbook) {
+      console.error("[STK] Cashbook id=%s not found or not an active posting account for businessId=%s", cashbookId, businessId);
       await CarWashMpesaNotification.updateOne({ _id: notif._id }, { $set: { status: "error", resultDesc: "Cashbook not found" } });
       return;
     }

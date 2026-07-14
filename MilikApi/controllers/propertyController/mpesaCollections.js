@@ -4,6 +4,7 @@ import MpesaCollection from "../../models/MpesaCollection.js";
 import RentPayment from "../../models/RentPayment.js";
 import Tenant from "../../models/Tenant.js";
 import { getRawMpesaPaybillConfigs, getPrimaryMpesaPaybillConfig } from "../../utils/companyModules.js";
+import { createAutoReceipt } from "./rentPayment.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 const escapeRegExp = (value = "") => String(value || "").replace(/[|\\{}()\[\]^$+*?.]/g, "\\$&");
@@ -646,40 +647,85 @@ export const importMpesaBatch = async (req, res) => {
   }
 };
 
-export const mpesaValidationCallback = async (req, res) => {
+const attemptAutoReceipt = async ({ stored, config }) => {
+  const tenant = stored?.tenant;
+  if (!tenant?._id) return;
+  if (stored.matchingStatus === "captured" || stored.matchingStatus === "duplicate" || stored.matchingStatus === "ignored") return;
+
+  const unitId = tenant?.unit?._id || tenant?.unit;
+  if (!unitId) {
+    console.warn("[PMS-AutoReceipt] No unit on tenant=%s collection=%s — skipping", tenant._id, stored._id);
+    return;
+  }
+
   try {
-    const shortCode = normalizeText(req.params.shortCode || req.body?.BusinessShortCode || "");
-    const { company, config } = await resolveCompanyAndConfig({ shortCode });
-    const responseType = normalizeText(config?.responseType || "Completed");
-    const accepted = responseType !== "Cancelled";
-
-    await upsertCollection({
-      businessId: String(company._id),
-      config,
-      source: "callback_validation",
-      payload: {
-        ...extractCallbackFields(req.body || {}),
-        callbackResultCode: accepted ? 0 : 1,
-        callbackResultDesc: accepted ? "Accepted" : "Cancelled by company configuration",
-      },
-      responseMode: responseType,
+    const receipt = await createAutoReceipt({
+      businessId: String(stored.business),
+      tenantId: String(tenant._id),
+      unitId: String(unitId),
+      amount: stored.amount,
+      referenceNumber: stored.transactionCode,
+      paymentDate: stored.transactionDate instanceof Date ? stored.transactionDate : new Date(),
+      cashbookAccountId: config?.defaultCashbookAccountId || null,
+      cashbookAccountName: config?.defaultCashbookAccountName || "M-Pesa",
+      description: `M-Pesa C2B – ${stored.transactionCode}${stored.payerName ? ` – ${stored.payerName}` : ""}`,
     });
-
-    return res.status(200).json({
-      ResultCode: accepted ? 0 : 1,
-      ResultDesc: accepted ? "Accepted" : "Cancelled by company configuration",
+    await MpesaCollection.findByIdAndUpdate(stored._id, {
+      $set: { matchingStatus: "captured", matchedReceipt: receipt._id },
     });
-  } catch (error) {
-    return res.status(error.statusCode || 500).json({
-      ResultCode: 1,
-      ResultDesc: error.message || "Failed to validate M-Pesa callback",
-    });
+    console.log("[PMS-AutoReceipt] Success ref=%s receipt=%s tenant=%s", stored.transactionCode, receipt._id, tenant._id);
+  } catch (err) {
+    if (err.isDuplicate) {
+      await MpesaCollection.findByIdAndUpdate(stored._id, {
+        $set: { matchingStatus: "captured", matchedReceipt: err.existingId },
+      });
+      console.warn("[PMS-AutoReceipt] Duplicate ref=%s linked to existing=%s", stored.transactionCode, err.existingId);
+    } else {
+      console.error("[PMS-AutoReceipt] Failed ref=%s tenant=%s: %s", stored.transactionCode, tenant._id, err.message);
+    }
   }
 };
 
-export const mpesaConfirmationCallback = async (req, res) => {
+export const mpesaValidationCallback = async (req, res) => {
+  const shortCode = normalizeText(req.params.shortCode || req.body?.BusinessShortCode || "");
+  let company = null;
+  let config = null;
+
   try {
-    const shortCode = normalizeText(req.params.shortCode || req.body?.BusinessShortCode || "");
+    ({ company, config } = await resolveCompanyAndConfig({ shortCode }));
+  } catch {
+    console.warn("[PMS-Validation] Unknown shortCode=%s", shortCode);
+    return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
+  }
+
+  const responseType = normalizeText(config?.responseType || "Completed");
+  const accepted = responseType !== "Cancelled";
+
+  // Respond to Safaricom immediately, then persist in background
+  res.status(200).json({
+    ResultCode: accepted ? 0 : 1,
+    ResultDesc: accepted ? "Accepted" : "Cancelled by company configuration",
+  });
+
+  upsertCollection({
+    businessId: String(company._id),
+    config,
+    source: "callback_validation",
+    payload: {
+      ...extractCallbackFields(req.body || {}),
+      callbackResultCode: accepted ? 0 : 1,
+      callbackResultDesc: accepted ? "Accepted" : "Cancelled by company configuration",
+    },
+    responseMode: responseType,
+  }).catch((err) => console.error("[PMS-Validation] Save error shortCode=%s: %s", shortCode, err.message));
+};
+
+export const mpesaConfirmationCallback = async (req, res) => {
+  // Respond to Safaricom immediately to avoid the 5s timeout
+  res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
+
+  const shortCode = normalizeText(req.params.shortCode || req.body?.BusinessShortCode || "");
+  try {
     const { company, config } = await resolveCompanyAndConfig({ shortCode });
     const { stored } = await upsertCollection({
       businessId: String(company._id),
@@ -689,16 +735,11 @@ export const mpesaConfirmationCallback = async (req, res) => {
       responseMode: normalizeText(config?.responseType || "Completed"),
     });
 
-    return res.status(200).json({
-      ResultCode: 0,
-      ResultDesc: "Accepted",
-      collectionId: stored?._id || null,
-    });
+    if (stored?.tenant?._id) {
+      await attemptAutoReceipt({ stored, config });
+    }
   } catch (error) {
-    return res.status(error.statusCode || 500).json({
-      ResultCode: 1,
-      ResultDesc: error.message || "Failed to persist M-Pesa callback",
-    });
+    console.error("[PMS-Confirmation] Processing error shortCode=%s: %s", shortCode, error.message);
   }
 };
 
@@ -756,6 +797,13 @@ export const assignTenantToCollection = async (req, res) => {
     await MpesaCollection.findByIdAndUpdate(row._id, {
       $set: { tenant: tenant._id, matchingStatus: nextStatus, matchedReceipt: matchedReceipt?._id || null },
     });
+
+    // No existing receipt found — attempt auto-receipt immediately so admin doesn't need a second step
+    if (nextStatus === "matched_tenant") {
+      const { config } = await resolveCompanyAndConfig({ businessId, shortCode: row.shortCode }).catch(() => ({ config: null }));
+      const stored = { ...row, tenant, matchingStatus: nextStatus, matchedReceipt: null };
+      await attemptAutoReceipt({ stored, config });
+    }
 
     const updated = await populateCollectionQuery(MpesaCollection.findById(row._id)).lean();
     return res.status(200).json({ success: true, message: `Assigned to ${tenant.name}`, data: updated });

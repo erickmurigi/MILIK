@@ -446,17 +446,30 @@ export const initiateStkPush = async (req, res, next) => {
 
     const company = await Company.findById(business).select("paymentIntegration").lean();
     const configs = getRawMpesaPaybillConfigs(company?.paymentIntegration);
-    let config = getPrimaryMpesaPaybillConfig(configs);
-    // Use the branch's own paybill when available
+    const primaryConfig = getPrimaryMpesaPaybillConfig(configs);
+    let config = primaryConfig;
+
+    // Use the branch's own paybill when available — fall back to primary if the branch config is incomplete
     if (job.branch) {
       const branchDoc = await CarWashBranch.findById(job.branch).select("mpesaShortCode").lean();
       const branchCode = String(branchDoc?.mpesaShortCode || "").trim();
       if (branchCode) {
         const branchConfig = configs.find((c) => String(c?.shortCode || "").trim() === branchCode);
-        if (branchConfig) config = branchConfig;
+        if (branchConfig) {
+          // passkey may be stored as 'passkey' or 'passKey' depending on the save path
+          const branchPasskey = branchConfig.passkey || branchConfig.passKey || "";
+          if (branchConfig.consumerKey && branchConfig.consumerSecret && branchConfig.shortCode && branchPasskey) {
+            config = { ...branchConfig, passkey: branchPasskey };
+          } else {
+            console.warn("[STK] Branch %s paybill %s has incomplete credentials — falling back to primary config", job.branch, branchCode);
+          }
+        }
       }
     }
-    if (!config?.consumerKey || !config?.consumerSecret || !config?.shortCode || !config?.passkey) {
+
+    // Normalise passkey field name before credential check (handles both casings)
+    const passkey = config?.passkey || config?.passKey || "";
+    if (!config?.consumerKey || !config?.consumerSecret || !config?.shortCode || !passkey) {
       return next(createError(400, "M-Pesa credentials not configured for this business. Set them up in Setup → M-Pesa."));
     }
 
@@ -496,7 +509,7 @@ export const initiateStkPush = async (req, res, next) => {
     );
 
     const timestamp = new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14);
-    const password = Buffer.from(`${config.shortCode}${config.passkey}${timestamp}`).toString("base64");
+    const password = Buffer.from(`${config.shortCode}${passkey}${timestamp}`).toString("base64");
 
     const { data: result } = await axios.post(
       `${baseURL}/mpesa/stkpush/v1/processrequest`,

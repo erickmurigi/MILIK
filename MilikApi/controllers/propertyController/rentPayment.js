@@ -25,7 +25,7 @@ import {
   resolvePropertyLedgerAccounts,
 } from "../../services/propertyLedgerService.js";
 import { resolveConfiguredAccountingDefaultAccount } from "../../services/companyAccountingDefaultsService.js";
-import { resolveAuditActorUserId } from "../../utils/systemActor.js";
+import { resolveAuditActorUserId, ensureSystemAuditUser } from "../../utils/systemActor.js";
 import { logAuditEvent } from "../../utils/auditLogger.js";
 import SequenceCounter from "../../models/SequenceCounter.js";
 
@@ -2306,6 +2306,17 @@ export const createPayment = async (req, res, next) => {
 
     emitToCompany(businessId, "payment:new", savedPayment);
 
+    // Link MpesaCollection when receipt is created manually from the notifications page
+    const collectionId = req.body?.collectionId;
+    if (collectionId && isValidObjectId(collectionId)) {
+      await MpesaCollection.findOneAndUpdate(
+        { _id: collectionId, business: businessId },
+        { $set: { matchingStatus: "captured", matchedReceipt: savedPayment._id } }
+      ).catch((err) =>
+        console.error("[createPayment] MpesaCollection link failed id=%s: %s", collectionId, err.message)
+      );
+    }
+
     const populated = await populateReceiptQuery(RentPayment.findById(savedPayment._id));
     return res.status(200).json(populated);
   } catch (err) {
@@ -3996,4 +4007,118 @@ export const cancelReversal = async (req, res, next) => {
   } catch (err) {
     return next(err);
   }
+};
+
+/**
+ * Creates a confirmed receipt automatically from an M-Pesa C2B callback.
+ * Allocates outstanding invoices FIFO, posts GL, and updates tenant balance.
+ * Throws `{ isDuplicate: true, existingId }` if referenceNumber already exists.
+ */
+export const createAutoReceipt = async ({
+  businessId,
+  tenantId,
+  unitId,
+  amount,
+  referenceNumber,
+  paymentDate,
+  cashbookAccountId,
+  cashbookAccountName,
+  description,
+}) => {
+  const receiptAmount = round2(Math.abs(Number(amount || 0)));
+  if (receiptAmount <= 0) throw new Error("Amount must be greater than zero.");
+
+  const dup = await RentPayment.findOne(
+    { business: businessId, referenceNumber },
+    { _id: 1 }
+  ).lean();
+  if (dup) {
+    const err = new Error(`Receipt with reference ${referenceNumber} already exists.`);
+    err.isDuplicate = true;
+    err.existingId = dup._id;
+    throw err;
+  }
+
+  const [allocationData, receiptNumber, actorUser] = await Promise.all([
+    buildReceiptAllocationData({
+      businessId,
+      tenantId,
+      amount: receiptAmount,
+      metadata: { allocationMode: "auto" },
+    }),
+    generateReceiptNumber(businessId),
+    ensureSystemAuditUser(businessId),
+  ]);
+
+  const payDate =
+    paymentDate instanceof Date && !Number.isNaN(paymentDate.getTime())
+      ? paymentDate
+      : new Date();
+
+  const payment = new RentPayment({
+    business: businessId,
+    tenant: tenantId,
+    unit: unitId,
+    amount: receiptAmount,
+    paymentType: allocationData.primaryPaymentType,
+    paymentDate: payDate,
+    bankingDate: payDate,
+    recordDate: new Date(),
+    month: payDate.getMonth() + 1,
+    year: payDate.getFullYear(),
+    referenceNumber,
+    receiptNumber,
+    description: description || `M-Pesa C2B – ${referenceNumber}`,
+    paymentMethod: "mobile_money",
+    cashbook: cashbookAccountName || "M-Pesa",
+    paidDirectToLandlord: false,
+    ledgerType: "receipts",
+    breakdown: allocationData.breakdown,
+    allocations: allocationData.allocations,
+    allocationSummary: allocationData.allocationSummary,
+    isConfirmed: true,
+    confirmedBy: actorUser._id,
+    confirmedAt: new Date(),
+    postingStatus: "unposted",
+    ledgerEntries: [],
+    metadata: { allocationMode: "auto", autoReceiptSource: "mpesa_c2b" },
+  });
+
+  const saved = await payment.save();
+
+  try {
+    const posting = await postReceiptJournal(saved, String(actorUser._id));
+    await applyIncrementalBalanceDelta({
+      tenantId: saved.tenant,
+      businessId: saved.business,
+      delta: -receiptAmount,
+    });
+    const accountIds = (posting?.entries ?? []).map((e) => e.accountId).filter(Boolean);
+    await Promise.all([
+      recomputeTenantBalance(saved.tenant, saved.business),
+      accountIds.length ? aggregateChartOfAccountBalances(saved.business, accountIds) : Promise.resolve(),
+    ]);
+  } catch (postErr) {
+    console.error("[AutoReceipt] GL posting failed ref=%s tenant=%s: %s", referenceNumber, tenantId, postErr.message);
+    await rollbackFailedReceiptPosting({
+      payment: saved,
+      actorId: String(actorUser._id),
+      reason: "Auto-receipt GL posting failed",
+    });
+    await RentPayment.findByIdAndUpdate(saved._id, {
+      $set: {
+        isConfirmed: false,
+        confirmedBy: null,
+        confirmedAt: null,
+        postingStatus: "failed",
+        postingError: postErr.message,
+        journalGroupId: null,
+        ledgerEntries: [],
+      },
+    });
+    await recomputeTenantBalance(saved.tenant, saved.business).catch(() => {});
+  }
+
+  emitToCompany(businessId, "payment:new", saved);
+  return RentPayment.findById(saved._id).lean();
 };
