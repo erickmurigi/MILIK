@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import {
-  FaCheckCircle, FaExclamationCircle, FaExclamationTriangle,
-  FaHistory, FaInfoCircle, FaShieldAlt, FaSyncAlt, FaTools, FaWrench,
+  FaCheckCircle, FaExclamationCircle, FaExclamationTriangle, FaExternalLinkAlt,
+  FaHistory, FaInfoCircle, FaShieldAlt, FaSyncAlt, FaTools, FaUndo, FaWrench,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
@@ -15,6 +16,8 @@ import {
   repairBalanceGroup as apiRepairBalanceGroup,
   repairRecomputeBalances as apiRepairRecompute,
   repairRepostInvoices as apiRepairRepost,
+  reverseGlCorrectionEntry as apiReverseGlCorrection,
+  getActiveGlCorrections,
   runGLIntegrityReport,
 } from "../../redux/apiCalls";
 import { useConfirm } from "../../context/ConfirmContext";
@@ -27,6 +30,20 @@ const fmtTs = (d) =>
   d ? new Date(d).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
 const fmtNum = (n) =>
   Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const sourceNavUrl = (sourceType, sourceId) => {
+  if (!sourceType || !sourceId) return null;
+  const t = String(sourceType).toLowerCase();
+  if (t === "rent_payment" || t === "receipt")        return `/receipts/${sourceId}`;
+  if (t === "invoice" || t === "tenant_invoice")      return `/invoices/rental/${sourceId}`;
+  if (t === "invoice_note")                           return `/invoices/notes`;
+  if (t === "late_penalty_batch")                     return `/invoices/late-penalties`;
+  if (t === "payment_voucher")                        return `/accounts/payment-vouchers`;
+  if (t === "landlord_receipt")                       return `/receipts/landlord`;
+  if (t === "landlord_payment")                       return `/landlord-payments`;
+  if (t === "journal_entry")                          return `/accounts/journals`;
+  return null;
+};
 
 const STATUS_CFG = {
   clean:    { icon: FaCheckCircle,        cls: "border-emerald-200 bg-emerald-50", text: "text-emerald-700", label: "All Clear"      },
@@ -71,7 +88,7 @@ const TABS = [
 ];
 
 // ─── Balance-Group Modal ───────────────────────────────────────────────────────
-function BalanceGroupModal({ group, accounts, businessId, healthRunId, onClose, onDone }) {
+function BalanceGroupModal({ group, accounts, businessId, healthRunId, onClose, onDone, navigate }) {
   const [accountId, setAccountId] = useState("");
   const [notes, setNotes]         = useState("");
   const [saving, setSaving]       = useState(false);
@@ -110,18 +127,38 @@ function BalanceGroupModal({ group, accounts, businessId, healthRunId, onClose, 
           {/* Group info */}
           <div className="border border-slate-100 bg-slate-50 px-3 py-2.5 space-y-1.5">
             {[
-              ["Journal Group",  String(group.journalGroupId).slice(-12)],
-              ["Source",         group.sourceType || "—"],
-              ["Date",           fmtDate(group.date)],
-              ["Debit Sum",      `KES ${fmtNum(group.debit)}`],
-              ["Credit Sum",     `KES ${fmtNum(group.credit)}`],
-              ["Imbalance",      `KES ${fmtNum(amount)}`],
+              ["Journal Group", String(group.journalGroupId).slice(-12)],
+              ["Source Type",   group.sourceType || "—"],
+              ["Date",          fmtDate(group.date)],
+              ["Debit Sum",     `KES ${fmtNum(group.debit)}`],
+              ["Credit Sum",    `KES ${fmtNum(group.credit)}`],
+              ["Imbalance",     `KES ${fmtNum(amount)}`],
             ].map(([label, val]) => (
               <div key={label} className="flex items-center justify-between">
                 <span className="text-[10px] text-slate-500">{label}</span>
                 <span className="text-[10px] font-semibold text-slate-800 font-mono">{val}</span>
               </div>
             ))}
+            {/* Source ID — clickable if we can build a nav URL */}
+            {(() => {
+              const url = sourceNavUrl(group.sourceType, group.sourceId);
+              const label = group.sourceId ? `…${String(group.sourceId).slice(-12)}` : "—";
+              return (
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-500">Source ID</span>
+                  {url ? (
+                    <button
+                      onClick={() => { onClose(); navigate(url); }}
+                      className="flex items-center gap-1 text-[10px] font-semibold text-blue-600 hover:text-blue-800 font-mono"
+                    >
+                      {label} <FaExternalLinkAlt size={8} />
+                    </button>
+                  ) : (
+                    <span className="text-[10px] font-semibold text-slate-800 font-mono">{label}</span>
+                  )}
+                </div>
+              );
+            })()}
             <div className="mt-1 border-t border-slate-200 pt-1.5 text-[10px] text-slate-600">
               A <strong>{direction}</strong> of <strong>KES {fmtNum(amount)}</strong> will be posted to the account you select below.
             </div>
@@ -184,7 +221,8 @@ export default function GLIntegrityReport() {
   const company      = useSelector(selectCurrentCompany);
   const currentUser  = useSelector(selectCurrentUser);
   const businessId   = company?._id;
-  const { confirm }  = useConfirm();
+  const confirm      = useConfirm();
+  const navigate     = useNavigate();
 
   // Repair actions are write operations — require Full Access on accounts module
   const canRepair = hasCompanyPermission(currentUser, company, "financialReports", "process", "accounts");
@@ -195,9 +233,10 @@ export default function GLIntegrityReport() {
   const [history,    setHistory]    = useState([]);
   const [histLoading, setHistLoading] = useState(false);
   const [accounts,   setAccounts]   = useState([]);
-  const [repairing,  setRepairing]  = useState(new Set());
-  const [groupModal, setGroupModal] = useState(null); // group object
-  const [expandedRun, setExpandedRun] = useState(null);
+  const [repairing,    setRepairing]    = useState(new Set());
+  const [groupModal,   setGroupModal]   = useState(null);
+  const [expandedRun,  setExpandedRun]  = useState(null);
+  const [corrections,  setCorrections]  = useState([]);
 
   const healthRunId = report?.healthRunId;
 
@@ -228,14 +267,25 @@ export default function GLIntegrityReport() {
     }
   }, [businessId]);
 
-  // load accounts and history on mount
+  const loadCorrections = useCallback(async () => {
+    if (!businessId) return;
+    try {
+      const data = await getActiveGlCorrections({ business: businessId });
+      setCorrections(data?.corrections ?? []);
+    } catch {
+      // non-critical
+    }
+  }, [businessId]);
+
+  // load accounts, history and active corrections on mount
   useEffect(() => {
     if (!businessId) return;
     getChartOfAccounts({ business: businessId, limit: 500 })
       .then((res) => setAccounts(res?.data ?? res ?? []))
       .catch(() => {});
     loadHistory();
-  }, [businessId, loadHistory]);
+    loadCorrections();
+  }, [businessId, loadHistory, loadCorrections]);
 
   // ── Repair actions ───────────────────────────────────────────────────────────
   const startRepair = (key) => setRepairing((s) => { const n = new Set(s); n.add(key); return n; });
@@ -245,7 +295,7 @@ export default function GLIntegrityReport() {
     const ok = await confirm({
       title: "Recompute All COA Balances",
       message: "This rebuilds every account's cached balance from the raw ledger entries. Safe to run at any time.",
-      confirmLabel: "Recompute",
+      confirmText: "Recompute",
     });
     if (!ok) return;
     startRepair("recompute");
@@ -264,7 +314,7 @@ export default function GLIntegrityReport() {
     const ok = await confirm({
       title: "Repost Invoice Ledger",
       message: "Posts GL entries for any tenant invoice that has no ledger entry. Does not duplicate existing entries.",
-      confirmLabel: "Repost Invoices",
+      confirmText: "Repost Invoices",
     });
     if (!ok) return;
     startRepair("invoices");
@@ -283,6 +333,27 @@ export default function GLIntegrityReport() {
   const onGroupRepaired = () => {
     setGroupModal(null);
     runCheck().then(loadHistory);
+  };
+
+  const doReverseCorrection = async (groupId) => {
+    const ok = await confirm({
+      title:       "Undo GL Correction",
+      message:     `This will reverse the manual correcting entry posted to journal group …${String(groupId).slice(-8)}. The GL will return to its state before the correction so you can find and fix the original transaction.`,
+      confirmText: "Undo Correction",
+    });
+    if (!ok) return;
+    const key = `reverse-${groupId}`;
+    startRepair(key);
+    try {
+      const res = await apiReverseGlCorrection(groupId, { business: businessId, healthRunId });
+      toast.success(`Correction reversed — ${res.reversedCount} entr${res.reversedCount === 1 ? "y" : "ies"} set to reversed`);
+      runCheck().then(loadHistory);
+      loadCorrections();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "Reverse failed");
+    } finally {
+      endRepair(key);
+    }
   };
 
   // ── Derived ─────────────────────────────────────────────────────────────────
@@ -468,14 +539,15 @@ export default function GLIntegrityReport() {
                       <div className="overflow-x-auto">
                         <table className="w-full">
                           <thead><tr>
-                            <TH>Group ID</TH><TH>Source</TH><TH>Date</TH>
+                            <TH>Group ID</TH><TH>Source Type</TH><TH>Source ID</TH><TH>Date</TH>
                             <TH right>Debit</TH><TH right>Credit</TH><TH right>Difference</TH>
                           </tr></thead>
                           <tbody>
                             {groups.map((g) => (
                               <tr key={g.journalGroupId} className="hover:bg-slate-50">
                                 <TD cls="font-mono text-[10px] text-slate-400">{String(g.journalGroupId).slice(-8)}</TD>
-                                <TD>{g.sourceType}</TD>
+                                <TD>{g.sourceType || "—"}</TD>
+                                <TD cls="font-mono text-[10px] text-slate-500">{g.sourceId ? `…${String(g.sourceId).slice(-12)}` : "—"}</TD>
                                 <TD>{fmtDate(g.date)}</TD>
                                 <TD right>{fmtNum(g.debit)}</TD>
                                 <TD right>{fmtNum(g.credit)}</TD>
@@ -525,6 +597,58 @@ export default function GLIntegrityReport() {
           {/* ── REPAIR CENTRE TAB ── */}
           {activeTab === "repair" && (
             <>
+              {/* ── Active GL Corrections (always visible when present) ── */}
+              {corrections.length > 0 && (
+                <div className="border border-amber-200 bg-white shadow-sm overflow-hidden mb-3">
+                  <div className="border-b border-amber-100 bg-amber-50 px-4 py-2.5 flex items-center gap-2">
+                    <FaUndo size={10} className="text-amber-600" />
+                    <span className="text-[10px] font-black uppercase tracking-[0.12em] text-amber-700">
+                      Active GL Corrections · {corrections.length}
+                    </span>
+                    <span className="ml-1 text-[10px] text-amber-500">Manual correcting entries that can be reversed</span>
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {corrections.map((c) => (
+                      <div key={c.journalGroupId} className="flex items-start gap-3 px-4 py-3">
+                        <FaWrench size={11} className="mt-0.5 text-amber-400 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[11px] font-bold text-slate-700">Journal Group</span>
+                            <span className="font-mono text-[10px] text-slate-400">…{String(c.journalGroupId).slice(-8)}</span>
+                            <span className="text-[10px] text-slate-400">{fmtTs(c.postedAt)}</span>
+                          </div>
+                          <div className="mt-1 space-y-0.5">
+                            {c.entries.map((e) => (
+                              <div key={String(e._id)} className="flex items-center gap-2 text-[10px] text-slate-600">
+                                <span className={`w-10 font-bold ${e.direction === "credit" ? "text-blue-600" : "text-emerald-600"}`}>
+                                  {e.direction === "credit" ? "CR" : "DR"}
+                                </span>
+                                <span className="font-mono tabular-nums">KES {fmtNum(e.direction === "credit" ? e.credit : e.debit)}</span>
+                                <span className="text-slate-400">→ {e.accountCode} {e.accountName}</span>
+                                {e.notes && <span className="text-slate-400 truncate max-w-[200px]">· {e.notes}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        {canRepair && (
+                          <button
+                            onClick={() => doReverseCorrection(c.journalGroupId)}
+                            disabled={repairing.has(`reverse-${c.journalGroupId}`)}
+                            className="shrink-0 flex h-7 items-center gap-1.5 border border-amber-300 bg-amber-50 px-3 text-[10px] font-bold text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+                          >
+                            {repairing.has(`reverse-${c.journalGroupId}`) ? (
+                              <><FaSyncAlt size={8} className="animate-spin" /> Undoing…</>
+                            ) : (
+                              <><FaUndo size={8} /> Undo</>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {!report ? (
                 <div className="border border-dashed border-slate-300 py-24 text-center">
                   <FaWrench size={32} className="mx-auto mb-3 text-slate-300" />
@@ -625,6 +749,19 @@ export default function GLIntegrityReport() {
                                 <span className="text-[11px] font-bold text-slate-700">{g.sourceType || "Journal"}</span>
                                 <span className="font-mono text-[10px] text-slate-400">{String(g.journalGroupId).slice(-8)}</span>
                                 <span className="text-[10px] text-slate-500">{fmtDate(g.date)}</span>
+                                {(() => {
+                                  const url = sourceNavUrl(g.sourceType, g.sourceId);
+                                  return url ? (
+                                    <button
+                                      onClick={() => navigate(url)}
+                                      className="flex items-center gap-1 font-mono text-[10px] text-blue-600 hover:text-blue-800 hover:underline"
+                                    >
+                                      …{String(g.sourceId).slice(-10)} <FaExternalLinkAlt size={8} />
+                                    </button>
+                                  ) : g.sourceId ? (
+                                    <span className="font-mono text-[10px] text-slate-400">…{String(g.sourceId).slice(-10)}</span>
+                                  ) : null;
+                                })()}
                               </div>
                               <div className="mt-0.5 text-[10px] text-slate-500">
                                 Dr {fmtNum(g.debit)} / Cr {fmtNum(g.credit)} ·{" "}
@@ -633,12 +770,27 @@ export default function GLIntegrityReport() {
                               </div>
                             </div>
                             {canRepair ? (
-                              <button
-                                onClick={() => setGroupModal(g)}
-                                className="shrink-0 flex h-7 items-center gap-1.5 border border-red-200 bg-red-50 px-3 text-[10px] font-bold text-red-700 hover:bg-red-100"
-                              >
-                                <FaWrench size={8} /> Fix
-                              </button>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {g.hasCorrectionEntry && (
+                                  <button
+                                    onClick={() => doReverseCorrection(g.journalGroupId)}
+                                    disabled={repairing.has(`reverse-${g.journalGroupId}`)}
+                                    className="flex h-7 items-center gap-1.5 border border-amber-200 bg-amber-50 px-3 text-[10px] font-bold text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+                                  >
+                                    {repairing.has(`reverse-${g.journalGroupId}`) ? (
+                                      <><FaSyncAlt size={8} className="animate-spin" /> Undoing…</>
+                                    ) : (
+                                      <><FaUndo size={8} /> Undo</>
+                                    )}
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => setGroupModal(g)}
+                                  className="flex h-7 items-center gap-1.5 border border-red-200 bg-red-50 px-3 text-[10px] font-bold text-red-700 hover:bg-red-100"
+                                >
+                                  <FaWrench size={8} /> Fix
+                                </button>
+                              </div>
                             ) : (
                               <span className="shrink-0 text-[9px] text-slate-400 italic self-center">View Only</span>
                             )}
@@ -862,6 +1014,7 @@ export default function GLIntegrityReport() {
             healthRunId={healthRunId}
             onClose={() => setGroupModal(null)}
             onDone={onGroupRepaired}
+            navigate={navigate}
           />
         )}
 

@@ -592,16 +592,28 @@ export const runIntegrityReport = async (req, res) => {
       issues,
       detail: {
         glBalance: { totalDebit, totalCredit, difference: glDifference, balanced: glBalanced },
-        unbalancedGroups: unbalancedGroups.map((g) => ({
-          journalGroupId: g._id,
-          sourceType:     g.sourceType,
-          sourceId:       g.sourceId,
-          date:           g.firstDate,
-          debit:          g.debitSum,
-          credit:         g.creditSum,
-          difference:     g.diff,
-          entryCount:     g.entryCount,
-        })),
+        unbalancedGroups: await (async () => {
+          if (!unbalancedGroups.length) return [];
+          const groupIds = unbalancedGroups.map((g) => g._id);
+          const correctionGroupIds = await FinancialLedgerEntry.distinct("journalGroupId", {
+            business:             bizId,
+            journalGroupId:       { $in: groupIds },
+            sourceTransactionType: "manual_adjustment",
+            status:               "approved",
+          });
+          const correctionSet = new Set(correctionGroupIds.map(String));
+          return unbalancedGroups.map((g) => ({
+            journalGroupId:    g._id,
+            sourceType:        g.sourceType,
+            sourceId:          g.sourceId,
+            date:              g.firstDate,
+            debit:             g.debitSum,
+            credit:            g.creditSum,
+            difference:        g.diff,
+            entryCount:        g.entryCount,
+            hasCorrectionEntry: correctionSet.has(String(g._id)),
+          }));
+        })(),
         orphanedEntriesCount,
         orphanedAccountIds,
         inactiveAccountEntries,
@@ -669,8 +681,12 @@ export const repairBalanceGroup = async (req, res) => {
 
     const correctionDirection = diff > 0 ? "credit" : "debit";
     const correctionAmount    = Math.abs(diff);
-    const sample              = entries[0];
-    const actorUserId         = await resolveAuditActorUserId({ req, businessId });
+    // Prefer the first original entry (not a prior correction) to pull source identity
+    const sample = entries.find((e) => e.sourceTransactionType !== "manual_adjustment") || entries[0];
+    const sourceLabel = sample?.sourceTransactionType && sample.sourceTransactionType !== "manual_adjustment"
+      ? ` | ${sample.sourceTransactionType} …${String(sample.sourceTransactionId || "").slice(-8)}`
+      : "";
+    const actorUserId = await resolveAuditActorUserId({ req, businessId });
 
     // Use current date to avoid closed-period lock; compute period from it
     const now         = new Date();
@@ -693,7 +709,7 @@ export const repairBalanceGroup = async (req, res) => {
       direction:             correctionDirection,
       payer:                 "n/a",
       receiver:              "n/a",
-      notes:                 notes?.trim() || `GL correction – balancing entry for journal group ${String(groupOid).slice(-8)}`,
+      notes:                 notes?.trim() || `GL correction – balancing entry for journal group ${String(groupOid).slice(-8)}${sourceLabel}`,
       createdBy:             actorUserId,
       approvedBy:            actorUserId,
       approvedAt:            new Date(),
@@ -783,6 +799,93 @@ export const repairRepostInvoices = async (req, res) => {
   }
 
   return res.status(capturedCode).json(capturedData);
+};
+
+// ─── LIST ALL ACTIVE MANUAL GL CORRECTION ENTRIES ────────────────────────────
+// GET /api/ledger/repair/active-corrections
+export const getActiveCorrections = async (req, res) => {
+  const businessId = req.query?.business || req.user?.company;
+  if (!businessId) return res.status(400).json({ error: "Business context required" });
+
+  try {
+    const entries = await FinancialLedgerEntry.find({
+      business:              businessId,
+      sourceTransactionType: "manual_adjustment",
+      status:                "approved",
+    })
+      .populate({ path: "accountId", select: "code name" })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const grouped = {};
+    for (const e of entries) {
+      const gid = String(e.journalGroupId || "ungrouped");
+      if (!grouped[gid]) grouped[gid] = { journalGroupId: gid, entries: [], postedAt: e.createdAt };
+      grouped[gid].entries.push({
+        _id:         e._id,
+        direction:   e.direction,
+        debit:       e.debit  || 0,
+        credit:      e.credit || 0,
+        accountCode: e.accountId?.code || "—",
+        accountName: e.accountId?.name || "—",
+        notes:       e.notes  || "",
+        postedAt:    e.createdAt,
+      });
+    }
+
+    return res.status(200).json({ corrections: Object.values(grouped) });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+// ─── REPAIR: REVERSE A CORRECTION ENTRY FOR A JOURNAL GROUP ─────────────────
+// POST /api/ledger/repair/reverse-correction/:groupId
+// Finds manual_adjustment entries in the group with status "approved" and sets
+// them to "reversed", then recomputes affected account balances.
+export const reverseGlCorrectionEntry = async (req, res) => {
+  const { groupId } = req.params;
+  const businessId  = req.body?.business || req.query?.business || req.user?.company;
+  const healthRunId = req.body?.healthRunId;
+
+  if (!businessId) return res.status(400).json({ error: "Business context required" });
+  if (!groupId || !mongoose.Types.ObjectId.isValid(groupId)) {
+    return res.status(400).json({ error: "Invalid groupId" });
+  }
+
+  try {
+    const corrections = await FinancialLedgerEntry.find({
+      business:             businessId,
+      journalGroupId:       new mongoose.Types.ObjectId(groupId),
+      sourceTransactionType: "manual_adjustment",
+      status:               "approved",
+    }).select("_id accountId").lean();
+
+    if (!corrections.length) {
+      return res.status(404).json({ error: "No active correction entries found for this journal group" });
+    }
+
+    const ids        = corrections.map((e) => e._id);
+    const accountIds = [...new Set(corrections.map((e) => String(e.accountId)).filter(Boolean))];
+
+    await FinancialLedgerEntry.updateMany({ _id: { $in: ids } }, { $set: { status: "reversed" } });
+
+    aggregateChartOfAccountBalances(businessId, accountIds).catch(() => {});
+
+    const actorUserId = await resolveAuditActorUserId({ req, businessId });
+    await appendRepairLog(healthRunId, {
+      repairType:      "reverse_correction",
+      appliedAt:       new Date(),
+      appliedBy:       actorUserId,
+      description:     `Reversed ${corrections.length} correction entr${corrections.length === 1 ? "y" : "ies"} for journal group …${String(groupId).slice(-8)}`,
+      outcome:         "success",
+      recordsAffected: corrections.length,
+    });
+
+    return res.status(200).json({ success: true, reversedCount: corrections.length });
+  } catch (err) {
+    return res.status(500).json({ error: err.message || "Reverse failed" });
+  }
 };
 
 // ─── GL ENTRIES BY SOURCE TRANSACTION ────────────────────────────────────────
