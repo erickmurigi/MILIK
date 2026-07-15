@@ -263,12 +263,21 @@ export const getRawMpesaPaybillConfigs = (paymentIntegration = {}) => {
     ? integration.mpesaPaybills.map((item) => toPlainObject(item)).filter((item) => item && typeof item === 'object')
     : [];
 
+  const legacy = toPlainObject(integration?.mpesaPaybill || {});
+  const hasLegacy = hasMpesaConfigMeaningfulValues(legacy);
+
   if (explicitArray.length > 0) {
+    // Merge legacy into the array only if it carries a shortCode not already present
+    if (hasLegacy && normalizeText(legacy.shortCode)) {
+      const alreadyPresent = explicitArray.some(
+        (c) => normalizeText(c.shortCode) === normalizeText(legacy.shortCode)
+      );
+      if (!alreadyPresent) return [legacy, ...explicitArray];
+    }
     return explicitArray;
   }
 
-  const legacy = toPlainObject(integration?.mpesaPaybill || {});
-  return hasMpesaConfigMeaningfulValues(legacy) ? [legacy] : [];
+  return hasLegacy ? [legacy] : [];
 };
 
 export const getPrimaryMpesaPaybillConfig = (configs = []) => {
