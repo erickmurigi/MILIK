@@ -13,6 +13,7 @@ import {
   repairRepostInvoices,
   reverseGlCorrectionEntry,
   getActiveCorrections,
+  getGroupEntries,
   getEntriesBySource,
 } from "../../controllers/propertyController/ledgerDiagnostics.js";
 
@@ -33,6 +34,7 @@ router.post("/repair/recompute-balances", verifyUser, requireCompanyModule("acco
 router.post("/repair/repost-invoices", verifyUser, requireCompanyModule("accounts"), repairRepostInvoices);
 router.post("/repair/reverse-correction/:groupId", verifyUser, requireCompanyModule("accounts"), reverseGlCorrectionEntry);
 router.get("/repair/active-corrections", verifyUser, requireCompanyModule("accounts"), getActiveCorrections);
+router.get("/repair/group-entries/:groupId", verifyUser, requireCompanyModule("accounts"), getGroupEntries);
 
 // ─── UNIVERSAL GL-by-source lookup (used by all transaction detail drawers) ──
 router.get("/entries", verifyToken, getEntriesBySource);

@@ -18,6 +18,7 @@ import {
   repairRepostInvoices as apiRepairRepost,
   reverseGlCorrectionEntry as apiReverseGlCorrection,
   getActiveGlCorrections,
+  getGlGroupEntries,
   runGLIntegrityReport,
 } from "../../redux/apiCalls";
 import { useConfirm } from "../../context/ConfirmContext";
@@ -31,11 +32,13 @@ const fmtTs = (d) =>
 const fmtNum = (n) =>
   Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const sourceNavUrl = (sourceType, sourceId) => {
+const sourceNavUrl = (sourceType, sourceId, sourceRef) => {
   if (!sourceType || !sourceId) return null;
   const t = String(sourceType).toLowerCase();
-  if (t === "rent_payment" || t === "receipt")        return `/receipts/${sourceId}`;
-  if (t === "invoice" || t === "tenant_invoice")      return `/invoices/rental/${sourceId}`;
+  // Use ?receipt=<id> so the Receipts page auto-opens by _id, not as a tenant filter
+  if (t === "rent_payment" || t === "receipt")        return `/receipts?receipt=${sourceId}`;
+  // Use ?invoice=<id> pattern consistently for invoices
+  if (t === "invoice" || t === "tenant_invoice")      return `/invoices/rental?invoice=${sourceId}`;
   if (t === "invoice_note")                           return `/invoices/notes`;
   if (t === "late_penalty_batch")                     return `/invoices/late-penalties`;
   if (t === "payment_voucher")                        return `/accounts/payment-vouchers`;
@@ -89,15 +92,28 @@ const TABS = [
 
 // ─── Balance-Group Modal ───────────────────────────────────────────────────────
 function BalanceGroupModal({ group, accounts, businessId, healthRunId, onClose, onDone, navigate }) {
-  const [accountId, setAccountId] = useState("");
-  const [notes, setNotes]         = useState("");
-  const [saving, setSaving]       = useState(false);
+  const [accountId,   setAccountId]   = useState("");
+  const [notes,       setNotes]       = useState("");
+  const [saving,      setSaving]      = useState(false);
+  const [entries,     setEntries]     = useState(null);  // null = loading, [] = none
+  const [entriesErr,  setEntriesErr]  = useState(false);
+
+  useEffect(() => {
+    if (!group?.journalGroupId || !businessId) return;
+    setEntries(null);
+    setEntriesErr(false);
+    getGlGroupEntries(group.journalGroupId, { business: businessId })
+      .then((d) => setEntries(d?.entries ?? []))
+      .catch(() => { setEntriesErr(true); setEntries([]); });
+  }, [group?.journalGroupId, businessId]);
 
   if (!group) return null;
 
-  const direction  = group.difference > 0 ? "Credit" : "Debit";
-  const amount     = Math.abs(group.difference);
+  const direction       = group.difference > 0 ? "Credit" : "Debit";
+  const amount          = Math.abs(group.difference);
   const postingAccounts = accounts.filter((a) => a.isPosting && !a.isHeader);
+  const sourceUrl       = sourceNavUrl(group.sourceType, group.sourceId);
+  const sourceLabel     = group.sourceRef || (group.sourceId ? `…${String(group.sourceId).slice(-12)}` : null);
 
   const submit = async () => {
     if (!accountId) { toast.error("Select a correcting account"); return; }
@@ -114,55 +130,128 @@ function BalanceGroupModal({ group, accounts, businessId, healthRunId, onClose, 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-[440px] border border-slate-200 bg-white shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-[520px] max-h-[90vh] flex flex-col border border-slate-200 bg-white shadow-xl">
         {/* Header */}
-        <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3" style={{ backgroundColor: GRN }}>
+        <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3 shrink-0" style={{ backgroundColor: GRN }}>
           <FaWrench size={11} className="text-white/70" />
           <span className="text-[11px] font-black uppercase tracking-[0.12em] text-white">Post Correcting Entry</span>
           <button onClick={onClose} className="ml-auto text-white/60 hover:text-white text-lg leading-none">&times;</button>
         </div>
 
-        <div className="px-4 py-4 space-y-4">
-          {/* Group info */}
+        <div className="overflow-y-auto px-4 py-4 space-y-4">
+
+          {/* Source advisory — adapt to whether source exists */}
+          {group.sourceOrphaned ? (
+            <div className="flex items-start gap-2.5 border border-red-200 bg-red-50 px-3 py-2.5">
+              <FaExclamationCircle size={11} className="mt-0.5 text-red-500 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="text-[10px] font-bold text-red-800">Source document deleted</div>
+                <div className="text-[10px] text-red-700 mt-0.5">
+                  The original <strong>{group.sourceType}</strong> transaction no longer exists in the database. The GL entries below are orphaned. Post a correcting entry to zero out the imbalance, then consider voiding the remaining entries manually.
+                </div>
+              </div>
+            </div>
+          ) : sourceUrl ? (
+            <div className="flex items-start gap-2.5 border border-blue-200 bg-blue-50 px-3 py-2.5">
+              <FaInfoCircle size={11} className="mt-0.5 text-blue-500 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="text-[10px] font-bold text-blue-800">Fix at source — recommended</div>
+                <div className="text-[10px] text-blue-700 mt-0.5">
+                  Open the original <strong>{group.sourceType}</strong> and correct the amount there. That is the cleanest fix and keeps your audit trail accurate.
+                </div>
+                <button
+                  onClick={() => { onClose(); navigate(sourceUrl); }}
+                  className="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-blue-700 hover:text-blue-900"
+                >
+                  Open {group.sourceType} {sourceLabel} <FaExternalLinkAlt size={8} />
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Group summary */}
           <div className="border border-slate-100 bg-slate-50 px-3 py-2.5 space-y-1.5">
             {[
               ["Journal Group", String(group.journalGroupId).slice(-12)],
               ["Source Type",   group.sourceType || "—"],
               ["Date",          fmtDate(group.date)],
-              ["Debit Sum",     `KES ${fmtNum(group.debit)}`],
-              ["Credit Sum",    `KES ${fmtNum(group.credit)}`],
-              ["Imbalance",     `KES ${fmtNum(amount)}`],
+              ["Debit Total",   `KES ${fmtNum(group.debit)}`],
+              ["Credit Total",  `KES ${fmtNum(group.credit)}`],
             ].map(([label, val]) => (
               <div key={label} className="flex items-center justify-between">
                 <span className="text-[10px] text-slate-500">{label}</span>
                 <span className="text-[10px] font-semibold text-slate-800 font-mono">{val}</span>
               </div>
             ))}
-            {/* Source ID — clickable if we can build a nav URL */}
-            {(() => {
-              const url = sourceNavUrl(group.sourceType, group.sourceId);
-              const label = group.sourceId ? `…${String(group.sourceId).slice(-12)}` : "—";
+            <div className="flex items-center justify-between border-t border-slate-200 pt-1.5">
+              <span className="text-[10px] font-bold text-red-600">Imbalance</span>
+              <span className="text-[10px] font-bold text-red-600 font-mono">KES {fmtNum(amount)} ({direction} missing)</span>
+            </div>
+          </div>
+
+          {/* Actual GL entries in this group */}
+          <div>
+            <div className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400 mb-1.5">Entries in this journal group</div>
+            {entries === null ? (
+              <div className="flex items-center gap-2 py-3 text-[10px] text-slate-400">
+                <FaSyncAlt size={9} className="animate-spin" /> Loading entries…
+              </div>
+            ) : entriesErr ? (
+              <div className="text-[10px] text-red-400">Could not load entries.</div>
+            ) : entries.length === 0 ? (
+              <div className="text-[10px] text-slate-400 italic">No entries found.</div>
+            ) : (() => {
+              const active   = entries.filter((e) => e.status !== "reversed");
+              const reversed = entries.filter((e) => e.status === "reversed");
+              const totalDr  = active.reduce((s, e) => s + e.debit,  0);
+              const totalCr  = active.reduce((s, e) => s + e.credit, 0);
               return (
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-500">Source ID</span>
-                  {url ? (
-                    <button
-                      onClick={() => { onClose(); navigate(url); }}
-                      className="flex items-center gap-1 text-[10px] font-semibold text-blue-600 hover:text-blue-800 font-mono"
-                    >
-                      {label} <FaExternalLinkAlt size={8} />
-                    </button>
-                  ) : (
-                    <span className="text-[10px] font-semibold text-slate-800 font-mono">{label}</span>
-                  )}
+                <div className="border border-slate-100 overflow-hidden">
+                  <table className="w-full">
+                    <thead><tr>
+                      <TH>Account</TH><TH right>Debit</TH><TH right>Credit</TH><TH>Type</TH>
+                    </tr></thead>
+                    <tbody>
+                      {active.map((e) => (
+                        <tr key={String(e._id)}>
+                          <TD cls="text-[10px]">{e.accountCode} {e.accountName}</TD>
+                          <TD right cls="text-emerald-700 font-mono text-[10px]">{e.debit  > 0 ? fmtNum(e.debit)  : ""}</TD>
+                          <TD right cls="text-blue-700 font-mono text-[10px]">{e.credit > 0 ? fmtNum(e.credit) : ""}</TD>
+                          <TD cls={`text-[9px] ${e.sourceTransactionType === "manual_adjustment" ? "text-amber-600 font-semibold" : "text-slate-400"}`}>
+                            {e.sourceTransactionType === "manual_adjustment" ? "correction" : e.sourceTransactionType || "—"}
+                          </TD>
+                        </tr>
+                      ))}
+                      {/* Totals row */}
+                      <tr className="border-t-2 border-slate-200 bg-slate-50">
+                        <td className="px-3 py-1 text-[9px] font-black uppercase text-slate-400">Active Total</td>
+                        <td className={`px-3 py-1 text-right text-[10px] font-bold tabular-nums ${totalDr !== totalCr ? "text-red-600" : "text-emerald-700"}`}>{fmtNum(totalDr)}</td>
+                        <td className={`px-3 py-1 text-right text-[10px] font-bold tabular-nums ${totalDr !== totalCr ? "text-red-600" : "text-blue-700"}`}>{fmtNum(totalCr)}</td>
+                        <td />
+                      </tr>
+                      {/* Reversed entries — collapsed, dimmed */}
+                      {reversed.length > 0 && (
+                        <tr><td colSpan={4} className="px-3 py-1 text-[9px] text-slate-400 bg-slate-50 border-t border-dashed border-slate-200">
+                          {reversed.length} reversed entr{reversed.length === 1 ? "y" : "ies"} (excluded from totals)
+                        </td></tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               );
             })()}
-            <div className="mt-1 border-t border-slate-200 pt-1.5 text-[10px] text-slate-600">
-              A <strong>{direction}</strong> of <strong>KES {fmtNum(amount)}</strong> will be posted to the account you select below.
-            </div>
           </div>
+
+          {/* Correcting entry section */}
+          <div className="border-t border-slate-200 pt-4 space-y-3">
+            <div className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">
+              Post correcting entry — last resort only
+            </div>
+            <div className="text-[10px] text-slate-500">
+              A <strong className={direction === "Credit" ? "text-blue-700" : "text-emerald-700"}>{direction} of KES {fmtNum(amount)}</strong> will be posted to the account below.
+              Only use this if you cannot fix the original transaction.
+            </div>
 
           {/* Account selector */}
           <div>
@@ -182,7 +271,7 @@ function BalanceGroupModal({ group, accounts, businessId, healthRunId, onClose, 
               ))}
             </select>
             <p className="mt-1 text-[9px] text-slate-400">
-              Use a suspense/clearing account (e.g. 9999) unless you know the original missing leg.
+              If unsure, use a suspense/clearing account and investigate before period close.
             </p>
           </div>
 
@@ -198,8 +287,10 @@ function BalanceGroupModal({ group, accounts, businessId, healthRunId, onClose, 
             />
           </div>
 
+          </div>{/* end correcting entry section */}
+
           {/* Buttons */}
-          <div className="flex items-center justify-end gap-2 pt-1">
+          <div className="flex items-center justify-end gap-2 pt-1 shrink-0">
             <button onClick={onClose} disabled={saving}
               className="border border-slate-200 px-4 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">
               Cancel
@@ -547,7 +638,11 @@ export default function GLIntegrityReport() {
                               <tr key={g.journalGroupId} className="hover:bg-slate-50">
                                 <TD cls="font-mono text-[10px] text-slate-400">{String(g.journalGroupId).slice(-8)}</TD>
                                 <TD>{g.sourceType || "—"}</TD>
-                                <TD cls="font-mono text-[10px] text-slate-500">{g.sourceId ? `…${String(g.sourceId).slice(-12)}` : "—"}</TD>
+                                <TD cls="font-mono text-[10px]">
+                                  {g.sourceOrphaned
+                                    ? <span className="text-red-500 font-semibold not-italic">Source deleted</span>
+                                    : g.sourceRef || (g.sourceId ? `…${String(g.sourceId).slice(-12)}` : "—")}
+                                </TD>
                                 <TD>{fmtDate(g.date)}</TD>
                                 <TD right>{fmtNum(g.debit)}</TD>
                                 <TD right>{fmtNum(g.credit)}</TD>
@@ -750,16 +845,19 @@ export default function GLIntegrityReport() {
                                 <span className="font-mono text-[10px] text-slate-400">{String(g.journalGroupId).slice(-8)}</span>
                                 <span className="text-[10px] text-slate-500">{fmtDate(g.date)}</span>
                                 {(() => {
-                                  const url = sourceNavUrl(g.sourceType, g.sourceId);
+                                  if (g.sourceOrphaned)
+                                    return <span className="text-[10px] text-red-500 font-semibold">Source deleted</span>;
+                                  const url   = sourceNavUrl(g.sourceType, g.sourceId);
+                                  const label = g.sourceRef || `…${String(g.sourceId || "").slice(-10)}`;
                                   return url ? (
                                     <button
                                       onClick={() => navigate(url)}
                                       className="flex items-center gap-1 font-mono text-[10px] text-blue-600 hover:text-blue-800 hover:underline"
                                     >
-                                      …{String(g.sourceId).slice(-10)} <FaExternalLinkAlt size={8} />
+                                      {label} <FaExternalLinkAlt size={8} />
                                     </button>
                                   ) : g.sourceId ? (
-                                    <span className="font-mono text-[10px] text-slate-400">…{String(g.sourceId).slice(-10)}</span>
+                                    <span className="font-mono text-[10px] text-slate-400">{label}</span>
                                   ) : null;
                                 })()}
                               </div>

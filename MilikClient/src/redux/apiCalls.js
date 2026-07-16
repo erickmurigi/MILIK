@@ -3173,6 +3173,10 @@ export const getActiveGlCorrections = async (params) => {
   const res = await adminRequests.get("/ledger/repair/active-corrections", { params });
   return res.data;
 };
+export const getGlGroupEntries = async (groupId, params) => {
+  const res = await adminRequests.get(`/ledger/repair/group-entries/${groupId}`, { params });
+  return res.data;
+};
 export const repairRecomputeBalances = async (data) => {
   const res = await adminRequests.post("/ledger/repair/recompute-balances", data);
   return res.data;

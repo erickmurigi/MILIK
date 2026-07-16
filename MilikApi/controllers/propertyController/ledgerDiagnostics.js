@@ -2,6 +2,8 @@ import mongoose from "mongoose";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import RentPayment from "../../models/RentPayment.js";
 import TenantInvoice from "../../models/TenantInvoice.js";
+import LandlordReceipt from "../../models/LandlordReceipt.js";
+import PaymentVoucher from "../../models/PaymentVoucher.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
 import JournalEntry from "../../models/JournalEntry.js";
 import Unit from "../../models/Unit.js";
@@ -13,6 +15,56 @@ import { ensureSystemChartOfAccounts, findSystemAccountByCode } from "../../serv
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+// Batch-fetch human-readable reference numbers for a list of unbalanced groups.
+// Groups the sourceIds by sourceType and does one query per type — no N+1.
+const enrichGroupsWithSourceRef = async (groups) => {
+  if (!groups.length) return groups;
+
+  // bucket by type
+  const byType = {};
+  for (const g of groups) {
+    const t = (g.sourceType || "").toLowerCase();
+    if (!g.sourceId || !mongoose.Types.ObjectId.isValid(String(g.sourceId))) continue;
+    if (!byType[t]) byType[t] = [];
+    byType[t].push(new mongoose.Types.ObjectId(String(g.sourceId)));
+  }
+
+  // per-type batch lookups
+  const refMap  = {}; // sourceId(string) → ref label
+  const foundSet = new Set(); // sourceIds that actually exist in the DB
+
+  const lookup = async (type, ids, Model, refField) => {
+    if (!ids?.length) return;
+    const docs = await Model.find({ _id: { $in: ids } }).select(`_id ${refField}`).lean();
+    for (const d of docs) {
+      const key = String(d._id);
+      foundSet.add(key);
+      refMap[key] = d[refField] || null;
+    }
+  };
+
+  await Promise.all([
+    lookup("rent_payment",    byType["rent_payment"],    RentPayment,    "receiptNumber"),
+    lookup("receipt",         byType["receipt"],          RentPayment,    "receiptNumber"),
+    lookup("tenant_invoice",  byType["tenant_invoice"],   TenantInvoice,  "invoiceNumber"),
+    lookup("invoice",         byType["invoice"],          TenantInvoice,  "invoiceNumber"),
+    lookup("landlord_receipt",byType["landlord_receipt"], LandlordReceipt,"receiptNumber"),
+    lookup("payment_voucher", byType["payment_voucher"],  PaymentVoucher, "voucherNo"),
+    lookup("journal_entry",   byType["journal_entry"],    JournalEntry,   "journalNo"),
+  ]);
+
+  return groups.map((g) => {
+    const sid = g.sourceId ? String(g.sourceId) : null;
+    const hasValidId = sid && mongoose.Types.ObjectId.isValid(sid);
+    return {
+      ...g,
+      sourceRef:      sid ? (refMap[sid] || null)           : null,
+      // true = we looked it up and it's gone from the DB; false/undefined = not looked up
+      sourceOrphaned: hasValidId ? !foundSet.has(sid) : false,
+    };
+  });
+};
 
 const appendRepairLog = async (healthRunId, repairEntry) => {
   if (!healthRunId || !mongoose.Types.ObjectId.isValid(String(healthRunId))) return;
@@ -562,6 +614,32 @@ export const runIntegrityReport = async (req, res) => {
       { journalNo: 1, date: 1 }
     ).lean();
 
+    // Flag which unbalanced groups already have an active manual correction posted
+    let mappedUnbalancedGroups = [];
+    if (unbalancedGroups.length) {
+      const groupIds = unbalancedGroups.map((g) => g._id);
+      const correctionGroupIds = await FinancialLedgerEntry.distinct("journalGroupId", {
+        business:              bizId,
+        journalGroupId:        { $in: groupIds },
+        sourceTransactionType: "manual_adjustment",
+        status:                "approved",
+      });
+      const correctionSet = new Set(correctionGroupIds.map(String));
+      const base = unbalancedGroups.map((g) => ({
+        journalGroupId:     g._id,
+        sourceType:         g.sourceType,
+        sourceId:           g.sourceId,
+        date:               g.firstDate,
+        debit:              g.debitSum,
+        credit:             g.creditSum,
+        difference:         g.diff,
+        entryCount:         g.entryCount,
+        hasCorrectionEntry: correctionSet.has(String(g._id)),
+      }));
+      // Enrich with human-readable receipt/invoice numbers — one query per sourceType
+      mappedUnbalancedGroups = await enrichGroupsWithSourceRef(base);
+    }
+
     const issues = [];
     if (!glBalanced)               issues.push({ severity: "critical", issue: `GL is out of balance by KES ${Math.abs(glDifference).toFixed(2)}` });
     if (unbalancedGroups.length)   issues.push({ severity: "critical", issue: `${unbalancedGroups.length} journal group(s) have unequal debits/credits` });
@@ -592,28 +670,7 @@ export const runIntegrityReport = async (req, res) => {
       issues,
       detail: {
         glBalance: { totalDebit, totalCredit, difference: glDifference, balanced: glBalanced },
-        unbalancedGroups: await (async () => {
-          if (!unbalancedGroups.length) return [];
-          const groupIds = unbalancedGroups.map((g) => g._id);
-          const correctionGroupIds = await FinancialLedgerEntry.distinct("journalGroupId", {
-            business:             bizId,
-            journalGroupId:       { $in: groupIds },
-            sourceTransactionType: "manual_adjustment",
-            status:               "approved",
-          });
-          const correctionSet = new Set(correctionGroupIds.map(String));
-          return unbalancedGroups.map((g) => ({
-            journalGroupId:    g._id,
-            sourceType:        g.sourceType,
-            sourceId:          g.sourceId,
-            date:              g.firstDate,
-            debit:             g.debitSum,
-            credit:            g.creditSum,
-            difference:        g.diff,
-            entryCount:        g.entryCount,
-            hasCorrectionEntry: correctionSet.has(String(g._id)),
-          }));
-        })(),
+        unbalancedGroups: mappedUnbalancedGroups,
         orphanedEntriesCount,
         orphanedAccountIds,
         inactiveAccountEntries,
@@ -678,6 +735,16 @@ export const repairBalanceGroup = async (req, res) => {
 
     if (Math.abs(diff) < 0.005)
       return res.status(400).json({ error: "This journal group is already balanced" });
+
+    // Prevent double-correcting: if an active manual_adjustment already exists, reject
+    const existingCorrection = await FinancialLedgerEntry.exists({
+      business:              bizId,
+      journalGroupId:        groupOid,
+      sourceTransactionType: "manual_adjustment",
+      status:                "approved",
+    });
+    if (existingCorrection)
+      return res.status(409).json({ error: "A correction entry already exists for this group. Undo it first before posting a new one." });
 
     const correctionDirection = diff > 0 ? "credit" : "debit";
     const correctionAmount    = Math.abs(diff);
@@ -855,10 +922,10 @@ export const reverseGlCorrectionEntry = async (req, res) => {
 
   try {
     const corrections = await FinancialLedgerEntry.find({
-      business:             businessId,
-      journalGroupId:       new mongoose.Types.ObjectId(groupId),
+      business:              new mongoose.Types.ObjectId(String(businessId)),
+      journalGroupId:        new mongoose.Types.ObjectId(groupId),
       sourceTransactionType: "manual_adjustment",
-      status:               "approved",
+      status:                "approved",
     }).select("_id accountId").lean();
 
     if (!corrections.length) {
@@ -885,6 +952,45 @@ export const reverseGlCorrectionEntry = async (req, res) => {
     return res.status(200).json({ success: true, reversedCount: corrections.length });
   } catch (err) {
     return res.status(500).json({ error: err.message || "Reverse failed" });
+  }
+};
+
+// ─── GL ENTRIES FOR A JOURNAL GROUP ──────────────────────────────────────────
+// GET /api/ledger/repair/group-entries/:groupId
+// Returns all ledger entries in a journal group so the user can see exactly
+// which legs exist and which is missing before deciding how to correct.
+export const getGroupEntries = async (req, res) => {
+  const { groupId } = req.params;
+  const businessId  = req.query?.business || req.user?.company;
+
+  if (!businessId) return res.status(400).json({ error: "Business context required" });
+  if (!mongoose.Types.ObjectId.isValid(groupId)) return res.status(400).json({ error: "Invalid groupId" });
+
+  try {
+    const entries = await FinancialLedgerEntry.find({
+      business:       new mongoose.Types.ObjectId(String(businessId)),
+      journalGroupId: new mongoose.Types.ObjectId(groupId),
+      status:         { $in: ["approved", "reversed"] },
+    })
+      .populate({ path: "accountId", select: "code name type" })
+      .sort({ direction: 1, createdAt: 1 })
+      .lean();
+
+    return res.status(200).json({
+      entries: entries.map((e) => ({
+        _id:                   e._id,
+        direction:             e.direction,
+        debit:                 e.debit  || 0,
+        credit:                e.credit || 0,
+        accountCode:           e.accountId?.code || "—",
+        accountName:           e.accountId?.name || "—",
+        notes:                 e.notes  || "",
+        sourceTransactionType: e.sourceTransactionType,
+        status:                e.status,
+      })),
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
   }
 };
 
