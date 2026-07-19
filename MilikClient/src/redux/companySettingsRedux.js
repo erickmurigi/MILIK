@@ -1,4 +1,23 @@
-import { createSlice } from "@reduxjs/toolkit";
+import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import { adminRequests } from "../utils/requestMethods";
+
+export const selectCompanySettings = (state) => state.companySettings?.companySettings ?? null;
+export const selectCompanySettingsLoading = (state) => state.companySettings?.isFetching ?? false;
+
+export const fetchCompanySettings = createAsyncThunk(
+  "companySettings/fetch",
+  async (companyId, { getState, rejectWithValue }) => {
+    const existing = selectCompanySettings(getState());
+    const existingCompanyId = existing?.company?._id || existing?.company || existing?._id;
+    if (existing && String(existingCompanyId) === String(companyId)) return existing;
+    try {
+      const res = await adminRequests.get(`/company-settings/${companyId}`);
+      return res.data;
+    } catch (err) {
+      return rejectWithValue(err?.response?.data?.message || "Failed to load settings");
+    }
+  }
+);
 
 const initialState = {
   companySettings: null,
@@ -10,6 +29,12 @@ const initialState = {
 const companySettingsSlice = createSlice({
   name: "companySettings",
   initialState,
+  extraReducers: (builder) => {
+    builder
+      .addCase(fetchCompanySettings.pending, (state) => { state.isFetching = true; state.error = false; })
+      .addCase(fetchCompanySettings.fulfilled, (state, action) => { state.isFetching = false; state.companySettings = action.payload; })
+      .addCase(fetchCompanySettings.rejected, (state, action) => { state.isFetching = false; state.error = true; state.errorMessage = action.payload; });
+  },
   reducers: {
     // Fetch settings
     getSettingsStart: (state) => {

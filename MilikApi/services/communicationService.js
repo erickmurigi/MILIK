@@ -9,6 +9,7 @@ import Landlord from '../models/Landlord.js';
 import { generateStatementPdf } from './statementPdfService.js';
 import { generateInvoicePdf } from './invoicePdfService.js';
 import { generateReceiptPdf } from './receiptPdfService.js';
+import { generateManagementFeeInvoicePdf } from './managementFeeInvoicePdfService.js';
 import MeterReading from '../models/MeterReading.js';
 import ProcessedStatement from '../models/ProcessedStatement.js';
 import Property from '../models/Property.js';
@@ -30,6 +31,7 @@ import {
   buildCompanyInternalCopyRecipients,
   buildCompanySmtpTransporter,
   decryptStoredSecret,
+  isEmailEnabled,
   resolveCompanyMailSender,
 } from '../utils/smtpMailer.js';
 
@@ -90,6 +92,7 @@ const SMS_ALLOWED_TEMPLATE_KEYS = {
   meter_reading: ['meter_usage_notification_sms'],
   penalty_invoice: ['penalty_notice_sms'],
   landlord_payment: ['landlord_payment_sms'],
+  management_fee_invoice: ['management_fee_invoice_sms'],
 };
 
 const EMAIL_TEMPLATE_DEFINITIONS = [
@@ -163,6 +166,14 @@ const EMAIL_TEMPLATE_DEFINITIONS = [
     subject: 'Notice from {companyName}',
     body: 'Hello {landlordName},\n\n{customBody}\n\nRegards,\n{companyName}\n{companyPhone}',
   },
+  {
+    key: 'management_fee_invoice_email',
+    name: 'Management Fee Invoice Email',
+    recipientType: 'landlord',
+    description: 'Send a management fee invoice to the landlord with the PDF attached.',
+    subject: 'Management Fee Invoice {invoiceNumber} – {propertyName} ({billingPeriod})',
+    body: 'Hello {landlordName},\n\nPlease find attached your management fee invoice for {propertyName} covering {billingPeriod}.\n\nInvoice Number: {invoiceNumber}\nStatement Reference: {statementNumber}\nManagement Fee: {commissionAmount}\n{vatLine}Total Due: {totalDue}\n\nThis fee has been deducted from your landlord disbursement for the above period. No separate payment is required.\n\nRegards,\n{companyName}\n{companyPhone}',
+  },
 ];
 
 const EMAIL_ALLOWED_TEMPLATE_KEYS = {
@@ -174,6 +185,7 @@ const EMAIL_ALLOWED_TEMPLATE_KEYS = {
   meter_reading: ['meter_usage_notification_email'],
   penalty_invoice: ['penalty_notice_email'],
   landlord_payment: ['landlord_payment_email'],
+  management_fee_invoice: ['management_fee_invoice_email'],
 };
 
 const CONTEXT_PERMISSION_MAP = {
@@ -190,6 +202,7 @@ const CONTEXT_PERMISSION_MAP = {
   meter_reading: { resource: 'meterReadings', moduleKey: 'propertyManagement' },
   penalty_invoice: { resource: 'latePenalties', moduleKey: 'propertyManagement' },
   landlord_payment: { resource: 'landlordPayments', moduleKey: 'propertyManagement' },
+  management_fee_invoice: { resource: 'processedStatements', moduleKey: 'propertyManagement' },
 };
 
 const normalizePhoneNumber = (value = '', defaultCountryCode = '+254') => {
@@ -414,6 +427,42 @@ const buildLandlordPaymentPayload = ({ statement, company, channel }) => ({
   referenceNumber: statement?.paymentReference || '',
 });
 
+const buildManagementFeeInvoicePayload = ({ statement, company, channel }) => {
+  const commissionNet = Number(statement?.commissionAmount || 0);
+  const commissionTax = Number(statement?.commissionTaxAmount || 0);
+  const commissionGross = Number(statement?.commissionGrossAmount || commissionNet + commissionTax);
+  const taxRate = Number(statement?.commissionTaxRate || 0);
+  const currency = company?.baseCurrency || 'KES';
+
+  const displayTaxRate =
+    taxRate > 0
+      ? taxRate
+      : commissionNet > 0
+      ? Math.round((commissionTax / commissionNet) * 100)
+      : null;
+
+  const vatLine =
+    commissionTax > 0
+      ? `VAT${displayTaxRate ? ` (${displayTaxRate}%)` : ''}: ${formatCurrency(commissionTax, currency)}\n`
+      : '';
+
+  return {
+    ...buildCommonPayload({ company, channel }),
+    recipientName: getLandlordDisplayName(statement?.landlord),
+    landlordName: getLandlordDisplayName(statement?.landlord),
+    landlordCode: statement?.landlord?.landlordCode || '',
+    propertyName: getPropertyName(statement?.property),
+    billingPeriod: `${formatDate(statement?.periodStart)} to ${formatDate(statement?.periodEnd)}`,
+    invoiceNumber: statement?.managementFeeInvoiceNumber || '',
+    statementNumber: statement?.sourceStatementNumber || String(statement?._id || ''),
+    commissionAmount: formatCurrency(commissionNet, currency),
+    vatLine,
+    totalDue: formatCurrency(commissionGross, currency),
+    email: statement?.landlord?.email || '',
+    phoneNumber: statement?.landlord?.phoneNumber || '',
+  };
+};
+
 const renderTemplateString = (template = '', payload = {}) => {
   const missing = [];
   const rendered = String(template || '').replace(/\{([a-zA-Z0-9_]+)\}/g, (_match, key) => {
@@ -508,7 +557,7 @@ const ensureCompany = async (businessId) => {
 
 const loadTenantRecords = async (ids = [], businessId) => {
   const rows = await Tenant.find({ _id: { $in: ids }, business: businessId })
-    .populate({ path: 'unit', select: 'unitNumber property', populate: { path: 'property', select: 'propertyName' } })
+    .populate({ path: 'unit', select: 'unitNumber property', populate: { path: 'property', select: 'propertyName smsExemptions emailExemptions' } })
     .lean();
 
   return rows.map((tenant) => ({
@@ -623,7 +672,7 @@ const loadProcessedStatementRecords = async (ids = [], businessId) => {
 const loadReceiptRecords = async (ids = [], businessId) => {
   const rows = await RentPayment.find({ _id: { $in: ids }, business: businessId })
     .populate('tenant', 'name email phone tenantCode')
-    .populate({ path: 'unit', select: 'unitNumber property', populate: { path: 'property', select: 'propertyName propertyCode' } })
+    .populate({ path: 'unit', select: 'unitNumber property', populate: { path: 'property', select: 'propertyName propertyCode smsExemptions emailExemptions' } })
     .lean();
 
   return rows.map((receipt) => ({
@@ -640,13 +689,14 @@ const loadReceiptRecords = async (ids = [], businessId) => {
     recipientPhone: receipt?.tenant?.phone || '',
     recipientEmail: receipt?.tenant?.email || '',
     receipt,
+    property: receipt?.unit?.property || null,
   }));
 };
 
 const loadInvoiceRecords = async (ids = [], businessId) => {
   const rows = await TenantInvoice.find({ _id: { $in: ids }, business: businessId })
     .populate('tenant', 'name email phone tenantCode rent')
-    .populate('property', 'propertyName propertyCode')
+    .populate('property', 'propertyName propertyCode smsExemptions emailExemptions')
     .populate('unit', 'unitNumber')
     .lean();
 
@@ -664,13 +714,14 @@ const loadInvoiceRecords = async (ids = [], businessId) => {
     recipientPhone: invoice?.tenant?.phone || '',
     recipientEmail: invoice?.tenant?.email || '',
     invoice,
+    property: invoice?.property || null,
   }));
 };
 
 const loadMeterReadingRecords = async (ids = [], businessId) => {
   const rows = await MeterReading.find({ _id: { $in: ids }, business: businessId })
     .populate('tenant', 'name email phone tenantCode')
-    .populate('property', 'propertyName propertyCode')
+    .populate('property', 'propertyName propertyCode smsExemptions emailExemptions')
     .populate('unit', 'unitNumber')
     .lean();
 
@@ -688,6 +739,7 @@ const loadMeterReadingRecords = async (ids = [], businessId) => {
     recipientPhone: reading?.tenant?.phone || '',
     recipientEmail: reading?.tenant?.email || '',
     reading,
+    property: reading?.property || null,
   }));
 };
 
@@ -700,6 +752,22 @@ const loadLandlordPaymentRecords = async (ids = [], businessId) => {
   return rows.map((statement) => ({
     recordId: String(statement._id),
     payload: buildLandlordPaymentPayload({ statement, company: null, channel: 'sms' }),
+    recipientName: getLandlordDisplayName(statement?.landlord),
+    recipientPhone: statement?.landlord?.phoneNumber || '',
+    recipientEmail: statement?.landlord?.email || '',
+    statement,
+  }));
+};
+
+const loadManagementFeeInvoiceRecords = async (ids = [], businessId) => {
+  const rows = await ProcessedStatement.find({ _id: { $in: ids }, business: businessId, commissionGrossAmount: { $gt: 0 } })
+    .populate('landlord', 'landlordName email phoneNumber landlordCode')
+    .populate('property', 'propertyName propertyCode')
+    .lean();
+
+  return rows.map((statement) => ({
+    recordId: String(statement._id),
+    payload: buildManagementFeeInvoicePayload({ statement, company: null, channel: 'email' }),
     recipientName: getLandlordDisplayName(statement?.landlord),
     recipientPhone: statement?.landlord?.phoneNumber || '',
     recipientEmail: statement?.landlord?.email || '',
@@ -721,6 +789,7 @@ const CONTEXT_LOADERS = {
   meter_reading: loadMeterReadingRecords,
   penalty_invoice: loadInvoiceRecords,
   landlord_payment: loadLandlordPaymentRecords,
+  management_fee_invoice: loadManagementFeeInvoiceRecords,
 };
 
 const resolveChannelTemplate = ({ company, contextType, channel, templateKey }) => {
@@ -771,7 +840,28 @@ const resolveEmailProfile = ({ company, requestedProfileId = '' }) => {
   };
 };
 
-const buildRecordPreview = ({ company, channel, template, record, profileStatus }) => {
+const isCompanyEmailEnabled = (company) => company?.communication?.emailEnabled !== false;
+
+// Maps a communication contextType to the exemption flag key on smsExemptions/emailExemptions
+const CONTEXT_EXEMPTION_KEY = {
+  tenant_bulk:     'general',
+  receipt:         'receipt',
+  invoice:         'invoice',
+  penalty_invoice: 'invoice',
+  meter_reading:   'general',
+  balance:         'balance',
+};
+
+const isPropertyExempt = (property, channel, contextType) => {
+  if (!property) return false;
+  const exemptions = channel === 'sms' ? property.smsExemptions : property.emailExemptions;
+  if (!exemptions) return false;
+  if (exemptions.all) return true;
+  const key = CONTEXT_EXEMPTION_KEY[contextType];
+  return key ? Boolean(exemptions[key]) : false;
+};
+
+const buildRecordPreview = ({ company, channel, contextType, template, record, profileStatus }) => {
   const payload = {
     ...record.payload,
     ...buildCommonPayload({ company, channel }),
@@ -800,6 +890,11 @@ const buildRecordPreview = ({ company, channel, template, record, profileStatus 
   if (channel === 'email' && !normalizedEmail) {
     canSend = false;
     reason = reason || 'Recipient email address is missing.';
+  }
+
+  if (canSend && isPropertyExempt(record.property || null, channel, contextType)) {
+    canSend = false;
+    reason = `Property is exempt from ${channel === 'sms' ? 'SMS' : 'email'} communications of this type.`;
   }
 
   return {
@@ -856,6 +951,7 @@ export const previewCommunication = async ({ businessId, contextType, channel, t
     previews.push(buildRecordPreview({
       company,
       channel,
+      contextType,
       template: effectiveTemplate,
       record,
       profileStatus: { ...profileStatus, profile },
@@ -1130,6 +1226,7 @@ const dispatchSms = async ({ profile, to, body }) => {
 };
 
 const dispatchEmail = async ({ profile, to, subject, text, html, attachments }) => {
+  if (!isEmailEnabled()) return;
   const transporter = buildCompanySmtpTransporter(profile);
   await transporter.sendMail({
     from: resolveCompanyMailSender(profile),
@@ -1225,6 +1322,24 @@ const preBuildAttachments = async ({ contextType, items, businessId }) => {
     }));
   }
 
+  if (contextType === 'management_fee_invoice') {
+    const statements = await ProcessedStatement.find({ _id: { $in: sendableIds }, business: businessId })
+      .populate('landlord', 'landlordName email phoneNumber landlordCode')
+      .populate('property', 'propertyName propertyCode commissionPaymentMode')
+      .lean();
+    const stmtMap = new Map(statements.map((s) => [String(s._id), s]));
+
+    await Promise.allSettled(sendableIds.map(async (id) => {
+      const statement = stmtMap.get(String(id));
+      if (!statement) return;
+      try {
+        const pdfBuffer = await generateManagementFeeInvoicePdf(statement);
+        const invoiceNo = statement.managementFeeInvoiceNumber || String(id);
+        cache.set(String(id), [{ filename: `ManagementFee-${invoiceNo}.pdf`, content: pdfBuffer, contentType: 'application/pdf' }]);
+      } catch { /* best-effort */ }
+    }));
+  }
+
   return cache;
 };
 
@@ -1268,6 +1383,17 @@ export const sendCommunication = async ({ businessId, contextType, channel, temp
   }
 
   const company = preview.company;
+
+  if (channel === 'email' && !isCompanyEmailEnabled(company)) {
+    return {
+      ...preview,
+      summary: { ...preview.summary, sentCount: 0, failedCount: 0 },
+      results: [],
+      skipped: true,
+      skipReason: 'Email sending is currently disabled for this company.',
+    };
+  }
+
   const template = resolveChannelTemplate({ company, contextType, channel, templateKey });
   const profileResolution = channel === 'sms'
     ? resolveSmsProfile({ company, template, requestedProfileId: profileId })
@@ -1587,6 +1713,8 @@ export const sendAdHocEmail = async ({ businessId, to, subject, html, text } = {
   if (!to || !subject || (!html && !text)) return null;
   try {
     const company = await ensureCompany(businessId);
+    if (!isCompanyEmailEnabled(company)) return { success: false, skipped: true };
+    if (!isEmailEnabled()) return { success: false, skipped: true };
     const profiles = getRawEmailProfiles(company.communication || {});
     const profile  = getPrimaryEmailProfile(profiles, company.communication?.defaultEmailProfileId || null);
     if (!profile?.enabled) throw new Error("No active email profile configured");
@@ -1600,6 +1728,13 @@ export const sendAdHocEmail = async ({ businessId, to, subject, html, text } = {
 
 export const sendTestEmail = async ({ businessId, email, subject, body } = {}) => {
   const company = await ensureCompany(businessId);
+
+  if (!isCompanyEmailEnabled(company)) {
+    const error = new Error('Email sending is currently disabled for this company.');
+    error.statusCode = 503;
+    throw error;
+  }
+
   const profiles = getRawEmailProfiles(company.communication || {});
   const profile  = getPrimaryEmailProfile(profiles, company.communication?.defaultEmailProfileId || null);
 

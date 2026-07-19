@@ -2,6 +2,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
+import rateLimit from 'express-rate-limit';
 import HREmployee from '../models/HREmployee.js';
 import Company from '../../../models/Company.js';
 
@@ -14,8 +15,17 @@ const getJWTSecret = () => {
 };
 const JWT_OPTS = { issuer: 'milik-api', audience: 'milik-client', expiresIn: '12h' };
 
+const essLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  message: { success: false, message: "Too many login attempts, please try again in 15 minutes." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+});
+
 // POST /api/hr/ess/auth/login
-router.post('/login', async (req, res) => {
+router.post('/login', essLoginLimiter, async (req, res) => {
   try {
     const { companyCode, employeeNumber, password } = req.body;
     if (!companyCode || !employeeNumber || !password) {

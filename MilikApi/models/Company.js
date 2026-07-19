@@ -474,6 +474,7 @@ const smsTemplateSchema = new mongoose.Schema(
 
 const communicationSchema = new mongoose.Schema(
   {
+    emailEnabled: { type: Boolean, default: true },
     emailProfiles: {
       type: [emailProfileSchema],
       default: [],

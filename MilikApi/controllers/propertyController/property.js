@@ -1065,6 +1065,10 @@ export const updateProperty = async (req, res, next) => {
       }
     });
 
+    if (req.body.dateAcquired === "") {
+      req.body.dateAcquired = null;
+    }
+
     if (isSelfManagingLandlordCompany(company)) {
       const modeAwareAssignment = await buildModeAwarePropertyAssignment({
         company,

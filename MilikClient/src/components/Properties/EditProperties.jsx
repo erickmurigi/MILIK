@@ -621,9 +621,6 @@ const EditProperty = () => {
   const validatePropertyForm = () => {
     const errors = {};
 
-    if (!formData.dateAcquired?.trim()) {
-      errors.dateAcquired = "Date acquired is required.";
-    }
     if (!formData.propertyName?.trim()) {
       errors.propertyName = "Property name is required.";
     }
@@ -864,14 +861,13 @@ const EditProperty = () => {
       <div className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           <div>
-            <label className={labelClass}>Date Acquired *</label>
+            <label className={labelClass}>Date Acquired</label>
             <input
               type="date"
               name="dateAcquired"
               value={formData.dateAcquired}
               onChange={handleChange}
-              className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS} ${fieldErrors.dateAcquired ? "border-red-500 focus:border-red-500 focus:ring-red-200" : ""}`}
-              required
+              className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
             />
             {fieldErrors.dateAcquired && <p className="mt-1 text-xs text-red-600">{fieldErrors.dateAcquired}</p>}
           </div>

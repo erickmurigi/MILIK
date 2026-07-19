@@ -18,6 +18,10 @@ import { isManagerIncomeAccount, isManagerExpenseAccount } from "../../utils/acc
 
 const router = express.Router();
 
+// In-memory dashboard cache — avoids 20+ parallel aggregations on every page mount.
+const dashboardCache = new Map(); // businessId -> { data, expiresAt }
+const DASHBOARD_CACHE_TTL_MS = 60_000; // 60 s
+
 // ── Aggregation expression helpers ───────────────────────────────────────────
 
 const amountExpr = {
@@ -85,6 +89,12 @@ router.get("/summary", verifyUser, async (req, res) => {
     const business = mongoose.Types.ObjectId.isValid(rawBusiness)
       ? new mongoose.Types.ObjectId(rawBusiness)
       : rawBusiness;
+
+    const cacheKey = String(rawBusiness);
+    const cached = dashboardCache.get(cacheKey);
+    if (cached && Date.now() < cached.expiresAt) {
+      return res.json(cached.data);
+    }
 
     // ── Timezone-aware boundaries (Kenya = UTC+3) ─────────────────────────────
     // Dates are stored as UTC. A Kenya midnight like "2026-07-01 00:00 EAT" is
@@ -382,7 +392,7 @@ router.get("/summary", verifyUser, async (req, res) => {
     const collectionRate  = Number(totalMonthlyRentDueAgg?.[0]?.total || 0) > 0
       ? (monthlyRevenue / Number(totalMonthlyRentDueAgg[0].total)) * 100 : 0;
 
-    return res.json({
+    const payload = {
       totalUnits,
       occupiedUnits,
       vacantUnits,
@@ -391,9 +401,9 @@ router.get("/summary", verifyUser, async (req, res) => {
       monthlyRevenue,
       collectedThisMonth,
       collectedByMonth,
-      expectedByMonth,       // NEW — drives the chart expected bars
-      outstandingArrears,    // NEW — live arrears total
-      propertyStats,         // NEW — per-property collection for Portfolio Pulse
+      expectedByMonth,
+      outstandingArrears,
+      propertyStats,
       pendingPayments,
       activeTenants,
       overdueTenants,
@@ -410,7 +420,9 @@ router.get("/summary", verifyUser, async (req, res) => {
       unpostedReceiptCount,
       leasesExpiringSoonCount,
       totalLandlordPayable,
-    });
+    };
+    dashboardCache.set(cacheKey, { data: payload, expiresAt: Date.now() + DASHBOARD_CACHE_TTL_MS });
+    return res.json(payload);
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

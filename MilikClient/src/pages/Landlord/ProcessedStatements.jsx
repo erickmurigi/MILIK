@@ -337,6 +337,32 @@ const ProcessedStatements = () => {
     }
   };
 
+  const handlePrintFeeInvoice = async (statement) => {
+    if (!canExportProcessedStatement) {
+      toast.warning("You do not have permission to print fee invoices");
+      return;
+    }
+    try {
+      const response = await adminRequests.get(`/processed-statements/${statement._id}/management-fee-invoice-pdf`, {
+        responseType: "blob",
+      });
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const blobUrl = window.URL.createObjectURL(blob);
+      const win = window.open(blobUrl, "_blank");
+      if (!win) {
+        window.URL.revokeObjectURL(blobUrl);
+        toast.error("Unable to open print window");
+        return;
+      }
+      const tryPrint = () => { try { win.focus(); win.print(); } catch (_) {} };
+      win.onload = tryPrint;
+      setTimeout(tryPrint, 1200);
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 15000);
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to generate fee invoice PDF");
+    }
+  };
+
   const handlePrintStatement = async (statement) => {
     if (!canExportProcessedStatement) {
       toast.warning("You do not have permission to print processed statements");
@@ -556,6 +582,7 @@ const ProcessedStatements = () => {
                 <button onClick={() => handleTabChange("outstanding")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "outstanding" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaHourglass /> Outstanding {activeTab === "outstanding" ? `(${pagination.total})` : ""}</button>
                 <button onClick={() => handleTabChange("recoveries")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "recoveries" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaHourglass /> Recoveries {activeTab === "recoveries" ? `(${pagination.total})` : ""}</button>
                 <button onClick={() => handleTabChange("paid")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "paid" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaCheckCircle /> Paid {activeTab === "paid" ? `(${pagination.total})` : ""}</button>
+                <button onClick={() => handleTabChange("management_fees")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "management_fees" ? "bg-[#FF8C00] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaDownload /> Mgmt Fees {activeTab === "management_fees" ? `(${pagination.total})` : ""}</button>
                 <input type="text" placeholder="Search landlord, property…" value={searchText} onChange={(e) => handleSearchChange(e.target.value)} onBlur={applySearch} onKeyDown={(e) => e.key === "Enter" && applySearch()} className="h-7 w-44 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 <select value={sortBy} onChange={(e) => handleSortChange(e.target.value)} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="date-desc">Newest First</option>
@@ -598,8 +625,11 @@ const ProcessedStatements = () => {
                         return (
                           <React.Fragment key={statement._id}>
                             <tr className={`border-b border-gray-100 transition-colors ${stmtIdx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
-                              <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-500">
-                                {statement.sourceStatementNumber || '—'}
+                              <td className="px-3 py-1 border-r border-gray-100">
+                                <div className="font-mono text-slate-500">{statement.sourceStatementNumber || '—'}</div>
+                                {statement.managementFeeInvoiceNumber && (
+                                  <div className="font-mono text-[10px] text-orange-600 font-semibold">{statement.managementFeeInvoiceNumber}</div>
+                                )}
                               </td>
                               <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{statement.landlord?.landlordName || "N/A"}</td>
                               <td className="px-3 py-1 border-r border-gray-100">
@@ -645,6 +675,12 @@ const ProcessedStatements = () => {
                                         <p className="text-sm text-gray-600">Statement Period</p>
                                         <p className="font-semibold">{formatPeriodRange(statement)}</p>
                                       </div>
+                                      {statement.managementFeeInvoiceNumber && (
+                                        <div>
+                                          <p className="text-sm text-gray-600">Fee Invoice #</p>
+                                          <p className="font-semibold font-mono text-[#FF8C00]">{statement.managementFeeInvoiceNumber}</p>
+                                        </div>
+                                      )}
                                     </div>
 
                                     <div className="rounded border bg-white p-3">
@@ -791,6 +827,17 @@ const ProcessedStatements = () => {
                                       >
                                         <FaPrint /> Print
                                       </button>
+
+                                      {Number(statement.commissionAmount || 0) > 0 && (
+                                        <button
+                                          onClick={() => handlePrintFeeInvoice(statement)}
+                                          disabled={!canExportProcessedStatement}
+                                          title={statement.managementFeeInvoiceNumber ? `Print Fee Invoice ${statement.managementFeeInvoiceNumber}` : "Print Management Fee Invoice"}
+                                          className="flex items-center gap-2 rounded border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-700 transition hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                          <FaDownload /> Fee Invoice
+                                        </button>
+                                      )}
 
                                       <button
                                         onClick={() => setCommModalStatement(statement)}

@@ -3,6 +3,7 @@ import ProcessedStatement from "../../models/ProcessedStatement.js";
 import Property from "../../models/Property.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
 import LandlordStatement from "../../models/LandlordStatement.js";
+import SequenceCounter from "../../models/SequenceCounter.js";
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import PaymentVoucher from "../../models/PaymentVoucher.js";
@@ -11,10 +12,25 @@ import { ensureSystemChartOfAccounts, findSystemAccountByCode } from "../../serv
 import { resolveConfiguredAccountingDefaultAccount } from "../../services/companyAccountingDefaultsService.js";
 import { getCompanyTaxConfiguration, resolveOutputVatAccount } from "../../services/taxCalculationService.js";
 import { generateLandlordStatement } from "../../services/landlordStatementService.js";
+import { generateManagementFeeInvoicePdf } from "../../services/managementFeeInvoicePdfService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 const toObjectId = (value) => (isValidObjectId(value) ? new mongoose.Types.ObjectId(String(value)) : null);
+
+const generateManagementFeeInvoiceNumber = async (businessId, periodEnd) => {
+  const date = periodEnd ? new Date(periodEnd) : new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const counterKey = `management_fee_invoice_number:${year}${month}`;
+  const businessOid = toObjectId(String(businessId));
+  const counter = await SequenceCounter.findOneAndUpdate(
+    { business: businessOid, key: counterKey },
+    { $setOnInsert: { business: businessOid, key: counterKey }, $inc: { sequence: 1 } },
+    { new: true, upsert: true }
+  ).lean();
+  return `MF-${year}${month}-${String(counter.sequence).padStart(5, "0")}`;
+};
 
 const resolveAuthenticatedBusinessId = (req) =>
   req?.user?.company?._id || req?.user?.company || req?.user?.businessId || null;
@@ -893,6 +909,13 @@ export const closeStatement = async (req, res) => {
       });
 
       if (duplicateBySource) {
+        if (!duplicateBySource.managementFeeInvoiceNumber && numberOrZero(duplicateBySource.commissionAmount) > 0) {
+          try {
+            const invoiceNo = await generateManagementFeeInvoiceNumber(business, duplicateBySource.periodEnd);
+            await ProcessedStatement.updateOne({ _id: duplicateBySource._id }, { $set: { managementFeeInvoiceNumber: invoiceNo } });
+          } catch (_) {}
+        }
+
         const hydratedExistingStatement =
           (await hydrateProcessedStatementForResponse(duplicateBySource)) || duplicateBySource;
 
@@ -1035,6 +1058,14 @@ export const closeStatement = async (req, res) => {
       closedAt: now,
     });
 
+    if (numberOrZero(snapshotData.commissionAmount) > 0) {
+      try {
+        newStatement.managementFeeInvoiceNumber = await generateManagementFeeInvoiceNumber(business, actualPeriodEnd);
+      } catch (_) {
+        // non-fatal — statement still saves without an invoice number
+      }
+    }
+
     let savedStatement = null;
 
     try {
@@ -1048,6 +1079,13 @@ export const closeStatement = async (req, res) => {
         });
 
         if (existingProcessedStatement) {
+          if (!existingProcessedStatement.managementFeeInvoiceNumber && numberOrZero(existingProcessedStatement.commissionAmount) > 0) {
+            try {
+              const invoiceNo = await generateManagementFeeInvoiceNumber(business, existingProcessedStatement.periodEnd);
+              await ProcessedStatement.updateOne({ _id: existingProcessedStatement._id }, { $set: { managementFeeInvoiceNumber: invoiceNo } });
+            } catch (_) {}
+          }
+
           const existingCommission = numberOrZero(existingProcessedStatement.commissionAmount);
           if (existingCommission > 0) {
             const existingCommissionEntry = await FinancialLedgerEntry.findOne({
@@ -1149,6 +1187,9 @@ export const getStatementsByBusiness = async (req, res) => {
     } else if (tab === "paid") {
       query.status = "paid";
       query.isNegativeStatement = { $ne: true };
+    } else if (tab === "management_fees") {
+      query.commissionGrossAmount = { $gt: 0 };
+      query.status = { $ne: "reversed" };
     }
 
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
@@ -1172,14 +1213,37 @@ export const getStatementsByBusiness = async (req, res) => {
       ProcessedStatement.countDocuments(query),
     ]);
 
-    // Apply text search post-populate (landlord name, property code/name)
+    // Lazy backfill: assign invoice numbers to any management_fees statements that are missing one
+    if (tab === "management_fees") {
+      const missing = statements.filter((s) => Number(s.commissionGrossAmount || 0) > 0 && !s.managementFeeInvoiceNumber);
+      if (missing.length > 0) {
+        await Promise.all(
+          missing.map(async (s) => {
+            try {
+              const invoiceNo = await generateManagementFeeInvoiceNumber(String(s.business?._id || s.business), s.periodEnd);
+              await ProcessedStatement.updateOne(
+                { _id: s._id, $or: [{ managementFeeInvoiceNumber: { $exists: false } }, { managementFeeInvoiceNumber: null }, { managementFeeInvoiceNumber: "" }] },
+                { $set: { managementFeeInvoiceNumber: invoiceNo } }
+              );
+              s.managementFeeInvoiceNumber = invoiceNo;
+            } catch (backfillErr) {
+              console.error("Management fee invoice backfill error for", String(s._id), ":", backfillErr?.message || backfillErr);
+            }
+          })
+        );
+      }
+    }
+
+    // Apply text search post-populate (landlord name, property code/name, invoice number)
     const filtered = search
       ? statements.filter((s) => {
           const q = String(search).toLowerCase();
           return (
             String(s.landlord?.landlordName || "").toLowerCase().includes(q) ||
             String(s.property?.propertyCode || "").toLowerCase().includes(q) ||
-            String(s.property?.propertyName || s.property?.name || "").toLowerCase().includes(q)
+            String(s.property?.propertyName || s.property?.name || "").toLowerCase().includes(q) ||
+            String(s.managementFeeInvoiceNumber || "").toLowerCase().includes(q) ||
+            String(s.sourceStatementNumber || "").toLowerCase().includes(q)
           );
         })
       : statements;
@@ -1506,6 +1570,33 @@ export const adminCleanupOrphanedGLEntries = async (req, res) => {
   } catch (error) {
     console.error("Cleanup orphaned GL error:", error);
     res.status(error?.statusCode || 500).json({ message: error.message || "Cleanup failed", error: error.message });
+  }
+};
+
+export const getManagementFeeInvoicePdf = async (req, res) => {
+  try {
+    const { statementId } = req.params;
+    const statement = await findScopedProcessedStatementById(req, statementId, [
+      { path: "landlord", select: "landlordName firstName lastName email contact" },
+      { path: "property", select: "propertyCode propertyName name commissionPaymentMode commissionPercentage" },
+      { path: "business", select: "companyName name address phone email" },
+    ]);
+
+    if (!statement) return res.status(404).json({ message: "Statement not found" });
+    if (!(numberOrZero(statement.commissionAmount) > 0)) {
+      return res.status(400).json({ message: "No management fee on this statement." });
+    }
+
+    const pdfBuffer = await generateManagementFeeInvoicePdf(statement);
+    const invoiceNo = statement.managementFeeInvoiceNumber || statement._id;
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `inline; filename="management-fee-${invoiceNo}.pdf"`,
+    });
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error("Management fee invoice PDF error:", error?.message || error);
+    res.status(error?.statusCode || 500).json({ message: error?.message || "Error generating management fee invoice" });
   }
 };
 

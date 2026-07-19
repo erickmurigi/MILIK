@@ -13,6 +13,7 @@ import { checkUserModuleAccess, hasCompanyPermission } from "./utils/permissions
 import { GL_ACCESS_MODULES, hasAnyCompanyModule, hasCompanyModule, isPropertyManagerCompany, isSelfManagingLandlordCompany } from "./utils/companyModules";
 import { ConfirmProvider } from "./context/ConfirmContext";
 import { ESSContextProvider } from "./context/ESSContext";
+import ErrorBoundary from "./components/common/ErrorBoundary";
 
 // ─── Page loader shown while lazy chunks are downloading ─────────────────────
 const PageLoader = () => (
@@ -75,6 +76,7 @@ const LandlordCommissionsStatement   = lazy(() => import("./pages/Landlord/Landl
 const LandlordStandingOrders         = lazy(() => import("./pages/Landlord/LandlordStandingOrders"));
 const LandlordAdvancements           = lazy(() => import("./pages/Landlord/LandlordAdvancements"));
 const ProcessedStatements            = lazy(() => import("./pages/Landlord/ProcessedStatements"));
+const ManagementFeeInvoices          = lazy(() => import("./pages/Landlord/ManagementFeeInvoices"));
 const LandlordStatementAllocations   = lazy(() => import("./pages/Admin/LandlordStatementAllocations"));
 
 // Properties & Units
@@ -581,6 +583,7 @@ function App() {
       <BrowserRouter>
         <ScrollToTop />
         <AppDocumentTitleGuard />
+        <ErrorBoundary>
         <Suspense fallback={<PageLoader />}>
           <Routes>
             {/* ── Public display screens (no auth) ─────────────────────── */}
@@ -764,6 +767,7 @@ function App() {
             <Route path="/financial/landlord-statement" element={<Guard companyMode={{ allowLandlord: false }} resource="statements" moduleKey="propertyManagement"><LandlordCommissionsStatement /></Guard>} />
             <Route path="/invoices/landlord"            element={<Navigate to="/landlord/statements" replace />} />
             <Route path="/landlord/processed-statements"element={<Guard companyMode={{ allowLandlord: false }} resource="processedStatements" moduleKey="accounts"><ProcessedStatements /></Guard>} />
+            <Route path="/landlord/management-fee-invoices" element={<Guard companyMode={{ allowLandlord: false }} resource="processedStatements" moduleKey="accounts"><ManagementFeeInvoices /></Guard>} />
             <Route path="/landlord/statements"          element={<Guard companyMode={{ allowLandlord: false }} resource="statements" moduleKey="propertyManagement"><LandlordCommissionsStatement /></Guard>} />
             <Route path="/landlords/standing-orders"    element={<Guard companyMode={{ allowLandlord: false }} resource="standingOrders" moduleKey="accounts"><LandlordStandingOrders /></Guard>} />
             <Route path="/landlords/advancement"        element={<Guard companyMode={{ allowLandlord: false }} resource="landlordAdvancements" moduleKey="accounts"><LandlordAdvancements /></Guard>} />
@@ -870,6 +874,7 @@ function App() {
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
+        </ErrorBoundary>
       </BrowserRouter>
     </ConfirmProvider>
     </ESSContextProvider>

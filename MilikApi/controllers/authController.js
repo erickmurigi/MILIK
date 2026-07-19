@@ -374,6 +374,7 @@ export const registerUser = async (req, res, next) => {
 
     const enrichedUser = sanitizeUserForResponse(await attachCompanyCollections(savedUser));
 
+    const emailDelivered = onboardingEmail?.sent === true;
     res.status(201).json({
       success: true,
       user: enrichedUser,
@@ -381,7 +382,7 @@ export const registerUser = async (req, res, next) => {
       generatedAccess: autoGeneratePassword
         ? {
             email: normalizedEmail,
-            temporaryPassword: resolvedPassword,
+            ...(emailDelivered ? {} : { temporaryPassword: resolvedPassword }),
           }
         : null,
       message: 'User registered successfully',
@@ -409,12 +410,14 @@ export const loginUser = async (req, res, next) => {
     const normalizedEmail = String(email).toLowerCase().trim();
     const adminCreds = getAdminCredentials();
 
-    if (
-      adminCreds.email &&
-      adminCreds.password &&
-      normalizedEmail === adminCreds.email &&
-      password === adminCreds.password
-    ) {
+    const isAdminEmail = adminCreds.email && normalizedEmail === adminCreds.email;
+    const adminPasswordHash = process.env.MILIK_ADMIN_PASSWORD_HASH;
+    const adminPasswordPlain = process.env.MILIK_ADMIN_PASSWORD;
+    const adminPasswordMatches = isAdminEmail && (adminPasswordHash
+      ? await bcrypt.compare(password, adminPasswordHash)
+      : adminPasswordPlain && password === adminPasswordPlain);
+
+    if (isAdminEmail && (adminPasswordHash || adminPasswordPlain) && adminPasswordMatches) {
       const user = buildSystemAdminUserPayload();
       const token = jwt.sign(
         {
@@ -605,7 +608,7 @@ export const logoutUser = async (req, res) => {
     if (rawToken) {
       try {
         const decoded = jwt.decode(rawToken);
-        if (decoded?.exp) addToBlacklist(rawToken, decoded.exp * 1000);
+        if (decoded?.exp) await addToBlacklist(rawToken, decoded.exp * 1000);
       } catch (_) {
         // ignore decode errors — token is cleared regardless
       }

@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
+import ErrorBoundary from "../common/ErrorBoundary";
 import { Toaster } from "react-hot-toast";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -67,6 +68,7 @@ const MENU_PERMISSION_MAP = {
   "landlord-statements": { resource: "statements", action: "view", moduleKey: "propertyManagement" },
   "statement-allocations": { resource: "statements", action: "view", moduleKey: "propertyManagement" },
   "processed-statements": { resource: "processedStatements", action: "view", moduleKey: "accounts" },
+  "management-fee-invoices": { resource: "processedStatements", action: "view", moduleKey: "accounts" },
   "rental-collection": { resource: "financialReports", action: "view", moduleKey: ["accounts", "propertyManagement"] },
   "paid-balance": { resource: "financialReports", action: "view", moduleKey: ["accounts", "propertyManagement"] },
   "aged-analysis": { resource: "financialReports", action: "view", moduleKey: ["accounts", "propertyManagement"] },
@@ -364,11 +366,13 @@ const DashboardLayout = ({ children, lockContentScroll = false }) => {
                 </p>
               </div>
             ) : (
-              React.Children.map(children, (child) => {
-                if (!React.isValidElement(child)) return child;
-                if (typeof child.type === "string") return child;
-                return React.cloneElement(child, { darkMode });
-              })
+              <ErrorBoundary>
+                {React.Children.map(children, (child) => {
+                  if (!React.isValidElement(child)) return child;
+                  if (typeof child.type === "string") return child;
+                  return React.cloneElement(child, { darkMode });
+                })}
+              </ErrorBoundary>
             )}
           </div>
         </main>
@@ -912,6 +916,7 @@ const TopToolbar = ({
       "landlord-advancement": "/landlords/advancement",
       "commission-landlord-statement": "/financial/landlord-statement",
       "processed-statements": "/landlord/processed-statements",
+      "management-fee-invoices": "/landlord/management-fee-invoices",
       "landlord-statements": "/landlord/statements",
       "statement-allocations": "/landlord/statement-allocations",
       "rental-collection": "/reports/rental-collection",
@@ -1596,6 +1601,7 @@ const TopToolbar = ({
         { id: "commission-landlord-statement", label: "Commissions & LL Statement", icon: FaFileAlt },
         { id: "landlord-standing-orders", label: "Landlord Standing Orders", icon: FaCalendarAlt },
         { id: "landlord-advancement", label: "Landlord Advancement", icon: FaMoneyBillWave },
+        { id: "management-fee-invoices", label: "Management Fee Invoices", icon: FaFileInvoice },
         { id: "processed-statements", label: "Processed Statements (Legacy)", icon: FaCheckCircle },
         ...(currentUser?.isSystemAdmin || currentUser?.superAdminAccess
           ? [{ id: "statement-allocations", label: "Statement Allocations", icon: FaExchangeAlt }]

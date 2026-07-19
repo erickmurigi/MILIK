@@ -42,6 +42,7 @@ import {
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { getTenants, deleteTenant, updateTenant } from "../../redux/tenantsRedux";
+import { fetchCompanySettings, selectCompanySettings } from "../../redux/companySettingsRedux";
 import { getUnits } from "../../redux/unitRedux";
 import { getProperties } from "../../redux/propertyRedux";
 import TenantsImportModal from "../../components/Modals/TenantsImportModal";
@@ -286,6 +287,7 @@ function AddUtilityModal({ tenants, allUnits, company, dispatch, onClose, onSave
   const isMulti = tenants.length > 1;
   const singleTenant = isMulti ? null : tenants[0];
 
+  const storedSettings = useSelector(selectCompanySettings);
   const [utilityOptions, setUtilityOptions] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -305,16 +307,15 @@ function AddUtilityModal({ tenants, allUnits, company, dispatch, onClose, onSave
   });
 
   useEffect(() => {
-    if (!company?._id) return;
-    adminRequests.get(`/company-settings/${company._id}`)
-      .then((res) => {
-        const names = Array.from(new Set(
-          (res?.data?.utilityTypes || []).filter((item) => item?.isActive !== false && item?.name).map((item) => String(item.name))
-        ));
-        setUtilityOptions(names);
-      })
-      .catch(() => setUtilityOptions([]));
-  }, [company?._id]);
+    if (storedSettings) {
+      const names = Array.from(new Set(
+        (storedSettings.utilityTypes || []).filter((item) => item?.isActive !== false && item?.name).map((item) => String(item.name))
+      ));
+      setUtilityOptions(names);
+    } else if (company?._id) {
+      dispatch(fetchCompanySettings(company._id));
+    }
+  }, [storedSettings, company?._id, dispatch]);
 
   const allOptions = useMemo(() => Array.from(new Set([...utilityOptions, ...STANDARD_UTILITY_OPTIONS])), [utilityOptions]);
 
@@ -792,10 +793,14 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
     if (!currentCompany?._id) return;
     if (!unitsLoaded) dispatch(getUnits({ business: currentCompany._id }));
     if (!propertiesLoaded) dispatch(getProperties({ business: currentCompany._id }));
+  }, [dispatch, currentCompany?._id, unitsLoaded, propertiesLoaded]);
+
+  useEffect(() => {
+    if (!currentCompany?._id) return;
     getLeases(dispatch, currentCompany._id, "active").catch((error) => {
       console.error("Failed to load leases:", error);
     });
-  }, [dispatch, currentCompany?._id]);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dispatch, currentCompany?._id]);
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -1911,8 +1916,37 @@ const confirmTransferUnit = useCallback(async () => {
     }
   };
 
-  const handlePrintList = () => {
-    if (!filteredTenants.length) {
+  const handlePrintList = async () => {
+    const isArrearsFilter = appliedFilters.balanceScope === "with_balance";
+    let printRows = filteredTenants;
+
+    if (isArrearsFilter) {
+      // filteredTenants only covers the current server page — fetch ALL tenants
+      // with a positive balance so the print is not page-limited.
+      try {
+        const params = new URLSearchParams({
+          ...buildTenantParams(1),
+          limit: 500,
+          hasBalance: "true",
+        }).toString();
+        const { data } = await adminRequests.get(`/tenants?${params}`);
+        const raw = Array.isArray(data?.data) ? data.data : Array.isArray(data?.tenants) ? data.tenants : [];
+        printRows = raw.map((t) => ({
+          ...t,
+          tenantName: t.name || "-",
+          rent: t.rent
+            ? `Ksh ${Number(t.rent).toLocaleString()}`
+            : t.unit?.rent
+            ? `Ksh ${Number(t.unit.rent).toLocaleString()}`
+            : "-",
+        }));
+      } catch {
+        toast.error("Could not fetch all arrears tenants for print");
+        return;
+      }
+    }
+
+    if (!printRows.length) {
       toast.warning("No tenants to print");
       return;
     }
@@ -1941,20 +1975,22 @@ const confirmTransferUnit = useCallback(async () => {
 
     printTabularList({
       title: "Tenants List",
-      subtitle: "Current filtered tenants register",
+      subtitle: isArrearsFilter
+        ? "Tenants with outstanding balance — all pages"
+        : "Current filtered tenants register",
       company: currentCompany || {},
-      summary: `Records: ${filteredTenants.length} • Printed on ${new Date().toLocaleString()}`,
+      summary: `Records: ${printRows.length} • Printed on ${new Date().toLocaleString()}`,
       columns: [
         { label: "Tenant Code", value: (row) => row?.tenantCode || row?.code || "-" },
         { label: "Tenant Name", value: (row) => row?.name || row?.tenantName || "-" },
         { label: "Property", value: (row) => resolveTenantPropertyName(row, units, properties) },
         { label: "Unit", value: (row) => row?.unit?.unitNumber || row?.unitNumber || "-" },
         { label: "VAT / Tax", value: (row) => resolveTenantPrintTaxLabel(row) },
-        { label: "Rent", value: (row) => Number(row?.rent || row?.monthlyRent || 0).toLocaleString(), align: "right" },
+        { label: "Rent", value: (row) => row?.rent || "-", align: "right" },
         { label: "Balance", value: (row) => Number(row?.balance || 0).toLocaleString(), align: "right" },
         { label: "Status", value: (row) => computeOperationalStatus({ tenant: row }) },
       ],
-      rows: filteredTenants,
+      rows: printRows,
     });
   };
 

@@ -1667,12 +1667,12 @@ export const deleteLandlordAdvancement = async (id, context = {}) => {
 export const getMaintenances = async (dispatch, business, status = null, priority = null, unit = null, tenant = null) => {
   dispatch(getMaintenancesStart());
   try {
-    let url = `/maintenances?business=${business}`;
+    let url = `/maintenances?business=${business}&limit=200`;
     if (status) url += `&status=${status}`;
     if (priority) url += `&priority=${priority}`;
     if (unit) url += `&unit=${unit}`;
     if (tenant) url += `&tenant=${tenant}`;
-    
+
     const res = await adminRequests.get(url);
     dispatch(getMaintenancesSuccess(extractList(res.data)));
   } catch (err) {

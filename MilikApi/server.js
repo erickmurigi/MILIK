@@ -124,6 +124,7 @@ import saleReportRoutes     from "./modules/propertySale/routes/reports.js";
 import saleLeadRoutes       from "./modules/propertySale/routes/leads.js";
 import saleActivityRoutes   from "./modules/propertySale/routes/activities.js";
 import publicListingsRoute  from "./routes/publicListings.js";
+import cookieParser from "cookie-parser";
 import mongoSanitize from "mongo-sanitize";
 import hpp from "hpp";
 import { blockDemoWrites } from "./utils/demoAccess.js";
@@ -131,8 +132,10 @@ import {
   canAccessCompanyId,
   enforceRequestedCompanyScope,
   tryAttachUserFromToken,
+  verifyToken,
 } from "./controllers/verifyToken.js";
 import { enforceRoutePermissions } from "./utils/routePermissionGuard.js";
+import { warmBlacklistCache, isBlacklistedAsync } from "./utils/tokenBlacklist.js";
 import { syncCriticalIndexes } from "./utils/indexMaintenance.js";
 
 dotenv.config();
@@ -345,14 +348,12 @@ const io = new Server(server, {
   },
 });
 
-io.use((socket, next) => {
+io.use(async (socket, next) => {
   try {
     const token = socket.handshake?.auth?.token;
-    if (!token) {
-      return next(new Error("Authentication required for websocket connection"));
-    }
-
+    if (!token) return next(new Error("Authentication required for websocket connection"));
     const payload = jwt.verify(token, getJWTSecret());
+    if (await isBlacklistedAsync(token)) return next(new Error("Session has been revoked"));
     socket.data.user = payload;
     return next();
   } catch (_error) {
@@ -477,7 +478,18 @@ const publicListingsLimiter = rateLimit({
   store: buildStore("pub_listings"),
 });
 
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  message: { success: false, message: "Too many login attempts, please try again in 15 minutes." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: buildStore("auth"),
+  skipSuccessfulRequests: true,
+});
+
 app.use(generalLimiter);
+app.use(cookieParser());
 
 app.get("/health", (req, res) => {
   const mongoReady = mongoose.connection.readyState === 1;
@@ -537,9 +549,10 @@ app.get("/api", (req, res) => {
   });
 });
 
-app.use("/uploads", express.static(UPLOADS_ROOT));
+// Authenticated file serving — requires a valid, non-revoked session.
+app.use("/uploads", verifyToken, express.static(UPLOADS_ROOT));
 
-app.use("/api/auth", authRoutes);
+app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/trial", trialLimiter, trialRoutes);
 app.use("/api/public/listings", publicListingsLimiter, publicListingsRoute);
 app.use("/api/coop-b2b",       coopB2BRoutes);
@@ -685,6 +698,7 @@ async function connect() {
       });
 
       console.log(`Connected to MongoDB using ${candidate.label}`);
+      warmBlacklistCache().catch(() => {});
       // Run auto-billing check for monthly car wash accounts on startup (fire-and-forget)
       processDueBilling(null).then((r) => { if (r.length) console.log(`[CW Billing] Auto-generated ${r.length} statement(s)`); }).catch(() => {});
       return;

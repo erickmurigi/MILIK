@@ -1,7 +1,10 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
+import { getProperties } from "../../redux/propertyRedux";
+import { getUnits, getTenants } from "../../redux/apiCalls";
+import { fetchCompanySettings, selectCompanySettings } from "../../redux/companySettingsRedux";
 import { toast } from "react-toastify";
 import {
   FaArrowLeft,
@@ -250,9 +253,15 @@ const buildRegisterPrintHtml = ({ company, companyName, rows, totalAmount, filte
 
 const MeterReadings = () => {
   const confirm = useConfirm();
+  const dispatch = useDispatch();
   const currentCompany = useSelector(selectCurrentCompany);
   const businessId = currentCompany?._id || "";
   const currentUser = useSelector(selectCurrentUser);
+
+  const companySettings = useSelector(selectCompanySettings);
+  const reduxProperties = useSelector((s) => s.property?.properties || []);
+  const reduxUnits = useSelector((s) => s.unit?.units || []);
+  const reduxTenants = useSelector((s) => s.tenant?.tenants || []);
 
   const canCreateReading = hasCompanyPermission(
     currentUser || {},
@@ -286,7 +295,7 @@ const MeterReadings = () => {
   const [properties, setProperties] = useState([]);
   const [units, setUnits] = useState([]);
   const [tenants, setTenants] = useState([]);
-  const [utilityOptions, setUtilityOptions] = useState([]);
+  const [utilityList, setUtilityList] = useState([]);
   const [readings, setReadings] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -303,44 +312,37 @@ const MeterReadings = () => {
   const [currentPage, setCurrentPage] = useTabState("/meter-readings:currentPage", 1);
   const [rowActionKey, setRowActionKey] = useState("");
 
+  // Sync local state from Redux so existing JSX references work unchanged
+  useEffect(() => { if (reduxProperties.length) setProperties(reduxProperties); }, [reduxProperties]);
+  useEffect(() => { if (reduxUnits.length) setUnits(reduxUnits); }, [reduxUnits]);
+  useEffect(() => { if (reduxTenants.length) setTenants(reduxTenants); }, [reduxTenants]);
+
+  // Derive utility options from Redux data and the raw /utilities response
+  const utilityOptions = useMemo(() => {
+    const names = new Set();
+    utilityList.forEach((item) => { if (item?.name) names.add(String(item.name)); });
+    (companySettings?.utilityTypes || []).forEach((item) => {
+      if (item?.isActive !== false && item?.name) names.add(String(item.name));
+    });
+    units.forEach((unit) => {
+      (unit?.utilities || []).forEach((item) => {
+        if (item?.utility) names.add(String(item.utility));
+      });
+    });
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [utilityList, companySettings, units]);
+
   const loadPageData = useCallback(async () => {
     if (!businessId) return;
 
     setLoading(true);
     try {
-      const [propertiesRes, unitsRes, tenantsRes, utilitiesRes, settingsRes, readingsRes] = await Promise.all([
-        adminRequests.get(`/properties?business=${businessId}&limit=1000`),
-        adminRequests.get(`/units?business=${businessId}`),
-        adminRequests.get(`/tenants?business=${businessId}`),
+      const [utilitiesRes, readingsRes] = await Promise.all([
         adminRequests.get(`/utilities?business=${businessId}`),
-        adminRequests.get(`/company-settings/${businessId}`),
         getMeterReadings({ business: businessId }),
       ]);
 
-      const propertyList = normalizeList(propertiesRes.data);
-      const unitList = normalizeList(unitsRes.data);
-      const tenantList = normalizeList(tenantsRes.data);
-      const utilityList = normalizeList(utilitiesRes.data);
-      const utilityNames = new Set();
-
-      utilityList.forEach((item) => {
-        if (item?.name) utilityNames.add(String(item.name));
-      });
-
-      (settingsRes.data?.utilityTypes || []).forEach((item) => {
-        if (item?.isActive !== false && item?.name) utilityNames.add(String(item.name));
-      });
-
-      unitList.forEach((unit) => {
-        (unit?.utilities || []).forEach((item) => {
-          if (item?.utility) utilityNames.add(String(item.utility));
-        });
-      });
-
-      setProperties(propertyList);
-      setUnits(unitList);
-      setTenants(tenantList);
-      setUtilityOptions(Array.from(utilityNames).sort((a, b) => a.localeCompare(b)));
+      setUtilityList(normalizeList(utilitiesRes.data));
       setReadings(Array.isArray(readingsRes) ? readingsRes : []);
       setSelectedReadingIds((prev) =>
         prev.filter((id) => (Array.isArray(readingsRes) ? readingsRes : []).some((row) => row._id === id))
@@ -355,6 +357,15 @@ const MeterReadings = () => {
       setLoading(false);
     }
   }, [businessId]);
+
+  // Trigger Redux loads for shared data (no-op if already in store)
+  useEffect(() => {
+    if (!businessId) return;
+    dispatch(getProperties({ business: businessId }));
+    getUnits(dispatch, businessId);
+    getTenants(dispatch, businessId);
+    dispatch(fetchCompanySettings(businessId));
+  }, [businessId, dispatch]);
 
   useEffect(() => {
     loadPageData();
@@ -651,7 +662,7 @@ const MeterReadings = () => {
         business: businessId,
         property: form.property,
         unit: form.unit,
-        tenant: form.tenant || null,
+        tenant: form.tenant || selectedAutoTenant?._id || null,
         utilityType: form.utilityType,
         meterNumber: form.meterNumber,
         billingPeriod: form.billingPeriod,
@@ -995,10 +1006,13 @@ const MeterReadings = () => {
                 </div>
 
                 <form className="flex flex-col flex-1 overflow-hidden" onSubmit={handleSubmit}>
-                  <div className="flex-1 overflow-y-auto bg-white px-5 py-4 space-y-5">
+                  <div className="flex-1 overflow-y-auto bg-white px-5 py-4 space-y-4">
+                    {/* ── Property + Unit ── */}
                     <div className="grid gap-4 md:grid-cols-2">
                       <label className="block">
-                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Property</span>
+                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
+                          Property <span className="text-red-500">*</span>
+                        </span>
                         <select
                           value={form.property}
                           onChange={(e) => handleFormChange("property", e.target.value)}
@@ -1014,7 +1028,9 @@ const MeterReadings = () => {
                       </label>
 
                       <label className="block">
-                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Unit</span>
+                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
+                          Unit <span className="text-red-500">*</span>
+                        </span>
                         <select
                           value={form.unit}
                           onChange={(e) => handleFormChange("unit", e.target.value)}
@@ -1028,30 +1044,40 @@ const MeterReadings = () => {
                           ))}
                         </select>
                       </label>
+                    </div>
 
-                      <label className="block">
-                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tenant / occupant</span>
-                        <select
-                          value={form.tenant}
-                          onChange={(e) => handleFormChange("tenant", e.target.value)}
-                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                        >
-                          <option value="">Auto-detect active tenant</option>
-                          {filteredTenants.map((tenant) => (
-                            <option key={tenant._id} value={tenant._id}>
-                              {tenant.name}
-                            </option>
-                          ))}
-                        </select>
-                        {!form.tenant && selectedAutoTenant && (
-                          <p className="text-[11px] font-medium text-emerald-700">
-                            Auto-detect will use {selectedAutoTenant.name} for this unit.
-                          </p>
-                        )}
-                      </label>
+                    {/* ── Tenant (read-only, auto-detected from unit) ── */}
+                    {form.unit && (
+                      <div className={`flex items-center gap-3 rounded-md border px-4 py-2.5 ${
+                        selectedAutoTenant
+                          ? "border-emerald-200 bg-emerald-50"
+                          : "border-amber-200 bg-amber-50"
+                      }`}>
+                        <div className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-[11px] font-black ${
+                          selectedAutoTenant ? "bg-emerald-600 text-white" : "bg-amber-500 text-white"
+                        }`}>
+                          {selectedAutoTenant ? selectedAutoTenant.name?.charAt(0)?.toUpperCase() || "T" : "!"}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">Tenant / Occupant</p>
+                          {selectedAutoTenant ? (
+                            <p className="truncate text-xs font-semibold text-emerald-800">
+                              {selectedAutoTenant.name}
+                              <span className="ml-2 font-normal text-emerald-600">· auto-detected</span>
+                            </p>
+                          ) : (
+                            <p className="text-xs font-semibold text-amber-800">No active tenant found for this unit</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
+                    {/* ── Utility + Billing Period ── */}
+                    <div className="grid gap-4 md:grid-cols-2">
                       <label className="block">
-                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Utility type</span>
+                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
+                          Utility type <span className="text-red-500">*</span>
+                        </span>
                         <select
                           value={form.utilityType}
                           onChange={(e) => handleFormChange("utilityType", e.target.value)}
@@ -1067,7 +1093,9 @@ const MeterReadings = () => {
                       </label>
 
                       <label className="block">
-                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Billing period</span>
+                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
+                          Billing period <span className="text-red-500">*</span>
+                        </span>
                         <input
                           type="month"
                           value={form.billingPeriod}
@@ -1087,6 +1115,17 @@ const MeterReadings = () => {
                       </label>
 
                       <label className="block">
+                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Rate per unit</span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={form.rate}
+                          onChange={(e) => handleFormChange("rate", e.target.value)}
+                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                        />
+                      </label>
+
+                      <label className="block">
                         <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Previous reading</span>
                         <input
                           type="text"
@@ -1099,23 +1138,14 @@ const MeterReadings = () => {
                       </label>
 
                       <label className="block">
-                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Current reading</span>
+                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
+                          Current reading <span className="text-red-500">*</span>
+                        </span>
                         <input
                           type="text"
                           inputMode="decimal"
                           value={form.currentReading}
                           onChange={(e) => handleFormChange("currentReading", e.target.value)}
-                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                        />
-                      </label>
-
-                      <label className="block">
-                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Rate per unit</span>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          value={form.rate}
-                          onChange={(e) => handleFormChange("rate", e.target.value)}
                           className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </label>
@@ -1133,7 +1163,7 @@ const MeterReadings = () => {
                       <label className="block md:col-span-2">
                         <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Notes</span>
                         <textarea
-                          rows={4}
+                          rows={3}
                           value={form.notes}
                           onChange={(e) => handleFormChange("notes", e.target.value)}
                           className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"

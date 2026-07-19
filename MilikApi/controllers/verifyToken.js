@@ -4,7 +4,7 @@ import { createError } from "../utils/error.js";
 import { hasModuleAccess, serializeCompanyForClient } from "../utils/companyModules.js";
 import { getAccessibleCompanyIds, hasCompanyActionPermission, isSystemAdminUser } from "../utils/permissionControl.js";
 import { extractAuthCookieToken } from "../utils/authCookie.js";
-import { isBlacklisted } from "../utils/tokenBlacklist.js";
+import { isBlacklisted, isBlacklistedAsync } from "../utils/tokenBlacklist.js";
 
 const getJWTSecret = () => {
   const secret = process.env.JWT_SECRET;
@@ -115,14 +115,18 @@ const extractBearerToken = (req) => {
   return extractAuthCookieToken(req.cookies);
 };
 
-export const tryAttachUserFromToken = (req, _res, next) => {
+export const tryAttachUserFromToken = async (req, _res, next) => {
   if (req.user) return next();
   const token = extractBearerToken(req);
   if (!token) return next();
 
   try {
     const decoded = jwt.verify(token, getJWTSecret(), JWT_VERIFY_OPTIONS);
-    if (!isBlacklisted(token)) req.user = decoded;
+    const revoked = await isBlacklistedAsync(token);
+    // Cache result on req so verifyToken doesn't repeat the DB check for the same token.
+    req._checkedToken = token;
+    req._tokenRevoked = revoked;
+    if (!revoked) req.user = decoded;
   } catch (_error) {
     // leave req.user unset; verifyUser will handle hard auth failures later
   }
@@ -136,9 +140,17 @@ export const verifyToken = (req, res, next) => {
     return next(createError(401, "You are not authenticated!"));
   }
 
-  jwt.verify(token, getJWTSecret(), JWT_VERIFY_OPTIONS, (err, user) => {
+  jwt.verify(token, getJWTSecret(), JWT_VERIFY_OPTIONS, async (err, user) => {
     if (err) return next(createError(403, "Token is not valid!"));
-    if (isBlacklisted(token)) return next(createError(401, "Session has been revoked. Please log in again."));
+    try {
+      // Reuse the result from tryAttachUserFromToken if it already checked this exact token.
+      const revoked = (req._checkedToken === token && req._tokenRevoked !== undefined)
+        ? req._tokenRevoked
+        : await isBlacklistedAsync(token);
+      if (revoked) return next(createError(401, "Session has been revoked. Please log in again."));
+    } catch (_e) {
+      return next(createError(500, "Authentication check failed"));
+    }
     req.user = user;
     next();
   });

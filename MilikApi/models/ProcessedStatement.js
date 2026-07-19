@@ -269,6 +269,11 @@ const ProcessedStatementSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    managementFeeInvoiceNumber: {
+      type: String,
+      default: null,
+      trim: true,
+    },
     reversedAt: {
       type: Date,
       default: null,
@@ -302,6 +307,7 @@ ProcessedStatementSchema.index({ business: 1, landlord: 1, status: 1 });
 ProcessedStatementSchema.index({ business: 1, status: 1 });
 ProcessedStatementSchema.index({ business: 1, isNegativeStatement: 1, status: 1 });
 ProcessedStatementSchema.index({ business: 1, closedAt: -1 });
+ProcessedStatementSchema.index({ business: 1, managementFeeInvoiceNumber: 1 }, { sparse: true });
 ProcessedStatementSchema.index(
   { business: 1, sourceStatement: 1 },
   {

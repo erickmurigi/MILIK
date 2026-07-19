@@ -29,8 +29,9 @@ import LatePenaltyBatch from "../../models/LatePenaltyBatch.js";
 
 const TENANT_INVOICE_NOTE_SOURCE_TYPE = "invoice_note";
 
-const SINGLE_INVOICE_ACCOUNT_CACHE_TTL_MS = 5 * 60 * 1000;
+const SINGLE_INVOICE_ACCOUNT_CACHE_TTL_MS = 30 * 1000;
 const singleInvoiceAccountCache = new Map();
+export const clearInvoiceAccountCache = () => singleInvoiceAccountCache.clear();
 
 const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 const safeLower = (value = "") => String(value || "").trim().toLowerCase();
@@ -1736,7 +1737,7 @@ const recomputeTenantFinancialState = async ({ businessId, tenantId }) => {
   };
 };
 
-const postInvoiceJournal = async ({ invoice, createdBy, incomeAccount, receivableAccount: preResolvedReceivableAccount = null }) => {
+const postInvoiceJournal = async ({ invoice, createdBy, incomeAccount, receivableAccount: preResolvedReceivableAccount = null, session = null }) => {
   const receivableAccount = preResolvedReceivableAccount || await resolveTenantReceivableAccount(invoice.business);
   const amount = Math.abs(Number(invoice.amount || 0));
   const taxSnapshot = invoice?.taxSnapshot || {};
@@ -1833,6 +1834,7 @@ const postInvoiceJournal = async ({ invoice, createdBy, incomeAccount, receivabl
     approvedBy: createdBy,
     approvedAt: new Date(),
     status: "approved",
+    session,
   });
 
   const creditLeg = await postEntry({
@@ -1865,6 +1867,7 @@ const postInvoiceJournal = async ({ invoice, createdBy, incomeAccount, receivabl
     approvedBy: createdBy,
     approvedAt: new Date(),
     status: "approved",
+    session,
   });
 
   const entries = [receivableLeg, creditLeg];
@@ -1906,6 +1909,7 @@ const postInvoiceJournal = async ({ invoice, createdBy, incomeAccount, receivabl
       approvedBy: createdBy,
       approvedAt: new Date(),
       status: "approved",
+      session,
     });
 
     entries.push(taxLeg);
@@ -2003,7 +2007,7 @@ const postInvoiceNoteJournal = async ({ note, createdBy, sourceInvoice = null, p
   };
 };
 
-export const getTenantInvoiceNoteChargeTypes = async (req, res) => {
+export const getTenantInvoiceNoteChargeTypes = async (req, res, next) => {
   return res.status(200).json({
     chargeTypes: TENANT_INVOICE_CATEGORIES.map((category) => ({
       value: category,
@@ -2012,7 +2016,7 @@ export const getTenantInvoiceNoteChargeTypes = async (req, res) => {
   });
 };
 
-export const getTenantInvoiceNotes = async (req, res) => {
+export const getTenantInvoiceNotes = async (req, res, next) => {
   try {
     const { tenant, business } = req.query;
     const query = {};
@@ -2020,9 +2024,7 @@ export const getTenantInvoiceNotes = async (req, res) => {
     if (business) query.business = business;
 
     if (!tenant && !business) {
-      return res
-        .status(400)
-        .json({ error: "At least tenant or business query parameter is required" });
+      return res.status(400).json({ success: false, message: "At least tenant or business query parameter is required" });
     }
 
     const notes = await TenantInvoiceNote.find(query)
@@ -2037,12 +2039,11 @@ export const getTenantInvoiceNotes = async (req, res) => {
 
     return res.status(200).json(notes.map(buildNoteStatementRow));
   } catch (error) {
-    console.error("Failed to fetch tenant invoice notes:", error);
-    return res.status(500).json({ error: "Failed to fetch tenant invoice notes" });
+    next(error);
   }
 };
 
-export const getCreditableTenantInvoices = async (req, res) => {
+export const getCreditableTenantInvoices = async (req, res, next) => {
   try {
     const { business, tenant } = req.query;
     if (!business) return res.status(400).json({ error: "business query parameter is required" });
@@ -2092,12 +2093,11 @@ export const getCreditableTenantInvoices = async (req, res) => {
 
     return res.status(200).json(allResults);
   } catch (error) {
-    console.error("Failed to fetch creditable invoices:", error);
-    return res.status(500).json({ error: "Failed to fetch creditable invoices" });
+    return next(error);
   }
 };
 
-export const getTakeOnBalances = async (req, res) => {
+export const getTakeOnBalances = async (req, res, next) => {
   try {
     const businessId = ensureBusinessAccess(req, resolveAuthorizedBusinessId(req));
     const tenantId = req.query?.tenant ? String(req.query.tenant) : "";
@@ -2251,11 +2251,7 @@ export const getTakeOnBalances = async (req, res) => {
       data: rows.sort((a, b) => new Date(b.effectiveDate || 0) - new Date(a.effectiveDate || 0)),
     });
   } catch (error) {
-    console.error("Failed to fetch tenant take-on balances:", error);
-    return res.status(error.statusCode || 500).json({
-      success: false,
-      message: error.message || "Failed to fetch tenant take-on balances.",
-    });
+    return next(error);
   }
 };
 
@@ -2403,7 +2399,7 @@ const buildTenantInvoiceListPayload = ({
   };
 };
 
-export const getTenantInvoicesList = async (req, res) => {
+export const getTenantInvoicesList = async (req, res, next) => {
   try {
     const { business } = req.query;
     const includeSnapshots = ["1", "true", "yes"].includes(String(req.query?.includeSnapshots || "").trim().toLowerCase());
@@ -2570,12 +2566,11 @@ export const getTenantInvoicesList = async (req, res) => {
       })
     );
   } catch (err) {
-    console.error("Failed to fetch tenant invoices:", err);
-    return res.status(err?.statusCode || 500).json({ error: err?.message || "Failed to fetch tenant invoices" });
+    return next(err);
   }
 };
 
-export const createTenantInvoiceNote = async (req, res) => {
+export const createTenantInvoiceNote = async (req, res, next) => {
   try {
     const noteType = String(req.body.noteType || "").toUpperCase();
     if (!TENANT_NOTE_TYPES.includes(noteType)) {
@@ -2888,19 +2883,17 @@ export const createTenantInvoiceNote = async (req, res) => {
 
     return res.status(201).json(buildNoteStatementRow(populated));
   } catch (error) {
-    console.error("Tenant invoice note creation error:", error);
     if (error?.code === 11000) {
       return res.status(409).json({
-        error: "Note number already exists for this business. Please retry so a new number can be reserved safely.",
+        success: false,
+        message: "Note number already exists for this business. Please retry so a new number can be reserved safely.",
       });
     }
-    return res.status(error.statusCode || 500).json({
-      error: error.message || `Failed to create invoice note. ${error.message}`,
-    });
+    return next(error);
   }
 };
 
-export const reverseTenantInvoiceNote = async (req, res) => {
+export const reverseTenantInvoiceNote = async (req, res, next) => {
   try {
     const noteId = req.params?.id;
     if (!isValidObjectId(noteId)) {
@@ -3026,10 +3019,7 @@ export const reverseTenantInvoiceNote = async (req, res) => {
       note: buildNoteStatementRow(populated),
     });
   } catch (error) {
-    console.error("Tenant invoice note reversal error:", error);
-    return res.status(error.statusCode || 500).json({
-      error: error.message || "Failed to reverse invoice note.",
-    });
+    return next(error);
   }
 };
 
@@ -3530,19 +3520,27 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
       return populated;
     }
 
-    const posting = await postInvoiceJournal({
-      invoice,
-      createdBy: actorUserId,
-      incomeAccount: postingAccount,
-      receivableAccount: cachedReceivableAccount || null,
-    });
-
-    invoice.journalGroupId = posting.journalGroupId;
-    invoice.ledgerEntries = posting.entries.map((entry) => entry._id);
-    invoice.postingStatus = "posted";
-    invoice.postingError = null;
-    invoice.status = "pending";
-    await invoice.save();
+    let posting;
+    const glSession = await mongoose.startSession();
+    try {
+      await glSession.withTransaction(async () => {
+        posting = await postInvoiceJournal({
+          invoice,
+          createdBy: actorUserId,
+          incomeAccount: postingAccount,
+          receivableAccount: cachedReceivableAccount || null,
+          session: glSession,
+        });
+        invoice.journalGroupId = posting.journalGroupId;
+        invoice.ledgerEntries = posting.entries.map((entry) => entry._id);
+        invoice.postingStatus = "posted";
+        invoice.postingError = null;
+        invoice.status = "pending";
+        await invoice.save({ session: glSession });
+      });
+    } finally {
+      await glSession.endSession();
+    }
 
     const touchedAccountIds = posting.entries.map((entry) => String(entry.accountId)).filter(Boolean);
 
@@ -3598,7 +3596,7 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
   }
 };
 
-export const updateTakeOnBalance = async (req, res) => {
+export const updateTakeOnBalance = async (req, res, next) => {
   try {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(String(id || ""))) {
@@ -3796,19 +3794,27 @@ export const updateTakeOnBalance = async (req, res) => {
 
     if (nextLedgerMode !== "off_ledger") {
       try {
-        const posting = await postInvoiceJournal({
-          invoice,
-          createdBy: actorUserId,
-          incomeAccount: postingAccount,
-        });
+        let reposting;
+        const repostSession = await mongoose.startSession();
+        try {
+          await repostSession.withTransaction(async () => {
+            reposting = await postInvoiceJournal({
+              invoice,
+              createdBy: actorUserId,
+              incomeAccount: postingAccount,
+              session: repostSession,
+            });
+            invoice.journalGroupId = reposting.journalGroupId;
+            invoice.ledgerEntries = reposting.entries.map((entry) => entry._id);
+            invoice.postingStatus = "posted";
+            invoice.postingError = null;
+            await invoice.save({ session: repostSession });
+          });
+        } finally {
+          await repostSession.endSession();
+        }
 
-        invoice.journalGroupId = posting.journalGroupId;
-        invoice.ledgerEntries = posting.entries.map((entry) => entry._id);
-        invoice.postingStatus = "posted";
-        invoice.postingError = null;
-        await invoice.save();
-
-        posting.entries.forEach((entry) => {
+        reposting.entries.forEach((entry) => {
           if (entry?.accountId) touchedAccountIds.add(String(entry.accountId));
         });
       } catch (postingError) {
@@ -3837,15 +3843,11 @@ export const updateTakeOnBalance = async (req, res) => {
 
     return res.status(200).json({ success: true, data: populated, message: "Take-on balance updated successfully." });
   } catch (error) {
-    console.error("Update take-on balance error:", error);
-    return res.status(error.statusCode || 500).json({
-      success: false,
-      message: error.message || "Failed to update take-on balance.",
-    });
+    return next(error);
   }
 };
 
-export const createTenantInvoice = async (req, res) => {
+export const createTenantInvoice = async (req, res, next) => {
   try {
     const result = await createTenantInvoiceRecord({
       req,
@@ -3913,18 +3915,14 @@ export const createTenantInvoice = async (req, res) => {
       availableCredits: Math.round(availableCredits * 100) / 100,
     });
   } catch (error) {
-    console.error("TenantInvoice creation error:", error);
-
     if (error?.invoiceId) {
       return res.status(error.statusCode || 500).json({
-        error: error.message,
+        success: false,
+        message: error.message,
         invoiceId: error.invoiceId,
       });
     }
-
-    return res.status(error.statusCode || 500).json({
-      error: error.message || `Failed to create invoice. ${error.message}`,
-    });
+    return next(error);
   }
 };
 
@@ -3953,7 +3951,7 @@ const getOrLoadCachedValue = async (cache, key, loader) => {
   return cache.get(key);
 };
 
-export const createTenantInvoicesBatch = async (req, res) => {
+export const createTenantInvoicesBatch = async (req, res, next) => {
   try {
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
 
@@ -4144,10 +4142,7 @@ export const createTenantInvoicesBatch = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("Batch tenant invoice creation error:", error);
-    return res.status(error.statusCode || 500).json({
-      error: error.message || "Failed to create tenant invoices batch.",
-    });
+    return next(error);
   }
 };
 
@@ -4195,7 +4190,7 @@ const syncLatePenaltyBatchItemsForInvoiceDeletion = async ({
 };
 
 
-export const deleteTenantInvoice = async (req, res) => {
+export const deleteTenantInvoice = async (req, res, next) => {
   try {
     const { id } = req.params;
     const isPrivilegedUser = Boolean(req?.user?.isSystemAdmin || req?.user?.superAdminAccess);
@@ -4392,14 +4387,11 @@ export const deleteTenantInvoice = async (req, res) => {
       auditStatus: cancellationStatus,
     });
   } catch (error) {
-    console.error("Delete tenant invoice error:", error);
-    return res.status(500).json({
-      error: `Failed to delete invoice. ${error.message}`,
-    });
+    return next(error);
   }
 };
 
-export const bulkImportInvoiceNotes = async (req, res) => {
+export const bulkImportInvoiceNotes = async (req, res, next) => {
   try {
     const rows = Array.isArray(req.body.notes) ? req.body.notes : [];
     if (rows.length === 0) return res.status(400).json({ error: "No note rows provided." });
@@ -4433,8 +4425,46 @@ export const bulkImportInvoiceNotes = async (req, res) => {
       return res.status(400).json({ error: actorError.message });
     }
 
+    // Batch-prefetch source invoices to eliminate N+1
+    const uniqueSourceNos = [
+      ...new Set(
+        rows.map((r) => String(r.sourceInvoiceNo || r.sourceInvoiceNumber || "").trim().toUpperCase()).filter(Boolean)
+      ),
+    ];
+    const sourceInvoicesByNo = new Map();
+    if (uniqueSourceNos.length > 0) {
+      const fetched = await TenantInvoice.find({
+        invoiceNumber: { $in: uniqueSourceNos },
+        ...(scopedBusinessId ? { business: scopedBusinessId } : {}),
+      }).lean();
+      fetched.forEach((inv) => sourceInvoicesByNo.set(String(inv.invoiceNumber).toUpperCase(), inv));
+    }
+
+    // Batch-prefetch units for all tenants
+    const uniqueUnitIds = [
+      ...new Set(allTenants.map((t) => String(t.unit?._id || t.unit || "")).filter(Boolean)),
+    ];
+    const unitById = new Map();
+    if (uniqueUnitIds.length > 0) {
+      const units = await Unit.find({ _id: { $in: uniqueUnitIds } }).lean();
+      units.forEach((u) => unitById.set(String(u._id), u));
+    }
+
+    // Cache account resolution to avoid repeated lookups for same (business, category, chartAccount) combos
+    const accountCache = new Map();
+    const resolveAccountCached = async ({ businessId, category, chartAccountValue }) => {
+      const key = `${businessId}|${category}|${String(chartAccountValue || "")}`;
+      if (accountCache.has(key)) return accountCache.get(key);
+      const acc = await resolveInvoiceIncomeAccount({ businessId, category, chartAccountValue });
+      accountCache.set(key, acc);
+      return acc;
+    };
+
     const successful = [];
     const failed = [];
+    const createdNoteIds = [];
+    const affectedAccountIds = new Set();
+    const affectedTenants = new Map(); // tenantId → businessId
 
     for (const [i, row] of rows.entries()) {
       const rowNum = i + 2;
@@ -4479,11 +4509,7 @@ export const bulkImportInvoiceNotes = async (req, res) => {
         let sourceInvoice = null;
         const sourceInvoiceNo = String(row.sourceInvoiceNo || row.sourceInvoiceNumber || "").trim();
         if (sourceInvoiceNo) {
-          sourceInvoice = await TenantInvoice.findOne({
-            tenant: tenant._id,
-            invoiceNumber: { $regex: `^${escapeRegExp(sourceInvoiceNo)}$`, $options: "i" },
-            ...(scopedBusinessId ? { business: scopedBusinessId } : {}),
-          }).lean();
+          sourceInvoice = sourceInvoicesByNo.get(sourceInvoiceNo.toUpperCase()) || null;
           if (!sourceInvoice) {
             failed.push({ row: rowNum, data: row, error: `Source invoice not found: "${sourceInvoiceNo}"` });
             continue;
@@ -4541,7 +4567,7 @@ export const bulkImportInvoiceNotes = async (req, res) => {
           continue;
         }
 
-        const unit = await Unit.findOne({ _id: resolvedUnitId, ...(resolvedBusinessId ? { business: resolvedBusinessId } : {}) }).lean();
+        const unit = unitById.get(String(resolvedUnitId)) || null;
         if (!unit) {
           failed.push({ row: rowNum, data: row, error: "Tenant unit not found." });
           continue;
@@ -4555,7 +4581,7 @@ export const bulkImportInvoiceNotes = async (req, res) => {
 
         let postingAccount;
         try {
-          postingAccount = await resolveInvoiceIncomeAccount({
+          postingAccount = await resolveAccountCached({
             businessId: resolvedBusinessId,
             category: requestedCategory,
             chartAccountValue: sourceInvoice?.chartAccount,
@@ -4613,27 +4639,38 @@ export const bulkImportInvoiceNotes = async (req, res) => {
         note.postingError = null;
         await note.save();
 
-        await aggregateChartOfAccountBalances(note.business, posting.entries.map((e) => e.accountId));
-        await recomputeTenantFinancialState({ businessId: note.business, tenantId: note.tenant });
-
-        const populated = await TenantInvoiceNote.findById(note._id)
-          .populate("chartAccount", "code name type")
-          .populate("ledgerEntries")
-          .populate("createdBy", "surname otherNames email profile")
-          .populate("sourceInvoice", "invoiceNumber amount category invoiceDate dueDate status")
-          .lean();
-
-        successful.push(buildNoteStatementRow(populated));
+        posting.entries.forEach((e) => affectedAccountIds.add(String(e.accountId)));
+        affectedTenants.set(String(note.tenant), note.business);
+        createdNoteIds.push(note._id);
       } catch (rowError) {
         console.error(`Bulk note import row ${rowNum} error:`, rowError);
         failed.push({ row: rowNum, data: row, error: rowError.message || "Unexpected error." });
       }
     }
 
-    return res.status(200).json({ successful, failed, total: rows.length });
+    // Batch post-loop aggregation instead of per-note calls
+    await Promise.all([
+      affectedAccountIds.size > 0
+        ? aggregateChartOfAccountBalances(scopedBusinessId, [...affectedAccountIds])
+        : Promise.resolve(),
+      ...[...affectedTenants.entries()].map(([tenantId, businessId]) =>
+        recomputeTenantFinancialState({ businessId, tenantId })
+      ),
+    ]);
+
+    // Batch populate all created notes in one query
+    const populatedNotes = await TenantInvoiceNote.find({ _id: { $in: createdNoteIds } })
+      .populate("chartAccount", "code name type")
+      .populate("ledgerEntries")
+      .populate("createdBy", "surname otherNames email profile")
+      .populate("sourceInvoice", "invoiceNumber amount category invoiceDate dueDate status")
+      .lean();
+    const noteRowById = new Map(populatedNotes.map((n) => [String(n._id), buildNoteStatementRow(n)]));
+    const successfulRows = createdNoteIds.map((id) => noteRowById.get(String(id))).filter(Boolean);
+
+    return res.status(200).json({ successful: successfulRows, failed, total: rows.length });
   } catch (error) {
-    console.error("Bulk import invoice notes error:", error);
-    return res.status(500).json({ error: error.message || "Bulk import failed." });
+    return next(error);
   }
 };
 

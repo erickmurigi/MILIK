@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
+import { getProperties } from "../../redux/propertyRedux";
+import { getUnits, getTenants } from "../../redux/apiCalls";
 import {
   FaCalendarAlt,
   FaCheckCircle,
@@ -122,8 +124,13 @@ const csvEscape = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
 
 const Inspections = () => {
   const confirm = useConfirm();
+  const dispatch = useDispatch();
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
+
+  const reduxProperties = useSelector((s) => s.property?.properties || []);
+  const reduxUnits = useSelector((s) => s.unit?.units || []);
+  const reduxTenants = useSelector((s) => s.tenant?.tenants || []);
   const isDemoUser = Boolean(currentUser?.isDemoUser);
   const canCreate = hasCompanyPermission(currentUser, currentCompany, "inspections", "create", "propertyManagement");
   const canUpdate = hasCompanyPermission(currentUser, currentCompany, "inspections", "update", "propertyManagement");
@@ -195,23 +202,20 @@ const Inspections = () => {
     }
   }, [currentCompany?._id, currentPage, pageSize, statusFilter, typeFilter, debouncedSearch]);
 
-  const loadFormData = useCallback(async () => {
+  // Sync Redux data into local state so existing JSX references work unchanged
+  useEffect(() => { if (reduxProperties.length) setProperties(reduxProperties); }, [reduxProperties]);
+  useEffect(() => { if (reduxUnits.length) setUnits(reduxUnits); }, [reduxUnits]);
+  useEffect(() => { if (reduxTenants.length) setTenants(reduxTenants); }, [reduxTenants]);
+
+  // Trigger Redux loads for shared form-dropdown data
+  useEffect(() => {
     if (!currentCompany?._id) return;
-    try {
-      const business = currentCompany._id;
-      const [unitsRes, tenantsRes, propsRes] = await Promise.all([
-        adminRequests.get(`/units?business=${business}&limit=1000`),
-        adminRequests.get(`/tenants?business=${business}&limit=1000`),
-        adminRequests.get(`/properties?business=${business}&limit=1000`),
-      ]);
-      setUnits(toList(unitsRes.data));
-      setTenants(toList(tenantsRes.data));
-      setProperties(toList(propsRes.data));
-    } catch { /* non-critical */ }
-  }, [currentCompany?._id]);
+    dispatch(getProperties({ business: currentCompany._id }));
+    getUnits(dispatch, currentCompany._id);
+    getTenants(dispatch, currentCompany._id);
+  }, [currentCompany?._id, dispatch]);
 
   useEffect(() => { loadInspections(); }, [loadInspections]);
-  useEffect(() => { loadFormData(); }, [loadFormData]);
   useEffect(() => { setCurrentPage(1); }, [statusFilter, typeFilter, debouncedSearch, pageSize]);
 
   const selectedPropertyId = useMemo(() => {

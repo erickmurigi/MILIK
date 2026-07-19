@@ -18,6 +18,15 @@ import {
 } from "../../services/billingPeriodService.js";
 import { logAuditEvent } from "../../utils/auditLogger.js";
 
+// In-memory settings cache — avoids a DB round-trip on every page load.
+// Invalidated via invalidateSettingsCache() from the routes layer on any mutation.
+const settingsCache = new Map(); // businessId -> { data, expiresAt }
+const SETTINGS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+export const invalidateSettingsCache = (businessId) => {
+  if (businessId) settingsCache.delete(String(businessId));
+};
+
 const normalizeText = (value = "") => String(value ?? "").trim();
 const normalizeLower = (value = "") => normalizeText(value).toLowerCase();
 const toNumber = (value, fallback = 0) => {
@@ -270,6 +279,11 @@ const archiveEmbeddedSetting = async ({ req, res, businessId, itemId, collection
 export const getCompanySettings = async (req, res, next) => {
   try {
     const businessId = resolveAuthorizedBusinessId(req);
+    const cacheKey = String(businessId);
+    const cached = settingsCache.get(cacheKey);
+    if (cached && Date.now() < cached.expiresAt) {
+      return res.status(200).json(cached.data);
+    }
 
     let settings = await findCompanySettings(businessId);
 
@@ -313,7 +327,9 @@ export const getCompanySettings = async (req, res, next) => {
       }
     }
 
-    res.status(200).json(settings);
+    const data = settings.toJSON ? settings.toJSON() : settings;
+    settingsCache.set(cacheKey, { data, expiresAt: Date.now() + SETTINGS_CACHE_TTL_MS });
+    res.status(200).json(data);
   } catch (err) {
     next(err);
   }

@@ -1,58 +1,55 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { FaFileDownload, FaFilter, FaPrint, FaSyncAlt, FaUsers } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
-import { getTenantInvoices } from "../../redux/apiCalls";
-import { adminRequests } from "../../utils/requestMethods";
+import { getTenantInvoices, getTenants } from "../../redux/apiCalls";
+import { getProperties } from "../../redux/propertyRedux";
 
 const formatMoney = (v) => `KES ${Number(v || 0).toLocaleString()}`;
 
 const ITEMS_PER_PAGE = 50;
 
-const normalize = (res) => {
-  const d = res?.data;
-  if (Array.isArray(d?.data)) return d.data;
-  if (Array.isArray(d)) return d;
-  return [];
-};
 
 const TenantSummaryReport = () => {
+  const dispatch = useDispatch();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const currentUser = useSelector((s) => s.auth?.currentUser || s.auth?.user || null);
   const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", "accounts");
   const businessId = currentCompany?._id || "";
 
+  const reduxProperties = useSelector((s) => s.property?.properties || []);
+  const reduxTenants = useSelector((s) => s.tenant?.tenants || []);
+
   const [loading, setLoading] = useState(false);
   const [tenants, setTenants] = useState([]);
   const [properties, setProperties] = useState([]);
   const [invoices, setInvoices] = useState([]);
-  const [payments, setPayments] = useState([]);
   const [filters, setFilters] = useState({ propertyId: "all", status: "all", search: "" });
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Sync Redux data into local state
+  useEffect(() => { if (reduxProperties.length) setProperties(reduxProperties); }, [reduxProperties]);
+  useEffect(() => { if (reduxTenants.length) setTenants(reduxTenants); }, [reduxTenants]);
 
   const loadData = useCallback(async () => {
     if (!businessId) return;
     setLoading(true);
     try {
-      const [tenantRes, propRes, invoiceRows, paymentRes] = await Promise.all([
-        adminRequests.get(`/tenants?business=${businessId}&limit=1000`),
-        adminRequests.get(`/properties?business=${businessId}&limit=1000`),
-        getTenantInvoices({ business: businessId }),
-        adminRequests.get(`/rent-payments?business=${businessId}&limit=10000`),
-      ]);
-      setTenants(normalize(tenantRes));
-      setProperties(normalize(propRes));
+      // Trigger Redux loads for tenants/properties
+      dispatch(getProperties({ business: businessId }));
+      getTenants(dispatch, businessId);
+      // Only fetch invoices — balance is already on each tenant record
+      const invoiceRows = await getTenantInvoices({ business: businessId });
       setInvoices(Array.isArray(invoiceRows) ? invoiceRows : []);
-      setPayments(normalize(paymentRes));
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to load tenant summary.");
     } finally {
       setLoading(false);
     }
-  }, [businessId]);
+  }, [businessId, dispatch]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -74,18 +71,6 @@ const TenantSummaryReport = () => {
     return m;
   }, [invoices]);
 
-  const paymentsByTenant = useMemo(() => {
-    const m = new Map();
-    payments.forEach((pay) => {
-      const id = String(pay?.tenant?._id || pay?.tenant || "");
-      if (!id) return;
-      const arr = m.get(id) || [];
-      arr.push(pay);
-      m.set(id, arr);
-    });
-    return m;
-  }, [payments]);
-
   const rows = useMemo(() => {
     return tenants.map((tenant) => {
       const unitProp = tenant.unit?.property;
@@ -95,11 +80,11 @@ const TenantSummaryReport = () => {
 
       const tenantId = String(tenant._id);
       const tenantInvoices = invoicesByTenant.get(tenantId) || [];
-      const tenantPayments = paymentsByTenant.get(tenantId) || [];
 
       const totalInvoiced = tenantInvoices.reduce((sum, inv) => sum + Number(inv?.amount || 0), 0);
-      const totalPaid = tenantPayments.reduce((sum, p) => sum + Number(p?.amount || 0), 0);
-      const balance = totalInvoiced - totalPaid;
+      // Use the tenant's maintained balance (set by backend on every payment/invoice event)
+      const balance = Number(tenant.balance || 0);
+      const totalPaid = totalInvoiced - balance;
 
       return {
         tenantId,
@@ -110,14 +95,14 @@ const TenantSummaryReport = () => {
         propertyId,
         unitNumber: tenant.unit?.unitNumber || "—",
         totalInvoiced,
-        totalPaid,
+        totalPaid: Math.max(0, totalPaid),
         balance,
         invoiceCount: tenantInvoices.length,
-        paymentCount: tenantPayments.length,
+        paymentCount: tenant.paymentCount || 0,
         status: String(tenant.status || "").toLowerCase() === "active" ? "active" : "inactive",
       };
     });
-  }, [tenants, propertyById, invoicesByTenant, paymentsByTenant]);
+  }, [tenants, propertyById, invoicesByTenant]);
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {

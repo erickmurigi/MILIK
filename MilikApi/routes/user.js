@@ -409,6 +409,7 @@ router.post('/', verifyUser, async (req, res) => {
     }
 
     const serialized = await serializeUser(user);
+    const emailDelivered = onboardingEmail?.sent === true;
     res.status(201).json({
       success: true,
       user: { ...serialized, accessSummary: buildAccessSummary(serialized) },
@@ -416,7 +417,7 @@ router.post('/', verifyUser, async (req, res) => {
       generatedAccess: autoGeneratePassword
         ? {
             email: normalizedEmail,
-            temporaryPassword: resolvedPassword,
+            ...(emailDelivered ? {} : { temporaryPassword: resolvedPassword }),
           }
         : null,
     });

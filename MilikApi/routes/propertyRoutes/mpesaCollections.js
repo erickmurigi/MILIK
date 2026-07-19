@@ -6,8 +6,6 @@ import {
   ignoreCollection,
   importMpesaBatch,
   listMpesaCollections,
-  mpesaConfirmationCallback,
-  mpesaValidationCallback,
   unignoreCollection,
 } from "../../controllers/propertyController/mpesaCollections.js";
 
@@ -19,7 +17,5 @@ router.post("/:id/assign-tenant", verifyUser, assignTenantToCollection);
 router.post("/:id/ignore",    verifyUser, ignoreCollection);
 router.post("/:id/unignore",  verifyUser, unignoreCollection);
 router.delete("/:id", verifyUser, deleteMpesaCollection);
-router.post("/validation/:shortCode", mpesaValidationCallback);
-router.post("/confirmation/:shortCode", mpesaConfirmationCallback);
 
 export default router;

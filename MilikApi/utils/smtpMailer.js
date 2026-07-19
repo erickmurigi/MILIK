@@ -54,8 +54,12 @@ export function decryptStoredSecret(value = "") {
   return decrypted.toString("utf8");
 }
 
+export function isEmailEnabled() {
+  return process.env.EMAIL_ENABLED !== "false";
+}
+
 export function hasSmtpConfig() {
-  return Boolean(env("SMTP_HOST") && env("SMTP_PORT") && env("SMTP_USER") && env("SMTP_PASS"));
+  return isEmailEnabled() && Boolean(env("SMTP_HOST") && env("SMTP_PORT") && env("SMTP_USER") && env("SMTP_PASS"));
 }
 
 export function buildSmtpTransporter() {

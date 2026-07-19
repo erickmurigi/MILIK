@@ -1020,6 +1020,21 @@ export default function CompanySetupPage() {
   const emailProfiles = useMemo(() => normalizeEmailConfigs(currentCompany), [currentCompany]);
   const smsProfiles = useMemo(() => normalizeSmsConfigs(currentCompany), [currentCompany]);
   const smsTemplates = useMemo(() => normalizeSmsTemplates(currentCompany), [currentCompany]);
+  const emailEnabled = currentCompany?.communication?.emailEnabled !== false;
+  const [togglingEmail, setTogglingEmail] = useState(false);
+
+  const handleToggleEmailEnabled = async () => {
+    if (!currentCompany?._id) return;
+    setTogglingEmail(true);
+    try {
+      await dispatch(updateCompany(currentCompany._id, { communication: { emailEnabled: !emailEnabled } }));
+      toast.success(emailEnabled ? "Email sending disabled" : "Email sending enabled");
+    } catch {
+      toast.error("Failed to update email setting");
+    } finally {
+      setTogglingEmail(false);
+    }
+  };
 
   useEffect(() => {
     if (!ALL_VALID_TAB_KEYS.has(searchParams.get("tab"))) {
@@ -2683,6 +2698,23 @@ export default function CompanySetupPage() {
         {/* ── Profiles sub-tab ── */}
         {emailSubTab === "profiles" && (
           <div className="space-y-3">
+            {/* Master email on/off switch */}
+            <div className={`flex items-center justify-between border px-4 py-3 ${emailEnabled ? "border-[#0B3B2E]/25 bg-[#EDF5F1]" : "border-red-200 bg-red-50"}`}>
+              <div>
+                <div className="text-[12px] font-bold text-slate-900">Email Sending</div>
+                <div className="mt-0.5 text-[11px] text-slate-500">
+                  {emailEnabled ? "All outgoing emails are active." : "All outgoing emails are paused — no emails will be sent until re-enabled."}
+                </div>
+              </div>
+              <button
+                onClick={handleToggleEmailEnabled}
+                disabled={togglingEmail}
+                className={`ml-4 flex h-7 flex-shrink-0 items-center gap-1.5 rounded px-3 text-xs font-bold transition disabled:opacity-60 ${emailEnabled ? "bg-red-600 text-white hover:bg-red-700" : "bg-[#0B3B2E] text-white hover:bg-[#0a3026]"}`}
+              >
+                {emailEnabled ? "Disable Email" : "Enable Email"}
+              </button>
+            </div>
+
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <div className="border border-slate-200 bg-white px-3 py-3">
                 <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Total profiles</div>

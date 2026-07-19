@@ -9,11 +9,12 @@ const toObjectId = (v) => {
 };
 
 const resolveBusinessId = (req) => {
-  const id =
-    req.query?.business || req.query?.company ||
-    req.body?.business || req.body?.company ||
-    req.user?.company;
-  return toObjectId(id);
+  const authenticated = req.user?.company?._id || req.user?.company || null;
+  const requested = req.query?.business || req.query?.company || req.body?.business || req.body?.company || null;
+  if (req.user?.isSystemAdmin || req.user?.superAdminAccess) {
+    return toObjectId(requested || authenticated);
+  }
+  return toObjectId(authenticated || requested);
 };
 
 // ─── LIST ─────────────────────────────────────────────────────────────────────

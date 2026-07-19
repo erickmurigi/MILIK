@@ -13,6 +13,15 @@ const normalizeIds = (accountIds = []) =>
     )
   ).map((id) => new mongoose.Types.ObjectId(id));
 
+// Per-business TTL guard — skips full ledger scans requested within 30 s of the previous one.
+// Targeted partial runs (specific accountIds, e.g. after posting a journal) always execute.
+const balanceLastRefreshed = new Map();
+const BALANCE_TTL_MS = 30_000;
+
+export const invalidateBalanceCache = (businessId) => {
+  if (businessId) balanceLastRefreshed.delete(String(businessId));
+};
+
 export async function aggregateChartOfAccountBalances(businessId, accountIds = []) {
   if (!businessId || !mongoose.Types.ObjectId.isValid(String(businessId))) {
     throw new Error("Valid businessId is required for chart balance aggregation.");
@@ -20,6 +29,7 @@ export async function aggregateChartOfAccountBalances(businessId, accountIds = [
 
   const businessObjectId = new mongoose.Types.ObjectId(String(businessId));
   const normalizedAccountIds = normalizeIds(accountIds);
+  const isFullRun = normalizedAccountIds.length === 0;
 
   const accountQuery = { business: businessObjectId };
   if (normalizedAccountIds.length > 0) {
@@ -31,6 +41,11 @@ export async function aggregateChartOfAccountBalances(businessId, accountIds = [
   );
 
   if (accounts.length === 0) return [];
+
+  if (isFullRun) {
+    const lastRun = balanceLastRefreshed.get(String(businessId)) || 0;
+    if (Date.now() - lastRun < BALANCE_TTL_MS) return accounts;
+  }
 
   // PCTRL accounts are non-posting summaries — their balance is the net credit on
   // account 2110 (Landlord Remittance Payable) tagged with their property.
@@ -126,9 +141,12 @@ export async function aggregateChartOfAccountBalances(businessId, accountIds = [
     await ChartOfAccount.bulkWrite(bulkOps);
   }
 
+  if (isFullRun) balanceLastRefreshed.set(String(businessId), Date.now());
+
   return accounts;
 }
 
 export default {
   aggregateChartOfAccountBalances,
+  invalidateBalanceCache,
 };

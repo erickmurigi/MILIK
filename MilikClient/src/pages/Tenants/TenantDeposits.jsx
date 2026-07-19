@@ -35,6 +35,7 @@ import { getUnits } from "../../redux/unitRedux";
 import { getProperties } from "../../redux/propertyRedux";
 import { createTenantInvoice, deleteTenantInvoice, getTenantInvoices } from "../../redux/invoiceApi";
 import { adminRequests } from "../../utils/requestMethods";
+import { fetchCompanySettings, selectCompanySettings } from "../../redux/companySettingsRedux";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtils";
@@ -205,8 +206,9 @@ const TenantDeposits = () => {
   const canDeleteInvoice = hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "delete", "propertyManagement");
   const canExportInvoice = hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "export", "propertyManagement");
 
+  const storedSettings = useSelector(selectCompanySettings);
   const [depositInvoices, setDepositInvoices] = useState([]);
-  const [depositTypes, setDepositTypes] = useState([]);
+  const depositTypes = Array.isArray(storedSettings?.depositTypes) ? storedSettings.depositTypes : [];
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -335,29 +337,14 @@ const TenantDeposits = () => {
     }
   }, [currentCompany?._id]);
 
-  const loadDepositTypes = useCallback(async () => {
-    if (!currentCompany?._id) {
-      setDepositTypes([]);
-      return;
-    }
-
-    try {
-      const response = await adminRequests.get(`/company-settings/${currentCompany._id}`);
-      setDepositTypes(Array.isArray(response?.data?.depositTypes) ? response.data.depositTypes : []);
-    } catch (error) {
-      console.error("Failed to load deposit types:", error);
-      setDepositTypes([]);
-    }
-  }, [currentCompany?._id]);
-
   useEffect(() => {
     if (!currentCompany?._id) return;
     if (!tenantsLoaded) dispatch(getTenants({ business: currentCompany._id }));
     if (!unitsLoaded) dispatch(getUnits({ business: currentCompany._id }));
     if (!propertiesLoaded) dispatch(getProperties({ business: currentCompany._id }));
+    dispatch(fetchCompanySettings(currentCompany._id));
     loadDepositInvoices();
-    loadDepositTypes();
-  }, [currentCompany?._id, loadDepositInvoices, loadDepositTypes]);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentCompany?._id, loadDepositInvoices, dispatch]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const handleRefresh = () => loadDepositInvoices();

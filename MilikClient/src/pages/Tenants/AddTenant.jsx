@@ -33,6 +33,7 @@ import { getUnits } from "../../redux/unitRedux";
 import { createTenant, getTenants, updateTenant } from "../../redux/tenantsRedux";
 import { createTenantInvoice } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
+import { fetchCompanySettings, selectCompanySettings } from "../../redux/companySettingsRedux";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
@@ -410,7 +411,10 @@ const AddTenant = () => {
   const [isCreatingInitialInvoices, setIsCreatingInitialInvoices] = useState(false);
   const [tenantLoading, setTenantLoading] = useState(false);
   const [openingInvoiceMode, setOpeningInvoiceMode] = useState("separate");
-  const [utilityOptions, setUtilityOptions] = useState([]);
+  const storedSettings = useSelector(selectCompanySettings);
+  const utilityOptions = Array.from(new Set(
+    (storedSettings?.utilityTypes || []).filter((item) => item?.isActive !== false && item?.name).map((item) => String(item.name))
+  ));
   const draftStorageKey = currentCompany?._id ? `milik:new-tenant-draft:${currentCompany._id}:${currentUser?._id || currentUser?.id || currentUser?.email || "user"}` : null;
   const draftRestoredRef = useRef(false);
   const submittingRef = useRef(false);
@@ -426,15 +430,7 @@ const AddTenant = () => {
     if (currentCompany?._id) {
       if (!propertiesLoaded) dispatch(getProperties({ business: currentCompany._id }));
       if (!unitsLoaded) dispatch(getUnits({ business: currentCompany._id }));
-      adminRequests
-        .get(`/company-settings/${currentCompany._id}`)
-        .then((res) => {
-          const names = Array.from(new Set((res?.data?.utilityTypes || [])
-            .filter((item) => item?.isActive !== false && item?.name)
-            .map((item) => String(item.name))));
-          setUtilityOptions(names);
-        })
-        .catch(() => setUtilityOptions([]));
+      dispatch(fetchCompanySettings(currentCompany._id));
     }
   }, [dispatch, currentCompany]);
 

@@ -8,7 +8,6 @@ import {
   registerCustomer,
   updateCustomer,
   lookupPlate,
-  redeemReward,
   getCustomerCard,
   getCustomerStatement,
   sendCustomerSms,
@@ -45,9 +44,6 @@ router.get('/customers/:customerId/card', validateParamId('customerId'), require
 router.get('/customers/:id/statement', validateParamId(), requireCompanyPermission('carwash-loyalty', 'view', 'carwash'), getCustomerStatement);
 router.post('/customers/:id/sms', validateParamId(), requireCompanyPermission('carwash-loyalty', 'view', 'carwash'), sendCustomerSms);
 router.post('/customers/:id/stamp', validateParamId(), requireCompanyPermission('carwash-loyalty', 'manage', 'carwash'), awardManualStamp);
-
-// Redeem a reward on a specific job
-router.patch('/jobs/:jobId/redeem', validateParamId('jobId'), requireCompanyPermission('carwash-jobs', 'update', 'carwash'), redeemReward);
 
 // Backfill: create missing customers + award stamps for all existing jobs
 router.post('/admin/backfill', requireCompanyPermission('carwash-loyalty', 'manage', 'carwash'), backfillCustomersAndStamps);

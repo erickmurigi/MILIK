@@ -15,7 +15,8 @@ import {
   normalizeChartAccountPayload,
   moduleScopesForAccount,
 } from "../services/chartOfAccountsService.js";
-import { aggregateChartOfAccountBalances } from "../services/chartAccountAggregationService.js";
+import { aggregateChartOfAccountBalances, invalidateBalanceCache } from "../services/chartAccountAggregationService.js";
+import { clearInvoiceAccountCache } from "../controllers/propertyController/tenantInvoices.js";
 import { postCorrection } from "../services/ledgerPostingService.js";
 import {
   entrySignedForAccount,
@@ -549,6 +550,8 @@ router.put("/:id", verifyUser, requireCompanyModule("accounts"), async (req, res
     }
 
     await account.save();
+    clearInvoiceAccountCache();
+    invalidateBalanceCache(business);
 
     // Cascade name change to every model that denormalises the account name as a
     // plain string, so all transaction history always reflects the current name.
@@ -636,6 +639,8 @@ router.delete("/:id", verifyUser, requireCompanyModule("accounts"), async (req, 
       account.deletedAt = new Date();
       account.deletedBy = req.user?._id || null;
       await account.save();
+      clearInvoiceAccountCache();
+      invalidateBalanceCache(business);
       return res.status(200).json({
         success: true,
         softDeleted: true,
@@ -644,6 +649,8 @@ router.delete("/:id", verifyUser, requireCompanyModule("accounts"), async (req, 
     }
 
     await account.deleteOne();
+    clearInvoiceAccountCache();
+    invalidateBalanceCache(business);
 
     return res.status(200).json({
       success: true,

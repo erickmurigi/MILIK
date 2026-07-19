@@ -458,10 +458,14 @@ const Receipts = ({ viewMode = "tenant" }) => {
     }
   }, [currentCompany?._id, dispatch, loadInvoices, isLandlordReceiptView, isCompanyLandlordMode]);
 
+  const loadDataRef = useRef(loadData);
+  useEffect(() => { loadDataRef.current = loadData; });
+
+  const initialFiltersRef = useRef(initialFilters);
+
   useEffect(() => {
     if (!currentCompany?._id) return;
-    loadData(1, initialFilters);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadDataRef.current(1, initialFiltersRef.current);
   }, [currentCompany?._id]);
 
   // Load payments for the selected tenant when the receipt form opens (for balance calc)

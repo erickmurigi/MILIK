@@ -136,74 +136,6 @@ const ManualStampModal = React.memo(({ customer, stampsRequired, mutation, onClo
   );
 });
 
-// ─── Redeem reward modal ──────────────────────────────────────────────────────
-const RedeemModal = React.memo(({ customer, businessId, mutation, onClose }) => {
-  const [selectedJobId, setSelectedJobId] = useState(null);
-
-  const plate = customer.plates?.[0] || "";
-  const { data: jobsData, isLoading } = useQuery({
-    queryKey: ["cw-redeem-jobs", businessId, customer._id],
-    queryFn: () => carWashApi.listJobs({ search: plate, status: "done", limit: 10 }),
-    enabled: Boolean(plate),
-    staleTime: 0,
-  });
-  const jobs = useMemo(() => Array.isArray(jobsData) ? jobsData : (jobsData?.data ?? []), [jobsData]);
-
-  const submit = () => {
-    if (!selectedJobId) { toast.error("Select a job to redeem the reward on"); return; }
-    mutation.mutate(selectedJobId, {
-      onSuccess: () => { toast.success("Reward redeemed!"); onClose(); },
-      onError: (err) => toast.error(err?.response?.data?.message || "Redemption failed"),
-    });
-  };
-
-  return (
-    <Modal
-      title={`Redeem Reward — ${customer.name}`}
-      onClose={onClose}
-      footer={
-        <>
-          <button onClick={onClose} className="border border-slate-300 px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-          <button onClick={submit} disabled={!selectedJobId || mutation.isPending} className="bg-amber-600 px-4 py-1.5 text-xs font-black uppercase tracking-wide text-white hover:bg-amber-700 disabled:opacity-50">
-            {mutation.isPending ? "Redeeming…" : "Redeem Reward"}
-          </button>
-        </>
-      }
-    >
-      <p className="mb-3 text-xs text-slate-600">Select the job to apply the loyalty reward to:</p>
-      {isLoading ? (
-        <div className="py-6 text-center text-xs text-slate-400">Loading jobs…</div>
-      ) : !jobs.length ? (
-        <div className="rounded border border-slate-200 py-6 text-center text-xs text-slate-400">
-          No recent done jobs found for plate <strong>{plate}</strong>. Complete a wash first.
-        </div>
-      ) : (
-        <div className="divide-y divide-slate-100 border border-slate-200">
-          {jobs.map(j => (
-            <label
-              key={j._id}
-              className={`flex cursor-pointer items-center gap-3 px-3 py-2 text-xs transition hover:bg-slate-50 ${selectedJobId === j._id ? "bg-amber-50" : ""}`}
-            >
-              <input
-                type="radio"
-                name="redeemJob"
-                value={j._id}
-                checked={selectedJobId === j._id}
-                onChange={() => setSelectedJobId(j._id)}
-                className="accent-amber-600"
-              />
-              <span className="font-bold text-slate-800">{j.jobNumber}</span>
-              <span className="text-slate-500">{j.plateNumber}</span>
-              <span className="ml-auto text-slate-400">{j.createdAt ? new Date(j.createdAt).toLocaleDateString("en-KE") : "—"}</span>
-              <span className="font-semibold text-slate-700">KES {(j.price || 0).toLocaleString()}</span>
-            </label>
-          ))}
-        </div>
-      )}
-    </Modal>
-  );
-});
-
 // ─── Bulk SMS modal ───────────────────────────────────────────────────────────
 const BulkSmsModal = React.memo(({ count, onSend, onClose, sending }) => {
   const [body, setBody] = useState("");
@@ -291,7 +223,7 @@ const CardDetail = React.memo(({ customerId, businessId, stampsRequired }) => {
 const CustomerRow = React.memo(({
   customer, isExpanded, isSelected, stampsRequired,
   canManage, businessId,
-  onExpand, onSelect, onEdit, onSms, onStamp, onRedeem,
+  onExpand, onSelect, onEdit, onSms, onStamp,
 }) => {
   const card            = customer.loyaltyCard;
   const pendingRewards  = card?.pendingRewards ?? 0;
@@ -367,15 +299,6 @@ const CustomerRow = React.memo(({
         {/* Actions */}
         <td className="w-40 px-3 py-2 text-right" onClick={e => e.stopPropagation()}>
           <div className="inline-flex items-center gap-1">
-            {pendingRewards > 0 && (
-              <button
-                onClick={() => onRedeem(customer)}
-                className="inline-flex items-center gap-1 border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 hover:bg-amber-100"
-                title="Redeem reward"
-              >
-                <FaGift className="text-[8px]" /> Redeem
-              </button>
-            )}
             {canManage && (
               <button
                 onClick={() => onStamp(customer)}
@@ -621,7 +544,6 @@ const CarWashLoyalty = () => {
   // ── Modal targets ─────────────────────────────────────────────────────────
   const [smsTarget,    setSmsTarget]    = useState(null);
   const [stampTarget,  setStampTarget]  = useState(null);
-  const [redeemTarget, setRedeemTarget] = useState(null);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [editingCustomer,   setEditingCustomer]   = useState(null);
   const [customerForm,      setCustomerForm]       = useState(emptyForm);
@@ -697,10 +619,6 @@ const CarWashLoyalty = () => {
     mutationFn: ({ customerId, payload }) => carWashApi.awardManualStamp(customerId, payload),
     onSuccess: () => { invalidateCustomers(); queryClient.invalidateQueries({ queryKey: ["cw-customer-card"] }); },
   });
-  const redeemMutation = useMutation({
-    mutationFn: jobId => carWashApi.redeemLoyaltyReward(jobId),
-    onSuccess: () => { invalidateCustomers(); queryClient.invalidateQueries({ queryKey: ["cw-customer-card"] }); },
-  });
 
   // ── Callbacks ─────────────────────────────────────────────────────────────
   const handleExpand  = useCallback(id => setExpandedId(prev => prev === id ? null : id), []);
@@ -722,7 +640,6 @@ const CarWashLoyalty = () => {
   }, []);
   const handleSms   = useCallback(c => setSmsTarget(c), []);
   const handleStamp = useCallback(c => setStampTarget(c), []);
-  const handleRedeem = useCallback(c => setRedeemTarget(c), []);
 
   const openAdd = useCallback(() => {
     setEditingCustomer(null);
@@ -959,7 +876,6 @@ const CarWashLoyalty = () => {
                         onEdit={handleEdit}
                         onSms={handleSms}
                         onStamp={handleStamp}
-                        onRedeem={handleRedeem}
                       />
                     ))}
                   </tbody>
@@ -1022,16 +938,6 @@ const CarWashLoyalty = () => {
           stampsRequired={stampsRequired}
           mutation={stampMutation}
           onClose={() => setStampTarget(null)}
-        />
-      )}
-
-      {/* Redeem reward */}
-      {redeemTarget && (
-        <RedeemModal
-          customer={redeemTarget}
-          businessId={businessId}
-          mutation={redeemMutation}
-          onClose={() => setRedeemTarget(null)}
         />
       )}
 

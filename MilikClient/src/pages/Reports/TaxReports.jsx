@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { hasCompanyPermission } from '../../utils/permissions';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { getProperties } from '../../redux/propertyRedux';
+import { fetchCompanySettings, selectCompanySettings } from '../../redux/companySettingsRedux';
 import { adminRequests } from '../../utils/requestMethods';
 
 const GREEN_BG = 'bg-[#0B3B2E]';
@@ -59,8 +60,9 @@ const TaxReports = () => {
     propertyId: '',
   }));
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
+  const storedSettings = useSelector(selectCompanySettings);
+  const companyTaxConfig = storedSettings || { taxSettings: { defaultVatRate: DEFAULT_RATE } };
   const [loading, setLoading] = useState(false);
-  const [companyTaxConfig, setCompanyTaxConfig] = useState({ taxSettings: { defaultVatRate: DEFAULT_RATE } });
   const [invoices, setInvoices] = useState([]);
   const [processedStatements, setProcessedStatements] = useState([]);
   const [currentPage, setCurrentPage] = useTabState("/accounts/tax-reports:currentPage", 1);
@@ -68,6 +70,7 @@ const TaxReports = () => {
   useEffect(() => {
     if (!currentCompany?._id) return;
     dispatch(getProperties({ business: currentCompany._id }));
+    dispatch(fetchCompanySettings(currentCompany._id));
   }, [currentCompany?._id, dispatch]);
 
   useEffect(() => {
@@ -78,15 +81,17 @@ const TaxReports = () => {
       setLoading(true);
       try {
         const invoiceUrl = `/tenant-invoices?business=${currentCompany._id}${filters.startDate ? `&fromDate=${filters.startDate}` : ""}${filters.endDate ? `&toDate=${filters.endDate}` : ""}`;
-        const [settingsRes, invoiceRes, statementRes] = await Promise.all([
-          adminRequests.get(`/company-settings/${currentCompany._id}`),
+        const statementParams = new URLSearchParams();
+        if (filters.startDate) statementParams.set("startDate", filters.startDate);
+        if (filters.endDate) statementParams.set("endDate", filters.endDate);
+        const statementQuery = statementParams.toString() ? `?${statementParams}` : "";
+        const [invoiceRes, statementRes] = await Promise.all([
           adminRequests.get(invoiceUrl),
-          adminRequests.get(`/processed-statements/business/${currentCompany._id}`),
+          adminRequests.get(`/processed-statements/business/${currentCompany._id}${statementQuery}`),
         ]);
 
         if (cancelled) return;
 
-        setCompanyTaxConfig(settingsRes?.data || { taxSettings: { defaultVatRate: DEFAULT_RATE } });
         setInvoices(Array.isArray(invoiceRes?.data) ? invoiceRes.data : []);
 
         const statements = Array.isArray(statementRes?.data?.statements)

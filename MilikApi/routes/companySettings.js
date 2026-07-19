@@ -1,6 +1,7 @@
 import express from "express";
 import {
   getCompanySettings,
+  invalidateSettingsCache,
   addUtilityType,
   updateUtilityType,
   deleteUtilityType,
@@ -24,6 +25,17 @@ import {
 import { verifyUser } from "../controllers/verifyToken.js";
 
 const router = express.Router();
+
+// Invalidate the in-memory cache after any successful mutation
+router.use((req, res, next) => {
+  if (req.method !== "GET") {
+    const businessId = req.params.businessId;
+    res.on("finish", () => {
+      if (res.statusCode < 400 && businessId) invalidateSettingsCache(businessId);
+    });
+  }
+  next();
+});
 
 // Get company settings
 router.get("/:businessId", verifyUser, getCompanySettings);

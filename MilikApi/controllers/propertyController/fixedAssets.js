@@ -240,55 +240,61 @@ export const runDepreciation = async (req, res, next) => {
 
     const results = [];
     const touchedAccounts = new Set();
+    const bulkOps = [];
 
-    for (const asset of assets) {
-      const monthly = calcMonthlyDepreciation(asset.toObject());
-      if (monthly <= 0) {
-        results.push({ assetId: asset._id, name: asset.name, skipped: true, reason: "No depreciation to post" });
-        continue;
-      }
+    await Promise.all(
+      assets.map(async (asset) => {
+        const monthly = calcMonthlyDepreciation(asset.toObject());
+        if (monthly <= 0) {
+          results.push({ assetId: asset._id, name: asset.name, skipped: true, reason: "No depreciation to post" });
+          return;
+        }
 
-      const journalGroupId = new mongoose.Types.ObjectId();
-      const transactionDate = end;
+        const journalGroupId = new mongoose.Types.ObjectId();
+        const transactionDate = end;
 
-      const basePayload = {
-        business: businessId,
-        allowUnscoped: true,
-        sourceTransactionType: "fixed_asset_depreciation",
-        sourceTransactionId: asset._id,
-        transactionDate,
-        statementPeriodStart: start,
-        statementPeriodEnd: end,
-        category: "DEPRECIATION",
-        journalGroupId,
-        amount: monthly,
-        createdBy: userId,
-        approvedBy: userId,
-        approvedAt: new Date(),
-        status: "approved",
-        notes: `Depreciation — ${asset.name} (${String(asset.code || "").trim()}) for period ${periodStart} to ${periodEnd}`,
-      };
+        const basePayload = {
+          business: businessId,
+          allowUnscoped: true,
+          sourceTransactionType: "fixed_asset_depreciation",
+          sourceTransactionId: asset._id,
+          transactionDate,
+          statementPeriodStart: start,
+          statementPeriodEnd: end,
+          category: "DEPRECIATION",
+          journalGroupId,
+          amount: monthly,
+          createdBy: userId,
+          approvedBy: userId,
+          approvedAt: new Date(),
+          status: "approved",
+          notes: `Depreciation — ${asset.name} (${String(asset.code || "").trim()}) for period ${periodStart} to ${periodEnd}`,
+        };
 
-      // DR Depreciation Expense
-      await postEntry({ ...basePayload, accountId: asset.depreciationExpenseAccount._id, direction: "debit" });
-      // CR Accumulated Depreciation
-      await postEntry({ ...basePayload, accountId: asset.accumulatedDepreciationAccount._id, direction: "credit" });
+        // DR Depreciation Expense and CR Accumulated Depreciation in parallel
+        await Promise.all([
+          postEntry({ ...basePayload, accountId: asset.depreciationExpenseAccount._id, direction: "debit" }),
+          postEntry({ ...basePayload, accountId: asset.accumulatedDepreciationAccount._id, direction: "credit" }),
+        ]);
 
-      touchedAccounts.add(String(asset.depreciationExpenseAccount._id));
-      touchedAccounts.add(String(asset.accumulatedDepreciationAccount._id));
+        touchedAccounts.add(String(asset.depreciationExpenseAccount._id));
+        touchedAccounts.add(String(asset.accumulatedDepreciationAccount._id));
 
-      // Update asset
-      asset.accumulatedDepreciation = round2(Number(asset.accumulatedDepreciation || 0) + monthly);
-      asset.lastDepreciationDate = transactionDate;
+        const newAccumulated = round2(Number(asset.accumulatedDepreciation || 0) + monthly);
+        const bookValue = round2(Math.max(0, Number(asset.purchaseCost || 0) - newAccumulated));
+        const residual = round2(Number(asset.residualValue || 0));
+        const updateFields = {
+          accumulatedDepreciation: newAccumulated,
+          lastDepreciationDate: transactionDate,
+          ...(bookValue <= residual ? { status: "fully_depreciated" } : {}),
+        };
 
-      const bookValue = round2(Math.max(0, Number(asset.purchaseCost || 0) - asset.accumulatedDepreciation));
-      const residual = round2(Number(asset.residualValue || 0));
-      if (bookValue <= residual) asset.status = "fully_depreciated";
+        bulkOps.push({ updateOne: { filter: { _id: asset._id }, update: { $set: updateFields } } });
+        results.push({ assetId: asset._id, name: asset.name, depreciation: monthly, newBookValue: bookValue });
+      })
+    );
 
-      await asset.save();
-      results.push({ assetId: asset._id, name: asset.name, depreciation: monthly, newBookValue: bookValue });
-    }
-
+    if (bulkOps.length) await FixedAsset.bulkWrite(bulkOps, { ordered: false });
     if (touchedAccounts.size) {
       await aggregateChartOfAccountBalances(businessId, [...touchedAccounts]);
     }

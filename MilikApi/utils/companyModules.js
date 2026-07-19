@@ -360,6 +360,17 @@ export const SMS_TEMPLATE_DEFINITIONS = [
     placeholders: ['landlordName', 'landlordCode', 'amount', 'propertyName', 'paymentDate', 'referenceNumber', 'statementNumber', 'statementPeriod', 'companyName', 'companyPhone'],
   },
   {
+    key: 'management_fee_invoice_sms',
+    name: 'Management Fee Invoice SMS',
+    recipientType: 'landlord',
+    description: 'Sent when a management fee invoice is issued to the landlord.',
+    sendMode: 'manual',
+    enabled: false,
+    messageBody:
+      'Hello {landlordName}, management fee invoice {invoiceNumber} for {propertyName} ({billingPeriod}): Fee {commissionAmount}, Total {totalDue}. Ref: {statementNumber}. - {companyName}',
+    placeholders: ['landlordName', 'landlordCode', 'propertyName', 'billingPeriod', 'invoiceNumber', 'statementNumber', 'commissionAmount', 'totalDue', 'companyName', 'companyPhone'],
+  },
+  {
     key: 'maintenance_update_tenant',
     name: 'Maintenance Update - Tenant',
     recipientType: 'tenant',
@@ -890,6 +901,7 @@ export const sanitizeCommunicationForClient = (communication = {}) => {
   }));
 
   return {
+    emailEnabled: rawCommunication?.emailEnabled !== false,
     emailProfiles: sanitizedProfiles,
     defaultEmailProfileId: primary?._id || '',
     defaultEmailProfile: primary

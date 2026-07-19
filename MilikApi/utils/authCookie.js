@@ -1,5 +1,5 @@
 const AUTH_COOKIE_NAME = String(process.env.AUTH_COOKIE_NAME || "milik_auth").trim() || "milik_auth";
-const AUTH_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const AUTH_COOKIE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 const parseBoolean = (value, fallback = false) => {
   if (typeof value === "boolean") return value;

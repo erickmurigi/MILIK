@@ -120,7 +120,7 @@ const pickPrimaryCurrentTenant = (unitId, tenants = []) => {
   return primary || tenants[0] || null;
 };
 
-export const calculateTotalMonthlyAmount = async (unitOrId) => {
+const calculateTotalMonthlyAmount = async (unitOrId) => {
   try {
     const unit =
       unitOrId && typeof unitOrId === "object" && (unitOrId._id || unitOrId.rent !== undefined)
@@ -980,9 +980,12 @@ export const getAvailableUnits = async (req, res, next) => {
       filter.property = property;
     }
 
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 200));
+
     const units = await Unit.find(filter)
       .populate("property", "propertyName propertyCode address")
-      .sort({ rent: 1 });
+      .sort({ rent: 1 })
+      .limit(limit);
 
     return res.status(200).json(units);
   } catch (err) {

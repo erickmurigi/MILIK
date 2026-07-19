@@ -28,6 +28,7 @@ import DashboardLayout from "../../components/Layout/DashboardLayout";
 import InvoiceCreationModal from "./InvoiceCreationModal";
 import { toast } from "react-toastify";
 import { adminRequests } from "../../utils/requestMethods";
+import { fetchCompanySettings, selectCompanySettings } from "../../redux/companySettingsRedux";
 import {
   normalizeCompanyTaxConfig,
   resolveTaxSelectionPayload,
@@ -459,7 +460,7 @@ const TenantStatement = () => {
   const [scheduleFilterTo, setScheduleFilterTo] = useState("");
   const [scheduleSearchText, setScheduleSearchText] = useState("");
   const [scheduleExtensionMonths, setScheduleExtensionMonths] = useState(0);
-  const [companyTaxConfig, setCompanyTaxConfig] = useState(null);
+  const companyTaxConfig = useSelector(selectCompanySettings);
 
   const currentCompany = useSelector(selectCurrentCompany);
   const { propertiesLoaded, unitsLoaded } = useEntityCache(currentCompany?._id);
@@ -670,32 +671,8 @@ const TenantStatement = () => {
   }, []);
 
   useEffect(() => {
-    if (!currentCompany?._id) {
-      setCompanyTaxConfig(null);
-      return;
-    }
-
-    let isMounted = true;
-
-    const loadCompanyTaxConfig = async () => {
-      try {
-        const res = await adminRequests.get(`/company-settings/${currentCompany._id}`);
-        if (isMounted) {
-          setCompanyTaxConfig(res.data || null);
-        }
-      } catch (_error) {
-        if (isMounted) {
-          setCompanyTaxConfig(null);
-        }
-      }
-    };
-
-    loadCompanyTaxConfig();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [currentCompany?._id]);
+    if (currentCompany?._id) dispatch(fetchCompanySettings(currentCompany._id));
+  }, [currentCompany?._id, dispatch]);
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -1742,6 +1719,17 @@ const TenantStatement = () => {
       })
       .map((t) => ({ ...t, balance: t.balance + printBbf }));
     const printBcfBalance = txns.length > 0 ? txns[txns.length - 1].balance : hasPrintBbf ? printBbf : null;
+
+    // Compute totals from the date-filtered txns only (not full statement history)
+    let printCharges = 0, printPayments = 0;
+    txns.forEach((t) => {
+      const abs = Math.abs(Number(t.amount || 0));
+      if (t.type === 'CHARGE' || t.type === 'DEBIT_NOTE') printCharges += abs;
+      else if (t.type === 'PAYMENT' || t.type === 'CREDIT_NOTE') printPayments += abs;
+    });
+    const printOutstanding = Math.max(0, printCharges - printPayments);
+    const printBalance = printBcfBalance ?? 0;
+
     const allPrintRows = [
       ...(hasPrintBbf ? [{ id: 'BBF', type: 'BBF', description: 'Balance Brought Forward', amount: printBbf, balance: printBbf }] : []),
       ...txns,
@@ -1788,10 +1776,10 @@ const TenantStatement = () => {
     ${allPrintRows.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:20px;color:#94a3b8">No transactions for the selected filters.</td></tr>' : ''}
     </tbody></table>
     <div class="totals">
-      <div class="t-card"><div class="t-cl">Charges</div><div class="t-cv chg">Ksh ${(statementData?.totalCharges || 0).toLocaleString()}</div></div>
-      <div class="t-card"><div class="t-cl">Payments</div><div class="t-cv pay">Ksh ${(statementData?.totalPayments || 0).toLocaleString()}</div></div>
-      <div class="t-card"><div class="t-cl">Outstanding</div><div class="t-cv amb">Ksh ${Math.abs(statementData?.operationalOutstanding || 0).toLocaleString()}</div></div>
-      <div class="t-card"><div class="t-cl">Balance</div><div class="t-cv" style="color:${(statementData?.currentBalance || 0) >= 0 ? '#047857' : '#dc2626'}">Ksh ${Math.abs(statementData?.currentBalance || 0).toLocaleString()}</div></div>
+      <div class="t-card"><div class="t-cl">Charges</div><div class="t-cv chg">Ksh ${printCharges.toLocaleString()}</div></div>
+      <div class="t-card"><div class="t-cl">Payments</div><div class="t-cv pay">Ksh ${printPayments.toLocaleString()}</div></div>
+      <div class="t-card"><div class="t-cl">Outstanding</div><div class="t-cv amb">Ksh ${printOutstanding.toLocaleString()}</div></div>
+      <div class="t-card"><div class="t-cl">Balance</div><div class="t-cv" style="color:${printBalance >= 0 ? '#047857' : '#dc2626'}">Ksh ${Math.abs(printBalance).toLocaleString()}</div></div>
     </div>
     </body></html>`);
     win.document.close();

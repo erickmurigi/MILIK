@@ -174,10 +174,14 @@ const syncTenantAssignedUnitOccupancy = async ({
   const toVacate = Array.from(previous).filter((unitId) => !next.has(unitId));
   const toOccupy = Array.from(next).filter((unitId) => !previous.has(unitId));
 
-  await Promise.all([
+  const units = await Promise.all([
     ...toVacate.map((unitId) => setUnitVacant(unitId, tenantId, effectiveDate)),
     ...toOccupy.map((unitId) => setUnitOccupied(unitId, tenantId)),
   ]);
+
+  // Update property counts once per unique property rather than once per unit.
+  const propertyIds = new Set(units.filter(Boolean).map((u) => u.property && String(u.property)).filter(Boolean));
+  await Promise.all([...propertyIds].map((id) => updatePropertyUnitCounts(id)));
 };
 
 
@@ -514,7 +518,7 @@ const resyncTenantCodeCounter = async (businessId) => {
   }
 };
 
-export const updatePropertyUnitCounts = async (propertyId) => {
+const updatePropertyUnitCounts = async (propertyId) => {
   try {
     const [agg] = await Unit.aggregate([
       { $match: { property: new mongoose.Types.ObjectId(String(propertyId)) } },
@@ -546,19 +550,19 @@ export const updatePropertyUnitCounts = async (propertyId) => {
 };
 
 const setUnitOccupied = async (unitId, tenantId) => {
-  const unit = await Unit.findById(unitId);
-  if (!unit) return null;
+  // Atomic: only update if the unit isn't already occupied, preventing double-occupancy races.
+  const unit = await Unit.findOneAndUpdate(
+    { _id: unitId, isVacant: { $ne: false } },
+    { $set: { status: "occupied", isVacant: false, vacantSince: null, daysVacant: 0, lastTenant: tenantId } },
+    { new: false, runValidators: false }
+  );
 
-  await Unit.findByIdAndUpdate(unitId, {
-    status: "occupied",
-    isVacant: false,
-    vacantSince: null,
-    daysVacant: 0,
-    lastTenant: tenantId,
-  });
-
-  if (unit.property) {
-    await updatePropertyUnitCounts(unit.property);
+  if (!unit) {
+    // Pre-validation in ensureUnitsBelongToBusiness guarantees the unit exists and is vacant —
+    // a null result here means a concurrent request already occupied it.
+    const err = new Error(`Unit is already occupied and cannot be assigned to another tenant.`);
+    err.statusCode = 409;
+    throw err;
   }
 
   return unit;
@@ -597,10 +601,6 @@ const setUnitVacant = async (unitId, tenantId, effectiveDate = new Date()) => {
       daysVacant: 0,
       lastTenant: tenantId || unit.lastTenant || null,
     });
-  }
-
-  if (unit.property) {
-    await updatePropertyUnitCounts(unit.property);
   }
 
   return unit;
@@ -1102,8 +1102,13 @@ export const getTenants = async (req, res, next) => {
       filter.tenantCode = { $regex: tenantCode.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
     }
 
+    if (req.query.hasBalance === "true") {
+      // 0.009 guards against floating-point noise: smallest real balance after round2() is 0.01
+      filter.balance = { $gt: 0.009 };
+    }
+
     const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(2000, Math.max(1, parseInt(req.query.limit) || 2000));
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 100));
     const skip = (page - 1) * limit;
 
     const [tenants, total] = await Promise.all([
@@ -1738,16 +1743,25 @@ export const getTenantPayments = async (req, res, next) => {
       });
     }
 
-    const payments = await RentPayment.find({
-      tenant: req.params.id,
-      business: tenant.business,
-    })
-      .sort({ paymentDate: -1 })
-      .lean();
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
+    const skip = (page - 1) * limit;
+
+    const [payments, total] = await Promise.all([
+      RentPayment.find({ tenant: req.params.id, business: tenant.business })
+        .sort({ paymentDate: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      RentPayment.countDocuments({ tenant: req.params.id, business: tenant.business }),
+    ]);
 
     return res.status(200).json({
       success: true,
       data: payments,
+      total,
+      page,
+      pages: Math.ceil(total / limit),
     });
   } catch (err) {
     next(err);
@@ -2312,7 +2326,7 @@ export const bulkImportTenants = async (req, res, next) => {
           for (const unitDoc of item.requestedUnitDocs) {
             unitBulkOps.push({
               updateOne: {
-                filter: { _id: unitDoc._id },
+                filter: { _id: unitDoc._id, isVacant: { $ne: false } },
                 update: { $set: { status: "occupied", isVacant: false, vacantSince: null, daysVacant: 0, lastTenant: savedTenant._id } },
               },
             });

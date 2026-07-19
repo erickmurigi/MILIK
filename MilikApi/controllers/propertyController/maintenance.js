@@ -154,27 +154,32 @@ export const deleteMaintenance = async (req, res, next) => {
 export const getMaintenanceStats = async (req, res, next) => {
   try {
     const business = resolveBusinessId(req);
-    const total = await Maintenance.countDocuments({ business });
-    const pending = await Maintenance.countDocuments({ business, status: "pending" });
-    const inProgress = await Maintenance.countDocuments({ business, status: "in_progress" });
-    const completed = await Maintenance.countDocuments({ business, status: "completed" });
-    const highPriority = await Maintenance.countDocuments({ business, priority: "high" });
-
-    let maintenanceCosts = [];
-    if (business && mongoose.Types.ObjectId.isValid(String(business))) {
-      maintenanceCosts = await Maintenance.aggregate([
-        { $match: { business: new mongoose.Types.ObjectId(String(business)), status: "completed" } },
-        { $group: { _id: null, totalCost: { $sum: "$actualCost" } } },
-      ]);
+    if (!business || !mongoose.Types.ObjectId.isValid(String(business))) {
+      return res.status(400).json({ success: false, message: "Missing business" });
     }
 
+    const [result] = await Maintenance.aggregate([
+      { $match: { business: new mongoose.Types.ObjectId(String(business)) } },
+      {
+        $group: {
+          _id: null,
+          total:       { $sum: 1 },
+          pending:     { $sum: { $cond: [{ $eq: ["$status", "pending"] },      1, 0] } },
+          inProgress:  { $sum: { $cond: [{ $eq: ["$status", "in_progress"] },  1, 0] } },
+          completed:   { $sum: { $cond: [{ $eq: ["$status", "completed"] },    1, 0] } },
+          highPriority:{ $sum: { $cond: [{ $eq: ["$priority", "high"] },       1, 0] } },
+          totalCost:   { $sum: { $cond: [{ $eq: ["$status", "completed"] }, "$actualCost", 0] } },
+        },
+      },
+    ]);
+
     res.status(200).json({
-      total,
-      pending,
-      inProgress,
-      completed,
-      highPriority,
-      totalCost: maintenanceCosts[0]?.totalCost || 0,
+      total:        result?.total        ?? 0,
+      pending:      result?.pending      ?? 0,
+      inProgress:   result?.inProgress   ?? 0,
+      completed:    result?.completed    ?? 0,
+      highPriority: result?.highPriority ?? 0,
+      totalCost:    result?.totalCost    ?? 0,
     });
   } catch (err) {
     next(err);

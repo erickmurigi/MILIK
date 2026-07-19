@@ -35,6 +35,7 @@ import { getTenants } from "../../redux/tenantsRedux";
 import { getProperties } from "../../redux/propertyRedux";
 import { getUnits } from "../../redux/unitRedux";
 import { getChartOfAccounts, downloadInvoicePdf } from "../../redux/apiCalls";
+import { fetchCompanySettings, selectCompanySettings } from "../../redux/companySettingsRedux";
 import {
   createTenantInvoice,
   createTenantInvoicesBatch,
@@ -1055,8 +1056,9 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   const unitsFromStore = useSelector(selectAllUnits);
   const tenantsFromStore = useMemo(() => ensureArray(rawTenantsFromStore), [rawTenantsFromStore]);
   const { propertiesLoaded, unitsLoaded, tenantsLoaded } = useEntityCache(currentCompany?._id);
-  const [companyTaxConfig, setCompanyTaxConfig] = useState(null);
-  const [companyBillingPeriods, setCompanyBillingPeriods] = useState([]);
+  const storedSettings = useSelector(selectCompanySettings);
+  const companyTaxConfig = storedSettings || null;
+  const companyBillingPeriods = Array.isArray(storedSettings?.billingPeriods) ? storedSettings.billingPeriods : [];
   const [leases, setLeases] = useState([]);
 
   const normalizedTaxConfig = useMemo(
@@ -1270,41 +1272,14 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
 
 
   useEffect(() => {
-    if (!currentCompany?._id) {
-      setCompanyTaxConfig(null);
-      return;
-    }
+    if (currentCompany?._id) dispatch(fetchCompanySettings(currentCompany._id));
+  }, [currentCompany?._id, dispatch]);
 
-    let isMounted = true;
-    const loadCompanyTaxConfig = async () => {
-      try {
-        const res = await adminRequests.get(`/company-settings/${currentCompany._id}`);
-        if (!isMounted) return;
-        setCompanyTaxConfig(res.data || null);
-        setCompanyBillingPeriods(Array.isArray(res?.data?.billingPeriods) ? res.data.billingPeriods : []);
-        const defaultTaxCodeKey =
-          res?.data?.taxSettings?.defaultTaxCodeKey || "vat_standard";
-        setSingleBookingForm((prev) => ({
-          ...prev,
-          taxCodeKey: prev.taxCodeKey || defaultTaxCodeKey,
-        }));
-        setBatchBookingForm((prev) => ({
-          ...prev,
-          taxCodeKey: prev.taxCodeKey || defaultTaxCodeKey,
-        }));
-      } catch {
-        if (isMounted) {
-          setCompanyTaxConfig(null);
-          setCompanyBillingPeriods([]);
-        }
-      }
-    };
-
-    loadCompanyTaxConfig();
-    return () => {
-      isMounted = false;
-    };
-  }, [currentCompany?._id]);
+  useEffect(() => {
+    const defaultTaxCodeKey = storedSettings?.taxSettings?.defaultTaxCodeKey || "vat_standard";
+    setSingleBookingForm((prev) => ({ ...prev, taxCodeKey: prev.taxCodeKey || defaultTaxCodeKey }));
+    setBatchBookingForm((prev) => ({ ...prev, taxCodeKey: prev.taxCodeKey || defaultTaxCodeKey }));
+  }, [storedSettings]);
 
   useEffect(() => {
     if (!currentCompany?._id) {

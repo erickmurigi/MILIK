@@ -38,11 +38,12 @@ import {
   buildCompanyInternalCopyRecipients,
   buildCompanySmtpTransporter,
   encryptStoredSecret,
+  isEmailEnabled,
   resolveCompanyMailSender,
 } from "../utils/smtpMailer.js";
 
 const companySummarySelect =
-  "companyName companyCode baseCurrency country town email phoneNo slogan logo unitTypes isActive accountStatus locked isDemoWorkspace companyMode modules fiscalStartMonth fiscalStartYear operationPeriodType paymentIntegration.mpesaPaybills paymentIntegration.mpesaPaybill communication.emailProfiles communication.defaultEmailProfileId communication.smsProfiles communication.defaultSmsProfileId communication.smsTemplates";
+  "companyName companyCode baseCurrency country town email phoneNo slogan logo unitTypes isActive accountStatus locked isDemoWorkspace companyMode modules fiscalStartMonth fiscalStartYear operationPeriodType paymentIntegration.mpesaPaybills paymentIntegration.mpesaPaybill communication.emailEnabled communication.emailProfiles communication.defaultEmailProfileId communication.smsProfiles communication.defaultSmsProfileId communication.smsTemplates";
 
 const DEMO_COMPANY_EMAIL = "demo.workspace@milik.local";
 const DEMO_COMPANY_NAME_REGEX = /^milik\s+demo\s+workspace$/i;
@@ -1486,6 +1487,11 @@ export const updateCompany = async (req, res, next) => {
       });
     }
 
+    if (req.body.communication?.emailEnabled !== undefined) {
+      if (!company.communication) company.communication = {};
+      company.communication.emailEnabled = Boolean(req.body.communication.emailEnabled);
+    }
+
     if (req.body.communication?.emailProfiles) {
       applyEmailProfileMutation({
         company,
@@ -1606,6 +1612,9 @@ export const testCompanyEmailProfile = async (req, res, next) => {
       );
     }
 
+    if (!isEmailEnabled()) {
+      return next(createError(503, "Email sending is currently disabled on this server."));
+    }
     const transporter = buildCompanySmtpTransporter(selectedProfile);
     await transporter.verify();
 

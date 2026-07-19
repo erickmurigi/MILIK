@@ -13,6 +13,7 @@ import Unit from "../../models/Unit.js";
 import ExpenseProperty from "../../models/ExpenseProperty.js";
 import PaymentVoucher from "../../models/PaymentVoucher.js";
 import { computeTenantInvoiceSnapshotsBatch } from "./tenantInvoices.js";
+import { round2 } from "../../utils/math.js";
 import { ensureSystemChartOfAccounts, findSystemAccountByCode } from "../../services/chartOfAccountsService.js";
 import { computeAccountBalance, getNormalBalanceSide } from "../../services/accountingClassificationService.js";
 import { postEntry } from "../../services/ledgerPostingService.js";
@@ -62,7 +63,6 @@ const normalizeDate = (value, fallbackToEnd = false) => {
   return date;
 };
 
-const round2 = (value) => Number((Number(value || 0)).toFixed(2));
 
 const REPORT_LEDGER_STATUSES = ["approved", "reversed"];
 
@@ -1098,6 +1098,15 @@ export const getPropertyIncomeSummaryReport = async (req, res, next) => {
     const expenseMatch = { business: businessId, date: { $gte: startDate, $lte: endDate } };
     if (propertyIds) expenseMatch.property = { $in: propertyIds };
 
+    // Pre-fetch unit ids for the requested properties so RentPayment aggregation
+    // can filter by `unit` (a direct field) before hitting the $lookup stage.
+    let propertyUnitIds = null;
+    if (propertyIds) {
+      const units = await Unit.find({ property: { $in: propertyIds } }).select("_id").lean();
+      propertyUnitIds = units.map((u) => u._id);
+      if (propertyUnitIds.length) receiptMatch.unit = { $in: propertyUnitIds };
+    }
+
     const [invoicesByProperty, receiptsByProperty, expensesByPropertyAndCategory] = await Promise.all([
       TenantInvoice.aggregate([
         { $match: invoiceMatch },
@@ -1111,13 +1120,13 @@ export const getPropertyIncomeSummaryReport = async (req, res, next) => {
           },
         },
       ]),
-      // RentPayment has no `property` field — resolve via unit lookup.
-      // Deposits excluded: they are balance-sheet items (liabilities), not income.
+      // RentPayment has no `property` field — resolved via unit lookup for grouping.
+      // When propertyIds is set, receiptMatch.unit already constrains the initial $match,
+      // so the post-lookup property filter is not needed.
       RentPayment.aggregate([
         { $match: receiptMatch },
         { $lookup: { from: "units", localField: "unit", foreignField: "_id", as: "_unit" } },
         { $addFields: { _propertyId: { $arrayElemAt: ["$_unit.property", 0] } } },
-        ...(propertyIds ? [{ $match: { _propertyId: { $in: propertyIds } } }] : []),
         {
           $group: {
             _id: "$_propertyId",
@@ -1513,11 +1522,18 @@ export const getMRITaxSummaryReport = async (req, res, next) => {
       paymentType: { $ne: "deposit" },
     };
 
+    // Pre-fetch unit ids so the initial $match filters by `unit` (direct field)
+    // before the $lookup stage, avoiding a full collection scan on RentPayment.
+    if (propertyIds) {
+      const units = await Unit.find({ property: { $in: propertyIds } }).select("_id").lean();
+      const unitIds = units.map((u) => u._id);
+      if (unitIds.length) receiptMatch.unit = { $in: unitIds };
+    }
+
     const byPropertyMonth = await RentPayment.aggregate([
       { $match: receiptMatch },
       { $lookup: { from: "units", localField: "unit", foreignField: "_id", as: "_unit" } },
       { $addFields: { _propertyId: { $arrayElemAt: ["$_unit.property", 0] } } },
-      ...(propertyIds ? [{ $match: { _propertyId: { $in: propertyIds } } }] : []),
       {
         $group: {
           _id: {

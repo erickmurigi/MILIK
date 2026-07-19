@@ -673,7 +673,6 @@ const attemptAutoReceipt = async ({ stored, config }) => {
     await MpesaCollection.findByIdAndUpdate(stored._id, {
       $set: { matchingStatus: "captured", matchedReceipt: receipt._id },
     });
-    console.log("[PMS-AutoReceipt] Success ref=%s receipt=%s tenant=%s", stored.transactionCode, receipt._id, tenant._id);
   } catch (err) {
     if (err.isDuplicate) {
       await MpesaCollection.findByIdAndUpdate(stored._id, {

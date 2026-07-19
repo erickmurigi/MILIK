@@ -11,6 +11,7 @@ import {
   adminForceReverseStatement,
   adminCleanupOrphanedGLEntries,
   getStatementStats,
+  getManagementFeeInvoicePdf,
 } from "../../controllers/propertyController/processedStatements.js";
 
 const router = express.Router();
@@ -41,6 +42,9 @@ router.post("/:statementId/admin-reverse", verifyAdmin, adminForceReverseStateme
 
 // Admin: delete orphaned GL entries whose source ProcessedStatement no longer exists
 router.post("/admin-cleanup-orphaned-gl/:businessId", verifyAdmin, adminCleanupOrphanedGLEntries);
+
+// Management fee invoice PDF
+router.get("/:statementId/management-fee-invoice-pdf", getManagementFeeInvoicePdf);
 
 // Delete statement
 router.delete("/:statementId", deleteStatement);
