@@ -136,6 +136,7 @@ import {
 } from "./controllers/verifyToken.js";
 import { enforceRoutePermissions } from "./utils/routePermissionGuard.js";
 import { warmBlacklistCache, isBlacklistedAsync } from "./utils/tokenBlacklist.js";
+import { extractAuthTokenFromCookieHeader } from "./utils/authCookie.js";
 import { syncCriticalIndexes } from "./utils/indexMaintenance.js";
 
 dotenv.config();
@@ -350,7 +351,11 @@ const io = new Server(server, {
 
 io.use(async (socket, next) => {
   try {
-    const token = socket.handshake?.auth?.token;
+    // Prefer explicit auth.token (future clients), fall back to the HttpOnly cookie
+    // that browsers send automatically with WebSocket upgrade requests.
+    const token =
+      socket.handshake?.auth?.token ||
+      extractAuthTokenFromCookieHeader(socket.handshake?.headers?.cookie || "");
     if (!token) return next(new Error("Authentication required for websocket connection"));
     const payload = jwt.verify(token, getJWTSecret());
     if (await isBlacklistedAsync(token)) return next(new Error("Session has been revoked"));
