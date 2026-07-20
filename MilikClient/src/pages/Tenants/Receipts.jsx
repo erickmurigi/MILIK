@@ -48,6 +48,7 @@ import {
   deleteRentPayment,
   listRentPaymentsPage,
   reverseRentPayment,
+  cancelRentPaymentReversal,
   updateRentPayment,
   unconfirmRentPayment,
   getTenantInvoices,
@@ -408,6 +409,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
   const [prepaymentLines, setPrepaymentLines] = useState([]);
   const prepaymentLinesInitializedRef = useRef(false);
   const [reversalModal, setReversalModal] = useState({ open: false, isBatch: false, receipt: null, receipts: [], reason: "", loading: false });
+  const [cancelReversalModal, setCancelReversalModal] = useState({ open: false, receipt: null, reason: "", loading: false });
 
   const loadInvoices = useCallback(async () => {
     if (!currentCompany?._id) return;
@@ -803,10 +805,17 @@ const Receipts = ({ viewMode = "tenant" }) => {
     }
   };
 
-  const handleDeleteOne = async (receiptId) => {
+  const handleDeleteOne = async (receiptId, receipt = null) => {
     if (!canDeleteReceipt) {
       toast.warning("You do not have permission to delete receipts");
       return;
+    }
+    // Reversed receipts carry a full GL chain — warn before purging
+    if (receipt?.isReversed) {
+      const ok = window.confirm(
+        `Receipt ${receipt.receiptNumber || receiptId} is reversed.\n\nDeleting it will permanently void both the original and reversal ledger entries. This cannot be undone.\n\nContinue?`
+      );
+      if (!ok) return;
     }
     try {
       await deleteRentPayment(dispatch, receiptId);
@@ -854,6 +863,33 @@ const Receipts = ({ viewMode = "tenant" }) => {
     }
 
     setReversalModal({ open: true, isBatch: false, receipt, receipts: [], reason: "Customer correction", loading: false });
+  };
+
+  const handleCancelReversalOpen = (receipt) => {
+    if (!canReverseReceipt) {
+      toast.warning("You do not have permission to cancel reversals");
+      return;
+    }
+    if (!receipt?.isReversed) {
+      toast.warning("This receipt has not been reversed");
+      return;
+    }
+    setCancelReversalModal({ open: true, receipt, reason: "", loading: false });
+  };
+
+  const handleCancelReversalConfirm = async () => {
+    const { receipt, reason } = cancelReversalModal;
+    if (!receipt?._id) return;
+    setCancelReversalModal((prev) => ({ ...prev, loading: true }));
+    try {
+      const res = await cancelRentPaymentReversal(dispatch, receipt._id, { reason: reason.trim() || "Reversal cancelled by user" });
+      toast.success(res?.message || "Reversal cancelled. Receipt restored successfully.");
+      setCancelReversalModal({ open: false, receipt: null, reason: "", loading: false });
+      await loadData(safeCurrentPage, appliedFilters);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to cancel reversal");
+      setCancelReversalModal((prev) => ({ ...prev, loading: false }));
+    }
   };
 
   const handleReverseSelected = async () => {
@@ -1921,14 +1957,19 @@ const Receipts = ({ viewMode = "tenant" }) => {
                                   <FaTimes size={11} />
                                 </button>
                               )}
-                              {!receipt.isReversed && (
-                                <button onClick={() => handleDeleteOne(receipt._id)} className="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white" title="Delete">
+                              {!receipt.reversalOf && (
+                                <button onClick={() => handleDeleteOne(receipt._id, receipt)} className="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white" title="Delete">
                                   <FaTrash size={11} />
                                 </button>
                               )}
                               {receipt.isConfirmed && !receipt.isReversed && (
                                 <button onClick={() => handleReverseOne(receipt)} className="px-2 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white" title="Reverse">
                                   <FaUndo size={11} />
+                                </button>
+                              )}
+                              {receipt.isReversed && canReverseReceipt && (
+                                <button onClick={() => handleCancelReversalOpen(receipt)} className="px-2 py-1 rounded bg-emerald-700 hover:bg-emerald-800 text-white text-[10px] font-semibold leading-none" title="Cancel Reversal — restore this receipt">
+                                  Undo Rev
                                 </button>
                               )}
                               {canExportReceipt && (
@@ -3117,6 +3158,84 @@ const Receipts = ({ viewMode = "tenant" }) => {
                   <>
                     <FaUndo className="text-xs" />
                     Confirm Reversal
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Cancel Reversal Modal ── */}
+      {cancelReversalModal.open && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
+              <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
+                <FaRedoAlt className="text-xs" />
+                <span>
+                  Cancel Reversal
+                  {cancelReversalModal.receipt?.receiptNumber && (
+                    <span className="ml-1.5 font-mono text-xs font-normal normal-case tracking-normal text-white/60">
+                      {cancelReversalModal.receipt.receiptNumber}
+                    </span>
+                  )}
+                </span>
+              </h3>
+            </div>
+
+            <div className="flex-1 overflow-y-auto bg-white px-5 py-4 space-y-4">
+              <div className="flex items-start gap-3 rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3">
+                <FaInfoCircle className="text-emerald-600 mt-0.5 shrink-0" />
+                <p className="text-sm text-emerald-800">
+                  This will void the reversal entry and fully restore receipt{" "}
+                  <span className="font-semibold">{cancelReversalModal.receipt?.receiptNumber}</span> to
+                  its original confirmed state. All ledger entries will be corrected automatically.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
+                  Reason (optional)
+                </label>
+                <textarea
+                  rows={3}
+                  autoFocus
+                  className="w-full resize-none border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  placeholder="e.g. Reversed by mistake…"
+                  value={cancelReversalModal.reason}
+                  onChange={(e) => setCancelReversalModal((prev) => ({ ...prev, reason: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleCancelReversalConfirm(); } }}
+                  disabled={cancelReversalModal.loading}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+              <button
+                onClick={() => setCancelReversalModal({ open: false, receipt: null, reason: "", loading: false })}
+                disabled={cancelReversalModal.loading}
+                className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-700 hover:bg-slate-100 transition-colors disabled:opacity-50"
+              >
+                Close
+              </button>
+              <button
+                onClick={handleCancelReversalConfirm}
+                disabled={cancelReversalModal.loading}
+                className="bg-emerald-700 hover:bg-emerald-800 px-5 py-2 text-xs font-bold uppercase tracking-wide text-white transition-colors disabled:opacity-60 flex items-center gap-2"
+              >
+                {cancelReversalModal.loading ? (
+                  <>
+                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    Restoring…
+                  </>
+                ) : (
+                  <>
+                    <FaRedoAlt className="text-xs" />
+                    Restore Receipt
                   </>
                 )}
               </button>

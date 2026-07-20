@@ -1327,6 +1327,23 @@ export const reverseRentPayment = async (dispatch, id, reverseData = {}) => {
   }
 };
 
+export const cancelRentPaymentReversal = async (dispatch, id, data = {}) => {
+  dispatch(updateRentPaymentStart());
+  try {
+    const res = await adminRequests.put(`/rent-payments/reverse/cancel/${id}`, data);
+    const restored = res?.data?.data?.original;
+    if (restored) {
+      dispatch(updateRentPaymentSuccess(restored));
+    } else {
+      dispatch(updateRentPaymentFailure());
+    }
+    return res.data;
+  } catch (err) {
+    dispatch(updateRentPaymentFailure());
+    throw err;
+  }
+};
+
 
 
 export const getLandlordReceipts = async (params = {}) => {

@@ -3693,11 +3693,63 @@ export const deletePayment = async (req, res, next) => {
       return res.status(404).json({ success: false, message: "Receipt not found." });
     }
 
-    if (payment.isCancelled || payment.isReversed || payment.reversalOf) {
+    if (payment.isCancelled || payment.reversalOf) {
       return res.status(400).json({
         success: false,
-        message: "Reversed or cancelled receipts remain in the audit trail and cannot be deleted.",
+        message: "Cancelled or reversal-entry receipts cannot be deleted.",
       });
+    }
+
+    // Special path: delete a reversed receipt by purging its entire GL chain
+    if (payment.isReversed && payment.reversalEntry) {
+      const reversalDoc = await RentPayment.findById(payment.reversalEntry);
+      if (reversalDoc && !reversalDoc.isCancelled) {
+        // Void REVERSAL GL entries
+        await FinancialLedgerEntry.updateMany(
+          {
+            business: payment.business,
+            sourceTransactionType: "rent_payment",
+            sourceTransactionId: String(payment._id),
+            category: "REVERSAL",
+            status: "approved",
+          },
+          { $set: { status: "void" } }
+        );
+        // Void the original GL entries
+        await FinancialLedgerEntry.updateMany(
+          {
+            business: payment.business,
+            sourceTransactionType: "rent_payment",
+            sourceTransactionId: String(payment._id),
+            status: "reversed",
+            category: { $ne: "REVERSAL" },
+          },
+          { $set: { status: "void", reversedByEntry: null } }
+        );
+        // Cancel the reversal RentPayment doc (keep for audit trail)
+        reversalDoc.isCancelled = true;
+        reversalDoc.cancelledAt = new Date();
+        reversalDoc.cancellationReason = "Original receipt deleted — chain purged";
+        reversalDoc.postingStatus = "failed";
+        reversalDoc.ledgerEntries = [];
+        await reversalDoc.save();
+      }
+      // Recompute tenant balance after voiding both sets of entries
+      await recomputeTenantBalance(payment.tenant, payment.business);
+      await RentPayment.findByIdAndDelete(req.params.id);
+      await logAuditEvent({
+        req,
+        company: payment.business,
+        action: "receipts.delete",
+        category: "finance",
+        severity: "critical",
+        targetType: "Receipt",
+        targetId: payment._id,
+        targetName: receiptLabel(payment),
+        message: `Deleted reversed receipt ${receiptLabel(payment)} — GL chain voided`,
+        metadata: { amount: payment.amount, tenant: payment.tenant, unit: payment.unit, reversalId: payment.reversalEntry },
+      });
+      return res.status(200).json({ message: "Reversed receipt deleted and ledger entries voided." });
     }
 
     if (
@@ -3986,23 +4038,127 @@ export const cancelReversal = async (req, res, next) => {
 
     const access = await authorizePaymentAccess(req, payment);
     if (!access.allowed) {
-      return res.status(access.status).json({
-        success: false,
-        message: access.message,
-      });
+      return res.status(access.status).json({ success: false, message: access.message });
     }
 
     if (!payment.isReversed || !payment.reversalEntry) {
-      return res.status(400).json({
-        success: false,
-        message: "Receipt does not have an active reversal.",
-      });
+      return res.status(400).json({ success: false, message: "Receipt does not have an active reversal." });
     }
 
-    return res.status(400).json({
-      success: false,
-      message:
-        "Cancellation of posted reversals is blocked for audit safety. Create a new correcting receipt instead.",
+    const reversalDoc = await RentPayment.findById(payment.reversalEntry);
+    if (!reversalDoc) {
+      return res.status(404).json({ success: false, message: "Reversal document not found." });
+    }
+
+    if (reversalDoc.isCancelled) {
+      return res.status(400).json({ success: false, message: "Reversal is already cancelled." });
+    }
+
+    const businessId = payment.business || resolveBusinessId(req);
+    let actorUserId;
+    try {
+      actorUserId = await resolveActorUserId({
+        req,
+        business: businessId,
+        fallbackUserId: payment.reversedBy || payment.confirmedBy || null,
+      });
+    } catch (actorError) {
+      return res.status(400).json({ success: false, message: actorError.message });
+    }
+
+    const reason = (req.body?.reason || "").trim() || "Reversal cancelled by user";
+
+    // Collect account IDs from the REVERSAL GL entries BEFORE voiding them
+    const reversalGLEntries = await FinancialLedgerEntry.find(
+      {
+        business: payment.business,
+        sourceTransactionType: "rent_payment",
+        sourceTransactionId: String(payment._id),
+        category: "REVERSAL",
+        status: "approved",
+      },
+      { accountId: 1 }
+    ).lean();
+
+    const touchedAccountIds = [...new Set(reversalGLEntries.map((e) => String(e.accountId || "")).filter(Boolean))];
+
+    // Void the REVERSAL GL entries (updateMany is not blocked by the immutability hook)
+    await FinancialLedgerEntry.updateMany(
+      {
+        business: payment.business,
+        sourceTransactionType: "rent_payment",
+        sourceTransactionId: String(payment._id),
+        category: "REVERSAL",
+        status: "approved",
+      },
+      { $set: { status: "void" } }
+    );
+
+    // Restore the original GL entries back to approved and clear the reversal pointer
+    await FinancialLedgerEntry.updateMany(
+      {
+        business: payment.business,
+        sourceTransactionType: "rent_payment",
+        sourceTransactionId: String(payment._id),
+        status: "reversed",
+        category: { $ne: "REVERSAL" },
+      },
+      { $set: { status: "approved", reversedByEntry: null } }
+    );
+
+    // Cancel the reversal RentPayment document
+    reversalDoc.isCancelled = true;
+    reversalDoc.cancelledAt = new Date();
+    reversalDoc.cancelledBy = actorUserId;
+    reversalDoc.cancellationReason = reason;
+    reversalDoc.postingStatus = "failed";
+    reversalDoc.ledgerEntries = [];
+    await reversalDoc.save();
+
+    // Restore the original RentPayment to its pre-reversal state
+    payment.isReversed = false;
+    payment.reversedAt = null;
+    payment.reversedBy = null;
+    payment.reversalReason = null;
+    payment.reversalEntry = null;
+    payment.postingStatus = "posted";
+    await payment.save();
+
+    // Recompute tenant balance and aggregate affected GL accounts
+    await recomputeTenantBalance(payment.tenant, payment.business);
+
+    if (touchedAccountIds.length > 0) {
+      await aggregateChartOfAccountBalances(payment.business, touchedAccountIds);
+    }
+
+    emitToCompany(businessId, "payment:reversal_cancelled", { paymentId: payment._id });
+
+    const populatedOriginal = await populateReceiptQuery(RentPayment.findById(payment._id));
+
+    await logAuditEvent({
+      req,
+      company: businessId,
+      action: "receipts.cancel_reversal",
+      category: "finance",
+      severity: "critical",
+      targetType: "Receipt",
+      targetId: payment._id,
+      targetName: receiptLabel(payment),
+      message: `Cancelled reversal for receipt ${receiptLabel(payment)}`,
+      metadata: {
+        amount: payment.amount,
+        reason,
+        reversalReceiptId: reversalDoc._id,
+        reversalReceiptNumber: reversalDoc.receiptNumber,
+        tenant: payment.tenant,
+        unit: payment.unit,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Reversal cancelled. Receipt ${receiptLabel(payment)} has been fully restored.`,
+      data: { original: populatedOriginal },
     });
   } catch (err) {
     return next(err);

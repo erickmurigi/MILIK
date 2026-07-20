@@ -121,7 +121,7 @@ const EMAIL_TEMPLATE_DEFINITIONS = [
     description: 'Notify the landlord that a processed statement is ready.',
     subject: '{statementType} Statement – {propertyName} ({statementPeriod})',
     body:
-      'Hello {landlordName} ({landlordCode}),\n\nYour {statementType} statement for {propertyName} covering {statementPeriod} is ready for review.\n\nStatement Reference: {statementNumber}\nStatement Date: {statementDate}\n\nFinancial Summary:\nTotal Rent Invoiced: {totalRentInvoiced}\nTotal Rent Received: {totalRentReceived}\nManagement Commission ({commissionPercentage}): {commissionAmount}{commissionVatLine}\nTotal Expenses: {totalExpenses}\nNet Amount Due to Landlord: {netAmountDue}\n\nPlease review and contact us if you have any questions.\n\nRegards,\n{companyName}\n{companyPhone}',
+      'Hello {landlordName} ({landlordCode}),\n\nYour {statementType} statement for {propertyName} covering {statementPeriod} is ready for review.\n\nStatement Reference: {statementNumber}\nStatement Date: {statementDate}\n\nFinancial Summary:\nTotal Rent Invoiced: {totalRentInvoiced}\nTotal Rent Received: {totalRentReceived}\nManagement Commission ({commissionPercentage}): {commissionAmount}{commissionVatLine}{totalExpensesLine}\nManager will transfer to you: {netAmountDue}\n\nPlease review and contact us if you have any questions.\n\nRegards,\n{companyName}\n{companyPhone}',
   },
   {
     key: 'landlord_payment_email',
@@ -337,6 +337,11 @@ const buildProcessedStatementPayload = ({ statement, company, channel }) => ({
     const label = rate > 0 ? `VAT on Commission (${rate}%)` : 'VAT on Commission';
     return `\n${label}: ${formatCurrency(vat, currency)}`;
   })(),
+  totalExpensesLine: (() => {
+    const exp = round2(statement?.totalExpenses || 0);
+    if (exp <= 0) return '';
+    return `\nTotal Expenses: ${formatCurrency(exp, company?.baseCurrency || 'KES')}`;
+  })(),
   totalExpenses: formatCurrency(statement?.totalExpenses || 0, company?.baseCurrency || 'KES'),
   netAfterExpenses: formatCurrency(statement?.netAfterExpenses || 0, company?.baseCurrency || 'KES'),
 });
@@ -467,7 +472,7 @@ const renderTemplateString = (template = '', payload = {}) => {
   const missing = [];
   const rendered = String(template || '').replace(/\{([a-zA-Z0-9_]+)\}/g, (_match, key) => {
     const rawValue = payload[key];
-    if (rawValue === undefined || rawValue === null || rawValue === '') {
+    if (rawValue === undefined || rawValue === null) {
       missing.push(key);
       return '—';
     }
@@ -1242,8 +1247,17 @@ const dispatchEmail = async ({ profile, to, subject, text, html, attachments }) 
 
 // Concurrency limit for parallel sends — keeps SMTP server happy
 const SEND_BATCH_SIZE = 8;
+// Puppeteer is memory-heavy; cap simultaneous PDF renders
+const PDF_BATCH_SIZE = 4;
 // Per-send timeout (ms) — prevents one slow connection blocking a batch
 const SEND_TIMEOUT_MS = 25_000;
+
+// Runs fn over items in serial batches of `size`, accumulating allSettled results.
+const batchedSettled = async (items, fn, size) => {
+  for (let i = 0; i < items.length; i += size) {
+    await Promise.allSettled(items.slice(i, i + size).map(fn));
+  }
+};
 
 const withTimeout = (promise, ms, label) =>
   Promise.race([

@@ -3055,7 +3055,7 @@ export const generateLandlordStatement = async ({
         unit: row.unit,
         paymentType,
         typeLabel,
-        receiptRef: r.receiptNumber || r.referenceNumber || "",
+        receiptRef: r.referenceNumber || r.receiptNumber || "",
       };
     });
 

@@ -760,6 +760,10 @@ export const generateStatementPdf = async (statementId, businessId) => {
           .summary-table td, .summary-table th { padding: 4px 5px; }
           .summary-table .label { font-weight: 700; }
           .summary-table .final-row td { font-weight: 700; font-size: 10px; background: #f0faf5; }
+          .summary-section td { background: #f1f5f9; font-size: 7.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; color: #475569; padding: 5px 5px 3px; border-top: 1px solid #e2e8f0; }
+          .summary-subtotal td { border-top: 1px solid #e2e8f0; font-weight: 700; color: #374151; }
+          .summary-transfer td { font-weight: 800; font-size: 10.5px; background: #EDF5F1; color: #0B3B2E; border-top: 2px solid #0B3B2E; }
+          .summary-total td { font-weight: 900; font-size: 11px; background: #0B3B2E; color: #ffffff; }
           .negative { color: #991b1b; }
           .footnote { margin-top: 8px; font-size: 7.5px; color: #6b7280; border-top: 1px solid #e5e7eb; padding-top: 4px; }
         </style>
@@ -969,24 +973,45 @@ export const generateStatementPdf = async (statementId, businessId) => {
                   <tr><th colspan="2">Settlement Summary</th></tr>
                 </thead>
                 <tbody>
-                  <tr><td class="label">Opening landlord settlement B/F</td><td class="num ${openingSettlementBalance < 0 ? "negative" : ""}">${formatCurrency(openingSettlementBalance)}</td></tr>
+
+                  <!-- COLLECTIONS -->
+                  <tr class="summary-section"><td colspan="2">Collections</td></tr>
                   <tr><td class="label">${esc(summaryBasisLabel)}</td><td class="num">${formatCurrency(summaryBasisAmount)}</td></tr>
+                  ${openingSettlementBalance !== 0 ? `<tr><td class="label">Opening balance carried forward</td><td class="num ${openingSettlementBalance < 0 ? "negative" : ""}">${formatCurrency(openingSettlementBalance)}</td></tr>` : ""}
+                  ${additionsAmount > 0 ? `<tr><td class="label">Additions</td><td class="num">${formatCurrency(additionsAmount)}</td></tr>` : ""}
                   ${utilityPassThroughAmount > 0 ? `<tr><td class="label">${esc(utilityPassThroughLabel)}</td><td class="num">${formatCurrency(utilityPassThroughAmount)}</td></tr>` : ""}
                   ${invoiceVatPassThroughAmount > 0 ? `<tr><td class="label">${esc(invoiceVatPassThroughLabel)}</td><td class="num">${formatCurrency(invoiceVatPassThroughAmount)}</td></tr>` : ""}
-                  <tr><td class="label">Additions</td><td class="num">${formatCurrency(additionsAmount)}</td></tr>
-                  <tr><td class="label">Expenses & other deductions</td><td class="num">${formatCurrency(nonCommissionDeductions)}</td></tr>
-                  <tr><td class="label">${esc(commissionBaseLabel)}</td><td class="num">${formatCurrency(commissionBaseAmount)}</td></tr>
-                  <tr><td class="label">Commission</td><td class="num">${formatCurrency(commissionAmount)}</td></tr>
-                  ${commissionTaxAmount > 0 ? `<tr><td class="label">VAT on commission</td><td class="num">${formatCurrency(commissionTaxAmount)}</td></tr>` : ""}
-                  ${totalEarlyPayouts > 0 ? `<tr><td class="label">Early payout already paid to landlord</td><td class="num negative">(${formatCurrency(totalEarlyPayouts)})</td></tr>` : ""}
+
+                  <!-- FEES & DEDUCTIONS -->
+                  <tr class="summary-section"><td colspan="2">Management Fees &amp; Deductions</td></tr>
+                  <tr><td class="label">Management commission</td><td class="num negative">(${formatCurrency(commissionAmount)})</td></tr>
+                  ${commissionTaxAmount > 0 ? `<tr><td class="label">VAT on commission</td><td class="num negative">(${formatCurrency(commissionTaxAmount)})</td></tr>` : ""}
+                  ${nonCommissionDeductions > 0 ? `<tr><td class="label">Other expenses &amp; deductions</td><td class="num negative">(${formatCurrency(nonCommissionDeductions)})</td></tr>` : ""}
+
+                  <!-- PRE-PAYOUT SUBTOTAL if there are payouts/recoveries -->
+                  ${(totalEarlyPayouts > 0 || totalAdvanceRecoveries > 0) ? `
+                  <tr class="summary-subtotal"><td class="label">Balance before payouts</td><td class="num">${formatCurrency(settlement.amount + totalEarlyPayouts + totalAdvanceRecoveries)}</td></tr>
+                  ${totalEarlyPayouts > 0 ? `<tr><td class="label">Early payout already paid to you</td><td class="num negative">(${formatCurrency(totalEarlyPayouts)})</td></tr>` : ""}
                   ${totalAdvanceRecoveries > 0 ? `<tr><td class="label">Advance recovery deduction</td><td class="num negative">(${formatCurrency(totalAdvanceRecoveries)})</td></tr>` : ""}
-                  <tr class="final-row"><td class="label">${esc(settlement.label)}</td><td class="num ${settlement.isNegative ? "negative" : ""}">${formatCurrency(settlement.amount)}</td></tr>
-                  ${directToLandlordAmount > 0 ? `
-                  <tr style="border-top:2px solid #e2e8f0;"><td class="label" colspan="2" style="padding-top:10px;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#0B3B2E;">Landlord Reconciliation</td></tr>
-                  <tr><td class="label">Manager will transfer to you</td><td class="num" style="color:#0B3B2E;font-weight:700;">${formatCurrency(Math.max(0, settlement.amount))}</td></tr>
-                  <tr><td class="label">You have already received directly</td><td class="num" style="color:#0B3B2E;font-weight:700;">${formatCurrency(directToLandlordAmount)}</td></tr>
-                  <tr style="background:#EDF5F1;"><td class="label" style="font-weight:800;color:#0B3B2E;">Total income this period</td><td class="num" style="font-weight:800;color:#0B3B2E;">${formatCurrency(Math.max(0, settlement.amount) + directToLandlordAmount)}</td></tr>
                   ` : ""}
+
+                  <!-- MANAGER TRANSFER -->
+                  <tr class="summary-transfer">
+                    <td class="label">Manager will transfer to you</td>
+                    <td class="num ${settlement.isNegative ? "negative" : ""}">${settlement.isNegative ? `(${formatCurrency(settlement.amount)})` : formatCurrency(settlement.amount)}</td>
+                  </tr>
+
+                  <!-- TOTAL INCOME if direct collections exist -->
+                  ${directToLandlordAmount > 0 ? `
+                  <tr class="summary-section"><td colspan="2">Your Total Income This Period</td></tr>
+                  <tr><td class="label">Manager transfer to you</td><td class="num">${formatCurrency(Math.max(0, settlement.amount))}</td></tr>
+                  <tr><td class="label">Received directly from tenants</td><td class="num">${formatCurrency(directToLandlordAmount)}</td></tr>
+                  <tr class="summary-total">
+                    <td class="label" style="padding-top:5px;padding-bottom:5px;">Total income this period</td>
+                    <td class="num" style="padding-top:5px;padding-bottom:5px;">${formatCurrency(Math.max(0, settlement.amount) + directToLandlordAmount)}</td>
+                  </tr>
+                  ` : ""}
+
                 </tbody>
               </table>
             </td>

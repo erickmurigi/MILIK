@@ -74,6 +74,9 @@ export function buildSmtpTransporter() {
   });
 }
 
+// Keyed by host:port:user:pwFingerprint — busts automatically when credentials change.
+const smtpTransporterCache = new Map();
+
 export function buildCompanySmtpTransporter(profile = {}) {
   const host = String(profile?.smtpHost || "").trim();
   const port = Number(profile?.smtpPort || 0);
@@ -91,16 +94,23 @@ export function buildCompanySmtpTransporter(profile = {}) {
     throw new Error("SMTP profile is incomplete");
   }
 
-  return nodemailer.createTransport({
+  const pwFingerprint = crypto.createHash("md5").update(password).digest("hex").slice(0, 8);
+  const cacheKey = `${host}:${port}:${username}:${pwFingerprint}`;
+  if (smtpTransporterCache.has(cacheKey)) return smtpTransporterCache.get(cacheKey);
+
+  const transporter = nodemailer.createTransport({
     host,
     port,
     secure: encryption === "ssl",
     requireTLS: encryption === "tls",
-    auth: {
-      user: username,
-      pass: password,
-    },
+    auth: { user: username, pass: password },
+    pool: true,
+    maxConnections: 5,
+    maxMessages: Infinity,
   });
+
+  smtpTransporterCache.set(cacheKey, transporter);
+  return transporter;
 }
 
 export function resolveMailSender(...preferredEnvNames) {

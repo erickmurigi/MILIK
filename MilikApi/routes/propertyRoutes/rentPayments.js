@@ -74,10 +74,10 @@ router.put("/confirm/:id", verifyUser, confirmPayment)
 // Unconfirm payment - allows unconfirming to enable deletion
 router.put("/unconfirm/:id", verifyUser, unconfirmPayment)
 
+// Cancel a reversal and restore original receipt (must be before /reverse/:id to avoid param collision)
+router.put("/reverse/cancel/:id", verifyUser, cancelReversal)
+
 // Reverse payment/receipt (audit-safe alternative to delete)
 router.put("/reverse/:id", verifyUser, reversePayment)
-
-// Cancel a reversal and restore original receipt allocation
-router.put("/reverse/cancel/:id", verifyUser, cancelReversal)
 
 export default router
