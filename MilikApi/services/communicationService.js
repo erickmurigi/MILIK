@@ -1299,7 +1299,7 @@ const preBuildAttachments = async ({ contextType, items, businessId }) => {
       .lean();
     const stmtMap = new Map(statements.map((s) => [String(s._id), s]));
 
-    await Promise.allSettled(sendableIds.map(async (id) => {
+    await batchedSettled(sendableIds, async (id) => {
       const ps = stmtMap.get(String(id));
       const sourceStatementId = String(ps?.sourceStatement || '');
       if (!sourceStatementId) return;
@@ -1311,29 +1311,29 @@ const preBuildAttachments = async ({ contextType, items, businessId }) => {
           : 'statement';
         cache.set(String(id), [{ filename: `Statement-${propertyCode}-${periodLabel}.pdf`, content: pdfBuffer, contentType: 'application/pdf' }]);
       } catch { /* best-effort */ }
-    }));
+    }, PDF_BATCH_SIZE);
   }
 
   if (contextType === 'invoice' || contextType === 'penalty_invoice') {
-    await Promise.allSettled(sendableIds.map(async (id) => {
+    const itemMap = new Map(items.map((i) => [i.recordId, i]));
+    await batchedSettled(sendableIds, async (id) => {
       try {
         const pdfBuffer = await generateInvoicePdf(id, businessId);
-        const item = items.find((i) => i.recordId === id);
-        const invoiceNum = item?.payload?.invoiceNumber || String(id);
+        const invoiceNum = itemMap.get(id)?.payload?.invoiceNumber || String(id);
         cache.set(String(id), [{ filename: `Invoice-${invoiceNum}.pdf`, content: pdfBuffer, contentType: 'application/pdf' }]);
       } catch { /* best-effort */ }
-    }));
+    }, PDF_BATCH_SIZE);
   }
 
   if (contextType === 'receipt') {
-    await Promise.allSettled(sendableIds.map(async (id) => {
+    const itemMap = new Map(items.map((i) => [i.recordId, i]));
+    await batchedSettled(sendableIds, async (id) => {
       try {
         const pdfBuffer = await generateReceiptPdf(id, businessId);
-        const item = items.find((i) => i.recordId === id);
-        const receiptNum = item?.payload?.receiptNumber || String(id);
+        const receiptNum = itemMap.get(id)?.payload?.receiptNumber || String(id);
         cache.set(String(id), [{ filename: `Receipt-${receiptNum}.pdf`, content: pdfBuffer, contentType: 'application/pdf' }]);
       } catch { /* best-effort */ }
-    }));
+    }, PDF_BATCH_SIZE);
   }
 
   if (contextType === 'management_fee_invoice') {
@@ -1343,7 +1343,7 @@ const preBuildAttachments = async ({ contextType, items, businessId }) => {
       .lean();
     const stmtMap = new Map(statements.map((s) => [String(s._id), s]));
 
-    await Promise.allSettled(sendableIds.map(async (id) => {
+    await batchedSettled(sendableIds, async (id) => {
       const statement = stmtMap.get(String(id));
       if (!statement) return;
       try {
@@ -1351,7 +1351,7 @@ const preBuildAttachments = async ({ contextType, items, businessId }) => {
         const invoiceNo = statement.managementFeeInvoiceNumber || String(id);
         cache.set(String(id), [{ filename: `ManagementFee-${invoiceNo}.pdf`, content: pdfBuffer, contentType: 'application/pdf' }]);
       } catch { /* best-effort */ }
-    }));
+    }, PDF_BATCH_SIZE);
   }
 
   return cache;
@@ -1362,32 +1362,31 @@ export const sendCommunication = async ({ businessId, contextType, channel, temp
   const results = [];
 
   if (!preview.senderProfile?.sendingAvailable) {
+    const statusReason = preview.senderProfile?.statusReason || `No active ${channel.toUpperCase()} profile is available for this company.`;
     const failResults = preview.previews.map((item) => ({
       recordId: item.recordId,
       recipientName: item.recipientName,
       status: 'failed',
       messageId: '',
       cost: '',
-      message: preview.senderProfile?.statusReason || `No active ${channel.toUpperCase()} profile is available for this company.`,
+      message: statusReason,
     }));
 
-    await Promise.allSettled(failResults.map((item) =>
-      SmsLog.create({
-        business: businessId,
-        channel,
-        contextType,
-        templateKey,
-        templateName: preview.template?.name || '',
-        profileName: preview.senderProfile?.name || '',
-        provider: preview.senderProfile?.provider || '',
-        to: preview.previews.find((p) => p.recordId === item.recordId)?.recipientPhone || '',
-        recipientName: item.recipientName,
-        body: preview.previews.find((p) => p.recordId === item.recordId)?.body || '',
-        status: 'failed',
-        error: item.message,
-        recordId: item.recordId,
-      }).catch(() => {})
-    ));
+    SmsLog.insertMany(preview.previews.map((item) => ({
+      business: businessId,
+      channel,
+      contextType,
+      templateKey,
+      templateName: preview.template?.name || '',
+      profileName: preview.senderProfile?.name || '',
+      provider: preview.senderProfile?.provider || '',
+      to: channel === 'sms' ? (item.recipientPhone || '') : (item.recipientEmail || ''),
+      recipientName: item.recipientName,
+      body: item.body || '',
+      status: 'failed',
+      error: statusReason,
+      recordId: item.recordId,
+    }))).catch(() => {});
 
     return {
       ...preview,
@@ -1428,20 +1427,22 @@ export const sendCommunication = async ({ businessId, contextType, channel, temp
 
   // Process in parallel batches to avoid sequential SMTP delays
   const sendable = preview.previews;
+  const pendingLogs = [];
+
   for (let i = 0; i < sendable.length; i += SEND_BATCH_SIZE) {
     const batch = sendable.slice(i, i + SEND_BATCH_SIZE);
 
     await Promise.allSettled(batch.map(async (item) => {
       if (!item.canSend) {
         results.push({ recordId: item.recordId, recipientName: item.recipientName, status: 'failed', messageId: '', cost: '', message: item.reason || 'Not sendable.' });
-        SmsLog.create(buildLogEntry({ businessId, channel, contextType, templateKey, preview, profile, item, status: 'failed', error: item.reason || 'Blocked' })).catch(() => {});
+        pendingLogs.push(buildLogEntry({ businessId, channel, contextType, templateKey, preview, profile, item, status: 'failed', error: item.reason || 'Blocked' }));
         return;
       }
 
       const dest = channel === 'sms' ? (item.recipientPhone || '') : (item.recipientEmail || '');
       if (!dest || (deduplicateByAddress && seenAddresses.has(dest))) {
         results.push({ recordId: item.recordId, recipientName: item.recipientName, status: 'failed', messageId: '', cost: '', message: !dest ? 'No recipient address.' : 'Duplicate recipient — skipped.' });
-        SmsLog.create(buildLogEntry({ businessId, channel, contextType, templateKey, preview, profile, item, status: 'failed', error: !dest ? 'No address' : 'Duplicate' })).catch(() => {});
+        pendingLogs.push(buildLogEntry({ businessId, channel, contextType, templateKey, preview, profile, item, status: 'failed', error: !dest ? 'No address' : 'Duplicate' }));
         return;
       }
       if (deduplicateByAddress) seenAddresses.add(dest);
@@ -1470,22 +1471,27 @@ export const sendCommunication = async ({ businessId, contextType, channel, temp
           );
         }
 
-        SmsLog.create(buildLogEntry({ businessId, channel, contextType, templateKey, preview, profile, item, status: 'sent', providerResult })).catch(() => {});
+        pendingLogs.push(buildLogEntry({ businessId, channel, contextType, templateKey, preview, profile, item, status: 'sent', providerResult }));
         results.push({ recordId: item.recordId, recipientName: item.recipientName, status: 'sent', messageId: providerResult.messageId || '', cost: providerResult.cost || '', message: `${channel.toUpperCase()} sent.` });
       } catch (error) {
         const errMsg = error?.response?.data?.message || error?.message || `Failed to send ${channel.toUpperCase()}.`;
-        SmsLog.create(buildLogEntry({ businessId, channel, contextType, templateKey, preview, profile, item, status: 'failed', error: errMsg })).catch(() => {});
+        pendingLogs.push(buildLogEntry({ businessId, channel, contextType, templateKey, preview, profile, item, status: 'failed', error: errMsg }));
         results.push({ recordId: item.recordId, recipientName: item.recipientName, status: 'failed', messageId: '', cost: '', message: errMsg });
       }
     }));
   }
 
+  if (pendingLogs.length) SmsLog.insertMany(pendingLogs).catch(() => {});
+
+  let sentCount = 0;
+  for (const r of results) { if (r.status === 'sent') sentCount++; }
+
   return {
     ...preview,
     summary: {
       ...preview.summary,
-      sentCount: results.filter((item) => item.status === 'sent').length,
-      failedCount: results.filter((item) => item.status !== 'sent').length,
+      sentCount,
+      failedCount: results.length - sentCount,
     },
     results,
   };
