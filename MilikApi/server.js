@@ -93,6 +93,7 @@ import carWashSettingsRoutes from "./modules/carwash/routes/settings.js";
 import carWashDisplayRoutes from "./modules/carwash/routes/display.js";
 import carWashCreditsRoutes from "./modules/carwash/routes/credits.js";
 import { processDueBilling } from "./modules/carwash/controllers/creditAccountsController.js";
+import { processAutoRentInvoices } from "./services/autoRentInvoicingService.js";
 import hrDepartmentRoutes from "./modules/hr/routes/departments.js";
 import hrDesignationRoutes from "./modules/hr/routes/designations.js";
 import hrEmployeeRoutes from "./modules/hr/routes/employees.js";
@@ -706,6 +707,8 @@ async function connect() {
       warmBlacklistCache().catch(() => {});
       // Run auto-billing check for monthly car wash accounts on startup (fire-and-forget)
       processDueBilling(null).then((r) => { if (r.length) console.log(`[CW Billing] Auto-generated ${r.length} statement(s)`); }).catch(() => {});
+      // Run auto rent invoicing check on startup (fire-and-forget)
+      processAutoRentInvoices().then((r) => { if (r.length) console.log(`[AutoInvoicing] Startup run: ${r.length} company(s) processed`); }).catch(() => {});
       return;
     } catch (error) {
       lastError = error;
@@ -806,6 +809,28 @@ async function startServer() {
       console.log("[CW Billing Cron] Scheduled — daily at 08:00 EAT");
     } catch (cronErr) {
       console.error("[CW Billing Cron] Failed to schedule:", cronErr?.message || cronErr);
+    }
+
+    // ── Auto rent invoicing cron ─────────────────────────────────────────────
+    // Runs at 08:00 EAT daily. Creates rent invoices for companies with
+    // autoInvoicing.enabled = true whose trigger day matches today.
+    try {
+      const cron = await import("node-cron");
+      cron.default.schedule("0 8 * * *", async () => {
+        console.log("[AutoInvoicing Cron] Running for", new Date().toISOString().slice(0, 10));
+        try {
+          const results = await processAutoRentInvoices();
+          if (results.length) {
+            const total = results.reduce((s, r) => s + r.created, 0);
+            console.log(`[AutoInvoicing Cron] Created ${total} invoice(s) across ${results.length} company(s)`);
+          }
+        } catch (err) {
+          console.error("[AutoInvoicing Cron] Error:", err?.message || err);
+        }
+      }, { timezone: "Africa/Nairobi" });
+      console.log("[AutoInvoicing Cron] Scheduled — daily at 08:00 EAT");
+    } catch (cronErr) {
+      console.error("[AutoInvoicing Cron] Failed to schedule:", cronErr?.message || cronErr);
     }
 
     server.listen(PORT, () => {

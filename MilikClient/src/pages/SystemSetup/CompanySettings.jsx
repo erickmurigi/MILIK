@@ -24,6 +24,8 @@ import {
   FaTimes,
   FaArrowRight,
   FaPowerOff,
+  FaCalendarAlt,
+  FaPlay,
 } from "react-icons/fa";
 
 const MILIK_GREEN = "#0B3B2E";
@@ -85,6 +87,11 @@ const TAB_CONFIG = {
     label: "Accounting Defaults",
     icon: FaCheck,
     requiredModules: ["propertyManagement", "hr", "inventory"],
+  },
+  autoInvoicing: {
+    label: "Auto Invoicing",
+    icon: FaCalendarAlt,
+    requiredModules: ["propertyManagement"],
   },
 };
 
@@ -524,6 +531,17 @@ const CompanySettings = () => {
   const [invAccountingDefaults, setInvAccountingDefaults] = useState(normalizeInvAccountingDefaults());
   const [savingHrAccounting, setSavingHrAccounting] = useState(false);
   const [savingInvAccounting, setSavingInvAccounting] = useState(false);
+  const [autoInvoicing, setAutoInvoicing] = useState({
+    enabled: false,
+    billingDay: 1,
+    daysInAdvance: 0,
+    notifyTenants: false,
+    notifyChannel: "none",
+    lastRunAt: null,
+    lastRunSummary: null,
+  });
+  const [savingAutoInvoicing, setSavingAutoInvoicing] = useState(false);
+  const [triggeringAutoInvoicing, setTriggeringAutoInvoicing] = useState(false);
   const [chartAccounts, setChartAccounts] = useState([]);
   const [loadedChartAccountCompanyId, setLoadedChartAccountCompanyId] = useState("");
   const requestedTab = searchParams.get("tab");
@@ -574,6 +592,16 @@ const CompanySettings = () => {
       setAccountingDefaults(normalizeAccountingDefaults(response.data || {}));
       setHrAccountingDefaults(normalizeHrAccountingDefaults(response.data || {}));
       setInvAccountingDefaults(normalizeInvAccountingDefaults(response.data || {}));
+      const ai = response.data?.autoInvoicing || {};
+      setAutoInvoicing({
+        enabled: Boolean(ai.enabled),
+        billingDay: Number(ai.billingDay || 1),
+        daysInAdvance: Number(ai.daysInAdvance || 0),
+        notifyTenants: Boolean(ai.notifyTenants),
+        notifyChannel: ai.notifyChannel || "none",
+        lastRunAt: ai.lastRunAt || null,
+        lastRunSummary: ai.lastRunSummary || null,
+      });
     } catch (error) {
       toast.error(extractErrorMessage(error));
     } finally {
@@ -1085,6 +1113,152 @@ const CompanySettings = () => {
       </div>
     );
   };
+
+  const saveAutoInvoicing = async () => {
+    if (!currentCompany?._id) return;
+    setSavingAutoInvoicing(true);
+    try {
+      const res = await adminRequests.put(`/company-settings/${currentCompany._id}/auto-invoicing`, {
+        enabled: autoInvoicing.enabled,
+        billingDay: autoInvoicing.billingDay,
+        daysInAdvance: autoInvoicing.daysInAdvance,
+        notifyTenants: autoInvoicing.notifyTenants,
+        notifyChannel: autoInvoicing.notifyChannel,
+      });
+      const ai = res?.data?.autoInvoicing || {};
+      setAutoInvoicing((prev) => ({ ...prev, ...ai }));
+      toast.success("Auto invoicing settings saved.");
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setSavingAutoInvoicing(false);
+    }
+  };
+
+  const triggerAutoInvoicing = async () => {
+    if (!currentCompany?._id) return;
+    setTriggeringAutoInvoicing(true);
+    try {
+      const res = await adminRequests.post(`/company-settings/${currentCompany._id}/auto-invoicing/trigger`);
+      toast.success(res?.data?.message || "Auto invoicing run complete.");
+      await loadSettings({ silent: true });
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setTriggeringAutoInvoicing(false);
+    }
+  };
+
+  const renderAutoInvoicingTab = () => (
+    <div className="space-y-4">
+      <Card
+        title="Automatic Rent Invoicing"
+        subtitle="Configure when rent invoices are automatically generated each month for active tenants. Invoices are created with an idempotency key — running twice in a month is safe."
+        action={
+          <ActionButton variant="primary" onClick={saveAutoInvoicing} disabled={savingAutoInvoicing}>
+            {savingAutoInvoicing ? <FaSpinner className="animate-spin" /> : <FaSave />} Save Settings
+          </ActionButton>
+        }
+      >
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <ToggleRow
+            checked={autoInvoicing.enabled}
+            onChange={(e) => setAutoInvoicing((p) => ({ ...p, enabled: e.target.checked }))}
+            title="Enable automatic invoicing"
+            description="When enabled, rent invoices are generated daily at 08:00 EAT on the configured trigger day."
+          />
+          <ToggleRow
+            checked={autoInvoicing.notifyTenants}
+            onChange={(e) => setAutoInvoicing((p) => ({ ...p, notifyTenants: e.target.checked }))}
+            title="Notify tenants on invoice creation"
+            description="Send a notification to tenants when their monthly rent invoice is auto-generated."
+          />
+
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">
+              Billing Day <span className="font-normal text-slate-500">(1–28, day of month rent is due)</span>
+            </label>
+            <Select
+              value={autoInvoicing.billingDay}
+              onChange={(e) => setAutoInvoicing((p) => ({ ...p, billingDay: Number(e.target.value) }))}
+            >
+              {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                <option key={d} value={d}>
+                  {d === 1 ? "1st (Start of month)" : `${d}${d === 2 ? "nd" : d === 3 ? "rd" : "th"}`}
+                </option>
+              ))}
+            </Select>
+            <p className="mt-1 text-[11px] text-slate-500">
+              Invoices for billing day {autoInvoicing.billingDay} will be generated{" "}
+              {autoInvoicing.daysInAdvance > 0
+                ? `${autoInvoicing.daysInAdvance} day(s) in advance (on the ${Math.max(1, autoInvoicing.billingDay - autoInvoicing.daysInAdvance)}${autoInvoicing.billingDay - autoInvoicing.daysInAdvance === 1 ? "st" : autoInvoicing.billingDay - autoInvoicing.daysInAdvance === 2 ? "nd" : autoInvoicing.billingDay - autoInvoicing.daysInAdvance === 3 ? "rd" : "th"})`
+                : "on the billing day itself"}.
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">
+              Days in Advance <span className="font-normal text-slate-500">(0 = same day, max 14)</span>
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={0}
+                max={14}
+                step={1}
+                value={autoInvoicing.daysInAdvance}
+                onChange={(e) => setAutoInvoicing((p) => ({ ...p, daysInAdvance: Number(e.target.value) }))}
+                className="h-2 w-full cursor-pointer accent-emerald-700"
+              />
+              <span className="w-8 text-center text-sm font-bold text-slate-700">{autoInvoicing.daysInAdvance}</span>
+            </div>
+            <p className="mt-1 text-[11px] text-slate-500">
+              Generate invoices this many days before the billing day so tenants have advance notice.
+            </p>
+          </div>
+
+          {autoInvoicing.notifyTenants && (
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-700">Notification Channel</label>
+              <Select
+                value={autoInvoicing.notifyChannel}
+                onChange={(e) => setAutoInvoicing((p) => ({ ...p, notifyChannel: e.target.value }))}
+              >
+                <option value="none">None</option>
+                <option value="sms">SMS only</option>
+                <option value="email">Email only</option>
+                <option value="both">SMS + Email</option>
+              </Select>
+            </div>
+          )}
+        </div>
+      </Card>
+
+      <Card title="Manual Trigger" subtitle="Run the auto invoicing process right now for this company. Safe to run multiple times — duplicate invoices are skipped automatically.">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-xs text-slate-600">
+            {autoInvoicing.lastRunAt ? (
+              <>
+                <span className="font-semibold">Last run:</span>{" "}
+                {new Date(autoInvoicing.lastRunAt).toLocaleString("en-GB", {
+                  day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+                })}{" "}
+                {autoInvoicing.lastRunSummary && (
+                  <span className="text-slate-500">— {autoInvoicing.lastRunSummary}</span>
+                )}
+              </>
+            ) : (
+              <span className="text-slate-400 italic">No runs recorded yet.</span>
+            )}
+          </div>
+          <ActionButton variant="primary" onClick={triggerAutoInvoicing} disabled={triggeringAutoInvoicing}>
+            {triggeringAutoInvoicing ? <FaSpinner className="animate-spin" /> : <FaPlay />}
+            {triggeringAutoInvoicing ? "Running..." : "Run Now"}
+          </ActionButton>
+        </div>
+      </Card>
+    </div>
+  );
 
   const renderTaxTab = () => (
     <div className="space-y-4">
@@ -1607,6 +1781,8 @@ const CompanySettings = () => {
               <div className="flex-1 overflow-auto px-4 py-4">{renderAccountingTab()}</div>
             ) : activeTab === "tax" ? (
               <div className="flex-1 overflow-auto px-4 py-4">{renderTaxTab()}</div>
+            ) : activeTab === "autoInvoicing" ? (
+              <div className="flex-1 overflow-auto px-4 py-4">{renderAutoInvoicingTab()}</div>
             ) : (
               renderCollectionTab(activeTab)
             )}

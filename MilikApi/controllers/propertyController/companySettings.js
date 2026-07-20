@@ -1036,3 +1036,45 @@ export const updateTaxConfiguration = async (req, res, next) => {
     next(err);
   }
 };
+
+export const updateAutoInvoicing = async (req, res, next) => {
+  try {
+    const businessId = resolveAuthorizedBusinessId(req);
+    let settings = await findCompanySettings(businessId);
+    if (!settings) {
+      settings = new CompanySettings({ company: businessId });
+    }
+
+    const {
+      enabled,
+      billingDay,
+      daysInAdvance,
+      notifyTenants,
+      notifyChannel,
+    } = req.body || {};
+
+    const current = settings.autoInvoicing?.toObject?.() || settings.autoInvoicing || {};
+
+    const merged = {
+      ...current,
+      ...(enabled !== undefined ? { enabled: Boolean(enabled) } : {}),
+      ...(billingDay !== undefined ? { billingDay: Math.max(1, Math.min(28, Number(billingDay) || 1)) } : {}),
+      ...(daysInAdvance !== undefined ? { daysInAdvance: Math.max(0, Math.min(14, Number(daysInAdvance) || 0)) } : {}),
+      ...(notifyTenants !== undefined ? { notifyTenants: Boolean(notifyTenants) } : {}),
+      ...(notifyChannel !== undefined ? { notifyChannel } : {}),
+    };
+
+    settings.set("autoInvoicing", merged);
+    settings.markModified("autoInvoicing");
+    await settings.save();
+
+    invalidateSettingsCache(String(businessId));
+
+    res.status(200).json({
+      message: "Auto invoicing settings updated",
+      autoInvoicing: settings.autoInvoicing,
+    });
+  } catch (err) {
+    next(err);
+  }
+};

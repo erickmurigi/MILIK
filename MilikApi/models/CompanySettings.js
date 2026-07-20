@@ -297,6 +297,18 @@ const CompanySettingsSchema = new mongoose.Schema(
       type: hrAccountingDefaultsSchema,
       default: () => ({}),
     },
+    autoInvoicing: {
+      type: new mongoose.Schema({
+        enabled:          { type: Boolean, default: false },
+        billingDay:       { type: Number, default: 1, min: 1, max: 28 },
+        daysInAdvance:    { type: Number, default: 0, min: 0, max: 14 },
+        notifyTenants:    { type: Boolean, default: false },
+        notifyChannel:    { type: String, enum: ["sms", "email", "both", "none"], default: "none" },
+        lastRunAt:        { type: Date, default: null },
+        lastRunSummary:   { type: String, default: null },
+      }, { _id: false }),
+      default: () => ({}),
+    },
     mriRate: { type: Number, default: 0.075, min: 0, max: 1 },
     currencyCode: { type: String, default: "KES" },
     decimalPlaces: { type: Number, default: 2 },

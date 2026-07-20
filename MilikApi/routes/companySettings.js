@@ -21,7 +21,9 @@ import {
   updateHrAccountingDefaults,
   updateInventoryAccountingDefaults,
   updateTaxConfiguration,
+  updateAutoInvoicing,
 } from "../controllers/propertyController/companySettings.js";
+import { processAutoRentInvoices } from "../services/autoRentInvoicingService.js";
 import { verifyUser } from "../controllers/verifyToken.js";
 
 const router = express.Router();
@@ -76,5 +78,22 @@ router.delete("/:businessId/expenses/:expenseId", verifyUser, deleteExpenseItem)
 router.post("/:businessId/deposits", verifyUser, addDepositType);
 router.put("/:businessId/deposits/:depositTypeId", verifyUser, updateDepositType);
 router.delete("/:businessId/deposits/:depositTypeId", verifyUser, deleteDepositType);
+
+// Auto Invoicing
+router.put("/:businessId/auto-invoicing", verifyUser, updateAutoInvoicing);
+router.post("/:businessId/auto-invoicing/trigger", verifyUser, async (req, res) => {
+  try {
+    const businessId = req.params.businessId;
+    const today = req.body?.date ? new Date(req.body.date) : new Date();
+    const results = await processAutoRentInvoices(businessId, today, { forceRun: true });
+    const summary = results[0] || { created: 0, skipped: 0, errors: [] };
+    res.status(200).json({
+      message: `Auto invoicing run complete: created ${summary.created}, skipped ${summary.skipped}`,
+      ...summary,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err?.message || "Auto invoicing trigger failed" });
+  }
+});
 
 export default router;
