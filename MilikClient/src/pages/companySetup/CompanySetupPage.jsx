@@ -1490,7 +1490,7 @@ export default function CompanySetupPage() {
     try {
       const result = await adminRequests.post("/mpesa-collections/register-urls", { shortCode }).then((r) => r.data);
       if (result?.alreadyRegistered) {
-        toast.warning(result.message, { autoClose: 12000 });
+        toast(result.message, { icon: "⚠️", duration: 12000 });
       } else {
         toast.success(result?.message || "URLs registered with Safaricom. Payments will now flow through.");
       }
