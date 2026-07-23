@@ -6,12 +6,14 @@ import {
   ignoreCollection,
   importMpesaBatch,
   listMpesaCollections,
+  registerPmsPaybillUrls,
   unignoreCollection,
 } from "../../controllers/propertyController/mpesaCollections.js";
 
 const router = express.Router();
 
 router.get("/", verifyUser, listMpesaCollections);
+router.post("/register-urls", verifyUser, registerPmsPaybillUrls);
 router.post("/import-batch", verifyUser, importMpesaBatch);
 router.post("/:id/assign-tenant", verifyUser, assignTenantToCollection);
 router.post("/:id/ignore",    verifyUser, ignoreCollection);

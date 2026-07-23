@@ -2945,26 +2945,6 @@ export const reverseTenantInvoiceNote = async (req, res, next) => {
       return res.status(400).json({ error: actorError.message });
     }
 
-    if (sourceInvoice) {
-      const { invoiceSnapshots } = await computeTenantInvoiceSnapshots({
-        businessId: note.business,
-        tenantId: note.tenant,
-      });
-
-      const sourceSnapshot = invoiceSnapshots.find(
-        (snapshot) => String(snapshot?._id || "") === String(sourceInvoiceId)
-      );
-
-      const outstanding = Math.max(0, Number(sourceSnapshot?.outstanding || 0));
-      const noteAmount = Math.abs(Number(note.amount || 0));
-
-      if (normalizedNoteType === "DEBIT_NOTE" && outstanding + 0.009 < noteAmount) {
-        return res.status(400).json({
-          error: "This debit note cannot be reversed because it has already been settled fully or partially.",
-        });
-      }
-    }
-
     const ledgerEntryIds = Array.isArray(note.ledgerEntries) ? note.ledgerEntries.map((entry) => String(entry)) : [];
     const originalEntries = ledgerEntryIds.length
       ? await FinancialLedgerEntry.find({ _id: { $in: ledgerEntryIds } }).lean().select("_id accountId status reversedByEntry")

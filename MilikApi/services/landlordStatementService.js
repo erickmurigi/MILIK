@@ -1293,7 +1293,7 @@ export const generateLandlordStatement = async ({
       periodEnd: { $lt: startOfDay(statementPeriodStart) },
     })
       .sort({ periodEnd: -1 })
-      .select("_id periodEnd")
+      .select("_id periodEnd approvedAt")
       .lean(),
   ]);
 
@@ -1424,6 +1424,28 @@ export const generateLandlordStatement = async ({
       )
       .lean(),
   ]);
+
+  // Take-on balances added after the last approved statement was closed fall before the
+  // invoicesBefore lowerBound and would otherwise be silently skipped. Catch them here so
+  // they still show as Balance B/F on the next statement.
+  if (snapshotDate && lastApproved?.approvedAt) {
+    const gapTakeOns = await TenantInvoice.find({
+      property: propertyObjectId,
+      business: businessObjectId,
+      status: { $nin: ["cancelled", "reversed"] },
+      "metadata.isTakeOnBalance": true,
+      createdAt: { $gt: lastApproved.approvedAt },
+      ...buildInvoiceRecognitionDateQuery({ periodStart: snapshotDate, lowerBound: null }),
+    })
+      .select("_id tenant unit category amount description invoiceDate bookingDate invoiceNumber landlord metadata depositHeldBy taxSnapshot")
+      .lean();
+    if (gapTakeOns.length > 0) {
+      const existingIds = new Set(invoicesBefore.map((i) => String(i._id)));
+      gapTakeOns.forEach((inv) => {
+        if (!existingIds.has(String(inv._id))) invoicesBefore.push(inv);
+      });
+    }
+  }
 
   const unitIds = units.map((u) => u._id);
 

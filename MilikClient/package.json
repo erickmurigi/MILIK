@@ -16,6 +16,7 @@
     "autoprefixer": "^10.4.23",
     "axios": "^1.13.4",
     "crypto-js": "^4.2.0",
+    "esbuild": "^0.28.1",
     "js-base64": "^3.7.8",
     "postcss": "^8.5.6",
     "react": "^19.2.0",

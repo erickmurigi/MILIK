@@ -1488,7 +1488,7 @@ export default function CompanySetupPage() {
     if (!shortCode) { toast.error("Save the Paybill configuration first, then register the URLs."); return; }
     setRegisteringUrls(true);
     try {
-      const result = await carWashApi.registerMpesaUrls(shortCode);
+      const result = await adminRequests.post("/mpesa-collections/register-urls", { shortCode }).then((r) => r.data);
       if (result?.alreadyRegistered) {
         toast.warning(result.message, { autoClose: 12000 });
       } else {

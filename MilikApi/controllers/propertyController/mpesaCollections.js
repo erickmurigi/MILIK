@@ -1,3 +1,4 @@
+import axios from "axios";
 import mongoose from "mongoose";
 import Company from "../../models/Company.js";
 import MpesaCollection from "../../models/MpesaCollection.js";
@@ -414,6 +415,132 @@ const upsertCollection = async ({ businessId, config = {}, source = "manual_batc
 
   const stored = await populateCollectionQuery(MpesaCollection.findById(storedId)).lean();
   return { stored, wasDuplicate: Boolean(existing) };
+};
+
+const extractSafaricomError = (err) => {
+  const d = err?.response?.data;
+  if (!d) return err?.message || "Unknown error";
+  if (d.errorMessage) return String(d.errorMessage).trim();
+  if (d.fault?.faultstring) return String(d.fault.faultstring).trim();
+  if (d.ResultDesc) return String(d.ResultDesc).trim();
+  if (d.error_description) return String(d.error_description).trim();
+  return err?.message || JSON.stringify(d).slice(0, 200);
+};
+
+const tryRegisterC2BUrls = async (safaricomBase, version, accessToken, shortCode, responseType, confirmationURL, validationURL) => {
+  const { data } = await axios.post(
+    `${safaricomBase}/mpesa/c2b/${version}/registerurl`,
+    { ShortCode: shortCode, ResponseType: responseType, ConfirmationURL: confirmationURL, ValidationURL: validationURL },
+    { headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" }, timeout: 15000 }
+  );
+  return data;
+};
+
+export const registerPmsPaybillUrls = async (req, res) => {
+  try {
+    const businessId = String(req.body?.business || req.userCompany || req.user?.company?._id || req.user?.company || "");
+    if (!isValidObjectId(businessId)) {
+      return res.status(400).json({ success: false, message: "Valid business id is required" });
+    }
+
+    const shortCode = normalizeText(req.body?.shortCode || "");
+    if (!shortCode) return res.status(400).json({ success: false, message: "shortCode is required" });
+
+    const company = await Company.findById(businessId).lean();
+    if (!company) return res.status(404).json({ success: false, message: "Company not found" });
+
+    const configs = getRawMpesaPaybillConfigs(company?.paymentIntegration || {});
+    const config =
+      configs.find((c) => normalizeText(c?.shortCode) === shortCode) ||
+      getPrimaryMpesaPaybillConfig(configs);
+
+    if (!config) {
+      return res.status(404).json({ success: false, message: `No Paybill configuration found for shortcode ${shortCode}` });
+    }
+
+    const consumerKey    = normalizeText(config.consumerKey);
+    const consumerSecret = normalizeText(config.consumerSecret);
+    const responseType   = config.responseType === "Cancelled" ? "Cancelled" : "Completed";
+
+    if (!consumerKey || !consumerSecret) {
+      return res.status(422).json({ success: false, message: "Save the Consumer Key and Consumer Secret before registering URLs with Safaricom." });
+    }
+
+    const envBase  = normalizeText(process.env.MPESA_CALLBACK_BASE_URL || "");
+    const apiBase  = (envBase || `${req.protocol}://${req.get("host")}`).replace(/\/$/, "");
+    const validationURL   = `${apiBase}/api/pms/pay/validation/${shortCode}`;
+    const confirmationURL = `${apiBase}/api/pms/pay/confirmation/${shortCode}`;
+
+    const safaricomBase = normalizeText(process.env.MPESA_ENVIRONMENT || "production") === "sandbox"
+      ? "https://sandbox.safaricom.co.ke"
+      : "https://api.safaricom.co.ke";
+
+    let accessToken;
+    try {
+      const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString("base64");
+      const tokenRes = await axios.get(`${safaricomBase}/oauth/v1/generate?grant_type=client_credentials`, {
+        headers: { Authorization: `Basic ${auth}` },
+        timeout: 15000,
+      });
+      accessToken = String(tokenRes.data?.access_token || "").trim();
+    } catch (tokenErr) {
+      return res.status(502).json({
+        success: false,
+        message: `Failed to authenticate with Safaricom. Verify your Consumer Key and Secret. (${extractSafaricomError(tokenErr)})`,
+      });
+    }
+
+    if (!accessToken) {
+      return res.status(502).json({ success: false, message: "No access token returned by Safaricom. Check your credentials." });
+    }
+
+    const isAlreadyRegistered = (msg = "") => /already.registered|url.*registered|registered.*url/i.test(msg);
+    let safaricomResponse;
+    let v1Error;
+    let alreadyRegistered = false;
+
+    try {
+      safaricomResponse = await tryRegisterC2BUrls(safaricomBase, "v1", accessToken, shortCode, responseType, confirmationURL, validationURL);
+      console.log("[PMS-RegisterURLs] v1 succeeded for %s: %j", shortCode, safaricomResponse);
+    } catch (err) {
+      v1Error = extractSafaricomError(err);
+      console.warn("[PMS-RegisterURLs] v1 failed (%s) — retrying with v2", v1Error);
+      try {
+        safaricomResponse = await tryRegisterC2BUrls(safaricomBase, "v2", accessToken, shortCode, responseType, confirmationURL, validationURL);
+        v1Error = null;
+        console.log("[PMS-RegisterURLs] v2 succeeded for %s: %j", shortCode, safaricomResponse);
+      } catch (err2) {
+        const v2Error = extractSafaricomError(err2);
+        if (isAlreadyRegistered(v2Error) || isAlreadyRegistered(v1Error)) {
+          alreadyRegistered = true;
+          safaricomResponse = { note: "already_registered" };
+          console.warn("[PMS-RegisterURLs] already_registered for %s — manual Daraja update may be needed", shortCode);
+        } else {
+          return res.status(502).json({
+            success: false,
+            message:
+              `Safaricom rejected the URL registration. ` +
+              `v1: ${v1Error} | v2: ${v2Error}. ` +
+              `Ensure your Daraja app has the C2B API product enabled and the Consumer Key belongs to shortcode ${shortCode}.`,
+          });
+        }
+      }
+    }
+
+    return res.json({
+      success: true,
+      alreadyRegistered,
+      message: alreadyRegistered
+        ? `Safaricom reports URLs are already registered for shortcode ${shortCode}. ` +
+          `The system has submitted the updated URLs (${confirmationURL}) — ` +
+          `do a test payment to confirm callbacks are arriving. ` +
+          `If they are not, log in to the Daraja portal and manually update the C2B confirmation URL to: ${confirmationURL}`
+        : `Callback URLs registered with Safaricom successfully. Confirmation URL: ${confirmationURL}`,
+      data: { validationURL, confirmationURL, safaricomResponse },
+    });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message || "Failed to register Safaricom callback URLs" });
+  }
 };
 
 export const listMpesaCollections = async (req, res) => {
