@@ -154,7 +154,7 @@ function shapeMeterReading(m) {
 }
 
 // ─── SEARCH ────────────────────────────────────────────────────────────────────
-export const searchTransactions = async (req, res) => {
+export const searchTransactions = async (req, res, next) => {
   try {
     if (!isAdmin(req.user)) return res.status(403).json({ error: "Milik Admin access required" });
 
@@ -261,12 +261,12 @@ export const searchTransactions = async (req, res) => {
     res.json({ data: all.slice(skip, skip + PER_PAGE), total: all.length, page: parseInt(page), limit: PER_PAGE });
   } catch (err) {
     console.error("[statementAllocations.searchTransactions]", err);
-    res.status(500).json({ error: err.message || "Server error" });
+    next(err);
   }
 };
 
 // ─── ADJUST BOOKING DATE ────────────────────────────────────────────────────────
-export const adjustBookingDate = async (req, res) => {
+export const adjustBookingDate = async (req, res, next) => {
   try {
     if (!isAdmin(req.user)) return res.status(403).json({ error: "Milik Admin access required" });
 
@@ -359,12 +359,12 @@ export const adjustBookingDate = async (req, res) => {
     res.json({ success: true, bookingDate: newDate || undefined, docId: doc._id });
   } catch (err) {
     console.error("[statementAllocations.adjustBookingDate]", err);
-    res.status(500).json({ error: err.message || "Server error" });
+    next(err);
   }
 };
 
 // ─── REALLOCATE PAYMENT ─────────────────────────────────────────────────────────
-export const reallocatePayment = async (req, res) => {
+export const reallocatePayment = async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
@@ -644,14 +644,14 @@ export const reallocatePayment = async (req, res) => {
   } catch (err) {
     await session.abortTransaction();
     console.error("[statementAllocations.reallocatePayment]", err);
-    res.status(500).json({ error: err.message || "Server error" });
+    next(err);
   } finally {
     session.endSession();
   }
 };
 
 // ─── GET TENANT INVOICES (for reallocation picker) ─────────────────────────────
-export const getTenantInvoicesForRealloc = async (req, res) => {
+export const getTenantInvoicesForRealloc = async (req, res, next) => {
   try {
     if (!isAdmin(req.user)) return res.status(403).json({ error: "Milik Admin access required" });
 
@@ -711,12 +711,12 @@ export const getTenantInvoicesForRealloc = async (req, res) => {
       ],
     });
   } catch (err) {
-    res.status(500).json({ error: err.message || "Server error" });
+    next(err);
   }
 };
 
 // ─── RECOMPUTE TENANT INVOICE BALANCES ──────────────────────────────────────────
-export const recomputeTenantState = async (req, res) => {
+export const recomputeTenantState = async (req, res, next) => {
   try {
     if (!isAdmin(req.user)) return res.status(403).json({ error: "Milik Admin access required" });
     const businessId = getBizId(req);
@@ -733,12 +733,12 @@ export const recomputeTenantState = async (req, res) => {
 
     res.json({ success: true, autoAllocated });
   } catch (err) {
-    res.status(500).json({ error: err.message || "Server error" });
+    next(err);
   }
 };
 
 // ─── ADJUSTMENT HISTORY ─────────────────────────────────────────────────────────
-export const getAdjustmentHistory = async (req, res) => {
+export const getAdjustmentHistory = async (req, res, next) => {
   try {
     if (!isAdmin(req.user)) return res.status(403).json({ error: "Milik Admin access required" });
 
@@ -771,7 +771,7 @@ export const getAdjustmentHistory = async (req, res) => {
     res.json({ data: logs, total, page: parseInt(page), limit: PER_PAGE });
   } catch (err) {
     console.error("[statementAllocations.getAdjustmentHistory]", err);
-    res.status(500).json({ error: err.message || "Server error" });
+    next(err);
   }
 };
 

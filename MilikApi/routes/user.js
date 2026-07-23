@@ -15,7 +15,7 @@ const router = express.Router();
 
 const COMPANY_SELECT = 'companyName companyCode baseCurrency logo country town email phoneNo slogan companyMode modules fiscalStartMonth fiscalStartYear operationPeriodType isActive accountStatus';
 const isSystemAdmin = (user = {}) => Boolean(user?.isSystemAdmin || user?.superAdminAccess);
-const SYSTEM_ACCESS_FIELDS = ['superAdminAccess', 'isSystemAdmin', 'isSystemAuditUser'];
+const SYSTEM_ACCESS_FIELDS = ['superAdminAccess', 'isSystemAdmin', 'isSystemAuditUser', 'adminAccess'];
 const userId = (user = {}) => String(user?._id || user?.id || '');
 const hasSystemAccessPayload = (payload = {}) => SYSTEM_ACCESS_FIELDS.some((field) => payload[field] === true);
 const hasRequiredUserFields = (body = {}) => ['surname', 'otherNames', 'idNumber', 'email', 'phoneNumber', 'profile'].every((field) => String(body[field] || '').trim());

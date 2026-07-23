@@ -92,7 +92,7 @@ PaymentVoucherSchema.index({ business: 1, createdAt: -1 });
 PaymentVoucherSchema.index({ business: 1, voucherNo: 1 }, { unique: true });
 PaymentVoucherSchema.index({ business: 1, status: 1 });
 PaymentVoucherSchema.index({ business: 1, category: 1 });
-PaymentVoucherSchema.index({ property: 1 });
+PaymentVoucherSchema.index({ business: 1, property: 1, status: 1 });
 PaymentVoucherSchema.index({ landlord: 1 });
 PaymentVoucherSchema.index({ liabilityAccount: 1 });
 PaymentVoucherSchema.index({ business: 1, sourceRequisition: 1 });

@@ -2538,12 +2538,114 @@ export const getLiabilitySubledger = async (req, res, next) => {
   }
 };
 
+// Returns monthly income/expense/net totals for the last N months in a single DB query.
+// Used by AccountsDashboard to replace 6 individual income-statement calls.
+export const getIncomeMonthlySummary = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) return res.status(400).json({ message: "Missing business" });
+
+    const months = Math.min(Math.max(parseInt(req.query.months || "6", 10), 1), 24);
+    const now = new Date();
+
+    const ranges = Array.from({ length: months }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (months - 1 - i), 1);
+      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      end.setHours(23, 59, 59, 999);
+      return {
+        label: d.toLocaleDateString("en-GB", { month: "short" }),
+        startDate: d,
+        endDate: end,
+        key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+      };
+    });
+
+    // Pre-fetch income/expense account IDs in parallel
+    const [incomeAccounts, expenseAccounts] = await Promise.all([
+      ChartOfAccount.find({ business: businessId, type: "income", isPosting: { $ne: false }, isHeader: { $ne: true } }, { _id: 1 }).lean(),
+      ChartOfAccount.find({ business: businessId, type: "expense", isPosting: { $ne: false }, isHeader: { $ne: true } }, { _id: 1 }).lean(),
+    ]);
+
+    const incomeIdSet = new Set(incomeAccounts.map((a) => String(a._id)));
+    const allIds = [
+      ...incomeAccounts.map((a) => a._id),
+      ...expenseAccounts.map((a) => a._id),
+    ];
+
+    if (!allIds.length) {
+      return res.json(ranges.map((r) => ({ month: r.label, income: 0, expenses: 0, net: 0 })));
+    }
+
+    const debitExpr = {
+      $cond: [
+        { $gt: ["$debit", 0] },
+        "$debit",
+        { $cond: [{ $eq: [{ $toLower: { $ifNull: ["$direction", ""] } }, "debit"] }, { $ifNull: ["$amount", 0] }, 0] },
+      ],
+    };
+    const creditExpr = {
+      $cond: [
+        { $gt: ["$credit", 0] },
+        "$credit",
+        { $cond: [{ $eq: [{ $toLower: { $ifNull: ["$direction", ""] } }, "credit"] }, { $ifNull: ["$amount", 0] }, 0] },
+      ],
+    };
+
+    const agg = await FinancialLedgerEntry.aggregate([
+      {
+        $match: {
+          business: businessId,
+          accountId: { $in: allIds },
+          status: { $in: REPORT_LEDGER_STATUSES },
+          transactionDate: { $gte: ranges[0].startDate, $lte: ranges[ranges.length - 1].endDate },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            ym: { $dateToString: { format: "%Y-%m", date: "$transactionDate" } },
+            accountId: "$accountId",
+          },
+          debit: { $sum: debitExpr },
+          credit: { $sum: creditExpr },
+        },
+      },
+    ]);
+
+    // Aggregate into month buckets
+    const byMonth = new Map();
+    for (const row of agg) {
+      const ym = row._id.ym;
+      if (!byMonth.has(ym)) byMonth.set(ym, { income: 0, expenses: 0 });
+      const bucket = byMonth.get(ym);
+      const isIncome = incomeIdSet.has(String(row._id.accountId));
+      if (isIncome) {
+        bucket.income += row.credit - row.debit; // credit-normal for income
+      } else {
+        bucket.expenses += row.debit - row.credit; // debit-normal for expense
+      }
+    }
+
+    const result = ranges.map((r) => {
+      const b = byMonth.get(r.key) || { income: 0, expenses: 0 };
+      const income = round2(b.income);
+      const expenses = round2(b.expenses);
+      return { month: r.label, income, expenses, net: round2(income - expenses) };
+    });
+
+    return res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
 export default {
   getTrialBalanceReport,
   getIncomeStatementReport,
   getBalanceSheetReport,
   getCashFlowReport,
   getCashMonthlySummary,
+  getIncomeMonthlySummary,
   getARAgingReport,
   getAPAgingReport,
   getRentalCollectionReport,

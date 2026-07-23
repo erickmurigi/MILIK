@@ -14,7 +14,7 @@ const getJWTSecret = () => {
   return secret;
 };
 
-const JWT_VERIFY_OPTIONS = { issuer: "milik-api", audience: "milik-client" };
+const JWT_VERIFY_OPTIONS = { issuer: "milik-api", audience: "milik-client", algorithms: ["HS256"] };
 
 export const normalizeCompanyId = (company) => {
   if (!company) return null;

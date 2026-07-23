@@ -338,6 +338,7 @@ const extractList = (payload) => {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.data)) return payload.data;
   if (Array.isArray(payload?.items)) return payload.items;
+  if (Array.isArray(payload?.notifications)) return payload.notifications;
   if (Array.isArray(payload?.companies)) return payload.companies;
   if (Array.isArray(payload?.users)) return payload.users;
   return [];
@@ -2831,6 +2832,16 @@ export const getCashMonthlySummary = async (params = {}) => {
   });
   const query = search.toString();
   const res = await adminRequests.get(`/financial-reports/cash-monthly-summary${query ? `?${query}` : ""}`, { timeout: 30_000 });
+  return res.data;
+};
+
+export const getIncomeMonthlySummary = async (params = {}) => {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== null && value !== undefined && value !== "") search.append(key, value);
+  });
+  const query = search.toString();
+  const res = await adminRequests.get(`/financial-reports/income-monthly-summary${query ? `?${query}` : ""}`, { timeout: 30_000 });
   return res.data;
 };
 

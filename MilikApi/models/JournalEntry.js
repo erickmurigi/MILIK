@@ -223,5 +223,7 @@ JournalEntrySchema.index({ business: 1, property: 1, date: -1 });
 JournalEntrySchema.index({ business: 1, landlord: 1, date: -1 });
 JournalEntrySchema.index({ business: 1, sourceModule: 1, date: -1 });
 JournalEntrySchema.index({ business: 1, sourceDocumentId: 1 }, { sparse: true });
+JournalEntrySchema.index({ business: 1, status: 1, date: -1 });
+JournalEntrySchema.index({ business: 1, approvalStatus: 1, date: -1 });
 
 export default mongoose.model("JournalEntry", JournalEntrySchema);

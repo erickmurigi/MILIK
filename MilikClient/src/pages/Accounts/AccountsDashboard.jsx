@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
+import { selectCurrentCompany } from "../../redux/selectors";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell,
 } from "recharts";
@@ -11,7 +12,7 @@ import {
   FaCalendarAlt, FaArchive, FaShieldAlt, FaChartPie,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
-import { getJournalEntries, getChartOfAccounts, getIncomeStatementReport, getCashMonthlySummary, getAccountingPeriods } from "../../redux/apiCalls";
+import { getJournalEntries, getChartOfAccounts, getIncomeMonthlySummary, getCashMonthlySummary, getAccountingPeriods } from "../../redux/apiCalls";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const GRN  = "#0B3B2E";
@@ -66,18 +67,6 @@ const shortKES  = (v) => {
 };
 const fullKES = (v) => `KES ${Number(v || 0).toLocaleString("en-KE", { minimumFractionDigits: 0 })}`;
 
-const getLast6Months = () => {
-  const now = new Date();
-  return Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
-    const endD = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-    return {
-      label: d.toLocaleDateString("en-GB", { month: "short" }),
-      startDate: d.toISOString().split("T")[0],
-      endDate:   endD.toISOString().split("T")[0],
-    };
-  });
-};
 
 // ─── Custom tooltip ───────────────────────────────────────────────────────────
 const ChartTooltip = ({ active, payload, label }) => {
@@ -180,7 +169,7 @@ const ChartCard = ({ title, subtitle, children, loading }) => (
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const AccountsDashboard = () => {
   const navigate = useNavigate();
-  const currentCompany = useSelector((s) => s.company?.currentCompany);
+  const currentCompany = useSelector(selectCurrentCompany);
 
   const [stats, setStats]               = useState({ accounts: null, draftJournals: null, postedJournals: null });
   const [statsLoading, setStatsLoading] = useState(true);
@@ -224,26 +213,15 @@ const AccountsDashboard = () => {
       .catch(() => {})
       .finally(() => setStatsLoading(false));
 
-    // Chart data — cash summary + income statement (6 months) in parallel
-    const months = getLast6Months();
+    // Chart data — cash summary + income monthly totals, both as single batch calls
     Promise.all([
       getCashMonthlySummary({ business: businessId, months: 6 })
         .then((d) => d?.data ?? [])
         .catch(() => []),
-      Promise.all(
-        months.map((m) =>
-          getIncomeStatementReport({ business: businessId, startDate: m.startDate, endDate: m.endDate })
-            .then((data) => ({
-              month:    m.label,
-              income:   data?.summary?.totalIncome   ?? 0,
-              expenses: data?.summary?.totalExpenses ?? 0,
-              net:      data?.summary?.netProfit     ?? 0,
-            }))
-            .catch(() => ({ month: m.label, income: 0, expenses: 0, net: 0 }))
-        )
-      ),
+      getIncomeMonthlySummary({ business: businessId, months: 6 })
+        .catch(() => []),
     ])
-      .then(([cash, income]) => { setCashData(cash); setMonthlyData(income); })
+      .then(([cash, income]) => { setCashData(cash); setMonthlyData(Array.isArray(income) ? income : []); })
       .finally(() => setChartsLoading(false));
   }, [businessId]);
 

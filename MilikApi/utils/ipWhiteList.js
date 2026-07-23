@@ -15,10 +15,8 @@ const safaricomIPs = [
 ];
 
 export const safaricomIPWhitelist = (req, res, next) => {
-  const clientIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-  
-  // Extract first IP if comma-separated list
-  const realIP = clientIP.split(',')[0].trim();
+  const clientIP = req.ip || req.socket.remoteAddress;
+  const realIP = clientIP.replace(/^::ffff:/, '');
   
   // Allow localhost in development
   if (process.env.NODE_ENV === 'development' && 

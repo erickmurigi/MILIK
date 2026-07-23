@@ -35,5 +35,6 @@ const inspectionSchema = new mongoose.Schema(
 
 inspectionSchema.index({ business: 1, property: 1, scheduledDate: -1 });
 inspectionSchema.index({ business: 1, status: 1, type: 1 });
+inspectionSchema.index({ business: 1, unit: 1 });
 
 export default mongoose.model("Inspection", inspectionSchema);

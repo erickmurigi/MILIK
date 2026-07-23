@@ -448,26 +448,27 @@ const findConflictingMonthlyInvoice = ({ existingInvoices = [], category, metada
   );
 };
 
-const findFirstAccount = async (businessId, candidates = []) => {
-  for (const candidate of candidates) {
-    const query = { business: businessId };
-
-    if (candidate._id) {
-      query._id = candidate._id;
-    } else {
-      const and = [];
-      if (candidate.type) and.push({ type: candidate.type });
-      if (candidate.code) and.push({ code: candidate.code });
-      if (candidate.nameRegex) and.push({ name: { $regex: candidate.nameRegex, $options: "i" } });
-      if (candidate.group) and.push({ group: candidate.group });
-      if (and.length > 0) query.$and = and;
-    }
-
-    const account = await ChartOfAccount.findOne(query).lean();
-    if (account) return account;
+const buildCandidateQuery = (businessId, candidate) => {
+  const query = { business: businessId };
+  if (candidate._id) {
+    query._id = candidate._id;
+  } else {
+    const and = [];
+    if (candidate.type) and.push({ type: candidate.type });
+    if (candidate.code) and.push({ code: candidate.code });
+    if (candidate.nameRegex) and.push({ name: { $regex: candidate.nameRegex, $options: "i" } });
+    if (candidate.group) and.push({ group: candidate.group });
+    if (and.length > 0) query.$and = and;
   }
+  return query;
+};
 
-  return null;
+const findFirstAccount = async (businessId, candidates = []) => {
+  if (!candidates.length) return null;
+  const results = await Promise.all(
+    candidates.map((c) => ChartOfAccount.findOne(buildCandidateQuery(businessId, c)).lean())
+  );
+  return results.find(Boolean) || null;
 };
 
 const resolveTenantReceivableAccount = async (businessId) => {

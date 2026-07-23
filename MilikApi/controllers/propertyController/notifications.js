@@ -36,7 +36,7 @@ export const createNotification = async (req, res, next) => {
 
 // Get all notifications
 export const getNotifications = async (req, res, next) => {
-  const { recipient, isRead, type } = req.query;
+  const { recipient, isRead, type, page, limit } = req.query;
   try {
     const business = resolveBusinessId(req);
     const filter = { business };
@@ -44,10 +44,24 @@ export const getNotifications = async (req, res, next) => {
     if (isRead !== undefined) filter.isRead = isRead === "true";
     if (type) filter.type = type;
 
-    const notifications = await Notification.find(filter)
-      .populate("recipient", "name email")
-      .sort({ createdAt: -1 });
-    res.status(200).json(notifications);
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(200, Math.max(1, parseInt(limit) || 50));
+
+    const [notifications, total] = await Promise.all([
+      Notification.find(filter)
+        .select("type title message isRead priority recipient relatedId relatedType business createdAt")
+        .populate("recipient", "name email")
+        .sort({ createdAt: -1 })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+        .lean(),
+      Notification.countDocuments(filter),
+    ]);
+
+    res.status(200).json({
+      notifications,
+      pagination: { total, page: pageNum, limit: limitNum, pages: Math.ceil(total / limitNum) },
+    });
   } catch (err) {
     next(err);
   }

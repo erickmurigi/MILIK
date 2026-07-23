@@ -126,7 +126,7 @@ const mpesaPaybillCrudSchema = z
   .object({
     action: z.enum(["create", "update", "delete"]),
     configId: z.string().optional(),
-    config: mpesaPaybillConfigSchema.optional(),
+    config: mpesaPaybillConfigSchema.nullish(),
   })
   .passthrough();
 

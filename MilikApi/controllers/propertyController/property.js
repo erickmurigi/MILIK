@@ -871,6 +871,15 @@ export const getProperties = async (req, res, next) => {
 
     const [properties, total] = await Promise.all([
       Property.find(query)
+        .select(
+          "propertyCode propertyName propertyType status letManage " +
+          "totalUnits occupiedUnits vacantUnits landlords " +
+          "address townCityState estateArea roadStreet zoneRegion lrNumber " +
+          "accountLedgerType propertyLedgerEnabled commissionPercentage " +
+          "commissionPaymentMode commissionCategoryKeys commissionTaxSettings " +
+          "depositHeldBy vatRate taxMode taxCodeKey " +
+          "business controlAccount createdAt updatedAt"
+        )
         .populate("landlords.landlordId", "_id landlordName firstName lastName")
         .limit(limitNumber)
         .skip((pageNumber - 1) * limitNumber)
@@ -1466,7 +1475,10 @@ export const getPropertyTenants = async (req, res, next) => {
     const tenants = await Tenant.find({
       business: propertyBusinessId,
       $or: [{ unit: { $in: units } }, { additionalUnits: { $in: units } }],
-    }).populate("unit", "unitNumber rent");
+    })
+      .select("name tenantCode unit additionalUnits rent deposit balance moveInDate moveOutDate status business")
+      .populate("unit", "unitNumber rent")
+      .lean();
 
     res.status(200).json(tenants);
   } catch (err) {

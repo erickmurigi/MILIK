@@ -55,9 +55,11 @@ const Properties = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
 
-  const canCreateProperty = hasCompanyPermission(currentUser || {}, currentCompany, "properties", "create", "propertyManagement");
-  const canUpdateProperty = hasCompanyPermission(currentUser || {}, currentCompany, "properties", "update", "propertyManagement");
-  const canDeleteProperty = hasCompanyPermission(currentUser || {}, currentCompany, "properties", "delete", "propertyManagement");
+  const { canCreateProperty, canUpdateProperty, canDeleteProperty } = useMemo(() => ({
+    canCreateProperty: hasCompanyPermission(currentUser || {}, currentCompany, "properties", "create", "propertyManagement"),
+    canUpdateProperty: hasCompanyPermission(currentUser || {}, currentCompany, "properties", "update", "propertyManagement"),
+    canDeleteProperty: hasCompanyPermission(currentUser || {}, currentCompany, "properties", "delete", "propertyManagement"),
+  }), [currentUser, currentCompany]);
 
   const landlordOptions = useMemo(() =>
     landlords.map(l => ({ id: l._id || l.id, label: l.fullName || l.name || l.landlordName || "Unnamed" })),
@@ -134,7 +136,7 @@ const Properties = () => {
     if (currentCompany?._id) {
       dispatch(getLandlords({ company: currentCompany._id }));
     }
-  }, [dispatch, currentCompany]);
+  }, [dispatch, currentCompany?._id]);
 
   useEffect(() => {
     const onDocClick = (e) => {

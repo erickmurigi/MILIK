@@ -95,7 +95,7 @@ try {
   res.status(200).json({ message: "Leave deleted successfully", leaves: updatedLeaves });
 } catch (error) {
   console.error(error);
-  res.status(500).json({ message: "An error occurred", error: error.message });
+  next(error);
 }
 
 };

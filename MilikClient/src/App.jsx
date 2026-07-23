@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useMemo } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import ScrollToTop from "./components/common/ScrollToTop";
 import { useDispatch, useSelector } from "react-redux";
@@ -348,7 +348,8 @@ function Guard({
 }) {
   const { currentUser }    = useSelector((state) => state.auth);
   const { currentCompany } = useSelector((state) => state.company);
-  const storedSession = getStoredAuthSession();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const storedSession = useMemo(() => getStoredAuthSession(), []);
   const resolvedUser  = getResolvedAuthUser(currentUser, storedSession);
 
   // 1. Authentication
@@ -422,7 +423,8 @@ function ESSProtectedRoute({ children }) {
 
 function SuperAdminRoute({ children }) {
   const { currentUser } = useSelector((state) => state.auth);
-  const storedSession = getStoredAuthSession();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const storedSession = useMemo(() => getStoredAuthSession(), []);
   const resolvedUser = getResolvedAuthUser(currentUser, storedSession);
   const isAuthenticated = Boolean(resolvedUser || storedSession.token);
   const canAccess = Boolean(resolvedUser?.isSystemAdmin || resolvedUser?.superAdminAccess);
@@ -440,7 +442,8 @@ function resolveDefaultAuthenticatedRoute(currentUser) {
 
 function PublicOnlyRoute({ children }) {
   const { currentUser } = useSelector((state) => state.auth);
-  const storedSession = getStoredAuthSession();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const storedSession = useMemo(() => getStoredAuthSession(), []);
   const resolvedUser = getResolvedAuthUser(currentUser, storedSession);
   const isAuthenticated = Boolean(resolvedUser || storedSession.token);
 
@@ -466,7 +469,8 @@ function AppDocumentTitleGuard() {
 
 function PublicEntryRoute() {
   const { currentUser } = useSelector((state) => state.auth);
-  const storedSession = getStoredAuthSession();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const storedSession = useMemo(() => getStoredAuthSession(), []);
   const resolvedUser = getResolvedAuthUser(currentUser, storedSession);
   const isAuthenticated = Boolean(resolvedUser || storedSession.token);
 

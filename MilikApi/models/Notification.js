@@ -29,11 +29,9 @@ const NotificationSchema = new mongoose.Schema(
 );
 
 // Indexes for better query performance
-NotificationSchema.index({ business: 1 });
-NotificationSchema.index({ business: 1, isRead: 1 });
-NotificationSchema.index({ recipient: 1 });
-NotificationSchema.index({ recipient: 1, isRead: 1 });
-NotificationSchema.index({ type: 1 });
-NotificationSchema.index({ createdAt: -1 });
+NotificationSchema.index({ business: 1, createdAt: -1 });
+NotificationSchema.index({ business: 1, isRead: 1, createdAt: -1 });
+NotificationSchema.index({ business: 1, recipient: 1, isRead: 1, createdAt: -1 });
+NotificationSchema.index({ business: 1, type: 1, createdAt: -1 });
 
 export default mongoose.model("Notification", NotificationSchema);

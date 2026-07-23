@@ -5,7 +5,7 @@ import { markAllNotificationsAsRead } from '../../redux/apiCalls';
 import {
   selectCurrentUser,
   selectAllNotifications,
-  selectAllRentPayments,
+  selectRecentRentPayments,
   selectAllMaintenances,
   selectAllLeases,
   selectAllTenants,
@@ -14,7 +14,7 @@ import {
 const RecentActivity = ({ darkMode }) => {
   const dispatch = useDispatch();
   const notifications = useSelector(selectAllNotifications);
-  const rentPayments  = useSelector(selectAllRentPayments);
+  const rentPayments  = useSelector(selectRecentRentPayments);
   const maintenances  = useSelector(selectAllMaintenances);
   const leases        = useSelector(selectAllLeases);
   const tenants       = useSelector(selectAllTenants);
@@ -69,11 +69,7 @@ const RecentActivity = ({ darkMode }) => {
       isRead: item.isRead
     }));
 
-    const sortedPayments = [...rentPayments].sort(
-      (a, b) => new Date(b.paymentDate || b.createdAt || 0) - new Date(a.paymentDate || a.createdAt || 0)
-    );
-
-    const receiptActivities = sortedPayments
+    const receiptActivities = rentPayments
       .filter((payment) => Boolean(payment?.receiptNumber))
       .slice(0, 4)
       .map((payment) => ({
@@ -85,7 +81,7 @@ const RecentActivity = ({ darkMode }) => {
         isRead: true
       }));
 
-    const paymentActivities = sortedPayments
+    const paymentActivities = rentPayments
       .filter((payment) => !payment?.receiptNumber)
       .slice(0, 3)
       .map((payment) => ({

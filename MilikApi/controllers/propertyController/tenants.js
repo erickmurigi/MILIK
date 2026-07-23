@@ -1178,24 +1178,23 @@ export const getTenants = async (req, res, next) => {
 // Get single tenant
 export const getTenant = async (req, res, next) => {
   try {
-    const tenant = await Tenant.findById(req.params.id)
+    const businessId = resolveBusinessId(req);
+    const filter = req.user?.isSystemAdmin
+      ? { _id: req.params.id }
+      : { _id: req.params.id, business: businessId };
+
+    const tenant = await Tenant.findOne(filter)
       .populate("unit", "unitNumber property rent amenities status utilities")
       .populate("unit.property", "propertyName propertyCode address name propertyType depositHeldBy")
       .populate("additionalUnits", "unitNumber property rent status utilities")
-      .populate("additionalUnits.property", "propertyName propertyCode address name propertyType depositHeldBy");
+      .populate("additionalUnits.property", "propertyName propertyCode address name propertyType depositHeldBy")
+      .lean();
 
-    const access = authorizeTenantAccess(req, tenant);
-    if (!access.allowed) {
-      return res.status(access.status).json({
-        success: false,
-        message: access.message,
-      });
+    if (!tenant) {
+      return res.status(404).json({ success: false, message: "Tenant not found" });
     }
 
-    return res.status(200).json({
-      success: true,
-      data: tenant,
-    });
+    return res.status(200).json({ success: true, data: tenant });
   } catch (err) {
     next(err);
   }
@@ -2034,7 +2033,7 @@ export const bulkImportTenants = async (req, res, next) => {
       });
     }
 
-    const units = await Unit.find({ business: businessId }).lean().select("_id unitNumber property status isVacant rent deposit utilities").populate("property");
+    const units = await Unit.find({ business: businessId }).lean().select("_id unitNumber property status isVacant rent deposit utilities").populate("property", "propertyCode landlords depositHeldBy letManage lettingFeeMode lettingFeeValue");
     const unitMap = new Map();
 
     units.forEach((unit) => {

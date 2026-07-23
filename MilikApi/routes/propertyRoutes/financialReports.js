@@ -4,6 +4,7 @@ import {
   getBalanceSheetReport,
   getCashFlowReport,
   getCashMonthlySummary,
+  getIncomeMonthlySummary,
   getIncomeStatementReport,
   getMRITaxSummaryReport,
   getPropertyIncomeSummaryReport,
@@ -26,6 +27,7 @@ router.get("/income-statement", verifyUser, requireCompanyModule(GL_ACCESS_MODUL
 router.get("/balance-sheet", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getBalanceSheetReport);
 router.get("/cash-flow", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getCashFlowReport);
 router.get("/cash-monthly-summary", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getCashMonthlySummary);
+router.get("/income-monthly-summary", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getIncomeMonthlySummary);
 router.get("/rental-collection", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getRentalCollectionReport);
 router.get("/tenant-paid-balance", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getTenantPaidBalanceReport);
 router.get("/property-income-summary", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getPropertyIncomeSummaryReport);

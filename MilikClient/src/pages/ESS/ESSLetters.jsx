@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import DOMPurify from 'dompurify';
 import { essRequests } from '../../utils/essRequests';
 import { useTabState } from '../../hooks/useTabState';
 import './ESS.css';
@@ -42,7 +43,7 @@ export default function ESSLetters() {
         @media print { body { margin: 0; } }
         body { font-family: Arial, sans-serif; }
       </style>
-    </head><body>${selected.body}</body></html>`);
+    </head><body>${DOMPurify.sanitize(selected.body)}</body></html>`);
     w.document.close();
     w.focus();
     setTimeout(() => { w.print(); w.close(); }, 400);
@@ -114,7 +115,7 @@ export default function ESSLetters() {
             </div>
             <div className="ess-modal-body">
               {selected.body
-                ? <div dangerouslySetInnerHTML={{ __html: selected.body }} style={{ fontSize: '0.85rem' }} />
+                ? <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(selected.body) }} style={{ fontSize: '0.85rem' }} />
                 : <div className="ess-empty">Letter content not available</div>
               }
             </div>

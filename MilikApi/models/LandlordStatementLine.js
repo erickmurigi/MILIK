@@ -104,6 +104,7 @@ const LandlordStatementLineSchema = new mongoose.Schema(
 LandlordStatementLineSchema.index({ statement: 1, lineNumber: 1 }, { unique: true });
 LandlordStatementLineSchema.index({ business: 1, statement: 1, transactionDate: 1 });
 LandlordStatementLineSchema.index({ sourceLedgerEntryId: 1, statement: 1 });
+LandlordStatementLineSchema.index({ business: 1, unit: 1 });
 
 // Virtual for signed amount (debit = negative, credit = positive)
 LandlordStatementLineSchema.virtual("signedAmount").get(function () {

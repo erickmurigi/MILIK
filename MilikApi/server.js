@@ -358,7 +358,7 @@ io.use(async (socket, next) => {
       socket.handshake?.auth?.token ||
       extractAuthTokenFromCookieHeader(socket.handshake?.headers?.cookie || "");
     if (!token) return next(new Error("Authentication required for websocket connection"));
-    const payload = jwt.verify(token, getJWTSecret());
+    const payload = jwt.verify(token, getJWTSecret(), { issuer: "milik-api", audience: "milik-client", algorithms: ["HS256"] });
     if (await isBlacklistedAsync(token)) return next(new Error("Session has been revoked"));
     socket.data.user = payload;
     return next();

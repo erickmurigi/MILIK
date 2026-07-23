@@ -83,7 +83,7 @@ const invDateExpr = {
 
 // ── Route ─────────────────────────────────────────────────────────────────────
 
-router.get("/summary", verifyUser, async (req, res) => {
+router.get("/summary", verifyUser, async (req, res, next) => {
   try {
     const rawBusiness = req.user.company?._id || req.user.company;
     const business = mongoose.Types.ObjectId.isValid(rawBusiness)
@@ -424,7 +424,7 @@ router.get("/summary", verifyUser, async (req, res) => {
     dashboardCache.set(cacheKey, { data: payload, expiresAt: Date.now() + DASHBOARD_CACHE_TTL_MS });
     return res.json(payload);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return next(err);
   }
 });
 

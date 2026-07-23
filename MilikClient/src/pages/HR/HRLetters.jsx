@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import DOMPurify from 'dompurify';
 import { useSelector } from 'react-redux';
 import useDebounce from '../../hooks/useDebounce';
 import { useTabState } from "../../hooks/useTabState";
@@ -373,7 +374,7 @@ export default function HRLetters() {
     </div>
   </div>
 
-  ${selected.body || ''}
+  ${DOMPurify.sanitize(selected.body || '')}
 
   <div class="pf-bar">
     <span>Private &amp; Confidential</span>
@@ -665,7 +666,7 @@ export default function HRLetters() {
 
                       <div
                         className="px-8 py-6 text-sm text-slate-800"
-                        dangerouslySetInnerHTML={{ __html: selected.body || '' }}
+                        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(selected.body || '') }}
                       />
                     </div>
                   </div>

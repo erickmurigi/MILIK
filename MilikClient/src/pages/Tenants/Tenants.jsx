@@ -686,10 +686,12 @@ const Tenants = ({ listingMode = "active" }) => {
   const tenantPagination = useSelector(selectTenantPagination);
   const isFetchingTenants = useSelector((state) => state.tenant?.isFetching ?? false);
 
-  const canViewTenants = hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "view", "propertyManagement");
-  const canCreateTenant = hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "create", "propertyManagement");
-  const canUpdateTenant = hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "update", "propertyManagement");
-  const canDeleteTenant = hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "delete", "propertyManagement");
+  const { canViewTenants, canCreateTenant, canUpdateTenant, canDeleteTenant } = useMemo(() => ({
+    canViewTenants:  hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "view",   "propertyManagement"),
+    canCreateTenant: hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "create", "propertyManagement"),
+    canUpdateTenant: hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "update", "propertyManagement"),
+    canDeleteTenant: hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "delete", "propertyManagement"),
+  }), [currentUser, currentCompany]);
 
   const isTerminatedView = listingMode === "terminated";
   const tenantStatusQuery = isTerminatedView ? "terminated" : undefined;
@@ -865,24 +867,28 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
   }, [invoiceRefreshTick, refreshTenants]);
 
   // ===== TRANSFORM TENANT DATA =====
-  const resolveTenantPropertyName = (tenant, unitsFromStore = [], propertiesFromStore = []) => {
+  const unitById = useMemo(
+    () => new Map((Array.isArray(units) ? units : []).map((u) => [normalizeId(u._id), u])),
+    [units]
+  );
+  const propertyById = useMemo(
+    () => new Map((Array.isArray(properties) ? properties : []).map((p) => [normalizeId(p._id), p])),
+    [properties]
+  );
+
+  const resolveTenantPropertyName = useCallback((tenant) => {
     const directPropertyName =
       tenant?.unit?.property?.propertyName ||
       tenant?.property?.propertyName ||
       tenant?.propertyName;
     if (directPropertyName) return directPropertyName;
 
-    const tenantUnitId = tenant?.unit?._id || tenant?.unit;
-    const matchedUnit = unitsFromStore.find(
-      (unit) => normalizeId(unit?._id) === normalizeId(tenantUnitId)
-    );
-    const propertyIdFromUnit = matchedUnit?.property?._id || matchedUnit?.property;
-
-    const propertyIdFromTenant = tenant?.property?._id || tenant?.property;
+    const tenantUnitId = normalizeId(tenant?.unit?._id || tenant?.unit);
+    const matchedUnit = tenantUnitId ? unitById.get(tenantUnitId) : null;
+    const propertyIdFromUnit = normalizeId(matchedUnit?.property?._id || matchedUnit?.property);
+    const propertyIdFromTenant = normalizeId(tenant?.property?._id || tenant?.property);
     const resolvedPropertyId = propertyIdFromUnit || propertyIdFromTenant;
-    const matchedProperty = propertiesFromStore.find(
-      (property) => normalizeId(property?._id) === normalizeId(resolvedPropertyId)
-    );
+    const matchedProperty = resolvedPropertyId ? propertyById.get(resolvedPropertyId) : null;
 
     return (
       matchedUnit?.property?.propertyName ||
@@ -890,7 +896,7 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
       matchedProperty?.name ||
       "-"
     );
-  };
+  }, [unitById, propertyById]);
 
 
   const { leaseByTenantId, leaseCountByTenant } = useMemo(() => {
@@ -993,7 +999,7 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
         tenantCode: tenant.tenantCode || "-",
         tenantName: tenant.name || "-",
         unitNumber: getTenantUnitLabel(tenant),
-        propertyName: resolveTenantPropertyName(tenant, units, properties),
+        propertyName: resolveTenantPropertyName(tenant),
         startDate: resolvedStartDate
           ? new Date(resolvedStartDate).toLocaleDateString()
           : "-",
@@ -1033,7 +1039,7 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
         deleteBlockedReason,
       };
     });
-  }, [tenantsData, units, properties, leaseByTenantId, leaseCountByTenant]);
+  }, [tenantsData, resolveTenantPropertyName, leaseByTenantId, leaseCountByTenant]);
 
   // ===== FILTER TENANTS =====
   // search/status/tenantName/tenantCode/property are now server-side; only balanceScope remains client-side
@@ -1952,7 +1958,7 @@ const confirmTransferUnit = useCallback(async () => {
     }
 
     const resolveTenantPrintTaxLabel = (row) => {
-      const propertyName = resolveTenantPropertyName(row, units, properties);
+      const propertyName = resolveTenantPropertyName(row);
       const matchedProperty = (Array.isArray(properties) ? properties : []).find((item) => {
         const candidateName = item?.propertyName || item?.name || "";
         return String(candidateName).trim().toLowerCase() === String(propertyName || "").trim().toLowerCase();
@@ -1983,7 +1989,7 @@ const confirmTransferUnit = useCallback(async () => {
       columns: [
         { label: "Tenant Code", value: (row) => row?.tenantCode || row?.code || "-" },
         { label: "Tenant Name", value: (row) => row?.name || row?.tenantName || "-" },
-        { label: "Property", value: (row) => resolveTenantPropertyName(row, units, properties) },
+        { label: "Property", value: (row) => resolveTenantPropertyName(row) },
         { label: "Unit", value: (row) => row?.unit?.unitNumber || row?.unitNumber || "-" },
         { label: "VAT / Tax", value: (row) => resolveTenantPrintTaxLabel(row) },
         { label: "Rent", value: (row) => row?.rent || "-", align: "right" },

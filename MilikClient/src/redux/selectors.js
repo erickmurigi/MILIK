@@ -118,6 +118,14 @@ export const selectAllRentPayments = createSelector(
   normalizePaymentList
 );
 
+export const selectRecentRentPayments = createSelector(
+  selectAllRentPayments,
+  (payments) =>
+    [...payments]
+      .sort((a, b) => new Date(b.paymentDate || b.createdAt || 0) - new Date(a.paymentDate || a.createdAt || 0))
+      .slice(0, 10)
+);
+
 // ─── Maintenance ───────────────────────────────────────────────────────────
 const selectMaintenanceSlice = (state) => state.maintenance?.maintenances;
 
