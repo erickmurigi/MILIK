@@ -12,7 +12,7 @@ const saleOfferSchema = new mongoose.Schema(
     offerAmount: { type: Number, required: true, min: 0 },
     counterOfferAmount: { type: Number, default: null },
     offerDate: { type: Date, default: Date.now },
-    validUntil: { type: Date, default: null },
+    validityDate: { type: Date, default: null },
     status: { type: String, enum: OFFER_STATUSES, default: "pending", index: true },
     negotiationNotes: { type: String, trim: true, default: "" },
     notes: { type: String, trim: true, default: "" },
