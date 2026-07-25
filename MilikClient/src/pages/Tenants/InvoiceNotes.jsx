@@ -354,19 +354,27 @@ const InvoiceNotes = () => {
     [properties]
   );
 
+  const loadProperties = useCallback(async () => {
+    if (!currentCompany?._id) return;
+    try {
+      const propertiesRes = await adminRequests.get(`/properties?business=${currentCompany._id}&limit=1000`);
+      setProperties(normalizeList(propertiesRes.data));
+    } catch (error) {
+      console.error("Failed to load properties:", error);
+    }
+  }, [currentCompany?._id]);
+
   const loadData = useCallback(async () => {
     if (!currentCompany?._id) return;
     setLoading(true);
     try {
       const [
-        propertiesRes,
         creditable,
         invoices,
         noteRows,
         types,
         accounts,
       ] = await Promise.all([
-        adminRequests.get(`/properties?business=${currentCompany._id}&limit=1000`),
         getCreditableTenantInvoices({ business: currentCompany._id }),
         getTenantInvoices({ business: currentCompany._id }),
         getTenantInvoiceNotes({ business: currentCompany._id }),
@@ -375,7 +383,6 @@ const InvoiceNotes = () => {
         dispatch(getTenants({ business: currentCompany._id })),
       ]);
 
-      setProperties(normalizeList(propertiesRes.data));
       setOpenInvoices((Array.isArray(creditable) ? creditable : []).filter(isActiveInvoice));
       setAnchorInvoices((Array.isArray(invoices) ? invoices : []).filter(isActiveInvoice));
       setNotes(Array.isArray(noteRows) ? noteRows : []);
@@ -389,6 +396,7 @@ const InvoiceNotes = () => {
     }
   }, [currentCompany?._id, dispatch]);
 
+  useEffect(() => { loadProperties(); }, [loadProperties]);
   useEffect(() => { loadData(); }, [loadData]);
 
   useEffect(() => {

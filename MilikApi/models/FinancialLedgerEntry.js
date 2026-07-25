@@ -41,6 +41,7 @@ const LEDGER_CATEGORIES = [
   "DISPOSAL",
   "JOURNAL_ENTRY",
   "TAX_REMITTANCE",
+  "YEAR_END_CLOSE",
 ];
 
 const SOURCE_TYPES = [
@@ -79,6 +80,7 @@ const SOURCE_TYPES = [
   "fixed_asset_disposal",
   "journal_entry",
   "tax_remittance",
+  "year_end_close",
   "other",
 ];
 
@@ -94,7 +96,6 @@ const FinancialLedgerEntrySchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Company",
       required: true,
-      index: true,
     },
     property: {
       type: mongoose.Schema.Types.ObjectId,
@@ -177,7 +178,6 @@ const FinancialLedgerEntrySchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "JournalGroup",
       default: null,
-      index: true,
     },
     amount: {
       type: Number,
@@ -212,7 +212,6 @@ const FinancialLedgerEntrySchema = new mongoose.Schema(
       type: String,
       enum: ENTRY_STATUS,
       default: "approved",
-      index: true,
     },
 
     reversalOf: {
@@ -282,6 +281,7 @@ FinancialLedgerEntrySchema.index({ business: 1, unit: 1, status: 1, transactionD
 FinancialLedgerEntrySchema.index({ business: 1, status: 1, transactionDate: 1, accountId: 1 });
 // Optimized for ledger activity: accountId range scan + sort by date/createdAt
 FinancialLedgerEntrySchema.index({ business: 1, accountId: 1, transactionDate: 1, createdAt: 1 });
+FinancialLedgerEntrySchema.index({ business: 1, journalGroupId: 1, status: 1 });
 
 FinancialLedgerEntrySchema.pre("findOneAndUpdate", function blockImmutableUpdate(next) {
   return next(new Error("FinancialLedgerEntry is immutable. Use reversal entries instead of updates."));

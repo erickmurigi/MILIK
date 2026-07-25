@@ -243,9 +243,11 @@ const persistOccupiedUnitStateIfNeeded = async (unitDoc, currentTenant = null) =
 const attachCurrentTenant = async (unitDoc) => {
   if (!unitDoc) return null;
 
-  const occupyingTenants = await getUnitOccupants(unitDoc._id);
+  const [occupyingTenants, totalMonthlyAmount] = await Promise.all([
+    getUnitOccupants(unitDoc._id),
+    calculateTotalMonthlyAmount(unitDoc),
+  ]);
   const currentTenant = pickPrimaryCurrentTenant(unitDoc._id, occupyingTenants);
-  const totalMonthlyAmount = await calculateTotalMonthlyAmount(unitDoc);
 
   if (currentTenant?._id) {
     await persistOccupiedUnitStateIfNeeded(unitDoc, currentTenant);
@@ -422,7 +424,7 @@ export const createUnit = async (req, res, next) => {
     const property = await Property.findOne({
       _id: req.body.property,
       business: businessId,
-    });
+    }).lean();
 
     if (!property) {
       return res.status(404).json({
@@ -475,11 +477,13 @@ export const createUnit = async (req, res, next) => {
 
     const savedUnit = await newUnit.save();
 
-    await updatePropertyUnitCounts(savedUnit.property);
-
-    const populatedUnit = await Unit.findById(savedUnit._id)
-      .populate("property", "propertyName propertyCode address")
-      .populate("lastTenant", "name phone status");
+    const [, populatedUnit] = await Promise.all([
+      updatePropertyUnitCounts(savedUnit.property),
+      Unit.findById(savedUnit._id)
+        .populate("property", "propertyName propertyCode address")
+        .populate("lastTenant", "name phone status")
+        .lean(),
+    ]);
 
     const responsePayload = await attachCurrentTenant(populatedUnit);
 
@@ -525,7 +529,7 @@ export const getUnits = async (req, res, next) => {
     if (property) {
       const propertyDoc = await Property.findOne({ _id: property, business: businessId }).select(
         "_id"
-      );
+      ).lean();
 
       if (!propertyDoc) {
         return res.status(404).json({
@@ -662,17 +666,21 @@ export const getUnits = async (req, res, next) => {
 // GET SINGLE UNIT
 export const getUnit = async (req, res, next) => {
   try {
-    const result = await loadUnitWithAccessCheck(req, req.params.id);
-    if (result.error) {
-      return res.status(result.error.status).json({
-        success: false,
-        message: result.error.message,
-      });
-    }
-
     const unit = await Unit.findById(req.params.id)
       .populate("property", "propertyName propertyCode address")
-      .populate("lastTenant", "name phone status");
+      .populate("lastTenant", "name phone status")
+      .lean();
+
+    if (!unit) {
+      return res.status(404).json({ success: false, message: "Unit not found" });
+    }
+
+    if (!req.user?.isSystemAdmin) {
+      const businessId = resolveBusinessId(req);
+      if (!businessId || String(unit.business) !== String(businessId)) {
+        return res.status(403).json({ success: false, message: "Not authorized to access this unit" });
+      }
+    }
 
     const payload = await attachCurrentTenant(unit);
     return res.status(200).json(payload);
@@ -704,7 +712,7 @@ export const updateUnit = async (req, res, next) => {
       const nextProperty = await Property.findOne({
         _id: req.body.property,
         business: businessId,
-      });
+      }).lean();
 
       if (!nextProperty) {
         return res.status(404).json({
@@ -728,7 +736,7 @@ export const updateUnit = async (req, res, next) => {
       resolvedProperty = await Property.findOne({
         _id: previousPropertyId,
         business: businessId,
-      });
+      }).lean();
     }
 
     const requestedStatus = normalizeUnitStatus(req.body.status || unit.status, unit.status);
@@ -813,16 +821,17 @@ export const updateUnit = async (req, res, next) => {
 
     const newPropertyId = normalizePropertyId(updatedUnit.property);
 
-    if (previousPropertyId) {
-      await updatePropertyUnitCounts(previousPropertyId);
-    }
-    if (newPropertyId && newPropertyId !== previousPropertyId) {
-      await updatePropertyUnitCounts(newPropertyId);
-    }
+    const countPromises = [];
+    if (previousPropertyId) countPromises.push(updatePropertyUnitCounts(previousPropertyId));
+    if (newPropertyId && newPropertyId !== previousPropertyId) countPromises.push(updatePropertyUnitCounts(newPropertyId));
 
-    const populatedUnit = await Unit.findById(updatedUnit._id)
-      .populate("property", "propertyName propertyCode address")
-      .populate("lastTenant", "name phone status");
+    const [populatedUnit] = await Promise.all([
+      Unit.findById(updatedUnit._id)
+        .populate("property", "propertyName propertyCode address")
+        .populate("lastTenant", "name phone status")
+        .lean(),
+      ...countPromises,
+    ]);
 
     const payload = await attachCurrentTenant(populatedUnit);
 
@@ -968,7 +977,7 @@ export const getAvailableUnits = async (req, res, next) => {
     if (property) {
       const propertyDoc = await Property.findOne({ _id: property, business: businessId }).select(
         "_id"
-      );
+      ).lean();
 
       if (!propertyDoc) {
         return res.status(404).json({
@@ -985,7 +994,8 @@ export const getAvailableUnits = async (req, res, next) => {
     const units = await Unit.find(filter)
       .populate("property", "propertyName propertyCode address")
       .sort({ rent: 1 })
-      .limit(limit);
+      .limit(limit)
+      .lean();
 
     return res.status(200).json(units);
   } catch (err) {

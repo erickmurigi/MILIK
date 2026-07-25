@@ -102,7 +102,6 @@ const LandlordSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Company",
       required: true,
-      index: true,
     },
 
     createdBy: {
@@ -126,8 +125,9 @@ LandlordSchema.index(
 );
 LandlordSchema.index({ company: 1, email: 1 });
 LandlordSchema.index({ company: 1, landlordName: 1 });
-LandlordSchema.index({ company: 1, status: 1 });
-LandlordSchema.index({ createdAt: -1 });
+LandlordSchema.index({ company: 1, status: 1, createdAt: -1 });
+LandlordSchema.index({ company: 1, portalAccess: 1 });
+LandlordSchema.index({ company: 1, createdAt: -1 });
 
 const isLandlordPlaceholder = (v) => {
   const s = String(v ?? "").trim().toLowerCase();

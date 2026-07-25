@@ -564,18 +564,21 @@ export const createProperty = async (req, res) => {
       });
     }
 
-    const allExistingPropertyCodes = await Property.find({ business: businessId })
-      .select("propertyCode")
-      .lean();
+    const [codeResult] = await Property.aggregate([
+      { $match: { business: new mongoose.Types.ObjectId(String(businessId)) } },
+      { $addFields: { codeNum: { $toInt: { $substr: ["$propertyCode", PROPERTY_CODE_PREFIX.length, -1] } } } },
+      { $group: { _id: null, maxNum: { $max: "$codeNum" } } },
+    ]);
+    const maxNum = codeResult?.maxNum ?? 0;
 
     const resolvedPropertyCode =
       normalizedPropertyCode ||
-      generateNextPropertyCode(allExistingPropertyCodes.map((item) => item?.propertyCode));
+      generateNextPropertyCode(maxNum > 0 ? [`${PROPERTY_CODE_PREFIX}${String(maxNum).padStart(3, "0")}`] : []);
 
     const existingProperty = await Property.findOne({
       business: businessId,
       propertyCode: resolvedPropertyCode,
-    });
+    }).lean();
 
     if (existingProperty) {
       return res.status(400).json({
@@ -588,7 +591,7 @@ export const createProperty = async (req, res) => {
       const existingLrProperty = await Property.findOne({
         business: businessId,
         lrNumber: normalizedLrNumber,
-      });
+      }).lean();
 
       if (existingLrProperty) {
         return res.status(400).json({
@@ -598,9 +601,16 @@ export const createProperty = async (req, res) => {
       }
     }
 
-    const company = await getPropertyCompanyContext(businessId);
-
-    await ensureSystemChartOfAccounts(businessId);
+    const [company, , createdById] = await Promise.all([
+      getPropertyCompanyContext(businessId),
+      ensureSystemChartOfAccounts(businessId),
+      resolveAuditActorUserId({
+        req,
+        businessId,
+        candidateUserIds: [req.body?.createdBy],
+        fallbackErrorMessage: "No valid company user could be resolved for property creation.",
+      }),
+    ]);
 
     const bankingDetails = {
       drawerBank: drawerBank || "",
@@ -608,13 +618,6 @@ export const createProperty = async (req, res) => {
       accountName: accountName || "",
       accountNumber: accountNumber || "",
     };
-
-    const createdById = await resolveAuditActorUserId({
-      req,
-      businessId,
-      candidateUserIds: [req.body?.createdBy],
-      fallbackErrorMessage: "No valid company user could be resolved for property creation.",
-    });
 
     const cleanedData = {};
     if (typeof specification === "string" && specification.trim() !== "") {
@@ -762,7 +765,7 @@ export const createProperty = async (req, res) => {
     const populated = await Property.findById(savedProperty._id).populate(
       "controlAccount",
       "code name type group subGroup"
-    );
+    ).lean();
 
     res.status(201).json({
       success: true,
@@ -1022,7 +1025,7 @@ export const updateProperty = async (req, res, next) => {
         business: property.business,
         propertyCode: trimmedPropertyCode,
         _id: { $ne: property._id },
-      });
+      }).lean();
 
       if (existingProperty) {
         return res.status(400).json({
@@ -1039,7 +1042,7 @@ export const updateProperty = async (req, res, next) => {
           business: property.business,
           lrNumber: trimmedLrNumber,
           _id: { $ne: property._id },
-        });
+        }).lean();
 
         if (existingLrProperty) {
           return res.status(400).json({
@@ -1403,7 +1406,7 @@ export const deleteProperty = async (req, res, next) => {
 // Get property units
 export const getPropertyUnits = async (req, res, next) => {
   try {
-    const property = await Property.findById(req.params.id).select("_id business");
+    const property = await Property.findById(req.params.id).select("_id business").lean();
 
     if (!property) {
       return res.status(404).json({
@@ -1451,7 +1454,7 @@ export const getPropertyUnits = async (req, res, next) => {
 // Get property tenants
 export const getPropertyTenants = async (req, res, next) => {
   try {
-    const property = await Property.findById(req.params.id).select("_id business");
+    const property = await Property.findById(req.params.id).select("_id business").lean();
 
     if (!property) {
       return res.status(404).json({
@@ -1557,28 +1560,18 @@ export const bulkImportProperties = async (req, res, next) => {
       .filter((p) => p.propertyCode)
       .map((p) => p.propertyCode);
 
-    const existingByLR =
+    const [existingByLR, existingByCodes, allProperties] = await Promise.all([
       lrNumbers.length > 0
-        ? await Property.find({
-            lrNumber: { $in: lrNumbers },
-            business: businessId,
-          })
-        : [];
-
-    const existingByCodes =
+        ? Property.find({ lrNumber: { $in: lrNumbers }, business: businessId }).select("lrNumber").lean()
+        : [],
       providedCodes.length > 0
-        ? await Property.find({
-            propertyCode: { $in: providedCodes },
-            business: businessId,
-          })
-        : [];
+        ? Property.find({ propertyCode: { $in: providedCodes }, business: businessId }).select("propertyCode").lean()
+        : [],
+      Property.find({ business: businessId }).select("propertyCode").lean(),
+    ]);
 
     const existingLRNumbers = new Set(existingByLR.map((p) => p.lrNumber));
     const existingPropertyCodes = new Set(existingByCodes.map((p) => p.propertyCode));
-
-    const allProperties = await Property.find({ business: businessId })
-      .select("propertyCode")
-      .lean();
     const landlordLookupValues = normalizedProperties
       .map((p) => String(p.landlordName || "").trim())
       .filter(Boolean);

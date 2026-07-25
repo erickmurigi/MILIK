@@ -40,6 +40,8 @@ const toInput = (d) => { try { return new Date(d).toISOString().split('T')[0]; }
 const today = () => toInput(new Date());
 const normalizeId = (v) => (typeof v === 'string' ? v : v?._id || v?.id || '');
 
+const defaultStart = toInput(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+
 const EMPTY_FORM = {
   property: '', unit: '', category: 'maintenance', amount: '',
   description: '', date: today(), receiptNumber: '', paidBy: '', paymentMethod: 'cash',
@@ -208,12 +210,13 @@ const PropertyExpenses = () => {
   const { propertiesLoaded, unitsLoaded } = useEntityCache(businessId);
   const currency   = currentCompany?.baseCurrency || 'KES';
 
-  const canCreateExpense = hasCompanyPermission(currentUser || {}, currentCompany, 'propertyExpenses', 'create', 'propertyManagement');
-  const canUpdateExpense = hasCompanyPermission(currentUser || {}, currentCompany, 'propertyExpenses', 'update', 'propertyManagement');
-  const canDeleteExpense = hasCompanyPermission(currentUser || {}, currentCompany, 'propertyExpenses', 'delete', 'propertyManagement');
+  const { canCreateExpense, canUpdateExpense, canDeleteExpense } = useMemo(() => ({
+    canCreateExpense: hasCompanyPermission(currentUser || {}, currentCompany, 'propertyExpenses', 'create', 'propertyManagement'),
+    canUpdateExpense: hasCompanyPermission(currentUser || {}, currentCompany, 'propertyExpenses', 'update', 'propertyManagement'),
+    canDeleteExpense: hasCompanyPermission(currentUser || {}, currentCompany, 'propertyExpenses', 'delete', 'propertyManagement'),
+  }), [currentUser, currentCompany]);
 
   // ─── filters ──────────────────────────────────────────────────────────────
-  const defaultStart = toInput(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [filters, setFilters] = useTabState("/property-expenses:filters", () => ({ startDate: defaultStart, endDate: today(), propertyId: '', category: '', search: '' }));
   const [page, setPage] = useTabState("/property-expenses:page", 1);
   const [modalOpen, setModalOpen] = useState(false);
@@ -259,12 +262,19 @@ const PropertyExpenses = () => {
 
   // ─── summary ──────────────────────────────────────────────────────────────
   const summary = useMemo(() => {
-    const total = filtered.reduce((s, e) => s + Number(e.amount || 0), 0);
-    const byCat = CATEGORIES.map((cat) => ({
-      cat,
-      total: filtered.filter((e) => e.category === cat).reduce((s, e) => s + Number(e.amount || 0), 0),
-      count: filtered.filter((e) => e.category === cat).length,
-    })).filter((r) => r.total > 0).sort((a, b) => b.total - a.total);
+    const catMap = new Map(CATEGORIES.map((c) => [c, { total: 0, count: 0 }]));
+    let total = 0;
+    for (const e of filtered) {
+      const amt = Number(e.amount || 0);
+      total += amt;
+      const entry = catMap.get(e.category);
+      if (entry) { entry.total += amt; entry.count += 1; }
+    }
+    const byCat = [];
+    for (const [cat, { total: t, count }] of catMap) {
+      if (t > 0) byCat.push({ cat, total: t, count });
+    }
+    byCat.sort((a, b) => b.total - a.total);
     return { total, count: filtered.length, byCat };
   }, [filtered]);
 

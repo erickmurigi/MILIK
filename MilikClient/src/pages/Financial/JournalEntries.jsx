@@ -120,6 +120,11 @@ const buildInitialForm = () => ({
   includeInLandlordStatement: false,
 });
 
+const buildJournalTitle = (journal) =>
+  [journal.narration, journal.reference, journal.property?.propertyName || journal.property?.name, journal.landlord?.landlordName || journal.landlord?.name]
+    .filter(Boolean)
+    .join(" | ");
+
 const JournalEntries = () => {
   const confirm = useConfirm();
   const dispatch = useDispatch();
@@ -128,11 +133,13 @@ const JournalEntries = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
   const properties = useSelector(selectAllProperties);
-  const canCreateJournal = hasCompanyPermission(currentUser || {}, currentCompany, "journals", "create", "accounts");
-  const canUpdateJournal = hasCompanyPermission(currentUser || {}, currentCompany, "journals", "update", "accounts");
-  const canPostJournal = hasCompanyPermission(currentUser || {}, currentCompany, "journals", "process", "accounts");
-  const canReverseJournal = hasCompanyPermission(currentUser || {}, currentCompany, "journals", "reverse", "accounts");
-  const canDeleteJournal = hasCompanyPermission(currentUser || {}, currentCompany, "journals", "delete", "accounts");
+  const { canCreateJournal, canUpdateJournal, canPostJournal, canReverseJournal, canDeleteJournal } = useMemo(() => ({
+    canCreateJournal:   hasCompanyPermission(currentUser || {}, currentCompany, "journals", "create",  "accounts"),
+    canUpdateJournal:   hasCompanyPermission(currentUser || {}, currentCompany, "journals", "update",  "accounts"),
+    canPostJournal:     hasCompanyPermission(currentUser || {}, currentCompany, "journals", "process", "accounts"),
+    canReverseJournal:  hasCompanyPermission(currentUser || {}, currentCompany, "journals", "reverse", "accounts"),
+    canDeleteJournal:   hasCompanyPermission(currentUser || {}, currentCompany, "journals", "delete",  "accounts"),
+  }), [currentUser, currentCompany]);
   const isLandlordWorkspace = useMemo(
     () => isSelfManagingLandlordCompany(currentCompany || currentUser?.company || null),
     [currentCompany, currentUser?.company]
@@ -163,7 +170,10 @@ const JournalEntries = () => {
 
   const filters = journalDraft.filters || { search: "", status: "all", journalType: "all", propertyId: "all" };
   const debouncedSearch = useDebounce(filters.search, 400);
-  const setFilters = (value) => setJournalDraft((prev) => ({ ...prev, filters: typeof value === "function" ? value(prev.filters || filters) : value }));
+  const setFilters = useCallback((value) => setJournalDraft((prev) => ({
+    ...prev,
+    filters: typeof value === "function" ? value(prev.filters || filters) : value,
+  })), []);
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
 
   const [form, setForm] = useState(buildInitialForm);
@@ -236,9 +246,10 @@ const JournalEntries = () => {
         if (item.status === "draft") acc.draft += amount;
         if (item.status === "posted") acc.posted += amount;
         if (item.status === "reversed") acc.reversed += amount;
+        acc.draftCount = (acc.draftCount || 0) + (item.status === "draft" ? 1 : 0);
         return acc;
       },
-      { total: 0, draft: 0, posted: 0, reversed: 0 }
+      { total: 0, draft: 0, posted: 0, reversed: 0, draftCount: 0 }
     );
   }, [journals]);
 
@@ -246,10 +257,6 @@ const JournalEntries = () => {
   const totalPages = Math.max(1, serverPages);
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const currentPageRows = journals;
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [debouncedSearch, filters.status, filters.journalType, filters.propertyId, pageSize]);
 
   const accountOptions = useMemo(
     () =>
@@ -566,34 +573,34 @@ const JournalEntries = () => {
                 <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">Journals: {serverTotal}</span>
                 <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">Total: KES {totals.total.toLocaleString()}</span>
                 <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">Posted: KES {totals.posted.toLocaleString()}</span>
-                <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">Draft: {journals.filter((j) => j.status === "draft").length}</span>
+                <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">Draft: {totals.draftCount}</span>
                 <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
                 <div className="relative shrink-0">
                   <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
                   <input
                     value={filters.search}
-                    onChange={setFilter("search")}
+                    onChange={(e) => { setFilter("search")(e); setCurrentPage(1); }}
                     placeholder="Journal no, reference, narration"
                     className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
-                <select value={filters.status} onChange={setFilter("status")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
+                <select value={filters.status} onChange={(e) => { setFilter("status")(e); setCurrentPage(1); }} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
                   <option value="all">All Statuses</option>
                   <option value="draft">Draft</option>
                   <option value="posted">Posted</option>
                   <option value="reversed">Reversed</option>
                 </select>
-                <select value={filters.journalType} onChange={setFilter("journalType")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
+                <select value={filters.journalType} onChange={(e) => { setFilter("journalType")(e); setCurrentPage(1); }} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
                   <option value="all">All Journal Types</option>
                   {JOURNAL_TYPES.map((type) => (
                     <option key={type.value} value={type.value}>{getJournalTypePresentation(type.value)?.label || type.label}</option>
                   ))}
                 </select>
-                <select value={filters.propertyId} onChange={setFilter("propertyId")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
+                <select value={filters.propertyId} onChange={(e) => { setFilter("propertyId")(e); setCurrentPage(1); }} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
                   <option value="all">All Properties</option>
                   {propertyOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                 </select>
-                <button onClick={() => setFilters({ search: "", status: "all", journalType: "all", propertyId: "all" })} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                <button onClick={() => { setFilters({ search: "", status: "all", journalType: "all", propertyId: "all" }); setCurrentPage(1); }} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
                   <FaFilter size={9} /> Reset
                 </button>
                 <button onClick={loadJournals} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaRedoAlt size={9} /></button>
@@ -627,7 +634,7 @@ const JournalEntries = () => {
                       const busyDelete = rowActionKey === `${journal._id}:delete`;
                       return (
                         <tr key={journal._id} className={`cursor-pointer border-b border-gray-100 transition-colors ${index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
-                          <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900 whitespace-nowrap" title={[journal.narration, journal.reference, journal.property?.propertyName || journal.property?.name, journal.landlord?.landlordName || journal.landlord?.name].filter(Boolean).join(" | ")}>{journal.journalNo}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900 whitespace-nowrap" title={buildJournalTitle(journal)}>{journal.journalNo}</td>
                           <td className="px-3 py-1 border-r border-gray-100 text-slate-700 whitespace-nowrap">{journal.date ? new Date(journal.date).toLocaleDateString("en-GB") : "—"}</td>
                           <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[130px] truncate">{getJournalTypePresentation(journal.journalType)?.label || journal.journalType}</td>
                           <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[200px] truncate" title={journal.debitAccount?.name}><span className="font-mono font-bold text-slate-400 mr-1">{journal.debitAccount?.code}</span>{journal.debitAccount?.name || "—"}</td>
@@ -865,8 +872,8 @@ const JournalEntries = () => {
                   )}
                   {controlAccountWarning.length > 0 && (
                     <div className="mt-1.5 border border-blue-200 bg-blue-50 px-2 py-1.5 space-y-0.5">
-                      {controlAccountWarning.map((w, i) => (
-                        <p key={i} className="text-[10px] font-semibold text-blue-800">{w}</p>
+                      {controlAccountWarning.map((w) => (
+                        <p key={w} className="text-[10px] font-semibold text-blue-800">{w}</p>
                       ))}
                     </div>
                   )}

@@ -336,20 +336,17 @@ function AddUtilityModal({ tenants, allUnits, company, dispatch, onClose, onSave
     if (validRows.length === 0) { setError("Add at least one utility before saving."); return; }
 
     setSaving(true);
-    let savedCount = 0;
-    let failed = 0;
     try {
-      for (const tenant of tenants) {
-        const unitUtils = getTenantUnitUtils(tenant, allUnits);
-        const existingAdditional = deriveAdditionalUtilities(tenant, unitUtils);
-        const merged = buildUtilitiesPayload({ inheritedUtilities: unitUtils, customUtilities: [...existingAdditional, ...validRows] });
-        try {
-          await dispatch(updateTenant({ id: String(tenant._id), tenantData: { utilities: merged } })).unwrap();
-          savedCount++;
-        } catch {
-          failed++;
-        }
-      }
+      const results = await Promise.allSettled(
+        tenants.map((tenant) => {
+          const unitUtils = getTenantUnitUtils(tenant, allUnits);
+          const existingAdditional = deriveAdditionalUtilities(tenant, unitUtils);
+          const merged = buildUtilitiesPayload({ inheritedUtilities: unitUtils, customUtilities: [...existingAdditional, ...validRows] });
+          return dispatch(updateTenant({ id: String(tenant._id), tenantData: { utilities: merged } })).unwrap();
+        })
+      );
+      const savedCount = results.filter((r) => r.status === "fulfilled").length;
+      const failed = results.filter((r) => r.status === "rejected").length;
       if (failed === 0) {
         toast.success(tenants.length === 1 ? "Utilities updated successfully" : `Utilities updated for ${savedCount} tenant${savedCount !== 1 ? "s" : ""}`);
         onSaved();
@@ -398,7 +395,7 @@ function AddUtilityModal({ tenants, allUnits, company, dispatch, onClose, onSave
               <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Unit Utilities (Inherited)</p>
               <div className="flex flex-wrap gap-1.5">
                 {singleUnitUtils.map((u, i) => (
-                  <span key={i} className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                  <span key={u.utility || u.utilityLabel || i} className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600">
                     {u.utilityLabel || u.utility}
                     {u.isIncluded
                       ? <span className="ml-1 text-emerald-600">incl.</span>
@@ -448,7 +445,7 @@ function AddUtilityModal({ tenants, allUnits, company, dispatch, onClose, onSave
             ) : (
               <div className="space-y-2">
                 {rows.map((row, idx) => (
-                  <div key={idx} className="grid grid-cols-[1fr_120px_auto_auto] items-end gap-2 border border-indigo-100 bg-indigo-50/40 p-3">
+                  <div key={row.utility || row.type || row.utilityLabel || idx} className="grid grid-cols-[1fr_120px_auto_auto] items-end gap-2 border border-indigo-100 bg-indigo-50/40 p-3">
                     <div>
                       <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Utility Type</label>
                       <select
@@ -542,21 +539,18 @@ function RemoveUtilityModal({ tenants, allUnits, dispatch, onClose, onSaved }) {
   const handleSave = async () => {
     if (selected.size === 0) return;
     setSaving(true);
-    let savedCount = 0;
-    let failed = 0;
     try {
-      for (const tenant of tenants) {
-        const unitUtils = getTenantUnitUtils(tenant, allUnits);
-        const existing = deriveAdditionalUtilities(tenant, unitUtils);
-        const remaining = existing.filter((u) => !selected.has(u.utility));
-        const merged = buildUtilitiesPayload({ inheritedUtilities: unitUtils, customUtilities: remaining });
-        try {
-          await dispatch(updateTenant({ id: String(tenant._id), tenantData: { utilities: merged } })).unwrap();
-          savedCount++;
-        } catch {
-          failed++;
-        }
-      }
+      const results = await Promise.allSettled(
+        tenants.map((tenant) => {
+          const unitUtils = getTenantUnitUtils(tenant, allUnits);
+          const existing = deriveAdditionalUtilities(tenant, unitUtils);
+          const remaining = existing.filter((u) => !selected.has(u.utility));
+          const merged = buildUtilitiesPayload({ inheritedUtilities: unitUtils, customUtilities: remaining });
+          return dispatch(updateTenant({ id: String(tenant._id), tenantData: { utilities: merged } })).unwrap();
+        })
+      );
+      const savedCount = results.filter((r) => r.status === "fulfilled").length;
+      const failed = results.filter((r) => r.status === "rejected").length;
       if (failed === 0) {
         toast.success(tenants.length === 1
           ? "Utilities removed successfully"
@@ -1243,10 +1237,9 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
     if (!depositLiabilityAccount?._id) {
       throw new Error("Deposit liability account could not be resolved from Chart of Accounts.");
     }
-    const notes = [];
-    for (const row of allocations) {
+    const notes = await Promise.all(allocations.map((row) => {
       const sourceInvoice = tenantInvoices.find((invoice) => normalizeId(invoice?._id) === normalizeId(row?.invoice)) || row;
-      const created = await createTenantInvoiceNote({
+      return createTenantInvoiceNote({
         tenant: tenantId,
         sourceInvoice: row.invoice,
         noteType: "CREDIT_NOTE",
@@ -1260,8 +1253,7 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
           sourceInvoiceNumber: sourceInvoice?.invoiceNumber || "",
         },
       });
-      notes.push(created);
-    }
+    }));
     return notes;
   }, [depositLiabilityAccount?._id, tenantInvoices]);
 
@@ -1751,8 +1743,10 @@ const confirmTransferUnit = useCallback(async () => {
       setSelectedTenants([]);
       setSelectAll(false);
 
-      await dispatch(getTenants(buildTenantParams()));
-      await dispatch(getUnits({ business: currentCompany._id }));
+      await Promise.all([
+        dispatch(getTenants(buildTenantParams())),
+        dispatch(getUnits({ business: currentCompany._id })),
+      ]);
     } catch (error) {
       toast.error(
         error?.response?.data?.message ||
@@ -1788,9 +1782,11 @@ const confirmTransferUnit = useCallback(async () => {
       setRestoreForm({ tenantId: "", notes: "" });
       setSelectedTenants([]);
       setSelectAll(false);
-      await dispatch(getTenants(buildTenantParams()));
-      await dispatch(getUnits({ business: currentCompany._id }));
-      await getLeases(dispatch, currentCompany._id, "active").catch(() => {});
+      await Promise.allSettled([
+        dispatch(getTenants(buildTenantParams())),
+        dispatch(getUnits({ business: currentCompany._id })),
+        getLeases(dispatch, currentCompany._id, "active"),
+      ]);
     } catch (error) {
       toast.error(
         error?.response?.data?.message ||

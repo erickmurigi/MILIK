@@ -62,6 +62,7 @@ export const getReconciliationEntries = async (req, res, next) => {
 
     const entries = await FinancialLedgerEntry.find(filter)
       .sort({ transactionDate: 1, createdAt: 1 })
+      .limit(10000)
       .lean();
 
     return res.status(200).json(entries);
@@ -82,6 +83,7 @@ export const getReconciliations = async (req, res, next) => {
 
     const list = await BankReconciliation.find(filter)
       .sort({ periodEnd: -1 })
+      .limit(200)
       .populate("account", "code name")
       .lean();
 
@@ -112,6 +114,7 @@ export const getReconciliation = async (req, res, next) => {
       status:          { $in: ["approved", "draft"] },
     })
       .sort({ transactionDate: 1, createdAt: 1 })
+      .limit(10000)
       .lean();
 
     const clearedSet = new Set(recon.clearedEntries.map(String));

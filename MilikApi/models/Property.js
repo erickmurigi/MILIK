@@ -310,7 +310,6 @@ const PropertySchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Company",
       required: true,
-      index: true,
     },
 
     commissionPercentage: {
@@ -428,20 +427,16 @@ PropertySchema.index({ business: 1, status: 1 });
 PropertySchema.index({ business: 1, zoneRegion: 1 });
 PropertySchema.index({ "landlords.landlordId": 1 });
 PropertySchema.index({ "landlords.name": 1 });
-PropertySchema.index({ createdAt: -1 });
+PropertySchema.index({ business: 1, createdAt: -1 });
 
 PropertySchema.statics.updateUnitCounts = async function (propertyId) {
   const Unit = mongoose.model("Unit");
 
-  const totalUnits = await Unit.countDocuments({ property: propertyId });
-  const occupiedUnits = await Unit.countDocuments({
-    property: propertyId,
-    status: "occupied",
-  });
-  const vacantUnits = await Unit.countDocuments({
-    property: propertyId,
-    status: "vacant",
-  });
+  const [totalUnits, occupiedUnits, vacantUnits] = await Promise.all([
+    Unit.countDocuments({ property: propertyId }),
+    Unit.countDocuments({ property: propertyId, status: "occupied" }),
+    Unit.countDocuments({ property: propertyId, status: "vacant" }),
+  ]);
 
   await this.findByIdAndUpdate(propertyId, {
     totalUnits,

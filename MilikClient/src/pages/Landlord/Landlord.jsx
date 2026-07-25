@@ -44,6 +44,18 @@ import { hasCompanyPermission } from "../../utils/permissions";
 const STORAGE_KEY = "milik_landlords_v1";
 const DEFAULT_PAGE_SIZE = 50;
 
+const emptyFilters = {
+  status: "Active",
+  portal: "any",
+  location: "",
+  code: "",
+  name: "",
+  regId: "",
+  pin: "",
+  email: "",
+  phone: "",
+};
+
 const MILIK_GREEN = "bg-[#0B3B2E]"; // deep MILIK-ish green
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
@@ -71,24 +83,9 @@ const Landlords = () => {
   const [currentPage, setCurrentPage] = useTabState("/landlords:currentPage", 1);
   const [isResizing, setIsResizing] = useState(false);
 
-  // Modals (keeping edit mode for future edit functionality)
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [editingId, setEditingId] = useState(null);
+  // Modals
   const [showImportModal, setShowImportModal] = useState(false);
   const [showCommunicationModal, setShowCommunicationModal] = useState(false);
-
-  // ---- NEW: Draft filters (typed) + Applied filters (used for searching) ----
-  const emptyFilters = {
-    status: "Active",
-    portal: "any",
-    location: "",
-    code: "",
-    name: "",
-    regId: "",
-    pin: "",
-    email: "",
-    phone: "",
-  };
 
   const [appliedFilters, setAppliedFilters] = useTabState("/landlords:appliedFilters", emptyFilters);
   const [draftFilters, setDraftFilters] = useState(appliedFilters);
@@ -162,7 +159,7 @@ const Landlords = () => {
     if (!currentCompany?._id) return;
     setCurrentPage(1);
     dispatch(getLandlords(buildLandlordParams(1)));
-  }, [dispatch, buildLandlordParams, currentCompany?._id]);
+  }, [dispatch, buildLandlordParams]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -504,128 +501,12 @@ const Landlords = () => {
     });
   };
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const formatFileSize = (bytes) => {
-    if (!bytes) return "0 Bytes";
-    const k = 1024;
-    const sizes = ["Bytes", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-  };
-
-  const handleFileUpload = (e) => {
-    const files = Array.from(e.target.files || []);
-    const newAttachments = files.map((file) => ({
-      id: Date.now() + Math.random(),
-      name: file.name,
-      size: formatFileSize(file.size),
-      dateTime: new Date().toLocaleString(),
-      file,
-    }));
-    setAttachments((prev) => [...prev, ...newAttachments]);
-    e.target.value = "";
-  };
-
-  const handleDownload = (attachment) => {
-    if (!attachment?.file) return;
-    const url = URL.createObjectURL(attachment.file);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = attachment.name;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const handleDeleteAttachment = (id) => {
-    setAttachments((prev) => prev.filter((att) => att.id !== id));
-  };
-
-  const nextCode = () => {
-    const codes = landlords
-      .map((l) => String(l.code || ""))
-      .filter((c) => /^LL\d{3,}$/i.test(c))
-      .map((c) => Number(c.replace(/[^0-9]/g, "")))
-      .filter((n) => !Number.isNaN(n));
-
-    const max = codes.length ? Math.max(...codes) : 0;
-    const next = max + 1;
-    return `LL${String(next).padStart(3, "0")}`;
-  };
-
-  const handleAddOrEditSubmit = (e) => {
-    e.preventDefault();
-
-    const landlordCode = formData.landlordCode?.trim() || nextCode();
-
-    if (!formData.landlordName?.trim()) return;
-    if (!formData.regId?.trim()) return;
-    if (!formData.taxPin?.trim()) return;
-    if (!formData.phoneNumber?.trim()) return;
-
-    const payload = {
-      id: isEditMode ? editingId : Date.now(),
-      code: landlordCode,
-      name: formData.landlordName.trim(),
-      pin: formData.taxPin.trim(),
-      regId: formData.regId.trim(),
-      address: formData.postalAddress?.trim() || "",
-      location: formData.location?.trim() || "",
-      email: formData.email?.trim() || "",
-      phone: formData.phoneNumber?.trim() || "",
-      activeProperties: String(
-        Number.isFinite(Number((landlords.find((x) => x.id === editingId) || {}).activeProperties))
-          ? (landlords.find((x) => x.id === editingId) || {}).activeProperties
-          : 0
-      ),
-      archivedProperties: String(
-        Number.isFinite(Number((landlords.find((x) => x.id === editingId) || {}).archivedProperties))
-          ? (landlords.find((x) => x.id === editingId) || {}).archivedProperties
-          : 0
-      ),
-      portalAccess: formData.portalAccess || "Disabled",
-      status: formData.status || "Active",
-      landlordType: formData.landlordType,
-      attachments: attachments.map(({ id, name, size, dateTime }) => ({ id, name, size, dateTime })),
-      updatedAt: new Date().toISOString(),
-      ...(isEditMode ? {} : { createdAt: new Date().toISOString() }),
-    };
-
-    setLandlords((prev) => {
-      if (!isEditMode) return [payload, ...prev];
-      return prev.map((x) => (x.id === editingId ? { ...x, ...payload } : x));
-    });
-
-    setShowAddLandlordModal(false);
-    setIsEditMode(false);
-    setEditingId(null);
-    setAttachments([]);
-    setFormData({
-      landlordCode: "",
-      landlordType: "Individual",
-      landlordName: "",
-      regId: "",
-      taxPin: "",
-      postalAddress: "",
-      email: "",
-      phoneNumber: "",
-      location: "",
-      portalAccess: "Disabled",
-      status: "Active",
-    });
-
-    setCurrentPage(1);
-  };
-
   const selectedCount = selectedLandlords.length;
-  const canCreate = hasCompanyPermission(currentUser, currentCompany, "landlords", "create", "propertyManagement");
-  const canUpdate = hasCompanyPermission(currentUser, currentCompany, "landlords", "update", "propertyManagement");
-  const canDelete = hasCompanyPermission(currentUser, currentCompany, "landlords", "delete", "propertyManagement");
+  const { canCreate, canUpdate, canDelete } = useMemo(() => ({
+    canCreate: hasCompanyPermission(currentUser, currentCompany, "landlords", "create", "propertyManagement"),
+    canUpdate: hasCompanyPermission(currentUser, currentCompany, "landlords", "update", "propertyManagement"),
+    canDelete: hasCompanyPermission(currentUser, currentCompany, "landlords", "delete", "propertyManagement"),
+  }), [currentUser, currentCompany]);
   const canEdit = selectedCount === 1 && canUpdate;
 
   // Excel Import Handler

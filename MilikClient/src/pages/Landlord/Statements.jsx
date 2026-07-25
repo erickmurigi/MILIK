@@ -141,6 +141,8 @@ const monthOptions = [
   "December",
 ];
 
+const MONTH_SELECT_OPTIONS = monthOptions.map((label, index) => ({ value: String(index + 1), label }));
+
 const toIsoDate = (date) => {
   const d = new Date(date);
   const y = d.getFullYear();
@@ -677,9 +679,11 @@ const Statements = () => {
   const properties = useSelector(selectAllProperties);
   const { propertiesLoaded } = useEntityCache(currentCompany?._id);
   const landlords = useSelector(selectAllLandlords);
-  const canCreateStatement = hasCompanyPermission(currentUser || {}, currentCompany, "statements", "create", "propertyManagement");
-  const canApproveStatement = hasCompanyPermission(currentUser || {}, currentCompany, "statements", "approve", "propertyManagement");
-  const canExportStatement = hasCompanyPermission(currentUser || {}, currentCompany, "statements", "export", "propertyManagement");
+  const { canCreateStatement, canApproveStatement, canExportStatement } = useMemo(() => ({
+    canCreateStatement: hasCompanyPermission(currentUser || {}, currentCompany, "statements", "create", "propertyManagement"),
+    canApproveStatement: hasCompanyPermission(currentUser || {}, currentCompany, "statements", "approve", "propertyManagement"),
+    canExportStatement: hasCompanyPermission(currentUser || {}, currentCompany, "statements", "export", "propertyManagement"),
+  }), [currentUser, currentCompany]);
 
   const today = new Date();
   const todayIso = toIsoDate(today);
@@ -1509,6 +1513,8 @@ const Statements = () => {
     }
   };
 
+  const propertyOptions = useMemo(() => properties.map((p) => ({ value: p._id, label: getPropertyLabel(p) })), [properties]);
+
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100">
@@ -1537,7 +1543,7 @@ const Statements = () => {
               <SearchableSelect
                 value={selectedPropertyId}
                 onChange={setSelectedPropertyId}
-                options={properties.map((p) => ({ value: p._id, label: getPropertyLabel(p) }))}
+                options={propertyOptions}
                 placeholder="Select property"
               />
             </div>
@@ -1547,7 +1553,7 @@ const Statements = () => {
               <SearchableSelect
                 value={month}
                 onChange={setMonth}
-                options={monthOptions.map((label, index) => ({ value: String(index + 1), label }))}
+                options={MONTH_SELECT_OPTIONS}
                 placeholder="Select month"
               />
             </div>
@@ -2177,7 +2183,7 @@ const Statements = () => {
 
                           return (
                             <tr
-                              key={`${row.unitId || row.unitNumber || "row"}-${index}`}
+                              key={row.unitId || row.unitNumber || row._id || index}
                               className={`${rowBase} border-b border-slate-100 transition-colors hover:bg-blue-50/20`}
                             >
                               <td className={`sticky left-0 z-10 w-[88px] min-w-[88px] ${rowBase} ${st.border} px-3 py-2.5 shadow-[2px_0_5px_-3px_rgba(0,0,0,0.07)]`}>
@@ -2298,7 +2304,7 @@ const Statements = () => {
                           </div>
                           <div className="space-y-1.5">
                             {depositSettlementAdditionRows.map((item, index) => (
-                              <div key={`deposit-settlement-add-${index}`} className="flex items-center justify-between rounded-lg border border-emerald-100 bg-emerald-50/70 px-4 py-2.5">
+                              <div key={item._id || item.id || `deposit-settlement-add-${index}`} className="flex items-center justify-between rounded-lg border border-emerald-100 bg-emerald-50/70 px-4 py-2.5">
                                 <div>
                                   <p className="text-xs text-slate-700">{item.description || "Deposit remittance"}</p>
                                   <p className="mt-0.5 text-[10px] text-slate-400">{item.holder === "landlord" ? "Landlord-held deposit" : "Deposit settlement"}</p>
@@ -2307,7 +2313,7 @@ const Statements = () => {
                               </div>
                             ))}
                             {depositSettlementOffsetRows.map((item, index) => (
-                              <div key={`deposit-settlement-offset-${index}`} className="flex items-center justify-between rounded-lg border border-amber-100 bg-amber-50/70 px-4 py-2.5">
+                              <div key={item._id || item.id || `deposit-settlement-offset-${index}`} className="flex items-center justify-between rounded-lg border border-amber-100 bg-amber-50/70 px-4 py-2.5">
                                 <div>
                                   <p className="text-xs text-slate-700">{item.description || "Deposit offset"}</p>
                                   <p className="mt-0.5 text-[10px] text-slate-400">Shown as both addition and deduction for direct landlord deposit receipts</p>
@@ -2342,7 +2348,7 @@ const Statements = () => {
                           </div>
                           <div className="space-y-1.5">
                             {broughtForwardCreditApplicationRows.map((item, index) => (
-                              <div key={`bf-credit-${index}`} className="flex items-start justify-between gap-3 rounded-lg border border-sky-100 bg-sky-50/60 px-4 py-2.5">
+                              <div key={item._id || item.id || `bf-credit-${index}`} className="flex items-start justify-between gap-3 rounded-lg border border-sky-100 bg-sky-50/60 px-4 py-2.5">
                                 <div>
                                   <p className="text-xs text-slate-700">{item.description || "Brought forward credit applied"}</p>
                                   <p className="mt-0.5 text-[10px] text-slate-400">
@@ -2377,7 +2383,7 @@ const Statements = () => {
                               </thead>
                               <tbody className="divide-y divide-slate-100 bg-white">
                                 {depositMemoRows.map((item, index) => (
-                                  <tr key={`deposit-memo-${index}`} className="hover:bg-slate-50/60 transition-colors">
+                                  <tr key={item._id || item.id || item.key || `deposit-memo-${index}`} className="hover:bg-slate-50/60 transition-colors">
                                     <td className="px-4 py-2.5 text-slate-700">{item.label || item.key || "Deposit memo"}</td>
                                     <td className="px-4 py-2.5 text-right text-slate-600">{depositMemoCurrency(item.openingBalance)}</td>
                                     <td className="px-4 py-2.5 text-right text-slate-600">{depositMemoCurrency(item.billed)}</td>
@@ -2405,7 +2411,7 @@ const Statements = () => {
                           </h4>
                           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
                             {nonDepositExpenseRows.map((item, index) => (
-                              <div key={`expense-${index}`} className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5 last:border-0 odd:bg-white even:bg-slate-50/60">
+                              <div key={item._id || item.id || `expense-${index}`} className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5 last:border-0 odd:bg-white even:bg-slate-50/60">
                                 <span className="text-xs text-slate-700">{item.description || item.name || "Expense"}</span>
                                 <span className="text-xs font-semibold text-slate-900">{currency(item.amount)}</span>
                               </div>
@@ -2421,7 +2427,7 @@ const Statements = () => {
                           </h4>
                           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
                             {nonDepositAdditionRows.map((item, index) => (
-                              <div key={`addition-${index}`} className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5 last:border-0 odd:bg-white even:bg-slate-50/60">
+                              <div key={item._id || item.id || `addition-${index}`} className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5 last:border-0 odd:bg-white even:bg-slate-50/60">
                                 <span className="text-xs text-slate-700">{item.description || item.name || "Addition"}</span>
                                 <span className="text-xs font-semibold text-emerald-700">{currency(item.amount)}</span>
                               </div>
@@ -2438,7 +2444,7 @@ const Statements = () => {
                           <p className="mb-2 text-[11px] text-slate-500">Advances already paid against future remittances. Deducted from settlement.</p>
                           <div className="overflow-hidden rounded-xl border border-amber-200 bg-white">
                             {earlyPayoutRows.map((item, index) => (
-                              <div key={`early-payout-${index}`} className="flex items-center justify-between border-b border-amber-100 px-4 py-2.5 last:border-0 odd:bg-white even:bg-amber-50/40">
+                              <div key={item._id || item.id || `early-payout-${index}`} className="flex items-center justify-between border-b border-amber-100 px-4 py-2.5 last:border-0 odd:bg-white even:bg-amber-50/40">
                                 <div>
                                   <span className="text-xs text-slate-700">{item.description || "Early payout"}</span>
                                   {item.date && <span className="ml-2 text-[10px] text-slate-400">{new Date(item.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</span>}
@@ -2462,7 +2468,7 @@ const Statements = () => {
                           <p className="mb-2 text-[11px] text-slate-500">Landlord advances being recovered through this statement period.</p>
                           <div className="overflow-hidden rounded-xl border border-red-200 bg-white">
                             {advanceRecoveryRows.map((item, index) => (
-                              <div key={`advance-recovery-${index}`} className="flex items-center justify-between border-b border-red-100 px-4 py-2.5 last:border-0 odd:bg-white even:bg-red-50/40">
+                              <div key={item._id || item.id || `advance-recovery-${index}`} className="flex items-center justify-between border-b border-red-100 px-4 py-2.5 last:border-0 odd:bg-white even:bg-red-50/40">
                                 <div>
                                   <span className="text-xs text-slate-700">{item.description || "Advance recovery"}</span>
                                   {item.date && <span className="ml-2 text-[10px] text-slate-400">{new Date(item.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</span>}
@@ -2490,7 +2496,7 @@ const Statements = () => {
                               ))}
                             </div>
                             {directToLandlordRows.map((item, index) => (
-                              <div key={`direct-${index}`} className={`grid grid-cols-[80px_60px_1fr_60px_80px_90px] gap-0 border-b border-slate-100 px-3 py-2 last:border-0 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
+                              <div key={item._id || item.id || `direct-${index}`} className={`grid grid-cols-[80px_60px_1fr_60px_80px_90px] gap-0 border-b border-slate-100 px-3 py-2 last:border-0 ${index % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
                                 <span className="text-[10px] text-slate-600">
                                   {item.date ? new Date(item.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) : "—"}
                                 </span>

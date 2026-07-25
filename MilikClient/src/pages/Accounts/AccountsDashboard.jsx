@@ -385,7 +385,7 @@ const AccountsDashboard = () => {
                     <Tooltip content={<NetTooltip />} cursor={{ fill: "#f8fafc" }} />
                     <Bar dataKey="net" name="Net" radius={0}>
                       {monthlyData.map((entry, i) => (
-                        <Cell key={i} fill={entry.net >= 0 ? GRN : ROSE} />
+                        <Cell key={entry.month} fill={entry.net >= 0 ? GRN : ROSE} />
                       ))}
                     </Bar>
                   </BarChart>

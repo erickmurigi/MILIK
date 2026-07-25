@@ -22,7 +22,6 @@ const UnitSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Property",
       required: true,
-      index: true,
     },
 
     unitType: {
@@ -104,7 +103,6 @@ const UnitSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Company",
       required: true,
-      index: true,
     },
   },
   { timestamps: true }
@@ -115,6 +113,7 @@ UnitSchema.index({ property: 1, status: 1 });
 UnitSchema.index({ business: 1, property: 1, unitNumber: 1 }, { unique: true });
 UnitSchema.index({ isVacant: 1 });
 UnitSchema.index({ listingEnabled: 1, status: 1 });
+UnitSchema.index({ business: 1, createdAt: -1 });
 
 UnitSchema.pre("validate", function (next) {
   if (typeof this.unitNumber === "string") {

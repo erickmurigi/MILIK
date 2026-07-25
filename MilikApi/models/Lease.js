@@ -63,7 +63,6 @@ const LeaseSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Company",
       required: true,
-      index: true,
     },
     leaseType: {
       type: String,
@@ -119,7 +118,6 @@ const LeaseSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-LeaseSchema.index({ business: 1, status: 1 });
 LeaseSchema.index({ business: 1, tenant: 1, status: 1 });
 LeaseSchema.index({ business: 1, unit: 1, status: 1 });
 LeaseSchema.index({ tenant: 1, startDate: -1 });
@@ -134,6 +132,10 @@ LeaseSchema.index(
   }
 );
 LeaseSchema.index({ business: 1, "billingScheduleAdjustments.periodKey": 1 });
+LeaseSchema.index({ business: 1, status: 1, endDate: 1 });
+LeaseSchema.index({ business: 1, tenant: 1, unit: 1, status: 1 });
+LeaseSchema.index({ business: 1, landlord: 1 });
+LeaseSchema.index({ business: 1, createdAt: -1 });
 
 LeaseSchema.pre("validate", function normalizeLease(next) {
   if (typeof this.agreementNumber === "string") {

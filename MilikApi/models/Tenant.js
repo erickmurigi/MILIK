@@ -220,7 +220,6 @@ const TenantSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-TenantSchema.index({ business: 1 });
 TenantSchema.index({ business: 1, status: 1 });
 TenantSchema.index({ business: 1, tenantCode: 1 }, { unique: true, sparse: true });
 TenantSchema.index(
@@ -232,7 +231,9 @@ TenantSchema.index({ business: 1, name: 1 });
 TenantSchema.index({ unit: 1 });
 TenantSchema.index({ business: 1, unit: 1, status: 1 });
 TenantSchema.index({ additionalUnits: 1 });
-TenantSchema.index({ moveInDate: -1 });
+TenantSchema.index({ business: 1, moveInDate: -1 });
+TenantSchema.index({ business: 1, createdAt: -1 });
+TenantSchema.index({ business: 1, balance: 1 });
 
 const isTenantPlaceholder = (v) => {
   const s = String(v ?? "").trim().toLowerCase();

@@ -521,31 +521,18 @@ const findAnyChartAccount = async (businessId, rawValue, fallbackCandidates = []
   const direct = String(rawValue || "").trim();
 
   if (direct) {
+    const baseFilter = { business: businessId, isPosting: { $ne: false }, isHeader: { $ne: true } };
+    const parallelQueries = [];
     if (isValidObjectId(direct)) {
-      const byId = await ChartOfAccount.findOne({
-        _id: direct,
-        business: businessId,
-        isPosting: { $ne: false },
-        isHeader: { $ne: true },
-      }).lean();
-      if (byId) return byId;
+      parallelQueries.push(ChartOfAccount.findOne({ ...baseFilter, _id: direct }).lean());
     }
-
-    const byCode = await ChartOfAccount.findOne({
-      business: businessId,
-      code: direct,
-      isPosting: { $ne: false },
-      isHeader: { $ne: true },
-    }).lean();
-    if (byCode) return byCode;
-
-    const byName = await ChartOfAccount.findOne({
-      business: businessId,
-      name: { $regex: `^${escapeRegExp(direct)}$`, $options: "i" },
-      isPosting: { $ne: false },
-      isHeader: { $ne: true },
-    }).lean();
-    if (byName) return byName;
+    parallelQueries.push(
+      ChartOfAccount.findOne({ ...baseFilter, code: direct }).lean(),
+      ChartOfAccount.findOne({ ...baseFilter, name: { $regex: `^${escapeRegExp(direct)}$`, $options: "i" } }).lean()
+    );
+    const results = await Promise.all(parallelQueries);
+    const account = results.find((r) => r != null) ?? null;
+    if (account) return account;
   }
 
   return findFirstAccount(businessId, fallbackCandidates);
@@ -2030,6 +2017,7 @@ export const getTenantInvoiceNotes = async (req, res, next) => {
 
     const notes = await TenantInvoiceNote.find(query)
       .sort({ noteDate: 1, createdAt: 1 })
+      .limit(500)
       .populate("tenant", "name tenantName firstName lastName")
       .populate("unit", "unitNumber name unitName")
       .populate("property", "propertyName name")
@@ -2121,6 +2109,7 @@ export const getTakeOnBalances = async (req, res, next) => {
     const [invoices, takeOnReceipts] = await Promise.all([
       TenantInvoice.find(invoiceQuery)
         .sort({ invoiceDate: -1, createdAt: -1, _id: -1 })
+        .limit(5000)
         .populate("tenant", "name tenantName firstName lastName")
         .populate("unit", "unitNumber name unitName")
         .populate("property", "propertyName name")
@@ -2128,6 +2117,7 @@ export const getTakeOnBalances = async (req, res, next) => {
         .lean(),
       RentPayment.find(receiptQuery)
         .sort({ paymentDate: -1, createdAt: -1, _id: -1 })
+        .limit(5000)
         .populate("tenant", "name tenantName firstName lastName")
         .populate("unit", "unitNumber name unitName")
         .lean(),
@@ -2681,19 +2671,14 @@ export const createTenantInvoiceNote = async (req, res, next) => {
       return res.status(400).json({ error: "A valid property is required." });
     }
 
-    const tenant = await Tenant.findOne({
-      _id: requestedTenantId,
-      ...(scopedBusinessId ? { business: scopedBusinessId } : {}),
-    }).lean();
+    const [tenant, property] = await Promise.all([
+      Tenant.findOne({ _id: requestedTenantId, ...(scopedBusinessId ? { business: scopedBusinessId } : {}) }).lean(),
+      Property.findOne({ _id: requestedPropertyId, ...(scopedBusinessId ? { business: scopedBusinessId } : {}) }).lean(),
+    ]);
 
     if (!tenant) {
       return res.status(404).json({ error: "Tenant not found." });
     }
-
-    const property = await Property.findOne({
-      _id: requestedPropertyId,
-      ...(scopedBusinessId ? { business: scopedBusinessId } : {}),
-    }).lean();
 
     if (!property) {
       return res.status(404).json({ error: "Property not found." });
@@ -2993,7 +2978,8 @@ export const reverseTenantInvoiceNote = async (req, res, next) => {
       .populate("sourceInvoice", "invoiceNumber amount category invoiceDate dueDate status")
       .populate("tenant", "name tenantCode")
       .populate("property", "propertyName propertyCode")
-      .populate("unit", "unitNumber");
+      .populate("unit", "unitNumber")
+      .lean();
 
     return res.status(200).json({
       message: `${normalizedNoteType === "CREDIT_NOTE" ? "Credit" : "Debit"} note reversed successfully.`,

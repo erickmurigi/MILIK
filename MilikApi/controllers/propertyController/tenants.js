@@ -111,7 +111,7 @@ const ensureUnitsBelongToBusiness = async ({ businessId, unitIds = [] } = {}) =>
   const unitDocs = await Unit.find({
     _id: { $in: normalizedIds },
     business: businessId,
-  }).populate("property", "depositHeldBy landlords letManage lettingFeeMode lettingFeeValue");
+  }).populate("property", "depositHeldBy landlords letManage lettingFeeMode lettingFeeValue").lean();
 
   if (unitDocs.length !== normalizedIds.length) {
     const error = new Error("One or more selected units were not found for the selected company");
@@ -322,7 +322,7 @@ const syncTenantLeaseRecord = async ({
 
   const resolvedUnit =
     unitDoc ||
-    (tenantDoc.unit ? await Unit.findById(tenantDoc.unit).populate("property", "landlords") : null);
+    (tenantDoc.unit ? await Unit.findById(tenantDoc.unit).populate("property", "landlords").lean() : null);
   if (!resolvedUnit?._id) return activeLease || null;
 
   const startDate = tenantDoc.moveInDate ? new Date(tenantDoc.moveInDate) : new Date(tenantDoc.createdAt || Date.now());
@@ -570,7 +570,7 @@ const setUnitOccupied = async (unitId, tenantId) => {
 
 
 const setUnitVacant = async (unitId, tenantId, effectiveDate = new Date()) => {
-  const unit = await Unit.findById(unitId);
+  const unit = await Unit.findById(unitId).lean();
   if (!unit) return null;
 
   const replacementOccupant = await Tenant.findOne({
@@ -901,7 +901,7 @@ export const createTenant = async (req, res, next) => {
     }
 
     const [populatedTenant] = await Promise.all([
-      populateTenantQuery(Tenant.findById(savedTenant._id)),
+      populateTenantQuery(Tenant.findById(savedTenant._id).lean()),
       syncTenantAssignedUnitOccupancy({
         previousUnitIds: [],
         nextUnitIds: shouldTenantOccupyUnits(savedTenant) ? getTenantAssignedUnitIds(savedTenant) : [],
@@ -1070,7 +1070,7 @@ export const getTenants = async (req, res, next) => {
     }
 
     if (unit) {
-      const unitDoc = await Unit.findOne({ _id: unit, business: businessId }).select("_id");
+      const unitDoc = await Unit.findOne({ _id: unit, business: businessId }).select("_id").lean();
       if (!unitDoc) {
         return res.status(404).json({
           success: false,
@@ -1203,7 +1203,7 @@ export const getTenant = async (req, res, next) => {
 // Update tenant
 export const updateTenant = async (req, res, next) => {
   try {
-    const tenant = await Tenant.findById(req.params.id);
+    const tenant = await Tenant.findById(req.params.id).lean();
 
     const access = authorizeTenantAccess(req, tenant);
     if (!access.allowed) {
@@ -1353,7 +1353,7 @@ export const updateTenant = async (req, res, next) => {
     if (Object.prototype.hasOwnProperty.call(normalizedPayload, "depositHeldBy")) {
       const unit =
         targetUnit ||
-        (tenant.unit ? await Unit.findById(tenant.unit).populate("property", "depositHeldBy") : null);
+        (tenant.unit ? await Unit.findById(tenant.unit).populate("property", "depositHeldBy").lean() : null);
 
       normalizedPayload.depositHeldBy = normalizeDepositHolder(
         normalizedPayload.depositHeldBy,
@@ -1428,7 +1428,7 @@ export const updateTenant = async (req, res, next) => {
         req.params.id,
         { $set: normalizedPayload },
         { new: true, runValidators: true }
-      )
+      ).lean()
     );
 
     if (isChangingUnit || isChangingAdditionalUnits || currentOccupiesUnits !== nextOccupiesUnits) {
@@ -1520,7 +1520,7 @@ export const updateTenant = async (req, res, next) => {
 // Delete tenant
 export const deleteTenant = async (req, res, next) => {
   try {
-    const tenant = await Tenant.findById(req.params.id);
+    const tenant = await Tenant.findById(req.params.id).lean();
 
     const access = authorizeTenantAccess(req, tenant);
     if (!access.allowed) {
@@ -1550,9 +1550,10 @@ export const deleteTenant = async (req, res, next) => {
     });
 
     // Clean up auto-created lease records before deleting the tenant
-    await Lease.deleteMany({ tenant: tenant._id, business: tenant.business });
-
-    await Tenant.findByIdAndDelete(req.params.id);
+    await Promise.all([
+      Lease.deleteMany({ tenant: tenant._id, business: tenant.business }),
+      Tenant.findByIdAndDelete(req.params.id),
+    ]);
     await logAuditEvent({
       req,
       company: tenant.business,
@@ -1581,7 +1582,7 @@ export const deleteTenant = async (req, res, next) => {
 // Update tenant status
 export const updateTenantStatus = async (req, res, next) => {
   try {
-    const tenant = await Tenant.findById(req.params.id);
+    const tenant = await Tenant.findById(req.params.id).lean();
 
     const access = authorizeTenantAccess(req, tenant);
     if (!access.allowed) {
@@ -1732,7 +1733,7 @@ export const updateTenantStatus = async (req, res, next) => {
 // Get tenant payments
 export const getTenantPayments = async (req, res, next) => {
   try {
-    const tenant = await Tenant.findById(req.params.id);
+    const tenant = await Tenant.findById(req.params.id).lean();
 
     const access = authorizeTenantAccess(req, tenant);
     if (!access.allowed) {
@@ -1770,7 +1771,7 @@ export const getTenantPayments = async (req, res, next) => {
 // Get tenant balance
 export const getTenantBalance = async (req, res, next) => {
   try {
-    const tenant = await Tenant.findById(req.params.id);
+    const tenant = await Tenant.findById(req.params.id).lean();
 
     const access = authorizeTenantAccess(req, tenant);
     if (!access.allowed) {
@@ -1785,7 +1786,7 @@ export const getTenantBalance = async (req, res, next) => {
       business: tenant.business,
       paymentType: { $in: ["rent", "utility", "deposit"] },
       isConfirmed: true,
-    });
+    }).limit(5000).lean();
 
     const totalPaid = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
 
@@ -1874,7 +1875,7 @@ export const getTenantTotalDue = async (tenantId) => {
 
 export const transferTenantUnit = async (req, res, next) => {
   try {
-    const tenant = await Tenant.findById(req.params.id);
+    const tenant = await Tenant.findById(req.params.id).lean();
 
     const access = authorizeTenantAccess(req, tenant);
     if (!access.allowed) {
@@ -1958,7 +1959,7 @@ export const transferTenantUnit = async (req, res, next) => {
           },
         },
         { new: true, runValidators: true }
-      )
+      ).lean()
     );
 
     // Sync the lease to reflect the new unit and updated rent
@@ -2033,7 +2034,7 @@ export const bulkImportTenants = async (req, res, next) => {
       });
     }
 
-    const units = await Unit.find({ business: businessId }).lean().select("_id unitNumber property status isVacant rent deposit utilities").populate("property", "propertyCode landlords depositHeldBy letManage lettingFeeMode lettingFeeValue");
+    const units = await Unit.find({ business: businessId }).lean().limit(10000).select("_id unitNumber property status isVacant rent deposit utilities").populate("property", "propertyCode landlords depositHeldBy letManage lettingFeeMode lettingFeeValue");
     const unitMap = new Map();
 
     units.forEach((unit) => {
@@ -2385,19 +2386,20 @@ export const backfillMissingLeases = async (req, res, next) => {
     }
 
     // Find tenants with no active/pending lease
-    const tenantsWithLease = await Lease.find({
-      business: businessId,
-      status: { $in: ["draft", "pending_signature", "active"] },
-    }).distinct("tenant");
+    const [tenantsWithLease, tenants] = await Promise.all([
+      Lease.find({
+        business: businessId,
+        status: { $in: ["draft", "pending_signature", "active"] },
+      }).distinct("tenant"),
+      Tenant.find({
+        business: businessId,
+        status: { $in: ACTIVE_TENANT_STATUSES },
+      })
+        .populate({ path: "unit", populate: { path: "property", select: "landlords depositHeldBy letManage propertyCode" } })
+        .lean(),
+    ]);
 
     const tenantIdsWithLease = new Set(tenantsWithLease.map(String));
-
-    const tenants = await Tenant.find({
-      business: businessId,
-      status: { $in: ACTIVE_TENANT_STATUSES },
-    })
-      .populate({ path: "unit", populate: { path: "property", select: "landlords depositHeldBy letManage propertyCode" } })
-      .lean();
 
     const missing = tenants.filter((t) => !tenantIdsWithLease.has(String(t._id)));
 
@@ -2454,10 +2456,18 @@ export const migrateTenantCodes = async (req, res, next) => {
       });
     }
 
-    const tenantsWithoutCodes = await Tenant.find({
-      business,
-      $or: [{ tenantCode: { $exists: false } }, { tenantCode: null }, { tenantCode: "" }],
-    }).sort({ createdAt: 1 });
+    const [tenantsWithoutCodes, tenantsWithCodes] = await Promise.all([
+      Tenant.find({
+        business,
+        $or: [{ tenantCode: { $exists: false } }, { tenantCode: null }, { tenantCode: "" }],
+      }).sort({ createdAt: 1 }).lean(),
+      Tenant.find({
+        business,
+        tenantCode: { $regex: /^TT\d+$/ },
+      })
+        .select("tenantCode")
+        .lean(),
+    ]);
 
     if (tenantsWithoutCodes.length === 0) {
       return res.status(200).json({
@@ -2466,13 +2476,6 @@ export const migrateTenantCodes = async (req, res, next) => {
         updated: 0,
       });
     }
-
-    const tenantsWithCodes = await Tenant.find({
-      business,
-      tenantCode: { $regex: /^TT\d+$/ },
-    })
-      .select("tenantCode")
-      .lean();
 
     const existingNumbers = tenantsWithCodes
       .map((t) => parseInt(String(t.tenantCode || "").replace("TT", ""), 10))

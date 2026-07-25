@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   selectCurrentCompany,
@@ -518,16 +518,14 @@ const TakeOnBalances = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const tenantState = useSelector(selectAllTenants);
   const propertyState = useSelector(selectAllProperties);
-  const tenants = Array.isArray(tenantState)
-    ? tenantState
-    : Array.isArray(tenantState?.data)
-      ? tenantState.data
-      : [];
-  const properties = Array.isArray(propertyState)
-    ? propertyState
-    : Array.isArray(propertyState?.data)
-      ? propertyState.data
-      : [];
+  const tenants = useMemo(
+    () => Array.isArray(tenantState) ? tenantState : Array.isArray(tenantState?.data) ? tenantState.data : [],
+    [tenantState]
+  );
+  const properties = useMemo(
+    () => Array.isArray(propertyState) ? propertyState : Array.isArray(propertyState?.data) ? propertyState.data : [],
+    [propertyState]
+  );
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -566,6 +564,11 @@ const TakeOnBalances = () => {
     );
   }, [properties, tenants]);
 
+  const tenantSelectOptions = useMemo(
+    () => tenants.filter((tenant) => !draftFilters.propertyId || getTenantPropertyId(tenant) === draftFilters.propertyId).map((tenant) => (<option key={tenant._id} value={tenant._id}>{getTenantDisplayName(tenant)}</option>)),
+    [tenants, draftFilters.propertyId]
+  );
+
   const propertyLookup = useMemo(() => {
     const map = new Map();
     propertyOptions.forEach((property) => {
@@ -584,7 +587,7 @@ const TakeOnBalances = () => {
     return getPropertyDisplay(propertyRecord || row?.property || getTenantPropertyRecord(row?.tenant));
   };
 
-  const loadRows = async () => {
+  const loadRows = useCallback(async () => {
     if (!currentCompany?._id) return;
     try {
       setLoading(true);
@@ -597,7 +600,7 @@ const TakeOnBalances = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentCompany?._id]);
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -612,7 +615,7 @@ const TakeOnBalances = () => {
         setChartAccounts([]);
       }
     })();
-  }, [dispatch, currentCompany?._id]);
+  }, [dispatch, currentCompany?._id, loadRows]);
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
@@ -960,7 +963,7 @@ const TakeOnBalances = () => {
                 </select>
                 <select value={draftFilters.tenant} onChange={setFilter("tenant")} className="h-7 shrink-0 rounded border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="">Tenant</option>
-                  {tenants.filter((tenant) => !draftFilters.propertyId || getTenantPropertyId(tenant) === draftFilters.propertyId).map((tenant) => (<option key={tenant._id} value={tenant._id}>{getTenantDisplayName(tenant)}</option>))}
+                  {tenantSelectOptions}
                 </select>
                 <select value={draftFilters.billItem} onChange={setFilter("billItem")} className="h-7 shrink-0 rounded border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
                   <option value="">Bill Item</option>

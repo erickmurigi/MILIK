@@ -96,6 +96,7 @@ export const checkInvoiceLedgerEntries = async (req, res) => {
     const invoices = await TenantInvoice.find(invoiceQuery)
       .populate("tenant", "name")
       .populate("unit", "unitNumber property")
+      .limit(2000)
       .lean();
 
     const invoiceIds = invoices.map((i) => String(i._id));
@@ -192,7 +193,7 @@ export const repostInvoicesToLedger = async (req, res) => {
     if (propertyId) invoiceQuery.property = propertyId;
     if (periodStart && periodEnd) invoiceQuery.invoiceDate = { $gte: periodStart, $lte: periodEnd };
 
-    const invoices = await TenantInvoice.find(invoiceQuery).lean();
+    const invoices = await TenantInvoice.find(invoiceQuery).limit(2000).lean();
     let posted = 0;
     let skipped = 0;
     const errors = [];
@@ -471,7 +472,7 @@ export const checkUtilityReceiptLedgerEntries = async (req, res) => {
       if (periodEnd) match.transactionDate.$lte = new Date(periodEnd);
     }
 
-    const entries = await FinancialLedgerEntry.find(match).lean();
+    const entries = await FinancialLedgerEntry.find(match).limit(2000).lean();
     return res.json({ count: entries.length, entries });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -493,99 +494,90 @@ export const runIntegrityReport = async (req, res) => {
     const bizId = new mongoose.Types.ObjectId(String(businessId));
     const ACTIVE_STATUSES = ["approved"];
 
-    // 1. Overall balance (debits must equal credits)
-    const [totals] = await FinancialLedgerEntry.aggregate([
-      { $match: { business: bizId, status: { $in: ACTIVE_STATUSES } } },
-      {
-        $group: {
-          _id: null,
-          totalDebit: { $sum: "$debit" },
-          totalCredit: { $sum: "$credit" },
-          count: { $sum: 1 },
+    const [
+      [totals],
+      unbalancedGroups,
+      entryAccountIds,
+      validAccountIds,
+      inactiveAccountIds,
+      accountBalances,
+      accountTypeMap,
+      journalsWithNoLedger,
+    ] = await Promise.all([
+      FinancialLedgerEntry.aggregate([
+        { $match: { business: bizId, status: { $in: ACTIVE_STATUSES } } },
+        {
+          $group: {
+            _id: null,
+            totalDebit: { $sum: "$debit" },
+            totalCredit: { $sum: "$credit" },
+            count: { $sum: 1 },
+          },
         },
-      },
+      ]),
+      FinancialLedgerEntry.aggregate([
+        { $match: { business: bizId, status: { $in: ACTIVE_STATUSES }, journalGroupId: { $ne: null } } },
+        {
+          $group: {
+            _id: "$journalGroupId",
+            debitSum: { $sum: "$debit" },
+            creditSum: { $sum: "$credit" },
+            entryCount: { $sum: 1 },
+            firstDate: { $min: "$transactionDate" },
+            sourceType: { $first: "$sourceTransactionType" },
+            sourceId: { $first: "$sourceTransactionId" },
+          },
+        },
+        { $addFields: { diff: { $subtract: ["$debitSum", "$creditSum"] } } },
+        { $match: { diff: { $not: { $gt: -0.01, $lt: 0.01 } } } },
+        { $sort: { firstDate: -1 } },
+        { $limit: 100 },
+      ]),
+      FinancialLedgerEntry.distinct("accountId", {
+        business: bizId,
+        status: { $in: ACTIVE_STATUSES },
+        accountId: { $ne: null },
+      }),
+      ChartOfAccount.distinct("_id", { business: bizId }),
+      ChartOfAccount.distinct("_id", { business: bizId, isActive: false }),
+      FinancialLedgerEntry.aggregate([
+        { $match: { business: bizId, status: { $in: ["approved", "reversed"] }, accountId: { $ne: null } } },
+        {
+          $group: {
+            _id: "$accountId",
+            netDebit: { $sum: "$debit" },
+            netCredit: { $sum: "$credit" },
+          },
+        },
+        { $addFields: { netBalance: { $subtract: ["$netDebit", "$netCredit"] } } },
+      ]),
+      ChartOfAccount.find(
+        { business: bizId, isActive: true },
+        { _id: 1, code: 1, name: 1, type: 1 }
+      ).lean(),
+      JournalEntry.find(
+        { business: bizId, status: "posted", ledgerEntries: { $size: 0 } },
+        { journalNo: 1, date: 1 }
+      ).lean(),
     ]);
+
     const totalDebit = Number(totals?.totalDebit || 0);
     const totalCredit = Number(totals?.totalCredit || 0);
     const glDifference = totalDebit - totalCredit;
     const glBalanced = Math.abs(glDifference) < 0.01;
 
-    // 2. Unbalanced journal groups (debit leg ≠ credit leg)
-    const unbalancedGroups = await FinancialLedgerEntry.aggregate([
-      { $match: { business: bizId, status: { $in: ACTIVE_STATUSES }, journalGroupId: { $ne: null } } },
-      {
-        $group: {
-          _id: "$journalGroupId",
-          debitSum: { $sum: "$debit" },
-          creditSum: { $sum: "$credit" },
-          entryCount: { $sum: 1 },
-          firstDate: { $min: "$transactionDate" },
-          sourceType: { $first: "$sourceTransactionType" },
-          sourceId: { $first: "$sourceTransactionId" },
-        },
-      },
-      { $addFields: { diff: { $subtract: ["$debitSum", "$creditSum"] } } },
-      { $match: { diff: { $not: { $gt: -0.01, $lt: 0.01 } } } },
-      { $sort: { firstDate: -1 } },
-      { $limit: 100 },
-    ]);
-
-    // 3. Orphaned ledger entries — no matching accountId in COA
-    const entryAccountIds = await FinancialLedgerEntry.distinct("accountId", {
-      business: bizId,
-      status: { $in: ACTIVE_STATUSES },
-      accountId: { $ne: null },
-    });
-    const validAccounts = await ChartOfAccount.distinct("_id", {
-      business: bizId,
-    });
-    const validSet = new Set(validAccounts.map(String));
+    const validSet = new Set(validAccountIds.map(String));
     const orphanedAccountIds = entryAccountIds.filter((id) => !validSet.has(String(id)));
 
-    let orphanedEntriesCount = 0;
-    if (orphanedAccountIds.length) {
-      orphanedEntriesCount = await FinancialLedgerEntry.countDocuments({
-        business: bizId,
-        status: { $in: ACTIVE_STATUSES },
-        accountId: { $in: orphanedAccountIds },
-      });
-    }
-
-    // 4. Entries posted to inactive (soft-deleted) accounts
-    const inactiveAccountIds = await ChartOfAccount.distinct("_id", {
-      business: bizId,
-      isActive: false,
-    });
-    let inactiveAccountEntries = 0;
-    if (inactiveAccountIds.length) {
-      inactiveAccountEntries = await FinancialLedgerEntry.countDocuments({
-        business: bizId,
-        status: { $in: ACTIVE_STATUSES },
-        accountId: { $in: inactiveAccountIds },
-      });
-    }
-
-    // 5. Accounts with abnormal balance sign for their type
-    // Assets & Expenses should be debit-normal; Liabilities, Equity, Income should be credit-normal.
-    // Must include "reversed" status so that original + reversal cancel to zero — otherwise every
-    // reversed transaction leaves only the reversal's opposite-direction entry in the "approved" pool
-    // and makes the account appear to have an abnormal balance (false positive).
-    const accountBalances = await FinancialLedgerEntry.aggregate([
-      { $match: { business: bizId, status: { $in: ["approved", "reversed"] }, accountId: { $ne: null } } },
-      {
-        $group: {
-          _id: "$accountId",
-          netDebit: { $sum: "$debit" },
-          netCredit: { $sum: "$credit" },
-        },
-      },
-      { $addFields: { netBalance: { $subtract: ["$netDebit", "$netCredit"] } } },
+    const [orphanedEntriesCount, inactiveAccountEntries] = await Promise.all([
+      orphanedAccountIds.length
+        ? FinancialLedgerEntry.countDocuments({ business: bizId, status: { $in: ACTIVE_STATUSES }, accountId: { $in: orphanedAccountIds } })
+        : Promise.resolve(0),
+      inactiveAccountIds.length
+        ? FinancialLedgerEntry.countDocuments({ business: bizId, status: { $in: ACTIVE_STATUSES }, accountId: { $in: inactiveAccountIds } })
+        : Promise.resolve(0),
     ]);
 
-    const accountTypeMap = await ChartOfAccount.find(
-      { business: bizId, isActive: true },
-      { _id: 1, code: 1, name: 1, type: 1 }
-    ).lean();
     const typeIndex = new Map(accountTypeMap.map((a) => [String(a._id), a]));
 
     const abnormalBalances = accountBalances
@@ -593,7 +585,6 @@ export const runIntegrityReport = async (req, res) => {
         const acc = typeIndex.get(String(row._id));
         if (!acc) return false;
         const isDebitNormal = ["asset", "expense"].includes(acc.type);
-        // Flag if net balance is on the wrong side (more than KES 1 threshold to skip rounding noise)
         return isDebitNormal ? row.netBalance < -1 : row.netBalance > 1;
       })
       .map((row) => {
@@ -607,12 +598,6 @@ export const runIntegrityReport = async (req, res) => {
         };
       })
       .slice(0, 50);
-
-    // 6. Posted journal entries with no ledger entries
-    const journalsWithNoLedger = await JournalEntry.find(
-      { business: bizId, status: "posted", ledgerEntries: { $size: 0 } },
-      { journalNo: 1, date: 1 }
-    ).lean();
 
     // Flag which unbalanced groups already have an active manual correction posted
     let mappedUnbalancedGroups = [];

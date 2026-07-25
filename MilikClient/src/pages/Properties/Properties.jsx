@@ -1,5 +1,5 @@
 ﻿// pages/Properties.js
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link, useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -44,6 +44,57 @@ const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
 
 const getErrorMessage = (error, fallback) =>
   error?.response?.data?.message || error?.message || fallback;
+
+const emptyFilters = {
+  status: "active",
+  zone: "",
+  category: "",
+  code: "",
+  name: "",
+  lr: "",
+  landlord: "",
+  location: "",
+};
+
+const formatDate = (dateString) => {
+  if (!dateString) return "N/A";
+  return new Date(dateString).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+};
+
+const getPrimaryLandlord = (landlords) => {
+  if (!landlords || landlords.length === 0) return "N/A";
+  const primary = landlords.find((l) => l.isPrimary) || landlords[0];
+  return primary?.name || primary?.landlordId?.landlordName || primary?.landlordId?.fullName || primary?.landlordId?.name || "N/A";
+};
+
+const getFullAddress = (property) => {
+  const parts = [property.roadStreet, property.estateArea, property.townCityState].filter(
+    (p) => p && String(p).trim() !== ""
+  );
+  return parts.join(", ") || property.address || "N/A";
+};
+
+const getStatusColor = (status) => {
+  switch (status) {
+    case "active": return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    case "maintenance": return "bg-amber-50 text-amber-700 border-amber-200";
+    case "closed": return "bg-red-50 text-red-700 border-red-200";
+    default: return "bg-slate-100 text-slate-600 border-slate-200";
+  }
+};
+
+const getCategoryColor = (category) => {
+  switch (category?.toLowerCase()) {
+    case "residential": return "bg-blue-50 text-blue-700 border-blue-200";
+    case "commercial": return "bg-purple-50 text-purple-700 border-purple-200";
+    case "mixed use": return "bg-amber-50 text-amber-700 border-amber-200";
+    default: return "bg-slate-100 text-slate-600 border-slate-200";
+  }
+};
 
 const Properties = () => {
   const dispatch = useDispatch();
@@ -106,17 +157,6 @@ const Properties = () => {
   );
 
   // Filters
-  const emptyFilters = {
-    status: "active",
-    zone: "",
-    category: "",
-    code: "",
-    name: "",
-    lr: "",
-    landlord: "",
-    location: "",
-  };
-
   const [appliedFilters, setAppliedFilters] = useTabState("/properties:appliedFilters", emptyFilters);
   const [draftFilters, setDraftFilters] = useState(appliedFilters);
 
@@ -206,7 +246,7 @@ const Properties = () => {
     };
 
     dispatch(getProperties(params));
-  }, [dispatch, currentPage, pageSize, appliedFilters, currentCompany]);
+  }, [dispatch, currentPage, pageSize, appliedFilters, currentCompany?._id]);
 
   // Show error toast
   useEffect(() => {
@@ -412,52 +452,10 @@ const Properties = () => {
     });
   };
 
-  // Row styling
-  const getRowClass = (index, id) => {
+  const getRowClass = useCallback((index, id) => {
     if (selectedProperties.includes(id)) return "bg-emerald-50 shadow-[inset_3px_0_0_0_#0B3B2E]";
     return index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40";
-  };
-
-  // Helpers
-  const formatDate = (dateString) => {
-    if (!dateString) return "N/A";
-    return new Date(dateString).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  };
-
-  const getPrimaryLandlord = (landlords) => {
-    if (!landlords || landlords.length === 0) return "N/A";
-    const primary = landlords.find((l) => l.isPrimary) || landlords[0];
-    return primary?.name || primary?.landlordId?.landlordName || primary?.landlordId?.fullName || primary?.landlordId?.name || "N/A";
-  };
-
-  const getFullAddress = (property) => {
-    const parts = [property.roadStreet, property.estateArea, property.townCityState].filter(
-      (p) => p && String(p).trim() !== ""
-    );
-    return parts.join(", ") || property.address || "N/A";
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "active": return "bg-emerald-50 text-emerald-700 border-emerald-200";
-      case "maintenance": return "bg-amber-50 text-amber-700 border-amber-200";
-      case "closed": return "bg-red-50 text-red-700 border-red-200";
-      default: return "bg-slate-100 text-slate-600 border-slate-200";
-    }
-  };
-
-  const getCategoryColor = (category) => {
-    switch (category?.toLowerCase()) {
-      case "residential": return "bg-blue-50 text-blue-700 border-blue-200";
-      case "commercial": return "bg-purple-50 text-purple-700 border-purple-200";
-      case "mixed use": return "bg-amber-50 text-amber-700 border-amber-200";
-      default: return "bg-slate-100 text-slate-600 border-slate-200";
-    }
-  };
+  }, [selectedProperties]);
 
   const totalPages = Math.max(1, Math.ceil((pagination?.total || 0) / pageSize));
 
@@ -849,7 +847,7 @@ const Properties = () => {
                                       <h4 className="font-bold text-gray-900 text-sm mb-3 pb-2 border-b-2 border-blue-600">👥 Contact Details</h4>
                                       {property.landlords && property.landlords.length > 0 ? (
                                         property.landlords.map((landlord, idx) => (
-                                          <div key={idx} className="p-2 bg-gray-50 rounded border border-gray-200">
+                                          <div key={landlord._id || landlord.landlordId || idx} className="p-2 bg-gray-50 rounded border border-gray-200">
                                             <p className="text-sm font-bold text-gray-900">
                                               {landlord.name} {landlord.isPrimary && "⭐ (Primary)"}
                                             </p>

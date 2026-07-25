@@ -202,9 +202,11 @@ const TenantDeposits = () => {
 
   const isLandlordWorkspace = useMemo(() => isSelfManagingLandlordCompany(currentCompany || null), [currentCompany]);
   const holderColumnLabel = isLandlordWorkspace ? "Owner / Landlord" : "Deposit Holder";
-  const canCreateInvoice = hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "create", "propertyManagement");
-  const canDeleteInvoice = hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "delete", "propertyManagement");
-  const canExportInvoice = hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "export", "propertyManagement");
+  const { canCreateInvoice, canDeleteInvoice, canExportInvoice } = useMemo(() => ({
+    canCreateInvoice: hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "create", "propertyManagement"),
+    canDeleteInvoice: hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "delete", "propertyManagement"),
+    canExportInvoice: hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "export", "propertyManagement"),
+  }), [currentUser, currentCompany]);
 
   const storedSettings = useSelector(selectCompanySettings);
   const [depositInvoices, setDepositInvoices] = useState([]);
@@ -458,7 +460,7 @@ const TenantDeposits = () => {
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
   const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, filteredRows.length);
-  const currentPageRows = filteredRows.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  const currentPageRows = filteredRows.slice(startIndex, endIndex);
   const selectedCount = selectedInvoices.length;
 
   useEffect(() => {
@@ -645,11 +647,7 @@ const TenantDeposits = () => {
 
     setDeleting(true);
     try {
-      for (const row of selectedRows) {
-        if (row.invoiceId) {
-          await deleteTenantInvoice(row.invoiceId);
-        }
-      }
+      await Promise.all(selectedRows.filter((row) => row.invoiceId).map((row) => deleteTenantInvoice(row.invoiceId)));
       toast.success("Selected deposit invoice(s) deleted successfully.");
       setSelectedInvoices([]);
       await loadDepositInvoices();

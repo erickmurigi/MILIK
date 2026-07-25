@@ -159,16 +159,17 @@ const buildAgreementNumber = async (businessId) => {
 };
 
 const ensureTenantAndUnitMatchBusiness = async ({ businessId, tenantId, unitId } = {}) => {
-  const tenant = await Tenant.findOne({ _id: tenantId, business: businessId })
-    .populate("unit", "_id property")
-    .lean();
+  const [tenant, unit] = await Promise.all([
+    Tenant.findOne({ _id: tenantId, business: businessId })
+      .populate("unit", "_id property")
+      .lean(),
+    Unit.findOne({ _id: unitId, business: businessId })
+      .populate("property", "landlords propertyName propertyCode name")
+      .lean(),
+  ]);
   if (!tenant) {
     return { error: "Tenant not found for the selected company." };
   }
-
-  const unit = await Unit.findOne({ _id: unitId, business: businessId })
-    .populate("property", "landlords propertyName propertyCode name")
-    .lean();
   if (!unit) {
     return { error: "Unit not found for the selected company." };
   }
@@ -331,7 +332,7 @@ export const createLease = async (req, res, next) => {
     const payload = await sanitizeLeasePayload({ req, payload: req.body || {} });
     const newLease = new Lease(payload);
     const savedDoc = await newLease.save();
-    const savedLease = await populateLeaseQuery(Lease.findById(savedDoc._id));
+    const savedLease = await populateLeaseQuery(Lease.findById(savedDoc._id)).lean();
 
     emitToCompany(payload.business, "lease:new", savedLease);
     return res.status(201).json(savedLease);
@@ -354,7 +355,7 @@ export const getLeases = async (req, res, next) => {
       filter.unit = { $in: propertyUnits.map((item) => item._id) };
     }
 
-    const leases = await populateLeaseQuery(Lease.find(filter).sort({ startDate: -1, createdAt: -1 }));
+    const leases = await populateLeaseQuery(Lease.find(filter).sort({ startDate: -1, createdAt: -1 }).limit(2000)).lean();
     return res.status(200).json(leases);
   } catch (err) {
     next(err);
@@ -365,7 +366,7 @@ export const getLease = async (req, res, next) => {
   try {
     const business = resolveBusinessId(req);
     const filter = business ? { _id: req.params.id, business } : { _id: req.params.id };
-    const lease = await populateLeaseQuery(Lease.findOne(filter));
+    const lease = await populateLeaseQuery(Lease.findOne(filter)).lean();
 
     if (!lease) return res.status(404).json({ message: "Lease not found" });
     return res.status(200).json(lease);
@@ -377,7 +378,7 @@ export const getLease = async (req, res, next) => {
 export const updateLease = async (req, res, next) => {
   try {
     const business = resolveBusinessId(req);
-    const existingLease = await Lease.findOne(business ? { _id: req.params.id, business } : { _id: req.params.id });
+    const existingLease = await Lease.findOne(business ? { _id: req.params.id, business } : { _id: req.params.id }).lean();
 
     if (!existingLease) {
       return res.status(404).json({ message: "Lease not found" });
@@ -386,7 +387,7 @@ export const updateLease = async (req, res, next) => {
     const updateData = await sanitizeLeasePayload({ req, payload: req.body || {}, existingLease });
     const updatedLease = await populateLeaseQuery(
       Lease.findByIdAndUpdate(existingLease._id, { $set: updateData }, { new: true, runValidators: true })
-    );
+    ).lean();
 
     emitToCompany(updatedLease.business, "lease:updated", updatedLease);
     return res.status(200).json(updatedLease);
@@ -398,7 +399,7 @@ export const updateLease = async (req, res, next) => {
 export const updateLeaseReviews = async (req, res, next) => {
   try {
     const business = resolveBusinessId(req);
-    const lease = await Lease.findOne(business ? { _id: req.params.id, business } : { _id: req.params.id });
+    const lease = await Lease.findOne(business ? { _id: req.params.id, business } : { _id: req.params.id }).lean();
     if (!lease) return res.status(404).json({ message: "Lease not found" });
 
     const updates = {};
@@ -414,7 +415,7 @@ export const updateLeaseReviews = async (req, res, next) => {
 
     const updated = await populateLeaseQuery(
       Lease.findByIdAndUpdate(lease._id, { $set: updates }, { new: true, runValidators: true })
-    );
+    ).lean();
     emitToCompany(updated.business, "lease:updated", updated);
     return res.status(200).json(updated);
   } catch (err) {
@@ -472,7 +473,7 @@ export const deleteLease = async (req, res, next) => {
 export const signLease = async (req, res, next) => {
   try {
     const business = resolveBusinessId(req);
-    const lease = await Lease.findOne(business ? { _id: req.params.id, business } : { _id: req.params.id });
+    const lease = await Lease.findOne(business ? { _id: req.params.id, business } : { _id: req.params.id }).lean();
 
     if (!lease) return res.status(404).json({ message: "Lease not found" });
 
@@ -504,7 +505,7 @@ export const signLease = async (req, res, next) => {
 
     const updatedLease = await populateLeaseQuery(
       Lease.findByIdAndUpdate(lease._id, { $set: updateData }, { new: true, runValidators: true })
-    );
+    ).lean();
 
     emitToCompany(updatedLease.business, "lease:updated", updatedLease);
     return res.status(200).json(updatedLease);
@@ -525,8 +526,8 @@ export const getExpiringLeases = async (req, res, next) => {
         business,
         status: "active",
         endDate: { $gte: today, $lte: futureDate },
-      }).sort({ endDate: 1 })
-    );
+      }).sort({ endDate: 1 }).limit(1000)
+    ).lean();
 
     return res.status(200).json(leases);
   } catch (err) {
@@ -572,7 +573,7 @@ export const generateLeaseDocument = async (req, res, next) => {
         { $set: { documentUrl, documentName } },
         { new: true, runValidators: true }
       )
-    );
+    ).lean();
 
     emitToCompany(String(lease.business?._id || lease.business || ""), "lease:updated", updated);
     return res.status(200).json(updated);
@@ -584,7 +585,7 @@ export const generateLeaseDocument = async (req, res, next) => {
 export const renewLease = async (req, res, next) => {
   try {
     const business = resolveBusinessId(req);
-    const lease = await Lease.findOne(business ? { _id: req.params.id, business } : { _id: req.params.id });
+    const lease = await Lease.findOne(business ? { _id: req.params.id, business } : { _id: req.params.id }).lean();
 
     if (!lease) return res.status(404).json({ message: "Lease not found" });
 
@@ -629,7 +630,7 @@ export const renewLease = async (req, res, next) => {
 
     const renewedLease = new Lease(renewalPayload);
     const savedDoc = await renewedLease.save();
-    const savedLease = await populateLeaseQuery(Lease.findById(savedDoc._id));
+    const savedLease = await populateLeaseQuery(Lease.findById(savedDoc._id)).lean();
 
     emitToCompany(savedLease.business, "lease:new", savedLease);
     return res.status(200).json(savedLease);

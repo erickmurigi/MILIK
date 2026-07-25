@@ -970,6 +970,8 @@ function areEqual(prev, next) {
 
 const InvoiceTableRow = React.memo(InvoiceTableRowBase, areEqual);
 
+const EMPTY_ARRAY = [];
+
 const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   const { id: tenantId } = useParams();
   const location = useLocation();
@@ -1015,9 +1017,10 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   const [singleBookingPropertyFilter, setSingleBookingPropertyFilter] = useState("all");
   const [singleBookingTenantSearch, setSingleBookingTenantSearch] = useState("");
   const [singleBookingTenantDropdownOpen, setSingleBookingTenantDropdownOpen] = useState(false);
-  const currentDate = new Date();
-  const currentBookingMonth = currentDate.getMonth();
-  const currentBookingYear = currentDate.getFullYear();
+  const { currentBookingMonth, currentBookingYear } = useMemo(() => {
+    const d = new Date();
+    return { currentBookingMonth: d.getMonth(), currentBookingYear: d.getFullYear() };
+  }, []);
 
   const [singleBookingForm, setSingleBookingForm] = useState({
     tenantId: tenantId || "",
@@ -1047,10 +1050,12 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
 
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
-  const canCreateInvoice = hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "create", "propertyManagement");
-  const canUpdateInvoice = hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "update", "propertyManagement");
-  const canDeleteInvoice = hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "delete", "propertyManagement");
-  const canExportInvoice = hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "export", "propertyManagement");
+  const { canCreateInvoice, canUpdateInvoice, canDeleteInvoice, canExportInvoice } = useMemo(() => ({
+    canCreateInvoice: hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "create", "propertyManagement"),
+    canUpdateInvoice: hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "update", "propertyManagement"),
+    canDeleteInvoice: hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "delete", "propertyManagement"),
+    canExportInvoice: hasCompanyPermission(currentUser || {}, currentCompany, "tenantInvoices", "export", "propertyManagement"),
+  }), [currentUser, currentCompany]);
   const rawTenantsFromStore = useSelector(selectAllTenants);
   const propertiesFromStore = useSelector(selectAllProperties);
   const unitsFromStore = useSelector(selectAllUnits);
@@ -1058,7 +1063,7 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   const { propertiesLoaded, unitsLoaded, tenantsLoaded } = useEntityCache(currentCompany?._id);
   const storedSettings = useSelector(selectCompanySettings);
   const companyTaxConfig = storedSettings || null;
-  const companyBillingPeriods = Array.isArray(storedSettings?.billingPeriods) ? storedSettings.billingPeriods : [];
+  const companyBillingPeriods = Array.isArray(storedSettings?.billingPeriods) ? storedSettings.billingPeriods : EMPTY_ARRAY;
   const [leases, setLeases] = useState([]);
 
   const normalizedTaxConfig = useMemo(
@@ -1089,14 +1094,14 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
       });
   }, [companyBillingPeriods]);
 
-  const resolveBillingPeriodDefinition = (billingPeriodKey = "monthly") => {
+  const resolveBillingPeriodDefinition = useCallback((billingPeriodKey = "monthly") => {
     const normalizedKey = canonicalBillingPeriodKey(billingPeriodKey);
     return (
       normalizedBillingPeriods.find((item) => item.key === normalizedKey) ||
       normalizedBillingPeriods.find((item) => item.key === "monthly") ||
       { key: "monthly", name: "Monthly", durationInMonths: 1, isActive: true }
     );
-  };
+  }, [normalizedBillingPeriods]);
 
   const leaseLookup = useMemo(() => {
     const byTenant = new Map();
@@ -1303,7 +1308,7 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
     return () => {
       isMounted = false;
     };
-  }, [currentCompany?._id, refreshTick]);
+  }, [currentCompany?._id]);
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -1451,7 +1456,7 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   }, [unitsFromStore]);
 
 
-const getAssignedUnitContexts = (tenant) => {
+const getAssignedUnitContexts = useCallback((tenant) => {
   const rawUnits = [tenant?.unit, ...(Array.isArray(tenant?.additionalUnits) ? tenant.additionalUnits : [])]
     .filter(Boolean)
     .map((unitRef) => {
@@ -1475,10 +1480,10 @@ const getAssignedUnitContexts = (tenant) => {
     rentAmount: Number(unit?.rent || unit?.monthlyRent || 0) || 0,
     utilityRows: Array.isArray(unit?.utilities) ? unit.utilities : [],
   }));
-};
+}, [unitLookupById]);
 
 
-const getTenantPricing = (tenant) => {
+const getTenantPricing = useCallback((tenant) => {
   const assignedUnitContexts = getAssignedUnitContexts(tenant);
   if (!assignedUnitContexts.length) {
     return {
@@ -1530,11 +1535,9 @@ const getTenantPricing = (tenant) => {
     total: rentAmount + utilityAmount,
     unitContexts,
   };
-};
+}, [getAssignedUnitContexts]);
 
-
-
-const getTenantPricingForBookingPeriod = (tenant, month, year) => {
+const getTenantPricingForBookingPeriod = useCallback((tenant, month, year) => {
   const pricing = getTenantPricing(tenant);
   const scheduleAwareUnitContexts = pricing.unitContexts
     .map((context) => {
@@ -1573,18 +1576,16 @@ const getTenantPricingForBookingPeriod = (tenant, month, year) => {
     total: rentAmount + utilityAmount,
     unitContexts: scheduleAwareUnitContexts,
   };
-};
+}, [getTenantPricing]);
 
-const getTenantPropertyId = (tenant) => {
+const getTenantPropertyId = useCallback((tenant) => {
     const directPropertyId = tenant?.property?._id || tenant?.property;
     if (directPropertyId) return directPropertyId;
 
-    const tenantUnitId = tenant?.unit?._id || tenant?.unit;
-    const matchedUnit = unitsFromStore.find(
-      (unit) => String(unit?._id) === String(tenantUnitId)
-    );
+    const tenantUnitId = String(tenant?.unit?._id || tenant?.unit || "");
+    const matchedUnit = unitLookupById.get(tenantUnitId);
     return matchedUnit?.property?._id || matchedUnit?.property || null;
-  };
+  }, [unitLookupById]);
 
   const activeProperties = useMemo(() => {
     return propertiesFromStore.filter((property) => {

@@ -179,21 +179,21 @@ const validateJournalPayload = async ({ businessId, payload = {} }) => {
       ? true
       : Boolean(payload?.includeInLandlordStatement);
 
-  const resolvedLandlordId = await resolveJournalLandlordId({
-    businessId,
-    payload: {
-      ...payload,
-      journalType,
-      includeInLandlordStatement: normalizedIncludeInStatement,
-    },
-  });
-
-  const [debitAccount, creditAccount] = await Promise.all([
-    ensurePostingAccount({ businessId, accountId: payload.debitAccount, label: "Debit" }),
-    ensurePostingAccount({ businessId, accountId: payload.creditAccount, label: "Credit" }),
+  const [resolvedLandlordId, [debitAccount, creditAccount], landlordPayableAccount] = await Promise.all([
+    resolveJournalLandlordId({
+      businessId,
+      payload: {
+        ...payload,
+        journalType,
+        includeInLandlordStatement: normalizedIncludeInStatement,
+      },
+    }),
+    Promise.all([
+      ensurePostingAccount({ businessId, accountId: payload.debitAccount, label: "Debit" }),
+      ensurePostingAccount({ businessId, accountId: payload.creditAccount, label: "Credit" }),
+    ]),
+    resolveLandlordRemittancePayableAccount(businessId).catch(() => null),
   ]);
-
-  const landlordPayableAccount = await resolveLandlordRemittancePayableAccount(businessId).catch(() => null);
   const debitTouchesLandlordPayable = landlordPayableAccount?._id
     ? sameId(payload.debitAccount, landlordPayableAccount._id)
     : false;
@@ -402,13 +402,6 @@ const postJournalToLedger = async ({ journal, actorUserId }) => {
     || await derivePropertyFromAccounts(journal.business, journal.debitAccount, journal.creditAccount);
 
   const isCompanyJournal = COMPANY_ONLY_JOURNAL_TYPES.has(String(journal.journalType || "")) || !resolvedPropertyId;
-  const accountingContext = isCompanyJournal
-    ? { businessId: String(journal.business), propertyId: null, landlordId: null }
-    : await resolvePropertyAccountingContext({
-        propertyId: resolvedPropertyId,
-        landlordId: journal.landlord || null,
-        businessId: journal.business,
-      });
 
   const amount = Math.abs(Number(journal.amount || 0));
   const date = normalizeDate(journal.date || new Date());
@@ -416,7 +409,16 @@ const postJournalToLedger = async ({ journal, actorUserId }) => {
   const journalGroupId = new mongoose.Types.ObjectId();
   const narration = String(journal.narration || journal.reference || `Journal ${journal.journalNo}`).trim();
 
-  const landlordPayableAccount = await resolveLandlordRemittancePayableAccount(journal.business).catch(() => null);
+  const [accountingContext, landlordPayableAccount] = await Promise.all([
+    isCompanyJournal
+      ? Promise.resolve({ businessId: String(journal.business), propertyId: null, landlordId: null })
+      : resolvePropertyAccountingContext({
+          propertyId: resolvedPropertyId,
+          landlordId: journal.landlord || null,
+          businessId: journal.business,
+        }),
+    resolveLandlordRemittancePayableAccount(journal.business).catch(() => null),
+  ]);
   const statementPostingConfig = resolveStatementPostingConfig({
     journal,
     landlordPayableAccountId: landlordPayableAccount?._id || null,
@@ -502,16 +504,13 @@ export const createJournalEntry = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "User must have a company context" });
     }
 
-    const actorUserId = await resolveActorUserId(req, businessId);
-
     const normalizedPayload = normalizeJournalPayload(req.body || {});
 
-    const { resolvedLandlordId, normalizedIncludeInStatement } = await validateJournalPayload({
-      businessId,
-      payload: normalizedPayload,
-    });
-
-    const journalNo = await generateJournalNo(businessId);
+    const [actorUserId, { resolvedLandlordId, normalizedIncludeInStatement }, journalNo] = await Promise.all([
+      resolveActorUserId(req, businessId),
+      validateJournalPayload({ businessId, payload: normalizedPayload }),
+      generateJournalNo(businessId),
+    ]);
 
     // Derive property from selected accounts when not explicitly provided
     const derivedProperty = normalizedPayload.property

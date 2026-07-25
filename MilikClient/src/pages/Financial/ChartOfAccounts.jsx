@@ -108,9 +108,11 @@ const ChartOfAccounts = () => {
 
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser    = useSelector(selectCurrentUser);
-  const canCreateCOA   = hasCompanyPermission(currentUser, currentCompany, "chartOfAccounts", "create", "accounts");
-  const canUpdateCOA   = hasCompanyPermission(currentUser, currentCompany, "chartOfAccounts", "update", "accounts");
-  const canDeleteCOA   = hasCompanyPermission(currentUser, currentCompany, "chartOfAccounts", "delete", "accounts");
+  const { canCreateCOA, canUpdateCOA, canDeleteCOA } = useMemo(() => ({
+    canCreateCOA: hasCompanyPermission(currentUser, currentCompany, "chartOfAccounts", "create", "accounts"),
+    canUpdateCOA: hasCompanyPermission(currentUser, currentCompany, "chartOfAccounts", "update", "accounts"),
+    canDeleteCOA: hasCompanyPermission(currentUser, currentCompany, "chartOfAccounts", "delete", "accounts"),
+  }), [currentUser, currentCompany]);
 
   const [accounts,            setAccounts]          = useState([]);
   const [search,              setSearch]            = useTabState(`${activityBase}:search`, "");
@@ -195,7 +197,7 @@ const ChartOfAccounts = () => {
     const handleRefresh = () => loadAccounts();
     window.addEventListener("invoicesUpdated", handleRefresh);
     return () => window.removeEventListener("invoicesUpdated", handleRefresh);
-  }, [businessId]);
+  }, [businessId, loadAccounts]);
 
   // ── Filtering ──
   const normalizedSearch = search.trim().toLowerCase();
@@ -246,6 +248,11 @@ const ChartOfAccounts = () => {
   const parentOptions = useMemo(() =>
     accounts.slice().sort((a, b) => String(a.code || "").localeCompare(String(b.code || ""))),
     [accounts]
+  );
+
+  const filteredParentOptions = useMemo(
+    () => parentOptions.filter((a) => a._id !== editingAccountId).map((a) => ({ value: a._id, label: `${a.code} — ${a.name}` })),
+    [parentOptions, editingAccountId]
   );
 
   const parentAccountForForm = useMemo(() =>
@@ -793,7 +800,7 @@ const ChartOfAccounts = () => {
                     <AppSelect
                       value={formData.parentAccount}
                       onChange={(v) => handleParentChange(v ?? "")}
-                      options={parentOptions.filter((a) => a._id !== editingAccountId).map((a) => ({ value: a._id, label: `${a.code} — ${a.name}` }))}
+                      options={filteredParentOptions}
                       placeholder="None"
                       searchable
                       clearable

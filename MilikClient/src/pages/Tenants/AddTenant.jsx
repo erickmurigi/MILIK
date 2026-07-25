@@ -344,6 +344,8 @@ function MilikSelect({
   );
 }
 
+const DUPLICATE_CHECK_FIELDS = new Set(["tenantCode", "name", "idNumber", "emergencyContactName"]);
+
 const AddTenant = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -354,9 +356,14 @@ const AddTenant = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
   const { propertiesLoaded, unitsLoaded } = useEntityCache(currentCompany?._id);
-  const canSaveTenant = isEditMode
-    ? hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "update", "propertyManagement")
-    : hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "create", "propertyManagement");
+  const { canSaveTenant } = useMemo(
+    () => ({
+      canSaveTenant: isEditMode
+        ? hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "update", "propertyManagement")
+        : hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "create", "propertyManagement"),
+    }),
+    [currentUser, currentCompany, isEditMode]
+  );
   const isSelfManagingLandlordMode = useMemo(
     () => isSelfManagingLandlordCompany(currentCompany || currentUser?.company || null),
     [currentCompany, currentUser?.company]
@@ -412,9 +419,12 @@ const AddTenant = () => {
   const [tenantLoading, setTenantLoading] = useState(false);
   const [openingInvoiceMode, setOpeningInvoiceMode] = useState("separate");
   const storedSettings = useSelector(selectCompanySettings);
-  const utilityOptions = Array.from(new Set(
-    (storedSettings?.utilityTypes || []).filter((item) => item?.isActive !== false && item?.name).map((item) => String(item.name))
-  ));
+  const utilityOptions = useMemo(
+    () => Array.from(new Set(
+      (storedSettings?.utilityTypes || []).filter((item) => item?.isActive !== false && item?.name).map((item) => String(item.name))
+    )),
+    [storedSettings?.utilityTypes]
+  );
   const draftStorageKey = currentCompany?._id ? `milik:new-tenant-draft:${currentCompany._id}:${currentUser?._id || currentUser?.id || currentUser?.email || "user"}` : null;
   const draftRestoredRef = useRef(false);
   const submittingRef = useRef(false);
@@ -432,7 +442,7 @@ const AddTenant = () => {
       if (!unitsLoaded) dispatch(getUnits({ business: currentCompany._id }));
       dispatch(fetchCompanySettings(currentCompany._id));
     }
-  }, [dispatch, currentCompany]);
+  }, [dispatch, currentCompany?._id]);
 
   useEffect(() => {
     if (utilityActionAppliedRef.current) return;
@@ -1056,7 +1066,7 @@ useEffect(() => {
 
   const labelClass = "mb-0.5 block text-xs font-semibold text-slate-700";
 
-  const uppercaseTenantFields = new Set(["tenantCode", "name", "idNumber", "emergencyContactName"]);
+  const uppercaseTenantFields = DUPLICATE_CHECK_FIELDS;
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -1094,7 +1104,12 @@ useEffect(() => {
     };
   };
 
-  const proratedInfo = calculateProratedRent();
+  const proratedInfo = useMemo(() => calculateProratedRent(), [formData.moveInDate, formData.rent]);
+
+  const fullUtilityOptions = useMemo(
+    () => Array.from(new Set([...utilityOptions, "Water", "Garbage", "Electricity", "Service Charge", "Security", "Others"])),
+    [utilityOptions]
+  );
 
   const addAdditionalUtility = () => {
     setAdditionalUtilities((prev) => [
@@ -1367,9 +1382,7 @@ if (Number(depositItem?.amount || 0) > 0) {
   });
 }
 
-for (const request of invoiceRequests) {
-  await createTenantInvoice(request);
-}
+await Promise.all(invoiceRequests.map((req) => createTenantInvoice(req)));
 
       toast.success("Tenant saved and opening invoice(s) created successfully.");
       setShowInvoicePrompt(false);
@@ -1786,7 +1799,7 @@ for (const request of invoiceRequests) {
                             {combinedUtilitiesPreview.map((util, idx) => {
                               const charge = parseFloat(util.unitCharge) || 0;
                               return (
-                                <div key={idx} className="text-xs flex justify-between items-center">
+                                <div key={util.utility || util.utilityLabel || idx} className="text-xs flex justify-between items-center">
                                   <span className="text-green-700 font-medium">
                                     {util.utilityLabel}:
                                   </span>
@@ -2012,14 +2025,14 @@ for (const request of invoiceRequests) {
                     <div className="space-y-3">
                       {additionalUtilities.map((util, idx) => (
                         <div
-                          key={idx}
+                          key={util.utility || idx}
                           className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end p-4 bg-white border border-indigo-200 rounded-lg hover:shadow-md transition-shadow"
                         >
                           <div>
                             <MilikSelect
                               label="Utility Type"
                               placeholder="Select"
-                              items={Array.from(new Set([...utilityOptions, "Water", "Garbage", "Electricity", "Service Charge", "Security", "Others"]))}
+                              items={fullUtilityOptions}
                               value={util.utility}
                               onChange={(val) => updateAdditionalUtility(idx, "utility", val)}
                               getLabel={(x) => x}

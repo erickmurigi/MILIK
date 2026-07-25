@@ -115,7 +115,7 @@ const generateVoucherNo = async (businessId) => {
     { business: businessId, voucherNo: { $regex: `^${prefix}\\d+$` } },
     { voucherNo: 1 },
     { sort: { createdAt: -1 } }
-  );
+  ).lean();
 
   let seq = 1;
   if (lastVoucher?.voucherNo) {
@@ -846,22 +846,22 @@ const ensureVoucherSettlementPosting = async ({ voucher, actorUserId, paidDate =
     };
   }
 
-  const liabilityAccount = await ensureLiabilityAccount({
-    businessId: voucher.business,
-    liabilityAccountId: voucher.liabilityAccount,
-  });
-
-  const settlementAccount = await ensureSettlementAccount({
-    businessId: voucher.business,
-    settlementAccountId: voucher.settlementAccount,
-  });
-
-  const accountingContext = await resolveVoucherLandlordContext({
-    propertyId: voucher.property || null,
-    landlordId: voucher.landlord || null,
-    businessId: voucher.business,
-    voucherCategory: voucher.category,
-  });
+  const [liabilityAccount, settlementAccount, accountingContext] = await Promise.all([
+    ensureLiabilityAccount({
+      businessId: voucher.business,
+      liabilityAccountId: voucher.liabilityAccount,
+    }),
+    ensureSettlementAccount({
+      businessId: voucher.business,
+      settlementAccountId: voucher.settlementAccount,
+    }),
+    resolveVoucherLandlordContext({
+      propertyId: voucher.property || null,
+      landlordId: voucher.landlord || null,
+      businessId: voucher.business,
+      voucherCategory: voucher.category,
+    }),
+  ]);
 
   const txDate = normalizeDate(paidDate || voucher.paidDate || voucher.paidAt || new Date());
   const { start, end } = buildStatementPeriod(txDate);
@@ -1073,7 +1073,7 @@ export const createPaymentVoucher = async (req, res, next) => {
     }
 
     emitToCompany(businessId, "voucher:new", { voucherId: voucher._id });
-    const populated = await populateVoucherQuery(PaymentVoucher.findById(voucher._id));
+    const populated = await populateVoucherQuery(PaymentVoucher.findById(voucher._id)).lean();
     res.status(201).json(populated);
   } catch (err) {
     next(err);
@@ -1168,7 +1168,7 @@ export const updatePaymentVoucher = async (req, res, next) => {
       payload.landlord = null;
     }
 
-    const existing = await PaymentVoucher.findOne({ _id: req.params.id, business });
+    const existing = await PaymentVoucher.findOne({ _id: req.params.id, business }).lean();
     if (!existing) return res.status(404).json({ message: "Payment voucher not found" });
 
     if (existing.status !== "draft") {
@@ -1227,7 +1227,7 @@ export const updatePaymentVoucher = async (req, res, next) => {
         { $set: payload },
         { new: true }
       )
-    );
+    ).lean();
 
     if (sourceRequisition) {
       const actorUserId = await resolveActorUserId(req, business);
@@ -1350,7 +1350,7 @@ export const updatePaymentVoucherStatus = async (req, res, next) => {
     await voucher.save();
     await syncLinkedProcessedStatementForVoucher({ voucher, businessId: business });
 
-    const updated = await populateVoucherQuery(PaymentVoucher.findById(voucher._id));
+    const updated = await populateVoucherQuery(PaymentVoucher.findById(voucher._id)).lean();
 
     emitToCompany(updated.business, "voucher:status", {
       voucherId: updated._id,

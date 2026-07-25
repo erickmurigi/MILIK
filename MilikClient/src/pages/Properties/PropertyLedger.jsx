@@ -84,7 +84,7 @@ const THead = ({ cols }) => (
   <thead>
     <tr style={{ backgroundColor: GRN }}>
       {cols.map((c, i) => (
-        <th key={i} className={`px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white ${c.right ? "text-right" : "text-left"}`}>
+        <th key={c.label || i} className={`px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white ${c.right ? "text-right" : "text-left"}`}>
           {c.label}
         </th>
       ))}
@@ -251,7 +251,7 @@ const TrialBalanceTab = ({ propertyId, asOfDate }) => {
         <THead cols={[{ label: "Code" }, { label: "Account" }, { label: "Type" }, { label: "Debit Balance", right: true }, { label: "Credit Balance", right: true }]} />
         <tbody>
           {rows.map((row, i) => (
-            <tr key={i} className="border-b border-slate-50 hover:bg-slate-50/80">
+            <tr key={row.code || row._id || i} className="border-b border-slate-50 hover:bg-slate-50/80">
               <td className="px-3 py-1.5 font-mono text-[9px] text-slate-400">{row.code}</td>
               <td className="px-3 py-1.5 text-slate-700">{row.name}</td>
               <td className="px-3 py-1.5 text-slate-500">{row.accountType}</td>
@@ -310,7 +310,7 @@ const IncomeStatementTab = ({ propertyId, startDate, endDate }) => {
         {rows.length === 0
           ? <tr><td colSpan={3} className="px-3 py-3 text-center text-xs text-slate-400">No entries</td></tr>
           : rows.map((r, i) => (
-            <tr key={i} className="border-b border-slate-50 hover:bg-slate-50/80">
+            <tr key={r.code || r._id || i} className="border-b border-slate-50 hover:bg-slate-50/80">
               <td className="px-3 py-1.5 font-mono text-[9px] text-slate-400">{r.code}</td>
               <td className="px-3 py-1.5 text-slate-700">{r.name}</td>
               <td className="px-3 py-1.5 text-right font-mono text-slate-800">KES {fmt(r.amount)}</td>
@@ -367,7 +367,7 @@ const BalanceSheetTab = ({ propertyId, asOfDate }) => {
         {rows.length === 0
           ? <tr><td colSpan={3} className="px-3 py-3 text-center text-xs text-slate-400">No entries</td></tr>
           : rows.map((r, i) => (
-            <tr key={i} className="border-b border-slate-50 hover:bg-slate-50/80">
+            <tr key={r.code || r._id || i} className="border-b border-slate-50 hover:bg-slate-50/80">
               <td className="px-3 py-1.5 font-mono text-[9px] text-slate-400">{r.code}</td>
               <td className="px-3 py-1.5 text-slate-700">{r.name}</td>
               <td className="px-3 py-1.5 text-right font-mono text-slate-800">KES {fmt(r.amount)}</td>
@@ -432,7 +432,7 @@ const JournalsTab = ({ propertyId, startDate, endDate }) => {
           <tbody>
             {entries.map((entry, i) =>
               (entry.lines || []).map((line, li) => (
-                <tr key={`${i}-${li}`} className={`border-b border-slate-50 hover:bg-slate-50/80 ${li === 0 && i > 0 ? "border-t border-slate-100" : ""}`}>
+                <tr key={`${entry._id || i}-${li}`} className={`border-b border-slate-50 hover:bg-slate-50/80 ${li === 0 && i > 0 ? "border-t border-slate-100" : ""}`}>
                   <td className="px-3 py-1.5 text-slate-500">{li === 0 ? fmtDate(entry.date) : ""}</td>
                   <td className="px-3 py-1.5 text-slate-700">
                     <span className="mr-1.5 font-mono text-[9px] text-slate-400">{line.account?.code}</span>
@@ -472,8 +472,6 @@ const PropertyLedger = () => {
 
   const [activeTab, setActiveTab] = useTabState(`${location.pathname}:activeTab`, "overview");
   const [dates, setDates] = useTabState(`${location.pathname}:dates`, () => ({ startDate: firstOfMonth(), endDate: today(), asOfDate: today() }));
-
-  const businessId = useMemo(() => businessIdFromState(currentCompany, currentUser), [currentCompany, currentUser]);
 
   useEffect(() => { dispatch(getPropertyById(id)); }, [dispatch, id]);
 

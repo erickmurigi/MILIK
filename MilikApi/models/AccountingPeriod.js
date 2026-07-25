@@ -6,7 +6,6 @@ const AccountingPeriodSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Company",
       required: true,
-      index: true,
     },
 
     name: {
@@ -33,7 +32,6 @@ const AccountingPeriodSchema = new mongoose.Schema(
       type: String,
       enum: ["open", "closed", "locked"],
       default: "open",
-      index: true,
     },
 
     closedBy: {
@@ -92,6 +90,6 @@ const AccountingPeriodSchema = new mongoose.Schema(
 
 // Prevent overlapping periods for the same business
 AccountingPeriodSchema.index({ business: 1, startDate: 1, endDate: 1 });
-AccountingPeriodSchema.index({ business: 1, status: 1 });
+AccountingPeriodSchema.index({ business: 1, status: 1, startDate: 1, endDate: 1 });
 
 export default mongoose.model("AccountingPeriod", AccountingPeriodSchema);

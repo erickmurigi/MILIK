@@ -1236,8 +1236,11 @@ export const createRentPayment = async (dispatch, paymentData) => {
   }
 };
 
-export const getReceiptAllocationOptions = async (id) => {
-  const res = await adminRequests.get(`/rent-payments/${id}/allocation-options`);
+export const getReceiptAllocationOptions = async (id, { adminOverride = false } = {}) => {
+  const url = adminOverride
+    ? `/rent-payments/${id}/allocation-options?adminOverride=true`
+    : `/rent-payments/${id}/allocation-options`;
+  const res = await adminRequests.get(url);
   return res?.data?.data || res?.data || {};
 };
 

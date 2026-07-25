@@ -153,7 +153,7 @@ const TenantAgreements = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
-  const queryTenantId = new URLSearchParams(location.search).get("tenant") || "";
+  const queryTenantId = useMemo(() => new URLSearchParams(location.search).get("tenant") || "", [location.search]);
 
   const currentCompany = useSelector(selectCurrentCompany);
   const leases = useSelector(selectAllLeases);
@@ -218,6 +218,13 @@ const TenantAgreements = () => {
     });
     return map;
   }, [tenants]);
+
+  const tenantSelectOptions = useMemo(
+    () => (Array.isArray(tenants) ? tenants : []).filter((t) => includeTerminatedTenants || isActiveTenant(t)).map((t) => (
+      <option key={t._id} value={t._id}>{t.name} {t.tenantCode ? `(${t.tenantCode})` : ""}</option>
+    )),
+    [tenants, includeTerminatedTenants]
+  );
 
   const unitsById = useMemo(() => {
     const map = new Map();
@@ -363,6 +370,7 @@ const TenantAgreements = () => {
   }, [filteredRows]);
 
   const totalPages = Math.max(1, Math.ceil(sortedFilteredRows.length / ITEMS_PER_PAGE));
+  const pageNumbers = useMemo(() => [...Array(totalPages)].map((_, i) => i + 1), [totalPages]);
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
   const endIndex = startIndex + ITEMS_PER_PAGE;
@@ -937,8 +945,7 @@ const TenantAgreements = () => {
                   <FaChevronLeft size={12} />
                 </button>
                 <div className="flex items-center gap-0.5">
-                  {[...Array(totalPages)].map((_, i) => {
-                    const page = i + 1;
+                  {pageNumbers.map((page) => {
                     if (page === 1 || page === totalPages || (page >= safeCurrentPage - 1 && page <= safeCurrentPage + 1)) {
                       return (
                         <button
@@ -975,7 +982,7 @@ const TenantAgreements = () => {
               <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
                 <h2 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
                   <FaEdit size={13} />
-                  {form._id ? "Edit Agreement" : "Edit Agreement"}
+                  {form._id ? "Edit Agreement" : "New Agreement"}
                 </h2>
                 <button onClick={closeModal} className="text-white/70 transition-colors hover:text-white">
                   <FaTimes size={18} />
@@ -990,9 +997,7 @@ const TenantAgreements = () => {
                         <>
                           <select value={form.tenant} onChange={(e) => handleTenantChange(e.target.value)} className="w-full border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none focus:border-[#0B3B2E]">
                             <option value="">Select tenant</option>
-                            {(Array.isArray(tenants) ? tenants : []).filter((t) => includeTerminatedTenants || isActiveTenant(t)).map((t) => (
-                              <option key={t._id} value={t._id}>{t.name} {t.tenantCode ? `(${t.tenantCode})` : ""}</option>
-                            ))}
+                            {tenantSelectOptions}
                           </select>
                           <label className="mt-1.5 inline-flex cursor-pointer items-center gap-2 text-[10px] text-slate-500">
                             <input type="checkbox" checked={includeTerminatedTenants} onChange={(e) => setIncludeTerminatedTenants(e.target.checked)} className="border-slate-300" />

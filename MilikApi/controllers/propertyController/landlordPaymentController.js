@@ -249,7 +249,7 @@ const postPayableCreationIfMissing = async ({ statement, actorUserId, transactio
 
 export const listLandlordPayments = async (req, res, next) => {
   try {
-    const businessId = resolveBusinessId(req);
+    const businessId = await resolveBusinessId(req);
     const { landlordId, landlord: landlordQ, page: pageQ, limit: limitQ } = req.query;
     const page = Math.max(Number(pageQ || 1), 1);
     const limit = Math.min(Math.max(Number(limitQ || 50), 1), 200);
@@ -293,6 +293,7 @@ const findAccountLinkedCommissionAccrualEntries = async (statement) => {
     "metadata.postingKind": "commission_accrual",
   })
     .select("_id accountId")
+    .limit(20)
     .lean();
 };
 
@@ -558,7 +559,7 @@ export const payLandlord = async (req, res, next) => {
         { business: bizId, voucherNo: { $regex: `^${prefix}\\d+$` } },
         { voucherNo: 1 },
         { sort: { createdAt: -1 } }
-      );
+      ).lean();
 
       let seq = 1;
       if (lastVoucher?.voucherNo) {
@@ -927,13 +928,12 @@ export const postCommission = async (req, res, next) => {
     }
 
     const businessId = await resolveBusinessId(req, statementId);
-    const statement = await ProcessedStatement.findOne(buildStatementLookup(statementId, businessId));
+    const statement = await ProcessedStatement.findOne(buildStatementLookup(statementId, businessId)).lean();
 
     if (!statement) {
       return next(createError(404, "Processed statement not found or access denied"));
     }
 
-    const actorUserId = await resolveActorUserId(req, String(statement.business || businessId || ""));
     const commissionAmount = Number(amount || statement.commissionAmount || 0);
     if (!commissionAmount || commissionAmount <= 0) {
       return next(createError(400, "Valid commission amount is required"));
@@ -944,7 +944,10 @@ export const postCommission = async (req, res, next) => {
       return next(createError(400, "Invalid postingDate"));
     }
 
-    const existingEntries = await findAccountLinkedCommissionAccrualEntries(statement);
+    const [actorUserId, existingEntries] = await Promise.all([
+      resolveActorUserId(req, String(statement.business || businessId || "")),
+      findAccountLinkedCommissionAccrualEntries(statement),
+    ]);
 
     if (existingEntries.length >= 2) {
       return res.status(200).json({

@@ -719,6 +719,7 @@ export const getRentalCollectionReport = async (req, res, next) => {
           populate: { path: "property", select: "propertyName name landlords" },
         })
         .sort({ paymentDate: -1, createdAt: -1 })
+        .limit(5000)
         .lean(),
       TenantInvoice.aggregate([
         { $match: invoiceQuery },
@@ -1656,6 +1657,7 @@ export const getARAgingReport = async (req, res, next) => {
       .populate("tenant", "tenantName name email phone")
       .populate("property", "propertyName name")
       .populate("unit", "unitNumber name")
+      .limit(5000)
       .lean();
 
     if (!invoices.length) {
@@ -1741,6 +1743,7 @@ export const getAPAgingReport = async (req, res, next) => {
     })
       .populate("property", "propertyName")
       .populate("landlord", "name")
+      .limit(5000)
       .lean();
 
     const totals = { current: 0, d1_30: 0, d31_60: 0, d61_90: 0, d90plus: 0, total: 0 };

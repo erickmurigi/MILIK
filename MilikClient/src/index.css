@@ -30,6 +30,17 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Remove number input spinners system-wide */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 /* Prevent table column headers from wrapping at any display scale or zoom level.
    Multi-line headers make rows taller and reduce visible row count at 150% scale. */
 thead th {

@@ -396,26 +396,27 @@ const resolvePropertyAndLandlord = async (payment) => {
 };
 
 const findFirstAccount = async (businessId, candidates = []) => {
-  for (const candidate of candidates) {
-    const query = { business: businessId };
-    const and = [];
-
-    if (candidate._id) {
-      query._id = candidate._id;
-    } else {
-      if (candidate.type) and.push({ type: candidate.type });
-      if (candidate.code) and.push({ code: candidate.code });
-      if (candidate.group) and.push({ group: candidate.group });
-      if (candidate.nameRegex) and.push({ name: { $regex: candidate.nameRegex, $options: "i" } });
-      if (and.length > 0) query.$and = and;
-    }
-
-    const account = await ChartOfAccount.findOne(query).lean();
-    if (account) return account;
+  const results = await Promise.all(
+    candidates.map((candidate) => {
+      const query = { business: businessId };
+      const and = [];
+      if (candidate._id) {
+        query._id = candidate._id;
+      } else {
+        if (candidate.type) and.push({ type: candidate.type });
+        if (candidate.code) and.push({ code: candidate.code });
+        if (candidate.group) and.push({ group: candidate.group });
+        if (candidate.nameRegex) and.push({ name: { $regex: candidate.nameRegex, $options: "i" } });
+        if (and.length > 0) query.$and = and;
+      }
+      return ChartOfAccount.findOne(query).lean();
+    })
+  );
+  const account = results.find((r) => r != null) ?? null;
+  if (!account) {
+    console.warn("[findFirstAccount] No matching account found for candidates:", JSON.stringify(candidates));
   }
-
-  console.warn("[findFirstAccount] No matching account found for candidates:", JSON.stringify(candidates));
-  return null;
+  return account;
 };
 
 const resolveCashbookAccount = async (businessId, payment) => {
@@ -1045,18 +1046,16 @@ const summarizeAllocationRows = ({ rows = [], receiptAmount = 0, metadata = {}, 
   };
 };
 
-const buildReceiptAllocationWorkspace = async (payment) => {
+const buildReceiptAllocationWorkspace = async (payment, { adminOverride = false } = {}) => {
   if (!payment?.business || !payment?.tenant) {
-    const initialUnapplied = round2(Math.abs(Number(payment?.allocationSummary?.unapplied || 0)));
-    const initialPostedConfirmed = Boolean(payment?.isConfirmed && payment?.postingStatus === "posted");
     return {
       receiptAmount: round2(Math.abs(Number(payment?.amount || 0))),
       invoiceOptions: [],
       currentRows: [],
       lockedAllocatedTotal: 0,
-      currentUnapplied: initialUnapplied,
-      appendOnlyUnappliedForConfirmed: initialPostedConfirmed && initialUnapplied > 0.009,
-      lockedUnappliedForConfirmed: initialPostedConfirmed && initialUnapplied <= 0.009,
+      currentUnapplied: round2(Math.abs(Number(payment?.allocationSummary?.unapplied || 0))),
+      appendOnlyUnappliedForConfirmed: false,
+      lockedUnappliedForConfirmed: false,
     };
   }
 
@@ -1068,27 +1067,33 @@ const buildReceiptAllocationWorkspace = async (payment) => {
   const receiptAmount = round2(Math.abs(Number(payment?.amount || 0)));
   const isPostedConfirmed = Boolean(payment?.isConfirmed && payment?.postingStatus === "posted");
   const currentReceiptAllocation = receiptAllocations.find((item) => String(item?.receiptId || "") === String(payment?._id || ""));
-  const currentRows = Array.isArray(currentReceiptAllocation?.rows)
+  const allPaymentRows = Array.isArray(currentReceiptAllocation?.rows)
     ? currentReceiptAllocation.rows
     : Array.isArray(payment?.allocations)
-    ? payment.allocations
-        .map((row) => ({
-          invoice: String(row?.invoice || row?.invoiceId || ""),
-          invoiceNumber: row?.invoiceNumber || "",
-          category: row?.category || "",
-          priorityGroup: row?.priorityGroup || "other",
-          utilityType: row?.utilityType || "",
-          depositHeldBy: row?.depositHeldBy || "",
-          invoiceLedgerMode: row?.invoiceLedgerMode || row?.ledgerMode || "",
-          appliedAmount: round2(Math.abs(Number(row?.appliedAmount || 0))),
-          beforeOutstanding: round2(Math.abs(Number(row?.beforeOutstanding || 0))),
-          afterOutstanding: round2(Math.abs(Number(row?.afterOutstanding || 0))),
-          invoiceDate: row?.invoiceDate || null,
-          dueDate: row?.dueDate || null,
-          description: row?.description || "",
-        }))
-        .filter((row) => row.invoice && row.appliedAmount > 0)
+    ? payment.allocations.map((row) => ({
+        invoice: String(row?.invoice || row?.invoiceId || ""),
+        invoiceNumber: row?.invoiceNumber || "",
+        category: row?.category || "",
+        priorityGroup: row?.priorityGroup || "other",
+        utilityType: row?.utilityType || "",
+        depositHeldBy: row?.depositHeldBy || "",
+        invoiceLedgerMode: row?.invoiceLedgerMode || row?.ledgerMode || "",
+        appliedAmount: round2(Math.abs(Number(row?.appliedAmount || 0))),
+        beforeOutstanding: round2(Math.abs(Number(row?.beforeOutstanding || 0))),
+        afterOutstanding: round2(Math.abs(Number(row?.afterOutstanding || 0))),
+        invoiceDate: row?.invoiceDate || null,
+        dueDate: row?.dueDate || null,
+        description: row?.description || "",
+        isPrepayment: row?.isPrepayment === true,
+        billItemKey: row?.billItemKey || null,
+        prepaymentLabel: row?.prepaymentLabel || row?.description || null,
+      }))
     : [];
+
+  // Invoice rows only (for locking / available-balance calculations)
+  const currentRows = allPaymentRows.filter((row) => row.invoice && row.appliedAmount > 0);
+  // Prepayment rows — unlabeled unapplied balance, preserved so the workspace can re-display them
+  const currentPrepaymentRows = allPaymentRows.filter((row) => !row.invoice && row.isPrepayment && row.appliedAmount > 0);
 
   const currentAllocatedByInvoice = new Map();
   currentRows.forEach((row) => {
@@ -1097,6 +1102,7 @@ const buildReceiptAllocationWorkspace = async (payment) => {
     currentAllocatedByInvoice.set(key, round2(Number(currentAllocatedByInvoice.get(key) || 0) + Number(row?.appliedAmount || 0)));
   });
 
+  const snapshotIds = new Set(invoiceSnapshots.map((s) => String(s?._id || "")));
   const invoiceOptions = invoiceSnapshots
     .map((snapshot) => {
       const invoiceId = String(snapshot?._id || "");
@@ -1119,31 +1125,69 @@ const buildReceiptAllocationWorkspace = async (payment) => {
         currentAllocation,
         maxAllocatable,
         status: snapshot?.computedStatus || snapshot?.status || "pending",
+        period: snapshot?.period || snapshot?.metadata?.period || null,
       };
     })
-    .filter((option) => {
-      // Keep the support allocation workspace focused on real allocation targets only.
-      // Fully-paid invoices are not selectable for new allocations because they have no
-      // remaining tenant receivable to clear. Existing allocations are kept visible so
-      // an already-linked receipt can still be audited without losing its locked line.
-      return String(option.invoiceId || "").trim() && round2(Number(option.maxAllocatable || 0)) > 0;
-    });
+    .filter((option) => String(option.invoiceId || "").trim() && round2(Number(option.maxAllocatable || 0)) > 0);
+
+  // For admin override: recover orphan invoices referenced by this receipt's allocations
+  // but absent from snapshots (e.g., fully-paid invoices not returned by snapshot engine).
+  if (adminOverride && currentAllocatedByInvoice.size > 0) {
+    const orphanIds = [...currentAllocatedByInvoice.keys()].filter((id) => id && !snapshotIds.has(id));
+    if (orphanIds.length > 0) {
+      const orphanInvoices = await TenantInvoice.find({ _id: { $in: orphanIds } })
+        .select("invoiceNumber category priorityGroup utilityType metadata invoiceDate dueDate amount status")
+        .lean();
+      for (const inv of orphanInvoices) {
+        const invoiceId = String(inv._id);
+        const currentAllocation = round2(Number(currentAllocatedByInvoice.get(invoiceId) || 0));
+        invoiceOptions.push({
+          invoiceId,
+          invoiceNumber: inv.invoiceNumber || "",
+          category: inv.category || "",
+          priorityGroup: inv.priorityGroup || "other",
+          utilityType: inv.metadata?.utilityType || inv.utilityType || "",
+          depositHeldBy: inv.metadata?.depositHeldBy || "",
+          invoiceLedgerMode: inv.metadata?.ledgerMode || "",
+          description: inv.metadata?.description || inv.description || "",
+          invoiceDate: inv.invoiceDate || null,
+          dueDate: inv.dueDate || null,
+          amount: round2(Math.abs(Number(inv.amount || 0))),
+          outstanding: 0,
+          currentAllocation,
+          maxAllocatable: currentAllocation,
+          status: "paid",
+          period: inv.metadata?.period || null,
+        });
+      }
+    }
+  }
+
   const lockedAllocatedTotal = round2(currentRows.reduce((sum, row) => sum + Number(row?.appliedAmount || 0), 0));
   const currentUnapplied = round2(Math.max(0, receiptAmount - lockedAllocatedTotal));
+
+  const utilityTypes = [...new Set(
+    invoiceSnapshots
+      .filter((s) => s.category === "UTILITY_CHARGE" && s.utilityType)
+      .map((s) => String(s.utilityType).trim())
+      .filter(Boolean)
+  )];
 
   return {
     receiptAmount,
     invoiceOptions,
+    utilityTypes,
     currentRows,
+    currentPrepaymentRows,
     lockedAllocatedTotal,
     currentUnapplied,
-    appendOnlyUnappliedForConfirmed: isPostedConfirmed && currentUnapplied > 0.009,
-    lockedUnappliedForConfirmed: isPostedConfirmed && currentUnapplied <= 0.009,
+    appendOnlyUnappliedForConfirmed: !adminOverride && isPostedConfirmed && currentUnapplied > 0.009,
+    lockedUnappliedForConfirmed: !adminOverride && isPostedConfirmed && currentUnapplied <= 0.009,
   };
 };
 
-const buildManualReceiptAllocationData = async ({ payment, requestedAllocations = [] }) => {
-  const workspace = await buildReceiptAllocationWorkspace(payment);
+const buildManualReceiptAllocationData = async ({ payment, requestedAllocations = [], prepaymentLines = [], adminOverride = false }) => {
+  const workspace = await buildReceiptAllocationWorkspace(payment, { adminOverride });
   const receiptAmount = round2(workspace.receiptAmount || Math.abs(Number(payment?.amount || 0)));
   const invoiceOptionMap = new Map((workspace.invoiceOptions || []).map((item) => [String(item.invoiceId), item]));
 
@@ -1174,42 +1218,41 @@ const buildManualReceiptAllocationData = async ({ payment, requestedAllocations 
   });
 
   const isPostedConfirmed = Boolean(payment?.isConfirmed && payment?.postingStatus === "posted");
-  if (isPostedConfirmed) {
-    for (const [invoiceId, lockedAmount] of existingLockedByInvoice.entries()) {
-      const requestedAmount = round2(Number(mergedRequested.get(invoiceId) || 0));
-      if (requestedAmount + 0.009 < lockedAmount) {
-        const lockedLabel = invoiceOptionMap.get(invoiceId)?.invoiceNumber || invoiceId;
+  if (!adminOverride) {
+    if (isPostedConfirmed) {
+      for (const [invoiceId, lockedAmount] of existingLockedByInvoice.entries()) {
+        const requestedAmount = round2(Number(mergedRequested.get(invoiceId) || 0));
+        if (requestedAmount + 0.009 < lockedAmount) {
+          const lockedLabel = invoiceOptionMap.get(invoiceId)?.invoiceNumber || invoiceId;
+          const error = new Error(
+            `Confirmed receipt allocations already applied to ${lockedLabel} are locked at KES ${lockedAmount.toLocaleString()}. Only the remaining unapplied balance can be allocated from this workspace.`
+          );
+          error.statusCode = 400;
+          throw error;
+        }
+      }
+      const appendableTotal = round2(Math.max(0, Number(workspace.currentUnapplied || 0)));
+      const addedTotal = round2(requestedTotal - Number(workspace.lockedAllocatedTotal || 0));
+      if (addedTotal < -0.009) {
+        const error = new Error("Confirmed receipt allocations cannot be reduced from this workspace. Reverse and recreate instead.");
+        error.statusCode = 400;
+        throw error;
+      }
+      if (addedTotal > appendableTotal + 0.009) {
         const error = new Error(
-          `Confirmed receipt allocations already applied to ${lockedLabel} are locked at KES ${lockedAmount.toLocaleString()}. Only the remaining unapplied balance can be allocated from this workspace.`
+          `This confirmed receipt only has KES ${appendableTotal.toLocaleString()} of unapplied balance available for new allocation.`
         );
         error.statusCode = 400;
         throw error;
       }
-    }
-
-    const appendableTotal = round2(Math.max(0, Number(workspace.currentUnapplied || 0)));
-    const addedTotal = round2(requestedTotal - Number(workspace.lockedAllocatedTotal || 0));
-
-    if (addedTotal < -0.009) {
-      const error = new Error("Confirmed receipt allocations cannot be reduced from this workspace. Reverse and recreate instead.");
-      error.statusCode = 400;
-      throw error;
-    }
-
-    if (addedTotal > appendableTotal + 0.009) {
-      const error = new Error(
-        `This confirmed receipt only has KES ${appendableTotal.toLocaleString()} of unapplied balance available for new allocation.`
-      );
-      error.statusCode = 400;
-      throw error;
-    }
-  } else if (workspace.lockedUnappliedForConfirmed) {
-    if (Math.abs(requestedTotal - Number(workspace.lockedAllocatedTotal || 0)) > 0.009) {
-      const error = new Error(
-        `This posted receipt can only reallocate its already allocated amount of KES ${Number(workspace.lockedAllocatedTotal || 0).toLocaleString()}. Its unapplied portion is locked to protect ledger integrity.`
-      );
-      error.statusCode = 400;
-      throw error;
+    } else if (workspace.lockedUnappliedForConfirmed) {
+      if (Math.abs(requestedTotal - Number(workspace.lockedAllocatedTotal || 0)) > 0.009) {
+        const error = new Error(
+          `This posted receipt can only reallocate its already allocated amount of KES ${Number(workspace.lockedAllocatedTotal || 0).toLocaleString()}. Its unapplied portion is locked to protect ledger integrity.`
+        );
+        error.statusCode = 400;
+        throw error;
+      }
     }
   }
 
@@ -1272,6 +1315,48 @@ const buildManualReceiptAllocationData = async ({ payment, requestedAllocations 
     if (aInvoice !== bInvoice) return aInvoice - bInvoice;
     return String(a.invoice || "").localeCompare(String(b.invoice || ""));
   });
+
+  // Append prepayment rows for any remaining unallocated amount so autoApplyPrepayments
+  // can correctly match them to future invoices by billItemKey
+  const remaining = round2(receiptAmount - requestedTotal);
+  if (remaining > 0.005) {
+    const resolvedLines = Array.isArray(prepaymentLines) && prepaymentLines.length > 0
+      ? prepaymentLines
+      : [{ billItemKey: "rent", label: "Rent Prepayment", amount: remaining }];
+    let excessPool = remaining;
+    for (const line of resolvedLines) {
+      if (excessPool <= 0.005) break;
+      const lineAmt = round2(Math.min(Number(line.amount || 0), excessPool));
+      if (lineAmt <= 0.005) continue;
+      const isUtility = String(line.billItemKey || "").startsWith("utility:");
+      const utType = isUtility ? String(line.billItemKey).replace("utility:", "") : "";
+      rows.push({
+        invoice: null, invoiceNumber: "",
+        category: isUtility ? "UTILITY_CHARGE" : "RENT_CHARGE",
+        priorityGroup: isUtility ? "utility" : "rent",
+        utilityType: utType,
+        billItemKey: line.billItemKey || "rent",
+        prepaymentLabel: line.label || (isUtility ? `${utType} Prepayment` : "Rent Prepayment"),
+        isPrepayment: true,
+        appliedAmount: lineAmt,
+        beforeOutstanding: 0,
+        afterOutstanding: 0,
+        description: line.label || "Prepayment",
+      });
+      excessPool = round2(excessPool - lineAmt);
+    }
+    if (excessPool > 0.005) {
+      const rentRow = rows.find((r) => !r.invoice && r.isPrepayment && r.billItemKey === "rent");
+      if (rentRow) rentRow.appliedAmount = round2(rentRow.appliedAmount + excessPool);
+      else rows.push({
+        invoice: null, invoiceNumber: "",
+        category: "RENT_CHARGE", priorityGroup: "rent", utilityType: "",
+        billItemKey: "rent", prepaymentLabel: "Rent Prepayment", isPrepayment: true,
+        appliedAmount: round2(excessPool), beforeOutstanding: 0, afterOutstanding: 0,
+        description: "Rent Prepayment",
+      });
+    }
+  }
 
   const metadata = getPaymentMetadata(payment);
   const summarized = summarizeAllocationRows({
@@ -2839,7 +2924,7 @@ export const getPayments = async (req, res, next) => {
     const query = RentPayment.find(filter).sort({ paymentDate: -1, createdAt: -1 });
 
     if (!wantsPagedResponse) {
-      const payments = await populateReceiptListQuery(query);
+      const payments = await populateReceiptListQuery(query.limit(2000));
       return res.status(200).json(payments);
     }
 
@@ -2935,7 +3020,7 @@ export const getPayment = async (req, res, next) => {
 
 export const getPaymentAllocationOptions = async (req, res, next) => {
   try {
-    const payment = await RentPayment.findById(req.params.id);
+    const payment = await RentPayment.findById(req.params.id).lean();
 
     const access = await authorizePaymentAccess(req, payment);
     if (!access.allowed) {
@@ -2949,7 +3034,20 @@ export const getPaymentAllocationOptions = async (req, res, next) => {
       return res.status(404).json({ success: false, message: "Receipt not found." });
     }
 
-    const workspace = await buildReceiptAllocationWorkspace(payment);
+    const isAdminUser = req.user?.isSystemAdmin === true;
+    const adminOverride = isAdminUser && req.query?.adminOverride === "true";
+    const workspace = await buildReceiptAllocationWorkspace(payment, { adminOverride });
+
+    // Derive available prepayment types from workspace utility snapshots (no extra DB query needed)
+    const seenPrepaymentKeys = new Set(["rent"]);
+    const prepaymentTypeOptions = [{ billItemKey: "rent", label: "Rent Prepayment" }];
+    for (const utilName of (workspace.utilityTypes || [])) {
+      const key = `utility:${normalizeUtilityMatch(utilName)}`;
+      if (seenPrepaymentKeys.has(key)) continue;
+      seenPrepaymentKeys.add(key);
+      prepaymentTypeOptions.push({ billItemKey: key, label: `${utilName} Prepayment` });
+    }
+
     return res.status(200).json({
       success: true,
       data: {
@@ -2958,6 +3056,8 @@ export const getPaymentAllocationOptions = async (req, res, next) => {
         amount: round2(Math.abs(Number(payment.amount || 0))),
         isConfirmed: payment.isConfirmed === true,
         postingStatus: payment.postingStatus || "unposted",
+        isAdminOverride: adminOverride,
+        canAdminOverride: isAdminUser,
         rules: {
           appendOnlyUnappliedForConfirmed: workspace.appendOnlyUnappliedForConfirmed === true,
           lockedUnappliedForConfirmed: workspace.lockedUnappliedForConfirmed,
@@ -2965,7 +3065,9 @@ export const getPaymentAllocationOptions = async (req, res, next) => {
           currentUnapplied: round2(workspace.currentUnapplied || 0),
         },
         currentAllocations: workspace.currentRows || [],
+        currentPrepaymentAllocations: workspace.currentPrepaymentRows || [],
         invoiceOptions: workspace.invoiceOptions || [],
+        prepaymentTypeOptions,
       },
     });
   } catch (err) {
@@ -2996,12 +3098,15 @@ export const updatePaymentAllocations = async (req, res, next) => {
       });
     }
 
+    const isAdminUser = req.user?.isSystemAdmin === true;
+    const adminOverride = isAdminUser && req.body?.adminOverride === true;
+
     const hasPostedLedger =
       String(payment.postingStatus || "").toLowerCase() === "posted" ||
       (Array.isArray(payment.ledgerEntries) && payment.ledgerEntries.length > 0);
     const isPostedConfirmed = payment.isConfirmed === true && hasPostedLedger;
 
-    if (payment.isConfirmed === true && !isPostedConfirmed) {
+    if (!adminOverride && payment.isConfirmed === true && !isPostedConfirmed) {
       return res.status(400).json({
         success: false,
         message:
@@ -3012,6 +3117,8 @@ export const updatePaymentAllocations = async (req, res, next) => {
     const allocationData = await buildManualReceiptAllocationData({
       payment,
       requestedAllocations: req.body?.allocations,
+      prepaymentLines: req.body?.prepaymentLines,
+      adminOverride,
     });
 
     const previousAllocations = Array.isArray(payment.allocations) ? payment.allocations : [];
@@ -3269,7 +3376,10 @@ export const updatePayment = async (req, res, next) => {
     const tenantId = req.body?.tenant || payment.tenant;
     const unitId = req.body?.unit || payment.unit;
 
-    const tenant = await Tenant.findOne({ _id: tenantId, business: payment.business }).select("_id unit depositHeldBy").lean();
+    const [tenant, unit] = await Promise.all([
+      Tenant.findOne({ _id: tenantId, business: payment.business }).select("_id unit depositHeldBy").lean(),
+      unitId ? Unit.findOne({ _id: unitId, business: payment.business }).select("_id property").lean() : Promise.resolve(null),
+    ]);
     if (!tenant) {
       return res.status(404).json({
         success: false,
@@ -3277,7 +3387,6 @@ export const updatePayment = async (req, res, next) => {
       });
     }
 
-    const unit = await Unit.findOne({ _id: unitId, business: payment.business }).select("_id property").lean();
     if (!unit) {
       return res.status(404).json({
         success: false,
@@ -3519,10 +3628,12 @@ export const confirmPayment = async (req, res, next) => {
           metadata: confirmationMetadata,
         });
 
-    const linkedTenant = await Tenant.findOne({ _id: existingPayment.tenant, business: existingPayment.business }).select("_id depositHeldBy").lean();
-    const linkedUnit = existingPayment.unit
-      ? await Unit.findOne({ _id: existingPayment.unit, business: existingPayment.business }).select("_id property").lean()
-      : null;
+    const [linkedTenant, linkedUnit] = await Promise.all([
+      Tenant.findOne({ _id: existingPayment.tenant, business: existingPayment.business }).select("_id depositHeldBy").lean(),
+      existingPayment.unit
+        ? Unit.findOne({ _id: existingPayment.unit, business: existingPayment.business }).select("_id property").lean()
+        : Promise.resolve(null),
+    ]);
     const linkedProperty = linkedUnit?.property
       ? await Property.findOne({ _id: linkedUnit.property, business: existingPayment.business }).select("_id depositHeldBy").lean()
       : null;

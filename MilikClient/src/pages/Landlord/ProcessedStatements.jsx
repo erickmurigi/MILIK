@@ -74,10 +74,12 @@ const ProcessedStatements = () => {
 
   const currentUser = useSelector(selectCurrentUser);
   const currentCompany = useSelector(selectCurrentCompany);
-  const canProcessLandlordPayments = hasCompanyPermission(currentUser || {}, currentCompany, "landlordPayments", "process", "accounts");
-  const canReverseProcessedStatement = hasCompanyPermission(currentUser || {}, currentCompany, "processedStatements", "reverse", "accounts");
-  const canExportProcessedStatement = hasCompanyPermission(currentUser || {}, currentCompany, "processedStatements", "export", "accounts");
-  const canSendCommunications = hasCompanyPermission(currentUser || {}, currentCompany, "processedStatements", "send", "accounts");
+  const { canProcessLandlordPayments, canReverseProcessedStatement, canExportProcessedStatement, canSendCommunications } = useMemo(() => ({
+    canProcessLandlordPayments: hasCompanyPermission(currentUser || {}, currentCompany, "landlordPayments", "process", "accounts"),
+    canReverseProcessedStatement: hasCompanyPermission(currentUser || {}, currentCompany, "processedStatements", "reverse", "accounts"),
+    canExportProcessedStatement: hasCompanyPermission(currentUser || {}, currentCompany, "processedStatements", "export", "accounts"),
+    canSendCommunications: hasCompanyPermission(currentUser || {}, currentCompany, "processedStatements", "send", "accounts"),
+  }), [currentUser, currentCompany]);
   const [statements, setStatements] = useState([]);
   const [pagination, setPagination] = useState({ total: 0, page: 1, pages: 1, limit: ITEMS_PER_PAGE });
   const [loading, setLoading] = useState(false);
@@ -747,7 +749,7 @@ const ProcessedStatements = () => {
                                             </thead>
                                             <tbody>
                                               {statement.paymentHistory.map((ph, i) => (
-                                                <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
+                                                <tr key={ph._id || ph.entryId || i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
                                                   <td className="px-3 py-1 border-r border-gray-100">{formatDate(ph.paymentDate)}</td>
                                                   <td className="px-3 py-1 border-r border-gray-100">{formatPaymentMethod(ph.paymentMethod)}</td>
                                                   <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-500">{ph.paymentReference || '—'}</td>
@@ -777,7 +779,7 @@ const ProcessedStatements = () => {
                                             </thead>
                                             <tbody>
                                               {statement.recoveryHistory.map((rh, i) => (
-                                                <tr key={i} className={`border-b border-red-100 ${i % 2 === 0 ? 'bg-white' : 'bg-red-50/40'}`}>
+                                                <tr key={rh._id || rh.entryId || i} className={`border-b border-red-100 ${i % 2 === 0 ? 'bg-white' : 'bg-red-50/40'}`}>
                                                   <td className="px-3 py-1 border-r border-red-100">{formatDate(rh.paymentDate)}</td>
                                                   <td className="px-3 py-1 border-r border-red-100">{formatPaymentMethod(rh.paymentMethod)}</td>
                                                   <td className="px-3 py-1 border-r border-red-100 font-mono text-slate-500">{rh.paymentReference || '—'}</td>

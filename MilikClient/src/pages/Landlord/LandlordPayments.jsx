@@ -1,28 +1,22 @@
-﻿import { propertyBelongsToLandlord } from "./propertyUtils";
-import React, { useState, useEffect, useMemo } from "react";
+﻿import React, { useState, useEffect, useMemo } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import {
-  FaArrowLeft,
-  FaPlus,
   FaSearch,
   FaRedoAlt,
   FaEye,
   FaFileInvoiceDollar,
   FaPrint,
-  FaCheck,
   FaTimes,
   FaChevronLeft,
   FaChevronRight,
-  FaEdit,
-  FaTrash,
   FaSms,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { getLandlords, getLandlordPayments } from "../../redux/apiCalls";
-import { selectCurrentCompany, selectCurrentUser, selectAllProperties, selectAllLandlords, selectAllTenants } from "../../redux/selectors";
+import { selectCurrentCompany, selectCurrentUser, selectAllProperties, selectAllTenants } from "../../redux/selectors";
 import { hasCompanyPermission } from "../../utils/permissions";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import { getProperties } from "../../redux/propertyRedux";
@@ -47,7 +41,10 @@ const LandlordPayments = ({ mode = "payments" }) => {
   const properties = useSelector(selectAllProperties);
   const tenants = useSelector(selectAllTenants);
 
-  const canExportPayment = hasCompanyPermission(currentUser || {}, currentCompany, "landlordPayments", "export", "accounts");
+  const canExportPayment = useMemo(
+    () => hasCompanyPermission(currentUser || {}, currentCompany, "landlordPayments", "export", "accounts"),
+    [currentUser, currentCompany]
+  );
 
   // Local state
   const [filters, setFilters] = useTabState("/landlord-payments:filters", { search: "", status: "all", paymentStatus: "all" });
@@ -86,10 +83,28 @@ const LandlordPayments = ({ mode = "payments" }) => {
   }, [tenants]);
 
   const landlordData = useMemo(() => {
+    const propsByLandlordId = new Map();
+    const propsByLandlordName = new Map();
+    for (const p of properties) {
+      for (const entry of (p.landlords || [])) {
+        if (entry.landlordId) {
+          const id = String(entry.landlordId);
+          if (!propsByLandlordId.has(id)) propsByLandlordId.set(id, []);
+          propsByLandlordId.get(id).push(p);
+        }
+        if (entry.name) {
+          if (!propsByLandlordName.has(entry.name)) propsByLandlordName.set(entry.name, []);
+          propsByLandlordName.get(entry.name).push(p);
+        }
+      }
+    }
+
     return landlords.map((landlord) => {
-      const landlordProperties = properties.filter((prop) =>
-        propertyBelongsToLandlord(prop, landlord._id, landlord.landlordName)
-      );
+      const landlordIdStr = String(landlord._id);
+      const byId = propsByLandlordId.get(landlordIdStr) || [];
+      const byName = landlord.landlordName ? (propsByLandlordName.get(landlord.landlordName) || []) : [];
+      const seen = new Set(byId.map((p) => String(p._id)));
+      const landlordProperties = [...byId, ...byName.filter((p) => !seen.has(String(p._id)))];
 
       let totalRentExpected = 0;
       let totalTenantsCount = 0;
@@ -113,7 +128,6 @@ const LandlordPayments = ({ mode = "payments" }) => {
         });
       });
 
-      const landlordIdStr = String(landlord._id);
       const paymentsMade = landlordPayments
         .filter((p) => String(p?.landlord?._id || p?.landlord || p?.landlordId || "") === landlordIdStr && p.status !== "reversed")
         .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);

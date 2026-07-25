@@ -324,12 +324,21 @@ const Receipts = ({ viewMode = "tenant" }) => {
   const entityCache = useEntityCache(currentCompany?._id);
   const entityCacheRef = useRef(entityCache);
   entityCacheRef.current = entityCache;
-  const canCreateReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "create", "propertyManagement");
-  const canProcessReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "process", "propertyManagement");
-  const canReverseReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "reverse", "propertyManagement");
-  const canDeleteReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "delete", "propertyManagement");
-  const canExportReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "export", "propertyManagement");
-  const canUpdateReceipt = hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "update", "propertyManagement");
+  const {
+    canCreateReceipt,
+    canProcessReceipt,
+    canReverseReceipt,
+    canDeleteReceipt,
+    canExportReceipt,
+    canUpdateReceipt,
+  } = useMemo(() => ({
+    canCreateReceipt: hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "create", "propertyManagement"),
+    canProcessReceipt: hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "process", "propertyManagement"),
+    canReverseReceipt: hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "reverse", "propertyManagement"),
+    canDeleteReceipt: hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "delete", "propertyManagement"),
+    canExportReceipt: hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "export", "propertyManagement"),
+    canUpdateReceipt: hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "update", "propertyManagement"),
+  }), [currentUser, currentCompany]);
   const isLandlordReceiptView = viewMode === "landlord";
   const isDefaultTenantView = !isLandlordReceiptView;
   const backPath = isLandlordReceiptView ? "/landlords" : "/tenants";
@@ -338,7 +347,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
   const rawTenants = useSelector(selectAllTenants);
   const properties = useSelector(selectAllProperties);
 
-  const tenants = ensureArray(rawTenants);
+  const tenants = useMemo(() => ensureArray(rawTenants), [rawTenants]);
 
   const [receipts, setReceipts] = useState([]);
   const [recPagination, setRecPagination] = useState({ totalItems: 0, totalPages: 1, page: 1, limit: ITEMS_PER_PAGE });
@@ -388,12 +397,16 @@ const Receipts = ({ viewMode = "tenant" }) => {
     isConfirmed: false,
   });
 
+  const isSystemAdmin = Boolean(currentUser?.isSystemAdmin);
   const [allocationDrawerOpen, setAllocationDrawerOpen] = useState(false);
   const [allocationTarget, setAllocationTarget] = useState(null);
   const [allocationOptions, setAllocationOptions] = useState([]);
   const [allocationLines, setAllocationLines] = useState([]);
   const [allocationSearchTerms, setAllocationSearchTerms] = useState({});
   const [allocationDropdownOpen, setAllocationDropdownOpen] = useState({});
+  const [allocationDropdownPos, setAllocationDropdownPos] = useState({});
+  const [allocationAdminOverride, setAllocationAdminOverride] = useState(false);
+  const [canAdminOverride, setCanAdminOverride] = useState(false);
   const [allocationReason, setAllocationReason] = useState("");
   const [allocationLoading, setAllocationLoading] = useState(false);
   const [allocationSaving, setAllocationSaving] = useState(false);
@@ -403,6 +416,8 @@ const Receipts = ({ viewMode = "tenant" }) => {
     lockedAllocatedTotal: 0,
     currentUnapplied: 0,
   });
+  const [allocationPrepaymentTypes, setAllocationPrepaymentTypes] = useState([{ billItemKey: "rent", label: "Rent Prepayment" }]);
+  const [prepaymentWorkspaceLines, setPrepaymentWorkspaceLines] = useState([]);
   const [formPayments, setFormPayments] = useState([]);
   const requestedReceiptId = useMemo(() => new URLSearchParams(location.search).get("receipt") || "", [location.search]);
   const [autoOpenedReceiptId, setAutoOpenedReceiptId] = useState("");
@@ -451,14 +466,13 @@ const Receipts = ({ viewMode = "tenant" }) => {
         listRentPaymentsPage(params),
         ...(tenantsLoaded ? [] : [getTenants(dispatch, currentCompany._id)]),
         ...(propertiesLoaded ? [] : [dispatch(getProperties({ business: currentCompany._id }))]),
-        loadInvoices(),
       ]);
       setReceipts(receiptResult.items);
       setRecPagination(receiptResult.pagination);
     } catch {
       toast.error("Failed to load receipts");
     }
-  }, [currentCompany?._id, dispatch, loadInvoices, isLandlordReceiptView, isCompanyLandlordMode]);
+  }, [currentCompany?._id, dispatch, isLandlordReceiptView, isCompanyLandlordMode]);
 
   const loadDataRef = useRef(loadData);
   useEffect(() => { loadDataRef.current = loadData; });
@@ -468,7 +482,8 @@ const Receipts = ({ viewMode = "tenant" }) => {
   useEffect(() => {
     if (!currentCompany?._id) return;
     loadDataRef.current(1, initialFiltersRef.current);
-  }, [currentCompany?._id]);
+    loadInvoices();
+  }, [currentCompany?._id, loadInvoices]);
 
   // Load payments for the selected tenant when the receipt form opens (for balance calc)
   useEffect(() => {
@@ -958,87 +973,34 @@ const Receipts = ({ viewMode = "tenant" }) => {
     loadData(1, reset);
   };
 
-  const applyDatePreset = (preset) => {
+  const computeDateRange = (preset) => {
     const today = new Date();
-    let from = "";
-    let to = "";
+    if (preset === "today") return { from: toInputDate(today), to: toInputDate(today) };
+    if (preset === "yesterday") { const y = new Date(today); y.setDate(today.getDate() - 1); return { from: toInputDate(y), to: toInputDate(y) }; }
+    if (preset === "thisWeek") { const d = today.getDay(); const m = new Date(today); m.setDate(today.getDate() - ((d + 6) % 7)); const s = new Date(m); s.setDate(m.getDate() + 6); return { from: toInputDate(m), to: toInputDate(s) }; }
+    if (preset === "lastWeek") { const d = today.getDay(); const m = new Date(today); m.setDate(today.getDate() - ((d + 6) % 7) - 7); const s = new Date(m); s.setDate(m.getDate() + 6); return { from: toInputDate(m), to: toInputDate(s) }; }
+    if (preset === "thisMonth") return { from: toInputDate(new Date(today.getFullYear(), today.getMonth(), 1)), to: toInputDate(new Date(today.getFullYear(), today.getMonth() + 1, 0)) };
+    if (preset === "lastMonth") return { from: toInputDate(new Date(today.getFullYear(), today.getMonth() - 1, 1)), to: toInputDate(new Date(today.getFullYear(), today.getMonth(), 0)) };
+    if (preset === "thisQuarter") { const q = Math.floor(today.getMonth() / 3); return { from: toInputDate(new Date(today.getFullYear(), q * 3, 1)), to: toInputDate(new Date(today.getFullYear(), q * 3 + 3, 0)) }; }
+    if (preset === "lastQuarter") { const q = Math.floor(today.getMonth() / 3) - 1; const yr = q < 0 ? today.getFullYear() - 1 : today.getFullYear(); const qq = (q + 4) % 4; return { from: toInputDate(new Date(yr, qq * 3, 1)), to: toInputDate(new Date(yr, qq * 3 + 3, 0)) }; }
+    if (preset === "thisYear") return { from: toInputDate(new Date(today.getFullYear(), 0, 1)), to: toInputDate(new Date(today.getFullYear(), 11, 31)) };
+    if (preset === "lastYear") return { from: toInputDate(new Date(today.getFullYear() - 1, 0, 1)), to: toInputDate(new Date(today.getFullYear() - 1, 11, 31)) };
+    return { from: "", to: "" };
+  };
 
-    if (preset === "today") {
-      from = toInputDate(today);
-      to = toInputDate(today);
-    }
-
-    if (preset === "thisMonth") {
-      from = toInputDate(new Date(today.getFullYear(), today.getMonth(), 1));
-      to = toInputDate(new Date(today.getFullYear(), today.getMonth() + 1, 0));
-    }
-
-    if (preset === "yesterday") {
-      const y = new Date(today); y.setDate(today.getDate() - 1);
-      from = toInputDate(y); to = toInputDate(y);
-    }
-    if (preset === "thisWeek") {
-      const day = today.getDay();
-      const mon = new Date(today); mon.setDate(today.getDate() - ((day + 6) % 7));
-      const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
-      from = toInputDate(mon); to = toInputDate(sun);
-    }
-    if (preset === "lastWeek") {
-      const day = today.getDay();
-      const mon = new Date(today); mon.setDate(today.getDate() - ((day + 6) % 7) - 7);
-      const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
-      from = toInputDate(mon); to = toInputDate(sun);
-    }
-    if (preset === "lastMonth") {
-      from = toInputDate(new Date(today.getFullYear(), today.getMonth() - 1, 1));
-      to = toInputDate(new Date(today.getFullYear(), today.getMonth(), 0));
-    }
-    if (preset === "thisQuarter") {
-      const q = Math.floor(today.getMonth() / 3);
-      from = toInputDate(new Date(today.getFullYear(), q * 3, 1));
-      to = toInputDate(new Date(today.getFullYear(), q * 3 + 3, 0));
-    }
-    if (preset === "lastQuarter") {
-      const q = Math.floor(today.getMonth() / 3) - 1;
-      const yr = q < 0 ? today.getFullYear() - 1 : today.getFullYear();
-      const qq = (q + 4) % 4;
-      from = toInputDate(new Date(yr, qq * 3, 1));
-      to = toInputDate(new Date(yr, qq * 3 + 3, 0));
-    }
-    if (preset === "thisYear") {
-      from = toInputDate(new Date(today.getFullYear(), 0, 1));
-      to = toInputDate(new Date(today.getFullYear(), 11, 31));
-    }
-    if (preset === "lastYear") {
-      from = toInputDate(new Date(today.getFullYear() - 1, 0, 1));
-      to = toInputDate(new Date(today.getFullYear() - 1, 11, 31));
-    }
-
+  const applyDatePreset = (preset) => {
+    const { from, to } = computeDateRange(preset);
     setDraftFilters((prev) => ({ ...prev, from, to }));
   };
 
   const applyDatePresetAndSearch = (preset) => {
-    const today = new Date();
-    let from = "";
-    let to = "";
-    if (preset === "today") { from = toInputDate(today); to = toInputDate(today); }
-    else if (preset === "yesterday") { const y = new Date(today); y.setDate(today.getDate() - 1); from = toInputDate(y); to = toInputDate(y); }
-    else if (preset === "thisWeek") { const d = today.getDay(); const m = new Date(today); m.setDate(today.getDate() - ((d + 6) % 7)); const s = new Date(m); s.setDate(m.getDate() + 6); from = toInputDate(m); to = toInputDate(s); }
-    else if (preset === "lastWeek") { const d = today.getDay(); const m = new Date(today); m.setDate(today.getDate() - ((d + 6) % 7) - 7); const s = new Date(m); s.setDate(m.getDate() + 6); from = toInputDate(m); to = toInputDate(s); }
-    else if (preset === "thisMonth") { from = toInputDate(new Date(today.getFullYear(), today.getMonth(), 1)); to = toInputDate(new Date(today.getFullYear(), today.getMonth() + 1, 0)); }
-    else if (preset === "lastMonth") { from = toInputDate(new Date(today.getFullYear(), today.getMonth() - 1, 1)); to = toInputDate(new Date(today.getFullYear(), today.getMonth(), 0)); }
-    else if (preset === "thisQuarter") { const q = Math.floor(today.getMonth() / 3); from = toInputDate(new Date(today.getFullYear(), q * 3, 1)); to = toInputDate(new Date(today.getFullYear(), q * 3 + 3, 0)); }
-    else if (preset === "lastQuarter") { const q = Math.floor(today.getMonth() / 3) - 1; const yr = q < 0 ? today.getFullYear() - 1 : today.getFullYear(); const qq = (q + 4) % 4; from = toInputDate(new Date(yr, qq * 3, 1)); to = toInputDate(new Date(yr, qq * 3 + 3, 0)); }
-    else if (preset === "thisYear") { from = toInputDate(new Date(today.getFullYear(), 0, 1)); to = toInputDate(new Date(today.getFullYear(), 11, 31)); }
-    else if (preset === "lastYear") { from = toInputDate(new Date(today.getFullYear() - 1, 0, 1)); to = toInputDate(new Date(today.getFullYear() - 1, 11, 31)); }
-    setAppliedFilters((prev) => {
-      const newFilters = { ...prev, from, to };
-      loadData(1, newFilters);
-      return newFilters;
-    });
+    const { from, to } = computeDateRange(preset);
+    const newFilters = { ...appliedFilters, from, to };
+    setAppliedFilters(newFilters);
     setDraftFilters((prev) => ({ ...prev, from, to }));
     setSelectedIds([]);
     setCurrentPage(1);
+    loadData(1, newFilters);
   };
 
   const handleConfirmOne = async (receipt) => {
@@ -1342,6 +1304,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
     setAllocationLines([]);
     setAllocationSearchTerms({});
     setAllocationDropdownOpen({});
+    setAllocationDropdownPos({});
     setAllocationReason("");
     setAllocationRules({
       appendOnlyUnappliedForConfirmed: false,
@@ -1349,34 +1312,65 @@ const Receipts = ({ viewMode = "tenant" }) => {
       lockedAllocatedTotal: 0,
       currentUnapplied: 0,
     });
+    setAllocationPrepaymentTypes([{ billItemKey: "rent", label: "Rent Prepayment" }]);
+    setPrepaymentWorkspaceLines([]);
+    setAllocationAdminOverride(false);
+    setCanAdminOverride(false);
     setAllocationLoading(false);
     setAllocationSaving(false);
   }, []);
 
-  const openAllocationDrawer = useCallback(async (receipt) => {
+  const openAllocationDrawer = useCallback(async (receipt, { adminOverride = false } = {}) => {
     if (!receipt?._id) return;
     setAllocationDrawerOpen(true);
     setAllocationTarget(receipt);
+    setAllocationAdminOverride(adminOverride);
     setAllocationLoading(true);
     try {
-      const workspace = await getReceiptAllocationOptions(receipt._id);
+      const workspace = await getReceiptAllocationOptions(receipt._id, { adminOverride });
       const options = Array.isArray(workspace?.invoiceOptions) ? workspace.invoiceOptions : [];
       const currentAllocations = Array.isArray(workspace?.currentAllocations) ? workspace.currentAllocations : [];
       setAllocationOptions(options);
+      setAllocationPrepaymentTypes(
+        Array.isArray(workspace?.prepaymentTypeOptions) && workspace.prepaymentTypeOptions.length > 0
+          ? workspace.prepaymentTypeOptions
+          : [{ billItemKey: "rent", label: "Rent Prepayment" }]
+      );
+      setCanAdminOverride(workspace?.canAdminOverride === true);
       setAllocationRules(workspace?.rules || {
         appendOnlyUnappliedForConfirmed: false,
         lockedUnappliedForConfirmed: false,
         lockedAllocatedTotal: 0,
         currentUnapplied: 0,
       });
+
+      // Invoice allocation lines (rows with a real invoice)
+      const invoiceRows = currentAllocations.filter((r) => r?.invoice || r?.invoiceId);
       setAllocationLines(
-        currentAllocations.length > 0
-          ? currentAllocations.map((row) => ({
+        invoiceRows.length > 0
+          ? invoiceRows.map((row) => ({
               invoiceId: String(row?.invoice || row?.invoiceId || ""),
               appliedAmount: Number(row?.appliedAmount || 0),
+              invoiceNumber: row?.invoiceNumber || "",
+              priorityGroup: row?.priorityGroup || row?.category || "",
+              utilityType: row?.utilityType || "",
+              description: row?.description || "",
             }))
-          : [{ invoiceId: "", appliedAmount: 0 }]
+          : [{ invoiceId: "", appliedAmount: 0, invoiceNumber: "", priorityGroup: "", utilityType: "", description: "" }]
       );
+
+      // Prepayment lines — seed from existing labeled prepayment rows on the receipt
+      const existingPrepayRows = Array.isArray(workspace?.currentPrepaymentAllocations) ? workspace.currentPrepaymentAllocations : [];
+      setPrepaymentWorkspaceLines(
+        existingPrepayRows.length > 0
+          ? existingPrepayRows.map((r) => ({
+              billItemKey: r.billItemKey || "rent",
+              label: r.prepaymentLabel || r.description || "Rent Prepayment",
+              amount: Number(r.appliedAmount || 0),
+            }))
+          : []
+      );
+
       setAllocationSearchTerms({});
       setAllocationDropdownOpen({});
       setAllocationReason("");
@@ -1666,11 +1660,25 @@ const Receipts = ({ viewMode = "tenant" }) => {
       return;
     }
 
+    // Validate prepayment lines total equals remaining
+    const r2 = (n) => Math.round(Number(n) * 100) / 100;
+    const remaining = r2(Math.max(0, allocationComputed.editableCap - allocationComputed.totalAdded));
+    const cleanedPrepayLines = prepaymentWorkspaceLines
+      .filter((l) => l.billItemKey && Number(l.amount) > 0)
+      .map((l) => ({ billItemKey: l.billItemKey, label: l.label, amount: r2(l.amount) }));
+    const prepayTotal = r2(cleanedPrepayLines.reduce((s, l) => s + l.amount, 0));
+    if (remaining > 0.005 && cleanedPrepayLines.length > 0 && Math.abs(prepayTotal - remaining) > 0.01) {
+      toast.error(`Prepayment labels total KES ${prepayTotal.toLocaleString()} but remaining is KES ${remaining.toLocaleString()}. Adjust amounts to match.`);
+      return;
+    }
+
     setAllocationSaving(true);
     try {
       const updated = await updateReceiptAllocations(dispatch, allocationTarget._id, {
         allocations: payloadRows,
+        prepaymentLines: cleanedPrepayLines,
         reason: allocationReason,
+        ...(allocationAdminOverride ? { adminOverride: true } : {}),
       });
       toast.success("Receipt allocations updated");
       syncActiveReceipt(updated);
@@ -1682,7 +1690,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
     } finally {
       setAllocationSaving(false);
     }
-  }, [allocationLines, allocationReason, allocationRules, allocationTarget, closeAllocationDrawer, dispatch, loadData, syncActiveReceipt]);
+  }, [allocationLines, allocationReason, allocationRules, allocationTarget, allocationComputed, prepaymentWorkspaceLines, closeAllocationDrawer, dispatch, loadData, syncActiveReceipt]);
 
   const handleDownloadReceiptPdf = async (receipt) => {
     if (!canExportReceipt) { toast.warning("You do not have permission to download receipts"); return; }
@@ -1942,6 +1950,11 @@ const Receipts = ({ viewMode = "tenant" }) => {
                               <button onClick={() => openView(receipt)} className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700" title="View">
                                 <FaEye size={11} />
                               </button>
+                              {!receipt.isReversed && (
+                                <button onClick={() => openAllocationDrawer(receipt)} className="px-2 py-1 rounded bg-[#0B3B2E] hover:bg-[#07271e] text-white" title="Allocate to Invoices">
+                                  <FaListAlt size={11} />
+                                </button>
+                              )}
                               {!receipt.isConfirmed && !receipt.isReversed && (
                                 <button onClick={() => openEditForm(receipt)} className="px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white" title="Edit">
                                   <FaEdit size={11} />
@@ -2697,7 +2710,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
               <div className="flex min-h-[280px] items-center justify-center text-sm font-semibold text-slate-500">Loading allocation workspace...</div>
             ) : (
               <div className="grid flex-1 grid-cols-1 gap-0 overflow-hidden xl:grid-cols-[minmax(0,1.75fr)_minmax(340px,0.65fr)]">
-                <div className="overflow-y-auto overflow-x-hidden border-r border-slate-200 bg-white">
+                <div className="overflow-y-auto border-r border-slate-200 bg-white">
                   <div className="grid grid-cols-1 gap-3 border-b border-slate-200 p-4 md:grid-cols-3">
                     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                       <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-500">Receipt Amount</p>
@@ -2729,17 +2742,33 @@ const Receipts = ({ viewMode = "tenant" }) => {
                     </div>
                   )}
 
-                  {allocationRules?.lockedUnappliedForConfirmed && !isAppendOnlyAllocationMode && (
+                  {allocationRules?.lockedUnappliedForConfirmed && !isAppendOnlyAllocationMode && !allocationAdminOverride && (
                     <div className="mx-4 mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                      <div className="flex items-start gap-3">
-                        <FaInfoCircle className="mt-0.5 shrink-0" />
-                        <div>
-                          <p className="font-bold">This posted receipt is fully locked.</p>
-                          <p className="mt-1">
-                            It has no remaining unapplied balance to move. Reverse and recreate it if the posted meaning needs to change.
-                          </p>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3">
+                          <FaInfoCircle className="mt-0.5 shrink-0" />
+                          <div>
+                            <p className="font-bold">This posted receipt is fully locked.</p>
+                            <p className="mt-1">
+                              It has no remaining unapplied balance to move. Reverse and recreate it if the posted meaning needs to change.
+                            </p>
+                          </div>
                         </div>
+                        {canAdminOverride && (
+                          <button
+                            onClick={() => openAllocationDrawer(allocationTarget, { adminOverride: true })}
+                            className="shrink-0 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-50"
+                          >
+                            Admin Override
+                          </button>
+                        )}
                       </div>
+                    </div>
+                  )}
+
+                  {allocationAdminOverride && (
+                    <div className="mx-4 mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-800">
+                      <span className="font-bold">⚠ Admin Override Active</span> — All lock restrictions bypassed. Changes will directly modify confirmed receipt allocations.
                     </div>
                   )}
 
@@ -2772,17 +2801,16 @@ const Receipts = ({ viewMode = "tenant" }) => {
                     </div>
 
                     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                      <div className="max-h-[430px] overflow-auto">
-                        <table className="min-w-[980px] w-full border-collapse text-[11px]">
-                          <thead className="sticky top-0 z-10 bg-slate-100 text-[10px] uppercase tracking-[0.14em] text-slate-600 shadow-sm">
+                      <div className="max-h-[560px] overflow-auto">
+                        <table className="w-full border-collapse text-[11px]">
+                          <thead className="sticky top-0 z-10 bg-slate-100 text-[9px] uppercase tracking-[0.12em] text-slate-500 shadow-sm">
                             <tr>
-                              <th className="border-b border-slate-200 px-2 py-1.5 text-left">Invoice / Bill</th>
-                              <th className="w-32 border-b border-slate-200 px-2 py-1.5 text-left">Amount</th>
-                              <th className="w-36 border-b border-slate-200 px-2 py-1.5 text-right">Available</th>
-                              <th className="w-32 border-b border-slate-200 px-2 py-1.5 text-right">Current</th>
-                              <th className="w-40 border-b border-slate-200 px-2 py-1.5 text-left">Class</th>
-                              <th className="w-44 border-b border-slate-200 px-2 py-1.5 text-left">Dates / Status</th>
-                              <th className="w-28 border-b border-slate-200 px-2 py-1.5 text-center">Action</th>
+                              <th className="border-b border-slate-200 px-2 py-1 text-left">Invoice / Bill</th>
+                              <th className="w-28 border-b border-slate-200 px-2 py-1 text-left">Amount</th>
+                              <th className="w-24 border-b border-slate-200 px-2 py-1 text-right">Available</th>
+                              <th className="w-20 border-b border-slate-200 px-2 py-1 text-left">Class</th>
+                              <th className="w-44 border-b border-slate-200 px-2 py-1 text-left">Period / Dates</th>
+                              <th className="w-16 border-b border-slate-200 px-2 py-1 text-center">Action</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -2792,28 +2820,35 @@ const Receipts = ({ viewMode = "tenant" }) => {
                               const maxForLine = Number(option?.maxAllocatable || 0);
                               const lockedFloor = Math.max(0, Number(option?.currentAllocation || 0));
                               const isLockedBaseLine = isAppendOnlyAllocationMode && lockedFloor > 0;
+                              const isOrphanLine = !!lineInvoiceId && !option;
+                              const isAnyLocked = isLockedBaseLine || isOrphanLine;
+                              const lineRef = line?.invoiceNumber || (lineInvoiceId ? `#${lineInvoiceId.slice(-6)}` : "");
+                              const linePriorityLabel = getAllocationGroupLabel(line?.priorityGroup || "");
+                              const resolvedSelectedLabel = option
+                                ? getAllocationOptionLabel(option)
+                                : lineRef
+                                ? `${lineRef}${linePriorityLabel ? ` · ${linePriorityLabel}` : ""}${line?.utilityType ? ` · ${line.utilityType}` : ""}`
+                                : "";
                               return (
-                                <tr key={`${lineInvoiceId || "line"}-${index}`} className={`border-b border-slate-100 ${isLockedBaseLine ? "bg-slate-50" : "bg-white hover:bg-slate-50"}`}>
-                                  <td className="px-2 py-1.5 align-middle">
-                                    <div
-                                      className="relative"
-                                      onClick={(event) => event.stopPropagation()}
-                                    >
+                                <tr key={`${lineInvoiceId || "line"}-${index}`} className={`border-b border-slate-100 ${isLockedBaseLine ? "bg-slate-50/70" : "bg-white hover:bg-slate-50/60"}`}>
+                                  <td className="px-2 py-1 align-middle">
+                                    <div onClick={(event) => event.stopPropagation()}>
                                       {(() => {
-                                        const selectedLabel = option ? getAllocationOptionLabel(option) : "";
                                         const isDropdownOpen = allocationDropdownOpen[index] === true;
                                         const searchValue = allocationSearchTerms[index];
-                                        const inputValue = isDropdownOpen && searchValue !== undefined ? searchValue : selectedLabel;
+                                        const inputValue = isDropdownOpen && searchValue !== undefined ? searchValue : resolvedSelectedLabel;
                                         const filteredOptions = getFilteredAllocationOptions(searchValue || "", lineInvoiceId);
 
                                         return (
                                           <>
                                             <input
                                               type="text"
-                                              value={inputValue}
+                                              value={isAnyLocked ? resolvedSelectedLabel : inputValue}
                                               onFocus={(event) => {
                                                 event.stopPropagation();
-                                                if (isLockedBaseLine) return;
+                                                if (isAnyLocked) return;
+                                                const rect = event.target.getBoundingClientRect();
+                                                setAllocationDropdownPos((prev) => ({ ...prev, [index]: { top: rect.bottom + 2, left: rect.left, width: rect.width } }));
                                                 setAllocationSearchTerms((prev) => ({
                                                   ...prev,
                                                   [index]: prev[index] !== undefined ? prev[index] : "",
@@ -2825,14 +2860,16 @@ const Receipts = ({ viewMode = "tenant" }) => {
                                               }}
                                               onClick={(event) => {
                                                 event.stopPropagation();
-                                                if (isLockedBaseLine) return;
+                                                if (isAnyLocked) return;
+                                                const rect = event.target.getBoundingClientRect();
+                                                setAllocationDropdownPos((prev) => ({ ...prev, [index]: { top: rect.bottom + 2, left: rect.left, width: rect.width } }));
                                                 setAllocationDropdownOpen((prev) => ({
                                                   ...prev,
                                                   [index]: true,
                                                 }));
                                               }}
                                               onChange={(event) => {
-                                                if (isLockedBaseLine) return;
+                                                if (isAnyLocked) return;
                                                 const value = event.target.value;
                                                 setAllocationSearchTerms((prev) => ({
                                                   ...prev,
@@ -2860,20 +2897,25 @@ const Receipts = ({ viewMode = "tenant" }) => {
                                                   });
                                                 }, 140);
                                               }}
-                                              disabled={isLockedBaseLine}
-                                              placeholder="Search invoice number, bill type, rent, deposit..."
-                                              className="h-8 w-full border border-slate-300 bg-white px-2 text-[11px] font-semibold text-slate-800 focus:border-[#0B3B2E] focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100"
+                                              disabled={isAnyLocked}
+                                              placeholder="Search invoice, bill type, rent, deposit…"
+                                              className="h-7 w-full border border-slate-300 bg-white px-2 text-[11px] font-semibold text-slate-800 placeholder:font-normal placeholder:text-slate-400 focus:border-[#0B3B2E] focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
                                             />
 
-                                            {isDropdownOpen && !isLockedBaseLine && (
+                                            {isDropdownOpen && !isAnyLocked && allocationDropdownPos[index] && (
                                               <div
-                                                className="absolute left-0 right-0 top-full z-[10000] mt-1 max-h-[200px] overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-2xl"
+                                                style={{ position: "fixed", top: allocationDropdownPos[index].top, left: allocationDropdownPos[index].left, width: allocationDropdownPos[index].width }}
+                                                className="z-[99999] max-h-[340px] overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-2xl ring-1 ring-black/5"
                                                 onMouseDown={(event) => event.preventDefault()}
                                                 onClick={(event) => event.stopPropagation()}
                                               >
                                                 {filteredOptions.length > 0 ? (
                                                   filteredOptions.map((invoice) => {
                                                     const invoiceId = String(invoice?.invoiceId || "");
+                                                    const ref = invoice?.invoiceNumber || invoice?.description || "Invoice";
+                                                    const chargeLabel = getAllocationGroupLabel(invoice?.priorityGroup || invoice?.chargeType || getInvoiceChargeType(invoice));
+                                                    const avail = getAllocationOptionAmount(invoice);
+                                                    const isPaid = String(invoice?.status || "").toLowerCase() === "paid";
                                                     return (
                                                       <button
                                                         key={invoiceId}
@@ -2891,24 +2933,29 @@ const Receipts = ({ viewMode = "tenant" }) => {
                                                             [index]: false,
                                                           }));
                                                         }}
-                                                        className="block w-full border-b border-slate-100 px-3 py-2 text-left text-[11px] hover:bg-slate-100 focus:bg-slate-100 focus:outline-none"
+                                                        className="flex w-full items-center gap-3 border-b border-slate-100 px-3 py-1.5 text-left last:border-0 hover:bg-[#0B3B2E]/[0.04] focus:bg-[#0B3B2E]/[0.04] focus:outline-none"
                                                       >
-                                                        <div className="flex items-center justify-between gap-3">
-                                                          <span className="truncate font-black text-slate-900">
-                                                            {getAllocationOptionLabel(invoice)}
-                                                          </span>
+                                                        <div className="min-w-0 flex-1">
+                                                          <div className="flex items-center gap-1.5">
+                                                            <span className="text-[11px] font-bold text-slate-900">{ref}</span>
+                                                            <span className="rounded bg-slate-100 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-slate-500">{chargeLabel}</span>
+                                                            {invoice?.utilityType ? (
+                                                              <span className="rounded bg-teal-50 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-teal-700">{invoice.utilityType}</span>
+                                                            ) : null}
+                                                          </div>
+                                                          <div className="mt-0.5 flex items-center gap-1 text-[10px] text-slate-400">
+                                                            {invoice?.period ? <span>{invoice.period}</span> : null}
+                                                            {invoice?.dueDate ? <><span>·</span><span>Due {formatDate(invoice.dueDate)}</span></> : null}
+                                                            {invoice?.status ? <><span>·</span><span className={isPaid ? "font-semibold text-emerald-600" : ""}>{String(invoice.status).replace(/_/g, " ")}</span></> : null}
+                                                          </div>
                                                         </div>
-                                                        <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-slate-500">
-                                                          <span>{invoice?.description || getAllocationGroupLabel(invoice?.priorityGroup || invoice?.chargeType || getInvoiceChargeType(invoice))}</span>
-                                                          {invoice?.invoiceId ? <span>· ID {String(invoice.invoiceId).slice(-6)}</span> : null}
-                                                          {invoice?.dueDate ? <span>· Due {formatDate(invoice.dueDate)}</span> : null}
-                                                        </div>
+                                                        <span className="shrink-0 text-[11px] font-black tabular-nums text-[#0B3B2E]">{formatMoney(avail)}</span>
                                                       </button>
                                                     );
                                                   })
                                                 ) : (
-                                                  <div className="px-3 py-2 text-[11px] font-semibold text-slate-500">
-                                                    No open invoice, debit note, deposit, rent, utility, or penalty bill matched your search.
+                                                  <div className="px-3 py-2.5 text-[11px] text-slate-400">
+                                                    No matching invoice, bill, deposit, or charge found.
                                                   </div>
                                                 )}
                                               </div>
@@ -2918,50 +2965,55 @@ const Receipts = ({ viewMode = "tenant" }) => {
                                       })()}
                                     </div>
                                   </td>
-                                  <td className="px-2 py-1.5 align-middle">
+                                  <td className="px-2 py-1 align-middle">
                                     <input
                                       type="number"
                                       min={isLockedBaseLine ? lockedFloor : 0}
                                       step="0.01"
                                       value={line?.appliedAmount || ""}
                                       onChange={(e) => updateAllocationLine(index, "appliedAmount", e.target.value)}
-                                      className="w-full border border-slate-300 bg-white px-2 py-1.5 text-[11px] text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
+                                      disabled={isAnyLocked}
+                                      className="h-7 w-full border border-slate-300 bg-white px-2 text-[11px] tabular-nums text-slate-800 focus:border-[#0B3B2E] focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
                                       placeholder="0.00"
                                     />
                                   </td>
-                                  <td className="whitespace-nowrap px-2 py-1.5 text-right align-middle font-black text-slate-900">{formatMoney(maxForLine)}</td>
-                                  <td className="whitespace-nowrap px-2 py-1.5 text-right align-middle text-slate-600">
-                                    {formatMoney(option?.currentAllocation || 0)}
-                                    {isLockedBaseLine ? <span className="ml-1 rounded-full bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-600">Locked</span> : null}
+                                  <td className="whitespace-nowrap px-2 py-1 text-right align-middle text-[11px] font-black tabular-nums text-slate-900">
+                                    {option ? formatMoney(maxForLine) : <span className="text-slate-300">—</span>}
+                                    {isAnyLocked ? <div className="mt-0.5 rounded bg-rose-50 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-rose-600 text-center">Locked</div> : null}
                                   </td>
-                                  <td className="px-2 py-1.5 align-middle">
-                                    {option ? (
-                                      <div className="flex flex-wrap gap-1">
-                                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700">{getAllocationGroupLabel(option?.priorityGroup)}</span>
-                                        {option?.utilityType ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700">{option.utilityType}</span> : null}
+                                  <td className="px-2 py-1 align-middle">
+                                    {(option || line?.priorityGroup) ? (
+                                      <div className="flex flex-col gap-0.5">
+                                        <span className="rounded bg-slate-100 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-slate-600 inline-block w-fit">{getAllocationGroupLabel(option?.priorityGroup || line?.priorityGroup)}</span>
+                                        {(option?.utilityType || line?.utilityType) ? <span className="rounded bg-teal-50 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-teal-700 inline-block w-fit">{option?.utilityType || line?.utilityType}</span> : null}
                                       </div>
                                     ) : (
-                                      <span className="text-slate-400">-</span>
+                                      <span className="text-slate-300">—</span>
                                     )}
                                   </td>
-                                  <td className="px-2 py-1.5 align-middle text-[10px] text-slate-500">
-                                    {option ? (
+                                  <td className="px-2 py-1 align-middle text-[10px] text-slate-500">
+                                    {(option || option?.period) ? (
                                       <div className="space-y-0.5">
-                                        {option?.invoiceDate ? <div>Invoice {formatDate(option.invoiceDate)}</div> : null}
+                                        {option?.period ? <div className="font-semibold text-slate-700">{option.period}</div> : null}
                                         {option?.dueDate ? <div>Due {formatDate(option.dueDate)}</div> : null}
-                                        <div>Status {String(option?.status || "pending").replaceAll("_", " ")}</div>
+                                        {option?.status ? (
+                                          <span className={`rounded px-1.5 py-px text-[9px] font-bold uppercase tracking-wide ${String(option.status).toLowerCase() === "paid" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
+                                            {String(option.status).replace(/_/g, " ")}
+                                          </span>
+                                        ) : null}
                                       </div>
                                     ) : (
-                                      <span>-</span>
+                                      <span className="text-slate-300">—</span>
                                     )}
                                   </td>
-                                  <td className="px-2 py-1.5 text-center align-middle">
+                                  <td className="px-2 py-1 text-center align-middle">
                                     <button
                                       onClick={() => removeAllocationLine(index)}
-                                      disabled={isLockedBaseLine}
-                                      className="inline-flex items-center justify-center gap-1 rounded-lg border border-rose-200 bg-white px-2.5 py-1.5 text-[10px] font-bold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                      disabled={isAnyLocked}
+                                      title={isAnyLocked ? "Locked — cannot remove" : "Remove line"}
+                                      className="inline-flex items-center justify-center gap-1 rounded border border-rose-200 bg-white px-2 py-1 text-[10px] font-bold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40"
                                     >
-                                      <FaMinusCircle /> {isLockedBaseLine ? "Locked" : "Remove"}
+                                      <FaMinusCircle size={9} /> {isAnyLocked ? "Locked" : "Remove"}
                                     </button>
                                   </td>
                                 </tr>
@@ -2972,6 +3024,69 @@ const Receipts = ({ viewMode = "tenant" }) => {
                       </div>
                     </div>
                   </div>
+
+                  {/* Prepayment label section — shown when there is remaining unallocated amount */}
+                  {allocationComputed.remaining > 0.005 && (
+                    <div className="border-t border-dashed border-amber-300 bg-amber-50/60 p-4">
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <h4 className="text-sm font-bold text-slate-900">Label Unallocated Balance <span className="ml-1 text-amber-700">({formatMoney(allocationComputed.remaining)} remaining)</span></h4>
+                          <p className="text-xs text-slate-500">Tag the unallocated portion by charge type so it auto-applies to the correct future invoice (e.g. rent vs garbage).</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setPrepaymentWorkspaceLines((prev) => [...prev, { billItemKey: "rent", label: "Rent Prepayment", amount: 0 }])}
+                          className="inline-flex items-center gap-1 rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-800"
+                        >
+                          <FaPlusCircle size={10} /> Add Label
+                        </button>
+                      </div>
+                      {prepaymentWorkspaceLines.length === 0 ? (
+                        <p className="text-xs text-amber-700 italic">No labels set — remaining will default to Rent Prepayment on save.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {prepaymentWorkspaceLines.map((line, idx) => (
+                            <div key={idx} className="flex items-center gap-2">
+                              <select
+                                value={line.billItemKey}
+                                onChange={(e) => {
+                                  const opt = allocationPrepaymentTypes.find((o) => o.billItemKey === e.target.value);
+                                  setPrepaymentWorkspaceLines((prev) => prev.map((l, i) => i !== idx ? l : { ...l, billItemKey: e.target.value, label: opt?.label || e.target.value }));
+                                }}
+                                className="h-7 flex-1 border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
+                              >
+                                {allocationPrepaymentTypes.map((o) => (
+                                  <option key={o.billItemKey} value={o.billItemKey}>{o.label}</option>
+                                ))}
+                              </select>
+                              <input
+                                type="number"
+                                min={0}
+                                step="0.01"
+                                value={line.amount || ""}
+                                onChange={(e) => setPrepaymentWorkspaceLines((prev) => prev.map((l, i) => i !== idx ? l : { ...l, amount: e.target.value }))}
+                                placeholder="0.00"
+                                className="h-7 w-32 border border-slate-300 bg-white px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setPrepaymentWorkspaceLines((prev) => prev.filter((_, i) => i !== idx))}
+                                className="inline-flex h-7 w-7 items-center justify-center rounded border border-rose-200 bg-white text-rose-600 hover:bg-rose-50"
+                              >
+                                <FaMinusCircle size={10} />
+                              </button>
+                            </div>
+                          ))}
+                          <div className="mt-1 flex justify-between text-[10px] font-bold">
+                            <span className="text-slate-500">Labels total</span>
+                            <span className={`${Math.abs(prepaymentWorkspaceLines.reduce((s, l) => s + Number(l.amount || 0), 0) - allocationComputed.remaining) > 0.01 ? "text-rose-600" : "text-emerald-700"}`}>
+                              {formatMoney(prepaymentWorkspaceLines.reduce((s, l) => s + Number(l.amount || 0), 0))} / {formatMoney(allocationComputed.remaining)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="overflow-y-auto bg-slate-50/80">

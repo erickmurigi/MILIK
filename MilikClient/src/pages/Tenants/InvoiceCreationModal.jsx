@@ -54,8 +54,10 @@ const InvoiceCreationModal = ({
 
   const tenantName  = periods[0]?.tenantName  ?? "N/A";
   const propertyName = periods[0]?.propertyName ?? "N/A";
-  const totalRentAmount    = periods.reduce((s, p) => s + Number(p.rent    || 0), 0);
-  const totalUtilityAmount = periods.reduce((s, p) => s + Number(p.utility || 0), 0);
+  const { totalRentAmount, totalUtilityAmount } = useMemo(() => ({
+    totalRentAmount:    periods.reduce((s, p) => s + Number(p.rent    || 0), 0),
+    totalUtilityAmount: periods.reduce((s, p) => s + Number(p.utility || 0), 0),
+  }), [periods]);
   const defaultDepositAmount = Number(depositOption?.amount || 0);
   const depositAmount = Number(depositAmountInput || 0);
 
@@ -123,7 +125,7 @@ const InvoiceCreationModal = ({
             </p>
             <div className="border border-slate-200 divide-y divide-slate-100">
               {periods.map((period, idx) => (
-                <div key={idx} className="flex items-center justify-between px-3 py-2">
+                <div key={period.periodKey || period.description || idx} className="flex items-center justify-between px-3 py-2">
                   <div>
                     <p className="text-sm font-bold text-slate-800">{period.description}</p>
                     <p className="text-[11px] text-slate-400">{period.from} — {period.to}</p>

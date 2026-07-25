@@ -152,7 +152,14 @@ export const createLandlord = async (req, res, next) => {
     if (idNumberValue) duplicateQuery.$or.push({ idNumber: idNumberValue });
     if (emailValue) duplicateQuery.$or.push({ email: emailValue });
 
-    const existingLandlord = await Landlord.findOne(duplicateQuery).lean();
+    const [existingLandlord, createdById] = await Promise.all([
+      Landlord.findOne(duplicateQuery).lean(),
+      resolveAuditActorUserId({
+        req,
+        businessId: companyId,
+        fallbackErrorMessage: "No valid company user could be resolved for landlord creation.",
+      }),
+    ]);
 
     if (existingLandlord) {
       if (existingLandlord.landlordCode === landlordCode) {
@@ -179,12 +186,6 @@ export const createLandlord = async (req, res, next) => {
         });
       }
     }
-
-    const createdById = await resolveAuditActorUserId({
-      req,
-      businessId: companyId,
-      fallbackErrorMessage: "No valid company user could be resolved for landlord creation.",
-    });
 
     const newLandlord = new Landlord({
       ...req.body,
@@ -313,13 +314,28 @@ export const getLandlords = async (req, res, next) => {
     );
     const landlordIds = landlords.map((l) => l._id);
 
-    const allProperties = await Property.find({ business: businessId }).select("landlords status").lean();
-
-    // Build in-memory property count maps
     const landlordById = new Map(landlords.map((l) => [String(l._id), l]));
     const landlordByName = new Map(
       landlords.flatMap((l) => (l.landlordName ? [[l.landlordName, l]] : []))
     );
+
+    const baseMatch = { business: businessId, landlord: { $in: landlordIds } };
+
+    const [allProperties, statementRows] = await Promise.all([
+      Property.find({ business: businessId }).select("landlords status").limit(2000).lean(),
+      ProcessedStatement.aggregate([
+        {
+          $match: {
+            ...baseMatch,
+            status: { $ne: "reversed" },
+            isNegativeStatement: { $ne: true },
+            balanceDue: { $gt: 0 },
+          },
+        },
+        { $group: { _id: "$landlord", balance: { $sum: "$balanceDue" } } },
+      ]),
+    ]);
+
     const activeCounts = new Map();
     const archivedCounts = new Map();
 
@@ -336,19 +352,6 @@ export const getLandlords = async (req, res, next) => {
         map.set(lid, (map.get(lid) || 0) + 1);
       }
     }
-
-    const baseMatch = { business: businessId, landlord: { $in: landlordIds } };
-    const statementRows = await ProcessedStatement.aggregate([
-      {
-        $match: {
-          ...baseMatch,
-          status: { $ne: "reversed" },
-          isNegativeStatement: { $ne: true },
-          balanceDue: { $gt: 0 },
-        },
-      },
-      { $group: { _id: "$landlord", balance: { $sum: "$balanceDue" } } },
-    ]);
 
     const balanceByLandlord = new Map(statementRows.map((r) => [String(r._id), Number(r.balance || 0)]));
 
@@ -384,7 +387,8 @@ export const getLandlord = async (req, res, next) => {
   try {
     const landlord = await Landlord.findById(req.params.id)
       .populate("company", "companyName")
-      .populate("createdBy", "surname otherNames email");
+      .populate("createdBy", "surname otherNames email")
+      .lean();
 
     const access = authorizeLandlordAccess(req, landlord);
     if (!access.allowed) {
@@ -411,7 +415,7 @@ export const getLandlord = async (req, res, next) => {
 // Update landlord
 export const updateLandlord = async (req, res, next) => {
   try {
-    const existingLandlord = await Landlord.findById(req.params.id);
+    const existingLandlord = await Landlord.findById(req.params.id).lean();
 
     const access = authorizeLandlordAccess(req, existingLandlord);
     if (!access.allowed) {
@@ -512,7 +516,7 @@ export const updateLandlord = async (req, res, next) => {
       req.params.id,
       { $set: updateData },
       { new: true, runValidators: true }
-    ).populate("company", "companyName");
+    ).populate("company", "companyName").lean();
 
     if (
       updatedLandlord &&
@@ -583,7 +587,7 @@ export const updateLandlord = async (req, res, next) => {
 export const deleteLandlord = async (req, res, next) => {
   try {
     const landlordId = req.params.id;
-    const landlord = await Landlord.findById(landlordId);
+    const landlord = await Landlord.findById(landlordId).lean();
 
     const access = authorizeLandlordAccess(req, landlord);
     if (!access.allowed) {
@@ -639,7 +643,7 @@ export const deleteLandlord = async (req, res, next) => {
 export const getLandlordStats = async (req, res, next) => {
   try {
     const landlordId = req.params.id;
-    const landlord = await Landlord.findById(landlordId);
+    const landlord = await Landlord.findById(landlordId).lean();
 
     const access = authorizeLandlordAccess(req, landlord);
     if (!access.allowed) {
@@ -651,7 +655,7 @@ export const getLandlordStats = async (req, res, next) => {
 
     const propertyQuery = buildLandlordPropertyMatch(landlord);
 
-    const properties = await Property.find(propertyQuery).select("_id status").lean();
+    const properties = await Property.find(propertyQuery).select("_id status").limit(2000).lean();
     const propertyIds = properties.map((p) => p._id);
 
     const totalProperties = properties.length;
@@ -750,18 +754,25 @@ export const bulkImportLandlords = async (req, res, next) => {
     const regIds = normalizedLandlords.map((l) => l.regId).filter(Boolean);
     const idNumbers = normalizedLandlords.map((l) => l.idNumber).filter(Boolean);
 
-    const existingLandlords = await Landlord.find({
-      company: companyId,
-      ...(emails.length || regIds.length || idNumbers.length
-        ? {
-            $or: [
-              ...(emails.length ? [{ email: { $in: emails } }] : []),
-              ...(regIds.length ? [{ regId: { $in: regIds } }] : []),
-              ...(idNumbers.length ? [{ idNumber: { $in: idNumbers } }] : []),
-            ],
-          }
-        : { _id: null }), // No real values to check — skip DB query result
-    }).select("email regId idNumber landlordCode");
+    const [existingLandlords, codeResult] = await Promise.all([
+      Landlord.find({
+        company: companyId,
+        ...(emails.length || regIds.length || idNumbers.length
+          ? {
+              $or: [
+                ...(emails.length ? [{ email: { $in: emails } }] : []),
+                ...(regIds.length ? [{ regId: { $in: regIds } }] : []),
+                ...(idNumbers.length ? [{ idNumber: { $in: idNumbers } }] : []),
+              ],
+            }
+          : { _id: null }), // No real values to check — skip DB query result
+      }).select("email regId idNumber landlordCode").lean(),
+      Landlord.aggregate([
+        { $match: { company: new mongoose.Types.ObjectId(String(companyId)), landlordCode: { $regex: /^LL\d+$/ } } },
+        { $addFields: { codeNum: { $toInt: { $substr: ["$landlordCode", 2, -1] } } } },
+        { $group: { _id: null, maxNum: { $max: "$codeNum" } } },
+      ]),
+    ]);
 
     const existingEmails = new Set(existingLandlords.map((l) => l.email).filter(Boolean));
     const existingRegIds = new Set(existingLandlords.map((l) => l.regId).filter(Boolean));
@@ -772,13 +783,6 @@ export const bulkImportLandlords = async (req, res, next) => {
       failed: [],
       totalProcessed: 0,
     };
-
-    // Resolve starting code number once — avoids N aggregation calls in the loop
-    const codeResult = await Landlord.aggregate([
-      { $match: { company: new mongoose.Types.ObjectId(String(companyId)), landlordCode: { $regex: /^LL\d+$/ } } },
-      { $addFields: { codeNum: { $toInt: { $substr: ["$landlordCode", 2, -1] } } } },
-      { $group: { _id: null, maxNum: { $max: "$codeNum" } } },
-    ]);
     let nextCodeNum = (codeResult[0]?.maxNum ?? 0) + 1;
 
     const toInsert = [];
