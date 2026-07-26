@@ -166,21 +166,18 @@ const ClientsDashboard = () => {
             tone="slate"
             sub="active monthly contracts"
           />
-          <StatCard
-            label="Outstanding"
-            value="View Invoices"
-            icon={FaMoneyBillWave}
-            tone="amber"
-            sub={
-              <button
-                type="button"
-                onClick={() => navigate('/clients/invoices')}
-                className="underline text-white/70 hover:text-white text-[10px]"
-              >
-                Go to Invoices →
-              </button>
-            }
-          />
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => navigate('/clients/invoices')}
+            onKeyDown={(e) => e.key === 'Enter' && navigate('/clients/invoices')}
+            className="relative overflow-hidden border bg-amber-700 border-amber-700 px-4 py-3 shadow-sm cursor-pointer hover:brightness-110 transition-all"
+          >
+            <FaMoneyBillWave className="absolute right-3 top-2.5 h-10 w-10 text-white/10" />
+            <p className="text-[9px] font-extrabold uppercase tracking-widest text-white/60">Invoices</p>
+            <p className="mt-1.5 text-2xl font-black leading-none text-white">All Invoices</p>
+            <p className="mt-1 text-[10px] text-white/60 underline">View all invoices →</p>
+          </div>
         </div>
 
         {/* ── Two column area ──────────────────────────────────────────────── */}
@@ -193,7 +190,7 @@ const ClientsDashboard = () => {
               <button
                 type="button"
                 onClick={() => navigate('/clients/contracts')}
-                className="text-[10px] font-extrabold uppercase tracking-wide text-[#0B3B2E] hover:text-[#FF8C00]"
+              className="text-[10px] font-extrabold uppercase tracking-wide text-[#0B3B2E] hover:text-[#FF8C00]"
               >
                 View All →
               </button>
@@ -286,7 +283,7 @@ const ClientsDashboard = () => {
                     <div className="min-w-0">
                       <p className="text-xs font-semibold text-slate-800 truncate">{cl.name}</p>
                       <p className="text-[10px] text-slate-400">
-                        {cl.code || '—'} &middot; {cl.category || '—'}
+                        {cl.clientCode || '—'} &middot; {cl.category || '—'}
                       </p>
                     </div>
                     <span

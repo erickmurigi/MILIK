@@ -6,7 +6,7 @@ import Client from "../models/Client.js";
 import Company from "../../../models/Company.js";
 import { resolveActiveBusinessId, currentUserId } from "../services/businessScope.js";
 import { nextInvoiceNumber } from "../services/clientSequenceService.js";
-import { sendInvoiceEmail } from "../services/clientEmailService.js";
+import { sendInvoiceEmail, sendReceiptEmail } from "../services/clientEmailService.js";
 
 // ─── Sanitizers ──────────────────────────────────────────────────────────────
 
@@ -181,6 +181,16 @@ export const markPaid = async (req, res, next) => {
     }
 
     await invoice.save();
+
+    // Fire-and-forget receipt email — don't block the response
+    Client.findOne({ _id: invoice.client, business }).lean()
+      .then(async (cl) => {
+        if (!cl?.email) return;
+        const company = await Company.findById(business).lean();
+        await sendReceiptEmail(invoice.toObject(), cl, company);
+      })
+      .catch((err) => console.error("[invoicesController] Receipt email error:", err.message));
+
     res.status(200).json({ success: true, data: invoice, invoice, message: "Payment recorded" });
   } catch (error) {
     next(error);

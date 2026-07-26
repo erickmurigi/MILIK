@@ -6,6 +6,7 @@ import {
   getContract,
   createContract,
   updateContract,
+  activateContract,
   updateRenewalStage,
   renewContract,
   terminateContract,
@@ -19,6 +20,7 @@ router.get("/",                                          listContracts);
 router.post("/",                                         createContract);
 router.get("/:id",            validateParamId(),         getContract);
 router.put("/:id",            validateParamId(),         updateContract);
+router.patch("/:id/activate",      validateParamId(),   activateContract);
 router.patch("/:id/renewal-stage", validateParamId(),   updateRenewalStage);
 router.post("/:id/renew",     validateParamId(),         renewContract);
 router.post("/:id/terminate", validateParamId(),         terminateContract);

@@ -34,12 +34,15 @@ const Dashboard = ({ darkMode }) => {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [dashboardError, setDashboardError] = useState(null);
 
+  const businessId = useMemo(() => {
+    const companyFromUser =
+      typeof currentUser?.company === 'string' ? currentUser.company : currentUser?.company?._id;
+    return currentCompany?._id || companyFromUser;
+  }, [currentCompany?._id, currentUser?.company, currentUser?._id]);
+
   useEffect(() => { window.scrollTo(0, 0); }, []);
 
   useEffect(() => {
-    const companyFromUser =
-      typeof currentUser?.company === 'string' ? currentUser.company : currentUser?.company?._id;
-    const businessId = currentCompany?._id || companyFromUser;
     if (!businessId) return;
 
     let active = true;
@@ -76,13 +79,9 @@ const Dashboard = ({ darkMode }) => {
 
     load();
     return () => { active = false; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dispatch, currentCompany?._id, currentUser?.company, currentUser?._id]);
+  }, [dispatch, businessId, properties.length, units.length, tenants.length]);
 
   useEffect(() => {
-    const companyFromUser =
-      typeof currentUser?.company === 'string' ? currentUser.company : currentUser?.company?._id;
-    const businessId = currentCompany?._id || companyFromUser;
     if (!socket || !businessId) return;
     socket.emit('joinCompany', { companyId: businessId, userId: currentUser?._id });
     const onNotif = () => getNotifications(dispatch, businessId);
@@ -90,7 +89,7 @@ const Dashboard = ({ darkMode }) => {
     socket.on('notification:new', onNotif);
     socket.on('maintenance:new',  onMaint);
     return () => { socket.off('notification:new', onNotif); socket.off('maintenance:new', onMaint); };
-  }, [socket, currentCompany?._id, currentUser?._id, currentUser?.company, dispatch]);
+  }, [socket, businessId, currentUser?._id, dispatch]);
 
   // ── Shared Maps — computed ONCE, passed as stable props to avoid duplicate O(n) builds ──
   const today = useMemo(() => {

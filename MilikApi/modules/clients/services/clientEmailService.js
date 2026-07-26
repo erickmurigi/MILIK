@@ -391,3 +391,103 @@ export const sendRenewalNoticeEmail = async (contract, client, company, daysLeft
     return { success: false, reason: err.message };
   }
 };
+
+// ─── Payment receipt email ────────────────────────────────────────────────────
+
+export const sendReceiptEmail = async (invoice, client, company) => {
+  if (!isEmailEnabled()) return { success: false, reason: "email_globally_disabled" };
+
+  const profile = resolveEmailProfile(company);
+  if (!profile) return { success: false, reason: "smtp_not_configured" };
+
+  const toEmail = String(client?.email || "").trim();
+  if (!toEmail) return { success: false, reason: "client_email_missing" };
+
+  const currency   = invoice.currency || "KES";
+  const total      = Number(invoice.total || 0);
+  const paidAmount = Number(invoice.paidAmount || 0);
+  const balance    = Math.max(0, total - paidAmount);
+  const companyName = escapeHtml(company?.name || "");
+
+  const subject = `Payment Receipt – ${invoice.invoiceNumber}`;
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Payment Receipt</title></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,sans-serif;font-size:14px;color:#111827;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 0;">
+    <tr>
+      <td align="center">
+        <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;">
+          <tr>
+            <td style="background:#0B3B2E;padding:20px 28px;">
+              <div style="color:#ffffff;font-size:18px;font-weight:bold;">${companyName}</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px;">
+              <div style="font-size:18px;font-weight:bold;color:#0B3B2E;margin-bottom:4px;">Payment Receipt</div>
+              <div style="color:#16a34a;font-size:13px;margin-bottom:20px;">Payment confirmed — thank you!</div>
+              <p style="margin:0 0 20px;">Dear ${escapeHtml(client?.name || "Client")},<br />
+              We acknowledge receipt of your payment for invoice <strong>${escapeHtml(invoice.invoiceNumber)}</strong>.</p>
+              <table cellpadding="0" cellspacing="0" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:4px;width:100%;margin-bottom:20px;">
+                <tr><td style="padding:8px 14px;color:#6b7280;min-width:150px;">Invoice No.</td><td style="padding:8px 14px;font-weight:bold;">${escapeHtml(invoice.invoiceNumber)}</td></tr>
+                <tr style="background:#fff;"><td style="padding:8px 14px;color:#6b7280;">Invoice Total</td><td style="padding:8px 14px;">${formatCurrency(total, currency)}</td></tr>
+                <tr><td style="padding:8px 14px;color:#6b7280;">Amount Paid</td><td style="padding:8px 14px;font-weight:bold;color:#16a34a;">${formatCurrency(paidAmount, currency)}</td></tr>
+                ${invoice.paymentMethod ? `<tr style="background:#fff;"><td style="padding:8px 14px;color:#6b7280;">Payment Method</td><td style="padding:8px 14px;">${escapeHtml(invoice.paymentMethod)}</td></tr>` : ""}
+                ${invoice.paymentReference ? `<tr><td style="padding:8px 14px;color:#6b7280;">Reference</td><td style="padding:8px 14px;">${escapeHtml(invoice.paymentReference)}</td></tr>` : ""}
+                ${invoice.paidAt ? `<tr style="background:#fff;"><td style="padding:8px 14px;color:#6b7280;">Payment Date</td><td style="padding:8px 14px;">${formatDate(invoice.paidAt)}</td></tr>` : ""}
+                ${balance > 0 ? `<tr><td style="padding:8px 14px;color:#dc2626;font-weight:bold;">Balance Remaining</td><td style="padding:8px 14px;color:#dc2626;font-weight:bold;">${formatCurrency(balance, currency)}</td></tr>` : `<tr><td style="padding:8px 14px;color:#16a34a;font-weight:bold;">Status</td><td style="padding:8px 14px;color:#16a34a;font-weight:bold;">PAID IN FULL</td></tr>`}
+              </table>
+              <p style="margin:0;color:#374151;">Thank you for your prompt payment.<br /><strong>${companyName}</strong></p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#f9fafb;padding:12px 28px;text-align:center;color:#9ca3af;font-size:12px;border-top:1px solid #e5e7eb;">
+              ${companyName}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+  const text = [
+    `Payment Receipt – ${invoice.invoiceNumber}`,
+    ``,
+    `Dear ${client?.name || "Client"},`,
+    `We acknowledge receipt of your payment.`,
+    ``,
+    `Invoice No.:    ${invoice.invoiceNumber}`,
+    `Invoice Total:  ${formatCurrency(total, currency)}`,
+    `Amount Paid:    ${formatCurrency(paidAmount, currency)}`,
+    invoice.paymentMethod   ? `Payment Method: ${invoice.paymentMethod}` : "",
+    invoice.paymentReference ? `Reference:      ${invoice.paymentReference}` : "",
+    invoice.paidAt           ? `Payment Date:   ${formatDate(invoice.paidAt)}` : "",
+    balance > 0
+      ? `Balance Due:    ${formatCurrency(balance, currency)}`
+      : `Status:         PAID IN FULL`,
+    ``,
+    `Thank you for your business.`,
+    companyName,
+  ].filter(Boolean).join("\n");
+
+  try {
+    const transporter = buildCompanySmtpTransporter(profile);
+    await transporter.sendMail({
+      from: resolveCompanyMailSender(profile),
+      to:   toEmail,
+      subject,
+      text,
+      html,
+      replyTo: profile?.replyTo || undefined,
+      ...buildCompanyInternalCopyRecipients(profile),
+    });
+    return { success: true };
+  } catch (err) {
+    console.error("[clientEmailService] Failed to send receipt email:", err.message);
+    return { success: false, reason: err.message };
+  }
+};

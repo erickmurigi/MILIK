@@ -252,9 +252,11 @@ const SaleLeads             = lazy(() => import("./pages/PropertySale/SaleLeads"
 const SaleActivities        = lazy(() => import("./pages/PropertySale/SaleActivities"));
 
 // Client Management module
-const ClientsDashboard = lazy(() => import("./pages/Clients/ClientsDashboard"));
-const ClientsList      = lazy(() => import("./pages/Clients/ClientsList"));
-const ClientDetail     = lazy(() => import("./pages/Clients/ClientDetail"));
+const ClientsDashboard  = lazy(() => import("./pages/Clients/ClientsDashboard"));
+const ClientsList       = lazy(() => import("./pages/Clients/ClientsList"));
+const ClientDetail      = lazy(() => import("./pages/Clients/ClientDetail"));
+const ClientsContracts  = lazy(() => import("./pages/Clients/ClientsContracts"));
+const ClientsInvoices   = lazy(() => import("./pages/Clients/ClientsInvoices"));
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const DEMO_EXPIRED_NOTICE_KEY = "milik_demo_expired_notice";
@@ -749,7 +751,9 @@ function App() {
             <Route path="/sale/chart-of-accounts/:accountId/activity" element={<Guard moduleKey="propertySale" resource="chartOfAccounts"><LedgerAccountActivity /></Guard>} />
 
             {/* ── Client Management module ──────────────────────────────── */}
-            <Route path="/clients/dashboard" element={<Guard resource="clients"><ClientsDashboard /></Guard>} />
+            <Route path="/clients/dashboard"  element={<Guard resource="clients"><ClientsDashboard /></Guard>} />
+            <Route path="/clients/contracts" element={<Guard resource="clients"><ClientsContracts /></Guard>} />
+            <Route path="/clients/invoices"  element={<Guard resource="clients"><ClientsInvoices /></Guard>} />
             <Route path="/clients"           element={<Guard resource="clients"><ClientsList /></Guard>} />
             <Route path="/clients/:id"       element={<Guard resource="clients"><ClientDetail /></Guard>} />
 

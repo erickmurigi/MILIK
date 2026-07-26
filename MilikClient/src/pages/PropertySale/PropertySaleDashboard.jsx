@@ -89,8 +89,16 @@ const PropertySaleDashboard = () => {
     sold:          s.listings?.sold          ?? 0,
   }), [s]);
 
-  const recentDeals    = s.recentDeals    || [];
   const recentListings = s.recentListings || [];
+
+  const recentDeals = useMemo(
+    () => (s.recentDeals || []).map((deal) => ({
+      ...deal,
+      pct: deal.agreedPrice > 0 ? Math.min(100, Math.round(((deal.totalPaid || 0) / deal.agreedPrice) * 100)) : 0,
+    })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [s.recentDeals]
+  );
 
   const totalCollected   = s.payments?.totalCollected ?? 0;
   const commissionsDue   = (s.commissions?.pending ?? 0) + (s.commissions?.approved ?? 0);
@@ -178,7 +186,7 @@ const PropertySaleDashboard = () => {
               {/* Mobile cards */}
               <div className="divide-y divide-slate-100 xl:hidden">
                 {recentDeals.length ? recentDeals.slice(0, 8).map((deal) => {
-                  const pct = deal.agreedPrice > 0 ? Math.min(100, Math.round(((deal.totalPaid || 0) / deal.agreedPrice) * 100)) : 0;
+                  const { pct } = deal;
                   return (
                     <div key={deal._id} className="flex items-center justify-between gap-2 px-3 py-2.5 hover:bg-slate-50 cursor-pointer" onClick={() => navigate("/sale/deals")}>
                       <div className="min-w-0">
@@ -216,7 +224,7 @@ const PropertySaleDashboard = () => {
                   </thead>
                   <tbody>
                     {recentDeals.length ? recentDeals.map((deal) => {
-                      const pct = deal.agreedPrice > 0 ? Math.min(100, Math.round(((deal.totalPaid || 0) / deal.agreedPrice) * 100)) : 0;
+                      const { pct } = deal;
                       return (
                         <tr
                           key={deal._id}

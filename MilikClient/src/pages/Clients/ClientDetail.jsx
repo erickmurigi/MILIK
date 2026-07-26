@@ -98,10 +98,10 @@ const clientStatusCls = (status) => {
 
 // ─── Data constants ───────────────────────────────────────────────────────────
 
-const CATEGORIES      = ['Corporate', 'SME', 'Individual', 'NGO', 'Government', 'Other'];
-const SOURCES         = ['Referral', 'Direct', 'Social Media', 'Email Campaign', 'Event', 'Other'];
-const BILLING_CYCLES  = ['monthly', 'quarterly', 'biannual', 'annual', 'one-off'];
-const RENEWAL_STAGES  = ['not_started', 'client_notified', 'negotiating', 'awaiting_sign', 'signed'];
+const CATEGORIES      = ['enterprise', 'sme', 'individual'];
+const SOURCES         = ['referral', 'direct', 'online', 'other'];
+const BILLING_CYCLES  = ['monthly', 'quarterly', 'annually'];
+const RENEWAL_STAGES  = ['due', 'contacted', 'negotiating', 'renewed', 'lost'];
 const INTERACTION_TYPES = ['note', 'email', 'call', 'meeting'];
 
 // ─── Shared sub-components ────────────────────────────────────────────────────
@@ -329,7 +329,7 @@ const ProfileTab = ({ client, summary, onRefresh }) => {
           {editMode ? (
             <>
               <FieldEdit label="Name"            field="name" />
-              <FieldView label="Code"            value={client.code} />
+              <FieldView label="Code"            value={client.clientCode} />
               <FieldEdit label="Category"        field="category"            options={CATEGORIES} />
               <FieldEdit label="Source"          field="source"              options={SOURCES} />
               <FieldEdit label="Email"           field="email"               type="email" />
@@ -345,7 +345,7 @@ const ProfileTab = ({ client, summary, onRefresh }) => {
           ) : (
             <>
               <FieldView label="Name"            value={client.name} />
-              <FieldView label="Code"            value={client.code} />
+              <FieldView label="Code"            value={client.clientCode} />
               <FieldView label="Category"        value={client.category} />
               <FieldView label="Source"          value={client.source} />
               <FieldView label="Email"           value={client.email} />
@@ -578,9 +578,9 @@ const AddContractModal = ({ clientId, onClose, onCreated }) => {
 
 const RenewContractModal = ({ contract, onClose, onRenewed }) => {
   const currentVal  = Number(contract?.currentValue || contract?.baseValue || 0);
-  const proposedVal = currentVal * 1.1;
+  const escalation  = Number(contract?.escalationPercent ?? 10) / 100;
+  const proposedVal = Math.round(currentVal * (1 + escalation) * 100) / 100;
   const [form, setForm] = useState({
-    newValue:  String(proposedVal.toFixed(2)),
     startDate: contract?.endDate ? contract.endDate.slice(0, 10) : todayISO(),
     endDate:   '',
   });
@@ -592,7 +592,6 @@ const RenewContractModal = ({ contract, onClose, onRenewed }) => {
     setSaving(true);
     try {
       await clientsApi.renewContract(contract._id, {
-        newValue:  Number(form.newValue),
         startDate: form.startDate,
         endDate:   form.endDate,
       });
@@ -626,13 +625,9 @@ const RenewContractModal = ({ contract, onClose, onRenewed }) => {
             <span className="font-semibold text-slate-800">{fmtKES(currentVal)}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-slate-500">Proposed (10% escalation)</span>
+            <span className="text-slate-500">New Value ({contract?.escalationPercent ?? 10}% escalation)</span>
             <span className="font-bold text-[#0B3B2E]">{fmtKES(proposedVal)}</span>
           </div>
-        </div>
-        <div>
-          <label className={labelCls}>New Value (KES)</label>
-          <input type="number" className={inputCls} value={form.newValue} onChange={(e) => set('newValue', e.target.value)} min="0" />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -728,7 +723,7 @@ const ContractsTab = ({ clientId }) => {
 
   const handleActivate = async (c) => {
     try {
-      await clientsApi.updateContract(c._id, { status: 'active' });
+      await clientsApi.activateContract(c._id);
       toast.success('Contract activated');
       load();
     } catch (err) {
@@ -1105,7 +1100,7 @@ const CreateInvoiceModal = ({ clientId, contracts, onClose, onCreated }) => {
 
 const MarkPaidModal = ({ invoice, onClose, onPaid }) => {
   const [form, setForm] = useState({
-    paidAmount:       String(invoice?.balance || invoice?.totalAmount || ''),
+    paidAmount:       String(Math.max(0, (invoice?.total || 0) - (invoice?.paidAmount || 0)) || ''),
     paidAt:           todayISO(),
     paymentMethod:    'Bank Transfer',
     paymentReference: '',
@@ -1258,7 +1253,7 @@ const InvoicesTab = ({ clientId, contracts }) => {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {invoices.map((inv, idx) => {
-                const balance = (inv.totalAmount || 0) - (inv.paidAmount || 0);
+                const balance = (inv.total || 0) - (inv.paidAmount || 0);
                 return (
                   <tr key={inv._id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
                     <td className="px-3 py-2.5 font-mono text-[11px] text-[#0B3B2E]">
@@ -1270,7 +1265,7 @@ const InvoicesTab = ({ clientId, contracts }) => {
                     <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{fmtDate(inv.issueDate)}</td>
                     <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{fmtDate(inv.dueDate)}</td>
                     <td className="px-3 py-2.5 tabular-nums font-semibold text-slate-700">
-                      {fmtKES(inv.totalAmount)}
+                      {fmtKES(inv.total)}
                     </td>
                     <td className="px-3 py-2.5 tabular-nums text-emerald-700">{fmtKES(inv.paidAmount || 0)}</td>
                     <td className={`px-3 py-2.5 tabular-nums font-semibold ${balance > 0 ? 'text-red-600' : 'text-slate-400'}`}>
@@ -1692,7 +1687,7 @@ const ClientDetail = () => {
                 <div>
                   <h1 className="text-lg font-extrabold text-slate-900">{clientName}</h1>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    {client.code && <span className="font-mono mr-2">{client.code}</span>}
+                    {client.clientCode && <span className="font-mono mr-2">{client.clientCode}</span>}
                     {client.category && <span className="mr-2">{client.category}</span>}
                     {client.email && <span className="mr-2">{client.email}</span>}
                     {client.phone}

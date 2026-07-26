@@ -281,6 +281,29 @@ export const renewContract = async (req, res, next) => {
   }
 };
 
+export const activateContract = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const userId   = currentUserId(req);
+
+    const contract = await ClientContract.findOneAndUpdate(
+      { _id: req.params.id, business, status: "draft" },
+      { status: "active", updatedBy: userId },
+      { new: true, runValidators: true }
+    );
+
+    if (!contract) {
+      const existing = await ClientContract.findOne({ _id: req.params.id, business }).lean();
+      if (!existing) return next(createError(404, "Contract not found"));
+      return next(createError(400, `Contract is already '${existing.status}' and cannot be activated`));
+    }
+
+    res.status(200).json({ success: true, data: contract, contract, message: "Contract activated" });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const terminateContract = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);

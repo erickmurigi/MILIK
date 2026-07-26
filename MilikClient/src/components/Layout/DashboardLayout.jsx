@@ -796,11 +796,10 @@ const TopToolbar = ({
 
     if (isClientsWorkspace) {
       return {
-        "clients-dashboard":    "/clients/dashboard",
-        "clients-list":         "/clients",
-        "clients-contracts":    "/clients/dashboard",
-        "clients-invoices":     "/clients/dashboard",
-        "clients-interactions": "/clients/dashboard",
+        "clients-dashboard": "/clients/dashboard",
+        "clients-list":      "/clients",
+        "clients-contracts": "/clients/contracts",
+        "clients-invoices":  "/clients/invoices",
         documentation: "/help/documentation",
         support: "/help/support",
         about: "/help/about",

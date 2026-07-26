@@ -19,9 +19,9 @@ const STATUS_TABS = [
   { value: 'churned',  label: 'Churned' },
 ];
 
-const CATEGORIES = ['Corporate', 'SME', 'Individual', 'NGO', 'Government', 'Other'];
+const CATEGORIES = ['enterprise', 'sme', 'individual'];
 
-const SOURCES = ['Referral', 'Direct', 'Social Media', 'Email Campaign', 'Event', 'Other'];
+const SOURCES = ['referral', 'direct', 'online', 'other'];
 
 const statusBadge = (status) => {
   const map = {
@@ -359,7 +359,7 @@ const ClientsList = () => {
                     onClick={() => navigate(`/clients/${cl._id}`)}
                   >
                     <td className="px-3 py-2.5 font-mono text-[11px] text-slate-500">
-                      {cl.code || '—'}
+                      {cl.clientCode || '—'}
                     </td>
                     <td className="px-3 py-2.5">
                       <p className="font-semibold text-slate-800">{cl.name}</p>

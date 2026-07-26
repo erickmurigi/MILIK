@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -82,26 +82,26 @@ const CarWashDashboard = () => {
   const dateInputRef  = useRef(null);
   const [date, setDate] = useState(() => sessionStorage.getItem(DASH_DATE_KEY) || todayISO());
 
-  const today = todayISO();
+  const today = useMemo(() => todayISO(), []);
 
-  const changeDate = (val) => {
+  const changeDate = useCallback((val) => {
     sessionStorage.setItem(DASH_DATE_KEY, val);
     setDate(val);
-  };
+  }, []);
 
-  const stepDay = (n) => {
+  const stepDay = useCallback((n) => {
     const d = new Date(date + "T00:00:00");
     d.setDate(d.getDate() + n);
     const yyyy = d.getFullYear();
     const mm   = String(d.getMonth() + 1).padStart(2, "0");
     const dd   = String(d.getDate()).padStart(2, "0");
     changeDate(`${yyyy}-${mm}-${dd}`);
-  };
+  }, [date, changeDate]);
 
-  const resetToday = () => {
+  const resetToday = useCallback(() => {
     sessionStorage.removeItem(DASH_DATE_KEY);
     setDate(todayISO());
-  };
+  }, []);
 
   const { data: dashData, isFetching: loading } = useQuery({
     queryKey: ["cw-dashboard", date],
@@ -126,16 +126,26 @@ const CarWashDashboard = () => {
   const payments = dashData?.payments || [];
 
   const counts        = summary?.statusCounts    || {};
-  const byMethod      = summary?.revenueByMethod || {};
   const totalRevenue  = Number(summary?.todayRevenue || 0);
   const activeQueue   = (counts.waiting || 0) + (counts.washing || 0) + (counts.done || 0);
   const cashTotal     = Number(summary?.cashTotal   || 0);
   const mpesaTotal    = Number(summary?.mpesaTotal  || 0);
   const nonCash       = totalRevenue - cashTotal;
 
+  const dateLabel = useMemo(
+    () => new Date(date + "T00:00:00").toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }),
+    [date]
+  );
+
+  const cardHeaderDate = useMemo(
+    () => new Date(date + "T00:00:00").toLocaleDateString("en-KE", { weekday: "long", day: "2-digit", month: "short", year: "numeric" }),
+    [date]
+  );
+
   const paymentRows = useMemo(
-    () => Object.keys(paymentLabels).map((m) => ({ method: m, label: paymentLabels[m], amount: Number(byMethod[m] || 0) })),
-    [byMethod]
+    () => Object.keys(paymentLabels).map((m) => ({ method: m, label: paymentLabels[m], amount: Number(summary?.revenueByMethod?.[m] || 0) })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [summary?.revenueByMethod]
   );
 
   return (
@@ -159,7 +169,7 @@ const CarWashDashboard = () => {
               className="relative flex h-full items-center px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
               title="Pick a date"
             >
-              {new Date(date + "T00:00:00").toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" })}
+              {dateLabel}
               <input
                 ref={dateInputRef}
                 type="date"
@@ -217,9 +227,7 @@ const CarWashDashboard = () => {
 
       {/* ── Operations Queue ───────────────────────────────────────────────── */}
       <Card title="Operations Queue" className="mt-1.5" right={
-        <span className="text-[10px] font-bold text-slate-400">
-          {new Date(date).toLocaleDateString("en-KE", { weekday: "long", day: "2-digit", month: "short", year: "numeric" })}
-        </span>
+        <span className="text-[10px] font-bold text-slate-400">{cardHeaderDate}</span>
       }>
         <div className="grid grid-cols-5 divide-x divide-slate-100">
           {queueStatus.map(({ key, label, icon: Icon, ring, num, bg, hover }) => (

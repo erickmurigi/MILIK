@@ -16,6 +16,7 @@ export const clientsApi = {
   getContract: (id) => adminRequests.get(`${BASE}/clients/contracts/${id}`),
   createContract: (data) => adminRequests.post(`${BASE}/clients/contracts`, data),
   updateContract: (id, data) => adminRequests.put(`${BASE}/clients/contracts/${id}`, data),
+  activateContract: (id) => adminRequests.patch(`${BASE}/clients/contracts/${id}/activate`),
   renewContract: (id, data) => adminRequests.post(`${BASE}/clients/contracts/${id}/renew`, data),
   terminateContract: (id, data) => adminRequests.post(`${BASE}/clients/contracts/${id}/terminate`, data),
   updateRenewalStage: (id, data) => adminRequests.patch(`${BASE}/clients/contracts/${id}/renewal-stage`, data),
