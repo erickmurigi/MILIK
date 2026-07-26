@@ -389,6 +389,7 @@ const HELP_MODULES = [
   { label: "Human Resources",     icon: FaUsers,      path: "/hr/overview" },
   { label: "Car Wash",            icon: FaCar,        path: "/carwash" },
   { label: "Property Sales",      icon: FaKey,        path: "/sale/dashboard" },
+  { label: "Client Management",   icon: FaHandshake,  path: "/clients/dashboard" },
 ];
 
 const HELP_RESOURCES = [
@@ -505,6 +506,9 @@ const MENU_COLOR_MAP = {
   "sale-operations": { color: "#027333", label: "Operations", icon: FaHandshake },
   "sale-clients":    { color: "#027333", label: "Clients & Agents", icon: FaUsers },
   "sale-finance":    { color: "#027333", label: "Finance & Reports", icon: FaMoneyBillWave },
+  "clients-main":            { color: "#0B3B2E", label: "Clients",   icon: FaUsers },
+  "clients-contracts-group": { color: "#0B3B2E", label: "Contracts", icon: FaHandshake },
+  "clients-billing":         { color: "#0B3B2E", label: "Billing",   icon: FaFileInvoice },
   "hr-people":      { color: "#0B3B2E", label: "Employees",  icon: FaUsers },
   "hr-leave":       { color: "#0891b2", label: "Leave",       icon: FaCalendarAlt },
   "hr-payroll":     { color: "#7c3aed", label: "Payroll",     icon: FaMoneyBillWave },
@@ -687,6 +691,7 @@ const TopToolbar = ({
   const isPropertySaleWorkspace   = effectiveMenuWorkspace === WORKSPACE_IDS.PROPERTY_SALE;
   const isHumanResourceWorkspace  = effectiveMenuWorkspace === WORKSPACE_IDS.HUMAN_RESOURCE;
   const isCommunicationsWorkspace = effectiveMenuWorkspace === WORKSPACE_IDS.COMMUNICATIONS;
+  const isClientsWorkspace        = effectiveMenuWorkspace === WORKSPACE_IDS.CLIENTS;
 
   const routeConfig = useMemo(() => {
     if (isSystemAdminWorkspace) {
@@ -783,6 +788,19 @@ const TopToolbar = ({
         "sale-reports":        "/sale/reports",
         "sale-crm-leads":      "/sale/crm/leads",
         "sale-crm-activities": "/sale/crm/activities",
+        documentation: "/help/documentation",
+        support: "/help/support",
+        about: "/help/about",
+      };
+    }
+
+    if (isClientsWorkspace) {
+      return {
+        "clients-dashboard":    "/clients/dashboard",
+        "clients-list":         "/clients",
+        "clients-contracts":    "/clients/dashboard",
+        "clients-invoices":     "/clients/dashboard",
+        "clients-interactions": "/clients/dashboard",
         documentation: "/help/documentation",
         support: "/help/support",
         about: "/help/about",
@@ -938,7 +956,7 @@ const TopToolbar = ({
       support: "/help/support",
       about: "/help/about",
     };
-  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isCommunicationsWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
+  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isClientsWorkspace, isCommunicationsWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
 
   const mainMenuItems = useMemo(() => {
     if (isSystemAdminWorkspace) {
@@ -1035,6 +1053,37 @@ const TopToolbar = ({
       ];
 
       return filterMenuByPermissions(saleItems, currentUser, activeCompanyContext);
+    }
+
+    if (isClientsWorkspace) {
+      const clientsItems = [
+        {
+          id: "clients-main",
+          label: "Clients",
+          icon: FaUsers,
+          submenu: [
+            { id: "clients-dashboard", label: "Dashboard",   icon: FaChartBar },
+            { id: "clients-list",      label: "All Clients", icon: FaUsers },
+          ],
+        },
+        {
+          id: "clients-contracts-group",
+          label: "Contracts",
+          icon: FaHandshake,
+          submenu: [
+            { id: "clients-contracts", label: "Contracts", icon: FaHandshake },
+          ],
+        },
+        {
+          id: "clients-billing",
+          label: "Billing",
+          icon: FaFileInvoice,
+          submenu: [
+            { id: "clients-invoices", label: "Invoices", icon: FaFileInvoice },
+          ],
+        },
+      ];
+      return filterMenuByPermissions(clientsItems, currentUser, activeCompanyContext);
     }
 
     if (isHumanResourceWorkspace) {
@@ -1571,10 +1620,10 @@ const TopToolbar = ({
       });
 
     return filterMenuByPermissions(items, currentUser, activeCompanyContext);
-  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isCommunicationsWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
+  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isClientsWorkspace, isCommunicationsWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
 
   const nestedSubmenus = useMemo(() => {
-    if (isSystemAdminWorkspace || isCompanySetupWorkspace || isAccountsWorkspace || isCarWashWorkspace || isPropertySaleWorkspace || isHumanResourceWorkspace || isCommunicationsWorkspace) {
+    if (isSystemAdminWorkspace || isCompanySetupWorkspace || isAccountsWorkspace || isCarWashWorkspace || isClientsWorkspace || isPropertySaleWorkspace || isHumanResourceWorkspace || isCommunicationsWorkspace) {
       return {};
     }
 
@@ -1641,7 +1690,7 @@ const TopToolbar = ({
     });
 
     return submenus;
-  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isCommunicationsWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
+  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isClientsWorkspace, isCommunicationsWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace]);
 
   const handleMenuItemClick = useCallback((menuId) => {
     const route = routeConfig[menuId];
@@ -1877,7 +1926,7 @@ const TopToolbar = ({
           </button>
         </div>
         )}
-        {!isAccountsWorkspace && !isCarWashWorkspace && !isPropertySaleWorkspace && !isHumanResourceWorkspace && !isCommunicationsWorkspace && !isInventoryWorkspace && !isCompanySetupWorkspace && !isSystemAdminWorkspace && (
+        {!isAccountsWorkspace && !isCarWashWorkspace && !isClientsWorkspace && !isPropertySaleWorkspace && !isHumanResourceWorkspace && !isCommunicationsWorkspace && !isInventoryWorkspace && !isCompanySetupWorkspace && !isSystemAdminWorkspace && (
         <div className="flex items-center space-x-1 px-1.5 py-0 text-[11px]">
           <button
             onClick={() => navigate("/tenant/new")}

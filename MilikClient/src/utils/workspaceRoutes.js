@@ -8,6 +8,7 @@ export const WORKSPACE_IDS = {
   SYSTEM_ADMIN:   'system-admin',
   COMPANY_SETUP:  'company-setup',
   COMMUNICATIONS: 'communications',
+  CLIENTS:        'clients',
   NEUTRAL:        'neutral', // Cross-module pages (My Account, etc.)
 };
 
@@ -111,6 +112,17 @@ export const WORKSPACE_CONFIG = {
       closable: false,
     },
   },
+  [WORKSPACE_IDS.CLIENTS]: {
+    id: WORKSPACE_IDS.CLIENTS,
+    label: 'Client Management',
+    defaultRoute: '/clients/dashboard',
+    defaultTab: {
+      id: 'clients-dashboard',
+      title: 'Dashboard',
+      route: '/clients/dashboard',
+      closable: false,
+    },
+  },
 };
 
 const SYSTEM_ADMIN_ROUTE_MATCHERS = [
@@ -168,6 +180,10 @@ export const getWorkspaceFromRoute = (pathname = '') => {
 
   if (pathname === '/communications' || pathname.startsWith('/communications/')) {
     return WORKSPACE_IDS.COMMUNICATIONS;
+  }
+
+  if (pathname === '/clients' || pathname.startsWith('/clients/')) {
+    return WORKSPACE_IDS.CLIENTS;
   }
 
   if (SYSTEM_ADMIN_ROUTE_MATCHERS.some((matches) => matches(pathname))) {
