@@ -22,34 +22,28 @@ const LandlordStatementSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Company",
       required: true,
-      index: true,
     },
     property: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Property",
       required: true,
-      index: true,
     },
     landlord: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Landlord",
       required: true,
-      index: true,
     },
     periodStart: {
       type: Date,
       required: true,
-      index: true,
     },
     periodEnd: {
       type: Date,
       required: true,
-      index: true,
     },
     statementNumber: {
       type: String,
       required: true,
-      index: true,
       trim: true,
     },
     version: {
@@ -63,7 +57,6 @@ const LandlordStatementSchema = new mongoose.Schema(
       enum: STATEMENT_STATUS,
       required: true,
       default: "draft",
-      index: true,
     },
     openingBalance: {
       type: Number,
@@ -141,13 +134,11 @@ const LandlordStatementSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "LandlordStatement",
       default: null,
-      index: true,
     },
     supersededByStatementId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "LandlordStatement",
       default: null,
-      index: true,
     },
     revisionReason: {
       type: String,
@@ -204,12 +195,12 @@ LandlordStatementSchema.pre("save", function (next) {
 
 // Store original document for pre-save hook
 LandlordStatementSchema.post("init", function () {
-  this._original = this.toObject();
+  this._original = { status: this.status };
 });
 
 // Block direct updates and deletes on approved statements
-LandlordStatementSchema.pre("findOneAndUpdate", async function (next) {
-  const docToUpdate = await this.model.findOne(this.getQuery());
+LandlordStatementSchema.pre("findOneAndUpdate", function (next) {
+  const filter = this.getFilter();
   const update = this.getUpdate() || {};
   const nextStatus = update?.$set?.status ?? update?.status;
   const touchesOnlyAllowedFields = (() => {
@@ -220,22 +211,24 @@ LandlordStatementSchema.pre("findOneAndUpdate", async function (next) {
     return allKeys.every((key) => ["status", "sentAt", "sentBy", "updatedAt"].includes(key));
   })();
 
-  if (
-    docToUpdate?.status === "approved" &&
-    nextStatus === "sent" &&
-    touchesOnlyAllowedFields
-  ) {
+  // Allow the approved -> sent transition.
+  // IMPORTANT: Callers performing this transition MUST include { status: "approved" } as a plain
+  // string in their filter. Without it the guard below will silently block the update.
+  if (filter.status === "approved" && nextStatus === "sent" && touchesOnlyAllowedFields) {
     return next();
   }
 
-  if (docToUpdate && (docToUpdate.status === "approved" || docToUpdate.status === "sent")) {
-    return next(new Error("Approved or sent statements cannot be updated. Create a revision instead."));
+  // Block updates to approved/sent statements by injecting a status guard into the filter.
+  // Only inject when the caller has not already supplied a status constraint, to avoid clobbering it.
+  // NOTE: invalid updates now silently no-op (0 matched) instead of throwing an error.
+  if (!filter.status) {
+    this.setQuery({ ...filter, status: { $nin: ["approved", "sent"] } });
   }
   next();
 });
 
-LandlordStatementSchema.pre("updateOne", async function (next) {
-  const docToUpdate = await this.model.findOne(this.getQuery());
+LandlordStatementSchema.pre("updateOne", function (next) {
+  const filter = this.getFilter();
   const update = this.getUpdate() || {};
   const nextStatus = update?.$set?.status ?? update?.status;
   const touchesOnlyAllowedFields = (() => {
@@ -246,24 +239,26 @@ LandlordStatementSchema.pre("updateOne", async function (next) {
     return allKeys.every((key) => ["status", "sentAt", "sentBy", "updatedAt"].includes(key));
   })();
 
-  if (
-    docToUpdate?.status === "approved" &&
-    nextStatus === "sent" &&
-    touchesOnlyAllowedFields
-  ) {
+  // Allow the approved -> sent transition.
+  // IMPORTANT: Callers performing this transition MUST include { status: "approved" } as a plain
+  // string in their filter. Without it the guard below will silently block the update.
+  if (filter.status === "approved" && nextStatus === "sent" && touchesOnlyAllowedFields) {
     return next();
   }
 
-  if (docToUpdate && (docToUpdate.status === "approved" || docToUpdate.status === "sent")) {
-    return next(new Error("Approved or sent statements cannot be updated. Create a revision instead."));
+  // Block updates to approved/sent statements by injecting a status guard into the filter.
+  // Only inject when the caller has not already supplied a status constraint, to avoid clobbering it.
+  // NOTE: invalid updates now silently no-op (0 matched) instead of throwing an error.
+  if (!filter.status) {
+    this.setQuery({ ...filter, status: { $nin: ["approved", "sent"] } });
   }
   next();
 });
 
 LandlordStatementSchema.pre("findOneAndDelete", async function (next) {
-  const docToDelete = await this.model.findOne(this.getQuery());
-  if (docToDelete && (docToDelete.status === "approved" || docToDelete.status === "sent")) {
-    return next(new Error("Approved or sent statements cannot be deleted."));
+  const docToDelete = await this.model.findOne(this.getQuery()).select("status").lean();
+  if (docToDelete?.status === "approved" || docToDelete?.status === "sent") {
+    return next(new Error("Approved or sent statements cannot be deleted. Create a revision instead."));
   }
   next();
 });

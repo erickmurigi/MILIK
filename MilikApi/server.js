@@ -124,6 +124,10 @@ import saleCommissionRoutes from "./modules/propertySale/routes/commissions.js";
 import saleReportRoutes     from "./modules/propertySale/routes/reports.js";
 import saleLeadRoutes       from "./modules/propertySale/routes/leads.js";
 import saleActivityRoutes   from "./modules/propertySale/routes/activities.js";
+import clientRoutes         from "./modules/clients/routes/clients.js";
+import clientContractRoutes from "./modules/clients/routes/contracts.js";
+import clientInvoiceRoutes  from "./modules/clients/routes/invoices.js";
+import clientInteractionRoutes from "./modules/clients/routes/interactions.js";
 import publicListingsRoute  from "./routes/publicListings.js";
 import cookieParser from "cookie-parser";
 import mongoSanitize from "mongo-sanitize";
@@ -667,6 +671,12 @@ app.use("/api/pos/sessions",              posSessionRoutes);
 app.use("/api/pos/sales",                 posSaleRoutes);
 app.use("/api/inventory/tills",           invTillRoutes);
 app.use("/api/pos/till-movements",        posTillMovementRoutes);
+// Client Management — sub-resource routes must be registered BEFORE the parent
+// so that /api/clients/contracts is not caught by the /:id handler in clientRoutes
+app.use("/api/clients/contracts",         clientContractRoutes);
+app.use("/api/clients/invoices",          clientInvoiceRoutes);
+app.use("/api/clients/interactions",      clientInteractionRoutes);
+app.use("/api/clients",                   clientRoutes);
 
 app.use((err, req, res, next) => {
   const errorStatus = err.status || err.statusCode || 500;

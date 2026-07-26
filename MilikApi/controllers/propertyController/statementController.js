@@ -47,13 +47,18 @@ const resolveActorUserId = async (req, businessId) =>
     fallbackErrorMessage: "No valid company user could be resolved for statement audit attribution.",
   });
 
-const findStatementForAccess = async (statementId, req) => {
+const findStatementForAccess = async (
+  statementId,
+  req,
+  {
+    lean = false,
+    fields = "_id status business property landlord periodStart periodEnd statementNumber version supersedesStatementId supersededByStatementId sentAt sentBy",
+  } = {}
+) => {
   const directBusinessId = await resolveBusinessId(req);
-  if (directBusinessId) {
-    const scoped = await LandlordStatement.findOne({ _id: statementId, business: directBusinessId });
-    if (scoped) return scoped;
-  }
-  return LandlordStatement.findById(statementId);
+  if (!directBusinessId) return null;
+  const q = LandlordStatement.findOne({ _id: statementId, business: directBusinessId }).select(fields);
+  return lean ? q.lean() : q;
 };
 
 const startOfDay = (value) => {
@@ -70,28 +75,6 @@ const endOfDay = (value) => {
   return date;
 };
 
-const canSupersedeReversedApprovedStatement = async ({ businessId, statementId }) => {
-  if (!statementId || !businessId) return false;
-
-  const hasActiveProcessedSnapshot = await ProcessedStatement.exists({
-    business: businessId,
-    sourceStatement: statementId,
-    status: { $ne: "reversed" },
-  });
-
-  if (hasActiveProcessedSnapshot) return false;
-
-  const hasReversedProcessedSnapshot = await ProcessedStatement.exists({
-    business: businessId,
-    status: "reversed",
-    $or: [
-      { reversedSourceStatement: statementId },
-      { sourceStatement: statementId },
-    ],
-  });
-
-  return Boolean(hasReversedProcessedSnapshot);
-};
 
 const markSupersededApprovedStatementRevised = async ({ statementId, replacementStatementId }) => {
   if (!statementId || !replacementStatementId) return;
@@ -123,8 +106,11 @@ export const createDraft = async (req, res, next) => {
       notes,
       statementType = "provisional",
     } = req.body;
-    const propertyContext = await resolvePropertyLandlord(propertyId);
-    const businessId = (await resolveBusinessId(req, propertyId)) || propertyContext.businessId;
+    const [propertyContext, directBusinessId] = await Promise.all([
+      resolvePropertyLandlord(propertyId),
+      resolveBusinessId(req),
+    ]);
+    const businessId = directBusinessId || propertyContext.businessId;
     const landlordId = landlordIdFromBody || propertyContext.landlordId;
     const userId = await resolveActorUserId(req, businessId);
 
@@ -190,7 +176,7 @@ export const createDraft = async (req, res, next) => {
       );
 
       const [lines, refreshedStatement] = await Promise.all([
-        LandlordStatementLine.find({ statement: existingDraft._id }).sort({ lineNumber: 1 }).lean(),
+        LandlordStatementLine.find({ statement: existingDraft._id }).sort({ lineNumber: 1 }).limit(5000).lean(),
         LandlordStatement.findById(existingDraft._id).lean(),
       ]);
 
@@ -327,9 +313,8 @@ export const approve = async (req, res, next) => {
   try {
     const { statementId } = req.params;
     const { approvalNotes } = req.body;
-    const statement = await findStatementForAccess(statementId, req);
+    const statement = await findStatementForAccess(statementId, req, { lean: true });
     const businessId = statement?.business ? String(statement.business) : await resolveBusinessId(req);
-    const userId = await resolveActorUserId(req, businessId);
 
     if (!statementId) {
       return res.status(400).json({
@@ -345,6 +330,8 @@ export const approve = async (req, res, next) => {
       });
     }
 
+    const userId = await resolveActorUserId(req, businessId);
+
     if (statement.status === "approved" || statement.status === "sent") {
       return res.status(400).json({
         success: false,
@@ -359,31 +346,25 @@ export const approve = async (req, res, next) => {
       });
     }
 
-    // Safeguard: Prevent approval of empty statements
-    const lineCount = await LandlordStatementLine.countDocuments({
-      statement: statementId,
-      business: businessId,
-    });
-
+    // Safeguard: Prevent approval of empty statements + check for duplicate approved period in parallel
+    const [lineCount, existingApproved] = await Promise.all([
+      LandlordStatementLine.countDocuments({ statement: statementId, business: businessId }),
+      LandlordStatement.findOne({
+        business: businessId,
+        property: statement.property,
+        landlord: statement.landlord,
+        periodStart: statement.periodStart,
+        periodEnd: statement.periodEnd,
+        status: "approved",
+        _id: { $ne: statementId },
+      }).select("_id statementNumber").lean(),
+    ]);
     if (lineCount === 0) {
       return res.status(400).json({
         success: false,
-        message: "Cannot approve statement with no line items. Statement must contain at least one entry.",
+        message: "Statement has no lines. Generate the statement first.",
       });
     }
-
-    // Safeguard: Prevent multiple approved statements for the same period.
-    // Exception: if the older approved snapshot only exists because its processed statement was later reversed,
-    // allow a fresh approval for the regenerated replacement statement.
-    const existingApproved = await LandlordStatement.findOne({
-      business: businessId,
-      property: statement.property,
-      landlord: statement.landlord,
-      periodStart: statement.periodStart,
-      periodEnd: statement.periodEnd,
-      status: "approved",
-      _id: { $ne: statementId },
-    });
 
     if (existingApproved) {
       // Allow if this draft explicitly supersedes the blocking approved statement (it IS the revision).
@@ -455,20 +436,13 @@ export const getStatement = async (req, res, next) => {
   try {
     const { statementId } = req.params;
     const { includeLines = "true", populateRefs = "true" } = req.query;
-    const statementCheck = await findStatementForAccess(statementId, req);
-
-    if (!statementId) {
-      return res.status(400).json({
-        success: false,
-        message: "statementId is required",
-      });
+    const businessId = await resolveBusinessId(req);
+    if (!businessId) {
+      return res.status(403).json({ success: false, message: "Access denied" });
     }
-
-    if (!statementCheck) {
-      return res.status(404).json({
-        success: false,
-        message: "Statement not found or access denied",
-      });
+    const exists = await LandlordStatement.exists({ _id: statementId, business: businessId });
+    if (!exists) {
+      return res.status(404).json({ success: false, message: "Statement not found or access denied" });
     }
 
     const result = await getStatementById(statementId, {
@@ -538,12 +512,14 @@ export const listStatementsForLandlord = async (req, res, next) => {
       if (periodEnd) filter.periodStart.$lte = new Date(periodEnd);
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const pageInt = parseInt(page, 10) || 1;
+    const limitInt = Math.min(parseInt(limit, 10) || 20, 200);
+    const skip = (pageInt - 1) * limitInt;
     const [statements, total] = await Promise.all([
       LandlordStatement.find(filter)
         .sort({ periodStart: -1, version: -1 })
         .skip(skip)
-        .limit(parseInt(limit))
+        .limit(limitInt)
         .populate("property", "name propertyName address city")
         .populate("landlord", "landlordName landlordType email phoneNumber")
         .populate("approvedBy", "surname otherNames email")
@@ -557,9 +533,9 @@ export const listStatementsForLandlord = async (req, res, next) => {
         statements,
         pagination: {
           total,
-          page: parseInt(page),
-          limit: parseInt(limit),
-          totalPages: Math.ceil(total / parseInt(limit)),
+          page: pageInt,
+          limit: limitInt,
+          totalPages: Math.ceil(total / limitInt),
         },
       },
     });
@@ -576,7 +552,7 @@ export const createStatementRevision = async (req, res, next) => {
   try {
     const { statementId } = req.params;
     const { revisionReason } = req.body;
-    const statementCheck = await findStatementForAccess(statementId, req);
+    const statementCheck = await findStatementForAccess(statementId, req, { lean: true });
     const businessId = statementCheck?.business ? String(statementCheck.business) : await resolveBusinessId(req);
     const userId = await resolveActorUserId(req, businessId);
 
@@ -726,7 +702,7 @@ export const adminMarkRevised = async (req, res, next) => {
 export const deleteDraft = async (req, res, next) => {
   try {
     const { statementId } = req.params;
-    const statement = await findStatementForAccess(statementId, req);
+    const statement = await findStatementForAccess(statementId, req, { lean: true });
     const businessId = statement?.business ? String(statement.business) : await resolveBusinessId(req);
 
     if (!statementId) {
@@ -812,7 +788,7 @@ export const deleteDraft = async (req, res, next) => {
 export const validateAudit = async (req, res, next) => {
   try {
     const { statementId } = req.params;
-    const statementCheck = await findStatementForAccess(statementId, req);
+    const statementCheck = await findStatementForAccess(statementId, req, { lean: true });
     const businessId = statementCheck?.business ? String(statementCheck.business) : await resolveBusinessId(req);
 
     if (!statementId) {
@@ -847,31 +823,32 @@ export const validateAudit = async (req, res, next) => {
 export const generatePdf = async (req, res, next) => {
   try {
     const { statementId } = req.params;
-    const statement = await findStatementForAccess(statementId, req);
-    const businessId = statement?.business ? String(statement.business) : req.user.company;
-
     if (!statementId) {
-      return res.status(400).json({
-        success: false,
-        message: "statementId is required",
-      });
+      return res.status(400).json({ success: false, message: "statementId is required" });
     }
+
+    const businessId = await resolveBusinessId(req);
+    if (!businessId) {
+      return res.status(403).json({ success: false, message: "Access denied" });
+    }
+
+    const statement = await LandlordStatement.findOne({ _id: statementId, business: businessId })
+      .populate("property", "propertyCode propertyName name address city commissionPercentage commissionRecognitionBasis commissionPaymentMode commissionFixedAmount totalUnits")
+      .populate("landlord", "firstName lastName landlordName email phone phoneNumber")
+      .populate("business", "companyName name address phone phoneNo email slogan logo postalAddress roadStreet town country POBOX Street City")
+      .lean();
 
     if (!statement) {
-      return res.status(404).json({
-        success: false,
-        message: "Statement not found or access denied",
-      });
+      return res.status(404).json({ success: false, message: "Statement not found or access denied" });
     }
 
-    const pdfBuffer = await generateStatementPdf(statementId, businessId);
+    const pdfBuffer = await generateStatementPdf(statementId, businessId, { statement });
 
-    const filename = `Statement_${statement.statementNumber}.pdf`;
-    const disposition = req.query?.preview === 'true' ? 'inline' : 'attachment';
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `${disposition}; filename="${filename}"`);
-    res.setHeader('Content-Length', pdfBuffer.length);
-
+    const filename = `Statement_${statement.statementNumber || statementId}.pdf`;
+    const disposition = req.query?.preview === "true" ? "inline" : "attachment";
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `${disposition}; filename="${filename}"`);
+    res.setHeader("Content-Length", pdfBuffer.length);
     res.send(pdfBuffer);
   } catch (err) {
     next(err);

@@ -62,8 +62,11 @@ export function hasSmtpConfig() {
   return isEmailEnabled() && Boolean(env("SMTP_HOST") && env("SMTP_PORT") && env("SMTP_USER") && env("SMTP_PASS"));
 }
 
+let _globalTransporter = null;
+
 export function buildSmtpTransporter() {
-  return nodemailer.createTransport({
+  if (_globalTransporter) return _globalTransporter;
+  _globalTransporter = nodemailer.createTransport({
     host: env("SMTP_HOST"),
     port: Number(env("SMTP_PORT") || 465),
     secure: env("SMTP_SECURE", "true") === "true",
@@ -71,7 +74,10 @@ export function buildSmtpTransporter() {
       user: env("SMTP_USER"),
       pass: env("SMTP_PASS"),
     },
+    pool: true,
+    maxConnections: 3,
   });
+  return _globalTransporter;
 }
 
 // Keyed by host:port:user:pwFingerprint — busts automatically when credentials change.

@@ -109,7 +109,9 @@
       "Read(//c/Users/murig/OneDrive/Desktop/**)",
       "Read(//c/Users/murig/OneDrive/Desktop/MilikLite/frontend/src/**)",
       "Read(//c/Users/murig/OneDrive/Desktop/MilikLite/frontend/**)",
-      "Bash(xargs basename -a)"
+      "Bash(xargs basename -a)",
+      "Bash(xargs grep -l \"generatePdf\\\\|printStatement\\\\|statementPdf\\\\|puppeteer\\\\|pdfkit\\\\|html-pdf\\\\|wkhtmltopdf\\\\|playwright\\\\|chromium\")",
+      "PowerShell(Get-ChildItem -Recurse \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikApi\\\\modules\\\\clients\" | Where-Object { -not $_.PSIsContainer } | ForEach-Object { $_.FullName } | Sort-Object)"
     ]
   }
 }

@@ -18,12 +18,12 @@ import { adminRequests } from "../../utils/requestMethods";
 import { hasCompanyPermission } from "../../utils/permissions";
 import useScopedSessionDraft, { buildScopedDraftKey } from "../../hooks/useScopedSessionDraft";
 
-const currency = (value) =>
-  new Intl.NumberFormat("en-KE", {
-    style: "currency",
-    currency: "KES",
-    minimumFractionDigits: 2,
-  }).format(Number(value || 0));
+const _KES_FMT = new Intl.NumberFormat("en-KE", {
+  style: "currency",
+  currency: "KES",
+  minimumFractionDigits: 2,
+});
+const currency = (value) => _KES_FMT.format(Number(value || 0));
 
 const depositMemoCurrency = (value) => currency(Math.abs(Number(value || 0)));
 
@@ -423,6 +423,19 @@ const buildPreparedStatementColumnMap = (row = {}, statementColumns = []) => {
 const getPreparedStatementColumnValue = (row = {}, key = '', phase = 'invoiced') =>
   Number(row?.__statementColumnMap?.[key]?.[phase] || row?.statementColumns?.[key]?.[phase] || 0);
 
+const PDF_MODAL_KEYFRAMES = `
+  @keyframes mlkPdfIn  { from { opacity:0; transform:scale(0.97) } to { opacity:1; transform:scale(1) } }
+  @keyframes mlkPdfOut { from { opacity:1; transform:scale(1)    } to { opacity:0; transform:scale(0.97) } }
+`;
+
+const paidCellDisplay = (val, isVacant, isNoBill) => {
+  if (isVacant || isNoBill) return { text: "—", cls: "text-slate-300" };
+  const n = Number(val || 0);
+  return n > 0.005
+    ? { text: currency(n), cls: "text-emerald-700 font-medium" }
+    : { text: "—", cls: "text-slate-300" };
+};
+
 const SearchableSelect = ({ value, onChange, options, placeholder = "Select..." }) => {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -515,10 +528,27 @@ const PdfPreviewModal = React.memo(function PdfPreviewModal({
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [closing, setClosing]       = useState(false);
   const iframeRef = useRef(null);
+  // Cache last-fetched PDF blob so re-opening the same statement is instant
+  const blobCacheRef = useRef({ id: null, url: null, filename: null });
 
-  // Fetch PDF whenever the modal opens
+  // Cleanup cached blob URL on unmount
+  useEffect(() => () => {
+    if (blobCacheRef.current.url) window.URL.revokeObjectURL(blobCacheRef.current.url);
+  }, []);
+
+  // Fetch PDF whenever the modal opens (cache hit = instant, cache miss = fetch)
   useEffect(() => {
     if (!open || !statementId) return;
+
+    // Cache hit — same statement already fetched
+    if (blobCacheRef.current.id === statementId && blobCacheRef.current.url) {
+      setBlobUrl(blobCacheRef.current.url);
+      setFilename(blobCacheRef.current.filename);
+      setPhase("ready");
+      setIframeLoaded(false);
+      return;
+    }
+
     let cancelled = false;
     setPhase("loading");
     setIframeLoaded(false);
@@ -526,10 +556,16 @@ const PdfPreviewModal = React.memo(function PdfPreviewModal({
       .get(`/statements/${statementId}/pdf`, { responseType: "blob" })
       .then(({ data }) => {
         if (cancelled) return;
+        // Revoke previous cached blob if different statement
+        if (blobCacheRef.current.url && blobCacheRef.current.id !== statementId) {
+          window.URL.revokeObjectURL(blobCacheRef.current.url);
+        }
         const url = window.URL.createObjectURL(new Blob([data], { type: "application/pdf" }));
         const period = (periodStart || "").slice(0, 7);
+        const fname = `Statement-${(propertyLabel || "Property").replace(/\s+/g, "_")}-${period}.pdf`;
+        blobCacheRef.current = { id: statementId, url, filename: fname };
         setBlobUrl(url);
-        setFilename(`Statement-${(propertyLabel || "Property").replace(/\s+/g, "_")}-${period}.pdf`);
+        setFilename(fname);
         setPhase("ready");
       })
       .catch((err) => {
@@ -540,10 +576,10 @@ const PdfPreviewModal = React.memo(function PdfPreviewModal({
     return () => { cancelled = true; };
   }, [open, statementId]); // eslint-disable-line
 
-  // Revoke blob URL when the modal closes
+  // Reset visual state when modal closes (keep blob alive in ref for re-open)
   useEffect(() => {
     if (open) return;
-    setBlobUrl((prev) => { if (prev) window.URL.revokeObjectURL(prev); return null; });
+    setBlobUrl(null);
     setFilename("");
     setPhase("idle");
     setIframeLoaded(false);
@@ -579,22 +615,22 @@ const PdfPreviewModal = React.memo(function PdfPreviewModal({
     document.body.removeChild(a);
   }, [blobUrl, filename]);
 
-  if (!open && !closing) return null;
+  const periodLabel = useMemo(
+    () =>
+      periodStart && periodEnd
+        ? `${new Date(periodStart).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })} – ${new Date(periodEnd).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })}`
+        : "",
+    [periodStart, periodEnd]
+  );
 
-  const periodLabel =
-    periodStart && periodEnd
-      ? `${new Date(periodStart).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })} – ${new Date(periodEnd).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" })}`
-      : "";
+  if (!open && !closing) return null;
 
   return (
     <div
       className="fixed inset-0 z-[9999] flex flex-col"
       style={{ animation: `${closing ? "mlkPdfOut" : "mlkPdfIn"} 0.2s cubic-bezier(0.16,1,0.3,1) both` }}
     >
-      <style>{`
-        @keyframes mlkPdfIn  { from { opacity:0; transform:scale(0.97) } to { opacity:1; transform:scale(1) } }
-        @keyframes mlkPdfOut { from { opacity:1; transform:scale(1)    } to { opacity:0; transform:scale(0.97) } }
-      `}</style>
+      <style>{PDF_MODAL_KEYFRAMES}</style>
 
       {/* Backdrop — click to close */}
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={handleClose} aria-hidden="true" />
@@ -669,6 +705,11 @@ const PdfPreviewModal = React.memo(function PdfPreviewModal({
   );
 });
 
+const _TODAY = new Date();
+const _INITIAL_MONTH = String(_TODAY.getMonth() + 1);
+const _INITIAL_YEAR = String(_TODAY.getFullYear());
+const _INITIAL_PERIOD = { ...buildPeriod(Number(_INITIAL_MONTH), Number(_INITIAL_YEAR)), periodEnd: toIsoDate(_TODAY) };
+
 const Statements = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -685,9 +726,6 @@ const Statements = () => {
     canExportStatement: hasCompanyPermission(currentUser || {}, currentCompany, "statements", "export", "propertyManagement"),
   }), [currentUser, currentCompany]);
 
-  const today = new Date();
-  const todayIso = toIsoDate(today);
-  const initialPeriod = { ...buildPeriod(today.getMonth() + 1, today.getFullYear()), periodEnd: todayIso };
   const statementDraftKey = buildScopedDraftKey({
     page: "landlord-statement",
     companyId: currentCompany?._id,
@@ -696,10 +734,10 @@ const Statements = () => {
   const [statementDraft, setStatementDraft, clearStatementDraft] = useScopedSessionDraft(statementDraftKey, {
     statementType: "provisional",
     selectedPropertyId: "",
-    month: String(today.getMonth() + 1),
-    year: String(today.getFullYear()),
-    periodStart: initialPeriod.periodStart,
-    periodEnd: initialPeriod.periodEnd,
+    month: _INITIAL_MONTH,
+    year: _INITIAL_YEAR,
+    periodStart: _INITIAL_PERIOD.periodStart,
+    periodEnd: _INITIAL_PERIOD.periodEnd,
     periodEndIsCustom: false,
     draftStatement: null,
     activeTab: "workspace",
@@ -709,14 +747,14 @@ const Statements = () => {
   const setStatementType = (value) => setStatementDraft((prev) => ({ ...prev, statementType: typeof value === "function" ? value(prev.statementType || "provisional") : value }));
   const selectedPropertyId = statementDraft.selectedPropertyId || "";
   const setSelectedPropertyId = (value) => setStatementDraft((prev) => ({ ...prev, selectedPropertyId: typeof value === "function" ? value(prev.selectedPropertyId || "") : value }));
-  const month = statementDraft.month || String(today.getMonth() + 1);
-  const setMonth = (value) => setStatementDraft((prev) => ({ ...prev, month: typeof value === "function" ? value(prev.month || String(today.getMonth() + 1)) : value }));
-  const year = statementDraft.year || String(today.getFullYear());
-  const setYear = (value) => setStatementDraft((prev) => ({ ...prev, year: typeof value === "function" ? value(prev.year || String(today.getFullYear())) : value }));
-  const periodStart = statementDraft.periodStart || initialPeriod.periodStart;
-  const setPeriodStart = (value) => setStatementDraft((prev) => ({ ...prev, periodStart: typeof value === "function" ? value(prev.periodStart || initialPeriod.periodStart) : value }));
-  const periodEnd = statementDraft.periodEnd || initialPeriod.periodEnd;
-  const setPeriodEnd = (value) => setStatementDraft((prev) => ({ ...prev, periodEnd: typeof value === "function" ? value(prev.periodEnd || initialPeriod.periodEnd) : value }));
+  const month = statementDraft.month || _INITIAL_MONTH;
+  const setMonth = (value) => setStatementDraft((prev) => ({ ...prev, month: typeof value === "function" ? value(prev.month || _INITIAL_MONTH) : value }));
+  const year = statementDraft.year || _INITIAL_YEAR;
+  const setYear = (value) => setStatementDraft((prev) => ({ ...prev, year: typeof value === "function" ? value(prev.year || _INITIAL_YEAR) : value }));
+  const periodStart = statementDraft.periodStart || _INITIAL_PERIOD.periodStart;
+  const setPeriodStart = (value) => setStatementDraft((prev) => ({ ...prev, periodStart: typeof value === "function" ? value(prev.periodStart || _INITIAL_PERIOD.periodStart) : value }));
+  const periodEnd = statementDraft.periodEnd || _INITIAL_PERIOD.periodEnd;
+  const setPeriodEnd = (value) => setStatementDraft((prev) => ({ ...prev, periodEnd: typeof value === "function" ? value(prev.periodEnd || _INITIAL_PERIOD.periodEnd) : value }));
   const periodEndIsCustom = Boolean(statementDraft.periodEndIsCustom);
   const setPeriodEndIsCustom = (value) => setStatementDraft((prev) => ({ ...prev, periodEndIsCustom: Boolean(value) }));
   const draftStatement = statementDraft.draftStatement || null;
@@ -732,6 +770,7 @@ const Statements = () => {
   const [processedContextLoaded, setProcessedContextLoaded] = useState(false);
   const [pdfPreviewOpen, setPdfPreviewOpen]   = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const handlePdfPreviewClose = useCallback(() => setPdfPreviewOpen(false), []);
 
   const autoDraftTimerRef = useRef(null);
   const lastAutoLoadedSelectionRef = useRef("");
@@ -746,15 +785,19 @@ const Statements = () => {
   const periodEndRef = useRef(periodEnd);
   // Read periodEndIsCustom in the effect without adding it to deps (avoids circular)
   const periodEndIsCustomRef = useRef(periodEndIsCustom);
+  const monthRef = useRef(month);
+  const yearRef = useRef(year);
   // Keep refs in sync on every render (cheap, no extra effect)
   periodStartRef.current = periodStart;
   periodEndRef.current = periodEnd;
   periodEndIsCustomRef.current = periodEndIsCustom;
+  monthRef.current = month;
+  yearRef.current = year;
 
   useEffect(() => {
     if (!currentCompany?._id) return;
     if (!propertiesLoaded) dispatch(getProperties({ business: currentCompany._id }));
-    dispatch(getLandlords({ company: currentCompany._id }));
+    if (!landlords?.length) dispatch(getLandlords({ company: currentCompany._id }));
   }, [currentCompany?._id]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectedProperty = useMemo(
@@ -836,10 +879,10 @@ const Statements = () => {
     const reopenStartDate = new Date(`${reopenDraftContext.periodStart}T00:00:00`);
     const nextMonth = !Number.isNaN(reopenStartDate.getTime())
       ? String(reopenStartDate.getMonth() + 1)
-      : month;
+      : monthRef.current;
     const nextYear = !Number.isNaN(reopenStartDate.getTime())
       ? String(reopenStartDate.getFullYear())
-      : year;
+      : yearRef.current;
 
     pendingReopenContextRef.current = reopenDraftContext;
     lastAutoLoadedSelectionRef.current = "";
@@ -853,7 +896,7 @@ const Statements = () => {
     setPeriodEnd(reopenDraftContext.periodEnd);
 
     navigate(location.pathname, { replace: true, state: null });
-  }, [location.pathname, location.state, month, navigate, year]);
+  }, [location.pathname, location.state, navigate]);
 
   useEffect(() => {
     if (!currentCompany?._id || !selectedPropertyId) {
@@ -878,6 +921,7 @@ const Statements = () => {
         params: {
           property: selectedPropertyId,
           ...(landlordId ? { landlord: landlordId } : {}),
+          limit: 3,
         },
       })
       .then((response) => {
@@ -985,7 +1029,10 @@ const Statements = () => {
     ? depositSettlement.rows
     : [];
   const depositSettlementTotals = depositSettlement?.totals || {};
-  const statementPeriodLabel = buildStatementPeriodLabel(workspace, draftStatement || {});
+  const statementPeriodLabel = useMemo(
+    () => buildStatementPeriodLabel(workspace, draftStatement || {}),
+    [draftStatement?._id, draftStatement?.periodStart, draftStatement?.periodEnd, workspace]
+  );
   const broughtForwardCreditApplications = workspace?.broughtForwardCreditApplications || {};
   const broughtForwardCreditApplicationRows = Array.isArray(broughtForwardCreditApplications?.rows)
     ? broughtForwardCreditApplications.rows
@@ -1035,11 +1082,12 @@ const Statements = () => {
     () =>
       rows.map((row) => {
         const utilityMap = normalizeRowUtilities(row);
-        return {
+        const enriched = {
           ...row,
           __utilityMap: utilityMap,
           __statementColumnMap: buildPreparedStatementColumnMap({ ...row, __utilityMap: utilityMap }, statementColumns),
         };
+        return { ...enriched, __paymentStatus: getRowPaymentStatus(enriched) };
       }),
     [rows, statementColumns]
   );
@@ -1170,7 +1218,7 @@ const Statements = () => {
     const rate = totalInvoiced > 0 ? Math.round((totalCollected / totalInvoiced) * 100) : null;
     let paidCount = 0, partialCount = 0, unpaidCount = 0, nobillCount = 0, vacantCount = 0;
     preparedRows.forEach((row) => {
-      const s = getRowPaymentStatus(row);
+      const s = row.__paymentStatus;
       if (s === "paid") paidCount++;
       else if (s === "partial") partialCount++;
       else if (s === "unpaid") unpaidCount++;
@@ -1182,7 +1230,7 @@ const Statements = () => {
 
   const filteredTableRows = useMemo(() => {
     if (rowFilter === "all") return statementDisplayRows;
-    return statementDisplayRows.filter((r) => getRowPaymentStatus(r) === rowFilter);
+    return statementDisplayRows.filter((r) => r.__paymentStatus === rowFilter);
   }, [statementDisplayRows, rowFilter]);
 
   const nonDepositAdditionRows = useMemo(
@@ -2149,22 +2197,12 @@ const Statements = () => {
                       ) : (
                         filteredTableRows.map((row, index) => {
                           const closingBal = Number(row.closingBalance ?? row.balanceCF ?? row.balance ?? 0);
-                          const status = getRowPaymentStatus(row);
+                          const status = row.__paymentStatus;
                           const st = ROW_STATUS[status] || ROW_STATUS.vacant;
                           const isVacant = status === "vacant";
                           const isNoBill = status === "nobill";
                           const isOdd = index % 2 !== 0;
                           const rowBase = isOdd ? "bg-slate-50" : "bg-white";
-
-                          // Helper: paid columns — only show green amount when actually > 0,
-                          // otherwise show a muted dash (zero payment ≠ good, don't colour it green).
-                          const paidCell = (val) => {
-                            if (isVacant || isNoBill) return { text: "—", cls: "text-slate-300" };
-                            const n = Number(val || 0);
-                            return n > 0.005
-                              ? { text: currency(n), cls: "text-emerald-700 font-medium" }
-                              : { text: "—", cls: "text-slate-300" };
-                          };
 
                           // Bal C/F: positive = tenant owes (arrears = red),
                           //          negative = tenant has credit (green),
@@ -2174,16 +2212,16 @@ const Statements = () => {
                             : closingBal < -0.005 ? "text-emerald-700 font-semibold"
                             : "text-slate-400";
 
-                          const paidRentCell   = paidCell(row.paidRent);
-                          const paidTaxCell    = paidCell(row.paidTax);
-                          const totalPaidCell  = paidCell(row.totalPaid);
+                          const paidRentCell   = paidCellDisplay(row.paidRent, isVacant, isNoBill);
+                          const paidTaxCell    = paidCellDisplay(row.paidTax, isVacant, isNoBill);
+                          const totalPaidCell  = paidCellDisplay(row.totalPaid, isVacant, isNoBill);
 
                           // Only show the inline badge for PAID and PARTIAL — those are the meaningful exceptions.
                           const showBadge = status === "paid" || status === "partial";
 
                           return (
                             <tr
-                              key={row.unitId || row.unitNumber || row._id || index}
+                              key={row.unitId ? `u-${row.unitId}` : row._id ? `d-${row._id}` : `n-${row.unitNumber || index}`}
                               className={`${rowBase} border-b border-slate-100 transition-colors hover:bg-blue-50/20`}
                             >
                               <td className={`sticky left-0 z-10 w-[88px] min-w-[88px] ${rowBase} ${st.border} px-3 py-2.5 shadow-[2px_0_5px_-3px_rgba(0,0,0,0.07)]`}>
@@ -2236,7 +2274,7 @@ const Statements = () => {
                                 <td className={`px-3 py-2.5 text-right text-[11px] ${paidTaxCell.cls}`}>{paidTaxCell.text}</td>
                               )}
                               {statementColumns.map((column) => {
-                                const padVal = paidCell(getPreparedStatementColumnValue(row, column.key, "paid"));
+                                const padVal = paidCellDisplay(getPreparedStatementColumnValue(row, column.key, "paid"), isVacant, isNoBill);
                                 return (
                                   <td key={`paid-${row.unitId || row.unitNumber || "row"}-${column.key}`} className={`px-3 py-2.5 text-right text-xs ${padVal.cls}`}>{padVal.text}</td>
                                 );
@@ -2454,7 +2492,7 @@ const Statements = () => {
                             ))}
                             <div className="flex items-center justify-between border-t border-amber-200 bg-amber-50 px-4 py-2.5">
                               <span className="text-xs font-bold text-amber-800">Total early payouts</span>
-                              <span className="text-xs font-bold text-amber-800">({currency(earlyPayoutRows.reduce((s, r) => s + Number(r.amount || 0), 0))})</span>
+                              <span className="text-xs font-bold text-amber-800">({currency(Number(summary?.totalEarlyPayouts || 0))})</span>
                             </div>
                           </div>
                         </div>
@@ -2478,7 +2516,7 @@ const Statements = () => {
                             ))}
                             <div className="flex items-center justify-between border-t border-red-200 bg-red-50 px-4 py-2.5">
                               <span className="text-xs font-bold text-red-800">Total advance recoveries</span>
-                              <span className="text-xs font-bold text-red-800">({currency(advanceRecoveryRows.reduce((s, r) => s + Number(r.amount || 0), 0))})</span>
+                              <span className="text-xs font-bold text-red-800">({currency(Number(summary?.totalAdvanceRecoveries || 0))})</span>
                             </div>
                           </div>
                         </div>
@@ -2615,7 +2653,7 @@ const Statements = () => {
         propertyLabel={selectedProperty ? getPropertyLabel(selectedProperty) : ""}
         periodStart={periodStart}
         periodEnd={periodEnd}
-        onClose={() => setPdfPreviewOpen(false)}
+        onClose={handlePdfPreviewClose}
       />
     </DashboardLayout>
   );

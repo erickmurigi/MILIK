@@ -1,11 +1,54 @@
+import https from "https";
+import http from "http";
 import { createPage, resetBrowser } from "./browserService.js";
 import LandlordStatement from "../models/LandlordStatement.js";
 import LandlordStatementLine from "../models/LandlordStatementLine.js";
 
+// Module-level logo cache: URL → Base64 data URI.
+// Pre-fetching eliminates the outbound HTTP call Puppeteer would otherwise make per render.
+const _logoDataUriCache = new Map();
+
+const _fetchBuffer = (url, redirectsLeft = 3) =>
+  new Promise((resolve, reject) => {
+    const mod = url.startsWith("https") ? https : http;
+    const req = mod.get(url, (res) => {
+      if ([301, 302, 307, 308].includes(res.statusCode) && res.headers.location && redirectsLeft > 0) {
+        return _fetchBuffer(res.headers.location, redirectsLeft - 1).then(resolve, reject);
+      }
+      const chunks = [];
+      res.on("data", (c) => chunks.push(c));
+      res.on("end", () => resolve(Buffer.concat(chunks)));
+      res.on("error", reject);
+    });
+    req.on("error", reject);
+    req.setTimeout(8000, () => { req.destroy(); reject(new Error("logo fetch timeout")); });
+  });
+
+const fetchLogoDataUri = async (url) => {
+  if (!url || typeof url !== "string" || !url.startsWith("http")) return url;
+  if (_logoDataUriCache.has(url)) {
+    const cached = _logoDataUriCache.get(url);
+    _logoDataUriCache.delete(url);
+    _logoDataUriCache.set(url, cached);
+    return cached;
+  }
+  try {
+    const buffer = await _fetchBuffer(url);
+    const ext = url.split("?")[0].split(".").pop().toLowerCase();
+    const mime = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml" }[ext] || "image/png";
+    const dataUri = `data:${mime};base64,${buffer.toString("base64")}`;
+    if (_logoDataUriCache.size >= 50) _logoDataUriCache.delete(_logoDataUriCache.keys().next().value);
+    _logoDataUriCache.set(url, dataUri);
+    return dataUri;
+  } catch {
+    return url;
+  }
+};
+
 const pdfBufferCache = new Map();
 const pdfRenderPromises = new Map();
 const MAX_PDF_CACHE_ENTRIES = 24;
-const MAX_CONCURRENT_PDF_RENDERS = 3;
+const MAX_CONCURRENT_PDF_RENDERS = 5;
 const QUEUE_TIMEOUT_MS = 120_000;
 const RENDER_TIMEOUT_MS = 90_000;
 let activePdfRenderCount = 0;
@@ -217,7 +260,9 @@ const buildRowStatementColumnMap = (row = {}, statementColumns = []) => {
 };
 
 const getRowStatementColumnAmount = (row = {}, key = "", phase = "invoiced") =>
-  Number(buildRowStatementColumnMap(row, row?.__statementColumns || [])?.[key]?.[phase] || 0);
+  Number(
+    (row.__statementColumnMap ?? buildRowStatementColumnMap(row, row?.__statementColumns || []))?.[key]?.[phase] || 0
+  );
 
 const buildBusinessLocation = (business = {}) =>
   [
@@ -464,8 +509,8 @@ const resolveSettlementDisplay = (summary = {}) => {
   };
 };
 
-export const generateStatementPdf = async (statementId, businessId) => {
-  const statement = await LandlordStatement.findOne({
+export const generateStatementPdf = async (statementId, businessId, { statement: preloadedStatement } = {}) => {
+  const statement = preloadedStatement || await LandlordStatement.findOne({
     _id: statementId,
     business: businessId,
   })
@@ -487,7 +532,7 @@ export const generateStatementPdf = async (statementId, businessId) => {
   if (cachedPdfBuffer) return cachedPdfBuffer;
 
   if (pdfRenderPromises.has(cacheKey)) {
-    return Buffer.from(await pdfRenderPromises.get(cacheKey));
+    return await pdfRenderPromises.get(cacheKey);
   }
 
   const renderPromise = (async () => {
@@ -504,6 +549,7 @@ export const generateStatementPdf = async (statementId, businessId) => {
           .populate("tenant", "name tenantCode")
           .populate("unit", "unitNumber name")
           .sort({ lineNumber: 1 })
+          .limit(5000)
           .lean();
 
     const rows = workspaceHasRows
@@ -659,6 +705,7 @@ export const generateStatementPdf = async (statementId, businessId) => {
     const businessSlogan =
       statement.business?.slogan || "Modern Property Management";
     const businessLogo = statement.business?.logo || "";
+    const businessLogoEmbed = businessLogo ? await fetchLogoDataUri(businessLogo) : "";
     const businessPhone = statement.business?.phoneNo || statement.business?.phone || "";
     const businessEmail = statement.business?.email || "";
     const businessPostalAddress = buildBusinessPostalAddress(statement.business || {});
@@ -773,7 +820,7 @@ export const generateStatementPdf = async (statementId, businessId) => {
           <table class="header-table">
             <tr>
               <td class="brand-cell">
-                ${businessLogo ? `<img src="${esc(businessLogo)}" alt="logo" class="brand-logo" />` : `<div class="brand-fallback">${esc(String(businessName || "M").charAt(0).toUpperCase())}</div>`}
+                ${businessLogoEmbed ? `<img src="${esc(businessLogoEmbed)}" alt="logo" class="brand-logo" />` : `<div class="brand-fallback">${esc(String(businessName || "M").charAt(0).toUpperCase())}</div>`}
               </td>
               <td>
                 <div class="business-name">${esc(businessName)}</div>
@@ -1049,16 +1096,17 @@ export const generateStatementPdf = async (statementId, businessId) => {
         "Statement PDF render timed out"
       );
 
-      try {
-        await page.close();
-      } catch {
-        // ignore page close errors for disconnected sessions
-      }
-
       rememberPdfBuffer(cacheKey, pdfBuffer);
-      return Buffer.from(pdfBuffer);
+      return pdfBuffer;
     } catch (error) {
-      await resetBrowser();
+      if (page) { try { await page.close(); } catch {} }
+      const msg = String(error?.message || "");
+      const isBrowserDead =
+        msg.includes("Protocol error") ||
+        msg.includes("Target closed") ||
+        msg.includes("Session closed") ||
+        msg.includes("disconnected");
+      if (isBrowserDead) await resetBrowser();
       throw error;
     } finally {
       releasePdfRenderSlot();
@@ -1068,7 +1116,7 @@ export const generateStatementPdf = async (statementId, businessId) => {
   pdfRenderPromises.set(cacheKey, renderPromise);
 
   try {
-    return Buffer.from(await renderPromise);
+    return await renderPromise;
   } finally {
     pdfRenderPromises.delete(cacheKey);
   }

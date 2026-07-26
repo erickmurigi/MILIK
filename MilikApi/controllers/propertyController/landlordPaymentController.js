@@ -167,6 +167,12 @@ const postPayableCreationIfMissing = async ({ statement, actorUserId, transactio
   const netAmountDue = Number(statement?.netAmountDue || 0);
   if (!statement?._id || !actorUserId || netAmountDue <= 0) return;
 
+  const stmtRef = statement.sourceStatementNumber
+    || (statement.periodStart
+        ? new Date(statement.periodStart).toLocaleDateString("en-GB", { month: "short", year: "numeric" })
+        : null)
+    || `Statement ${String(statement._id).slice(-6)}`;
+
   const existing = await FinancialLedgerEntry.findOne({
     business: statement.business,
     sourceTransactionType: "processed_statement",
@@ -177,11 +183,10 @@ const postPayableCreationIfMissing = async ({ statement, actorUserId, transactio
 
   if (existing) return;
 
-  const propertyControlAccount = await ensurePropertyControlAccount({
-    businessId: statement.business,
-    propertyId: statement.property,
-  });
-  const landlordPayableAccount = await resolveLandlordRemittancePayableAccount(statement.business);
+  const [propertyControlAccount, landlordPayableAccount] = await Promise.all([
+    ensurePropertyControlAccount({ businessId: statement.business, propertyId: statement.property }),
+    resolveLandlordRemittancePayableAccount(statement.business),
+  ]);
   const journalGroupId = new mongoose.Types.ObjectId();
   const meta = {
     processedStatementId: String(statement._id),
@@ -207,7 +212,7 @@ const postPayableCreationIfMissing = async ({ statement, actorUserId, transactio
     journalGroupId,
     payer: "manager",
     receiver: "landlord",
-    notes: `Landlord payable created (retroactive) for processed statement ${statement._id}`,
+    notes: `Landlord Payable — ${stmtRef} (retroactive)`,
     metadata: { ...meta, postingRole: "property_control_payable_transfer" },
     createdBy: actorUserId,
     approvedBy: actorUserId,
@@ -233,7 +238,7 @@ const postPayableCreationIfMissing = async ({ statement, actorUserId, transactio
     journalGroupId,
     payer: "manager",
     receiver: "system",
-    notes: `Landlord payable created (retroactive) for processed statement ${statement._id}`,
+    notes: `Landlord Payable — ${stmtRef} (retroactive)`,
     metadata: { ...meta, postingRole: "landlord_remittance_payable", offsetOfEntryId: String(debitLeg._id) },
     createdBy: actorUserId,
     approvedBy: actorUserId,
@@ -305,6 +310,12 @@ const postCommissionAccrualIfMissing = async ({ statement, actorUserId, transact
     return { alreadyPosted: false, entries: [] };
   }
 
+  const stmtRef = statement.sourceStatementNumber
+    || (statement.periodStart
+        ? new Date(statement.periodStart).toLocaleDateString("en-GB", { month: "short", year: "numeric" })
+        : null)
+    || `Statement ${String(statement._id).slice(-6)}`;
+
   const existingEntries = await findAccountLinkedCommissionAccrualEntries(statement);
   const expectedEntryCount = commissionTaxAmount > 0 ? 3 : 2;
   if (existingEntries.length >= expectedEntryCount) {
@@ -312,12 +323,11 @@ const postCommissionAccrualIfMissing = async ({ statement, actorUserId, transact
   }
 
   const { postEntry } = await import("../../services/ledgerPostingService.js");
-  const propertyControlAccount = await ensurePropertyControlAccount({
-    businessId: statement.business,
-    propertyId: statement.property,
-  });
-  const commissionIncomeAccount = await resolveCommissionIncomeAccount(statement.business);
-  const companyTaxConfig = await getCompanyTaxConfiguration(statement.business);
+  const [propertyControlAccount, commissionIncomeAccount, companyTaxConfig] = await Promise.all([
+    ensurePropertyControlAccount({ businessId: statement.business, propertyId: statement.property }),
+    resolveCommissionIncomeAccount(statement.business),
+    getCompanyTaxConfiguration(statement.business),
+  ]);
   const outputVatAccount = commissionTaxAmount > 0
     ? await resolveOutputVatAccount({ businessId: statement.business, companyTaxConfig })
     : null;
@@ -350,7 +360,7 @@ const postCommissionAccrualIfMissing = async ({ statement, actorUserId, transact
     journalGroupId,
     payer: "manager",
     receiver: "landlord",
-    notes: notes || `Commission accrued for processed statement ${statement._id}` ,
+    notes: notes || `Management Commission — ${stmtRef}`,
     metadata: {
       ...commonMetadata,
       postingRole: "property_control_charge",
@@ -379,7 +389,7 @@ const postCommissionAccrualIfMissing = async ({ statement, actorUserId, transact
     journalGroupId,
     payer: "manager",
     receiver: "system",
-    notes: notes || `Commission income accrued for processed statement ${statement._id}` ,
+    notes: notes || `Commission Income — ${stmtRef}`,
     metadata: {
       ...commonMetadata,
       postingRole: "commission_income_accrual",
@@ -413,7 +423,7 @@ const postCommissionAccrualIfMissing = async ({ statement, actorUserId, transact
       journalGroupId,
       payer: "manager",
       receiver: "system",
-      notes: notes || `Commission VAT accrued for processed statement ${statement._id}` ,
+      notes: notes || `Commission VAT — ${stmtRef}`,
       metadata: {
         ...commonMetadata,
         postingRole: "commission_output_vat",
@@ -486,6 +496,12 @@ export const payLandlord = async (req, res, next) => {
       return next(createError(404, "Processed statement not found or access denied"));
     }
 
+    const stmtRef = statement.sourceStatementNumber
+      || (statement.periodStart
+          ? new Date(statement.periodStart).toLocaleDateString("en-GB", { month: "short", year: "numeric" })
+          : null)
+      || `Statement ${String(statement._id).slice(-6)}`;
+
     const isNegativeStatement =
       Boolean(statement.isNegativeStatement) || Number(statement.amountPayableByLandlordToManager || 0) > 0;
 
@@ -506,7 +522,7 @@ export const payLandlord = async (req, res, next) => {
       statement,
       actorUserId,
       transactionDate: postingDate,
-      notes: `Commission accrued during landlord payment for processed statement ${statement._id}`,
+      notes: `Management Commission — ${stmtRef}`,
     });
 
     await postPayableCreationIfMissing({ statement, actorUserId, transactionDate: postingDate });
@@ -569,13 +585,11 @@ export const payLandlord = async (req, res, next) => {
       return `${prefix}${String(seq).padStart(5, "0")}`;
     };
 
-    const voucherNo = await generateVoucherNo(statement.business);
-    const landlordPayableAccount = await resolveLandlordRemittancePayableAccount(statement.business);
-    const cashbookAccount = await resolveCashbookAccount({
-      businessId: statement.business,
-      cashbook,
-      paymentMethod: normalizedPaymentMethod,
-    });
+    const [voucherNo, landlordPayableAccount, cashbookAccount] = await Promise.all([
+      generateVoucherNo(statement.business),
+      resolveLandlordRemittancePayableAccount(statement.business),
+      resolveCashbookAccount({ businessId: statement.business, cashbook, paymentMethod: normalizedPaymentMethod }),
+    ]);
 
     if (!cashbookAccount?._id) {
       return next(createError(400, "A valid cashbook account could not be resolved for this payment."));
@@ -592,9 +606,7 @@ export const payLandlord = async (req, res, next) => {
       paidDate: postingDate,
       reference: referenceNumber || null,
       sourceProcessedStatement: statement._id,
-      narration: `Landlord payment for statement ${statement.sourceStatementNumber || statement._id}${
-        cashbookAccount?.name ? ` via ${cashbookAccount.name}` : ""
-      }`,
+      narration: `Landlord Payment — ${stmtRef}${cashbookAccount?.name ? ` via ${cashbookAccount.name}` : ""}`,
       liabilityAccount: landlordPayableAccount?._id || null,
       debitAccount: cashbookAccount?._id || null,
       approvedBy: actorUserId,
@@ -731,6 +743,12 @@ export const recordRecoveryFromLandlord = async (req, res, next) => {
       return next(createError(404, "Processed statement not found or access denied"));
     }
 
+    const stmtRef = statement.sourceStatementNumber
+      || (statement.periodStart
+          ? new Date(statement.periodStart).toLocaleDateString("en-GB", { month: "short", year: "numeric" })
+          : null)
+      || `Statement ${String(statement._id).slice(-6)}`;
+
     if (statement.status === "reversed") {
       return next(createError(400, "Reversed processed statements cannot accept recovery postings."));
     }
@@ -809,7 +827,7 @@ export const recordRecoveryFromLandlord = async (req, res, next) => {
       journalGroupId,
       payer: "landlord",
       receiver: "manager",
-      notes: `Recovery received from landlord for processed statement ${statement._id}${cashbookAccount?.name ? ` via ${cashbookAccount.name}` : ""}`,
+      notes: `Landlord Recovery — ${stmtRef}${cashbookAccount?.name ? ` via ${cashbookAccount.name}` : ""}`,
       metadata: {
         processedStatementId: String(statement._id),
         postingKind: "landlord_recovery",
@@ -843,7 +861,7 @@ export const recordRecoveryFromLandlord = async (req, res, next) => {
       journalGroupId,
       payer: "landlord",
       receiver: "system",
-      notes: `Recovery cleared against property control for processed statement ${statement._id}`,
+      notes: `Recovery Cleared — ${stmtRef}`,
       metadata: {
         processedStatementId: String(statement._id),
         postingKind: "landlord_recovery",
@@ -934,6 +952,12 @@ export const postCommission = async (req, res, next) => {
       return next(createError(404, "Processed statement not found or access denied"));
     }
 
+    const stmtRef = statement.sourceStatementNumber
+      || (statement.periodStart
+          ? new Date(statement.periodStart).toLocaleDateString("en-GB", { month: "short", year: "numeric" })
+          : null)
+      || `Statement ${String(statement._id).slice(-6)}`;
+
     const commissionAmount = Number(amount || statement.commissionAmount || 0);
     if (!commissionAmount || commissionAmount <= 0) {
       return next(createError(400, "Valid commission amount is required"));
@@ -986,7 +1010,7 @@ export const postCommission = async (req, res, next) => {
       journalGroupId,
       payer: "manager",
       receiver: "landlord",
-      notes: `Commission posting for processed statement ${statement._id}`,
+      notes: `Management Commission — ${stmtRef}`,
       metadata: {
         processedStatementId: String(statement._id),
         postingKind: "commission_accrual",
@@ -1017,7 +1041,7 @@ export const postCommission = async (req, res, next) => {
       journalGroupId,
       payer: "manager",
       receiver: "system",
-      notes: `Commission posting for processed statement ${statement._id}`,
+      notes: `Management Commission — ${stmtRef}`,
       metadata: {
         processedStatementId: String(statement._id),
         postingKind: "commission_accrual",

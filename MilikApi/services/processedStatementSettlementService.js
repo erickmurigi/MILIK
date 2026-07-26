@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import PaymentVoucher from "../models/PaymentVoucher.js";
 import ProcessedStatement from "../models/ProcessedStatement.js";
 import FinancialLedgerEntry from "../models/FinancialLedgerEntry.js";
@@ -83,7 +84,10 @@ export const computeProcessedStatementSettlementState = async ({ statementId, bu
   const [activeVouchers, activeRecoveryEntries] = await Promise.all([
     PaymentVoucher.find({
       business: scopedBusinessId,
-      reference: scopedStatementId,
+      $or: [
+        { reference: String(scopedStatementId) },
+        { sourceProcessedStatement: new mongoose.Types.ObjectId(String(scopedStatementId)) },
+      ],
       status: { $ne: "reversed" },
     })
       .select("_id amount status voucherNo narration paidDate paidAt approvedAt approvedBy paidBy createdAt")

@@ -2,6 +2,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import { verifyUser } from '../../../controllers/verifyToken.js';
 import HRPayslip from '../models/HRPayslip.js';
+import HRPayrollPeriod from '../models/HRPayrollPeriod.js';
 import HRLetter from '../models/HRLetter.js';
 import HREmployee from '../models/HREmployee.js';
 import Company from '../../../models/Company.js';
@@ -36,6 +37,7 @@ router.post('/payslip/:payslipId', async (req, res) => {
     const [payslip, company] = await Promise.all([
       HRPayslip.findOne({ _id: req.params.payslipId, company: oid })
         .populate('payrollPeriod', 'name label month year status')
+        .populate('employee', 'workEmail email')
         .lean(),
       Company.findById(oid).lean(),
     ]);
@@ -45,11 +47,7 @@ router.post('/payslip/:payslipId', async (req, res) => {
     const snap = payslip.snapshot || {};
     const toEmail = await resolveToEmail(req, [
       snap.email,
-      async () => {
-        if (!payslip.employee) return null;
-        const emp = await HREmployee.findById(payslip.employee).select('workEmail email').lean();
-        return emp?.workEmail || emp?.email;
-      },
+      payslip.employee?.workEmail || payslip.employee?.email,
     ]);
 
     if (!toEmail) return res.status(400).json({ message: 'No email address found for this employee' });
@@ -59,7 +57,8 @@ router.post('/payslip/:payslipId', async (req, res) => {
 
     res.json({ sent: true, to: toEmail, subject });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error('[HR Email] send failed: %s', err?.message || err);
+    res.status(500).json({ message: 'Email could not be sent. Check server email configuration.' });
   }
 });
 
@@ -89,7 +88,8 @@ router.post('/letter/:letterId', async (req, res) => {
 
     res.json({ sent: true, to: toEmail, subject });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error('[HR Email] send failed: %s', err?.message || err);
+    res.status(500).json({ message: 'Email could not be sent. Check server email configuration.' });
   }
 });
 
@@ -105,15 +105,9 @@ router.post('/payroll-register', async (req, res) => {
     if (!toEmail) return res.status(400).json({ message: 'Recipient email is required' });
     if (!periodId) return res.status(400).json({ message: 'Period ID is required' });
 
-    // Fetch register data by re-using the existing report endpoint logic
-    const [HRPayrollPeriod, HRPayslipM] = await Promise.all([
-      import('../models/HRPayrollPeriod.js').then((m) => m.default),
-      import('../models/HRPayslip.js').then((m) => m.default),
-    ]);
-
     const [period, payslips, company] = await Promise.all([
       HRPayrollPeriod.findOne({ _id: periodId, company: oid }).lean(),
-      HRPayslipM.find({ payrollPeriod: periodId, company: oid }).lean(),
+      HRPayslip.find({ payrollPeriod: periodId, company: oid }).lean(),
       Company.findById(oid).lean(),
     ]);
 
@@ -143,7 +137,8 @@ router.post('/payroll-register', async (req, res) => {
 
     res.json({ sent: true, to: toEmail, subject });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error('[HR Email] send failed: %s', err?.message || err);
+    res.status(500).json({ message: 'Email could not be sent. Check server email configuration.' });
   }
 });
 

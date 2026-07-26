@@ -47,6 +47,7 @@ export async function createReceipt(req, res) {
       transactionDate: receipt.date,
       statementPeriodStart: receipt.statementPeriodStart,
       statementPeriodEnd: receipt.statementPeriodEnd,
+      notes: receipt.description || `Receipt — ${receipt.receiptNumber || String(receipt._id).slice(-6)}`,
       status: "approved",
       createdBy: actorUserId,
       approvedBy: actorUserId,

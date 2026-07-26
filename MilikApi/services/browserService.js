@@ -59,7 +59,6 @@ export const createPage = async () => {
 
 async function openPage(b) {
   const page = await b.newPage();
-  await page.setCacheEnabled(false);
   page.on("error", () => {});
   page.on("pageerror", () => {});
   return page;

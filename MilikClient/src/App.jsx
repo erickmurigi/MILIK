@@ -251,6 +251,11 @@ const SaleFinancials        = lazy(() => import("./pages/PropertySale/SaleFinanc
 const SaleLeads             = lazy(() => import("./pages/PropertySale/SaleLeads"));
 const SaleActivities        = lazy(() => import("./pages/PropertySale/SaleActivities"));
 
+// Client Management module
+const ClientsDashboard = lazy(() => import("./pages/Clients/ClientsDashboard"));
+const ClientsList      = lazy(() => import("./pages/Clients/ClientsList"));
+const ClientDetail     = lazy(() => import("./pages/Clients/ClientDetail"));
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 const DEMO_EXPIRED_NOTICE_KEY = "milik_demo_expired_notice";
 const DEMO_EXPIRED_MESSAGE = "Your demo period has ended. Contact MILIK for activation.";
@@ -742,6 +747,11 @@ function App() {
             <Route path="/sale/crm/activities"               element={<Guard moduleKey="propertySale" resource="saleActivities"><SaleActivities /></Guard>} />
             <Route path="/sale/chart-of-accounts"            element={<Guard moduleKey={GL_ACCESS_MODULES} resource="chartOfAccounts"><ChartOfAccounts /></Guard>} />
             <Route path="/sale/chart-of-accounts/:accountId/activity" element={<Guard moduleKey="propertySale" resource="chartOfAccounts"><LedgerAccountActivity /></Guard>} />
+
+            {/* ── Client Management module ──────────────────────────────── */}
+            <Route path="/clients/dashboard" element={<Guard resource="clients"><ClientsDashboard /></Guard>} />
+            <Route path="/clients"           element={<Guard resource="clients"><ClientsList /></Guard>} />
+            <Route path="/clients/:id"       element={<Guard resource="clients"><ClientDetail /></Guard>} />
 
             {/* ── System setup ──────────────────────────────────────────── */}
             <Route path="/system-setup"          element={<SuperAdminRoute><Navigate to="/system-setup/overview" replace /></SuperAdminRoute>} />

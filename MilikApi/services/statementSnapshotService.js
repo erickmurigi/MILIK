@@ -36,7 +36,7 @@ const reserveStatementNumber = async (businessId, periodStart) => {
     const latestStatement = await LandlordStatement.findOne(
       {
         business: businessObjectId,
-        statementNumber: { $regex: `^${escapeRegExp(prefix)}-\\d+$`, $options: "i" },
+        statementNumber: { $regex: `^${escapeRegExp(prefix)}-\\d+$` },
       },
       { statementNumber: 1 }
     )
@@ -82,7 +82,7 @@ const reserveStatementNumber = async (businessId, periodStart) => {
 
     const existingStatement = await LandlordStatement.exists({
       business: businessObjectId,
-      statementNumber: { $regex: `^${escapeRegExp(candidate)}$`, $options: "i" },
+      statementNumber: candidate,
     });
 
     if (!existingStatement) {
@@ -113,7 +113,34 @@ const findExistingDraftStatement = async ({
     periodStart,
     periodEnd,
     status: "draft",
-  }).sort({ createdAt: -1, _id: -1 });
+  }).sort({ createdAt: -1, _id: -1 }).lean();
+
+const buildStatementLines = (statementData, { statementId, business, property, landlord }) => {
+  let runningBalance = statementData.openingBalance;
+  return (statementData.entries || statementData.lines || []).map((entry, i) => {
+    const signedAmount = entry.direction === "debit" ? -Math.abs(entry.amount) : Math.abs(entry.amount);
+    runningBalance += signedAmount;
+    return {
+      statement: statementId,
+      business,
+      property,
+      landlord,
+      tenant: entry.tenant || null,
+      unit: entry.unit || null,
+      transactionDate: entry.transactionDate,
+      category: entry.category,
+      description: entry.notes || entry.description || `${entry.category} entry`,
+      amount: Math.abs(entry.amount),
+      direction: entry.direction,
+      runningBalance,
+      sourceLedgerEntryId: entry._id,
+      sourceTransactionType: entry.sourceTransactionType || null,
+      sourceTransactionId: entry.sourceTransactionId || null,
+      lineNumber: i + 1,
+      metadata: entry.metadata || {},
+    };
+  });
+};
 
 /**
  * Create a draft statement from ledger data.
@@ -266,34 +293,12 @@ export const createDraftStatement = async ({
 
   // Step 5: Create statement lines (not yet frozen, can be regenerated)
   // Lines are only frozen when statement is approved
-  const lines = [];
-  let runningBalance = statementData.openingBalance;
-
-  for (let i = 0; i < statementData.entries.length; i++) {
-    const entry = statementData.entries[i];
-    const signedAmount = entry.direction === "debit" ? -Math.abs(entry.amount) : Math.abs(entry.amount);
-    runningBalance += signedAmount;
-
-    lines.push({
-      statement: statement._id,
-      business: businessId,
-      property: propertyId,
-      landlord: landlordId,
-      tenant: entry.tenant || null,
-      unit: entry.unit || null,
-      transactionDate: entry.transactionDate,
-      category: entry.category,
-      description: entry.notes || entry.description || `${entry.category} entry`,
-      amount: Math.abs(entry.amount),
-      direction: entry.direction,
-      runningBalance,
-      sourceLedgerEntryId: entry._id,
-      sourceTransactionType: entry.sourceTransactionType || null,
-      sourceTransactionId: entry.sourceTransactionId || null,
-      lineNumber: i + 1,
-      metadata: entry.metadata || {},
-    });
-  }
+  const lines = buildStatementLines(statementData, {
+    statementId: statement._id,
+    business: businessId,
+    property: propertyId,
+    landlord: landlordId,
+  });
 
   if (lines.length > 0) {
     await LandlordStatementLine.insertMany(lines);
@@ -352,34 +357,12 @@ export const refreshDraftStatement = async (
   // Replace all existing draft lines with refreshed lines.
   await LandlordStatementLine.deleteMany({ statement: draft._id });
 
-  const lines = [];
-  let runningBalance = statementData.openingBalance;
-
-  for (let i = 0; i < statementData.entries.length; i++) {
-    const entry = statementData.entries[i];
-    const signedAmount = entry.direction === "debit" ? -Math.abs(entry.amount) : Math.abs(entry.amount);
-    runningBalance += signedAmount;
-
-    lines.push({
-      statement: draft._id,
-      business: draft.business,
-      property: draft.property,
-      landlord: draft.landlord,
-      tenant: entry.tenant || null,
-      unit: entry.unit || null,
-      transactionDate: entry.transactionDate,
-      category: entry.category,
-      description: entry.notes || entry.description || `${entry.category} entry`,
-      amount: Math.abs(entry.amount),
-      direction: entry.direction,
-      runningBalance,
-      sourceLedgerEntryId: entry._id,
-      sourceTransactionType: entry.sourceTransactionType || null,
-      sourceTransactionId: entry.sourceTransactionId || null,
-      lineNumber: i + 1,
-      metadata: entry.metadata || {},
-    });
-  }
+  const lines = buildStatementLines(statementData, {
+    statementId: draft._id,
+    business: draft.business,
+    property: draft.property,
+    landlord: draft.landlord,
+  });
 
   draft.openingBalance = statementData.openingBalance;
   draft.periodEnd = statementData.periodEnd;
@@ -505,23 +488,25 @@ export const approveStatement = async (statementId, userId, approvalNotes = "") 
   }));
 
   const allSnapshots = [...tenantSnapshots, ...depositSnapshots];
-  if (allSnapshots.length > 0) {
-    // bulkWrite with $setOnInsert makes this idempotent: re-running approve (double-click /
-    // race condition) silently skips rows that already exist instead of throwing E11000.
-    await LandlordStatementTenantBalance.bulkWrite(
-      allSnapshots.map((snap) => ({
-        updateOne: {
-          filter: { statement: snap.statement, tenantKey: snap.tenantKey },
-          update: { $setOnInsert: snap },
-          upsert: true,
-        },
-      })),
-      { ordered: false }
-    );
-  }
 
-  // Lines are now frozen (immutable via pre-save hooks)
-  const lines = await LandlordStatementLine.find({ statement: statementId }).sort({ lineNumber: 1 }).lean();
+  // Run bulkWrite and lines fetch in parallel — they operate on different collections with no interdependency.
+  // bulkWrite with $setOnInsert makes this idempotent: re-running approve (double-click /
+  // race condition) silently skips rows that already exist instead of throwing E11000.
+  const [, lines] = await Promise.all([
+    allSnapshots.length > 0
+      ? LandlordStatementTenantBalance.bulkWrite(
+          allSnapshots.map((snap) => ({
+            updateOne: {
+              filter: { statement: snap.statement, tenantKey: snap.tenantKey },
+              update: { $setOnInsert: snap },
+              upsert: true,
+            },
+          })),
+          { ordered: false }
+        )
+      : Promise.resolve(),
+    LandlordStatementLine.find({ statement: statementId }).sort({ lineNumber: 1 }).lean(),
+  ]);
 
   return {
     statement,
@@ -652,43 +637,20 @@ export const createRevision = async (originalStatementId, userId, revisionReason
   });
 
   // Create new lines
-  const lines = [];
-  let runningBalance = statementData.openingBalance;
+  const lines = buildStatementLines(statementData, {
+    statementId: revisedStatement._id,
+    business: originalStatement.business,
+    property: originalStatement.property,
+    landlord: originalStatement.landlord,
+  });
 
-  for (let i = 0; i < statementData.entries.length; i++) {
-    const entry = statementData.entries[i];
-    const signedAmount = entry.direction === "debit" ? -Math.abs(entry.amount) : Math.abs(entry.amount);
-    runningBalance += signedAmount;
-
-    lines.push({
-      statement: revisedStatement._id,
-      business: originalStatement.business,
-      property: originalStatement.property,
-      landlord: originalStatement.landlord,
-      tenant: entry.tenant || null,
-      unit: entry.unit || null,
-      transactionDate: entry.transactionDate,
-      category: entry.category,
-      description: entry.notes || entry.description || `${entry.category} entry`,
-      amount: Math.abs(entry.amount),
-      direction: entry.direction,
-      runningBalance,
-      sourceLedgerEntryId: entry._id,
-      sourceTransactionType: entry.sourceTransactionType || null,
-      sourceTransactionId: entry.sourceTransactionId || null,
-      lineNumber: i + 1,
-      metadata: entry.metadata || {},
-    });
-  }
-
-  if (lines.length > 0) {
-    await LandlordStatementLine.insertMany(lines);
-  }
-
-  // Mark original as revised
   originalStatement.status = "revised";
   originalStatement.supersededByStatementId = revisedStatement._id;
-  await originalStatement.save();
+
+  await Promise.all([
+    lines.length > 0 ? LandlordStatementLine.insertMany(lines) : Promise.resolve(),
+    originalStatement.save(),
+  ]);
 
   return {
     statement: revisedStatement,
@@ -709,12 +671,13 @@ export const validateStatementAudit = async (statementId) => {
     throw new Error("statementId is required");
   }
 
-  const statement = await LandlordStatement.findById(statementId).lean();
+  const [statement, lines] = await Promise.all([
+    LandlordStatement.findById(statementId).lean(),
+    LandlordStatementLine.find({ statement: statementId }).sort({ lineNumber: 1 }).lean(),
+  ]);
   if (!statement) {
     throw new Error("Statement not found");
   }
-
-  const lines = await LandlordStatementLine.find({ statement: statementId }).lean();
   const actualLineCount = lines.length;
 
   const errors = [];
@@ -761,7 +724,7 @@ export const validateStatementAudit = async (statementId) => {
   }
 
   // Validate running balance calculation
-  const lastLine = lines.sort((a, b) => a.lineNumber - b.lineNumber)[lines.length - 1];
+  const lastLine = lines[lines.length - 1];
   if (lastLine && Math.abs(lastLine.runningBalance - statement.closingBalance) > 0.01) {
     errors.push({
       field: "closingBalance",

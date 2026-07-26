@@ -441,10 +441,8 @@ router.post('/:id/ess-invite', verifyUser, async (req, res) => {
       return res.status(400).json({ message: 'Password must be at least 6 characters' });
     }
 
-    // Set the new password
+    // Hash password but don't write it yet — send email first
     const hashed = await bcrypt.hash(String(plainPassword), 10);
-    await HREmployee.updateOne({ _id: emp._id }, { essPassword: hashed, updatedBy: currentUserId(req) });
-
     const company = await Company.findById(companyId).lean();
     const { subject, html, text } = buildESSInviteEmail({
       employee: emp,
@@ -453,11 +451,18 @@ router.post('/:id/ess-invite', verifyUser, async (req, res) => {
       portalUrl: resolvePortalUrl(req),
     });
 
-    await buildSmtpTransporter().sendMail({
-      from: resolveMailSender('SMTP_FROM_EMAIL'),
-      to:   toEmail,
-      subject, html, text,
-    });
+    try {
+      await buildSmtpTransporter().sendMail({
+        from: resolveMailSender('SMTP_FROM_EMAIL'),
+        to:   toEmail,
+        subject, html, text,
+      });
+    } catch (e) {
+      return res.json({ success: false, emailError: e.message });
+    }
+
+    // Email succeeded — now persist the new password hash
+    await HREmployee.updateOne({ _id: emp._id }, { essPassword: hashed, updatedBy: currentUserId(req) });
 
     res.json({ sent: true, to: toEmail, subject });
   } catch (err) {

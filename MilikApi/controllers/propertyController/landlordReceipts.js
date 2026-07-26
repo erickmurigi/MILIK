@@ -486,7 +486,17 @@ export const postLandlordReceipt = async (req, res, next) => {
     const amount = Number(receipt.amount || 0);
     const journalGroupId = new mongoose.Types.ObjectId();
     const postingRole = buildPostingRole(receipt.category);
-    const narration = receipt.narration || `Landlord receipt ${receipt.receiptNumber}`;
+    const _receiptCategoryLabel = {
+      owner_float: "Owner Float",
+      expense_reimbursement: "Expense Reimbursement",
+      advance_settlement: "Advance Settlement",
+      deposit_funding: "Deposit Funding",
+      utility_funding: "Utility Funding",
+      management_fee_payment: "Management Fee Payment",
+      other: "Landlord Receipt",
+    }[receipt.category] || "Landlord Receipt";
+
+    const narration = receipt.narration || `${_receiptCategoryLabel} — ${receipt.receiptNumber}`;
 
     const debitLeg = await postEntry({
       business: receipt.business,

@@ -18,9 +18,11 @@ import { recomputeCustomerStats } from '../services/customerStatsService.js';
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
 
-const sendLoyaltySms = async (business, phone, body, templateKey) => {
+const sendLoyaltySms = async (business, phone, body, templateKey, recipientName = '') => {
   if (!phone || !body) return;
-  sendAdHocSms({ businessId: business, phone, body, templateKey }).catch((err) => console.error('[CW Loyalty SMS] business=%s phone=%s: %s', business, phone, err?.message || err));
+  sendAdHocSms({ businessId: business, phone, body, templateKey, recipientName }).catch((err) => {
+    console.error('[CW Loyalty SMS] send failed phone=%s: %s', phone, err?.message || err);
+  });
 };
 
 // ─── Loyalty program ──────────────────────────────────────────────────────────
@@ -638,7 +640,7 @@ export const awardLoyaltyStamp = async ({ business, job, overridePhone = null, m
 
     if (!suppressSms && stampSmsBody) {
       if (smsPhone) {
-        sendLoyaltySms(business, smsPhone, stampSmsBody, templateKey);
+        sendLoyaltySms(business, smsPhone, stampSmsBody, templateKey, customerName);
       } else if (effectiveMasked) {
         sendAdHocSmsToMasked({ businessId: business, maskedNumber: effectiveMasked, body: stampSmsBody, templateKey, recipientName: customerName }).catch(() => {});
       }
@@ -765,13 +767,13 @@ export const sendPaymentConfirmationSms = async ({ business, job, amount, remain
     if (!body) return;
 
     if (phone) {
-      await sendLoyaltySms(business, phone, body, 'carwash_payment_confirmed');
+      await sendLoyaltySms(business, phone, body, 'carwash_payment_confirmed', customerName);
     } else if (maskedMsisdn) {
       // Real phone not yet known — send to hashed MSISDN via AT's masked-number endpoint
       sendAdHocSmsToMasked({ businessId: business, maskedNumber: maskedMsisdn, body, templateKey: 'carwash_payment_confirmed', recipientName: customerName }).catch(() => {});
     }
   } catch (_err) {
-    // Never break the main flow
+    console.error('[CW Loyalty] sendPaymentConfirmationSms failed: %s', _err?.message || _err);
   }
 };
 
@@ -1147,25 +1149,28 @@ export const bulkSendCustomerSms = async (req, res, next) => {
       .select('name phone maskedMsisdn')
       .lean();
 
-    let sent = 0, skipped = 0;
-    for (const c of customers) {
-      const phone  = String(c.phone  || '').trim();
+    const BATCH_SIZE = 8;
+    const settledResults = [];
+    const sendOne = (c) => {
+      const phone = String(c.phone || '').trim();
       const masked = String(c.maskedMsisdn || '').trim();
-      if (phone) {
-        sendAdHocSms({ businessId: business, phone, body, templateKey: 'carwash_bulk_sms' }).catch(() => {});
-        sent++;
-      } else if (masked) {
-        sendAdHocSmsToMasked({ businessId: business, maskedNumber: masked, body, templateKey: 'carwash_bulk_sms', recipientName: c.name || 'Customer' }).catch(() => {});
-        sent++;
-      } else {
-        skipped++;
-      }
+      const name = c.name || '';
+      if (phone)  return sendAdHocSms({ businessId: business, phone, body, templateKey: 'carwash_bulk_sms', recipientName: name });
+      if (masked) return sendAdHocSmsToMasked({ businessId: business, maskedNumber: masked, body, templateKey: 'carwash_bulk_sms', recipientName: name });
+      return Promise.reject(new Error('no_phone'));
+    };
+    for (let i = 0; i < customers.length; i += BATCH_SIZE) {
+      const batch = await Promise.allSettled(customers.slice(i, i + BATCH_SIZE).map(sendOne));
+      settledResults.push(...batch);
     }
+    const sent    = settledResults.filter((r) => r.status === 'fulfilled').length;
+    const skipped = settledResults.filter((r) => r.reason?.message === 'no_phone').length;
+    const failed  = settledResults.filter((r) => r.status === 'rejected' && r.reason?.message !== 'no_phone').length;
 
     res.json({
       success: true,
-      message: `SMS sent to ${sent} customer${sent !== 1 ? 's' : ''}${skipped > 0 ? `, ${skipped} skipped (no phone)` : ''}`,
-      sent, skipped,
+      message: `SMS sent to ${sent} customer${sent !== 1 ? 's' : ''}${skipped > 0 ? `, ${skipped} skipped (no phone)` : ''}${failed > 0 ? `, ${failed} failed` : ''}`,
+      sent, skipped, failed,
     });
   } catch (err) {
     next(err);

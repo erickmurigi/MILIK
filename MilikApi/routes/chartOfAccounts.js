@@ -218,6 +218,7 @@ router.get("/:id/activity", verifyUser, requireCompanyModule(GL_ACCESS_MODULES),
       .populate("tenant",     "name")
       .populate("unit",       "unitNumber")
       .populate("landlord",   "landlordName")
+      .populate("property",   "name propertyName")
       .lean();
 
     // For reversed entries, look up the creator of the reversal entry to show a name
@@ -250,10 +251,12 @@ router.get("/:id/activity", verifyUser, requireCompanyModule(GL_ACCESS_MODULES),
       const tenantName  = entry.tenant?.name     || null;
       const unitNum     = entry.unit?.unitNumber  || null;
       const landlordName = entry.landlord?.landlordName || null;
+      const propertyName = entry.property?.propertyName || entry.property?.name || null;
       const contextParts = [
         tenantName,
         unitNum ? `Unit ${unitNum}` : null,
         !tenantName && landlordName ? landlordName : null,
+        propertyName ? `[${propertyName}]` : null,
       ].filter(Boolean);
       const baseNarration = entry.notes || entry.category || "";
       const displayNarration = contextParts.length
@@ -265,6 +268,7 @@ router.get("/:id/activity", verifyUser, requireCompanyModule(GL_ACCESS_MODULES),
         tenant:   undefined, // strip populated object — id already on entry
         unit:     undefined,
         landlord: undefined,
+        property: undefined,
         runningBalance,
         createdByName,
         reversedByUserName,

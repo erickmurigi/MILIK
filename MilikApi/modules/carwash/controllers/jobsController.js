@@ -801,7 +801,7 @@ export const deleteJobsBulk = async (req, res, next) => {
     const ids = Array.isArray(req.body.ids) ? req.body.ids.filter((id) => mongoose.Types.ObjectId.isValid(id)).slice(0, 100) : [];
     if (!ids.length) return next(createError(400, "Select at least one Car Wash job to delete"));
 
-    const jobs = await CarWashJob.find({ _id: { $in: ids }, business });
+    const jobs = await CarWashJob.find({ _id: { $in: ids }, business }).lean();
     const safeIds = [];
     const skipped = [];
 

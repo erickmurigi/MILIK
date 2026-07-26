@@ -1108,7 +1108,7 @@ const sendSmsViaAfricasTalkingMasked = async ({ profile, maskedNumber, body }) =
     timeout: 30000,
   });
 
-  console.log('[AT Masked SMS] Raw response:', JSON.stringify(response.data, null, 2));
+  if (process.env.AT_SMS_DEBUG === 'true') console.log('[AT Masked SMS] Raw response:', JSON.stringify(response.data, null, 2));
 
   const smsData = response?.data?.SMSMessageData;
   if (!smsData) throw new Error(`Africa's Talking masked bulk: unexpected response — ${JSON.stringify(response?.data || {})}`);
@@ -1483,8 +1483,7 @@ export const sendCommunication = async ({ businessId, contextType, channel, temp
 
   if (pendingLogs.length) SmsLog.insertMany(pendingLogs).catch(() => {});
 
-  let sentCount = 0;
-  for (const r of results) { if (r.status === 'sent') sentCount++; }
+  const sentCount = results.filter((r) => r.status === 'sent').length;
 
   return {
     ...preview,
@@ -1567,7 +1566,7 @@ export const sendAdHocSmsToMasked = async ({ businessId, maskedNumber, body, tem
       to: `masked:${maskedNumber}`,
       recipientName,
       body,
-      status: 'sent',
+      status: result?.messageId ? 'sent' : 'dispatched',
       providerMessageId: result?.messageId || '',
       providerStatus: result?.status || '',
       costLabel: result?.cost || '',
@@ -1742,6 +1741,17 @@ export const sendAdHocEmail = async ({ businessId, to, subject, html, text } = {
     return { success: true };
   } catch (err) {
     console.error("[Email] sendAdHocEmail failed to=%s subject=%s: %s", to, subject, err?.message || err);
+    SmsLog.create({
+      business: businessId,
+      channel: 'email',
+      templateKey: 'ad_hoc_email',
+      to,
+      subject: subject || '',
+      body: (text || html || '').slice(0, 1000),
+      status: 'failed',
+      error: String(err?.message || err).slice(0, 500),
+      sentAt: new Date(),
+    }).catch(() => {});
     throw err;
   }
 };
@@ -1771,7 +1781,7 @@ export const sendTestEmail = async ({ businessId, email, subject, body } = {}) =
   let sendError  = '';
 
   try {
-    await dispatchEmail({ profile, to: email, subject: testSubject, text: testBody, html: testBody });
+    await dispatchEmail({ profile, to: email, subject: testSubject, text: testBody, html: `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#334155">${testBody.replace(/\n/g, '<br>')}</div>` });
   } catch (err) {
     sendStatus = 'failed';
     sendError  = err?.message || 'Dispatch failed.';

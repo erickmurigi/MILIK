@@ -584,7 +584,9 @@ export const confirmCarWashCallback = async (req, res) => {
                 sendAdHocSmsToMasked({ businessId, maskedNumber: maskedMsisdn, body, templateKey: "carwash_topup_confirmed", recipientName: senderName || "" }).catch(() => {});
               }
             }
-          } catch (_err) {}
+          } catch (_err) {
+            console.error('[CW SMS] topup confirmation SMS failed businessId=%s: %s', businessId, _err?.message || _err);
+          }
         })();
 
         return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted – prepaid wallet topped up" });
@@ -699,7 +701,9 @@ export const confirmCarWashCallback = async (req, res) => {
                 sendAdHocSmsToMasked({ businessId, maskedNumber: maskedMsisdn, body, templateKey: "carwash_topup_confirmed", recipientName: senderName || "" }).catch(() => {});
               }
             }
-          } catch (_err) {}
+          } catch (_err) {
+            console.error('[CW SMS] topup confirmation SMS failed businessId=%s: %s', businessId, _err?.message || _err);
+          }
         })();
 
         return res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted – voucher allocation complete" });
@@ -763,7 +767,7 @@ export const confirmCarWashCallback = async (req, res) => {
     // If MSISDN was hashed: prefer TSQ (resolves real phone + sends SMS after).
     // Fall back to AT masked-number endpoint only when TSQ is not configured.
     const tsqWillFire = !normalizedMsisdn && transactionCode && config?.initiatorName && (config?.securityCredential || config?.initiatorPassword);
-    console.log(`[TxnStatus Check] msisdn=${normalizedMsisdn} txnCode=${transactionCode} initiatorName=${config?.initiatorName || ""} hasCred=${Boolean(config?.securityCredential || config?.initiatorPassword)} hasCallbackBase=${Boolean(process.env.MPESA_CALLBACK_BASE_URL)}`);
+    if (process.env.MPESA_DEBUG === 'true') console.log(`[TxnStatus Check] msisdn=${normalizedMsisdn} txnCode=${transactionCode} initiatorName=${config?.initiatorName || ""} hasCred=${Boolean(config?.securityCredential || config?.initiatorPassword)} hasCallbackBase=${Boolean(process.env.MPESA_CALLBACK_BASE_URL)}`);
     if (tsqWillFire) {
       triggerTransactionStatusQuery({ config, transId: transactionCode, businessId, notifId: savedNotif?._id }).catch(() => {});
     }
@@ -1165,10 +1169,15 @@ export const allocateNotification = async (req, res, next) => {
       const amount = round2(Number(alloc.amount || 0));
       if (amount <= 0) continue;
 
-      const job = await CarWashJob.findOne({ _id: alloc.jobId, business, status: { $nin: ["cancelled"] } }).lean();
+      const jobOid = mongoose.Types.ObjectId.isValid(String(alloc.jobId)) ? new mongoose.Types.ObjectId(String(alloc.jobId)) : null;
+      const [job, pt] = await Promise.all([
+        CarWashJob.findOne({ _id: alloc.jobId, business, status: { $nin: ["cancelled"] } }).lean(),
+        jobOid
+          ? CarWashPayment.aggregate([{ $match: { business: new mongoose.Types.ObjectId(String(business)), job: jobOid } }, { $group: { _id: null, paid: { $sum: "$amount" } } }])
+          : Promise.resolve([]),
+      ]);
       if (!job) continue;
 
-      const pt   = await CarWashPayment.aggregate([{ $match: { business: job.business, job: job._id } }, { $group: { _id: null, paid: { $sum: "$amount" } } }]);
       const jobOutstanding = round2(Math.max(netJobPrice(job) - (pt?.[0]?.paid || 0), 0));
       if (jobOutstanding <= 0) continue;
 

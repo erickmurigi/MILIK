@@ -407,7 +407,17 @@ const postJournalToLedger = async ({ journal, actorUserId }) => {
   const date = normalizeDate(journal.date || new Date());
   const { start, end } = buildStatementPeriod(date);
   const journalGroupId = new mongoose.Types.ObjectId();
-  const narration = String(journal.narration || journal.reference || `Journal ${journal.journalNo}`).trim();
+  const _journalTypeLabel = {
+    landlord_credit_adjustment: "Landlord Credit Adjustment",
+    landlord_debit_adjustment: "Landlord Debit Adjustment",
+    property_expense_accrual: "Property Expense Accrual",
+    property_income_adjustment: "Property Income Adjustment",
+    internal_account_transfer: "Account Transfer",
+    company_journal: "Company Journal",
+    opening_balance: "Opening Balance",
+    general_adjustment: "General Adjustment",
+  }[journal.journalType] || "Manual Journal";
+  const narration = String(journal.narration || journal.reference || `${_journalTypeLabel} — ${journal.journalNo}`).trim();
 
   const [accountingContext, landlordPayableAccount] = await Promise.all([
     isCompanyJournal

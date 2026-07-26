@@ -1403,6 +1403,9 @@ const confirmNonCashDirectToLandlordReceipt = async (payment, actorId) => {
         const totalAmt = Math.abs(Number(payment.amount || 0));
         if (plAccounts.receivables && totalAmt > 0) {
           const cashAccount = await resolveCashbookAccount(payment.business, payment).catch(() => null);
+          const _glPeriod1 = (payment.month && payment.year)
+            ? `, ${new Date(payment.year, payment.month - 1).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}`
+            : "";
           await postPropertyLedgerEntry({
             businessId:      payment.business,
             propertyId,
@@ -1410,7 +1413,7 @@ const confirmNonCashDirectToLandlordReceipt = async (payment, actorId) => {
             creditAccountId: plAccounts.receivables,
             amount:          totalAmt,
             date:            payment.paymentDate,
-            narration:       `Receipt — ${payment.receiptNumber || payment.reference || ""}`.trim(),
+            narration:       `Rent Receipt — ${payment.receiptNumber || payment.reference || "receipt"}${_glPeriod1}`,
             reference:       payment.receiptNumber || payment.reference || "",
             category:        "receipt",
             tenantId:        payment.tenant,
@@ -1507,7 +1510,7 @@ const confirmNonCashDirectToLandlordReceipt = async (payment, actorId) => {
       journalGroupId,
       payer: "tenant",
       receiver,
-      notes: `Direct-to-landlord receipt ${payment.receiptNumber || payment.referenceNumber || payment._id}`,
+      notes: `Direct Receipt — ${payment.receiptNumber || payment.referenceNumber || String(payment._id).slice(-6)}`,
       metadata: {
         includeInLandlordStatement: includeInStatement && includeGroupInStatement,
         includeInCategoryTotals: includeInStatement && includeGroupInStatement,
@@ -1552,7 +1555,7 @@ const confirmNonCashDirectToLandlordReceipt = async (payment, actorId) => {
     journalGroupId,
     payer: "tenant",
     receiver,
-    notes: `Direct-to-landlord settlement leg for receipt ${payment.receiptNumber || payment.referenceNumber || payment._id}`,
+    notes: `Landlord Settlement — ${payment.receiptNumber || payment.referenceNumber || String(payment._id).slice(-6)}`,
     metadata: {
       includeInLandlordStatement: false,
       includeInCategoryTotals: false,
@@ -1607,6 +1610,9 @@ const postReceiptJournal = async (payment, actorId) => {
         const plAccounts = await resolvePropertyLedgerAccounts(payment.business);
         const totalAmt = Math.abs(Number(payment.amount || 0));
         if (plAccounts.receivables && totalAmt > 0) {
+          const _glPeriod = (payment.month && payment.year)
+            ? `, ${new Date(payment.year, payment.month - 1).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}`
+            : "";
           await postPropertyLedgerEntry({
             businessId:      payment.business,
             propertyId,
@@ -1614,7 +1620,7 @@ const postReceiptJournal = async (payment, actorId) => {
             creditAccountId: plAccounts.receivables,
             amount:          totalAmt,
             date:            payment.paymentDate,
-            narration:       `Receipt — ${payment.receiptNumber || payment.reference || ""}`.trim(),
+            narration:       `Rent Receipt — ${payment.receiptNumber || payment.reference || "receipt"}${_glPeriod}`,
             reference:       payment.receiptNumber || payment.reference || "",
             category:        "receipt",
             tenantId:        payment.tenant,
@@ -1714,8 +1720,11 @@ const postReceiptJournal = async (payment, actorId) => {
       receiver,
       notes: (() => {
         const bucketLabel = { rent: "Rent", deposit: "Deposit", deposit_landlord: "Deposit", utility: "Utility", late_penalty: "Penalty", debit_note: "Debit note", other: "Other", unapplied: "Unapplied" }[group.key] || "Payment";
-        const ref = payment.referenceNumber ? ` [${payment.referenceNumber}]` : "";
-        return `${bucketLabel} · ${payment.receiptNumber || payment.referenceNumber || "receipt"}${ref}`;
+        const _period = (payment.month && payment.year)
+          ? ` — ${new Date(payment.year, payment.month - 1).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}`
+          : "";
+        const _ref = payment.referenceNumber ? ` [${payment.referenceNumber}]` : "";
+        return `${bucketLabel} Receipt — ${payment.receiptNumber || payment.referenceNumber || "receipt"}${_ref}${_period}`;
       })(),
       metadata: {
         includeInLandlordStatement: includeInStatement && includeGroupInStatement,
@@ -1763,10 +1772,13 @@ const postReceiptJournal = async (payment, actorId) => {
     receiver,
     notes: (() => {
       const num = payment.receiptNumber || payment.referenceNumber || "receipt";
-      const ref = payment.referenceNumber ? ` [${payment.referenceNumber}]` : "";
+      const _rcptRef = payment.referenceNumber ? ` [${payment.referenceNumber}]` : "";
+      const _rcptPeriod = (payment.month && payment.year)
+        ? ` — ${new Date(payment.year, payment.month - 1).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}`
+        : "";
       return payment?.paidDirectToLandlord
-        ? `Direct payout · ${num}${ref}`
-        : `Cashbook · ${num}${ref}`;
+        ? `Direct to Landlord — ${num}${_rcptRef}${_rcptPeriod}`
+        : `Cash Received — ${num}${_rcptRef}${_rcptPeriod}`;
     })(),
     metadata: {
       includeInLandlordStatement: false,

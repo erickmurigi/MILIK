@@ -1791,7 +1791,15 @@ const postInvoiceJournal = async ({ invoice, createdBy, incomeAccount, receivabl
     LATE_PENALTY_CHARGE: "Late penalty", OTHER_CHARGE: "Other charge",
     DEBIT_NOTE_CHARGE: "Debit note", METER_READING_CHARGE: "Meter reading",
   }[invoice.category] || "Invoice";
-  const invoiceNarration = (invoice.description || "").trim() || `${_invCatLabel} ${invoice.invoiceNumber}`;
+  const _invMonthYear = invoice.invoiceDate
+    ? new Date(invoice.invoiceDate).toLocaleDateString("en-GB", { month: "short", year: "numeric" })
+    : "";
+  const _utilityLabel = (invoice.category === "UTILITY_CHARGE" && invoice.metadata?.utilityType)
+    ? `${invoice.metadata.utilityType} Charge`
+    : _invCatLabel;
+  const invoiceNarration = (invoice.description || "").trim()
+    || [_utilityLabel, _invMonthYear && `— ${_invMonthYear}`, `(${invoice.invoiceNumber})`]
+        .filter(Boolean).join(" ");
 
   const receivableLeg = await postEntry({
     business: invoice.business,
@@ -1917,6 +1925,8 @@ const postInvoiceNoteJournal = async ({ note, createdBy, sourceInvoice = null, p
   const journalGroupId = new mongoose.Types.ObjectId();
   const ledgerCategory = mapInvoiceCategoryToLedgerCategory(note.category);
   const isCreditNote = String(note.noteType || "").toUpperCase() === "CREDIT_NOTE";
+  const _noteLabel = note.noteType === "CREDIT_NOTE" ? "Credit Note" : "Debit Note";
+  const _srcRef = note.sourceInvoiceNumber ? ` — against ${note.sourceInvoiceNumber}` : "";
 
   const receivableLeg = await postEntry({
     business: note.business,
@@ -1938,7 +1948,7 @@ const postInvoiceNoteJournal = async ({ note, createdBy, sourceInvoice = null, p
     journalGroupId,
     payer: "tenant",
     receiver: "manager",
-    notes: `${note.noteType} ${note.noteNumber}`,
+    notes: `${_noteLabel}${_srcRef} (${note.noteNumber})`,
     metadata: {
       noteType: note.noteType,
       noteNumber: note.noteNumber,
@@ -1973,7 +1983,7 @@ const postInvoiceNoteJournal = async ({ note, createdBy, sourceInvoice = null, p
     journalGroupId,
     payer: "tenant",
     receiver: "manager",
-    notes: `${note.noteType} offset ${note.noteNumber}`,
+    notes: `${_noteLabel} Offset${_srcRef} (${note.noteNumber})`,
     metadata: {
       noteType: note.noteType,
       noteNumber: note.noteNumber,
@@ -2825,8 +2835,8 @@ export const createTenantInvoiceNote = async (req, res, next) => {
       description:
         req.body.description ||
         (sourceInvoice
-          ? `${noteType === "CREDIT_NOTE" ? "Credit" : "Debit"} note against ${sourceInvoice.invoiceNumber}`
-          : `${noteType === "CREDIT_NOTE" ? "Credit" : "Debit"} note - standalone charge`),
+          ? `${noteType === "CREDIT_NOTE" ? "Credit Note" : "Debit Note"} — against ${sourceInvoice.invoiceNumber}`
+          : `${noteType === "CREDIT_NOTE" ? "Credit Note" : "Debit Note"} — standalone`),
       noteDate,
       status: "posted",
       createdBy: actorUserId,
@@ -3441,7 +3451,20 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
               creditAccountId,
               amount:    Math.abs(Number(invoice.amount || 0)),
               date:      invoice.invoiceDate,
-              narration: `${normalizedCategory} — ${invoice.invoiceNumber || ""}`.trim(),
+              narration: (() => {
+              const _glCatLabel = {
+                RENT_CHARGE: "Rent Charge",
+                UTILITY_CHARGE: "Utility Charge",
+                DEPOSIT_CHARGE: "Deposit Charge",
+                LATE_PENALTY: "Late Penalty",
+                OTHER_CHARGE: "Other Charge",
+              }[normalizedCategory] || "Invoice Charge";
+              const _glMonthYear = invoice.invoiceDate
+                ? new Date(invoice.invoiceDate).toLocaleDateString("en-GB", { month: "short", year: "numeric" })
+                : "";
+              return [_glCatLabel, _glMonthYear && `— ${_glMonthYear}`, invoice.invoiceNumber && `(${invoice.invoiceNumber})`]
+                .filter(Boolean).join(" ");
+            })(),
               reference: invoice.invoiceNumber || "",
               category:  normalizedCategory.toLowerCase(),
               tenantId:  invoice.tenant,

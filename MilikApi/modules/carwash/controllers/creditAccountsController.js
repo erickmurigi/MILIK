@@ -149,6 +149,7 @@ export const listAccounts = async (req, res, next) => {
     const accounts = await CarWashCreditAccount.find(filter)
       .populate("customer", "name phone plates")
       .sort({ status: 1, createdAt: -1 })
+      .limit(500)
       .lean();
 
     const balances = await computeAllBalances(business, accounts);
@@ -386,7 +387,7 @@ export const recordAccountPayment = async (req, res, next) => {
       creditAccount: account._id,
       paymentStatus: { $in: ["unpaid", "partial"] },
       status: { $nin: ["cancelled"] },
-    }).sort({ createdAt: 1 });
+    }).sort({ createdAt: 1 }).limit(200).lean();
 
     const jobIds = unpaidJobs.map((j) => j._id);
     const paymentTotals = jobIds.length
@@ -427,7 +428,7 @@ export const recordAccountPayment = async (req, res, next) => {
       // Post Dr Cashbook / Cr 4400 for each job settled — same entry as a direct payment.
       // Fire-and-forget so a ledger error never blocks the payment response.
       if (cashbookAccount) {
-        postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbookAccount, job: job.toObject(), userId, taxAmount: Number(job.taxAmount || 0), jobPrice: Number(job.price || 0) })
+        postCarWashPaymentLedger({ businessId: business, payment, cashbookAccountId: cashbookAccount, job: { ...job }, userId, taxAmount: Number(job.taxAmount || 0), jobPrice: Number(job.price || 0) })
           .catch((e) => console.error("[CW Account] Ledger posting failed job=%s: %s", job.jobNumber, e?.message));
       }
 
@@ -438,7 +439,7 @@ export const recordAccountPayment = async (req, res, next) => {
       await CarWashJob.updateOne({ _id: job._id }, { paymentStatus: newPaymentStatus, status: newJobStatus, updatedBy: userId });
 
       if (newJobStatus === "paid") {
-        const jobForCommission = { ...job.toObject(), status: "paid", paymentStatus: "paid" };
+        const jobForCommission = { ...job, status: "paid", paymentStatus: "paid" };
         accrueCommissionForJob({ req: null, job: jobForCommission })
           .then(() => markJobCommissionsPayable({ business, jobId: job._id }))
           .catch((e) => console.error("[CW Account] Commission accrual failed job=%s: %s", job.jobNumber, e?.message));
@@ -690,12 +691,13 @@ export const sendStatementEmail = async (req, res, next) => {
     const period          = new Date(statement.periodStart).toLocaleString("en-KE", { month: "long", year: "numeric" });
     const contactName     = account?.contactPerson || customer?.name || "Customer";
     const fmtAmt          = (n) => `KES ${Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2 })}`;
+    const esc             = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
     const jobRows = (statement.jobs || []).map((j) => `
       <tr>
         <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">${new Date(j.jobDate).toLocaleDateString("en-KE")}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">${j.plateNumber || "—"}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">${j.serviceName || "—"}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">${esc(j.plateNumber || "—")}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">${esc(j.serviceName || "—")}</td>
         <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right">${fmtAmt(j.price)}</td>
         <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right">${fmtAmt(j.paidAmount)}</td>
         <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:bold;color:${j.outstanding > 0 ? "#dc2626" : "#16a34a"}">${fmtAmt(j.outstanding)}</td>
@@ -704,12 +706,12 @@ export const sendStatementEmail = async (req, res, next) => {
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,sans-serif;color:#1e293b;max-width:700px;margin:0 auto;padding:24px">
       <div style="background:#0B3B2E;color:#fff;padding:20px 24px;border-radius:4px 4px 0 0">
         <h2 style="margin:0;font-size:18px">Car Wash Account Statement</h2>
-        <p style="margin:4px 0 0;opacity:.75;font-size:13px">${period} · Ref: ${statement.statementNumber}</p>
+        <p style="margin:4px 0 0;opacity:.75;font-size:13px">${esc(period)} · Ref: ${esc(statement.statementNumber)}</p>
       </div>
       <div style="border:1px solid #e2e8f0;border-top:none;padding:20px 24px">
-        <p style="margin:0 0 4px"><strong>To:</strong> ${contactName}</p>
-        <p style="margin:0 0 4px"><strong>Account:</strong> ${account?.accountNumber || ""}</p>
-        <p style="margin:0 0 16px"><strong>Period:</strong> ${period}</p>
+        <p style="margin:0 0 4px"><strong>To:</strong> ${esc(contactName)}</p>
+        <p style="margin:0 0 4px"><strong>Account:</strong> ${esc(account?.accountNumber || "")}</p>
+        <p style="margin:0 0 16px"><strong>Period:</strong> ${esc(period)}</p>
 
         <table style="width:100%;border-collapse:collapse;font-size:13px">
           <thead>
@@ -776,15 +778,18 @@ export const processDueBilling = async (business) => {
     billingDay: dayOfMonth,
   }).lean();
 
-  const results = [];
-  for (const account of dueAccounts) {
+  const customerIds = dueAccounts.map((a) => a.customer).filter(Boolean);
+  const customerDocs = await CarWashCustomer.find({ _id: { $in: customerIds } }).lean();
+  const customerMap = new Map(customerDocs.map((c) => [String(c._id), c]));
+
+  const settled = await Promise.allSettled(dueAccounts.map(async (account) => {
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
     const existing = await CarWashAccountStatement.findOne({
       business: account.business,
       account: account._id,
       periodStart: { $gte: monthStart },
     }).lean();
-    if (existing) continue;
+    if (existing) return null;
 
     const periodStart = monthStart;
     const periodEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
@@ -796,7 +801,7 @@ export const processDueBilling = async (business) => {
       createdAt: { $gte: periodStart, $lte: periodEnd },
     }).lean();
 
-    if (!jobs.length) continue;
+    if (!jobs.length) return null;
 
     const jobIds = jobs.map((j) => j._id);
     const paymentTotals = await CarWashPayment.aggregate([
@@ -843,7 +848,7 @@ export const processDueBilling = async (business) => {
     await CarWashCreditAccount.updateOne({ _id: account._id }, { lastStatementAt: today });
 
     // Auto-send SMS if customer has a phone
-    const customer = await CarWashCustomer.findById(account.customer).lean();
+    const customer = customerMap.get(String(account.customer));
     if (customer?.phone && totalOutstanding > 0) {
       const period = today.toLocaleString("en-KE", { month: "long", year: "numeric" });
       const body = await resolveCarWashSmsBody(account.business, "carwash_statement", {
@@ -853,12 +858,13 @@ export const processDueBilling = async (business) => {
         totalJobs:       jobs.length,
         statementNumber,
       }) || `Hi ${customer.name}, your car wash bill for ${period} is KES ${totalOutstanding.toLocaleString()} for ${jobs.length} wash(es). Ref: ${statementNumber}. Thank you!`;
-      await sendAdHocSms({ businessId: account.business, phone: customer.phone, body, templateKey: "carwash_statement" }).catch(() => {});
+      sendAdHocSms({ businessId: account.business, phone: customer.phone, body, templateKey: "carwash_statement" }).catch(() => {});
       await CarWashAccountStatement.updateOne({ _id: stmt._id }, { status: "sent", sentAt: new Date() });
     }
 
-    results.push({ account: account.accountNumber, statement: statementNumber, jobs: jobs.length, totalOutstanding });
-  }
+    return { account: account.accountNumber, statement: statementNumber, jobs: jobs.length, totalOutstanding };
+  }));
+  const results = settled.filter((r) => r.status === "fulfilled" && r.value !== null).map((r) => r.value);
 
   return results;
 };

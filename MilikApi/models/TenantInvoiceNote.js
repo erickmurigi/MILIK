@@ -130,5 +130,6 @@ const TenantInvoiceNoteSchema = new mongoose.Schema(
 TenantInvoiceNoteSchema.index({ business: 1, noteNumber: 1 }, { unique: true });
 TenantInvoiceNoteSchema.index({ business: 1, tenant: 1, noteDate: -1 });
 TenantInvoiceNoteSchema.index({ business: 1, sourceInvoice: 1, noteType: 1, status: 1 });
+TenantInvoiceNoteSchema.index({ business: 1, property: 1, status: 1, noteDate: -1 });
 
 export default mongoose.model("TenantInvoiceNote", TenantInvoiceNoteSchema);

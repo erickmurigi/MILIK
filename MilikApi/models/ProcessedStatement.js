@@ -65,7 +65,6 @@ const ProcessedStatementSchema = new mongoose.Schema(
     cutoffAt: {
       type: Date,
       default: null,
-      index: true,
     },
     previousCutoffAt: {
       type: Date,
@@ -317,6 +316,13 @@ ProcessedStatementSchema.index(
     },
   }
 );
+ProcessedStatementSchema.index(
+  { business: 1, commissionGrossAmount: 1 },
+  {
+    partialFilterExpression: { commissionGrossAmount: { $gt: 0 } },
+    name: "idx_business_commission_gross",
+  }
+);
 
 ProcessedStatementSchema.pre("save", function (next) {
   if (this.status === "reversed") {
@@ -370,11 +376,7 @@ ProcessedStatementSchema.pre("save", function (next) {
     this.status = "part_paid";
   } else {
     this.balanceDue = 0;
-    if (!["processed", "paid", "part_paid", "unpaid", "reversed"].includes(this.status)) {
-      this.status = "processed";
-    } else if (this.status !== "processed") {
-      this.status = "processed";
-    }
+    this.status = "processed";
   }
 
   next();

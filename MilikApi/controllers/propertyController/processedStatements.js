@@ -293,12 +293,11 @@ const postCommissionAccrualForProcessedStatement = async ({ processedStatement, 
 
   const { postEntry } = await import("../../services/ledgerPostingService.js");
   const transactionDate = processedStatement.cutoffAt || processedStatement.closedAt || new Date();
-  const propertyControlAccount = await ensurePropertyControlAccount({
-    businessId: processedStatement.business,
-    propertyId: processedStatement.property,
-  });
-  const commissionIncomeAccount = await resolveCommissionIncomeAccount(processedStatement.business);
-  const companyTaxConfig = await getCompanyTaxConfiguration(processedStatement.business);
+  const [propertyControlAccount, commissionIncomeAccount, companyTaxConfig] = await Promise.all([
+    ensurePropertyControlAccount({ businessId: processedStatement.business, propertyId: processedStatement.property }),
+    resolveCommissionIncomeAccount(processedStatement.business),
+    getCompanyTaxConfiguration(processedStatement.business),
+  ]);
   const outputVatAccount = commissionTaxAmount > 0
     ? await resolveOutputVatAccount({ businessId: processedStatement.business, companyTaxConfig })
     : null;
@@ -548,14 +547,24 @@ const reverseProcessedStatementLedgerEntries = async ({ statement, userId, reaso
 const hasActiveDownstreamPayments = async (statement) => {
   if (!statement?._id) return { blocked: false, count: 0, hasRecoveryActivity: false };
 
-  const paymentVoucherCount = await PaymentVoucher.countDocuments({
-    business: statement.business,
-    $or: [
-      { sourceProcessedStatement: statement._id },
-      { reference: String(statement._id) },
-    ],
-    status: { $ne: "reversed" },
-  });
+  const [paymentVoucherCount, recoveryEntryCount] = await Promise.all([
+    PaymentVoucher.countDocuments({
+      business: statement.business,
+      $or: [
+        { sourceProcessedStatement: statement._id },
+        { reference: String(statement._id) },
+      ],
+      status: { $ne: "reversed" },
+    }),
+    FinancialLedgerEntry.countDocuments({
+      business: statement.business,
+      sourceTransactionType: "processed_statement_payment",
+      status: "approved",
+      reversalOf: null,
+      "metadata.processedStatementId": String(statement._id),
+      "metadata.postingKind": "landlord_recovery",
+    }),
+  ]);
 
   const paymentHistoryCount = Array.isArray(statement.paymentHistory)
     ? statement.paymentHistory.filter((row) => Number(row?.amount || 0) > 0).length
@@ -564,15 +573,6 @@ const hasActiveDownstreamPayments = async (statement) => {
   const recoveryHistoryCount = Array.isArray(statement.recoveryHistory)
     ? statement.recoveryHistory.filter((row) => Number(row?.amount || 0) > 0).length
     : 0;
-
-  const recoveryEntryCount = await FinancialLedgerEntry.countDocuments({
-    business: statement.business,
-    sourceTransactionType: "processed_statement_payment",
-    status: "approved",
-    reversalOf: null,
-    "metadata.processedStatementId": String(statement._id),
-    "metadata.postingKind": "landlord_recovery",
-  });
 
   const hasRecoveryActivity =
     recoveryHistoryCount > 0 || recoveryEntryCount > 0 || Number(statement.amountRecovered || 0) > 0;
@@ -1248,12 +1248,13 @@ export const getStatementsByBusiness = async (req, res) => {
         })
       : statements;
 
+    const resolvedTotal = search ? filtered.length : total;
     res.status(200).json({
       success: true,
       statements: filtered,
-      total,
+      total: resolvedTotal,
       page: pageNum,
-      pages: Math.ceil(total / limitNum),
+      pages: Math.ceil(resolvedTotal / limitNum),
       limit: limitNum,
     });
   } catch (error) {

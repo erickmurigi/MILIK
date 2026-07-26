@@ -1,30 +1,16 @@
-import puppeteer from "puppeteer";
-
-let _browser = null;
-
-async function getBrowser() {
-  if (_browser && _browser.connected) return _browser;
-  _browser = await puppeteer.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-  });
-  _browser.on("disconnected", () => { _browser = null; });
-  return _browser;
-}
+import { createPage } from "./browserService.js";
 
 export async function htmlToPdf(html, options = {}) {
-  const browser = await getBrowser();
-  const page = await browser.newPage();
+  const page = await createPage();
   try {
-    await page.setContent(html, { waitUntil: "networkidle0" });
-    const pdf = await page.pdf({
+    await page.setContent(html, { waitUntil: "domcontentloaded" });
+    return await page.pdf({
       format: "A4",
       printBackground: true,
       margin: { top: "0", right: "0", bottom: "0", left: "0" },
       ...options,
     });
-    return pdf;
   } finally {
-    await page.close();
+    try { await page.close(); } catch { /* ignore */ }
   }
 }

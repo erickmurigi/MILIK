@@ -11,13 +11,11 @@ const LandlordStatementLineSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "LandlordStatement",
       required: true,
-      index: true,
     },
     business: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Company",
       required: true,
-      index: true,
     },
     property: {
       type: mongoose.Schema.Types.ObjectId,
@@ -42,7 +40,6 @@ const LandlordStatementLineSchema = new mongoose.Schema(
     transactionDate: {
       type: Date,
       required: true,
-      index: true,
     },
     category: {
       type: String,
@@ -73,7 +70,6 @@ const LandlordStatementLineSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "FinancialLedgerEntry",
       required: true,
-      index: true,
     },
     sourceTransactionType: {
       type: String,
@@ -121,8 +117,10 @@ LandlordStatementLineSchema.pre("updateOne", function (next) {
 });
 
 LandlordStatementLineSchema.pre("findOneAndDelete", async function (next) {
-  const lineToDelete = await this.model.findOne(this.getQuery()).populate("statement");
-  if (lineToDelete?.statement?.status === "approved" || lineToDelete?.statement?.status === "sent") {
+  const line = await this.model.findOne(this.getQuery()).select("statement").lean();
+  if (!line) return next();
+  const stmt = await mongoose.model("LandlordStatement").findById(line.statement).select("status").lean();
+  if (stmt?.status === "approved" || stmt?.status === "sent") {
     return next(new Error("Cannot delete lines from approved or sent statements."));
   }
   next();

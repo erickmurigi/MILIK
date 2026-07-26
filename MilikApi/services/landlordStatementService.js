@@ -1310,18 +1310,8 @@ export const generateLandlordStatement = async ({
 
   const snapshotDate = lastApproved ? new Date(lastApproved.periodEnd) : null;
 
-  // Round-trip 3: tenant balance snapshots (must follow lastApproved)
-  const tenantBalanceSnapshots = snapshotDate
-    ? await LandlordStatementTenantBalance.find({ statement: lastApproved._id })
-        .select("tenantKey balanceCF")
-        .lean()
-    : [];
-
-  const snapshotMap = new Map(
-    tenantBalanceSnapshots.map((s) => [String(s.tenantKey), s])
-  );
-
-  // Phase 1: fetch units in parallel with all property-scoped queries (none need unitIds yet)
+  // Phase 1: all property-scoped queries in parallel — includes tenant balance snapshots
+  // and gap take-on invoices that were previously sequential round-trips.
   const [
     units,
     invoicesBefore,
@@ -1330,6 +1320,8 @@ export const generateLandlordStatement = async ({
     expensesInPeriod,
     vouchersInPeriod,
     statementAdjustments,
+    tenantBalanceSnapshots,
+    gapTakeOnsResult,
   ] = await Promise.all([
     Unit.find({ property: propertyObjectId, business: businessObjectId })
       .select("_id unitNumber name rent utilities status isVacant property")
@@ -1423,27 +1415,38 @@ export const generateLandlordStatement = async ({
         "_id amount debit credit direction transactionDate notes sourceTransactionType sourceTransactionId metadata tenant unit"
       )
       .lean(),
+
+    // 8th: tenant balance snapshots from last approved statement
+    snapshotDate && lastApproved?._id
+      ? LandlordStatementTenantBalance.find({ statement: lastApproved._id })
+          .select("tenantKey balanceCF")
+          .lean()
+      : Promise.resolve([]),
+
+    // 9th: take-on balances added after the last approved statement closed
+    snapshotDate && lastApproved?.approvedAt
+      ? TenantInvoice.find({
+          property: propertyObjectId,
+          business: businessObjectId,
+          status: { $nin: ["cancelled", "reversed"] },
+          "metadata.isTakeOnBalance": true,
+          createdAt: { $gt: lastApproved.approvedAt },
+          ...buildInvoiceRecognitionDateQuery({ periodStart: snapshotDate, lowerBound: null }),
+        })
+          .select("_id tenant unit category amount description invoiceDate bookingDate invoiceNumber landlord metadata depositHeldBy taxSnapshot")
+          .lean()
+      : Promise.resolve([]),
   ]);
 
-  // Take-on balances added after the last approved statement was closed fall before the
-  // invoicesBefore lowerBound and would otherwise be silently skipped. Catch them here so
-  // they still show as Balance B/F on the next statement.
-  if (snapshotDate && lastApproved?.approvedAt) {
-    const gapTakeOns = await TenantInvoice.find({
-      property: propertyObjectId,
-      business: businessObjectId,
-      status: { $nin: ["cancelled", "reversed"] },
-      "metadata.isTakeOnBalance": true,
-      createdAt: { $gt: lastApproved.approvedAt },
-      ...buildInvoiceRecognitionDateQuery({ periodStart: snapshotDate, lowerBound: null }),
-    })
-      .select("_id tenant unit category amount description invoiceDate bookingDate invoiceNumber landlord metadata depositHeldBy taxSnapshot")
-      .lean();
-    if (gapTakeOns.length > 0) {
-      const existingIds = new Set(invoicesBefore.map((i) => String(i._id)));
-      gapTakeOns.forEach((inv) => {
-        if (!existingIds.has(String(inv._id))) invoicesBefore.push(inv);
-      });
+  const snapshotMap = new Map(
+    tenantBalanceSnapshots.map((s) => [String(s.tenantKey), s])
+  );
+
+  // Merge gap take-ons into invoicesBefore (they appear as Balance B/F on the next statement)
+  if (gapTakeOnsResult.length > 0) {
+    const existingIds = new Set(invoicesBefore.map((i) => String(i._id)));
+    for (const inv of gapTakeOnsResult) {
+      if (!existingIds.has(String(inv._id))) invoicesBefore.push(inv);
     }
   }
 
@@ -2077,6 +2080,22 @@ export const generateLandlordStatement = async ({
     });
   }
 
+  let totalRentReceivedManager = 0;
+  let totalRentReceivedLandlord = 0;
+  let totalUtilityReceivedManager = 0;
+  let totalUtilityReceivedLandlord = 0;
+  let totalInvoiceTaxReceivedManager = 0;
+  let totalInvoiceTaxReceivedLandlord = 0;
+  let directToLandlordOffset = 0;
+  const additionRows = [];
+  const extraDeductionRows = [];
+  const advanceRecoveryRows = [];
+  const earlyPayoutRows = [];
+  let totalAdditions = 0;
+  let totalExtraDeductions = 0;
+  let totalAdvanceRecoveries = 0;
+  let totalEarlyPayouts = 0;
+
   for (const note of notesInPeriod) {
     if (!shouldIncludeNoteInLandlordStatement(note)) continue;
 
@@ -2155,22 +2174,6 @@ export const generateLandlordStatement = async ({
       },
     });
   }
-
-  let totalRentReceivedManager = 0;
-  let totalRentReceivedLandlord = 0;
-  let totalUtilityReceivedManager = 0;
-  let totalUtilityReceivedLandlord = 0;
-  let totalInvoiceTaxReceivedManager = 0;
-  let totalInvoiceTaxReceivedLandlord = 0;
-  let directToLandlordOffset = 0;
-  const additionRows = [];
-  const extraDeductionRows = [];
-  const advanceRecoveryRows = [];
-  const earlyPayoutRows = [];
-  let totalAdditions = 0;
-  let totalExtraDeductions = 0;
-  let totalAdvanceRecoveries = 0;
-  let totalEarlyPayouts = 0;
 
   for (const receipt of receiptsInPeriod) {
     const row = ensureRow(receipt.tenant, receipt.unit);
@@ -3027,12 +3030,12 @@ export const generateLandlordStatement = async ({
   const depositsHeldByManager = round2(depositMemoBuckets.manager.closingBalance);
   const depositsHeldByLandlord = round2(depositMemoBuckets.landlord.closingBalance);
 
-  const occupiedUnits = filteredTenantRows.filter(
-    (row) => row.tenantName !== "VACANT"
-  ).length;
-  const vacantUnits = filteredTenantRows.filter(
-    (row) => row.tenantName === "VACANT"
-  ).length;
+  let occupiedUnits = 0;
+  let vacantUnits = 0;
+  for (const row of filteredTenantRows) {
+    if (row.tenantName === "VACANT") vacantUnits++;
+    else occupiedUnits++;
+  }
 
   const expenseRows = [
     ...cleanedPropertyExpenseRows,

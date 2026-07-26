@@ -792,7 +792,7 @@ export const processLatePenalties = async (req, res) => {
             unit: row.unitId,
             category: "LATE_PENALTY_CHARGE",
             amount: Number(row.calculatedPenalty || 0),
-            description: `${row.sourceInvoiceNumber || formatPenaltyDescriptionPeriod(runDate)} Late Penalty`,
+            description: `Late Penalty${row.sourceInvoiceNumber ? ` — ${row.sourceInvoiceNumber}` : ""} (${formatPenaltyDescriptionPeriod(runDate)})`,
             invoiceDate: runDate,
             dueDate: runDate,
             createdBy: actorUserId,

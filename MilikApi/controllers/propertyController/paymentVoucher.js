@@ -729,7 +729,19 @@ const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate
   const { start, end } = buildStatementPeriod(postingDate);
   const txDate = postingDate;
   const journalGroupId = new mongoose.Types.ObjectId();
-  const narration = String(voucher.narration || voucher.reference || `Payment voucher ${voucher.voucherNo}`).trim();
+  const _voucherCategoryLabel = {
+    landlord_maintenance: "Landlord Maintenance",
+    landlord_other: "Landlord Expense",
+    deposit_refund: "Deposit Refund",
+    manager_property: "Property Expense",
+    company_operational: "Company Operational Expense",
+    petty_cash_float: "Petty Cash Float",
+    petty_cash_expense: "Petty Cash Expense",
+    service_provider: "Service Provider Payment",
+    landlord_advance: "Landlord Advance",
+    landlord_standing_order: "Landlord Standing Order",
+  }[voucher.category] || "Payment Voucher";
+  const narration = String(voucher.narration || voucher.reference || `${_voucherCategoryLabel} — ${voucher.voucherNo}`).trim();
   const amount = Math.abs(Number(voucher.amount || 0));
 
   try {
@@ -866,7 +878,19 @@ const ensureVoucherSettlementPosting = async ({ voucher, actorUserId, paidDate =
   const txDate = normalizeDate(paidDate || voucher.paidDate || voucher.paidAt || new Date());
   const { start, end } = buildStatementPeriod(txDate);
   const journalGroupId = voucher.journalGroupId || new mongoose.Types.ObjectId();
-  const narration = String(voucher.narration || voucher.reference || `Payment voucher ${voucher.voucherNo}`).trim();
+  const _voucherCategoryLabel = {
+    landlord_maintenance: "Landlord Maintenance",
+    landlord_other: "Landlord Expense",
+    deposit_refund: "Deposit Refund",
+    manager_property: "Property Expense",
+    company_operational: "Company Operational Expense",
+    petty_cash_float: "Petty Cash Float",
+    petty_cash_expense: "Petty Cash Expense",
+    service_provider: "Service Provider Payment",
+    landlord_advance: "Landlord Advance",
+    landlord_standing_order: "Landlord Standing Order",
+  }[voucher.category] || "Payment Voucher";
+  const narration = String(voucher.narration || voucher.reference || `${_voucherCategoryLabel} — ${voucher.voucherNo}`).trim();
   const amount = Math.abs(Number(voucher.amount || 0));
   const whtAmount = Math.max(0, Math.round(Number(voucher.whtAmount || 0) * 100) / 100);
   const netCashAmount = Math.max(0, Math.round((amount - whtAmount) * 100) / 100);
