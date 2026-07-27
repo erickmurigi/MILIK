@@ -389,7 +389,7 @@ const HELP_MODULES = [
   { label: "Human Resources",     icon: FaUsers,      path: "/hr/overview" },
   { label: "Car Wash",            icon: FaCar,        path: "/carwash" },
   { label: "Property Sales",      icon: FaKey,        path: "/sale/dashboard" },
-  { label: "Client Management",   icon: FaHandshake,  path: "/clients/dashboard" },
+  { label: "Contract Management", icon: FaHandshake,  path: "/clients/dashboard" },
 ];
 
 const HELP_RESOURCES = [

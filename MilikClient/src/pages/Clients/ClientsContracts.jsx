@@ -167,7 +167,10 @@ const ClientsContracts = () => {
                         {c.description || '—'}
                       </td>
                       <td className="px-3 py-2.5 whitespace-nowrap text-slate-500">
-                        {fmtDate(c.startDate)} – {fmtDate(c.endDate)}
+                        {fmtDate(c.startDate)} –{' '}
+                        {c.openEnded || !c.endDate
+                          ? <span className="font-semibold text-emerald-700">Ongoing</span>
+                          : fmtDate(c.endDate)}
                       </td>
                       <td className="px-3 py-2.5 tabular-nums font-semibold text-slate-700">
                         {fmtKES(c.currentValue || c.baseValue)}

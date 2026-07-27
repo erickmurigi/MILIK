@@ -571,6 +571,10 @@ const companySchema = new mongoose.Schema(
         type: Boolean,
         default: companyModuleDefaults.carwash ?? false,
       },
+      clients: {
+        type: Boolean,
+        default: companyModuleDefaults.clients ?? false,
+      },
     },
 
     // Fiscal Period Settings

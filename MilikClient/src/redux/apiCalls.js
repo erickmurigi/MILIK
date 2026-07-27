@@ -409,7 +409,9 @@ export const invalidateAccessibleCompaniesCache = () => {
 // Switch company context
 export const switchCompany = (companyId) => async (dispatch) => {
   dispatch(startCompanySwitch(companyId));
-  dispatch(getCompanyStart());
+  // Clear old company-scoped Redux slices immediately so no stale data
+  // lingers in the store while the API call is in flight.
+  dispatch(resetCompanyScopedState());
 
   try {
     const res = await adminRequests.post("/auth/switch-company", { companyId });
@@ -424,8 +426,6 @@ export const switchCompany = (companyId) => async (dispatch) => {
 
     invalidateAccessibleCompaniesCache();
     resetPersistedWorkspaceCache();
-
-    dispatch(resetCompanyScopedState());
 
     if (user) {
       dispatch(loginSuccess({ user, token: token || localStorage.getItem("milik_token") }));
@@ -450,7 +450,6 @@ export const switchCompany = (companyId) => async (dispatch) => {
     dispatch(finishCompanySwitch());
     return data;
   } catch (err) {
-    dispatch(getCompanyFailure());
     dispatch(failCompanySwitch());
     throw err;
   }

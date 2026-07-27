@@ -114,7 +114,7 @@ export const WORKSPACE_CONFIG = {
   },
   [WORKSPACE_IDS.CLIENTS]: {
     id: WORKSPACE_IDS.CLIENTS,
-    label: 'Client Management',
+    label: 'Contract Management',
     defaultRoute: '/clients/dashboard',
     defaultTab: {
       id: 'clients-dashboard',

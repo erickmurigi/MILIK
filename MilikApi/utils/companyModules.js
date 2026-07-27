@@ -125,6 +125,13 @@ const MODULE_REGISTRY = {
     defaultEnabled: false,
     userAccessKey: 'carwash',
   },
+  clients: {
+    key: 'clients',
+    label: 'Contract Management',
+    category: 'expansion',
+    defaultEnabled: false,
+    userAccessKey: 'clients',
+  },
 };
 
 const ACCESS_VALUES = ['Not allowed', 'View only', 'Full access'];

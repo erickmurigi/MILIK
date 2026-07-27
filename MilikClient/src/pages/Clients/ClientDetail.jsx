@@ -469,6 +469,7 @@ const AddContractModal = ({ clientId, onClose, onCreated }) => {
     description: '',
     startDate: todayISO(),
     endDate: '',
+    openEnded: false,
     baseValue: '',
     billingCycle: 'monthly',
     escalationPercent: '10',
@@ -481,8 +482,9 @@ const AddContractModal = ({ clientId, onClose, onCreated }) => {
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   const handleSubmit = async () => {
-    if (!form.description.trim())        { toast.error('Description required'); return; }
-    if (!form.startDate || !form.endDate) { toast.error('Start and end dates required'); return; }
+    if (!form.description.trim()) { toast.error('Description required'); return; }
+    if (!form.startDate)          { toast.error('Start date required'); return; }
+    if (!form.openEnded && !form.endDate) { toast.error('End date required, or check "Open-ended"'); return; }
     if (!form.baseValue || isNaN(Number(form.baseValue))) { toast.error('Valid base value required'); return; }
     setSaving(true);
     try {
@@ -490,7 +492,8 @@ const AddContractModal = ({ clientId, onClose, onCreated }) => {
         client:                clientId,
         description:           form.description.trim(),
         startDate:             form.startDate,
-        endDate:               form.endDate,
+        endDate:               form.openEnded ? undefined : form.endDate,
+        openEnded:             form.openEnded,
         baseValue:             Number(form.baseValue),
         billingCycle:          form.billingCycle,
         escalationPercent:     Number(form.escalationPercent) || 10,
@@ -538,8 +541,25 @@ const AddContractModal = ({ clientId, onClose, onCreated }) => {
           <input type="date" className={inputCls} value={form.startDate} onChange={(e) => set('startDate', e.target.value)} />
         </div>
         <div>
-          <label className={labelCls}>End Date *</label>
-          <input type="date" className={inputCls} value={form.endDate} onChange={(e) => set('endDate', e.target.value)} />
+          <div className="flex items-center justify-between mb-1">
+            <label className={labelCls} style={{ marginBottom: 0 }}>End Date {form.openEnded ? '' : '*'}</label>
+            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={form.openEnded}
+                onChange={(e) => set('openEnded', e.target.checked)}
+                className="rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
+              />
+              <span className="text-[11px] font-semibold text-slate-500">Open-ended</span>
+            </label>
+          </div>
+          <input
+            type="date"
+            className={`${inputCls} ${form.openEnded ? 'opacity-40 pointer-events-none' : ''}`}
+            value={form.openEnded ? '' : form.endDate}
+            onChange={(e) => set('endDate', e.target.value)}
+            disabled={form.openEnded}
+          />
         </div>
         <div>
           <label className={labelCls}>Base Value (KES) *</label>
@@ -789,7 +809,10 @@ const ContractsTab = ({ clientId }) => {
                       {c.description || '—'}
                     </td>
                     <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">
-                      {fmtDate(c.startDate)} – {fmtDate(c.endDate)}
+                      {fmtDate(c.startDate)} –{' '}
+                      {c.openEnded || !c.endDate
+                        ? <span className="font-semibold text-emerald-700">Ongoing</span>
+                        : fmtDate(c.endDate)}
                     </td>
                     <td className="px-3 py-2.5 tabular-nums font-semibold text-slate-700">
                       {fmtKES(c.currentValue || c.baseValue)}
@@ -1099,8 +1122,9 @@ const CreateInvoiceModal = ({ clientId, contracts, onClose, onCreated }) => {
 };
 
 const MarkPaidModal = ({ invoice, onClose, onPaid }) => {
+  const balance = Math.max(0, (invoice?.total || 0) - (invoice?.paidAmount || 0));
   const [form, setForm] = useState({
-    paidAmount:       String(Math.max(0, (invoice?.total || 0) - (invoice?.paidAmount || 0)) || ''),
+    paidAmount:       String(balance || ''),
     paidAt:           todayISO(),
     paymentMethod:    'Bank Transfer',
     paymentReference: '',
@@ -1142,9 +1166,14 @@ const MarkPaidModal = ({ invoice, onClose, onPaid }) => {
       }
     >
       <div className="space-y-3">
+        {(invoice?.paidAmount > 0) && (
+          <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <span className="font-semibold">Partially paid:</span> {fmtKES(invoice.paidAmount)} of {fmtKES(invoice.total)} — balance {fmtKES(balance)}
+          </div>
+        )}
         <div>
-          <label className={labelCls}>Paid Amount (KES) *</label>
-          <input type="number" className={inputCls} value={form.paidAmount} onChange={(e) => set('paidAmount', e.target.value)} min="0" />
+          <label className={labelCls}>Amount Paying Now (KES) *</label>
+          <input type="number" className={inputCls} value={form.paidAmount} onChange={(e) => set('paidAmount', e.target.value)} min="0.01" step="0.01" />
         </div>
         <div>
           <label className={labelCls}>Payment Date</label>
@@ -1171,6 +1200,7 @@ const MarkPaidModal = ({ invoice, onClose, onPaid }) => {
 };
 
 const InvoicesTab = ({ clientId, contracts }) => {
+  const navigate = useNavigate();
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading]   = useState(true);
   const loadedRef               = useRef(false);
@@ -1299,6 +1329,13 @@ const InvoicesTab = ({ clientId, contracts }) => {
                             Mark Paid
                           </button>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/clients/invoices/${inv._id}/print`)}
+                          className="border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 px-2 py-0.5 rounded text-[10px] font-semibold"
+                        >
+                          Print
+                        </button>
                         {inv.status !== 'paid' && inv.status !== 'cancelled' && (
                           <button
                             type="button"

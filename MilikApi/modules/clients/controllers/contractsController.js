@@ -13,12 +13,14 @@ const ALLOWED_RENEWAL_STAGES = ["due", "contacted", "negotiating", "renewed", "l
 const sanitizeContractPayload = (body = {}) => {
   const baseValue    = Math.max(0, Number(body.baseValue || 0));
   const currentValue = body.currentValue != null ? Math.max(0, Number(body.currentValue)) : undefined;
+  const openEnded    = body.openEnded === true || body.openEnded === "true";
 
   return {
     client:               String(body.client || "").trim(),
     description:          String(body.description || "").trim(),
     startDate:            body.startDate ? new Date(body.startDate) : null,
-    endDate:              body.endDate   ? new Date(body.endDate)   : null,
+    endDate:              openEnded ? null : (body.endDate ? new Date(body.endDate) : null),
+    openEnded,
     noticePeriodDays:     Math.max(0, Number(body.noticePeriodDays ?? 30)),
     baseValue,
     currentValue:         currentValue !== undefined ? currentValue : baseValue,
@@ -54,12 +56,13 @@ export const listContracts = async (req, res, next) => {
       filter.status = req.query.status;
     }
 
-    // Expiring within N days
+    // Expiring within N days — always excludes open-ended contracts
     if (req.query.expiringDays) {
       const days = Math.max(1, Number(req.query.expiringDays));
       const now  = new Date();
       const cutoff = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
-      filter.endDate = { $gte: now, $lte: cutoff };
+      filter.openEnded = { $ne: true };
+      filter.endDate   = { $gte: now, $lte: cutoff };
       if (!req.query.status) {
         filter.status = { $in: ["active", "pending_renewal"] };
       }
@@ -109,11 +112,13 @@ export const createContract = async (req, res, next) => {
     if (!payload.startDate || Number.isNaN(payload.startDate.getTime())) {
       return next(createError(400, "Valid startDate is required"));
     }
-    if (!payload.endDate || Number.isNaN(payload.endDate.getTime())) {
-      return next(createError(400, "Valid endDate is required"));
-    }
-    if (payload.endDate <= payload.startDate) {
-      return next(createError(400, "endDate must be after startDate"));
+    if (!payload.openEnded) {
+      if (!payload.endDate || Number.isNaN(payload.endDate.getTime())) {
+        return next(createError(400, "endDate is required unless the contract is open-ended"));
+      }
+      if (payload.endDate <= payload.startDate) {
+        return next(createError(400, "endDate must be after startDate"));
+      }
     }
 
     // Verify client belongs to this business

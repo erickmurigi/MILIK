@@ -108,6 +108,7 @@ export const MODULE_LABELS = {
   pos:                 'POS',
   securityServices:    'Security Services',
   carwash:             'MILIK Car Wash',
+  clients:             'Contract Management',
   crm:                 'CRM',
   sacco:               'SACCO / Cooperative',
   revenueRecognition:  'Revenue Recognition',

@@ -4,13 +4,14 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import {
   FaArrowLeft,
+  FaBoxes,
   FaBuilding,
   FaCalculator,
   FaCar,
   FaCalendarAlt,
   FaCheckCircle,
-  FaBoxes,
   FaEnvelope,
+  FaHandshake,
   FaImage,
   FaMapMarkerAlt,
   FaPhone,
@@ -46,7 +47,8 @@ const MODULE_OPTIONS = [
   { key: "inventory", label: "Inventory", description: "Stock tracking, requisitions and inventory valuation.", icon: FaBoxes, core: false },
   { key: "pos", label: "POS", description: "Point-of-sale sales and retail outlet management.", icon: FaStore, core: false },
   { key: "securityServices", label: "Security Services", description: "Guard deployment, incident reporting and shift scheduling.", icon: FaShieldAlt, core: false },
-  { key: "carwash", label: "MILIK Car Wash", description: "Wash jobs, services, payments, staff and daily car wash operations.", icon: FaCar, core: false },
+  { key: "carwash",  label: "MILIK Car Wash",      description: "Wash jobs, services, payments, staff and daily car wash operations.", icon: FaCar,       core: false },
+  { key: "clients",  label: "Contract Management", description: "Client management, contracts, invoices and billing.",                  icon: FaHandshake, core: false },
 ];
 
 const COMPANY_MODE_OPTIONS = [
@@ -60,7 +62,7 @@ const ALL_MODULE_KEYS = [
   "telcoDealership", "procurement", "hr", "facilityManagement",
   "hotelManagement", "propertySale", "frontOffice", "dms",
   "academics", "projectManagement", "assetValuation", "pos", "securityServices",
-  "carwash",
+  "carwash", "clients",
 ];
 
 const buildInitialModules = () =>

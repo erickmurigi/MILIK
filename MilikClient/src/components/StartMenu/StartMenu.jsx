@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  FaBoxes, FaFolderOpen,
+  FaAddressBook, FaBoxes, FaFolderOpen,
   FaEnvelope, FaSms, FaUserCircle, FaSignOutAlt, FaThLarge,
   FaBuilding, FaCheckCircle, FaSearch, FaUserShield, FaShieldAlt,
   FaStore, FaChartLine, FaBriefcase, FaLock, FaCog, FaCar,
@@ -47,7 +47,7 @@ const moduleRegistry = [
   { id: "propertySale", moduleKey: "propertySale",       label: "Property Sales",      icon: <FaBuilding />,   to: "/sale/dashboard",     status: "active" },
   { id: "carwash",      moduleKey: "carwash",            label: "MILIK Car Wash",      icon: <FaCar />,        to: "/carwash/dashboard",  status: "active" },
   { id: "hr",           moduleKey: "hr",                 label: "Human Resources",     icon: <FaUserTie />,    to: "/hr/dashboard",       status: "active" },
-  { id: "clients",                                       label: "Client Management",   icon: <FaUserTie />,    to: "/clients/dashboard",  status: "active" },
+  { id: "clients",      moduleKey: "clients",            label: "Contract Management", icon: <FaAddressBook />, to: "/clients/dashboard",  status: "active" },
   { id: "procurement",  moduleKey: "procurement",        label: "Ven-Door",            icon: <FaBriefcase />,                             status: "coming" },
   { id: "pos",          moduleKey: "pos",                label: "POS & Billing",       icon: <FaStore />,                                 status: "coming" },
   { id: "securityServices", moduleKey: "securityServices", label: "Security",          icon: <FaShieldAlt />,                             status: "coming" },

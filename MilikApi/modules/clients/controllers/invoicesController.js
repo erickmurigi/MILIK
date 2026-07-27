@@ -10,7 +10,7 @@ import { sendInvoiceEmail, sendReceiptEmail } from "../services/clientEmailServi
 
 // ─── Sanitizers ──────────────────────────────────────────────────────────────
 
-const ALLOWED_STATUSES = ["draft", "sent", "paid", "overdue", "cancelled"];
+const ALLOWED_STATUSES = ["draft", "sent", "partial", "paid", "overdue", "cancelled"];
 
 const sanitizeLineItem = (item) => {
   const quantity  = Math.max(0, Number(item.quantity  ?? 1));
@@ -159,25 +159,31 @@ export const markPaid = async (req, res, next) => {
     const invoice = await ClientInvoice.findOne({
       _id: req.params.id,
       business,
-      status: { $nin: ["cancelled"] },
+      status: { $nin: ["paid", "cancelled"] },
     });
-    if (!invoice) return next(createError(404, "Invoice not found or is cancelled"));
+    if (!invoice) return next(createError(404, "Invoice not found, already paid, or is cancelled"));
 
-    const paidAmount      = Math.max(0, Number(req.body.paidAmount ?? invoice.total));
-    const paidAt          = req.body.paidAt ? new Date(req.body.paidAt) : new Date();
-    const paymentMethod   = String(req.body.paymentMethod   || "").trim();
+    const paymentAmount = Number(req.body.paidAmount);
+    if (!paymentAmount || paymentAmount <= 0) {
+      return next(createError(400, "Payment amount must be greater than zero"));
+    }
+
+    const paidAt           = req.body.paidAt ? new Date(req.body.paidAt) : new Date();
+    const paymentMethod    = String(req.body.paymentMethod    || "").trim();
     const paymentReference = String(req.body.paymentReference || "").trim();
 
-    invoice.paidAmount       = paidAmount;
+    // Accumulate — cap at invoice total so overpayment doesn't inflate paidAmount
+    const newPaidAmount = Math.min(invoice.total, (invoice.paidAmount || 0) + paymentAmount);
+
+    invoice.paidAmount       = newPaidAmount;
     invoice.paidAt           = paidAt;
     invoice.paymentMethod    = paymentMethod;
     invoice.paymentReference = paymentReference;
 
-    // Auto-set status to paid if fully covered
-    if (paidAmount >= invoice.total) {
+    if (newPaidAmount >= invoice.total) {
       invoice.status = "paid";
-    } else if (invoice.status === "draft" || invoice.status === "overdue") {
-      invoice.status = "sent";
+    } else if (newPaidAmount > 0) {
+      invoice.status = "partial";
     }
 
     await invoice.save();

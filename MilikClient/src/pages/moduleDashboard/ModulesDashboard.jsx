@@ -5,18 +5,19 @@ import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { selectCurrentUser, selectCurrentCompany } from "../../redux/selectors";
 import {
-  FaChartLine,
-  FaWarehouse,
-  FaUsers,
-  FaShieldAlt,
-  FaHandshake,
-  FaStore,
+  FaAddressBook,
   FaArrowRight,
-  FaLock,
-  FaCar,
   FaBuilding,
-  FaSearch,
+  FaCar,
+  FaChartLine,
   FaCity,
+  FaHandshake,
+  FaLock,
+  FaSearch,
+  FaShieldAlt,
+  FaStore,
+  FaUsers,
+  FaWarehouse,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import {
@@ -115,6 +116,17 @@ const moduleRegistry = [
     icon: FaUsers,
     color: "#7c3aed",
     category: "People",
+  },
+  {
+    id: "clients",
+    moduleKey: "clients",
+    title: "Contract Management",
+    subtitle: "Clients, Contracts & Billing",
+    status: "active",
+    route: "/clients/dashboard",
+    icon: FaAddressBook,
+    color: "#065f46",
+    category: "Sales",
   },
   {
     id: "vendoor",
