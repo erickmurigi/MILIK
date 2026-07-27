@@ -1635,7 +1635,7 @@ await Promise.all(invoiceRequests.map((req) => createTenantInvoice(req)));
                     />
                   </div>
 
-                  {formData.property && availableUnits.length > 1 && (
+                  {formData.property && (availableUnits.length > 1 || (isEditMode && (formData.additionalUnits?.length ?? 0) > 0)) && (
                     <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                       <label className="flex items-center gap-3 text-sm font-semibold text-slate-800">
                         <input
@@ -1662,31 +1662,43 @@ await Promise.all(invoiceRequests.map((req) => createTenantInvoice(req)));
                       )}
                       {showAdditionalUnits ? (
                         <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
-                          {availableUnits
-                            .filter((unit) => normalizeId(unit?._id) !== normalizeId(formData.unit))
-                            .map((unit) => {
-                              const checked = Array.isArray(formData.additionalUnits) && formData.additionalUnits.some((unitId) => normalizeId(unitId) === normalizeId(unit?._id));
-                              return (
-                                <label key={unit._id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-                                  <span>{unit.unitNumber} - Ksh {Number(unit.rent || 0).toLocaleString()}</span>
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={(e) => {
-                                      setFormData((prev) => ({
-                                        ...prev,
-                                        additionalUnits: e.target.checked
-                                          ? [...(Array.isArray(prev.additionalUnits) ? prev.additionalUnits : []), unit._id || unit.id]
-                                          : (Array.isArray(prev.additionalUnits) ? prev.additionalUnits : []).filter((unitId) => normalizeId(unitId) !== normalizeId(unit._id)),
-                                      }));
-                                      if (fieldErrors.additionalUnits) {
-                                        setFieldErrors((prev) => ({ ...prev, additionalUnits: "" }));
-                                      }
-                                    }}
-                                  />
-                                </label>
-                              );
-                            })}
+                          {(() => {
+                            // Base list: available units excluding the primary
+                            const base = availableUnits.filter((u) => normalizeId(u?._id) !== normalizeId(formData.unit));
+                            const baseIds = new Set(base.map((u) => normalizeId(u?._id)));
+                            // In edit mode, also show currently-assigned additional units that
+                            // may be occupied and therefore absent from availableUnits
+                            const orphaned = isEditMode
+                              ? (currentEditAdditionalUnits || []).filter((eu) => {
+                                  const id = normalizeId(eu?._id || eu?.id);
+                                  return id && !baseIds.has(id) && id !== normalizeId(formData.unit);
+                                })
+                              : [];
+                            return [...base, ...orphaned];
+                          })().map((unit) => {
+                            const unitId = unit._id || unit.id;
+                            const checked = Array.isArray(formData.additionalUnits) && formData.additionalUnits.some((id) => normalizeId(id) === normalizeId(unitId));
+                            return (
+                              <label key={unitId} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                                <span>{unit.unitNumber} - Ksh {Number(unit.rent || 0).toLocaleString()}</span>
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(e) => {
+                                    setFormData((prev) => ({
+                                      ...prev,
+                                      additionalUnits: e.target.checked
+                                        ? [...(Array.isArray(prev.additionalUnits) ? prev.additionalUnits : []), unitId]
+                                        : (Array.isArray(prev.additionalUnits) ? prev.additionalUnits : []).filter((id) => normalizeId(id) !== normalizeId(unitId)),
+                                    }));
+                                    if (fieldErrors.additionalUnits) {
+                                      setFieldErrors((prev) => ({ ...prev, additionalUnits: "" }));
+                                    }
+                                  }}
+                                />
+                              </label>
+                            );
+                          })}
                         </div>
                       ) : null}
                       {fieldErrors.additionalUnits && <p className="mt-2 text-xs text-red-600">{fieldErrors.additionalUnits}</p>}
