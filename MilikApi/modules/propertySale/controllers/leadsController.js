@@ -75,6 +75,8 @@ export const updateLead = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const userId   = currentUserId(req);
     const { business: _b, leadNumber: _n, createdBy: _c, convertedBuyer: _cv, convertedAt: _ca, ...updates } = req.body;
+    // "converted" status must go through /convert (which creates the buyer record)
+    if (updates.status === "converted") delete updates.status;
     const lead = await SaleLead.findOneAndUpdate(
       { _id: req.params.id, business },
       { ...updates, updatedBy: userId },

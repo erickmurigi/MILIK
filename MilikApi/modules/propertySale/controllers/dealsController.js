@@ -94,9 +94,12 @@ export const createDeal = async (req, res, next) => {
       await SaleOffer.findByIdAndUpdate(req.body.offer, { status: "accepted" });
     }
 
+    // Strip commission override fields from deal body — they belong on the commission record
+    const { commissionRateOverride, commissionTypeOverride, commissionAmountOverride, ...dealBody } = req.body;
+
     const dealNumber = await generateSequentialNumber(SaleDeal, business, "DL");
     const deal = await SaleDeal.create({
-      ...req.body,
+      ...dealBody,
       business,
       dealNumber,
       createdBy: userId,
@@ -106,10 +109,14 @@ export const createDeal = async (req, res, next) => {
     const postDealOps = [SaleListing.findByIdAndUpdate(listing._id, { status: "under_contract" })];
 
     if (agent) {
-      const saleAmount = req.body.agreedPrice;
-      const commissionAmount = agent.commissionType === "percentage"
-        ? (saleAmount * agent.commissionRate) / 100
-        : agent.commissionRate;
+      const saleAmount = Number(req.body.agreedPrice);
+      const commissionRate = commissionRateOverride != null ? Number(commissionRateOverride) : agent.commissionRate;
+      const commissionType = commissionTypeOverride  ?? agent.commissionType;
+      const commissionAmount = commissionAmountOverride != null
+        ? Number(commissionAmountOverride)
+        : commissionType === "percentage"
+          ? (saleAmount * commissionRate) / 100
+          : commissionRate;
       postDealOps.push(
         generateSequentialNumber(SaleCommission, business, "COM").then((commissionNumber) =>
           SaleCommission.create({
@@ -120,8 +127,8 @@ export const createDeal = async (req, res, next) => {
             listing: req.body.listing,
             buyer: req.body.buyer,
             saleAmount,
-            commissionRate: agent.commissionRate,
-            commissionType: agent.commissionType,
+            commissionRate,
+            commissionType,
             commissionAmount,
             status: "pending",
             createdBy: userId,

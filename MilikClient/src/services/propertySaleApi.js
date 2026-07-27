@@ -54,6 +54,7 @@ export const saleApi = {
 
   // Payments
   listPayments: async (params = {}) => unwrapPage(await adminRequests.get("/sale/payments", { params })),
+  getPayment: async (id, params = {}) => unwrap(await adminRequests.get(`/sale/payments/${id}`, { params })),
   createPayment: async (payload) => unwrap(await adminRequests.post("/sale/payments", payload)),
   updatePayment: async (id, payload) => unwrap(await adminRequests.put(`/sale/payments/${id}`, payload)),
   voidPayment: async (id, payload = {}) => unwrap(await adminRequests.patch(`/sale/payments/${id}/void`, payload)),
@@ -61,6 +62,7 @@ export const saleApi = {
 
   // Commissions
   listCommissions: async (params = {}) => unwrapPage(await adminRequests.get("/sale/commissions", { params })),
+  getCommission: async (id, params = {}) => unwrap(await adminRequests.get(`/sale/commissions/${id}`, { params })),
   updateCommissionStatus: async (id, payload) => unwrap(await adminRequests.patch(`/sale/commissions/${id}/status`, payload)),
 
   // Cashbook accounts (for payment recording)
@@ -87,6 +89,14 @@ export const saleApi = {
   deleteLead:     async (id)         => unwrap(await adminRequests.delete(`/sale/leads/${id}`)),
   convertLead:    async (id, payload) => unwrap(await adminRequests.patch(`/sale/leads/${id}/convert`, payload)),
   getLeadsPipeline: async (params = {}) => unwrap(await adminRequests.get("/sale/leads/pipeline",      { params })),
+
+  // Payment Schedule
+  listSchedule:         async (params = {}) => unwrapPage(await adminRequests.get("/sale/schedule", { params })),
+  getOverdueSchedule:   async (params = {}) => unwrapPage(await adminRequests.get("/sale/schedule/overdue", { params })),
+  setSchedule:          async (payload)     => unwrap(await adminRequests.post("/sale/schedule", payload)),
+  updateScheduleItem:   async (id, payload) => unwrap(await adminRequests.patch(`/sale/schedule/${id}`, payload)),
+  linkPaymentToSchedule:async (id, payload) => unwrap(await adminRequests.patch(`/sale/schedule/${id}/link`, payload)),
+  deleteScheduleItem:   async (id)          => unwrap(await adminRequests.delete(`/sale/schedule/${id}`)),
 
   // CRM — Activities
   listActivities:   async (params = {}) => unwrapPage(await adminRequests.get("/sale/activities",         { params })),

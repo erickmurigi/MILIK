@@ -2,8 +2,8 @@ import React, { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import {
-  FaBan, FaBuilding, FaCheck, FaEdit, FaEnvelope, FaFileAlt, FaHandshake, FaMoneyBillWave,
-  FaPlus, FaPrint, FaRedoAlt, FaSearch, FaSms, FaTimes, FaUser,
+  FaBan, FaBuilding, FaCalendarAlt, FaCheck, FaEdit, FaEnvelope, FaFileAlt, FaHandshake, FaLink, FaMoneyBillWave,
+  FaPlus, FaPrint, FaRedoAlt, FaSearch, FaSms, FaTimes, FaTrash, FaUser,
 } from "react-icons/fa";
 import CwSmsModal from "../CarWash/CwSmsModal";
 import { toast } from "react-toastify";
@@ -25,6 +25,7 @@ const statusBadge = (status) => ({
 const blankDealForm = {
   listing: "", buyer: "", agent: "", agreedPrice: "",
   dealDate: todayISO(), expectedClosingDate: "", notes: "",
+  commOverrideEnabled: false, commissionRateOverride: "", commissionTypeOverride: "", commissionAmountOverride: "",
 };
 
 const PAYMENT_TYPES   = ["deposit", "installment", "final_payment", "other"];
@@ -78,13 +79,17 @@ const SaleDeals = () => {
   const [payingDeal,     setPayingDeal]     = useState(null);
   const [payForm,        setPayForm]        = useState(blankPayForm);
   const [payingSave,     setPayingSave]     = useState(false);
-  const [printingStmt,   setPrintingStmt]   = useState("");
   const [selected,       setSelected]       = useTabState("/sale/deals:selected", null);
   const [smsTarget,      setSmsTarget]      = useState(null);
   const [smsSending,     setSmsSending]     = useState(false);
   const [emailTarget,    setEmailTarget]    = useState(null);
   const [emailForm,      setEmailForm]      = useState({ subject: "", body: "" });
   const [emailSending,   setEmailSending]   = useState(false);
+
+  const [showScheduleBuilder, setShowScheduleBuilder] = useState(false);
+  const [scheduleItems,       setScheduleItems]       = useState([]);
+  const [scheduleSaving,      setScheduleSaving]      = useState(false);
+  const [linkingInstallment,  setLinkingInstallment]  = useState(null);
 
   const biz = currentCompany?._id;
 
@@ -128,6 +133,13 @@ const SaleDeals = () => {
     staleTime: 30_000,
   });
 
+  const { data: dealScheduleData } = useQuery({
+    queryKey: ["deal-detail-schedule", selected?._id],
+    queryFn:  () => saleApi.listSchedule({ dealId: selected._id }),
+    enabled:  !!selected?._id,
+    staleTime: 30_000,
+  });
+
   const deals      = dealsData?.data ?? [];
   const total      = dealsData?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -135,13 +147,56 @@ const SaleDeals = () => {
   const buyers     = buyersData?.data   ?? [];
   const agents     = agentsData?.data   ?? [];
 
-  const dealPmts   = (dealPmtsData?.payments ?? dealPmtsData?.data ?? []).filter((p) => p.status === "paid");
-  const dealComm   = (dealCommData?.commissions ?? dealCommData?.data ?? [])[0] ?? null;
+  const dealPmts    = (dealPmtsData?.data ?? []).filter((p) => p.status === "paid");
+  const dealComm    = (dealCommData?.data ?? [])[0] ?? null;
+  const dealSchedule= dealScheduleData?.data ?? [];
   const fmtDate    = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["sale-deals", biz] });
     queryClient.invalidateQueries({ queryKey: ["sale-dashboard"] });
+  };
+
+  const openScheduleBuilder = (deal) => {
+    const existing = dealScheduleData?.data ?? [];
+    if (existing.length > 0) {
+      setScheduleItems(existing.map((i) => ({
+        dueDate:        i.dueDate ? new Date(i.dueDate).toISOString().slice(0, 10) : "",
+        expectedAmount: String(i.expectedAmount),
+        description:    i.description || "",
+      })));
+    } else {
+      setScheduleItems([{ dueDate: "", expectedAmount: "", description: "Deposit" }]);
+    }
+    setShowScheduleBuilder(true);
+  };
+
+  const handleSaveSchedule = async () => {
+    if (!selected) return;
+    const items = scheduleItems.filter((i) => i.dueDate && Number(i.expectedAmount) > 0);
+    if (items.length === 0) return toast.warning("Add at least one installment with a date and amount");
+    setScheduleSaving(true);
+    try {
+      await saleApi.setSchedule({ dealId: selected._id, items });
+      queryClient.invalidateQueries({ queryKey: ["deal-detail-schedule", selected._id] });
+      setShowScheduleBuilder(false);
+      toast.success("Payment schedule saved");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to save schedule");
+    } finally {
+      setScheduleSaving(false);
+    }
+  };
+
+  const handleLinkPayment = async (scheduleItemId, paymentId) => {
+    try {
+      await saleApi.linkPaymentToSchedule(scheduleItemId, { paymentId });
+      queryClient.invalidateQueries({ queryKey: ["deal-detail-schedule", selected._id] });
+      setLinkingInstallment(null);
+      toast.success("Payment linked to installment");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to link payment");
+    }
   };
 
   const openCreate = () => { setEditingId(""); setForm(blankDealForm); setShowModal(true); };
@@ -165,7 +220,13 @@ const SaleDeals = () => {
     if (!form.agreedPrice || Number(form.agreedPrice) <= 0) return toast.warning("Valid agreed price required");
     setSaving(true);
     try {
-      const payload = { ...form, business: biz, agreedPrice: Number(form.agreedPrice), agent: form.agent || undefined, expectedClosingDate: form.expectedClosingDate || undefined };
+      const { commOverrideEnabled, commissionRateOverride, commissionTypeOverride, commissionAmountOverride, ...baseForm } = form;
+      const payload = { ...baseForm, business: biz, agreedPrice: Number(form.agreedPrice), agent: form.agent || undefined, expectedClosingDate: form.expectedClosingDate || undefined };
+      if (!editingId && form.agent && commOverrideEnabled) {
+        if (commissionRateOverride !== "") payload.commissionRateOverride = Number(commissionRateOverride);
+        if (commissionTypeOverride !== "") payload.commissionTypeOverride = commissionTypeOverride;
+        if (commissionAmountOverride !== "") payload.commissionAmountOverride = Number(commissionAmountOverride);
+      }
       if (editingId) await saleApi.updateDeal(editingId, payload);
       else await saleApi.createDeal(payload);
       invalidate();
@@ -224,65 +285,6 @@ const SaleDeals = () => {
     }
   };
 
-  const printPaymentReceipt = (payment) => {
-    const co      = currentCompany || {};
-    const coName  = co.companyName || co.name || "MILIK";
-    const deal    = payment.deal    || {};
-    const listing = deal.listing    || {};
-    const buyer   = deal.buyer      || {};
-    const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const fmtD = (d) => d ? new Date(d).toLocaleDateString("en-KE") : "—";
-    const fmtAmt = (n) => `KES ${Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Receipt — ${esc(payment.paymentNumber)}</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#0f172a}
-.page{max-width:148mm;margin:0 auto;padding:14mm 14mm 10mm}
-.hdr{border-bottom:3px solid #0B3B2E;padding-bottom:10px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:flex-start}
-.brand{font-size:20px;font-weight:900;color:#0B3B2E;letter-spacing:2px}.co-info{text-align:right;font-size:9px;color:#555;line-height:1.7}
-.doc-title{text-align:center;margin:12px 0 14px}.doc-title h1{font-size:20px;font-weight:900;letter-spacing:4px;color:#0B3B2E;text-transform:uppercase}
-.doc-title p{font-size:9px;color:#777;margin-top:2px}
-.receipt-bar{background:#0B3B2E;color:#fff;padding:8px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center}
-.receipt-bar span{font-weight:900;font-size:14px;font-family:monospace}.receipt-bar small{font-size:9px;opacity:.8}
-.amount-box{background:#0B3B2E;color:#fff;padding:14px 20px;margin:14px 0;text-align:center}
-.amount-box .lbl{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;opacity:.7}
-.amount-box .amt{font-size:28px;font-weight:900;font-family:monospace;margin-top:2px}
-.sec{font-size:9px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#0B3B2E;border-bottom:1.5px solid #0B3B2E;padding-bottom:4px;margin:12px 0 8px}
-.g2{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px}
-.f label{font-size:8px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:2px}
-.f span{font-size:11px;font-weight:600;color:#0f172a;display:block;padding:4px 8px;border:1px solid #e2e8f0;background:#f8fafc;min-height:24px}
-.thanks{text-align:center;margin:16px 0 8px;font-size:13px;font-weight:900;letter-spacing:3px;color:#0B3B2E;text-transform:uppercase}
-.sig-box{border-top:1.5px solid #334155;padding-top:6px;margin-top:24px;max-width:200px}
-.sig-box p{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#64748b;margin-top:2px}
-.footer{margin-top:16px;padding-top:8px;border-top:1px solid #e2e8f0;font-size:8px;color:#94a3b8;text-align:center}
-@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}@page{size:A5 portrait;margin:8mm}}</style></head><body><div class="page">
-<div class="hdr"><div class="brand">${esc(coName)}</div><div class="co-info"><strong>${esc(coName)}</strong><br/>${esc([co.physicalAddress, co.telephone, co.email].filter(Boolean).join(" | "))}</div></div>
-<div class="doc-title"><h1>Payment Receipt</h1><p>Official Receipt — Property Sale Transaction</p></div>
-<div class="receipt-bar"><div><small>Receipt No.</small><br/><span>${esc(payment.paymentNumber)}</span></div><div style="text-align:right"><small>Date</small><br/><span>${esc(fmtD(payment.paymentDate))}</span></div></div>
-<div class="amount-box"><div class="lbl">Amount Received</div><div class="amt">${esc(fmtAmt(payment.amount))}</div><div style="font-size:10px;opacity:.75;margin-top:4px">${esc(fmtLabel(payment.paymentType))} via ${esc(fmtLabel(payment.paymentMethod))}</div></div>
-<div class="sec">Deal Reference</div>
-<div class="g2">
-  <div class="f"><label>Deal No.</label><span>${esc(deal.dealNumber || "—")}</span></div>
-  <div class="f"><label>Property</label><span>${esc(listing.title || listing.listingNumber || "—")}</span></div>
-  <div class="f"><label>Buyer</label><span>${esc(buyer.fullName || "—")}</span></div>
-  <div class="f"><label>Agreed Price</label><span>${esc(fmtAmt(deal.agreedPrice))}</span></div>
-</div>
-<div class="sec">Payment Details</div>
-<div class="g2">
-  <div class="f"><label>Type</label><span>${esc(fmtLabel(payment.paymentType))}</span></div>
-  <div class="f"><label>Method</label><span>${esc(fmtLabel(payment.paymentMethod))}</span></div>
-  ${payment.reference ? `<div class="f" style="grid-column:1/-1"><label>Reference / Code</label><span style="font-family:monospace;font-weight:900">${esc(payment.reference)}</span></div>` : ""}
-</div>
-${payment.notes ? `<div class="sec">Notes</div><div style="border:1px solid #e2e8f0;padding:8px;background:#f8fafc;font-size:10px">${esc(payment.notes)}</div>` : ""}
-<div class="thanks">— Received With Thanks —</div>
-<div class="sig-box"><br/><p>Authorized Signature</p><p style="color:#0f172a">${esc(coName)}</p></div>
-<div class="footer">Computer-generated receipt. Generated: ${new Date().toLocaleString("en-KE")} | MILIK Property Sales</div>
-</div></body></html>`;
-    const w = window.open("", "_blank", "width=780,height=640");
-    if (!w) return;
-    w.document.write(html);
-    w.document.close();
-    w.onload = () => w.print();
-  };
-
   const handleRecordPayment = async () => {
     if (!payingDeal) return;
     if (!payForm.amount || Number(payForm.amount) <= 0) return toast.warning("Valid amount required");
@@ -297,7 +299,7 @@ ${payment.notes ? `<div class="sec">Notes</div><div style="border:1px solid #e2e
       setShowPayModal(false);
       setPayForm(blankPayForm);
       toast.success("Payment recorded");
-      printPaymentReceipt(payment);
+      window.open(`/sale/payments/${payment._id}/receipt`, "_blank");
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to record payment");
     } finally {
@@ -334,177 +336,6 @@ ${payment.notes ? `<div class="sec">Notes</div><div style="border:1px solid #e2e
     }
   };
 
-  const printStatement = async (row) => {
-    setPrintingStmt(row._id);
-    try {
-      const res  = await saleApi.listPayments({ deal: row._id, limit: 500 });
-      const pmts = (res.payments ?? res.data ?? []).filter((p) => p.status === "paid");
-      const co   = currentCompany || {};
-      const coName = co.companyName || co.name || "MILIK";
-      const esc  = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-      const fmtD = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "long", year: "numeric" }) : "—";
-      const fmtAmt = (n) => Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-      const totalPaid   = pmts.reduce((s, p) => s + (p.amount || 0), 0);
-      const outstanding = (row.agreedPrice || 0) - totalPaid;
-
-      let running = row.agreedPrice || 0;
-      const payRows = pmts.map((p, i) => {
-        running -= (p.amount || 0);
-        return `<tr>
-          <td class="n">${i + 1}</td>
-          <td>${esc(fmtD(p.paymentDate))}</td>
-          <td>${esc(fmtLabel(p.paymentType))}</td>
-          <td>${esc(fmtLabel(p.paymentMethod))}${p.reference ? `<br/><span style="font-family:monospace;font-size:9px;color:#64748b">${esc(p.reference)}</span>` : ""}</td>
-          <td class="r">${esc(fmtAmt(p.amount))}</td>
-          <td class="r ${running > 0 ? "red" : "grn"}">${esc(fmtAmt(running))}</td>
-        </tr>`;
-      }).join("");
-
-      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Statement — ${esc(row.dealNumber)}</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#0f172a}
-.page{max-width:210mm;margin:0 auto;padding:14mm 16mm 12mm}
-.hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0B3B2E;padding-bottom:12px;margin-bottom:16px}
-.brand{font-size:22px;font-weight:900;color:#0B3B2E;letter-spacing:2px}
-.co-info{text-align:right;font-size:9px;color:#555;line-height:1.7}
-.doc-title{text-align:center;margin-bottom:16px}
-.doc-title h1{font-size:18px;font-weight:900;color:#0B3B2E;text-transform:uppercase;letter-spacing:4px}
-.doc-title p{font-size:9px;color:#777;margin-top:3px}
-.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#e2e8f0;border:1px solid #e2e8f0;margin-bottom:14px}
-.ic{background:#fff;padding:8px 12px}
-.ic label{font-size:8px;font-weight:900;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;display:block;margin-bottom:2px}
-.ic span{font-size:11px;font-weight:600;color:#0f172a}
-.bal-bar{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border:0;margin-bottom:14px}
-.bc{padding:10px 14px;color:#fff}
-.bc .lbl{font-size:8px;font-weight:900;text-transform:uppercase;letter-spacing:1px;opacity:.7}
-.bc .val{font-size:17px;font-weight:900;font-family:monospace;margin-top:3px}
-table{width:100%;border-collapse:collapse;margin-bottom:14px;font-size:11px}
-thead tr{background:#0B3B2E;color:#fff}
-th{padding:7px 10px;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:1px;text-align:left}
-th.r,td.r{text-align:right}
-td{padding:7px 10px;border-bottom:1px solid #f1f5f9}
-td.n{color:#94a3b8;font-size:9px;text-align:center;width:28px}
-td.r{font-family:monospace;font-weight:700}
-td.red{color:#dc2626}td.grn{color:#0B3B2E}
-tr:nth-child(even){background:#f8fafc}
-.empty{padding:20px;text-align:center;color:#94a3b8;font-style:italic;font-size:11px}
-.sig-grid{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-top:22px;padding-top:14px;border-top:1px solid #e2e8f0}
-.sig-line{border-bottom:1.5px solid #334155;height:28px;margin-bottom:4px}
-.sig-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#64748b}
-.footer{margin-top:14px;border-top:1px solid #e2e8f0;padding-top:8px;font-size:8px;color:#94a3b8;text-align:center;line-height:1.7}
-@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}@page{size:A4 portrait;margin:8mm}}</style></head><body><div class="page">
-<div class="hdr">
-  <div><div class="brand">${esc(coName)}</div><div style="font-size:9px;color:#64748b;margin-top:4px">Property Sales Division</div></div>
-  <div class="co-info"><strong>${esc(coName)}</strong><br/>${esc([co.physicalAddress, co.telephone, co.email].filter(Boolean).join(" | "))}</div>
-</div>
-<div class="doc-title">
-  <h1>Statement of Account</h1>
-  <p>Payment history for sale transaction &bull; Generated: ${new Date().toLocaleDateString("en-KE", { day: "2-digit", month: "long", year: "numeric" })}</p>
-</div>
-<div class="info-grid">
-  <div class="ic"><label>Deal No.</label><span>${esc(row.dealNumber)}</span></div>
-  <div class="ic"><label>Deal Date</label><span>${esc(fmtD(row.dealDate))}</span></div>
-  <div class="ic"><label>Property</label><span>${esc(row.listing?.title || "—")}</span></div>
-  <div class="ic"><label>Listing No.</label><span>${esc(row.listing?.listingNumber || "—")}</span></div>
-  <div class="ic"><label>Buyer</label><span>${esc(row.buyer?.fullName || "—")}</span></div>
-  <div class="ic"><label>Sales Agent</label><span>${esc(row.agent?.fullName || "—")}</span></div>
-</div>
-<div class="bal-bar">
-  <div class="bc" style="background:#0B3B2E"><div class="lbl">Agreed Sale Price</div><div class="val">KES ${esc(fmtAmt(row.agreedPrice))}</div></div>
-  <div class="bc" style="background:#07271e"><div class="lbl">Total Received</div><div class="val">KES ${esc(fmtAmt(totalPaid))}</div></div>
-  <div class="bc" style="background:${outstanding > 0 ? "#7f1d1d" : "#064e3b"}"><div class="lbl">Outstanding Balance</div><div class="val">KES ${esc(fmtAmt(outstanding))}</div></div>
-</div>
-<table>
-  <thead><tr>
-    <th style="width:28px">#</th><th>Date</th><th>Type</th><th>Method / Reference</th><th class="r">Amount (KES)</th><th class="r">Balance (KES)</th>
-  </tr></thead>
-  <tbody>${pmts.length === 0 ? `<tr><td colspan="6" class="empty">No payments recorded against this deal.</td></tr>` : payRows}</tbody>
-</table>
-<div class="sig-grid">
-  <div><div class="sig-line"></div><div class="sig-lbl">Authorized by — ${esc(coName)}</div></div>
-  <div><div class="sig-line"></div><div class="sig-lbl">Acknowledged by — Buyer</div></div>
-</div>
-<div class="footer">
-  Statement of Account for Deal ${esc(row.dealNumber)} &bull; All amounts in Kenya Shillings (KES)<br/>
-  Issued by MILIK Property Sales System &bull; ${new Date().toLocaleString("en-KE")}
-</div>
-</div></body></html>`;
-      const w = window.open("", "_blank", "width=900,height=760");
-      if (!w) return;
-      w.document.write(html);
-      w.document.close();
-      w.onload = () => w.print();
-    } catch {
-      toast.error("Failed to load payment history");
-    } finally {
-      setPrintingStmt("");
-    }
-  };
-
-  const printDeal = (row) => {
-    const co = currentCompany || {};
-    const coName = co.companyName || co.name || "MILIK";
-    const esc  = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const fmtD = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "long", year: "numeric" }) : "—";
-    const coInfo   = [co.phone || co.phoneNumber, co.email || co.companyEmail].filter(Boolean).join(" • ");
-    const statusC  = { active: "#1e40af", closed: "#166534", cancelled: "#9f1239" }[row.status] || "#334155";
-    const statusBg2 = { active: "#dbeafe", closed: "#dcfce7", cancelled: "#ffe4e6" }[row.status] || "#f1f5f9";
-    const balance  = row.agreedPrice - (row.totalPaid || 0);
-    const prepBy   = [currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(" ") || currentUser?.email || "Milik Admin";
-    const win = window.open("", "_blank", "width=900,height=760");
-    if (!win) return;
-    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Sale Agreement – ${esc(row.dealNumber)}</title>
-<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;padding:28px 32px;font-size:12px}
-.hdr{display:grid;grid-template-columns:1fr 180px;align-items:start;border-bottom:3px solid #0B3B2E;padding-bottom:14px;margin-bottom:18px}
-.co-name{font-size:18px;font-weight:900;color:#0B3B2E}.co-sub{font-size:9px;color:#64748b;line-height:1.5}
-.doc-type{font-size:13px;font-weight:900;color:#0B3B2E;text-transform:uppercase;letter-spacing:.05em;text-align:right}
-.doc-no{font-family:monospace;font-size:15px;font-weight:700;text-align:right;margin-top:3px}
-.badge{display:inline-block;padding:3px 12px;font-size:10px;font-weight:800;float:right;margin-top:6px;background:${statusBg2};color:${statusC}}
-.price-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px}
-.price-box{border:1.5px solid #e2e8f0;padding:10px 14px}.price-box.main{border-color:#0B3B2E;background:#f0faf5}
-.pl{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:3px}
-.pv{font-size:18px;font-weight:900;color:#0f172a;font-family:monospace}.pv.green{color:#0B3B2E}
-.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:#e2e8f0;border:1px solid #e2e8f0;overflow:hidden;margin-bottom:14px}
-.field{background:#fff;padding:9px 12px}.fl{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:2px}
-.fv{font-size:11px;font-weight:600;color:#1e293b}.st{font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.12em;color:#0B3B2E;margin:14px 0 6px}
-.sig-section{border-top:2px solid #0B3B2E;padding-top:18px;margin-top:24px}
-.sig-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:16px}
-.sig-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#0B3B2E;margin-bottom:14px}
-.sig-line{border-bottom:1.5px solid #94a3b8;height:28px;margin-bottom:4px}.sig-sub{font-size:9px;color:#94a3b8;margin-bottom:10px}
-.notice{font-size:9px;color:#94a3b8;text-align:center;margin-top:18px;border-top:1px solid #f1f5f9;padding-top:10px;line-height:1.6}
-@media print{body{padding:14px 16px}@page{size:A4 portrait;margin:10mm}}</style></head><body>
-<div class="hdr"><div><div class="co-name">${esc(coName)}</div>${coInfo ? `<div class="co-sub">${esc(coInfo)}</div>` : ""}</div>
-<div><div class="doc-type">Sale Agreement</div><div class="doc-no">${esc(row.dealNumber)}</div><div class="badge">${esc(String(row.status || "").toUpperCase())}</div></div></div>
-<div class="price-row">
-<div class="price-box main"><div class="pl">Agreed Sale Price</div><div class="pv green">${esc(fmtKES(row.agreedPrice))}</div></div>
-<div class="price-box"><div class="pl">Amount Paid</div><div class="pv">${esc(fmtKES(row.totalPaid || 0))}</div></div>
-<div class="price-box"><div class="pl">Outstanding Balance</div><div class="pv ${balance > 0 ? "" : "green"}">${esc(fmtKES(balance))}</div></div></div>
-<div class="st">Transaction Details</div><div class="grid">
-<div class="field"><div class="fl">Deal No.</div><div class="fv">${esc(row.dealNumber)}</div></div>
-<div class="field"><div class="fl">Deal Date</div><div class="fv">${esc(fmtD(row.dealDate))}</div></div>
-<div class="field"><div class="fl">Expected Closing</div><div class="fv">${esc(fmtD(row.expectedClosingDate))}</div></div>
-<div class="field"><div class="fl">Actual Closing</div><div class="fv">${esc(fmtD(row.actualClosingDate))}</div></div>
-<div class="field"><div class="fl">Title Transfer</div><div class="fv">${esc(fmtD(row.titleTransferDate))}</div></div></div>
-<div class="st">Property</div><div class="grid">
-<div class="field"><div class="fl">Listing No.</div><div class="fv">${esc(row.listing?.listingNumber)}</div></div>
-<div class="field"><div class="fl">Title</div><div class="fv">${esc(row.listing?.title)}</div></div>
-<div class="field"><div class="fl">Location</div><div class="fv">${esc(row.listing?.location || row.listing?.town)}</div></div></div>
-<div class="st">Parties</div><div class="grid">
-<div class="field"><div class="fl">Buyer</div><div class="fv">${esc(row.buyer?.fullName)}</div></div>
-<div class="field"><div class="fl">Buyer Code</div><div class="fv">${esc(row.buyer?.buyerNumber)}</div></div>
-<div class="field"><div class="fl">Buyer Phone</div><div class="fv">${esc(row.buyer?.phone)}</div></div>
-<div class="field"><div class="fl">Sales Agent</div><div class="fv">${esc(row.agent?.fullName || "N/A")}</div></div></div>
-${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:11px;color:#334155;line-height:1.6;margin-bottom:14px"><div style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:4px">Notes</div>${esc(row.notes)}</div>` : ""}
-<div class="sig-section"><div class="sig-grid">
-<div><div class="sig-title">Prepared By</div><div class="sig-line" style="display:flex;align-items:flex-end;padding-bottom:3px;"><span style="font-size:11px;font-weight:700;">${esc(prepBy)}</span></div><div class="sig-sub">Signature &amp; Date</div></div>
-<div><div class="sig-title">Buyer</div><div class="sig-line"></div><div class="sig-sub">Signature &amp; Date</div><div class="sig-line"></div><div class="sig-sub">Full Name</div></div>
-<div><div class="sig-title">Sales Agent</div><div class="sig-line"></div><div class="sig-sub">Signature &amp; Date</div></div>
-<div><div class="sig-title">Authorized Officer</div><div class="sig-line"></div><div class="sig-sub">Signature &amp; Date</div></div></div></div>
-<div class="notice">Official sale agreement record issued by ${esc(coName)} • Printed: ${new Date().toLocaleDateString("en-KE", { day: "2-digit", month: "long", year: "numeric" })} • Does not substitute a formal legal agreement</div>
-</body></html>`);
-    win.document.close();
-    setTimeout(() => { win.focus(); win.print(); }, 400);
-  };
 
   const applySearch = (e) => { e.preventDefault(); setAppliedSearch(search); setPage(1); };
   const resetFilters = () => { setSearch(""); setAppliedSearch(""); setStatusFilter(""); setPage(1); };
@@ -616,15 +447,14 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
                     </td>
                     <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="inline-flex items-center gap-1">
-                        <button type="button" onClick={() => printDeal(row)} title="Print Agreement" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                        <button type="button" onClick={() => window.open(`/sale/deals/${row._id}/summary`, "_blank")} title="Print Agreement Cover" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
                           <FaPrint className="text-[9px]" />
                         </button>
                         <button
                           type="button"
-                          onClick={() => printStatement(row)}
-                          disabled={printingStmt === row._id}
+                          onClick={() => window.open(`/sale/deals/${row._id}/statement`, "_blank")}
                           title="Statement of Account"
-                          className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-40"
+                          className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
                         >
                           <FaFileAlt className="text-[9px]" />
                         </button>
@@ -776,7 +606,7 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
                     <div className="flex items-center gap-1 flex-shrink-0">
                       <span className="font-black text-xs text-slate-900">{fmtKES(p.amount)}</span>
                       <button
-                        onClick={() => printPaymentReceipt({ ...p, deal: { ...selected, listing: selected.listing, buyer: selected.buyer } })}
+                        onClick={() => window.open(`/sale/payments/${p._id}/receipt`, "_blank")}
                         className="border border-[#B7C9C0] bg-white p-0.5 text-[#0B3B2E] hover:bg-[#F1F6F3]"
                         title="Print Receipt"
                       >
@@ -811,14 +641,67 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
                 </div>
               </>
             )}
+
+            {/* Payment Schedule */}
+            <div className="flex-shrink-0 flex items-center justify-between border-t border-slate-200 px-4 py-1.5 mt-1">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Payment Schedule</span>
+              {selected.status === "active" && (
+                <button type="button" onClick={() => openScheduleBuilder(selected)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-[#F1F6F3] px-2 py-0.5 text-[9px] font-black uppercase text-[#0B3B2E] hover:bg-[#B7C9C0]/40">
+                  <FaCalendarAlt size={8} /> {dealSchedule.length > 0 ? "Edit" : "Set"} Schedule
+                </button>
+              )}
+            </div>
+            {dealSchedule.length === 0 ? (
+              <div className="px-4 pb-3 text-[11px] text-slate-400">No schedule defined.</div>
+            ) : (
+              <div className="px-4 pb-3 space-y-1.5">
+                {dealSchedule.map((item) => {
+                  const paidPmts = dealPmts.filter((p) => p._id === (item.linkedPayment?._id || item.linkedPayment));
+                  return (
+                    <div key={item._id} className={`border px-3 py-2 text-xs ${
+                      item.status === "paid"    ? "border-emerald-200 bg-emerald-50"
+                      : item.status === "overdue" ? "border-rose-200 bg-rose-50"
+                      : item.status === "waived"  ? "border-slate-200 bg-slate-50 opacity-60"
+                      : "border-slate-200 bg-white"
+                    }`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="font-black text-slate-900">#{item.installmentNumber} · {fmtKES(item.expectedAmount)}</div>
+                          <div className="text-[10px] text-slate-500">{fmtDate(item.dueDate)} · {item.description || `Installment ${item.installmentNumber}`}</div>
+                          {item.linkedPayment && (
+                            <div className="text-[10px] text-emerald-700 mt-0.5">
+                              <FaCheck className="inline mr-0.5" size={8} />
+                              Linked: {item.linkedPayment.paymentNumber}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className={`border px-1 py-0.5 text-[8px] font-black uppercase ${
+                            item.status === "paid" ? "border-emerald-300 text-emerald-700"
+                            : item.status === "overdue" ? "border-rose-300 text-rose-700"
+                            : item.status === "waived" ? "border-slate-300 text-slate-400"
+                            : "border-slate-300 text-slate-500"
+                          }`}>{item.status}</span>
+                          {item.status !== "paid" && item.status !== "waived" && dealPmts.length > 0 && (
+                            <button type="button" onClick={() => setLinkingInstallment(item)} className="inline-flex items-center gap-0.5 text-[9px] font-bold text-[#0B3B2E] hover:underline">
+                              <FaLink size={7} /> Link
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Panel footer actions */}
           <div className="flex-shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-2 flex items-center gap-1.5">
-            <button onClick={() => printDeal(selected)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+            <button onClick={() => window.open(`/sale/deals/${selected._id}/summary`, "_blank")} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
               <FaPrint size={8} /> Agreement
             </button>
-            <button onClick={() => printStatement(selected)} disabled={printingStmt === selected._id} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-40">
+            <button onClick={() => window.open(`/sale/deals/${selected._id}/statement`, "_blank")} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
               <FaFileAlt size={8} /> Statement
             </button>
             {selected.buyer?.phone && (
@@ -884,11 +767,46 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
             </div>
             <div>
               <label className={labelCls}>Sales Agent (Optional)</label>
-              <select value={form.agent} onChange={(e) => setForm((p) => ({ ...p, agent: e.target.value }))} className={inputCls}>
+              <select value={form.agent} onChange={(e) => setForm((p) => ({ ...p, agent: e.target.value, commOverrideEnabled: false, commissionRateOverride: "", commissionTypeOverride: "", commissionAmountOverride: "" }))} className={inputCls}>
                 <option value="">No agent</option>
                 {agents.map((a) => <option key={a._id} value={a._id}>{a.fullName} ({a.agentNumber})</option>)}
               </select>
             </div>
+            {!editingId && form.agent && (() => {
+              const selAgent = agents.find((a) => a._id === form.agent);
+              return (
+                <div className="md:col-span-2 border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={!!form.commOverrideEnabled} onChange={(e) => setForm((p) => ({ ...p, commOverrideEnabled: e.target.checked }))} className="h-3.5 w-3.5 accent-[#0B3B2E]" />
+                    <span className="text-[11px] font-extrabold uppercase tracking-wide text-slate-600">Override Commission</span>
+                    {selAgent && !form.commOverrideEnabled && (
+                      <span className="ml-1 text-[11px] text-slate-400">
+                        (Default: {selAgent.commissionType === "percentage" ? `${selAgent.commissionRate}%` : `KES ${Number(selAgent.commissionRate).toLocaleString()}`} — {selAgent.commissionType})
+                      </span>
+                    )}
+                  </label>
+                  {form.commOverrideEnabled && (
+                    <div className="mt-2.5 grid gap-3 sm:grid-cols-3">
+                      <div>
+                        <label className={labelCls}>Commission Type</label>
+                        <select value={form.commissionTypeOverride || selAgent?.commissionType || "percentage"} onChange={(e) => setForm((p) => ({ ...p, commissionTypeOverride: e.target.value, commissionAmountOverride: "" }))} className={inputCls}>
+                          <option value="percentage">Percentage (%)</option>
+                          <option value="fixed">Fixed Amount (KES)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelCls}>{(form.commissionTypeOverride || selAgent?.commissionType) === "fixed" ? "Commission Amount (KES)" : "Commission Rate (%)"}</label>
+                        <input type="number" min="0" step="0.01" value={form.commissionRateOverride} onChange={(e) => setForm((p) => ({ ...p, commissionRateOverride: e.target.value, commissionAmountOverride: "" }))} className={inputCls} placeholder={selAgent ? String(selAgent.commissionRate) : ""} />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Direct Amount Override (KES)</label>
+                        <input type="number" min="0" step="0.01" value={form.commissionAmountOverride} onChange={(e) => setForm((p) => ({ ...p, commissionAmountOverride: e.target.value }))} className={inputCls} placeholder="Skip rate — set exact amount" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
             <div>
               <label className={labelCls}>Agreed Price (KES)</label>
               <AmountInput value={form.agreedPrice} onChange={(v) => setForm((p) => ({ ...p, agreedPrice: v }))} className={inputCls} placeholder="e.g. 8,500,000" />
@@ -1096,6 +1014,90 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
               <textarea rows={2} value={payForm.notes} onChange={(e) => setPayForm((f) => ({ ...f, notes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
             </div>
           </div>
+        </Modal>
+      )}
+
+      {/* Schedule Builder Modal */}
+      {showScheduleBuilder && selected && (
+        <Modal
+          title="Payment Schedule"
+          subtitle={`${selected.dealNumber} — ${fmtKES(selected.agreedPrice)} total`}
+          onClose={() => setShowScheduleBuilder(false)}
+          footer={
+            <>
+              <button type="button" onClick={() => setShowScheduleBuilder(false)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button type="button" onClick={handleSaveSchedule} disabled={scheduleSaving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#07271e] disabled:opacity-60">
+                {scheduleSaving ? "Saving…" : "Save Schedule"}
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-2">
+            {scheduleItems.map((item, idx) => (
+              <div key={idx} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end border border-slate-200 bg-slate-50 px-3 py-2">
+                <div>
+                  <label className={labelCls}>Due Date</label>
+                  <input type="date" value={item.dueDate} onChange={(e) => setScheduleItems((prev) => prev.map((x, i) => i === idx ? { ...x, dueDate: e.target.value } : x))} className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Amount (KES)</label>
+                  <input type="number" min="0" value={item.expectedAmount} onChange={(e) => setScheduleItems((prev) => prev.map((x, i) => i === idx ? { ...x, expectedAmount: e.target.value } : x))} className={inputCls} placeholder="0.00" />
+                </div>
+                <div>
+                  <label className={labelCls}>Description</label>
+                  <input type="text" value={item.description} onChange={(e) => setScheduleItems((prev) => prev.map((x, i) => i === idx ? { ...x, description: e.target.value } : x))} className={inputCls} placeholder={`Installment ${idx + 1}`} />
+                </div>
+                <div>
+                  <button type="button" onClick={() => setScheduleItems((prev) => prev.filter((_, i) => i !== idx))} className="h-8 w-8 border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 flex items-center justify-center">
+                    <FaTrash size={9} />
+                  </button>
+                </div>
+              </div>
+            ))}
+            <button type="button" onClick={() => setScheduleItems((prev) => [...prev, { dueDate: "", expectedAmount: "", description: `Installment ${prev.length + 1}` }])} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-[#F1F6F3] px-3 py-1.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#B7C9C0]/40">
+              <FaPlus size={8} /> Add Installment
+            </button>
+            {scheduleItems.length > 0 && (
+              <div className="mt-2 text-right text-xs">
+                <span className="text-slate-500">Schedule total: </span>
+                <span className={`font-black ${Math.abs(scheduleItems.reduce((s, i) => s + Number(i.expectedAmount || 0), 0) - selected.agreedPrice) < 1 ? "text-emerald-700" : "text-rose-600"}`}>
+                  {fmtKES(scheduleItems.reduce((s, i) => s + Number(i.expectedAmount || 0), 0))}
+                </span>
+                <span className="text-slate-400"> / {fmtKES(selected.agreedPrice)}</span>
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {/* Link Payment to Installment Modal */}
+      {linkingInstallment && selected && (
+        <Modal
+          title="Link Payment to Installment"
+          subtitle={`#${linkingInstallment.installmentNumber} · ${fmtKES(linkingInstallment.expectedAmount)}`}
+          onClose={() => setLinkingInstallment(null)}
+        >
+          {dealPmts.length === 0 ? (
+            <div className="py-6 text-center text-xs text-slate-400">No confirmed payments to link.</div>
+          ) : (
+            <div className="space-y-2">
+              <div className="mb-3 text-xs text-slate-500">Select the payment that fulfils installment #{linkingInstallment.installmentNumber}:</div>
+              {dealPmts.map((p) => (
+                <button
+                  key={p._id}
+                  type="button"
+                  onClick={() => handleLinkPayment(linkingInstallment._id, p._id)}
+                  className="w-full border border-slate-200 px-3 py-2.5 text-left hover:bg-[#F1F6F3] text-xs"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-black text-[#0B3B2E]">{p.paymentNumber}</span>
+                    <span className="font-black text-slate-900">{fmtKES(p.amount)}</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">{fmtDate(p.paymentDate)} · {String(p.paymentMethod || "").replace(/_/g, " ")}</div>
+                </button>
+              ))}
+            </div>
+          )}
         </Modal>
       )}
     </PropertySaleShell>

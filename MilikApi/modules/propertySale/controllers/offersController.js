@@ -29,7 +29,7 @@ export const listOffers = async (req, res, next) => {
       populateOffer(SaleOffer.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit)).lean(),
       SaleOffer.countDocuments(filter),
     ]);
-    res.status(200).json({ offers, total, page, pages: Math.ceil(total / limit) });
+    res.status(200).json({ data: offers, total, page, pages: Math.ceil(total / limit) });
   } catch (err) {
     next(err);
   }
@@ -89,7 +89,7 @@ export const updateOffer = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
-    const { business: _b, offerNumber: _n, createdBy: _c, listing: _l, buyer: _by, ...updates } = req.body;
+    const { business: _b, offerNumber: _n, createdBy: _c, listing: _l, buyer: _by, status: _s, ...updates } = req.body;
     const offer = await populateOffer(
       SaleOffer.findOneAndUpdate(
         { _id: req.params.id, business },
@@ -164,7 +164,23 @@ export const deleteOffer = async (req, res, next) => {
     const offer = await SaleOffer.findOne({ _id: req.params.id, business });
     if (!offer) return next(createError(404, "Offer not found"));
     if (offer.status === "accepted") return next(createError(400, "Cannot delete an accepted offer — cancel the deal instead"));
+
+    const listingId = offer.listing;
     await offer.deleteOne();
+
+    // Restore listing to available if no other active offers remain
+    const otherActive = await SaleOffer.findOne({
+      business,
+      listing: listingId,
+      status: { $in: ["pending", "negotiating", "accepted"] },
+    });
+    if (!otherActive) {
+      await SaleListing.findOneAndUpdate(
+        { _id: listingId, business, status: "reserved" },
+        { status: "available" }
+      );
+    }
+
     res.status(200).json({ message: "Offer deleted" });
   } catch (err) {
     next(err);

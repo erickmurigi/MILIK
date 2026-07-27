@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
-import { FaEdit, FaPlus, FaPrint, FaRedoAlt, FaSearch, FaTimes, FaTrash } from "react-icons/fa";
+import { useNavigate } from "react-router-dom";
+import { FaChartLine, FaEdit, FaPlus, FaPrint, FaRedoAlt, FaSearch, FaTimes, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
 import PaginationBar from "../../components/PaginationBar";
@@ -40,6 +41,7 @@ const SaleAgents = () => {
   const confirm        = useConfirm();
   const queryClient    = useQueryClient();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
+  const navigate       = useNavigate();
   const [saving,    setSaving]    = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState("");
@@ -254,6 +256,7 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
                   </td>
                   <td className="px-3 py-2 text-right">
                     <div className="inline-flex gap-1">
+                      <button type="button" onClick={() => navigate(`/sale/agents/${row._id}/performance`)} title="Performance" className="border border-violet-200 bg-violet-50 px-2 py-0.5 text-[11px] font-bold text-violet-700 hover:bg-violet-100"><FaChartLine className="text-[9px]" /></button>
                       <button type="button" onClick={() => printAgent(row)} className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"><FaPrint className="text-[9px]" /></button>
                       <button type="button" onClick={() => openEdit(row)} className="border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100"><FaEdit className="text-[9px]" /></button>
                       <button type="button" onClick={() => handleDelete(row)} className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-700 hover:bg-rose-100"><FaTrash className="text-[9px]" /></button>

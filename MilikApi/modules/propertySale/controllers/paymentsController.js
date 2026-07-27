@@ -35,13 +35,14 @@ export const listPayments = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const bId = new mongoose.Types.ObjectId(String(business));
-    const { deal = "", paymentType = "", paymentMethod = "", status = "", search = "" } = req.query;
+    const { deal = "", buyer = "", paymentType = "", paymentMethod = "", status = "", search = "" } = req.query;
     const page  = Math.max(1, parseInt(req.query.page)  || 1);
     const limit = Math.min(200, parseInt(req.query.limit) || 50);
     const skip  = (page - 1) * limit;
 
     const filter = { business };
     if (deal)          filter.deal          = new mongoose.Types.ObjectId(String(deal));
+    if (buyer)         filter.buyer         = new mongoose.Types.ObjectId(String(buyer));
     if (paymentType)   filter.paymentType   = paymentType;
     if (paymentMethod) filter.paymentMethod = paymentMethod;
     if (status)        filter.status        = status;
@@ -59,7 +60,18 @@ export const listPayments = async (req, res, next) => {
       ]),
     ]);
 
-    res.status(200).json({ payments, total, totalCollected: agg?.totalCollected || 0, page, limit });
+    res.status(200).json({ data: payments, total, totalCollected: agg?.totalCollected || 0, page, pages: Math.ceil(total / limit) || 1 });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getPayment = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const payment = await populatePayment(SalePayment.findOne({ _id: req.params.id, business })).lean();
+    if (!payment) return next(createError(404, "Payment not found"));
+    res.status(200).json(payment);
   } catch (err) {
     next(err);
   }

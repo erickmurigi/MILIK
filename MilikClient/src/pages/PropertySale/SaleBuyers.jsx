@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
-import { FaBan, FaCheck, FaEdit, FaEnvelope, FaFileAlt, FaPlus, FaPrint, FaRedoAlt, FaSearch, FaSms, FaTimes, FaTrash } from "react-icons/fa";
+import { FaBan, FaCheck, FaEdit, FaEnvelope, FaFileAlt, FaHandshake, FaHistory, FaMoneyBillWave, FaPlus, FaPrint, FaRedoAlt, FaSearch, FaSms, FaTimes, FaTrash } from "react-icons/fa";
 import CwSmsModal from "../CarWash/CwSmsModal";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
@@ -69,6 +69,7 @@ const SaleBuyers = () => {
   const [kycFilter,     setKycFilter]     = useTabState("/sale/buyers:kycFilter", "");
   const [page,          setPage]          = useTabState("/sale/buyers:page", 1);
   const [pageSize,      setPageSize]      = useTabState("/sale/buyers:pageSize", PAGE_SIZE);
+  const [panelTab,      setPanelTab]      = useState("profile");
 
   const biz = currentCompany?._id;
 
@@ -88,12 +89,29 @@ const SaleBuyers = () => {
   const total      = buyersData?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  // sync panel with fresh data after mutations
+  const selectedId = selected?._id;
+
+  const { data: buyerOffersData }    = useQuery({ queryKey: ["sale-buyer-offers",    biz, selectedId], queryFn: () => saleApi.listOffers({ business: biz, buyerId: selectedId, limit: 100 }), enabled: !!biz && !!selectedId, staleTime: 30_000 });
+  const { data: buyerDealsData }     = useQuery({ queryKey: ["sale-buyer-deals",     biz, selectedId], queryFn: () => saleApi.listDeals({ business: biz, buyerId: selectedId, limit: 100 }), enabled: !!biz && !!selectedId, staleTime: 30_000 });
+  const { data: buyerPaymentsData }  = useQuery({ queryKey: ["sale-buyer-payments",  biz, selectedId], queryFn: () => saleApi.listPayments({ business: biz, buyer: selectedId, limit: 100 }), enabled: !!biz && !!selectedId, staleTime: 30_000 });
+  const { data: buyerActivitiesData }= useQuery({ queryKey: ["sale-buyer-activities",biz, selectedId], queryFn: () => saleApi.listActivities({ business: biz, relatedBuyer: selectedId, limit: 100 }), enabled: !!biz && !!selectedId, staleTime: 30_000 });
+
+  const buyerOffers     = buyerOffersData?.data     ?? [];
+  const buyerDeals      = buyerDealsData?.data      ?? [];
+  const buyerPayments   = buyerPaymentsData?.data   ?? [];
+  const buyerActivities = buyerActivitiesData?.data ?? [];
+
+  const fmtKES  = (n) => Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 0 });
+  const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+
+  // sync panel with fresh data after mutations; reset tab when buyer changes
   useEffect(() => {
     if (!selected) return;
     const updated = buyers.find((b) => b._id === selected._id);
     if (updated) setSelected(updated);
   }, [buyers]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { setPanelTab("profile"); }, [selectedId]);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["sale-buyers", biz] });
 
@@ -337,7 +355,7 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
 
       {/* Table + KYC detail panel */}
       <div className="relative flex flex-col flex-1 min-h-0 overflow-hidden">
-        <div className={`flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm transition-[margin] duration-200 ${selected ? "mr-[360px]" : ""}`}>
+        <div className={`flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm transition-[margin] duration-200 ${selected ? "mr-[380px]" : ""}`}>
           <div className="flex-1 min-h-0 overflow-auto">
             <table className="w-full min-w-[640px] text-xs border-collapse">
               <thead>
@@ -392,170 +410,299 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
           <div className="absolute inset-0 z-[5]" onClick={() => setSelected(null)} />
         )}
 
-        {/* KYC Detail Panel */}
+        {/* Buyer Detail Panel */}
         {selected && (
-          <div className="absolute right-0 top-0 bottom-0 w-[360px] flex flex-col bg-white border-l border-slate-200 shadow-xl z-10 overflow-hidden">
+          <div className="absolute right-0 top-0 bottom-0 w-[380px] flex flex-col bg-white border-l border-slate-200 shadow-xl z-10 overflow-hidden">
             {/* Header */}
             <div className="flex-shrink-0 bg-[#0B3B2E] px-4 py-3 text-white">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="text-[10px] font-black uppercase tracking-wider text-white/60">{selected.buyerNumber}</div>
                   <div className="mt-0.5 text-sm font-black leading-tight">{selected.fullName}</div>
+                  {selected.phone && <div className="text-[10px] text-white/60 mt-0.5">{selected.phone}{selected.email ? ` · ${selected.email}` : ""}</div>}
                 </div>
                 <button type="button" onClick={() => setSelected(null)} className="flex-shrink-0 p-1 text-white/70 hover:bg-white/10"><FaTimes size={12} /></button>
               </div>
-              <div className="mt-2">
+              <div className="mt-2 flex items-center gap-2">
                 <span className={`border px-1.5 py-0.5 text-[9px] font-black uppercase ${kycBadge(selected.kycStatus)}`}>{selected.kycStatus}</span>
+                <span className="text-[10px] text-white/50">{buyerDeals.length} deal{buyerDeals.length !== 1 ? "s" : ""} · {buyerOffers.length} offer{buyerOffers.length !== 1 ? "s" : ""}</span>
               </div>
+            </div>
+
+            {/* Tab nav */}
+            <div className="flex-shrink-0 flex border-b border-slate-200 bg-slate-50 overflow-x-auto">
+              {[
+                { id: "profile",    label: "Profile / KYC" },
+                { id: "offers",     label: `Offers (${buyerOffers.length})` },
+                { id: "deals",      label: `Deals (${buyerDeals.length})` },
+                { id: "payments",   label: `Payments (${buyerPayments.length})` },
+                { id: "activities", label: `Log (${buyerActivities.length})` },
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setPanelTab(t.id)}
+                  className={`flex-shrink-0 px-3 py-2 text-[10px] font-black uppercase tracking-wide whitespace-nowrap border-b-2 transition-colors ${panelTab === t.id ? "border-[#0B3B2E] text-[#0B3B2E] bg-white" : "border-transparent text-slate-400 hover:text-slate-700"}`}
+                >
+                  {t.label}
+                </button>
+              ))}
             </div>
 
             {/* Scrollable body */}
             <div className="flex-1 min-h-0 overflow-y-auto">
 
-              {/* Profile */}
-              <div className="border-b border-slate-100 px-4 py-3">
-                <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Profile</div>
-                <div className="space-y-1.5">
-                  {[
-                    ["ID / Passport", selected.idNumber],
-                    ["Phone",         selected.phone],
-                    ["Email",         selected.email],
-                    ["Nationality",   selected.nationality],
-                    ["Source",        String(selected.source || "").replace(/_/g, " ")],
-                    ["Address",       selected.address],
-                  ].filter(([, v]) => v).map(([label, val]) => (
-                    <div key={label} className="flex items-baseline gap-2">
-                      <span className="w-[100px] flex-shrink-0 text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</span>
-                      <span className="text-xs text-slate-800 break-all">{val}</span>
+              {/* ── Profile / KYC tab ── */}
+              {panelTab === "profile" && (
+                <>
+                  <div className="border-b border-slate-100 px-4 py-3">
+                    <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Contact Details</div>
+                    <div className="space-y-1.5">
+                      {[
+                        ["ID / Passport", selected.idNumber],
+                        ["Phone",         selected.phone],
+                        ["Email",         selected.email],
+                        ["Nationality",   selected.nationality],
+                        ["Source",        String(selected.source || "").replace(/_/g, " ")],
+                        ["Address",       selected.address],
+                      ].filter(([, v]) => v).map(([label, val]) => (
+                        <div key={label} className="flex items-baseline gap-2">
+                          <span className="w-[100px] flex-shrink-0 text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</span>
+                          <span className="text-xs text-slate-800 break-all">{val}</span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-                {selected.notes && (
-                  <div className="mt-3 border-t border-slate-100 pt-3">
-                    <div className="mb-1 text-[9px] font-black uppercase tracking-widest text-slate-400">Notes</div>
-                    <div className="text-xs leading-relaxed text-slate-600">{selected.notes}</div>
-                  </div>
-                )}
-              </div>
-
-              {/* KYC quick actions */}
-              <div className="border-b border-slate-100 px-4 py-3">
-                <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">KYC Status</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {selected.kycStatus !== "verified" && (
-                    <button
-                      type="button"
-                      disabled={kycSaving}
-                      onClick={() => handleKycAction(selected, "verified")}
-                      className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
-                    >
-                      <FaCheck size={9} /> Verify
-                    </button>
-                  )}
-                  {selected.kycStatus !== "rejected" && (
-                    <button
-                      type="button"
-                      disabled={kycSaving}
-                      onClick={() => handleKycAction(selected, "rejected")}
-                      className="inline-flex items-center gap-1 border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-60"
-                    >
-                      <FaBan size={9} /> Reject
-                    </button>
-                  )}
-                  {selected.kycStatus !== "pending" && (
-                    <button
-                      type="button"
-                      disabled={kycSaving}
-                      onClick={() => handleKycAction(selected, "pending")}
-                      className="inline-flex items-center gap-1 border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700 hover:bg-amber-100 disabled:opacity-60"
-                    >
-                      Reset to Pending
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* KYC Documents */}
-              <div className="px-4 py-3">
-                <div className="mb-2 flex items-baseline gap-1.5">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">KYC Documents</span>
-                  <span className="text-[10px] font-bold text-slate-500">({(selected.kycDocuments || []).length})</span>
-                </div>
-                {(selected.kycDocuments || []).length > 0 ? (
-                  <div className="mb-2 space-y-1">
-                    {selected.kycDocuments.map((doc, idx) => (
-                      <div key={idx} className="flex items-center gap-2 border border-slate-200 bg-[#F1F6F3] px-2.5 py-1.5">
-                        <FaFileAlt size={9} className="flex-shrink-0 text-[#0B3B2E]" />
-                        <span className="flex-1 min-w-0 truncate text-xs text-slate-800" title={doc}>{doc}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveDoc(selected, idx)}
-                          disabled={kycSaving}
-                          className="flex-shrink-0 p-0.5 text-rose-400 hover:text-rose-600 disabled:opacity-40"
-                        >
-                          <FaTimes size={9} />
-                        </button>
+                    {selected.notes && (
+                      <div className="mt-3 border-t border-slate-100 pt-3">
+                        <div className="mb-1 text-[9px] font-black uppercase tracking-widest text-slate-400">Notes</div>
+                        <div className="text-xs leading-relaxed text-slate-600">{selected.notes}</div>
                       </div>
-                    ))}
+                    )}
                   </div>
-                ) : (
-                  <div className="mb-2 text-[11px] text-slate-400">No documents recorded.</div>
-                )}
-                <div className="flex gap-1">
-                  <input
-                    value={docInput}
-                    onChange={(e) => setDocInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleAddDoc(selected)}
-                    placeholder="e.g. National ID copy"
-                    className="h-7 flex-1 border border-slate-200 bg-white px-2.5 text-xs focus:border-[#0B3B2E] focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleAddDoc(selected)}
-                    disabled={kycSaving || !docInput.trim()}
-                    className="h-7 border border-[#B7C9C0] bg-[#F1F6F3] px-2.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#B7C9C0]/30 disabled:opacity-50"
-                  >
-                    <FaPlus size={9} />
-                  </button>
+                  <div className="border-b border-slate-100 px-4 py-3">
+                    <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">KYC Status</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selected.kycStatus !== "verified" && (
+                        <button type="button" disabled={kycSaving} onClick={() => handleKycAction(selected, "verified")}
+                          className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-60">
+                          <FaCheck size={9} /> Verify
+                        </button>
+                      )}
+                      {selected.kycStatus !== "rejected" && (
+                        <button type="button" disabled={kycSaving} onClick={() => handleKycAction(selected, "rejected")}
+                          className="inline-flex items-center gap-1 border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-60">
+                          <FaBan size={9} /> Reject
+                        </button>
+                      )}
+                      {selected.kycStatus !== "pending" && (
+                        <button type="button" disabled={kycSaving} onClick={() => handleKycAction(selected, "pending")}
+                          className="inline-flex items-center gap-1 border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700 hover:bg-amber-100 disabled:opacity-60">
+                          Reset to Pending
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="px-4 py-3">
+                    <div className="mb-2 flex items-baseline gap-1.5">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">KYC Documents</span>
+                      <span className="text-[10px] font-bold text-slate-500">({(selected.kycDocuments || []).length})</span>
+                    </div>
+                    {(selected.kycDocuments || []).length > 0 ? (
+                      <div className="mb-2 space-y-1">
+                        {selected.kycDocuments.map((doc, idx) => (
+                          <div key={idx} className="flex items-center gap-2 border border-slate-200 bg-[#F1F6F3] px-2.5 py-1.5">
+                            <FaFileAlt size={9} className="flex-shrink-0 text-[#0B3B2E]" />
+                            <span className="flex-1 min-w-0 truncate text-xs text-slate-800" title={doc}>{doc}</span>
+                            <button type="button" onClick={() => handleRemoveDoc(selected, idx)} disabled={kycSaving} className="flex-shrink-0 p-0.5 text-rose-400 hover:text-rose-600 disabled:opacity-40">
+                              <FaTimes size={9} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mb-2 text-[11px] text-slate-400">No documents recorded.</div>
+                    )}
+                    <div className="flex gap-1">
+                      <input value={docInput} onChange={(e) => setDocInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleAddDoc(selected)}
+                        placeholder="e.g. National ID copy" className="h-7 flex-1 border border-slate-200 bg-white px-2.5 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+                      <button type="button" onClick={() => handleAddDoc(selected)} disabled={kycSaving || !docInput.trim()}
+                        className="h-7 border border-[#B7C9C0] bg-[#F1F6F3] px-2.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#B7C9C0]/30 disabled:opacity-50">
+                        <FaPlus size={9} />
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* ── Offers tab ── */}
+              {panelTab === "offers" && (
+                <div className="px-4 py-3">
+                  {buyerOffers.length === 0 ? (
+                    <div className="py-8 text-center text-xs text-slate-400">No offers found for this buyer.</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {buyerOffers.map((o) => (
+                        <div key={o._id} className="border border-slate-200 px-3 py-2.5">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <div className="font-mono text-[10px] font-black text-[#0B3B2E]">{o.offerNumber}</div>
+                              <div className="text-xs font-semibold text-slate-800 mt-0.5">{o.listing?.title || o.listing?.listingNumber || "—"}</div>
+                            </div>
+                            <span className={`flex-shrink-0 border px-1.5 py-0.5 text-[9px] font-black uppercase ${
+                              o.status === "accepted" ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : o.status === "rejected" || o.status === "withdrawn" ? "border-rose-200 bg-rose-50 text-rose-700"
+                              : o.status === "expired" ? "border-slate-200 bg-slate-50 text-slate-500"
+                              : "border-amber-200 bg-amber-50 text-amber-700"
+                            }`}>{o.status}</span>
+                          </div>
+                          <div className="mt-1.5 flex items-center gap-3 text-[11px] text-slate-500">
+                            <span>KES {fmtKES(o.offerAmount)}</span>
+                            <span>{fmtDate(o.offerDate)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
+
+              {/* ── Deals tab ── */}
+              {panelTab === "deals" && (
+                <div className="px-4 py-3">
+                  {buyerDeals.length === 0 ? (
+                    <div className="py-8 text-center text-xs text-slate-400">No deals found for this buyer.</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {buyerDeals.map((d) => {
+                        const pct = d.agreedPrice ? Math.min(100, Math.round((d.totalPaid / d.agreedPrice) * 100)) : 0;
+                        return (
+                          <div key={d._id} className="border border-slate-200 px-3 py-2.5">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <div className="font-mono text-[10px] font-black text-[#0B3B2E]">{d.dealNumber}</div>
+                                <div className="text-xs font-semibold text-slate-800 mt-0.5">{d.listing?.title || d.listing?.listingNumber || "—"}</div>
+                              </div>
+                              <span className={`flex-shrink-0 border px-1.5 py-0.5 text-[9px] font-black uppercase ${
+                                d.status === "closed" ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                : d.status === "cancelled" ? "border-slate-200 bg-slate-50 text-slate-500"
+                                : "border-[#B7C9C0] bg-[#F1F6F3] text-[#0B3B2E]"
+                              }`}>{d.status}</span>
+                            </div>
+                            <div className="mt-1.5 text-[11px] text-slate-500">
+                              <span>KES {fmtKES(d.agreedPrice)}</span>
+                              <span className="mx-2 text-slate-300">·</span>
+                              <span className="text-slate-700 font-semibold">Paid: KES {fmtKES(d.totalPaid)}</span>
+                              <span className="mx-2 text-slate-300">·</span>
+                              <span>Bal: KES {fmtKES(d.balance)}</span>
+                            </div>
+                            <div className="mt-1.5">
+                              <div className="flex items-center gap-1.5">
+                                <div className="h-1.5 flex-1 bg-slate-100 overflow-hidden">
+                                  <div className="h-full bg-[#0B3B2E] transition-all" style={{ width: `${pct}%` }} />
+                                </div>
+                                <span className="text-[10px] font-black text-slate-500">{pct}%</span>
+                              </div>
+                            </div>
+                            <div className="mt-1 text-[10px] text-slate-400">{fmtDate(d.dealDate)}{d.agent ? ` · Agent: ${d.agent.fullName}` : ""}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── Payments tab ── */}
+              {panelTab === "payments" && (
+                <div className="px-4 py-3">
+                  {buyerPayments.length === 0 ? (
+                    <div className="py-8 text-center text-xs text-slate-400">No payments found for this buyer.</div>
+                  ) : (
+                    <>
+                      <div className="mb-2 flex items-baseline justify-between">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">{buyerPayments.length} payment{buyerPayments.length !== 1 ? "s" : ""}</span>
+                        <span className="text-xs font-black text-[#0B3B2E]">Total: KES {fmtKES(buyerPayments.filter(p => p.status === "paid").reduce((s, p) => s + p.amount, 0))}</span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {buyerPayments.map((p) => (
+                          <div key={p._id} className="flex items-start gap-2 border border-slate-200 px-3 py-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono text-[10px] font-black text-[#0B3B2E]">{p.paymentNumber}</span>
+                                <span className={`border px-1 py-0.5 text-[8px] font-black uppercase ${p.status === "paid" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-rose-200 bg-rose-50 text-rose-700"}`}>{p.status}</span>
+                              </div>
+                              <div className="mt-0.5 text-[11px] text-slate-600">{String(p.paymentType || "").replace(/_/g, " ")} · {String(p.paymentMethod || "").replace(/_/g, " ")}</div>
+                              <div className="text-[10px] text-slate-400">{fmtDate(p.paymentDate)} · {p.deal?.dealNumber || "—"}</div>
+                            </div>
+                            <div className="flex-shrink-0 text-right">
+                              <div className="text-xs font-black text-slate-900">KES {fmtKES(p.amount)}</div>
+                              {p.reference && <div className="text-[10px] text-slate-400">Ref: {p.reference}</div>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* ── Activities tab ── */}
+              {panelTab === "activities" && (
+                <div className="px-4 py-3">
+                  {buyerActivities.length === 0 ? (
+                    <div className="py-8 text-center text-xs text-slate-400">No activity log for this buyer.</div>
+                  ) : (
+                    <div className="relative">
+                      <div className="absolute left-[7px] top-0 bottom-0 w-px bg-slate-200" />
+                      <div className="space-y-3 pl-5">
+                        {buyerActivities.map((a) => (
+                          <div key={a._id} className="relative">
+                            <div className="absolute -left-5 top-1 h-2 w-2 border border-[#B7C9C0] bg-[#F1F6F3]" />
+                            <div className="border border-slate-200 px-3 py-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <span className="text-[10px] font-black uppercase tracking-wide text-[#0B3B2E]">{String(a.type || "").replace(/_/g, " ")}</span>
+                                {a.outcome && (
+                                  <span className={`text-[9px] font-black uppercase px-1 py-0.5 ${a.outcome === "positive" ? "bg-emerald-50 text-emerald-700" : a.outcome === "negative" ? "bg-rose-50 text-rose-700" : "bg-slate-50 text-slate-500"}`}>{a.outcome}</span>
+                                )}
+                              </div>
+                              {a.notes && <div className="mt-1 text-[11px] text-slate-700 leading-relaxed">{a.notes}</div>}
+                              <div className="mt-1 text-[10px] text-slate-400">
+                                {fmtDate(a.date)}{a.createdBy?.name || a.createdBy?.fullName ? ` · ${a.createdBy.name || a.createdBy.fullName}` : ""}
+                                {a.relatedDeal?.dealNumber ? ` · ${a.relatedDeal.dealNumber}` : ""}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
             </div>
 
             {/* Panel footer */}
             <div className="flex-shrink-0 flex items-center justify-between gap-1 border-t border-slate-200 bg-slate-50 px-3 py-2">
               <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => printBuyer(selected)}
-                  className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-                >
+                <button type="button" onClick={() => printBuyer(selected)}
+                  className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
                   <FaPrint size={9} /> Print
                 </button>
                 {selected.phone && (
-                  <button
-                    type="button"
-                    onClick={() => setSmsTarget(selected)}
-                    className="inline-flex items-center gap-1 border border-teal-200 bg-teal-50 px-2.5 py-1 text-[11px] font-bold text-teal-700 hover:bg-teal-100"
-                  >
+                  <button type="button" onClick={() => setSmsTarget(selected)}
+                    className="inline-flex items-center gap-1 border border-teal-200 bg-teal-50 px-2.5 py-1 text-[11px] font-bold text-teal-700 hover:bg-teal-100">
                     <FaSms size={9} /> SMS
                   </button>
                 )}
                 {selected.email && (
-                  <button
-                    type="button"
-                    onClick={() => { setEmailTarget(selected); setEmailForm({ subject: "", body: "" }); }}
-                    className="inline-flex items-center gap-1 border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-100"
-                  >
+                  <button type="button" onClick={() => { setEmailTarget(selected); setEmailForm({ subject: "", body: "" }); }}
+                    className="inline-flex items-center gap-1 border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-100">
                     <FaEnvelope size={9} /> Email
                   </button>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={() => openEdit(selected)}
-                className="inline-flex items-center gap-1 bg-[#0B3B2E] px-3 py-1 text-[11px] font-black text-white hover:bg-[#07271e]"
-              >
+              <button type="button" onClick={() => openEdit(selected)}
+                className="inline-flex items-center gap-1 bg-[#0B3B2E] px-3 py-1 text-[11px] font-black text-white hover:bg-[#07271e]">
                 <FaEdit size={9} /> Edit Profile
               </button>
             </div>

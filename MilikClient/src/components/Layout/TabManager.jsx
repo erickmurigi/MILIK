@@ -92,6 +92,7 @@ const TabManager = ({ darkMode }) => {
   const currentCompanyKey  = String(currentCompany?._id || 'default-company');
   const currentCompanyName = String(currentCompany?.companyName || currentCompany?.name || '').trim();
   const previousCompanyKeyRef = useRef(currentCompanyKey);
+  const locationPathRef = useRef(location.pathname);
 
   const [tabsByWorkspace, setTabsByWorkspace] = useState(() => readTabsByWorkspace(currentCompanyKey));
   const [activeTabsByWorkspace, setActiveTabsByWorkspace] = useState(() =>
@@ -135,13 +136,13 @@ const TabManager = ({ darkMode }) => {
     [location.pathname]
   );
 
-  // Reset tabs when company changes
+  // Keep locationPathRef current so the company-change effect can read the path
+  // without taking it as a dependency (avoids re-running on every route change).
+  useEffect(() => { locationPathRef.current = location.pathname; }, [location.pathname]);
+
+  // Reset tabs and navigate to module picker whenever the active company changes.
   useEffect(() => {
-    const prev = previousCompanyKeyRef.current;
-    if (prev === currentCompanyKey) {
-      previousCompanyKeyRef.current = currentCompanyKey;
-      return;
-    }
+    if (previousCompanyKeyRef.current === currentCompanyKey) return;
 
     const cleanTabs       = buildInitialTabsByWorkspace();
     const cleanActiveTabs = buildInitialActiveTabs();
@@ -152,8 +153,10 @@ const TabManager = ({ darkMode }) => {
     localStorage.setItem(getActiveStorageKey(currentCompanyKey), JSON.stringify(cleanActiveTabs));
 
     previousCompanyKeyRef.current = currentCompanyKey;
-    if (location.pathname !== '/moduleDashboard') navigate('/moduleDashboard', { replace: true });
-  }, [currentCompanyKey, location.pathname, navigate]);
+    if (locationPathRef.current !== '/moduleDashboard') {
+      navigate('/moduleDashboard', { replace: true });
+    }
+  }, [currentCompanyKey, navigate]);
 
   // Sync route navigation → tab state
   useEffect(() => {

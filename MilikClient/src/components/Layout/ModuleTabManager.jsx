@@ -142,22 +142,17 @@ const ModuleTabManager = ({ darkMode }) => {
   }, [currentCompanyKey, openModules, activeModule]);
 
   useEffect(() => {
-    const previousCompanyKey = previousCompanyKeyRef.current;
+    if (previousCompanyKeyRef.current === currentCompanyKey) return;
 
-    if (previousCompanyKey !== currentCompanyKey) {
-      clearAllTabCache();
-      setOpenModules([]);
-      setActiveModule(null);
+    clearAllTabCache();
+    setOpenModules([]);
+    setActiveModule(null);
 
-      localStorage.setItem(getModulesStorageKey(currentCompanyKey), JSON.stringify([]));
-      localStorage.removeItem(getActiveModuleStorageKey(currentCompanyKey));
-
-      previousCompanyKeyRef.current = currentCompanyKey;
-      return;
-    }
+    localStorage.setItem(getModulesStorageKey(currentCompanyKey), JSON.stringify([]));
+    localStorage.removeItem(getActiveModuleStorageKey(currentCompanyKey));
 
     previousCompanyKeyRef.current = currentCompanyKey;
-  }, [currentCompany, currentCompanyKey, location.pathname, navigate]);
+  }, [currentCompanyKey]);
 
   useEffect(() => {
     if (!currentModule) return;

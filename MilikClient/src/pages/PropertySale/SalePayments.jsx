@@ -109,9 +109,10 @@ const SalePayments = () => {
     staleTime: 10 * 60_000,
   });
 
-  const payments      = paymentsData?.payments ?? paymentsData?.data ?? [];
+  const payments      = paymentsData?.data ?? [];
   const total         = paymentsData?.total ?? 0;
   const totalPages    = Math.max(1, Math.ceil(total / pageSize));
+  const totalCollected = paymentsData?.totalCollected ?? 0;
   const deals         = dealsRef?.data ?? [];
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["sale-payments", biz] });
@@ -208,80 +209,6 @@ const SalePayments = () => {
     }
   };
 
-  const printReceipt = (payment) => {
-    const co      = currentCompany || {};
-    const deal    = payment.deal    || {};
-    const listing = deal.listing    || {};
-    const buyer   = deal.buyer      || {};
-    const html = `<!DOCTYPE html><html><head><title>Receipt — ${payment.paymentNumber}</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;background:#fff}
-.page{max-width:148mm;margin:0 auto;padding:14mm 14mm 10mm}
-.hdr{border-bottom:3px solid #0B3B2E;padding-bottom:10px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:flex-start}
-.brand{font-size:20px;font-weight:900;color:#0B3B2E;letter-spacing:2px}
-.co-info{text-align:right;font-size:9px;color:#444;line-height:1.7}
-.doc-title{text-align:center;margin:12px 0 14px}
-.doc-title h1{font-size:20px;font-weight:900;letter-spacing:4px;color:#0B3B2E;text-transform:uppercase}
-.doc-title p{font-size:9px;color:#555;margin-top:2px}
-.receipt-no{background:#0B3B2E;color:#fff;padding:8px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center}
-.receipt-no span{font-weight:900;font-size:14px;font-family:monospace}
-.receipt-no small{font-size:9px;opacity:.8}
-.amount-box{background:#0B3B2E;color:#fff;padding:14px 20px;margin:14px 0;text-align:center}
-.amount-box .lbl{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;opacity:.7}
-.amount-box .amt{font-size:28px;font-weight:900;font-family:monospace;margin-top:2px}
-.voided-banner{background:#dc2626;color:#fff;padding:6px 14px;margin-bottom:12px;text-align:center;font-size:11px;font-weight:900;letter-spacing:3px}
-.sec{font-size:9px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#0B3B2E;border-bottom:1.5px solid #0B3B2E;padding-bottom:4px;margin:12px 0 8px}
-.g2{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px}
-.f label{font-size:8.5px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:2px}
-.f span{font-size:11px;font-weight:600;color:#111;display:block;padding:4px 8px;border:1px solid #e5e7eb;background:#fafafa;min-height:24px}
-.thanks{text-align:center;margin:16px 0 8px;font-size:13px;font-weight:900;letter-spacing:3px;color:#0B3B2E;text-transform:uppercase}
-.sig-box{border-top:1.5px solid #333;padding-top:6px;margin-top:24px;max-width:200px}
-.sig-box p{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#555;margin-top:2px}
-.footer{margin-top:16px;padding-top:8px;border-top:1.5px solid #0B3B2E;font-size:8px;color:#777;text-align:center}
-@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-</style></head><body><div class="page">
-<div class="hdr">
-  <div class="brand">${co.logo ? `<img src="${co.logo}" alt="logo" style="height:48px;object-fit:contain"/>` : (co.companyName || "MILIK")}</div>
-  <div class="co-info"><strong>${co.companyName || ""}</strong><br/>${co.physicalAddress || co.postalAddress || ""}<br/>${[co.telephone, co.email].filter(Boolean).join(" | ")}</div>
-</div>
-<div class="doc-title"><h1>Payment Receipt</h1><p>Official Receipt — Property Sale Transaction</p></div>
-${payment.status === "cancelled" ? '<div class="voided-banner">&#9888; VOIDED / CANCELLED</div>' : ""}
-<div class="receipt-no">
-  <div><small>Receipt No.</small><br/><span>${payment.paymentNumber}</span></div>
-  <div style="text-align:right"><small>Payment Date</small><br/><span>${payment.paymentDate ? new Date(payment.paymentDate).toLocaleDateString("en-KE") : ""}</span></div>
-</div>
-<div class="amount-box">
-  <div class="lbl">Amount ${payment.status === "cancelled" ? "(VOIDED)" : "Received"}</div>
-  <div class="amt">${fmtKES(payment.amount)}</div>
-  <div style="font-size:10px;opacity:.75;margin-top:4px">${fmtLabel(payment.paymentType)} via ${fmtLabel(payment.paymentMethod)}</div>
-</div>
-<div class="sec">Deal Reference</div>
-<div class="g2">
-  <div class="f"><label>Deal No.</label><span>${deal.dealNumber || "—"}</span></div>
-  <div class="f"><label>Property</label><span>${listing.title || listing.listingNumber || "—"}</span></div>
-  <div class="f"><label>Buyer</label><span>${buyer.fullName || "—"}</span></div>
-  <div class="f"><label>Agreed Price</label><span>${fmtKES(deal.agreedPrice)}</span></div>
-</div>
-<div class="sec">Payment Details</div>
-<div class="g2">
-  <div class="f"><label>Payment Type</label><span>${fmtLabel(payment.paymentType)}</span></div>
-  <div class="f"><label>Method</label><span>${fmtLabel(payment.paymentMethod)}</span></div>
-  ${payment.reference ? `<div class="f" style="grid-column:1/-1"><label>Reference / Transaction ID</label><span style="font-family:monospace;font-weight:900">${payment.reference}</span></div>` : ""}
-  <div class="f"><label>Status</label><span style="text-transform:uppercase;color:${payment.status === "paid" ? "#0B3B2E" : "#dc2626"};font-weight:900">${payment.status}</span></div>
-</div>
-${payment.notes ? `<div class="sec">Notes</div><div style="border:1px solid #e5e7eb;padding:8px;background:#fafafa;font-size:10.5px">${payment.notes}</div>` : ""}
-<div class="thanks">— Received With Thanks —</div>
-<div class="sig-box"><br/><p>Authorized Signature</p><p style="color:#111">${co.companyName || ""}</p></div>
-<div class="footer">Computer-generated receipt, valid without physical signature. Generated: ${new Date().toLocaleString("en-KE")} | MILIK Property Sales System</div>
-</div></body></html>`;
-    const w = window.open("", "_blank", "width=800,height=650");
-    if (!w) return;
-    w.document.write(html);
-    w.document.close();
-    w.onload = () => w.print();
-  };
-
   const hasFilters     = dealFilter || typeFilter || methodFilter || statusFilter || search;
   const resetFilters   = () => { setDealFilter(""); setTypeFilter(""); setMethodFilter(""); setStatusFilter(""); setSearch(""); setPage(1); };
   return (
@@ -356,6 +283,13 @@ ${payment.notes ? `<div class="sec">Notes</div><div style="border:1px solid #e5e
         )}
       </div>
 
+      {/* Total collected stat */}
+      <div className="mb-1 flex items-center gap-3 border border-emerald-200 bg-emerald-50 px-3 py-1.5">
+        <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Total Collected (active filters)</span>
+        <span className="text-sm font-black text-emerald-800">{fmtKES(totalCollected)}</span>
+        <span className="ml-auto text-[10px] text-emerald-600">{total} payment(s)</span>
+      </div>
+
       {/* Table */}
       <div className="flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm">
         <div className="flex-1 min-h-0 overflow-auto">
@@ -403,7 +337,7 @@ ${payment.notes ? `<div class="sec">Notes</div><div style="border:1px solid #e5e
                   </td>
                   <td className="px-3 py-2 text-right">
                     <div className="inline-flex items-center gap-1">
-                      <button type="button" onClick={() => printReceipt(p)} className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                      <button type="button" onClick={() => window.open(`/sale/payments/${p._id}/receipt`, "_blank")} className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]" title="Print Receipt">
                         <FaPrint className="text-[9px]" />
                       </button>
                       {p.status !== "cancelled" && (

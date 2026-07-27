@@ -51,7 +51,18 @@ export const listCommissions = async (req, res, next) => {
       cancelled: statsMap.cancelled || { count: 0, amount: 0 },
     };
 
-    res.status(200).json({ commissions, total, page, pages: Math.ceil(total / limit), stats });
+    res.status(200).json({ data: commissions, total, page, pages: Math.ceil(total / limit), stats });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getCommission = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const commission = await populateCommission(SaleCommission.findOne({ _id: req.params.id, business })).lean();
+    if (!commission) return next(createError(404, "Commission not found"));
+    res.status(200).json(commission);
   } catch (err) {
     next(err);
   }

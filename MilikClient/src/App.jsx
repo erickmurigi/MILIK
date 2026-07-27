@@ -248,8 +248,13 @@ const SaleCommissions       = lazy(() => import("./pages/PropertySale/SaleCommis
 const SaleReports           = lazy(() => import("./pages/PropertySale/SaleReports"));
 const SaleMonthlyDetail     = lazy(() => import("./pages/PropertySale/SaleMonthlyDetail"));
 const SaleFinancials        = lazy(() => import("./pages/PropertySale/SaleFinancials"));
-const SaleLeads             = lazy(() => import("./pages/PropertySale/SaleLeads"));
-const SaleActivities        = lazy(() => import("./pages/PropertySale/SaleActivities"));
+const SaleLeads                  = lazy(() => import("./pages/PropertySale/SaleLeads"));
+const SaleActivities             = lazy(() => import("./pages/PropertySale/SaleActivities"));
+const SalePaymentReceipt         = lazy(() => import("./pages/PropertySale/SalePaymentReceipt"));
+const SaleDealStatement          = lazy(() => import("./pages/PropertySale/SaleDealStatement"));
+const SaleCommissionStatement    = lazy(() => import("./pages/PropertySale/SaleCommissionStatement"));
+const SaleDealSummary            = lazy(() => import("./pages/PropertySale/SaleDealSummary"));
+const SaleAgentPerformance       = lazy(() => import("./pages/PropertySale/SaleAgentPerformance"));
 
 // Client Management module
 const ClientsDashboard  = lazy(() => import("./pages/Clients/ClientsDashboard"));
@@ -748,6 +753,11 @@ function App() {
             <Route path="/sale/financials"                   element={<Guard moduleKey={GL_ACCESS_MODULES} resource="chartOfAccounts"><SaleFinancials /></Guard>} />
             <Route path="/sale/crm/leads"                    element={<Guard moduleKey="propertySale" resource="saleLeads"><SaleLeads /></Guard>} />
             <Route path="/sale/crm/activities"               element={<Guard moduleKey="propertySale" resource="saleActivities"><SaleActivities /></Guard>} />
+            <Route path="/sale/payments/:id/receipt"         element={<Guard moduleKey="propertySale" resource="salePayments"><SalePaymentReceipt /></Guard>} />
+            <Route path="/sale/deals/:id/statement"          element={<Guard moduleKey="propertySale" resource="saleDeals"><SaleDealStatement /></Guard>} />
+            <Route path="/sale/commissions/:id/statement"    element={<Guard moduleKey="propertySale" resource="saleCommissions"><SaleCommissionStatement /></Guard>} />
+            <Route path="/sale/deals/:id/summary"            element={<Guard moduleKey="propertySale" resource="saleDeals"><SaleDealSummary /></Guard>} />
+            <Route path="/sale/agents/:id/performance"       element={<Guard moduleKey="propertySale" resource="saleAgents"><SaleAgentPerformance /></Guard>} />
             <Route path="/sale/chart-of-accounts"            element={<Guard moduleKey={GL_ACCESS_MODULES} resource="chartOfAccounts"><ChartOfAccounts /></Guard>} />
             <Route path="/sale/chart-of-accounts/:accountId/activity" element={<Guard moduleKey="propertySale" resource="chartOfAccounts"><LedgerAccountActivity /></Guard>} />
 

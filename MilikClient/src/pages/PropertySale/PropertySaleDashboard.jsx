@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   FaBuilding, FaChartLine, FaCheck, FaClipboard, FaClock,
-  FaFileAlt, FaHandshake, FaMoneyBillWave, FaPlus,
+  FaExclamationTriangle, FaFileAlt, FaHandshake, FaMoneyBillWave, FaPlus,
   FaRedoAlt, FaTag, FaTimesCircle, FaUserFriends, FaUsers, FaUserTie,
 } from "react-icons/fa";
 import { saleApi, fmtKES } from "../../services/propertySaleApi";
@@ -77,6 +77,14 @@ const PropertySaleDashboard = () => {
     staleTime: 60_000,
   });
 
+  const { data: overdueScheduleData } = useQuery({
+    queryKey: ["sale-overdue-schedule"],
+    queryFn:  () => saleApi.getOverdueSchedule(),
+    staleTime: 5 * 60_000,
+  });
+
+  const overdueInstallments = overdueScheduleData?.data ?? [];
+
   const s    = data || {};
   const leads = s.leads || {};
 
@@ -128,6 +136,35 @@ const PropertySaleDashboard = () => {
       }
     >
       <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5">
+
+        {/* ── Overdue Schedule Alert ─────────────────────────────────────── */}
+        {overdueInstallments.length > 0 && (
+          <div className="flex items-start gap-3 border border-rose-200 bg-rose-50 px-4 py-3">
+            <FaExclamationTriangle className="mt-0.5 flex-shrink-0 text-rose-600" size={14} />
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-black text-rose-800">
+                {overdueInstallments.length} overdue installment{overdueInstallments.length !== 1 ? "s" : ""}
+              </div>
+              <div className="mt-1 space-y-0.5">
+                {overdueInstallments.slice(0, 5).map((item) => (
+                  <div key={item._id} className="flex items-center gap-2 text-[11px] text-rose-700">
+                    <span className="font-mono font-black">{item.deal?.dealNumber || "—"}</span>
+                    <span>·</span>
+                    <span>{fmtKES(item.expectedAmount)}</span>
+                    <span>·</span>
+                    <span>Due: {item.dueDate ? new Date(item.dueDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</span>
+                  </div>
+                ))}
+                {overdueInstallments.length > 5 && (
+                  <div className="text-[10px] text-rose-500">…and {overdueInstallments.length - 5} more</div>
+                )}
+              </div>
+            </div>
+            <button type="button" onClick={() => navigate("/sale/deals")} className="flex-shrink-0 border border-rose-300 bg-white px-3 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-50">
+              View Deals
+            </button>
+          </div>
+        )}
 
         {/* ── KPI stat cards ─────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 xl:grid-cols-5">

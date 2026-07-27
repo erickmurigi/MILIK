@@ -984,7 +984,7 @@ export default function SystemSetupPage() {
 
   const handleOpenCompanySetup = (company) => handleSwitchAndNavigate(company, "/company-setup", `Opened ${company?.companyName || "company"} in Company Setup`);
   const handleOpenOperationalSettings = (company) => handleSwitchAndNavigate(company, "/settings", `Opened ${company?.companyName || "company"} in Operational Settings`);
-  const handleOpenWorkspace = (company) => handleSwitchAndNavigate(company, "/dashboard", `Opened ${company?.companyName || "company"} workspace`);
+  const handleOpenWorkspace = (company) => handleSwitchAndNavigate(company, "/moduleDashboard", `Opened ${company?.companyName || "company"} workspace`);
   const handleManageUsers = (company) => {
     const id = normalizeId(company);
     if (!id) return;
