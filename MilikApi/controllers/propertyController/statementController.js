@@ -943,6 +943,28 @@ export const getStatementSummary = async (req, res, next) => {
   }
 };
 
+export const updateStatementNotes = async (req, res, next) => {
+  try {
+    const { statementId } = req.params;
+    const { notes } = req.body;
+    const statement = await findStatementForAccess(statementId, req, {
+      fields: "_id status business notes",
+    });
+    if (!statement) {
+      return res.status(404).json({ success: false, message: "Statement not found or access denied" });
+    }
+    const TERMINAL = ["revised", "processed", "cancelled"];
+    if (TERMINAL.includes(statement.status)) {
+      return res.status(400).json({ success: false, message: `Cannot update notes on a ${statement.status} statement` });
+    }
+    statement.notes = typeof notes === "string" ? notes.trim() : "";
+    await statement.save();
+    res.status(200).json({ success: true, data: { notes: statement.notes } });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export default {
   createDraft,
   approve,
@@ -954,4 +976,5 @@ export default {
   validateAudit,
   generatePdf,
   getStatementSummary,
+  updateStatementNotes,
 };

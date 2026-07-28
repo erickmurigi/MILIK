@@ -958,8 +958,20 @@ const buildNoteStatementRow = (noteDoc) => {
   const amount = round2(Math.abs(Number(note.amount || 0)));
   const noteType = String(note.noteType || "").toUpperCase();
 
+  // For utility debit notes, append the specific utility type to the description
+  // so the statement shows e.g. "Debit Note DN00040 · Electricity" instead of just the number.
+  let description = note.description || "";
+  if (noteType === "DEBIT_NOTE" && note.category === "UTILITY_CHARGE") {
+    const utilityType = String(note.metadata?.utilityType || note.metadata?.meterUtilityType || "").trim();
+    if (utilityType && !description.toLowerCase().includes(utilityType.toLowerCase())) {
+      const label = utilityType.charAt(0).toUpperCase() + utilityType.slice(1).toLowerCase();
+      description = description ? `${description} · ${label}` : label;
+    }
+  }
+
   return {
     ...note,
+    description,
     transactionType: noteType,
     debit: noteType === "DEBIT_NOTE" ? amount : 0,
     credit: noteType === "CREDIT_NOTE" ? amount : 0,
@@ -986,23 +998,48 @@ const summarizeTenantSnapshotState = ({ invoiceSnapshots = [], receiptAllocation
   };
 };
 
+// Debit note snapshots are identified by the sourceTransactionType written during build.
+const isDebitNoteSnapshot = (snapshot) =>
+  String(snapshot?.metadata?.sourceTransactionType || "").toLowerCase() === TENANT_INVOICE_NOTE_SOURCE_TYPE;
+
+// Ops for TenantInvoice (regular invoices only — debit note _ids go to TenantInvoiceNote below).
 const buildInvoiceStatusBulkOps = (invoiceSnapshots = []) =>
   invoiceSnapshots
-    .filter((snapshot) => snapshot._id)
+    .filter((snapshot) => snapshot._id && !isDebitNoteSnapshot(snapshot))
     .map((snapshot) => ({
       updateOne: {
         filter: { _id: snapshot._id },
         update: {
           $set: {
             status: snapshot.computedStatus || snapshot.status,
-            // Write computed outstanding back so DB stays in sync with the snapshot engine.
-            // Previously only status was written — reversed payments left invoices with
-            // stale outstanding=0 because the recomputed value was never persisted.
             outstanding: round2(Math.max(0, snapshot.outstanding ?? 0)),
           },
         },
       },
     }));
+
+// Ops for TenantInvoiceNote. Maps snapshot computedStatus to valid note enum values:
+//   "pending" → "posted"  (a posted but unpaid note — "pending" isn't in the note enum)
+//   "partially_paid" → "partially_paid"
+//   "paid" → "paid"
+const buildDebitNoteStatusBulkOps = (invoiceSnapshots = []) =>
+  invoiceSnapshots
+    .filter((snapshot) => snapshot._id && isDebitNoteSnapshot(snapshot))
+    .map((snapshot) => {
+      const cs = snapshot.computedStatus || snapshot.status;
+      const noteStatus = cs === "paid" ? "paid" : cs === "partially_paid" ? "partially_paid" : "posted";
+      return {
+        updateOne: {
+          filter: { _id: snapshot._id },
+          update: {
+            $set: {
+              status: noteStatus,
+              outstanding: round2(Math.max(0, snapshot.outstanding ?? 0)),
+            },
+          },
+        },
+      };
+    });
 
 const applyTenantBalanceAndStatus = async ({
   businessId,
@@ -1680,11 +1717,13 @@ const recomputeInvoiceStatusesForTenant = async ({ businessId, tenantId, snapsho
     snapshotBundle || (await computeTenantInvoiceSnapshots({ businessId, tenantId }));
   if (invoiceSnapshots.length === 0) return [];
 
-  const bulkOps = buildInvoiceStatusBulkOps(invoiceSnapshots);
+  const invoiceOps = buildInvoiceStatusBulkOps(invoiceSnapshots);
+  const debitNoteOps = buildDebitNoteStatusBulkOps(invoiceSnapshots);
 
-  if (bulkOps.length > 0) {
-    await TenantInvoice.bulkWrite(bulkOps, { ordered: false });
-  }
+  await Promise.all([
+    invoiceOps.length > 0 ? TenantInvoice.bulkWrite(invoiceOps, { ordered: false }) : Promise.resolve(),
+    debitNoteOps.length > 0 ? TenantInvoiceNote.bulkWrite(debitNoteOps, { ordered: false }) : Promise.resolve(),
+  ]);
 
   return invoiceSnapshots;
 };
@@ -1705,11 +1744,13 @@ const recomputeTenantFinancialState = async ({ businessId, tenantId }) => {
 
   const snapshotBundle = await computeTenantInvoiceSnapshots({ businessId, tenantId });
   const { invoiceSnapshots = [], receiptAllocations = [] } = snapshotBundle;
-  const bulkOps = buildInvoiceStatusBulkOps(invoiceSnapshots);
+  const invoiceOps = buildInvoiceStatusBulkOps(invoiceSnapshots);
+  const debitNoteOps = buildDebitNoteStatusBulkOps(invoiceSnapshots);
 
-  if (bulkOps.length > 0) {
-    await TenantInvoice.bulkWrite(bulkOps, { ordered: false });
-  }
+  await Promise.all([
+    invoiceOps.length > 0 ? TenantInvoice.bulkWrite(invoiceOps, { ordered: false }) : Promise.resolve(),
+    debitNoteOps.length > 0 ? TenantInvoiceNote.bulkWrite(debitNoteOps, { ordered: false }) : Promise.resolve(),
+  ]);
 
   const tenantState = await applyTenantBalanceAndStatus({
     businessId,
@@ -1721,7 +1762,7 @@ const recomputeTenantFinancialState = async ({ businessId, tenantId }) => {
   return {
     ...snapshotBundle,
     ...tenantState,
-    statusUpdateCount: bulkOps.length,
+    statusUpdateCount: invoiceOps.length + debitNoteOps.length,
   };
 };
 

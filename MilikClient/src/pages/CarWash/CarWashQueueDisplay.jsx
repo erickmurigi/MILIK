@@ -109,12 +109,9 @@ const CarWashQueueDisplay = () => {
   return (
     <div
       className="relative flex h-screen flex-col overflow-hidden"
-      style={bgImage
-        ? { paddingTop: "18px" }
-        : { background: "linear-gradient(160deg, #050d1a 0%, #0a1120 60%, #050d1a 100%)", paddingTop: "18px" }
-      }
+      style={{ background: "linear-gradient(160deg, #050d1a 0%, #0a1120 60%, #050d1a 100%)", paddingTop: "18px" }}
     >
-      {/* Background image — fills screen */}
+      {/* Background image — slightly zoomed out so dark frame is visible at edges */}
       {bgImage && (
         <div
           className="pointer-events-none absolute inset-0"
@@ -122,6 +119,7 @@ const CarWashQueueDisplay = () => {
             backgroundImage: `url(${bgImage})`,
             backgroundSize: "cover",
             backgroundPosition: "center 40%",
+            transform: "scale(0.88)",
           }}
         />
       )}

@@ -121,8 +121,7 @@ export const sendBuyerEmail = async (req, res, next) => {
     if (!to)      return next(createError(400, "Buyer has no email address"));
     if (!subject) return next(createError(400, "Email subject is required"));
     if (!body)    return next(createError(400, "Email body is required"));
-    const escaped = body.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    await sendAdHocEmail({ businessId: business, to, subject, html: `<p style="white-space:pre-line">${escaped}</p>`, text: body });
+    await sendAdHocEmail({ businessId: business, to, subject, bodyText: body });
     res.json({ success: true, message: "Email sent" });
   } catch (err) {
     next(err);

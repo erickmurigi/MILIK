@@ -1064,6 +1064,12 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
             </td>
           </tr></tbody></table>
 
+          ${statement.notes ? `
+          <div style="margin-top:18px;padding:10px 14px;border-left:3px solid #0B3B2E;background:#f6faf8;">
+            <div style="font-size:8px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#0B3B2E;margin-bottom:5px;">Notes to Landlord</div>
+            <div style="font-size:9px;color:#1e293b;white-space:pre-line;line-height:1.55;">${statement.notes.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+          </div>` : ""}
+
           <div class="footnote">Generated from MILIK statement workspace. This print layout is kept compact and wide so schedule columns fit within the in-system print preview and downloaded PDF.</div>
         </div>
       </body>

@@ -111,7 +111,16 @@
       "Read(//c/Users/murig/OneDrive/Desktop/MilikLite/frontend/**)",
       "Bash(xargs basename -a)",
       "Bash(xargs grep -l \"generatePdf\\\\|printStatement\\\\|statementPdf\\\\|puppeteer\\\\|pdfkit\\\\|html-pdf\\\\|wkhtmltopdf\\\\|playwright\\\\|chromium\")",
-      "PowerShell(Get-ChildItem -Recurse \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikApi\\\\modules\\\\clients\" | Where-Object { -not $_.PSIsContainer } | ForEach-Object { $_.FullName } | Sort-Object)"
+      "PowerShell(Get-ChildItem -Recurse \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikApi\\\\modules\\\\clients\" | Where-Object { -not $_.PSIsContainer } | ForEach-Object { $_.FullName } | Sort-Object)",
+      "PowerShell(Get-ChildItem \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikApi\\\\modules\\\\\" -Recurse | Where-Object { $_.Name -match \"allocat\" } | Select-Object FullName)",
+      "Bash(xargs grep -l \"LandlordStatement\\\\|StatementModel\\\\|statementSchema\")",
+      "Bash(xargs grep -l \"mongoose\\\\|Schema\\\\|model\")",
+      "Bash(grep -v \"//\\\\|console\")",
+      "Bash(Remove-Item \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikClient\\\\src\\\\pages\\\\PropertySale\\\\SaleFinancials.jsx\" -Force)",
+      "PowerShell(Select-String -Pattern \"sale\" -SimpleMatch -CaseSensitive:$false)",
+      "Bash(grep -n \"useTabState\\\\|tabState\\\\|\\\\\\\\\\\\\\\\\" \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikClient\\\\src\\\\pages\\\\PropertySale\\\\SaleDeals.jsx\")",
+      "Bash(grep -i \"tab\\\\|state\\\\|\\\\\\\\\\\\\\\\\")",
+      "Bash(python -c ' *)"
     ]
   }
 }

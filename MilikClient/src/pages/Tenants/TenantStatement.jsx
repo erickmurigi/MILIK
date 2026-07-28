@@ -373,6 +373,44 @@ const buildTenantStatementInvoiceDescription = (invoice = {}) => {
   return cleanStatementPart(period ? `${baseLabel} – ${period}` : baseLabel || invoice?.description || "Charge");
 };
 
+// Builds a human-readable description for a credit/debit note statement row.
+// Priority: specific utility name → category label → stored description → fallback.
+const buildNoteDescription = (note, isCredit) => {
+  const noteNum = note.noteNumber || note.invoiceNumber || "";
+  const category = String(note.category || "").toUpperCase();
+  const storedDesc = cleanStatementPart(note.description || "");
+  const sourceRef = note.sourceInvoiceNumber ? ` (against ${note.sourceInvoiceNumber})` : "";
+
+  if (category === "UTILITY_CHARGE") {
+    const utilityNames = extractUtilityNamesFromInvoice(note);
+    const utilityLabel = utilityNames.length > 0
+      ? uniqueStatementParts(utilityNames.map((u) => u.charAt(0).toUpperCase() + u.slice(1).toLowerCase())).slice(0, 2).join(" & ")
+      : "Utility";
+    const typeWord = isCredit ? "Credit" : "Charge";
+    return cleanStatementPart(`${utilityLabel} ${typeWord} – ${noteNum}${sourceRef}`);
+  }
+
+  if (category === "RENT_CHARGE") {
+    return cleanStatementPart(`${isCredit ? "Rent Credit" : "Rent Charge"} – ${noteNum}${sourceRef}`);
+  }
+
+  if (category === "DEPOSIT_CHARGE") {
+    return cleanStatementPart(`${isCredit ? "Deposit Refund" : "Deposit Charge"} – ${noteNum}${sourceRef}`);
+  }
+
+  if (category === "LATE_PENALTY_CHARGE") {
+    return cleanStatementPart(`${isCredit ? "Penalty Credit" : "Late Penalty"} – ${noteNum}${sourceRef}`);
+  }
+
+  // OTHER_CHARGE: use stored description if it's not just the generic "Debit/Credit Note DNXXXXX"
+  const isGenericDesc = /^(debit|credit)\s+note\s*/i.test(storedDesc);
+  if (storedDesc && !isGenericDesc) {
+    return cleanStatementPart(`${storedDesc}${noteNum ? ` – ${noteNum}` : ""}${sourceRef}`);
+  }
+
+  return cleanStatementPart(`${isCredit ? "Credit Note" : "Debit Note"} ${noteNum}${sourceRef}`);
+};
+
 const buildTenantStatementReceiptDescription = (payment = {}, invoiceMap = new Map()) => {
   const reference = cleanStatementPart(payment?.receiptNumber || payment?.referenceNumber || "");
   const allocationRows = getReceiptAllocationRows(payment);
@@ -1034,7 +1072,7 @@ const TenantStatement = () => {
         transactions.push({
           id: transactionId++,
           date: note.noteDate || note.invoiceDate || note.createdAt,
-          description: `${isCredit ? "Credit Note" : "Debit Note"} ${note.noteNumber || note.invoiceNumber || ""}${note.sourceInvoiceNumber ? ` against ${note.sourceInvoiceNumber}` : ""}`,
+          description: buildNoteDescription(note, isCredit),
           type: isCredit ? "CREDIT_NOTE" : "DEBIT_NOTE",
           amount: isCredit ? -Math.abs(Number(note.amount || 0)) : Math.abs(Number(note.amount || 0)),
           transactionCode: note.noteNumber || note.invoiceNumber || `NT-${transactionId}`,

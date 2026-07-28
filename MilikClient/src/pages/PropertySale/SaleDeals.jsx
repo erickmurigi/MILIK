@@ -6,6 +6,7 @@ import {
   FaPlus, FaPrint, FaRedoAlt, FaSearch, FaSms, FaTimes, FaTrash, FaUser,
 } from "react-icons/fa";
 import CwSmsModal from "../CarWash/CwSmsModal";
+import SaleEmailModal from "./SaleEmailModal";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar, { FilterSearch, FilterSelect, FilterDateRange } from "./SaleFilterBar";
@@ -890,33 +891,15 @@ const SaleDeals = () => {
 
       {/* Email Modal */}
       {emailTarget && (
-        <div className="fixed inset-0 z-[140] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
-          <div className="flex w-full max-w-md flex-col bg-white shadow-2xl sm:border sm:border-slate-200 rounded-t-2xl sm:rounded-none">
-            <div className="flex-shrink-0 flex items-start justify-between gap-3 border-b border-slate-200 bg-[#1a4069] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
-              <div>
-                <div className="text-sm font-extrabold uppercase tracking-wide">Email Buyer</div>
-                <div className="text-xs font-semibold text-white/70">To: {emailTarget.buyer?.email} · {emailTarget.dealNumber}</div>
-              </div>
-              <button type="button" onClick={() => setEmailTarget(null)} className="p-1 text-white/80 hover:bg-white/10"><FaTimes /></button>
-            </div>
-            <div className="flex flex-col gap-3 p-4">
-              <div>
-                <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Subject</label>
-                <input value={emailForm.subject} onChange={(e) => setEmailForm((f) => ({ ...f, subject: e.target.value }))} className="h-8 w-full border border-slate-200 bg-white px-3 text-xs focus:border-[#1a4069] focus:outline-none" />
-              </div>
-              <div>
-                <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Message</label>
-                <textarea rows={7} value={emailForm.body} onChange={(e) => setEmailForm((f) => ({ ...f, body: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#1a4069] focus:outline-none" />
-              </div>
-            </div>
-            <div className="flex-shrink-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
-              <button type="button" onClick={() => setEmailTarget(null)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button type="button" onClick={handleSendDealEmail} disabled={emailSending} className="bg-[#1a4069] px-4 py-1.5 text-xs font-black text-white hover:bg-[#143354] disabled:opacity-60">
-                {emailSending ? "Sending…" : "Send Email"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <SaleEmailModal
+          title="Email Buyer"
+          subtitle={`To: ${emailTarget.buyer?.email} · ${emailTarget.dealNumber}`}
+          emailForm={emailForm}
+          setEmailForm={setEmailForm}
+          sending={emailSending}
+          onSend={handleSendDealEmail}
+          onClose={() => setEmailTarget(null)}
+        />
       )}
 
       {/* Close Deal Modal */}

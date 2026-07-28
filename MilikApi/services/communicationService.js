@@ -1728,8 +1728,8 @@ export const sendTestSms = async ({ businessId, phone, message, profileId = '' }
   };
 };
 
-export const sendAdHocEmail = async ({ businessId, to, subject, html, text } = {}) => {
-  if (!to || !subject || (!html && !text)) return null;
+export const sendAdHocEmail = async ({ businessId, to, subject, html, text, bodyText } = {}) => {
+  if (!to || !subject || (!html && !text && !bodyText)) return null;
   try {
     const company = await ensureCompany(businessId);
     if (!isCompanyEmailEnabled(company)) return { success: false, skipped: true };
@@ -1737,7 +1737,20 @@ export const sendAdHocEmail = async ({ businessId, to, subject, html, text } = {
     const profiles = getRawEmailProfiles(company.communication || {});
     const profile  = getPrimaryEmailProfile(profiles, company.communication?.defaultEmailProfileId || null);
     if (!profile?.enabled) throw new Error("No active email profile configured");
-    await dispatchEmail({ profile, to, subject, html, text });
+    const resolvedHtml = bodyText
+      ? buildEmailHtml({ companyName: company.companyName || company.name || 'MILIK', subject, body: bodyText })
+      : html;
+    await dispatchEmail({ profile, to, subject, html: resolvedHtml, text: text || bodyText });
+    SmsLog.create({
+      business: businessId,
+      channel: 'email',
+      templateKey: 'ad_hoc_email',
+      to,
+      subject: subject || '',
+      body: (bodyText || text || html || '').slice(0, 1000),
+      status: 'sent',
+      sentAt: new Date(),
+    }).catch(() => {});
     return { success: true };
   } catch (err) {
     console.error("[Email] sendAdHocEmail failed to=%s subject=%s: %s", to, subject, err?.message || err);
@@ -1747,7 +1760,7 @@ export const sendAdHocEmail = async ({ businessId, to, subject, html, text } = {
       templateKey: 'ad_hoc_email',
       to,
       subject: subject || '',
-      body: (text || html || '').slice(0, 1000),
+      body: (bodyText || text || html || '').slice(0, 1000),
       status: 'failed',
       error: String(err?.message || err).slice(0, 500),
       sentAt: new Date(),

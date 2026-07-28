@@ -11,6 +11,7 @@ import {
   generatePdf,
   getStatementSummary,
   adminMarkRevised,
+  updateStatementNotes,
 } from "../../controllers/propertyController/statementController.js";
 import { verifyToken, verifyCompanyScope, verifyAdmin } from "../../controllers/verifyToken.js";
 
@@ -75,6 +76,12 @@ router.delete("/:statementId", deleteDraft);
  * Validate statement audit integrity (header counts vs actual lines)
  */
 router.get("/:statementId/validate", validateAudit);
+
+/**
+ * PATCH /api/statements/:statementId/notes
+ * Update the notes field on a non-terminal statement
+ */
+router.patch("/:statementId/notes", updateStatementNotes);
 
 /**
  * POST /api/statements/:statementId/admin-mark-revised

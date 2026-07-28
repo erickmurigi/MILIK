@@ -18,9 +18,18 @@ import ErrorBoundary from "./components/common/ErrorBoundary";
 // ─── Page loader shown while lazy chunks are downloading ─────────────────────
 const PageLoader = () => (
   <div className="flex h-screen items-center justify-center bg-slate-50">
-    <div className="flex flex-col items-center gap-3">
-      <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-[#027333]" />
-      <span className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">Loading</span>
+    <div className="flex flex-col items-center gap-4">
+      <div className="relative h-10 w-10">
+        <div
+          className="absolute inset-0 animate-spin"
+          style={{ border: "3px solid #e2e8f0", borderTopColor: "#027333", borderRightColor: "#0B3B2E", animationDuration: "0.9s" }}
+        />
+        <div
+          className="absolute inset-[9px] animate-spin"
+          style={{ border: "2px solid #e2e8f0", borderBottomColor: "#027333", borderLeftColor: "#0B3B2E", animationDuration: "0.6s", animationDirection: "reverse" }}
+        />
+      </div>
+      <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">MILIK</span>
     </div>
   </div>
 );
@@ -247,7 +256,6 @@ const SalePayments          = lazy(() => import("./pages/PropertySale/SalePaymen
 const SaleCommissions       = lazy(() => import("./pages/PropertySale/SaleCommissions"));
 const SaleReports           = lazy(() => import("./pages/PropertySale/SaleReports"));
 const SaleMonthlyDetail     = lazy(() => import("./pages/PropertySale/SaleMonthlyDetail"));
-const SaleFinancials        = lazy(() => import("./pages/PropertySale/SaleFinancials"));
 const SaleLeads                  = lazy(() => import("./pages/PropertySale/SaleLeads"));
 const SaleActivities             = lazy(() => import("./pages/PropertySale/SaleActivities"));
 const SalePaymentReceipt         = lazy(() => import("./pages/PropertySale/SalePaymentReceipt"));
@@ -750,7 +758,6 @@ function App() {
             <Route path="/sale/commissions"                  element={<Guard moduleKey="propertySale" resource="saleCommissions"><SaleCommissions /></Guard>} />
             <Route path="/sale/reports"                      element={<Guard moduleKey="propertySale" resource="saleReports"><SaleReports /></Guard>} />
             <Route path="/sale/reports/monthly/:year/:month" element={<Guard moduleKey="propertySale" resource="saleReports"><SaleMonthlyDetail /></Guard>} />
-            <Route path="/sale/financials"                   element={<Guard moduleKey={GL_ACCESS_MODULES} resource="chartOfAccounts"><SaleFinancials /></Guard>} />
             <Route path="/sale/crm/leads"                    element={<Guard moduleKey="propertySale" resource="saleLeads"><SaleLeads /></Guard>} />
             <Route path="/sale/crm/activities"               element={<Guard moduleKey="propertySale" resource="saleActivities"><SaleActivities /></Guard>} />
             <Route path="/sale/payments/:id/receipt"         element={<Guard moduleKey="propertySale" resource="salePayments"><SalePaymentReceipt /></Guard>} />

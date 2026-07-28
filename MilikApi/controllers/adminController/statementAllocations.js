@@ -25,7 +25,16 @@ const CATEGORY_TO_SUMMARY_KEY = {
 function rebuildAllocationSummary(allocations = []) {
   const s = { rent: 0, deposit: 0, utility: 0, latePenalty: 0, debitNote: 0, other: 0, unapplied: 0 };
   for (const a of allocations) {
-    const key = a.invoice ? (CATEGORY_TO_SUMMARY_KEY[a.category] || "other") : "unapplied";
+    let key;
+    if (!a.invoice) {
+      key = "unapplied";
+    } else if (a.priorityGroup === "debit_note") {
+      // Debit notes store their real charge category (e.g. UTILITY_CHARGE), not "DEBIT_NOTE",
+      // so CATEGORY_TO_SUMMARY_KEY would misroute them to "utility". Use priorityGroup instead.
+      key = "debitNote";
+    } else {
+      key = CATEGORY_TO_SUMMARY_KEY[a.category] || "other";
+    }
     s[key] = round2(s[key] + Number(a.appliedAmount || 0));
   }
   return s;
@@ -427,20 +436,53 @@ export const reallocatePayment = async (req, res, next) => {
       .select("_id amount outstanding status invoiceNumber category invoiceDate dueDate description metadata tenant")
       .session(session).lean();
 
+    // Debit note IDs live in TenantInvoiceNote, not TenantInvoice — fetch them separately
+    // so the state map covers all allocation targets (invoice or debit note).
+    const foundInvoiceIds = new Set(invoiceLeanList.map((i) => String(i._id)));
+    const missingIds = allIds.filter((id) => !foundInvoiceIds.has(id));
+    const debitNoteLeanList = missingIds.length > 0
+      ? await TenantInvoiceNote.find({
+          _id: { $in: missingIds }, business: businessId,
+          noteType: "DEBIT_NOTE",
+          status: { $nin: ["cancelled", "reversed"] },
+        })
+        .select("_id amount outstanding status noteNumber category noteDate description metadata tenant")
+        .session(session).lean()
+      : [];
+    const debitNoteIdSet = new Set(debitNoteLeanList.map((n) => String(n._id)));
+
     // Mutable working state map — we mutate outstanding in memory, then bulk-save at end
-    const stateMap = new Map(invoiceLeanList.map((i) => [String(i._id), {
-      _id: i._id,
-      amount: round2(i.amount || 0),
-      outstanding: round2(i.outstanding || 0),
-      status: i.status || "pending",
-      invoiceNumber: i.invoiceNumber || "",
-      category: i.category || "",
-      invoiceDate: i.invoiceDate || null,
-      dueDate: i.dueDate || null,
-      description: i.description || "",
-      metadata: i.metadata || {},
-      tenant: i.tenant,
-    }]));
+    const stateMap = new Map([
+      ...invoiceLeanList.map((i) => [String(i._id), {
+        _id: i._id,
+        amount: round2(i.amount || 0),
+        outstanding: round2(i.outstanding || 0),
+        status: i.status || "pending",
+        invoiceNumber: i.invoiceNumber || "",
+        category: i.category || "",
+        invoiceDate: i.invoiceDate || null,
+        dueDate: i.dueDate || null,
+        description: i.description || "",
+        metadata: i.metadata || {},
+        tenant: i.tenant,
+        isDebitNote: false,
+      }]),
+      ...debitNoteLeanList.map((n) => [String(n._id), {
+        _id: n._id,
+        amount: round2(n.amount || 0),
+        // Use stored outstanding if available (set by snapshot engine); fall back to full amount
+        outstanding: round2(n.outstanding ?? n.amount ?? 0),
+        status: n.status || "posted",
+        invoiceNumber: n.noteNumber || "",
+        category: n.category || "",
+        invoiceDate: n.noteDate || null,
+        dueDate: n.noteDate || null,
+        description: n.description || "",
+        metadata: n.metadata || {},
+        tenant: n.tenant,
+        isDebitNote: true,
+      }]),
+    ]);
 
     // Security: each NEW target invoice must belong to the same tenant as the payment
     // and must not be in a terminal state
@@ -551,16 +593,34 @@ export const reallocatePayment = async (req, res, next) => {
       });
     }
 
-    // Step 3 — Persist updated outstanding + status for every involved invoice via bulkWrite
-    // (lean docs can't call .save(); bulkWrite participates in the same session/transaction)
+    // Step 3 — Persist updated outstanding + status for every involved invoice/debit note.
+    // Debit notes live in TenantInvoiceNote (different collection + different status enum).
     if (stateMap.size > 0) {
-      const bulkOps = Array.from(stateMap.values()).map((inv) => ({
-        updateOne: {
-          filter: { _id: inv._id },
-          update: { $set: { outstanding: inv.outstanding, status: invoiceStatus(inv.outstanding, inv.amount) } },
-        },
-      }));
-      await TenantInvoice.bulkWrite(bulkOps, { session });
+      const invoiceBulkOps = [];
+      const debitNoteBulkOps = [];
+      for (const inv of stateMap.values()) {
+        if (inv.isDebitNote) {
+          const o = round2(inv.outstanding);
+          const noteStatus = o <= 0 ? "paid" : o < round2(inv.amount) ? "partially_paid" : "posted";
+          debitNoteBulkOps.push({
+            updateOne: {
+              filter: { _id: inv._id },
+              update: { $set: { outstanding: inv.outstanding, status: noteStatus } },
+            },
+          });
+        } else {
+          invoiceBulkOps.push({
+            updateOne: {
+              filter: { _id: inv._id },
+              update: { $set: { outstanding: inv.outstanding, status: invoiceStatus(inv.outstanding, inv.amount) } },
+            },
+          });
+        }
+      }
+      await Promise.all([
+        invoiceBulkOps.length > 0 ? TenantInvoice.bulkWrite(invoiceBulkOps, { session }) : Promise.resolve(),
+        debitNoteBulkOps.length > 0 ? TenantInvoiceNote.bulkWrite(debitNoteBulkOps, { session }) : Promise.resolve(),
+      ]);
     }
 
     // Step 4 — Rebuild payment allocations + summary
@@ -650,6 +710,28 @@ export const reallocatePayment = async (req, res, next) => {
   }
 };
 
+// Converts a TenantInvoiceNote doc to the invoice-shaped object the picker expects
+const noteToInvoiceShape = (note) => ({
+  _id: note._id,
+  invoiceNumber: note.noteNumber || "",
+  category: note.category || "",
+  amount: Math.abs(Number(note.amount || 0)),
+  outstanding: round2(note.outstanding ?? Math.abs(Number(note.amount || 0))),
+  invoiceDate: note.noteDate || null,
+  dueDate: note.noteDate || null,
+  bookingDate: null,
+  description: note.description || `Debit note ${note.noteNumber || ""}`,
+  metadata: {
+    ...(note.metadata || {}),
+    sourceTransactionType: "invoice_note",
+    invoicePriorityCategory: "debit_note",
+    noteType: "DEBIT_NOTE",
+    noteNumber: note.noteNumber || "",
+  },
+  createdAt: note.createdAt || null,
+  _isDebitNote: true,
+});
+
 // ─── GET TENANT INVOICES (for reallocation picker) ─────────────────────────────
 export const getTenantInvoicesForRealloc = async (req, res, next) => {
   try {
@@ -663,7 +745,7 @@ export const getTenantInvoicesForRealloc = async (req, res, next) => {
     const tId = new mongoose.Types.ObjectId(tenantId);
     const INV_SELECT = "_id invoiceNumber category amount outstanding invoiceDate dueDate bookingDate description metadata";
 
-    // Run open-invoice query, payment-lookup, and snapshot computation in parallel.
+    // Run open-invoice query, debit note query, payment-lookup, and snapshot in parallel.
     // Snapshots give us the authoritative computed outstanding (replays all active receipts)
     // so the picker is always correct even if the DB outstanding field is stale.
     const openInvoicesPromise = TenantInvoice.find({
@@ -671,42 +753,53 @@ export const getTenantInvoicesForRealloc = async (req, res, next) => {
       status: { $nin: ["cancelled", "reversed", "void"] },
     }).select(INV_SELECT).sort({ invoiceDate: -1 }).lean();
 
+    // Debit notes also appear as allocation targets but live in a different collection
+    const openDebitNotesPromise = TenantInvoiceNote.find({
+      business: bId, tenant: tId,
+      noteType: "DEBIT_NOTE",
+      status: { $nin: ["cancelled", "reversed"] },
+    }).select("_id noteNumber category amount outstanding noteDate description metadata createdAt").sort({ noteDate: -1 }).lean();
+
     const allocatedPromise = (async () => {
       if (!paymentId || !isOid(paymentId)) return [];
       const pay = await RentPayment.findOne({ _id: paymentId, business: bId }).select("allocations").lean();
       const allocIds = (pay?.allocations || [])
         .filter((a) => a.invoice && isOid(String(a.invoice))).map((a) => a.invoice);
       if (!allocIds.length) return [];
-      const docs = await TenantInvoice.find({
-        _id: { $in: allocIds }, business: bId, tenant: tId,
-        status: { $nin: ["pending", "partially_paid"] },
-      }).select(INV_SELECT).lean();
-      return docs.map((i) => ({ ...i, _currentlyAllocated: true }));
+      // Fetch from both collections — some IDs may be debit notes
+      const [invDocs, noteDocs] = await Promise.all([
+        TenantInvoice.find({ _id: { $in: allocIds }, business: bId, tenant: tId, status: { $nin: ["pending", "partially_paid"] } }).select(INV_SELECT).lean(),
+        TenantInvoiceNote.find({ _id: { $in: allocIds }, business: bId, tenant: tId, noteType: "DEBIT_NOTE", status: { $nin: ["cancelled", "reversed"] } }).select("_id noteNumber category amount outstanding noteDate description metadata createdAt").lean(),
+      ]);
+      return [
+        ...invDocs.map((i) => ({ ...i, _currentlyAllocated: true })),
+        ...noteDocs.map((n) => ({ ...noteToInvoiceShape(n), _currentlyAllocated: true })),
+      ];
     })();
 
     const snapshotPromise = computeTenantInvoiceSnapshots({ businessId: bId, tenantId: tId });
 
-    const [openInvoices, currentlyAllocated, snapshotBundle] = await Promise.all([
-      openInvoicesPromise, allocatedPromise, snapshotPromise,
+    const [openInvoices, openDebitNotes, currentlyAllocated, snapshotBundle] = await Promise.all([
+      openInvoicesPromise, openDebitNotesPromise, allocatedPromise, snapshotPromise,
     ]);
 
-    // Build a map of invoice _id → computed outstanding from the snapshot engine
+    // Build a map of _id → computed outstanding from the snapshot engine
     const snapMap = new Map(
       (snapshotBundle.invoiceSnapshots || []).map((s) => [String(s._id), round2(s.outstanding ?? 0)])
     );
 
     const applyComputedOutstanding = (inv) => {
       const computed = snapMap.get(String(inv._id));
-      // Use snapshot value if available; fall back to DB value, then invoice amount
       const outstanding = computed != null ? computed : round2(inv.outstanding ?? inv.amount ?? 0);
       return { ...inv, outstanding };
     };
 
-    // Exclude from openInvoices any invoice already in currentlyAllocated to prevent duplicates
+    // Exclude from open lists any item already in currentlyAllocated to prevent duplicates
     const allocatedIdSet = new Set(currentlyAllocated.map((i) => String(i._id)));
     res.json({
       data: [
         ...openInvoices.filter((i) => !allocatedIdSet.has(String(i._id))).map(applyComputedOutstanding),
+        ...openDebitNotes.filter((n) => !allocatedIdSet.has(String(n._id))).map((n) => applyComputedOutstanding(noteToInvoiceShape(n))),
         ...currentlyAllocated.map(applyComputedOutstanding),
       ],
     });

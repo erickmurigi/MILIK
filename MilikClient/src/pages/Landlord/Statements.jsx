@@ -771,6 +771,8 @@ const Statements = () => {
   const [pdfPreviewOpen, setPdfPreviewOpen]   = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const handlePdfPreviewClose = useCallback(() => setPdfPreviewOpen(false), []);
+  const [statementNotes, setStatementNotes] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
 
   const autoDraftTimerRef = useRef(null);
   const lastAutoLoadedSelectionRef = useRef("");
@@ -1334,7 +1336,7 @@ const Statements = () => {
           periodStart,
           periodEnd,
           statementType,
-          notes: `${statementType} statement workspace`,
+          notes: statementNotes || undefined,
           refresh: options.refresh !== false,
           _signal: controller.signal,
         })
@@ -1367,6 +1369,7 @@ const Statements = () => {
 
       pendingReopenContextRef.current = null;
       setDraftStatement(nextStatement);
+      setStatementNotes(nextStatement?.notes || "");
     } catch (error) {
       if (error?.name === "CanceledError" || error?.name === "AbortError") return;
       lastAutoLoadedSelectionRef.current = requestedSelectionKey;
@@ -1471,10 +1474,26 @@ const Statements = () => {
     try {
       await dispatch(approveStatement(draftStatement._id, "Approved from landlord statement workspace"));
       const full = await dispatch(getStatement(draftStatement._id));
-      setDraftStatement(full?.statement || null);
+      const approvedStatement = full?.statement || null;
+      setDraftStatement(approvedStatement);
+      setStatementNotes(approvedStatement?.notes || "");
       toast.success("Statement approved successfully");
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to approve statement");
+    }
+  };
+
+  const handleSaveNotes = async () => {
+    if (!draftStatement?._id) return;
+    setSavingNotes(true);
+    try {
+      await adminRequests.patch(`/statements/${draftStatement._id}/notes`, { notes: statementNotes });
+      setDraftStatement((prev) => prev ? { ...prev, notes: statementNotes } : prev);
+      toast.success("Notes saved");
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to save notes");
+    } finally {
+      setSavingNotes(false);
     }
   };
 
@@ -2564,6 +2583,35 @@ const Statements = () => {
                           </p>
                         </div>
                       )}
+                    </div>
+                  )}
+
+                  {/* Notes to landlord */}
+                  {draftStatement && (
+                    <div className="border-t border-slate-200 bg-slate-50 px-5 py-4">
+                      <h4 className="mb-2 border-l-2 border-[#0B3B2E] pl-2.5 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">
+                        Notes to Landlord
+                      </h4>
+                      <textarea
+                        value={statementNotes}
+                        onChange={(e) => setStatementNotes(e.target.value)}
+                        placeholder="Add notes for the landlord — these will appear on the printed statement..."
+                        rows={3}
+                        className="w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-700 placeholder-slate-400 focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
+                      />
+                      <div className="mt-1.5 flex items-center justify-between">
+                        <span className="text-[9px] text-slate-400">
+                          {statementNotes.length > 0 ? `${statementNotes.length} characters` : "No notes added"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleSaveNotes}
+                          disabled={savingNotes || !draftStatement?._id}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-[#0B3B2E] bg-[#0B3B2E] px-3 py-1 text-[10px] font-semibold text-white transition-colors hover:bg-[#0a3328] disabled:opacity-40"
+                        >
+                          {savingNotes ? "Saving…" : "Save Notes"}
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

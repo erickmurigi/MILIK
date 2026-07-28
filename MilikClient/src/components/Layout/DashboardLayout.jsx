@@ -503,9 +503,10 @@ const MENU_COLOR_MAP = {
   "carwash-commissions-group":  { color: "#0B3B2E", label: "Commissions", icon: FaHandshake },
   "carwash-reporting":          { color: "#0B3B2E", label: "Reports",     icon: FaChartBar },
   "carwash-setup":              { color: "#0B3B2E", label: "Setup",       icon: FaCog },
-  "sale-operations": { color: "#027333", label: "Operations", icon: FaHandshake },
-  "sale-clients":    { color: "#027333", label: "Clients & Agents", icon: FaUsers },
-  "sale-finance":    { color: "#027333", label: "Finance & Reports", icon: FaMoneyBillWave },
+  "sale-operations": { color: "#027333", label: "Pipeline",  icon: FaHandshake },
+  "sale-clients":    { color: "#027333", label: "Clients",   icon: FaUsers },
+  "sale-finance":    { color: "#027333", label: "Finance",   icon: FaMoneyBillWave },
+  "sale-crm":        { color: "#027333", label: "CRM",       icon: FaUserClock },
   "clients-main":            { color: "#0B3B2E", label: "Clients",   icon: FaUsers },
   "clients-contracts-group": { color: "#0B3B2E", label: "Contracts", icon: FaHandshake },
   "clients-billing":         { color: "#0B3B2E", label: "Billing",   icon: FaFileInvoice },
@@ -1012,13 +1013,13 @@ const TopToolbar = ({
       const saleItems = [
         {
           id: "sale-operations",
-          label: "Operations",
+          label: "Pipeline",
           icon: FaHandshake,
           submenu: [
             { id: "sale-dashboard", label: "Dashboard", icon: FaChartBar },
-            { id: "sale-listings", label: "Sale Listings", icon: FaBuilding },
-            { id: "sale-offers", label: "Offers", icon: FaTag },
-            { id: "sale-deals", label: "Deals / Transactions", icon: FaHandshake },
+            { id: "sale-listings",  label: "Listings",  icon: FaBuilding },
+            { id: "sale-offers",    label: "Offers",    icon: FaTag },
+            { id: "sale-deals",     label: "Deals",     icon: FaHandshake },
           ],
         },
         {
@@ -1026,8 +1027,8 @@ const TopToolbar = ({
           label: "Clients",
           icon: FaUsers,
           submenu: [
-            { id: "sale-buyers", label: "Buyers / Clients", icon: FaUsers },
-            { id: "sale-agents", label: "Sales Agents", icon: FaUser },
+            { id: "sale-buyers", label: "Buyers",  icon: FaUsers },
+            { id: "sale-agents", label: "Agents",  icon: FaUser },
           ],
         },
         {
@@ -1035,9 +1036,9 @@ const TopToolbar = ({
           label: "Finance",
           icon: FaMoneyBillWave,
           submenu: [
-            { id: "sale-payments",    label: "Payments",      icon: FaMoneyBillWave },
-            { id: "sale-commissions", label: "Commissions",   icon: FaChartLine },
-            { id: "sale-reports",     label: "Sales Reports", icon: FaFileAlt },
+            { id: "sale-payments",    label: "Payments",    icon: FaMoneyBillWave },
+            { id: "sale-commissions", label: "Commissions", icon: FaChartLine },
+            { id: "sale-reports",     label: "Reports",     icon: FaFileAlt },
           ],
         },
         {
@@ -1045,8 +1046,8 @@ const TopToolbar = ({
           label: "CRM",
           icon: FaUserClock,
           submenu: [
-            { id: "sale-crm-leads",      label: "Leads Pipeline", icon: FaUserFriends },
-            { id: "sale-crm-activities", label: "Activity Log",   icon: FaClipboard },
+            { id: "sale-crm-leads",      label: "Leads",      icon: FaUserFriends },
+            { id: "sale-crm-activities", label: "Activities", icon: FaClipboard },
           ],
         },
       ];

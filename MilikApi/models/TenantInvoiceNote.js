@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import { TENANT_INVOICE_CATEGORIES } from "./TenantInvoice.js";
 
 export const TENANT_NOTE_TYPES = ["CREDIT_NOTE", "DEBIT_NOTE"];
-export const TENANT_NOTE_STATUSES = ["draft", "posted", "cancelled", "reversed"];
+export const TENANT_NOTE_STATUSES = ["draft", "posted", "partially_paid", "paid", "cancelled", "reversed"];
 
 const TenantInvoiceNoteSchema = new mongoose.Schema(
   {
@@ -86,6 +86,10 @@ const TenantInvoiceNoteSchema = new mongoose.Schema(
       enum: TENANT_NOTE_STATUSES,
       default: "posted",
       index: true,
+    },
+    outstanding: {
+      type: Number,
+      default: null,
     },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
