@@ -2,8 +2,9 @@ import React, { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
-import { FaCheck, FaMoneyBillWave, FaPrint, FaRedoAlt, FaSearch, FaTimes, FaUndo } from "react-icons/fa";
+import { FaCheck, FaMoneyBillWave, FaPrint, FaRedoAlt, FaTimes, FaUndo } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
+import SaleFilterBar, { FilterSearch, FilterSelect, FilterDateRange } from "./SaleFilterBar";
 import PaginationBar from "../../components/PaginationBar";
 import { fmtKES, saleApi, todayISO } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
@@ -47,6 +48,10 @@ const SaleCommissions = () => {
 
   const [statusFilter,  setStatusFilter]  = useTabState("/sale/commissions:statusFilter", "");
   const [search,        setSearch]        = useTabState("/sale/commissions:search", "");
+  const [agentFilt,     setAgentFilt]     = useTabState("/sale/commissions:agentFilt", "");
+  const [dealFilt,      setDealFilt]      = useTabState("/sale/commissions:dealFilt", "");
+  const [dateFrom,      setDateFrom]      = useTabState("/sale/commissions:dateFrom", "");
+  const [dateTo,        setDateTo]        = useTabState("/sale/commissions:dateTo", "");
   const [page,          setPage]          = useTabState("/sale/commissions:page", 1);
   const [pageSize,      setPageSize]      = useTabState("/sale/commissions:pageSize", PAGE_SIZE);
   const [showPayout,    setShowPayout]    = useState(null);
@@ -54,12 +59,31 @@ const SaleCommissions = () => {
   const [saving,        setSaving]        = useState(false);
   const [actionKey,     setActionKey]     = useState("");
 
+  const { data: agentsData } = useQuery({
+    queryKey: ["sale-agents-ref", biz],
+    queryFn:  () => saleApi.listAgents({ business: biz, limit: 200 }),
+    enabled:  !!biz,
+    staleTime: 5 * 60_000,
+  });
+  const { data: dealsData } = useQuery({
+    queryKey: ["sale-deals-ref", biz],
+    queryFn:  () => saleApi.listDeals({ business: biz, limit: 200 }),
+    enabled:  !!biz,
+    staleTime: 5 * 60_000,
+  });
+  const agentsRef = agentsData?.data ?? [];
+  const dealsRef  = dealsData?.data  ?? [];
+
   const { data, isLoading: loading, isFetching } = useQuery({
-    queryKey: ["sale-commissions", biz, statusFilter, search, page, pageSize],
+    queryKey: ["sale-commissions", biz, statusFilter, search, agentFilt, dealFilt, dateFrom, dateTo, page, pageSize],
     queryFn:  () => saleApi.listCommissions({
       business: biz, limit: pageSize, page,
-      ...(statusFilter && { status: statusFilter }),
+      ...(statusFilter && { status:   statusFilter }),
       ...(search       && { search }),
+      ...(agentFilt    && { agentId:  agentFilt }),
+      ...(dealFilt     && { dealId:   dealFilt }),
+      ...(dateFrom     && { dateFrom }),
+      ...(dateTo       && { dateTo }),
     }),
     enabled:  !!biz,
     placeholderData: (prev) => prev,
@@ -160,28 +184,33 @@ const SaleCommissions = () => {
       )}
 
       {/* Filter bar */}
-      <div className="mb-1 flex flex-wrap items-center gap-1 border border-slate-200 bg-white px-2 py-1 shadow-sm">
-        <div className="relative min-w-[160px] flex-1">
-          <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
-          <input
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            placeholder="Agent, deal, comm. no."
-            className="h-7 w-full border border-slate-300 pl-7 pr-2 text-xs placeholder:text-slate-400 focus:border-[#0B3B2E] focus:outline-none"
-          />
-        </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-          className="h-7 border border-[#B7C9C0] bg-[#F1F6F3] px-1.5 text-xs font-semibold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
-        >
+      <SaleFilterBar
+        onReset={() => { setSearch(""); setStatusFilter(""); setAgentFilt(""); setDealFilt(""); setDateFrom(""); setDateTo(""); setPage(1); }}
+        activeCount={[search, statusFilter, agentFilt, dealFilt, dateFrom, dateTo].filter(Boolean).length}
+      >
+        <FilterSearch
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          placeholder="Agent, deal, comm. no."
+        />
+        <FilterSelect value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
           <option value="">All Statuses</option>
           {["pending", "approved", "paid", "cancelled"].map((s) => <option key={s} value={s}>{fmtLabel(s)}</option>)}
-        </select>
-        {(search || statusFilter) && (
-          <button type="button" onClick={() => { setSearch(""); setStatusFilter(""); setPage(1); }} className="h-7 border border-rose-200 bg-rose-50 px-2.5 text-xs font-bold text-rose-600 hover:bg-rose-100">Clear</button>
-        )}
-      </div>
+        </FilterSelect>
+        <FilterSelect value={agentFilt} onChange={(e) => { setAgentFilt(e.target.value); setPage(1); }}>
+          <option value="">All Agents</option>
+          {agentsRef.map((a) => <option key={a._id} value={a._id}>{a.fullName}{a.agentNumber ? ` (${a.agentNumber})` : ""}</option>)}
+        </FilterSelect>
+        <FilterSelect value={dealFilt} onChange={(e) => { setDealFilt(e.target.value); setPage(1); }}>
+          <option value="">All Deals</option>
+          {dealsRef.map((d) => <option key={d._id} value={d._id}>{d.dealNumber}{d.listing?.title ? ` — ${d.listing.title}` : ""}</option>)}
+        </FilterSelect>
+        <FilterDateRange
+          from={dateFrom} to={dateTo}
+          onFromChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
+          onToChange={(e) => { setDateTo(e.target.value); setPage(1); }}
+        />
+      </SaleFilterBar>
 
       {/* Table */}
       <div className="flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm">

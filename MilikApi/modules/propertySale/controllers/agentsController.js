@@ -10,11 +10,12 @@ export const listAgents = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const bId = new mongoose.Types.ObjectId(String(business));
-    const { search = "", status = "", page = 1, limit = 50 } = req.query;
+    const { search = "", status = "", commissionType = "", page = 1, limit = 50 } = req.query;
     const pageNum = Math.max(parseInt(page, 10) || 1, 1);
     const limitNum = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 500);
     const filter = { business };
-    if (status) filter.status = status;
+    if (status)         filter.status         = status;
+    if (commissionType) filter.commissionType = commissionType;
     if (search.trim()) {
       filter.$text = { $search: search.trim() };
     }

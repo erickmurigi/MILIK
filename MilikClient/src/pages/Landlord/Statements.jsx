@@ -794,6 +794,8 @@ const Statements = () => {
   monthRef.current = month;
   yearRef.current = year;
 
+  const todayIso = useMemo(() => toIsoDate(new Date()), []);
+
   useEffect(() => {
     if (!currentCompany?._id) return;
     if (!propertiesLoaded) dispatch(getProperties({ business: currentCompany._id }));

@@ -4,10 +4,11 @@ import { useSelector } from "react-redux";
 import {
   FaCamera, FaChevronLeft, FaChevronRight,
   FaEdit, FaPlus, FaPrint, FaRedoAlt,
-  FaSearch, FaTimes, FaTrash,
+  FaTimes, FaTrash,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
+import SaleFilterBar, { FilterSearch, FilterSelect } from "./SaleFilterBar";
 import PaginationBar from "../../components/PaginationBar";
 import { saleApi, fmtKES, todayISO } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
@@ -76,6 +77,7 @@ const SaleListings = () => {
   const [search,     setSearch]     = useTabState("/sale/listings:search", "");
   const [statusFilt, setStatusFilt] = useTabState("/sale/listings:statusFilt", "");
   const [typeFilt,   setTypeFilt]   = useTabState("/sale/listings:typeFilt", "");
+  const [agentFilt,  setAgentFilt]  = useTabState("/sale/listings:agentFilt", "");
   const [page,       setPage]       = useTabState("/sale/listings:page", 1);
   const [pageSize,   setPageSize]   = useTabState("/sale/listings:pageSize", PAGE_SIZE);
   const [selected,   setSelected]   = useTabState("/sale/listings:selected", null);
@@ -86,8 +88,8 @@ const SaleListings = () => {
   const biz = currentCompany?._id;
 
   const { data: listingsData, isLoading: loading, isFetching } = useQuery({
-    queryKey: ["sale-listings", biz, debouncedSearch, statusFilt, typeFilt, page, pageSize],
-    queryFn:  () => saleApi.listListings({ business: biz, search: debouncedSearch, status: statusFilt, propertyType: typeFilt, page, limit: pageSize }),
+    queryKey: ["sale-listings", biz, debouncedSearch, statusFilt, typeFilt, agentFilt, page, pageSize],
+    queryFn:  () => saleApi.listListings({ business: biz, search: debouncedSearch, status: statusFilt, propertyType: typeFilt, agentId: agentFilt, page, limit: pageSize }),
     enabled:  !!biz,
     placeholderData: (prev) => prev,
     staleTime: 30_000,
@@ -288,7 +290,7 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
     setTimeout(() => { win.focus(); win.print(); }, 400);
   };
 
-  const resetFilters = () => { setSearch(""); setStatusFilt(""); setTypeFilt(""); setPage(1); };
+  const resetFilters = () => { setSearch(""); setStatusFilt(""); setTypeFilt(""); setAgentFilt(""); setPage(1); };
 
   return (
     <PropertySaleShell
@@ -314,37 +316,28 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
       }
     >
       {/* Filter bar */}
-      <div className="flex-shrink-0 mb-1 flex flex-wrap items-center gap-1 border border-slate-200 bg-white px-2 py-1 shadow-sm">
-        <input
-          className="h-7 w-[160px] grow border border-slate-300 px-2 text-xs text-slate-700 placeholder:text-slate-400 focus:border-[#0B3B2E] focus:outline-none"
-          placeholder="Search listings..."
+      <SaleFilterBar
+        onReset={resetFilters}
+        activeCount={[search, statusFilt, typeFilt, agentFilt].filter(Boolean).length}
+      >
+        <FilterSearch
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          placeholder="Search listings..."
         />
-        <select
-          className="h-7 w-[130px] grow border border-[#B7C9C0] bg-[#F1F6F3] px-1.5 text-xs font-semibold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
-          value={statusFilt}
-          onChange={(e) => { setStatusFilt(e.target.value); setPage(1); }}
-        >
+        <FilterSelect value={statusFilt} onChange={(e) => { setStatusFilt(e.target.value); setPage(1); }}>
           <option value="">All Statuses</option>
           {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
-        </select>
-        <select
-          className="h-7 w-[120px] grow border border-slate-300 bg-white px-1.5 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-          value={typeFilt}
-          onChange={(e) => { setTypeFilt(e.target.value); setPage(1); }}
-        >
+        </FilterSelect>
+        <FilterSelect value={typeFilt} onChange={(e) => { setTypeFilt(e.target.value); setPage(1); }}>
           <option value="">All Types</option>
           {PROPERTY_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-        </select>
-        <button
-          type="button"
-          onClick={resetFilters}
-          className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
-        >
-          <FaRedoAlt size={9} /> Reset
-        </button>
-      </div>
+        </FilterSelect>
+        <FilterSelect value={agentFilt} onChange={(e) => { setAgentFilt(e.target.value); setPage(1); }}>
+          <option value="">All Agents</option>
+          {agents.map((a) => <option key={a._id} value={a._id}>{a.fullName}</option>)}
+        </FilterSelect>
+      </SaleFilterBar>
 
       {/* Table + images panel */}
       <div className="relative flex flex-col flex-1 min-h-0 overflow-hidden">

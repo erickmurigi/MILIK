@@ -8,6 +8,7 @@ import {
 import CwSmsModal from "../CarWash/CwSmsModal";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
+import SaleFilterBar, { FilterSearch, FilterSelect, FilterDateRange } from "./SaleFilterBar";
 import PaginationBar from "../../components/PaginationBar";
 import { saleApi, fmtKES, todayISO } from "../../services/propertySaleApi";
 import AmountInput from "./AmountInput";
@@ -72,6 +73,11 @@ const SaleDeals = () => {
   const [search,         setSearch]         = useTabState("/sale/deals:search", "");
   const [appliedSearch,  setAppliedSearch]  = useTabState("/sale/deals:appliedSearch", "");
   const [statusFilter,   setStatusFilter]   = useTabState("/sale/deals:statusFilter", "");
+  const [agentFilt,      setAgentFilt]      = useTabState("/sale/deals:agentFilt", "");
+  const [buyerFilt,      setBuyerFilt]      = useTabState("/sale/deals:buyerFilt", "");
+  const [listingFilt,    setListingFilt]    = useTabState("/sale/deals:listingFilt", "");
+  const [dateFrom,       setDateFrom]       = useTabState("/sale/deals:dateFrom", "");
+  const [dateTo,         setDateTo]         = useTabState("/sale/deals:dateTo", "");
   const [page,           setPage]           = useTabState("/sale/deals:page", 1);
   const [pageSize,       setPageSize]       = useTabState("/sale/deals:pageSize", PAGE_SIZE);
 
@@ -94,8 +100,8 @@ const SaleDeals = () => {
   const biz = currentCompany?._id;
 
   const { data: dealsData, isLoading: loading, isFetching } = useQuery({
-    queryKey: ["sale-deals", biz, appliedSearch, statusFilter, page, pageSize],
-    queryFn:  () => saleApi.listDeals({ business: biz, search: appliedSearch, status: statusFilter, page, limit: pageSize }),
+    queryKey: ["sale-deals", biz, appliedSearch, statusFilter, agentFilt, buyerFilt, listingFilt, dateFrom, dateTo, page, pageSize],
+    queryFn:  () => saleApi.listDeals({ business: biz, search: appliedSearch, status: statusFilter, agentId: agentFilt, buyerId: buyerFilt, listingId: listingFilt, dateFrom, dateTo, page, limit: pageSize }),
     enabled:  !!biz,
     placeholderData: (prev) => prev,
     staleTime: 30_000,
@@ -338,7 +344,7 @@ const SaleDeals = () => {
 
 
   const applySearch = (e) => { e.preventDefault(); setAppliedSearch(search); setPage(1); };
-  const resetFilters = () => { setSearch(""); setAppliedSearch(""); setStatusFilter(""); setPage(1); };
+  const resetFilters = () => { setSearch(""); setAppliedSearch(""); setStatusFilter(""); setAgentFilt(""); setBuyerFilt(""); setListingFilt(""); setDateFrom(""); setDateTo(""); setPage(1); };
 
   return (
     <PropertySaleShell
@@ -366,30 +372,43 @@ const SaleDeals = () => {
       <div className="relative flex flex-col flex-1 min-h-0 overflow-hidden">
 
       {/* ── Filter bar ───────────────────────────────────────────────────── */}
-      <form onSubmit={applySearch} className="mb-1 flex flex-wrap items-center gap-1 border border-slate-200 bg-white px-2 py-1 shadow-sm flex-shrink-0">
-        <input
-          className="h-7 w-[160px] grow border border-slate-300 px-2 text-xs text-slate-700 placeholder:text-slate-400 focus:border-[#0B3B2E] focus:outline-none"
-          placeholder="Deal no. / property / buyer"
+      <SaleFilterBar
+        onSubmit={applySearch}
+        onReset={resetFilters}
+        activeCount={[appliedSearch, statusFilter, agentFilt, buyerFilt, listingFilt, dateFrom, dateTo].filter(Boolean).length}
+      >
+        <FilterSearch
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          placeholder="Deal no. / property / buyer"
         />
-        <select
-          className="h-7 w-[120px] grow border border-[#B7C9C0] bg-[#F1F6F3] px-1.5 text-xs font-semibold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
-          value={statusFilter}
-          onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-        >
+        <button type="submit" className="inline-flex h-8 shrink-0 items-center gap-1.5 border border-[#C8511A] bg-[#C8511A] px-3 text-xs font-bold text-white hover:bg-[#a84115]">
+          <FaSearch size={9} /> Search
+        </button>
+        <FilterSelect value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
           <option value="">All Statuses</option>
           <option value="active">Active</option>
           <option value="closed">Closed</option>
           <option value="cancelled">Cancelled</option>
-        </select>
-        <button type="submit" className="inline-flex h-7 items-center gap-1 bg-[#C8511A] px-3 text-xs font-bold text-white hover:bg-[#a84115]">
-          <FaSearch size={9} /> Search
-        </button>
-        <button type="button" onClick={resetFilters} className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]">
-          <FaRedoAlt size={9} /> Reset
-        </button>
-      </form>
+        </FilterSelect>
+        <FilterSelect value={agentFilt} onChange={(e) => { setAgentFilt(e.target.value); setPage(1); }}>
+          <option value="">All Agents</option>
+          {agents.map((a) => <option key={a._id} value={a._id}>{a.fullName}{a.agentNumber ? ` (${a.agentNumber})` : ""}</option>)}
+        </FilterSelect>
+        <FilterSelect value={buyerFilt} onChange={(e) => { setBuyerFilt(e.target.value); setPage(1); }}>
+          <option value="">All Buyers</option>
+          {buyers.map((b) => <option key={b._id} value={b._id}>{b.fullName}{b.buyerNumber ? ` (${b.buyerNumber})` : ""}</option>)}
+        </FilterSelect>
+        <FilterSelect value={listingFilt} onChange={(e) => { setListingFilt(e.target.value); setPage(1); }}>
+          <option value="">All Listings</option>
+          {listings.map((l) => <option key={l._id} value={l._id}>{l.listingNumber} — {l.title}</option>)}
+        </FilterSelect>
+        <FilterDateRange
+          from={dateFrom} to={dateTo}
+          onFromChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
+          onToChange={(e) => { setDateTo(e.target.value); setPage(1); }}
+        />
+      </SaleFilterBar>
 
       {/* ── Table ────────────────────────────────────────────────────────── */}
       <div className={`flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm transition-all ${selected ? "mr-[364px]" : ""}`}>

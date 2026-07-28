@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
-import { FaBan, FaCheck, FaEdit, FaEnvelope, FaFileAlt, FaHandshake, FaHistory, FaMoneyBillWave, FaPlus, FaPrint, FaRedoAlt, FaSearch, FaSms, FaTimes, FaTrash } from "react-icons/fa";
+import { FaBan, FaCheck, FaEdit, FaEnvelope, FaFileAlt, FaHandshake, FaHistory, FaMoneyBillWave, FaPlus, FaPrint, FaRedoAlt, FaSms, FaTimes, FaTrash } from "react-icons/fa";
 import CwSmsModal from "../CarWash/CwSmsModal";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
+import SaleFilterBar, { FilterSearch, FilterSelect } from "./SaleFilterBar";
 import PaginationBar from "../../components/PaginationBar";
 import { saleApi } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
@@ -67,17 +68,18 @@ const SaleBuyers = () => {
   const [search,        setSearch]        = useTabState("/sale/buyers:search", "");
   const debouncedSearch = useDebounce(search, 400);
   const [kycFilter,     setKycFilter]     = useTabState("/sale/buyers:kycFilter", "");
+  const [sourceFilter,  setSourceFilter]  = useTabState("/sale/buyers:sourceFilter", "");
   const [page,          setPage]          = useTabState("/sale/buyers:page", 1);
   const [pageSize,      setPageSize]      = useTabState("/sale/buyers:pageSize", PAGE_SIZE);
   const [panelTab,      setPanelTab]      = useState("profile");
 
   const biz = currentCompany?._id;
 
-  useEffect(() => setPage(1), [debouncedSearch, kycFilter]);
+  useEffect(() => setPage(1), [debouncedSearch, kycFilter, sourceFilter]);
 
   const { data: buyersData, isLoading: loading, isFetching, error } = useQuery({
-    queryKey: ["sale-buyers", biz, debouncedSearch, kycFilter, page, pageSize],
-    queryFn:  () => saleApi.listBuyers({ business: biz, search: debouncedSearch, kycStatus: kycFilter, page, limit: pageSize }),
+    queryKey: ["sale-buyers", biz, debouncedSearch, kycFilter, sourceFilter, page, pageSize],
+    queryFn:  () => saleApi.listBuyers({ business: biz, search: debouncedSearch, kycStatus: kycFilter, source: sourceFilter, page, limit: pageSize }),
     enabled:  !!biz,
     placeholderData: (prev) => prev,
     staleTime: 30_000,
@@ -330,28 +332,24 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
       }
     >
       {/* Filter bar */}
-      <div className="flex-shrink-0 mb-1 flex flex-wrap items-center gap-1 border border-slate-200 bg-white px-2 py-1 shadow-sm">
-        <div className="relative min-w-[180px] flex-1">
-          <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Name, phone, ID…"
-            className="h-7 w-full border border-slate-300 pl-7 pr-2 text-xs placeholder:text-slate-400 focus:border-[#0B3B2E] focus:outline-none"
-          />
-        </div>
-        <select
-          value={kycFilter}
-          onChange={(e) => setKycFilter(e.target.value)}
-          className="h-7 border border-[#B7C9C0] bg-[#F1F6F3] px-1.5 text-xs font-semibold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
-        >
+      <SaleFilterBar
+        onReset={() => { setSearch(""); setKycFilter(""); setSourceFilter(""); setPage(1); }}
+        activeCount={[search, kycFilter, sourceFilter].filter(Boolean).length}
+      >
+        <FilterSearch
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Name, phone, ID…"
+        />
+        <FilterSelect value={kycFilter} onChange={(e) => setKycFilter(e.target.value)}>
           <option value="">All KYC Statuses</option>
-          {KYC_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        {(search || kycFilter) && (
-          <button type="button" onClick={() => { setSearch(""); setKycFilter(""); }} className="h-7 border border-rose-200 bg-rose-50 px-2.5 text-xs font-bold text-rose-600 hover:bg-rose-100">Clear</button>
-        )}
-      </div>
+          {KYC_STATUSES.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+        </FilterSelect>
+        <FilterSelect value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)}>
+          <option value="">All Sources</option>
+          {SOURCES.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</option>)}
+        </FilterSelect>
+      </SaleFilterBar>
 
       {/* Table + KYC detail panel */}
       <div className="relative flex flex-col flex-1 min-h-0 overflow-hidden">

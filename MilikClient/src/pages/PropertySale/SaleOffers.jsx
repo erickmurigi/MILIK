@@ -2,8 +2,9 @@ import React, { useState } from "react";
 import { useSelector } from "react-redux";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-toastify";
-import { FaCheck, FaEdit, FaHandshake, FaPlus, FaPrint, FaTimes } from "react-icons/fa";
+import { FaCheck, FaEdit, FaHandshake, FaPlus, FaPrint, FaRedoAlt, FaTimes } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
+import SaleFilterBar, { FilterSearch, FilterSelect } from "./SaleFilterBar";
 import PaginationBar from "../../components/PaginationBar";
 import { fmtKES, saleApi, todayISO } from "../../services/propertySaleApi";
 import AmountInput from "./AmountInput";
@@ -34,6 +35,8 @@ const SaleOffers = () => {
   const [search, setSearch] = useTabState("/sale/offers:search", "");
   const debouncedSearch = useDebounce(search, 400);
   const [statusFilter, setStatusFilter] = useTabState("/sale/offers:statusFilter", "");
+  const [listingFilt, setListingFilt] = useTabState("/sale/offers:listingFilt", "");
+  const [buyerFilt,   setBuyerFilt]   = useTabState("/sale/offers:buyerFilt", "");
   const [page, setPage] = useTabState("/sale/offers:page", 1);
   const [pageSize, setPageSize] = useTabState("/sale/offers:pageSize", LIMIT);
 
@@ -48,11 +51,13 @@ const SaleOffers = () => {
 
   // ── Queries ────────────────────────────────────────────────────────────────
   const { data: offersPage, isFetching } = useQuery({
-    queryKey: ["sale-offers", biz, debouncedSearch, statusFilter, page, pageSize],
+    queryKey: ["sale-offers", biz, debouncedSearch, statusFilter, listingFilt, buyerFilt, page, pageSize],
     queryFn: () => saleApi.listOffers({
       business: biz, limit: pageSize, page,
-      ...(statusFilter && { status: statusFilter }),
-      ...(debouncedSearch && { search: debouncedSearch }),
+      ...(statusFilter     && { status:    statusFilter }),
+      ...(debouncedSearch  && { search:    debouncedSearch }),
+      ...(listingFilt      && { listingId: listingFilt }),
+      ...(buyerFilt        && { buyerId:   buyerFilt }),
     }),
     enabled: !!biz,
     placeholderData: (prev) => prev,
@@ -317,37 +322,49 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
       title="Offers"
       subtitle={`${total} offer(s)`}
       action={
-        <button
-          onClick={() => { setForm(EMPTY_FORM); setShowCreate(true); }}
-          className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
-        >
-          <FaPlus size={9} /> New Offer
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={invalidate}
+            className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+          >
+            <FaRedoAlt size={9} className={isFetching ? "animate-spin" : ""} /> Refresh
+          </button>
+          <button
+            onClick={() => { setForm(EMPTY_FORM); setShowCreate(true); }}
+            className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#07271e]"
+          >
+            <FaPlus size={9} /> New Offer
+          </button>
+        </>
       }
     >
       <div className="flex-1 min-h-0 flex flex-col gap-1">
-        {/* Filters */}
-        <div className="mb-1 flex flex-wrap items-center gap-1 border border-slate-200 bg-white px-2 py-1 shadow-sm">
-          <input
+        {/* Filter bar */}
+        <SaleFilterBar
+          onReset={() => { setSearch(""); setStatusFilter(""); setListingFilt(""); setBuyerFilt(""); setPage(1); }}
+          activeCount={[search, statusFilter, listingFilt, buyerFilt].filter(Boolean).length}
+        >
+          <FilterSearch
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            placeholder="Search offer / listing / buyer…"
-            className="h-7 min-w-[180px] flex-1 border border-slate-300 px-2 text-xs focus:border-[#0B3B2E] focus:outline-none"
+            placeholder="Offer no. / listing / buyer…"
           />
-          <select
-            value={statusFilter}
-            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-            className="h-7 border border-[#B7C9C0] bg-[#F1F6F3] px-1.5 text-xs font-semibold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
-          >
+          <FilterSelect value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
             <option value="">All Statuses</option>
             {["pending", "negotiating", "accepted", "rejected", "expired", "withdrawn"].map((s) => (
               <option key={s} value={s}>{s === "negotiating" ? "Counter Active" : s.charAt(0).toUpperCase() + s.slice(1)}</option>
             ))}
-          </select>
-          <button type="button" onClick={invalidate} className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-            Refresh
-          </button>
-        </div>
+          </FilterSelect>
+          <FilterSelect value={listingFilt} onChange={(e) => { setListingFilt(e.target.value); setPage(1); }}>
+            <option value="">All Listings</option>
+            {listings.map((l) => <option key={l._id} value={l._id}>{l.listingNumber} — {l.title}</option>)}
+          </FilterSelect>
+          <FilterSelect value={buyerFilt} onChange={(e) => { setBuyerFilt(e.target.value); setPage(1); }}>
+            <option value="">All Buyers</option>
+            {buyers.map((b) => <option key={b._id} value={b._id}>{b.fullName}{b.buyerNumber ? ` (${b.buyerNumber})` : ""}</option>)}
+          </FilterSelect>
+        </SaleFilterBar>
 
         {/* Table */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">

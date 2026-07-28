@@ -2,12 +2,13 @@
  * Self-contained GL accounting service for the Property Sales module.
  *
  * Accounts used:
- *   [cashbook] — Actual bank/cash account chosen at payment time (Dr side for receipts)
+ *   [cashbook]  — Actual bank/cash account chosen at payment time (Dr side for receipts)
  *   1311 — Property Sale Receipts Control   (asset)    fallback Dr when no cashbook provided
  *   2180 — Agent Commission Payable          (liability) accrued commission owed to agents
  *   4410 — Property Sale Revenue             (income)   credit side for payments received
  *   5320 — Property Sale Commission Expense  (expense)  debit side for commission accrual
- *   5321 — Agent Commission Disbursements    (expense)  clearing account for commission payouts
+ *   5321 — Agent Commission Disbursements    (liability) fallback Cr when no cashbook provided at payout;
+ *           use a real bank/cashbook account at payout to avoid this fallback
  */
 
 import mongoose from "mongoose";
@@ -20,7 +21,7 @@ const PS_ACCOUNT_TEMPLATES = {
   "2180": { name: "Agent Commission Payable",         type: "liability", group: "liabilities", subGroup: "Agent Payables" },
   "4410": { name: "Property Sale Revenue",            type: "income",    group: "income",      subGroup: "Property Sales" },
   "5320": { name: "Property Sale Commission Expense", type: "expense",   group: "expenses",    subGroup: "Sales Commissions" },
-  "5321": { name: "Agent Commission Disbursements",   type: "expense",   group: "expenses",    subGroup: "Sales Commissions" },
+  "5321": { name: "Agent Commission Disbursements",   type: "liability", group: "liabilities", subGroup: "Agent Payables" },
 };
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
@@ -78,6 +79,7 @@ export const postPropertySalePaymentLedger = async ({ businessId, payment, userI
     sourceTransactionType: "property_sale_payment",
     sourceTransactionId: String(payment._id),
     status: { $ne: "reversed" },
+    category: { $ne: "REVERSAL" },
   });
   if (existing > 0) return;
 
@@ -149,6 +151,7 @@ export const postPropertySaleCommissionAccrual = async ({ businessId, commission
     sourceTransactionType: "property_sale_commission",
     sourceTransactionId: String(commission._id),
     status: { $ne: "reversed" },
+    category: { $ne: "REVERSAL" },
   });
   if (existing > 0) return;
 
@@ -186,9 +189,10 @@ export const postPropertySaleCommissionAccrual = async ({ businessId, commission
 /**
  * Called when a commission is marked "paid".
  * Step 1: ensure the accrual exists  — Dr 5320 Commission Expense / Cr 2180 Commission Payable
- * Step 2: clear the payable          — Dr 2180 Commission Payable / Cr 5321 Commission Disbursements
+ * Step 2: clear the payable          — Dr 2180 Commission Payable / Cr [cashbook] (or fallback Cr 5321)
+ * cashbookAccountId: ChartOfAccount _id; when provided the actual bank account is credited.
  */
-export const postPropertySaleCommissionPayout = async ({ businessId, commission, userId, payoutDate }) => {
+export const postPropertySaleCommissionPayout = async ({ businessId, commission, userId, payoutDate, cashbookAccountId }) => {
   await postPropertySaleCommissionAccrual({ businessId, commission, userId });
 
   const amount = round2(Number(commission.commissionAmount || 0));
@@ -199,6 +203,7 @@ export const postPropertySaleCommissionPayout = async ({ businessId, commission,
     sourceTransactionType: "property_sale_commission_payout",
     sourceTransactionId: String(commission._id),
     status: { $ne: "reversed" },
+    category: { $ne: "REVERSAL" },
   });
   if (existingPayout > 0) return;
 
@@ -206,10 +211,14 @@ export const postPropertySaleCommissionPayout = async ({ businessId, commission,
   const { start, end } = dayRange(effectiveDate);
   const journalGroupId = new mongoose.Types.ObjectId();
 
-  const [payableAcc, disbursementAcc] = await Promise.all([
+  const [payableAcc, creditAcc] = await Promise.all([
     resolvePSAccount(businessId, "2180"),
-    resolvePSAccount(businessId, "5321"),
+    cashbookAccountId
+      ? ChartOfAccount.findById(cashbookAccountId).lean()
+      : resolvePSAccount(businessId, "5321"),
   ]);
+
+  if (!creditAcc) throw new Error("Commission payout cashbook account not found — GL posting aborted");
 
   const ref = commission.commissionNumber || String(commission._id);
 
@@ -227,8 +236,8 @@ export const postPropertySaleCommissionPayout = async ({ businessId, commission,
   };
 
   await Promise.all([
-    postEntry({ ...base, accountId: payableAcc._id,      direction: "debit",  amount, notes: `Agent commission payable cleared — ${ref}` }),
-    postEntry({ ...base, accountId: disbursementAcc._id, direction: "credit", amount, notes: `Agent commission disbursed — ${ref}` }),
+    postEntry({ ...base, accountId: payableAcc._id, direction: "debit",  amount, notes: `Agent commission payable cleared — ${ref}` }),
+    postEntry({ ...base, accountId: creditAcc._id,  direction: "credit", amount, notes: `Agent commission disbursed — ${ref}` }),
   ]);
 };
 

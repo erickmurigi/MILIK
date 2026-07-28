@@ -2,9 +2,10 @@ import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { FaChartLine, FaEdit, FaPlus, FaPrint, FaRedoAlt, FaSearch, FaTimes, FaTrash } from "react-icons/fa";
+import { FaChartLine, FaEdit, FaPlus, FaPrint, FaRedoAlt, FaTimes, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
+import SaleFilterBar, { FilterSearch, FilterSelect } from "./SaleFilterBar";
 import PaginationBar from "../../components/PaginationBar";
 import { saleApi, fmtKES } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
@@ -46,19 +47,20 @@ const SaleAgents = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState("");
   const [form,      setForm]      = useState(blankForm);
-  const [search,    setSearch]    = useTabState("/sale/agents:search", "");
+  const [search,       setSearch]       = useTabState("/sale/agents:search", "");
   const debouncedSearch = useDebounce(search, 400);
   const [statusFilter, setStatusFilter] = useTabState("/sale/agents:statusFilter", "");
-  const [page,      setPage]      = useTabState("/sale/agents:page", 1);
-  const [pageSize,  setPageSize]  = useTabState("/sale/agents:pageSize", PAGE_SIZE);
+  const [commTypeFilt, setCommTypeFilt] = useTabState("/sale/agents:commTypeFilt", "");
+  const [page,         setPage]         = useTabState("/sale/agents:page", 1);
+  const [pageSize,     setPageSize]     = useTabState("/sale/agents:pageSize", PAGE_SIZE);
 
   const biz = currentCompany?._id;
 
-  useEffect(() => setPage(1), [debouncedSearch, statusFilter]);
+  useEffect(() => setPage(1), [debouncedSearch, statusFilter, commTypeFilt]);
 
   const { data: agentsData, isLoading: loading, isFetching, error } = useQuery({
-    queryKey: ["sale-agents", biz, debouncedSearch, statusFilter, page, pageSize],
-    queryFn:  () => saleApi.listAgents({ business: biz, search: debouncedSearch, status: statusFilter || undefined, page, limit: pageSize }),
+    queryKey: ["sale-agents", biz, debouncedSearch, statusFilter, commTypeFilt, page, pageSize],
+    queryFn:  () => saleApi.listAgents({ business: biz, search: debouncedSearch, status: statusFilter || undefined, commissionType: commTypeFilt, page, limit: pageSize }),
     enabled:  !!biz,
     placeholderData: (prev) => prev,
     staleTime: 30_000,
@@ -198,29 +200,26 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
       }
     >
       {/* Filter bar */}
-      <div className="mb-1 flex flex-wrap items-center gap-1 border border-slate-200 bg-white px-2 py-1 shadow-sm">
-        <div className="relative min-w-[180px] flex-1">
-          <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search agents…"
-            className="h-7 w-full border border-slate-300 pl-7 pr-2 text-xs placeholder:text-slate-400 focus:border-[#0B3B2E] focus:outline-none"
-          />
-        </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="h-7 border border-[#B7C9C0] bg-[#F1F6F3] px-1.5 text-xs font-semibold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
-        >
+      <SaleFilterBar
+        onReset={() => { setSearch(""); setStatusFilter(""); setCommTypeFilt(""); setPage(1); }}
+        activeCount={[search, statusFilter, commTypeFilt].filter(Boolean).length}
+      >
+        <FilterSearch
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search agents…"
+        />
+        <FilterSelect value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">All Statuses</option>
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
-        </select>
-        {(search || statusFilter) && (
-          <button type="button" onClick={() => { setSearch(""); setStatusFilter(""); }} className="h-7 border border-rose-200 bg-rose-50 px-2.5 text-xs font-bold text-rose-600 hover:bg-rose-100">Clear</button>
-        )}
-      </div>
+        </FilterSelect>
+        <FilterSelect value={commTypeFilt} onChange={(e) => setCommTypeFilt(e.target.value)}>
+          <option value="">All Commission Types</option>
+          <option value="percentage">Percentage</option>
+          <option value="flat">Flat</option>
+        </FilterSelect>
+      </SaleFilterBar>
 
       {/* Table */}
       <div className="flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm">

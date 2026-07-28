@@ -4,6 +4,7 @@ import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { FaBan, FaEdit, FaPlus, FaPrint, FaRedoAlt, FaTimes } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
+import SaleFilterBar, { FilterSearch, FilterSelect, FilterDateRange } from "./SaleFilterBar";
 import PaginationBar from "../../components/PaginationBar";
 import { fmtKES, saleApi, todayISO } from "../../services/propertySaleApi";
 import AmountInput from "./AmountInput";
@@ -77,11 +78,13 @@ const SalePayments = () => {
   const [methodFilter, setMethodFilter] = useTabState("/sale/payments:methodFilter", "");
   const [statusFilter, setStatusFilter] = useTabState("/sale/payments:statusFilter", "");
   const [search,       setSearch]       = useTabState("/sale/payments:search", "");
+  const [dateFrom,     setDateFrom]     = useTabState("/sale/payments:dateFrom", "");
+  const [dateTo,       setDateTo]       = useTabState("/sale/payments:dateTo", "");
   const [page,         setPage]         = useTabState("/sale/payments:page", 1);
   const [pageSize,     setPageSize]     = useTabState("/sale/payments:pageSize", PAGE_SIZE);
 
   const { data: paymentsData, isLoading: loading, isFetching } = useQuery({
-    queryKey: ["sale-payments", biz, dealFilter, typeFilter, methodFilter, statusFilter, search, page, pageSize],
+    queryKey: ["sale-payments", biz, dealFilter, typeFilter, methodFilter, statusFilter, search, dateFrom, dateTo, page, pageSize],
     queryFn:  () => saleApi.listPayments({
       business: biz, limit: pageSize, page,
       ...(dealFilter   && { deal: dealFilter }),
@@ -89,6 +92,8 @@ const SalePayments = () => {
       ...(methodFilter && { paymentMethod: methodFilter }),
       ...(statusFilter && { status: statusFilter }),
       ...(search       && { search }),
+      ...(dateFrom     && { dateFrom }),
+      ...(dateTo       && { dateTo }),
     }),
     enabled:  !!biz,
     placeholderData: (prev) => prev,
@@ -210,7 +215,7 @@ const SalePayments = () => {
   };
 
   const hasFilters     = dealFilter || typeFilter || methodFilter || statusFilter || search;
-  const resetFilters   = () => { setDealFilter(""); setTypeFilter(""); setMethodFilter(""); setStatusFilter(""); setSearch(""); setPage(1); };
+  const resetFilters   = () => { setDealFilter(""); setTypeFilter(""); setMethodFilter(""); setStatusFilter(""); setSearch(""); setDateFrom(""); setDateTo(""); setPage(1); };
   return (
     <PropertySaleShell
       title="Payments"
@@ -235,53 +240,40 @@ const SalePayments = () => {
       }
     >
       {/* Filter bar */}
-      <div className="mb-1 flex flex-wrap items-center gap-1 border border-slate-200 bg-white px-2 py-1 shadow-sm">
-        <input
+      <SaleFilterBar
+        onReset={resetFilters}
+        activeCount={[search, dealFilter, typeFilter, methodFilter, statusFilter, dateFrom, dateTo].filter(Boolean).length}
+      >
+        <FilterSearch
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          placeholder="Receipt no."
-          className="h-7 w-28 border border-slate-300 px-2 text-xs placeholder:text-slate-400 focus:border-[#0B3B2E] focus:outline-none"
+          placeholder="Receipt no. / buyer…"
+          minWidth="130px"
         />
-        <select
-          value={dealFilter}
-          onChange={(e) => { setDealFilter(e.target.value); setPage(1); }}
-          className="h-7 max-w-[180px] border border-[#B7C9C0] bg-[#F1F6F3] px-1.5 text-xs font-semibold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
-        >
+        <FilterSelect value={dealFilter} onChange={(e) => { setDealFilter(e.target.value); setPage(1); }} className="max-w-[200px]">
           <option value="">All Deals</option>
           {deals.map((d) => (
             <option key={d._id} value={d._id}>{d.dealNumber} — {d.listing?.title || d.listing?.listingNumber || ""}</option>
           ))}
-        </select>
-        <select
-          value={typeFilter}
-          onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
-          className="h-7 border border-slate-200 bg-slate-50 px-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none"
-        >
+        </FilterSelect>
+        <FilterSelect value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}>
           <option value="">All Types</option>
           {PAYMENT_TYPES.map((t) => <option key={t} value={t}>{fmtLabel(t)}</option>)}
-        </select>
-        <select
-          value={methodFilter}
-          onChange={(e) => { setMethodFilter(e.target.value); setPage(1); }}
-          className="h-7 border border-slate-200 bg-slate-50 px-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none"
-        >
+        </FilterSelect>
+        <FilterSelect value={methodFilter} onChange={(e) => { setMethodFilter(e.target.value); setPage(1); }}>
           <option value="">All Methods</option>
           {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{fmtLabel(m)}</option>)}
-        </select>
-        <select
-          value={statusFilter}
-          onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-          className="h-7 border border-slate-200 bg-slate-50 px-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none"
-        >
+        </FilterSelect>
+        <FilterSelect value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
           <option value="">All Statuses</option>
           {["paid", "pending", "cancelled"].map((s) => <option key={s} value={s}>{fmtLabel(s)}</option>)}
-        </select>
-        {hasFilters && (
-          <button type="button" onClick={resetFilters} className="h-7 border border-rose-200 bg-rose-50 px-2.5 text-xs font-bold text-rose-600 hover:bg-rose-100">
-            Clear
-          </button>
-        )}
-      </div>
+        </FilterSelect>
+        <FilterDateRange
+          from={dateFrom} to={dateTo}
+          onFromChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
+          onToChange={(e) => { setDateTo(e.target.value); setPage(1); }}
+        />
+      </SaleFilterBar>
 
       {/* Total collected stat */}
       <div className="mb-1 flex items-center gap-3 border border-emerald-200 bg-emerald-50 px-3 py-1.5">

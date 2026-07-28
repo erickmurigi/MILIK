@@ -35,7 +35,7 @@ export const listPayments = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const bId = new mongoose.Types.ObjectId(String(business));
-    const { deal = "", buyer = "", paymentType = "", paymentMethod = "", status = "", search = "" } = req.query;
+    const { deal = "", buyer = "", paymentType = "", paymentMethod = "", status = "", search = "", dateFrom = "", dateTo = "" } = req.query;
     const page  = Math.max(1, parseInt(req.query.page)  || 1);
     const limit = Math.min(200, parseInt(req.query.limit) || 50);
     const skip  = (page - 1) * limit;
@@ -47,6 +47,11 @@ export const listPayments = async (req, res, next) => {
     if (paymentMethod) filter.paymentMethod = paymentMethod;
     if (status)        filter.status        = status;
     if (search)        filter.paymentNumber = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
+    if (dateFrom || dateTo) {
+      filter.paymentDate = {};
+      if (dateFrom) filter.paymentDate.$gte = new Date(dateFrom);
+      if (dateTo)   filter.paymentDate.$lte = new Date(dateTo + "T23:59:59.999Z");
+    }
 
     const collectedMatch = { business: bId, status: "paid" };
     if (deal) collectedMatch.deal = new mongoose.Types.ObjectId(String(deal));

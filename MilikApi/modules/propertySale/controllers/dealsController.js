@@ -29,13 +29,19 @@ const computeTotals = async (business, dealId) => {
 export const listDeals = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const { search = "", status = "", agentId = "", buyerId = "" } = req.query;
+    const { search = "", status = "", agentId = "", buyerId = "", listingId = "", dateFrom = "", dateTo = "" } = req.query;
     const page = Math.max(Number(req.query.page || 1), 1);
     const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);
     const filter = { business };
-    if (status) filter.status = status;
-    if (agentId) filter.agent = agentId;
-    if (buyerId) filter.buyer = buyerId;
+    if (status)    filter.status  = status;
+    if (agentId)   filter.agent   = agentId;
+    if (buyerId)   filter.buyer   = buyerId;
+    if (listingId) filter.listing = listingId;
+    if (dateFrom || dateTo) {
+      filter.dealDate = {};
+      if (dateFrom) filter.dealDate.$gte = new Date(dateFrom);
+      if (dateTo)   filter.dealDate.$lte = new Date(dateTo + "T23:59:59.999Z");
+    }
     if (search.trim()) {
       const rx = new RegExp(escapeRegex(search.trim()), "i");
       filter.$or = [{ dealNumber: rx }];
@@ -192,14 +198,20 @@ export const closeDeal = async (req, res, next) => {
       SaleCommission.find({ business, deal: deal._id, status: "pending" }).lean(),
     ]);
 
-    // Post GL accrual for each pending commission — all must succeed before approving
-    await Promise.all(
-      pendingCommissions.map((commission) =>
-        postPropertySaleCommissionAccrual({ businessId: business, commission, userId }).catch((err) =>
-          console.error("[PS GL] postPropertySaleCommissionAccrual failed:", err.message)
+    // Post GL accrual for every pending commission — if any fail, roll back the deal
+    try {
+      await Promise.all(
+        pendingCommissions.map((commission) =>
+          postPropertySaleCommissionAccrual({ businessId: business, commission, userId })
         )
-      )
-    );
+      );
+    } catch (glErr) {
+      deal.status = "active";
+      deal.updatedBy = userId;
+      await deal.save();
+      await SaleListing.findByIdAndUpdate(deal.listing, { status: "under_contract" });
+      return next(createError(500, `GL accrual failed during deal close: ${glErr.message}. Deal has been rolled back to active.`));
+    }
     await SaleCommission.updateMany({ business, deal: deal._id, status: "pending" }, { status: "approved" });
 
     res.status(200).json({ ...deal.toObject(), totalPaid, balance: 0 });
@@ -217,9 +229,15 @@ export const cancelDeal = async (req, res, next) => {
     if (deal.status === "closed") return next(createError(400, "Cannot cancel a closed deal"));
     if (deal.status === "cancelled") return next(createError(400, "Deal is already cancelled"));
 
-    const paidPaymentCount = await SalePayment.countDocuments({ business, deal: deal._id, status: "paid" });
+    const [paidPaymentCount, paidCommissionCount] = await Promise.all([
+      SalePayment.countDocuments({ business, deal: deal._id, status: "paid" }),
+      SaleCommission.countDocuments({ business, deal: deal._id, status: "paid" }),
+    ]);
     if (paidPaymentCount > 0) {
       return next(createError(400, `${paidPaymentCount} payment(s) must be voided before cancelling this deal`));
+    }
+    if (paidCommissionCount > 0) {
+      return next(createError(400, `${paidCommissionCount} commission(s) have already been paid out — reverse them before cancelling this deal`));
     }
 
     deal.status = "cancelled";
@@ -232,15 +250,21 @@ export const cancelDeal = async (req, res, next) => {
       SaleCommission.find({ business, deal: deal._id, status: "approved" }).lean(),
     ]);
 
-    // Reverse GL accrual for any already-approved commissions before cancelling
+    // Reverse GL accrual for approved commissions — roll back deal if any reversal fails
     const cancellationReason = req.body.cancellationReason ? `Deal cancelled: ${req.body.cancellationReason}` : "Deal cancelled";
-    await Promise.all(
-      approvedCommissions.map((commission) =>
-        reversePropertySaleCommissionAccrual({ businessId: business, commission, userId, reason: cancellationReason }).catch((err) =>
-          console.error("[PS GL] reversePropertySaleCommissionAccrual failed:", err.message)
+    try {
+      await Promise.all(
+        approvedCommissions.map((commission) =>
+          reversePropertySaleCommissionAccrual({ businessId: business, commission, userId, reason: cancellationReason })
         )
-      )
-    );
+      );
+    } catch (glErr) {
+      deal.status = "active";
+      deal.updatedBy = userId;
+      await deal.save();
+      await SaleListing.findByIdAndUpdate(deal.listing, { status: "under_contract" });
+      return next(createError(500, `GL reversal failed during deal cancellation: ${glErr.message}. Deal has been rolled back to active.`));
+    }
     await SaleCommission.updateMany({ business, deal: deal._id, status: { $in: ["pending", "approved"] } }, { status: "cancelled" });
 
     res.status(200).json(deal);
