@@ -85,7 +85,7 @@ export const getQueueBgImage = async (req, res, next) => {
     }
     if (!fs.existsSync(filePath)) return res.status(404).end();
 
-    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.setHeader("Cache-Control", "public, max-age=300");
     res.sendFile(filePath);
   } catch (err) {
     next(err);

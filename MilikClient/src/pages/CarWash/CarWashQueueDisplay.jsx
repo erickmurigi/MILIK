@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 
-const POLL_INTERVAL = 20_000;
+const POLL_INTERVAL = 8_000;
 
 const elapsed = (iso) => {
   const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
@@ -101,8 +101,9 @@ const CarWashQueueDisplay = () => {
 
   const jobs         = data?.jobs ?? [];
   const businessName = data?.business?.name ?? "Car Wash";
-  const bgImage      = data?.business?.queueBgImage
-    ? `/api/carwash/display/${businessId}/bg`
+  const queueBgRaw   = data?.business?.queueBgImage || null;
+  const bgImage      = queueBgRaw
+    ? `/api/carwash/display/${businessId}/bg?v=${encodeURIComponent(queueBgRaw.split("/").pop())}`
     : null;
   const byStatus     = (s) => jobs.filter((j) => j.status === s);
 
