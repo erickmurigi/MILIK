@@ -112,22 +112,16 @@ const CarWashQueueDisplay = () => {
       className="relative flex h-screen flex-col overflow-hidden"
       style={{ background: "linear-gradient(160deg, #050d1a 0%, #0a1120 60%, #050d1a 100%)", paddingTop: "18px" }}
     >
-      {/* Background image — edge-to-edge, anchored to top so the signboard stays in frame */}
+      {/* Background image — contain so the full image is shown exactly as uploaded */}
       {bgImage && (
         <div
           className="pointer-events-none absolute inset-0"
           style={{
             backgroundImage: `url(${bgImage})`,
-            backgroundSize: "cover",
-            backgroundPosition: "center top",
+            backgroundSize: "contain",
+            backgroundPosition: "center center",
+            backgroundRepeat: "no-repeat",
           }}
-        />
-      )}
-      {/* Dark overlay — keeps text readable over bright signage */}
-      {bgImage && (
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.30) 0%, rgba(0,0,0,0.10) 25%, rgba(0,0,0,0.10) 70%, rgba(0,0,0,0.45) 100%)" }}
         />
       )}
 
