@@ -553,14 +553,25 @@ export const awardLoyaltyStamp = async ({ business, job, overridePhone = null, m
     { upsert: true, new: true }
   );
 
-  // Redemption visits never earn a stamp — stamps restart on the next fresh visit
-  if (job.rewardRedemption) return null;
   // Voucher jobs are paid by the issuing company — no personal stamp earned
   if (job.isVoucher) return null;
 
-  // Idempotency guard — a stamp for this exact job was already awarded (e.g. Done then Paid)
+  // Idempotency guard — this job was already stamped or a redemption was already recorded
   const jobIdStr = String(job._id);
   if (card.stampHistory.some((h) => String(h.job) === jobIdStr)) return card;
+
+  // Redemption visits consume one pending reward instead of earning a stamp.
+  // Must be checked AFTER the idempotency guard so double-payments don't double-consume.
+  if (job.rewardRedemption) {
+    if (card.pendingRewards > 0) {
+      card.pendingRewards     = Math.max(0, card.pendingRewards - 1);
+      card.totalRewardsRedeemed += 1;
+      card.lastRedemptionAt   = new Date();
+      card.stampHistory.push({ job: job._id, jobNumber: job.jobNumber || '', plate, awardedAt: new Date(), wasRedemption: true });
+      await card.save();
+    }
+    return { card, rewardTriggered: false };
+  }
 
   // 4. Check service eligibility — empty applicableServices = all services qualify.
   // If services were typed manually (not selected from catalog), service IDs are null —
@@ -654,6 +665,19 @@ export const awardLoyaltyStamp = async ({ business, job, overridePhone = null, m
 // Creates or updates the CarWashCustomer record for a plate.
 // Called at job creation AND as a safety net before stamp awarding.
 // Never throws — failure must not block any calling flow.
+// Kenyan plate pattern (KXX + 3-4 digits + optional letter) after normalization.
+// Used to reject plate-formatted strings being saved as customer names.
+const PLATE_RE = /^[A-Z]{2,3}\d{3,4}[A-Z]?$/;
+const looksLikePlate = (v) => PLATE_RE.test(normalizePlate(v || ''));
+
+// Strip a customerName that looks like a different plate to avoid "KDX767P" as a name.
+const safeCustomerName = (raw, ownPlate) => {
+  const s = String(raw || '').trim();
+  if (!s) return null;
+  if (looksLikePlate(s) && normalizePlate(s) !== normalizePlate(ownPlate)) return null;
+  return s;
+};
+
 export const ensureCarWashCustomer = async ({ business, plate, customerName, phone, maskedMsisdn = null, payerName = null }) => {
   try {
     const normalizedPlate = normalizePlate(plate);
@@ -661,6 +685,8 @@ export const ensureCarWashCustomer = async ({ business, plate, customerName, pho
     const cleanPhone = String(phone || '').trim() || null;
     const cleanMasked = String(maskedMsisdn || '').trim() || null;
     const cleanPayerName = String(payerName || '').trim() || null;
+    // Guard: reject a customerName that looks like a different plate (e.g. staff typed wrong plate in name field)
+    const cleanCustomerName = safeCustomerName(customerName, normalizedPlate);
 
     // Plate is the sole identity key — every unique plate is its own customer record.
     // Phone is stored as metadata only and is never used for lookup or merging.
@@ -671,7 +697,7 @@ export const ensureCarWashCustomer = async ({ business, plate, customerName, pho
       try {
         const doc = {
           business,
-          name: cleanPayerName || String(customerName || normalizedPlate).trim() || normalizedPlate,
+          name: cleanPayerName || cleanCustomerName || normalizedPlate,
           plates: [normalizedPlate],
           notes: 'Auto-enrolled at first wash',
         };
@@ -696,9 +722,12 @@ export const ensureCarWashCustomer = async ({ business, plate, customerName, pho
     } else if (cleanMasked && !customer.phone && customer.maskedMsisdn !== cleanMasked) {
       updates.maskedMsisdn = cleanMasked;
     }
-    // Replace name if: (a) none set yet, or (b) current name is just the plate number (auto-enrolled placeholder)
-    const nameIsPlate = customer.name &&
-      (customer.plates || []).some((p) => String(p).trim().toUpperCase() === customer.name.trim().toUpperCase());
+    // Replace name if: (a) none set yet, (b) current name is the plate itself, or (c) current name
+    // looks like a different plate number (staff data-entry error — correct it when a real name arrives)
+    const nameIsPlate = customer.name && (
+      (customer.plates || []).some((p) => String(p).trim().toUpperCase() === customer.name.trim().toUpperCase()) ||
+      looksLikePlate(customer.name)
+    );
     if (cleanPayerName && (!customer.name || nameIsPlate)) updates.name = cleanPayerName;
     if (Object.keys(updates).length) {
       await CarWashCustomer.updateOne({ _id: customer._id }, { $set: updates });
