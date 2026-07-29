@@ -931,7 +931,7 @@ const buildDebitNoteAllocationSnapshots = (notes = []) =>
         tenant: note?.tenant,
         amount: round2(Math.abs(Number(note?.amount || 0))),
         invoiceNumber: noteNumber,
-        category: note?.category || metadata?.sourceInvoiceCategory || "OTHER_CHARGE",
+        category: "DEBIT_NOTE",
         metadata: {
           ...metadata,
           sourceTransactionType: "invoice_note",
@@ -2580,6 +2580,41 @@ export const getTenantInvoicesList = async (req, res, next) => {
           computedStatus: snapshot.computedStatus || invoice.status,
           receiptApplications,
         };
+      });
+
+      // Append outstanding debit notes as separate selectable items.
+      // The snapshot engine (computeTenantInvoiceSnapshotsBatch) already computed their
+      // outstanding balances — we just need to surface them here.
+      const matchedInvoiceIds = new Set(adjustedInvoices.map((inv) => String(inv._id)));
+      snapshotByInvoiceId.forEach((snap) => {
+        if (matchedInvoiceIds.has(String(snap._id))) return; // already a regular invoice
+        if (String(snap?.metadata?.noteType || "").toUpperCase() !== "DEBIT_NOTE") return;
+        const amt = round2(Math.abs(Number(snap.amount || 0)));
+        const outstanding = round2(Number(snap.outstanding || 0));
+        if (amt <= 0 || outstanding <= 0) return; // skip zero-amount or fully-paid notes
+        const applied = round2(Math.max(0, amt - outstanding));
+        hydratedInvoices.push({
+          _id: snap._id,
+          noteType: "DEBIT_NOTE",
+          tenant: snap.tenant,
+          amount: amt,
+          adjustedAmount: amt,
+          appliedAmount: applied,
+          outstanding,
+          computedStatus: applied > 0.009 ? "partially_paid" : "pending",
+          status: "pending",
+          category: "DEBIT_NOTE",
+          invoiceNumber: snap.invoiceNumber || "",
+          description: snap.description || "Debit Note",
+          invoiceDate: snap.invoiceDate || null,
+          dueDate: snap.dueDate || null,
+          createdAt: snap.createdAt || null,
+          metadata: snap.metadata || {},
+          ledgerMode: "invoice_note",
+          receiptApplications: (receiptApplicationsByInvoiceId.get(String(snap._id)) || [])
+            .slice()
+            .sort((a, b) => (a.receiptDate ? new Date(a.receiptDate).getTime() : 0) - (b.receiptDate ? new Date(b.receiptDate).getTime() : 0)),
+        });
       });
     }
 

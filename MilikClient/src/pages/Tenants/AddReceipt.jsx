@@ -66,7 +66,10 @@ const isTerminatedTenant = (tenant) => {
 };
 
 const getChargeTypeFromInvoice = (invoice) => {
+  const noteType = String(invoice?.noteType || invoice?.metadata?.noteType || "").toUpperCase();
+  if (noteType === "DEBIT_NOTE") return "debit_note";
   const category = String(invoice?.category || "").toUpperCase();
+  if (category === "DEBIT_NOTE") return "debit_note";
   const metadata = invoice?.metadata && typeof invoice.metadata === "object" ? invoice.metadata : {};
   if (category === "RENT_CHARGE" && String(metadata?.billItemKey || "").trim().toLowerCase() === "rent_utility:combined") {
     return "combined";
@@ -83,6 +86,7 @@ const getChargeTypeLabel = (chargeType = "rent") => {
   if (normalized === "utility") return "Utility";
   if (normalized === "deposit") return "Deposit";
   if (normalized === "late_fee") return "Late Penalty";
+  if (normalized === "debit_note") return "Debit Note";
   return "Rent";
 };
 
@@ -530,7 +534,7 @@ const AddReceipt = () => {
     const entries = Object.entries(totals);
     if (!entries.length) return "rent";
     const primary = entries.sort((a, b) => b[1] - a[1])[0][0];
-    return { rent: "rent", deposit: "deposit", utility: "utility", late_fee: "late_fee", combined: "rent" }[primary] || "rent";
+    return { rent: "rent", deposit: "deposit", utility: "utility", late_fee: "late_fee", combined: "rent", debit_note: "other" }[primary] || "rent";
   }, [creditOnAccountMode, allocationPreview]);
 
   const prepaymentTypeOptions = useMemo(() => {
