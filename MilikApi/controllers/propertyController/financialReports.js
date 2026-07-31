@@ -686,11 +686,19 @@ export const getRentalCollectionReport = async (req, res, next) => {
     });
 
     if (req.query.tenantId) paymentQuery.tenant = toObjectId(req.query.tenantId);
-    if (req.query.unitId) paymentQuery.unit = toObjectId(req.query.unitId);
     if (req.query.paymentMethod) paymentQuery.paymentMethod = req.query.paymentMethod;
-    // Push property filter to DB — RentPayment has a direct property field
-    if (req.query.propertyId) paymentQuery.property = toObjectId(req.query.propertyId);
     if (req.query.cashbook) paymentQuery.cashbook = { $regex: escapeRegex(req.query.cashbook), $options: "i" };
+    // RentPayment doesn't reliably carry a direct property field — resolve via unit.
+    // unitId is more specific and takes precedence; propertyId resolves to its unit IDs.
+    if (req.query.unitId) {
+      paymentQuery.unit = toObjectId(req.query.unitId);
+    } else if (req.query.propertyId) {
+      const propertyUnitIds = await Unit.find(
+        { property: toObjectId(req.query.propertyId), business: businessId },
+        { _id: 1 }
+      ).lean();
+      paymentQuery.unit = { $in: propertyUnitIds.map((u) => u._id) };
+    }
 
     const invoiceQuery = {
       business: businessId,

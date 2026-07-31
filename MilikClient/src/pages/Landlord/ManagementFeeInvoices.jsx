@@ -1,4 +1,5 @@
 import { LISTING_UI } from "../../utils/listingPageUtils";
+import AppSelect from "../../components/common/AppSelect";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { FaEnvelope, FaFileInvoiceDollar, FaPrint, FaSearch, FaRedoAlt, FaSms } from "react-icons/fa";
@@ -200,33 +201,31 @@ const ManagementFeeInvoices = () => {
                 onKeyDown={(e) => e.key === "Enter" && applyFilters()}
                 className={`${LISTING_UI.filterInput} w-52`}
               />
-              <select
-                value={draftFilters.propertyId}
-                onChange={setFilter("propertyId")}
-                className={LISTING_UI.filterSelect}
-              >
-                {propertyOptions.map((o) => (
-                  <option key={o.v} value={o.v}>{o.l}</option>
-                ))}
-              </select>
-              <select
-                value={draftFilters.month}
-                onChange={setFilter("month")}
-                className={LISTING_UI.filterSelect}
-              >
-                {MONTH_OPTIONS.map((o) => (
-                  <option key={o.v} value={o.v}>{o.l}</option>
-                ))}
-              </select>
-              <select
-                value={draftFilters.year}
-                onChange={setFilter("year")}
-                className={LISTING_UI.filterSelect}
-              >
-                {YEAR_OPTIONS.map((o) => (
-                  <option key={o.v} value={o.v}>{o.l}</option>
-                ))}
-              </select>
+              <AppSelect
+                value={draftFilters.propertyId || null}
+                onChange={(v) => setDraftFilters((prev) => ({ ...prev, propertyId: v ?? "" }))}
+                options={propertyOptions.map((o) => ({ value: o.v, label: o.l }))}
+                placeholder="All Properties"
+                searchable
+                clearable
+                size="sm"
+              />
+              <AppSelect
+                value={draftFilters.month || null}
+                onChange={(v) => setDraftFilters((prev) => ({ ...prev, month: v ?? "" }))}
+                options={MONTH_OPTIONS.map((o) => ({ value: o.v, label: o.l }))}
+                placeholder="All Months"
+                clearable
+                size="sm"
+              />
+              <AppSelect
+                value={draftFilters.year || null}
+                onChange={(v) => setDraftFilters((prev) => ({ ...prev, year: v ?? "" }))}
+                options={YEAR_OPTIONS.map((o) => ({ value: o.v, label: o.l }))}
+                placeholder="All Years"
+                clearable
+                size="sm"
+              />
               <button onClick={applyFilters} className={LISTING_UI.searchButton}>
                 <FaSearch size={11} /> Search
               </button>

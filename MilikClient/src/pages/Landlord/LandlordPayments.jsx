@@ -18,6 +18,7 @@ import { toast } from "react-toastify";
 import { getLandlords, getLandlordPayments } from "../../redux/apiCalls";
 import { selectCurrentCompany, selectCurrentUser, selectAllProperties, selectAllTenants } from "../../redux/selectors";
 import { hasCompanyPermission } from "../../utils/permissions";
+import AppSelect from "../../components/common/AppSelect";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import { getProperties } from "../../redux/propertyRedux";
 // NOTE: getLandlords is a thunk creator — must be called via dispatch(getLandlords({...}))
@@ -586,12 +587,20 @@ const LandlordPayments = ({ mode = "payments" }) => {
                 <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]" />
                 <input value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder="Search name, code, email…" className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </div>
-              <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                <option value="all">All Status</option><option value="Active">Active</option><option value="Archived">Archived</option>
-              </select>
-              <select value={filters.paymentStatus} onChange={(e) => setFilters({ ...filters, paymentStatus: e.target.value })} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                <option value="all">All Payment Status</option><option value="owed">Balance Owed</option><option value="clear">Fully Paid</option>
-              </select>
+              <AppSelect
+                value={filters.status || null}
+                onChange={(v) => setFilters({ ...filters, status: v ?? 'all' })}
+                options={[{ value: 'all', label: 'All Status' }, { value: 'Active', label: 'Active' }, { value: 'Archived', label: 'Archived' }]}
+                size="sm"
+                clearable
+              />
+              <AppSelect
+                value={filters.paymentStatus || null}
+                onChange={(v) => setFilters({ ...filters, paymentStatus: v ?? 'all' })}
+                options={[{ value: 'all', label: 'All Payment Status' }, { value: 'owed', label: 'Balance Owed' }, { value: 'clear', label: 'Fully Paid' }]}
+                size="sm"
+                clearable
+              />
               <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
               <span className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600">{stats.totalLandlords} landlords</span>
               <span className="shrink-0 rounded border border-green-200 bg-green-50 px-2 py-0.5 text-[10px] font-bold text-green-700">Paid: Ksh {stats.totalPaid.toLocaleString()}</span>

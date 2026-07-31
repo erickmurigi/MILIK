@@ -1510,7 +1510,13 @@ const confirmNonCashDirectToLandlordReceipt = async (payment, actorId) => {
       journalGroupId,
       payer: "tenant",
       receiver,
-      notes: `Direct Receipt — ${payment.receiptNumber || payment.referenceNumber || String(payment._id).slice(-6)}`,
+      notes: (() => {
+        const modeLabel = payment?.metadata?.autoReceiptSource === "mpesa_c2b" ? "M-Pesa Auto" : "Manual";
+        const bucketLabel = { rent: "Rent", deposit: "Deposit", deposit_landlord: "Deposit", utility: "Utility", late_penalty: "Penalty", debit_note: "Debit Note", other: "Other", unapplied: "Unapplied" }[group.key] || "Payment";
+        const num = payment.receiptNumber || payment.referenceNumber || String(payment._id).slice(-6);
+        const _ref = payment.referenceNumber ? ` [${payment.referenceNumber}]` : "";
+        return `${modeLabel} – Direct Receipt (${bucketLabel}) – ${num}${_ref}`;
+      })(),
       metadata: {
         includeInLandlordStatement: includeInStatement && includeGroupInStatement,
         includeInCategoryTotals: includeInStatement && includeGroupInStatement,
@@ -1555,7 +1561,12 @@ const confirmNonCashDirectToLandlordReceipt = async (payment, actorId) => {
     journalGroupId,
     payer: "tenant",
     receiver,
-    notes: `Landlord Settlement — ${payment.receiptNumber || payment.referenceNumber || String(payment._id).slice(-6)}`,
+    notes: (() => {
+      const modeLabel = payment?.metadata?.autoReceiptSource === "mpesa_c2b" ? "M-Pesa Auto" : "Manual";
+      const num = payment.receiptNumber || payment.referenceNumber || String(payment._id).slice(-6);
+      const _ref = payment.referenceNumber ? ` [${payment.referenceNumber}]` : "";
+      return `${modeLabel} – Landlord Settlement – ${num}${_ref}`;
+    })(),
     metadata: {
       includeInLandlordStatement: false,
       includeInCategoryTotals: false,
@@ -1586,6 +1597,18 @@ const confirmNonCashDirectToLandlordReceipt = async (payment, actorId) => {
     journalGroupId,
     entries: [...creditLegEntries, balancingLeg],
   };
+};
+
+const buildReceiptAllocationLabel = (summary = {}) => {
+  const parts = [];
+  if (Number(summary.rent        || 0) > 0.009) parts.push("Rent");
+  if (Number(summary.utility     || 0) > 0.009) parts.push("Utility");
+  if (Number(summary.deposit     || 0) > 0.009) parts.push("Deposit");
+  if (Number(summary.latePenalty || 0) > 0.009) parts.push("Penalty");
+  if (Number(summary.debitNote   || 0) > 0.009) parts.push("Debit Note");
+  if (Number(summary.other       || 0) > 0.009) parts.push("Other");
+  if (Number(summary.unapplied   || 0) > 0.009) parts.push("Unapplied");
+  return parts.length ? parts.join(" + ") : "Payment";
 };
 
 const postReceiptJournal = async (payment, actorId) => {
@@ -1620,7 +1643,7 @@ const postReceiptJournal = async (payment, actorId) => {
             creditAccountId: plAccounts.receivables,
             amount:          totalAmt,
             date:            payment.paymentDate,
-            narration:       `Rent Receipt — ${payment.receiptNumber || payment.reference || "receipt"}${_glPeriod}`,
+            narration:       `${payment?.metadata?.autoReceiptSource === "mpesa_c2b" ? "M-Pesa Auto" : "Manual"} – Rent Receipt — ${payment.receiptNumber || payment.reference || "receipt"}${_glPeriod}`,
             reference:       payment.receiptNumber || payment.reference || "",
             category:        "receipt",
             tenantId:        payment.tenant,
@@ -1719,12 +1742,13 @@ const postReceiptJournal = async (payment, actorId) => {
       payer: "tenant",
       receiver,
       notes: (() => {
-        const bucketLabel = { rent: "Rent", deposit: "Deposit", deposit_landlord: "Deposit", utility: "Utility", late_penalty: "Penalty", debit_note: "Debit note", other: "Other", unapplied: "Unapplied" }[group.key] || "Payment";
+        const modeLabel = payment?.metadata?.autoReceiptSource === "mpesa_c2b" ? "M-Pesa Auto" : "Manual";
+        const bucketLabel = { rent: "Rent", deposit: "Deposit", deposit_landlord: "Deposit", utility: "Utility", late_penalty: "Penalty", debit_note: "Debit Note", other: "Other", unapplied: "Unapplied" }[group.key] || "Payment";
         const _period = (payment.month && payment.year)
-          ? ` — ${new Date(payment.year, payment.month - 1).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}`
+          ? ` – ${new Date(payment.year, payment.month - 1).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}`
           : "";
         const _ref = payment.referenceNumber ? ` [${payment.referenceNumber}]` : "";
-        return `${bucketLabel} Receipt — ${payment.receiptNumber || payment.referenceNumber || "receipt"}${_ref}${_period}`;
+        return `${modeLabel} – ${bucketLabel} – ${payment.receiptNumber || payment.referenceNumber || "receipt"}${_ref}${_period}`;
       })(),
       metadata: {
         includeInLandlordStatement: includeInStatement && includeGroupInStatement,
@@ -1771,14 +1795,15 @@ const postReceiptJournal = async (payment, actorId) => {
     payer: "tenant",
     receiver,
     notes: (() => {
+      const modeLabel = payment?.metadata?.autoReceiptSource === "mpesa_c2b" ? "M-Pesa Auto" : "Manual";
       const num = payment.receiptNumber || payment.referenceNumber || "receipt";
       const _rcptRef = payment.referenceNumber ? ` [${payment.referenceNumber}]` : "";
       const _rcptPeriod = (payment.month && payment.year)
-        ? ` — ${new Date(payment.year, payment.month - 1).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}`
+        ? ` – ${new Date(payment.year, payment.month - 1).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}`
         : "";
       return payment?.paidDirectToLandlord
-        ? `Direct to Landlord — ${num}${_rcptRef}${_rcptPeriod}`
-        : `Cash Received — ${num}${_rcptRef}${_rcptPeriod}`;
+        ? `${modeLabel} – Direct to Landlord – ${num}${_rcptRef}${_rcptPeriod}`
+        : `${modeLabel} – Cash Received – ${num}${_rcptRef}${_rcptPeriod}`;
     })(),
     metadata: {
       includeInLandlordStatement: false,
@@ -2323,6 +2348,8 @@ export const createPayment = async (req, res, next) => {
       allocationData,
     });
 
+    const _manualAllocationLabel = buildReceiptAllocationLabel(allocationData.allocationSummary);
+
     const payment = new RentPayment({
       ...req.body,
       tenant: tenantId,
@@ -2336,6 +2363,7 @@ export const createPayment = async (req, res, next) => {
       ledgerType: "receipts",
       referenceNumber: refNumber,
       receiptNumber,
+      description: `Manual Receipt – ${_manualAllocationLabel}`,
       bankingDate: req.body?.bankingDate || req.body?.paymentDate,
       recordDate: req.body?.recordDate || new Date(),
       business: businessId,
@@ -4347,7 +4375,7 @@ export const createAutoReceipt = async ({
     year: payDate.getFullYear(),
     referenceNumber,
     receiptNumber,
-    description: description || `M-Pesa C2B – ${referenceNumber}`,
+    description: `${description || `M-Pesa Auto – ${referenceNumber}`} → ${buildReceiptAllocationLabel(allocationData.allocationSummary)}`,
     paymentMethod: "mobile_money",
     cashbook: cashbookAccountName || "M-Pesa",
     paidDirectToLandlord: false,

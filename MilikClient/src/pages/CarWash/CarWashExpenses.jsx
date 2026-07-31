@@ -10,6 +10,7 @@ import { toast } from "react-toastify";
 import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import PaginationBar from "../../components/PaginationBar";
+import AppSelect from "../../components/common/AppSelect";
 
 const METHODS             = ["cash", "mpesa", "bank", "card", "other"];
 const STATUSES            = ["draft", "approved", "paid", "cancelled"];
@@ -84,15 +85,15 @@ const ExpenseForm = ({ form, setForm, cashbooks, categories, isEditing, branches
       {isConsolidated && !isEditing && (
         <div>
           <label className={lc}>Branch <span className="text-red-500">*</span></label>
-          <select
-            className={`${ic} ${!form.branch ? "border-amber-400 bg-amber-50" : ""}`}
+          <AppSelect
             value={form.branch}
-            onChange={(e) => setForm((p) => ({ ...p, branch: e.target.value }))}
-            required
-          >
-            <option value="">— Select branch —</option>
-            {branches.map((b) => <option key={b._id} value={b._id}>{b.name}</option>)}
-          </select>
+            onChange={(v) => setForm((p) => ({ ...p, branch: v ?? "" }))}
+            options={branches.map((b) => ({ value: b._id, label: b.name }))}
+            placeholder="— Select branch —"
+            searchable
+            clearable
+            size="md"
+          />
         </div>
       )}
 
@@ -110,10 +111,12 @@ const ExpenseForm = ({ form, setForm, cashbooks, categories, isEditing, branches
         </div>
         <div>
           <label className={lc}>Category *</label>
-          <select className={ic} value={form.category}
-            onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}>
-            {categories.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
+          <AppSelect
+            value={form.category}
+            onChange={(v) => setForm((p) => ({ ...p, category: v ?? "" }))}
+            options={categories.map((c) => ({ value: c, label: c }))}
+            size="md"
+          />
         </div>
       </div>
 
@@ -121,29 +124,39 @@ const ExpenseForm = ({ form, setForm, cashbooks, categories, isEditing, branches
       <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
         <div>
           <label className={lc}>Method</label>
-          <select className={ic} value={form.method}
-            onChange={(e) => setForm((p) => ({ ...p, method: e.target.value, cashbookAccount: preferredCashbook(cashbooks, e.target.value) }))}>
-            {METHODS.map((m) => <option key={m} value={m}>{m.toUpperCase()}</option>)}
-          </select>
+          <AppSelect
+            value={form.method}
+            onChange={(v) => setForm((p) => ({ ...p, method: v ?? "cash", cashbookAccount: preferredCashbook(cashbooks, v ?? "cash") }))}
+            options={METHODS.map((m) => ({ value: m, label: m.toUpperCase() }))}
+            size="md"
+          />
         </div>
         {!isEditing && (
           <div>
             <label className={lc}>Status</label>
-            <select className={ic} value={form.status}
-              onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}>
-              <option value="paid">Paid</option>
-              <option value="approved">Approved</option>
-              <option value="draft">Draft</option>
-            </select>
+            <AppSelect
+              value={form.status}
+              onChange={(v) => setForm((p) => ({ ...p, status: v ?? "" }))}
+              options={[
+                { value: "paid", label: "Paid" },
+                { value: "approved", label: "Approved" },
+                { value: "draft", label: "Draft" },
+              ]}
+              size="md"
+            />
           </div>
         )}
         <div>
           <label className={lc}>Cashbook {form.status === "paid" ? "*" : ""}</label>
-          <select className={ic} value={form.cashbookAccount} required={form.status === "paid"}
-            onChange={(e) => setForm((p) => ({ ...p, cashbookAccount: e.target.value }))}>
-            <option value="">Select cashbook…</option>
-            {cashbooks.map((cb) => <option key={cb._id} value={cb._id}>{cb.code} – {cb.name}</option>)}
-          </select>
+          <AppSelect
+            value={form.cashbookAccount}
+            onChange={(v) => setForm((p) => ({ ...p, cashbookAccount: v ?? "" }))}
+            options={cashbooks.map((cb) => ({ value: cb._id, label: `${cb.code} – ${cb.name}` }))}
+            placeholder="Select cashbook…"
+            searchable
+            clearable
+            size="md"
+          />
         </div>
         <div>
           <label className={lc}>Reference</label>
@@ -460,26 +473,40 @@ const CarWashExpenses = () => {
       <form onSubmit={applyFilters} className="mb-2 flex-shrink-0 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm grid-cols-1 sm:grid-cols-2 xl:grid-cols-[160px_150px_200px_150px_220px_1fr_auto_auto]">
         <input type="date" className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
           value={filters.date} onChange={(e) => setFilters((p) => ({ ...p, date: e.target.value }))} />
-        <select className="h-8 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
-          value={filters.status} onChange={(e) => setFilters((p) => ({ ...p, status: e.target.value }))}>
-          <option value="">All status</option>
-          {STATUSES.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-        </select>
-        <select className="h-8 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
-          value={filters.category} onChange={(e) => setFilters((p) => ({ ...p, category: e.target.value }))}>
-          <option value="">All categories</option>
-          {categories.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <select className="h-8 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
-          value={filters.method} onChange={(e) => setFilters((p) => ({ ...p, method: e.target.value }))}>
-          <option value="">All methods</option>
-          {METHODS.map((m) => <option key={m} value={m}>{m.toUpperCase()}</option>)}
-        </select>
-        <select className="h-8 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
-          value={filters.cashbookAccount} onChange={(e) => setFilters((p) => ({ ...p, cashbookAccount: e.target.value }))}>
-          <option value="">All cashbooks</option>
-          {cashbooks.map((cb) => <option key={cb._id} value={cb._id}>{cb.code} – {cb.name}</option>)}
-        </select>
+        <AppSelect
+          value={filters.status}
+          onChange={(v) => setFilters((p) => ({ ...p, status: v ?? "" }))}
+          options={STATUSES.map((s) => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))}
+          placeholder="All status"
+          clearable
+          size="sm"
+        />
+        <AppSelect
+          value={filters.category}
+          onChange={(v) => setFilters((p) => ({ ...p, category: v ?? "" }))}
+          options={categories.map((c) => ({ value: c, label: c }))}
+          placeholder="All categories"
+          searchable
+          clearable
+          size="sm"
+        />
+        <AppSelect
+          value={filters.method}
+          onChange={(v) => setFilters((p) => ({ ...p, method: v ?? "" }))}
+          options={METHODS.map((m) => ({ value: m, label: m.toUpperCase() }))}
+          placeholder="All methods"
+          clearable
+          size="sm"
+        />
+        <AppSelect
+          value={filters.cashbookAccount}
+          onChange={(v) => setFilters((p) => ({ ...p, cashbookAccount: v ?? "" }))}
+          options={cashbooks.map((cb) => ({ value: cb._id, label: `${cb.code} – ${cb.name}` }))}
+          placeholder="All cashbooks"
+          searchable
+          clearable
+          size="sm"
+        />
         <input className="h-8 border border-slate-300 px-2 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
           placeholder="Payee / ref / description"
           value={filters.search} onChange={(e) => setFilters((p) => ({ ...p, search: e.target.value }))} />
@@ -521,10 +548,12 @@ const CarWashExpenses = () => {
                   <div className="flex-shrink-0 text-right">
                     <div className="font-extrabold text-slate-900">{formatMoney(row.amount)}</div>
                     {!["cancelled"].includes(row.status) && (
-                      <select className={`mt-1 h-6 border px-1.5 text-[10px] font-bold uppercase ${statusBadge[row.status] || statusBadge.draft}`}
-                        value={row.status} onChange={(e) => updateStatus(row, e.target.value)}>
-                        {statusOptionsFor(row.status).map((s) => <option key={s} value={s}>{s.toUpperCase()}</option>)}
-                      </select>
+                      <AppSelect
+                        value={row.status}
+                        onChange={(v) => updateStatus(row, v ?? "")}
+                        options={statusOptionsFor(row.status).map((s) => ({ value: s, label: s.toUpperCase() }))}
+                        size="sm"
+                      />
                     )}
                   </div>
                 </div>
@@ -600,14 +629,13 @@ const CarWashExpenses = () => {
                         <td className="px-2 py-1 font-bold uppercase text-slate-700">{row.method || "—"}</td>
                         <td className="px-2 py-1 text-slate-700">{row.cashbookAccount ? `${row.cashbookAccount.code || ""} ${row.cashbookAccount.name || ""}`.trim() : "—"}</td>
                         <td className="px-2 py-1">
-                          <select
-                            className={`h-6 border px-2 text-[11px] font-bold uppercase ${statusBadge[row.status] || statusBadge.draft}`}
+                          <AppSelect
                             value={row.status}
+                            onChange={(v) => updateStatus(row, v ?? "")}
+                            options={statusOptionsFor(row.status).map((s) => ({ value: s, label: s.toUpperCase() }))}
                             disabled={row.status === "cancelled"}
-                            onChange={(e) => updateStatus(row, e.target.value)}
-                          >
-                            {statusOptionsFor(row.status).map((s) => <option key={s} value={s}>{s.toUpperCase()}</option>)}
-                          </select>
+                            size="sm"
+                          />
                         </td>
                         <td className="px-2 py-1 text-right font-extrabold text-slate-900">{formatMoney(row.amount)}</td>
                       </tr>

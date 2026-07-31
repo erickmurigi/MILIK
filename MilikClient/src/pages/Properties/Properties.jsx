@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from "react"
 import { useDispatch, useSelector } from "react-redux";
 import { Link, useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import AppSelect from "../../components/common/AppSelect";
 import {
   FaPlus,
   FaSearch,
@@ -536,42 +537,59 @@ const Properties = () => {
         {/* Toolbar — single scrollable row */}
         <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
           <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-            <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
-              value={draftFilters.status} onChange={(e) => setDraftFilters((p) => ({ ...p, status: e.target.value }))}>
-              <option value="active">Active</option>
-              <option value="">All Status</option>
-              <option value="maintenance">Maintenance</option>
-              <option value="closed">Closed</option>
-            </select>
+            <AppSelect
+              value={draftFilters.status}
+              onChange={(v) => setDraftFilters((p) => ({ ...p, status: v ?? "" }))}
+              options={[
+                { value: "active", label: "Active" },
+                { value: "maintenance", label: "Maintenance" },
+                { value: "closed", label: "Closed" },
+              ]}
+              placeholder="All Status"
+              clearable
+              size="sm"
+            />
 
-            <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
-              value={draftFilters.zone} onChange={(e) => setDraftFilters((p) => ({ ...p, zone: e.target.value }))}>
-              <option value="">All Zones</option>
-              <option value="Nairobi CBD">Nairobi CBD</option>
-              <option value="Westlands">Westlands</option>
-              <option value="Kilimani">Kilimani</option>
-              <option value="Karen">Karen</option>
-              <option value="Mombasa Road">Mombasa Road</option>
-              <option value="Thika Road">Thika Road</option>
-            </select>
+            <AppSelect
+              value={draftFilters.zone}
+              onChange={(v) => setDraftFilters((p) => ({ ...p, zone: v ?? "" }))}
+              options={[
+                { value: "Nairobi CBD", label: "Nairobi CBD" },
+                { value: "Westlands", label: "Westlands" },
+                { value: "Kilimani", label: "Kilimani" },
+                { value: "Karen", label: "Karen" },
+                { value: "Mombasa Road", label: "Mombasa Road" },
+                { value: "Thika Road", label: "Thika Road" },
+              ]}
+              placeholder="All Zones"
+              clearable
+              size="sm"
+            />
 
-            <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
-              value={draftFilters.category} onChange={(e) => setDraftFilters((p) => ({ ...p, category: e.target.value }))}>
-              <option value="">All Categories</option>
-              <option value="Residential">Residential</option>
-              <option value="Commercial">Commercial</option>
-              <option value="Mixed Use">Mixed Use</option>
-              <option value="Industrial">Industrial</option>
-              <option value="Agricultural">Agricultural</option>
-            </select>
+            <AppSelect
+              value={draftFilters.category}
+              onChange={(v) => setDraftFilters((p) => ({ ...p, category: v ?? "" }))}
+              options={[
+                { value: "Residential", label: "Residential" },
+                { value: "Commercial", label: "Commercial" },
+                { value: "Mixed Use", label: "Mixed Use" },
+                { value: "Industrial", label: "Industrial" },
+                { value: "Agricultural", label: "Agricultural" },
+              ]}
+              placeholder="All Categories"
+              clearable
+              size="sm"
+            />
 
-            <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
-              value={draftFilters.landlord} onChange={(e) => setDraftFilters((p) => ({ ...p, landlord: e.target.value }))}>
-              <option value="">All Landlords</option>
-              {landlordOptions.length > 0 ? landlordOptions.map((l) => (
-                <option key={l.id} value={l.id || ""}>{l.label}</option>
-              )) : <option disabled>No landlords</option>}
-            </select>
+            <AppSelect
+              value={draftFilters.landlord}
+              onChange={(v) => setDraftFilters((p) => ({ ...p, landlord: v ?? "" }))}
+              options={landlordOptions.map((l) => ({ value: l.id || "", label: l.label }))}
+              placeholder="All Landlords"
+              searchable
+              clearable
+              size="sm"
+            />
 
             <div className="h-4 w-px shrink-0 bg-slate-200" />
 
@@ -963,13 +981,12 @@ const Properties = () => {
                     <div className="flex items-center gap-2">
                       <div className="flex items-center gap-1">
                         <span className="font-semibold text-slate-500 text-xs">Per page:</span>
-                        <select
+                        <AppSelect
                           value={pageSize}
-                          onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                          className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition"
-                        >
-                          {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
-                        </select>
+                          onChange={(v) => { setPageSize(Number(v)); setCurrentPage(1); }}
+                          options={[25, 50, 100, 200].map((n) => ({ value: n, label: String(n) }))}
+                          size="sm"
+                        />
                       </div>
                       <button
                         onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}

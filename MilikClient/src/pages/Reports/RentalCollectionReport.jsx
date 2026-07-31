@@ -10,7 +10,9 @@ import { getTenants } from '../../redux/tenantsRedux';
 import { FaChartBar, FaFileDownload, FaFilter, FaPrint, FaSyncAlt } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import { hasCompanyPermission } from '../../utils/permissions';
+import { buildTenantOption } from '../../utils/tenantUtils';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
+import AppSelect from '../../components/common/AppSelect';
 
 const MILIK_GREEN = '#0B3B2E';
 const formatMoney = (value) => `KES ${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
@@ -413,65 +415,122 @@ const RentalCollectionReport = () => {
         <div className="mx-auto flex w-full max-w-none min-h-0 flex-1 flex-col">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
 
-            <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
-              <div className="grid gap-1.5 md:grid-cols-2 xl:grid-cols-4">
-                <input type="date" value={filters.startDate} onChange={setFilter("startDate")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                <input type="date" value={filters.endDate} onChange={setFilter("endDate")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                <select value={filters.propertyId} onChange={setFilter("propertyId")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
-                  <option value="">All properties</option>
-                  {properties.map((property) => <option key={property._id} value={property._id}>{property.propertyName || property.name}</option>)}
-                </select>
-                <select value={filters.paymentMethod} onChange={setFilter("paymentMethod")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
-                  <option value="">All methods</option>
-                  <option value="cash">Cash</option>
-                  <option value="mobile_money">Mobile money</option>
-                  <option value="bank_transfer">Bank transfer</option>
-                  <option value="check">Cheque</option>
-                  <option value="credit_card">Card</option>
-                </select>
-                <select value={filters.tenantId} onChange={(e) => setFilters((prev) => ({ ...prev, tenantId: e.target.value, unitId: '' }))} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
-                  <option value="">All tenants</option>
-                  {tenants.map((tenant) => <option key={tenant._id} value={tenant._id}>{tenant.tenantName || tenant.name}</option>)}
-                </select>
-                <select value={filters.unitId} onChange={setFilter("unitId")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
-                  <option value="">All units</option>
-                  {units.map((unit) => <option key={unit._id} value={unit._id}>{unit.unitNumber}</option>)}
-                </select>
-                {!isLandlordMode && (
-                  <select value={filters.landlordId} onChange={setFilter("landlordId")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
-                    <option value="">All landlords</option>
-                    {landlords.map((landlord) => <option key={landlord._id} value={landlord._id}>{landlord.landlordName || landlord.name}</option>)}
-                  </select>
-                )}
-                <input value={filters.cashbook} onChange={setFilter("cashbook")} placeholder="Cashbook contains..." className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-              </div>
-              <div className="mt-1.5 flex flex-wrap justify-end gap-1.5">
-                <button onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "No export permission"} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaFileDownload /> Export CSV</button>
-                <button onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? "Print" : "No print permission"} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaPrint /> Print</button>
-                <button onClick={() => loadReport()} className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] transition ${filtersChanged ? 'border border-[#0B3B2E] bg-[#0B3B2E] text-white hover:bg-[#0A3127]' : 'border border-slate-200 bg-white text-slate-700 hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white'}`}><FaSyncAlt className={loading ? 'animate-spin' : ''} /> {filtersChanged ? 'Apply Filters' : 'Refresh'}</button>
-              </div>
-            </div>
+            <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-white shadow-sm">
+              <div className="flex flex-wrap items-end gap-x-3 gap-y-2.5 px-3 py-2.5">
 
-            {/* ── Stat strip (replaces card grids) ── */}
-            <div className="flex-shrink-0 overflow-x-auto border-b border-slate-100 bg-white">
-              <div className="flex min-w-max divide-x divide-slate-100">
-                {[
-                  { label: 'Operational Income',  value: formatMoney(summary.operationalCollected ?? summary.totalCollected), accent: 'text-emerald-700', sub: Number(summary.depositCollected || 0) > 0 ? `+${formatMoney(summary.depositCollected)} deposits` : 'Rent · utility · fees' },
-                  { label: 'Allocated',            value: formatMoney(summary.allocatedAmount),  accent: 'text-slate-800',     sub: null },
-                  { label: 'Unapplied',            value: formatMoney(summary.unappliedAmount),  accent: Number(summary.unappliedAmount || 0) > 0 ? 'text-amber-600' : 'text-slate-400', sub: Number(summary.unappliedAmount || 0) > 0 ? 'Needs attention' : null },
-                  { label: 'Rent Applied',         value: formatMoney(summary.rentApplied),      accent: 'text-slate-800',     sub: null },
-                  { label: 'Utilities Applied',    value: formatMoney(summary.utilityApplied),   accent: 'text-slate-800',     sub: null },
-                  { label: 'Collection Rate',      value: formatPercent(summary.collectionRate), accent: 'text-slate-800',     sub: 'Operational vs invoiced' },
-                  { label: 'Avg Receipt',          value: formatMoney(collectionInsights.averageReceipt), accent: 'text-slate-800', sub: 'Per effective receipt' },
-                  { label: 'Alloc Efficiency',     value: formatPercent(collectionInsights.allocationEfficiency), accent: 'text-slate-800', sub: 'Cash tied to invoices' },
-                  { label: 'Top Property',         value: collectionInsights.topProperty?.propertyName || '—', accent: 'text-[#0B3B2E]', sub: collectionInsights.topProperty ? `${formatMoney(collectionInsights.topProperty.totalCollected)} · ${collectionInsights.topProperty.paymentCount || 0} receipt(s)` : null },
-                ].map((item) => (
-                  <div key={item.label} className="min-w-[115px] flex-1 px-3 py-2.5">
-                    <p className="whitespace-nowrap text-[9px] font-bold uppercase tracking-widest text-slate-400">{item.label}</p>
-                    <p className={`mt-0.5 whitespace-nowrap text-[13px] font-black ${item.accent}`}>{item.value}</p>
-                    {item.sub && <p className="mt-0.5 whitespace-nowrap text-[9px] leading-tight text-slate-400">{item.sub}</p>}
+                {/* Period */}
+                <div>
+                  <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">Period</p>
+                  <div className="flex items-center gap-1">
+                    <input type="date" value={filters.startDate} onChange={setFilter("startDate")}
+                      className="h-7 w-[116px] rounded border border-slate-200 bg-white px-2 text-[11px] text-slate-700 transition focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                    <span className="text-[10px] font-semibold text-slate-400">–</span>
+                    <input type="date" value={filters.endDate} onChange={setFilter("endDate")}
+                      className="h-7 w-[116px] rounded border border-slate-200 bg-white px-2 text-[11px] text-slate-700 transition focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20" />
                   </div>
-                ))}
+                </div>
+
+                {/* Property */}
+                <div className="w-[165px]">
+                  <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">Property</p>
+                  <AppSelect
+                    value={filters.propertyId || null}
+                    onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "" }))}
+                    options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))}
+                    placeholder="All properties"
+                    searchable clearable size="sm"
+                  />
+                </div>
+
+                {/* Tenant */}
+                <div className="w-[155px]">
+                  <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">Tenant</p>
+                  <AppSelect
+                    value={filters.tenantId || null}
+                    onChange={(v) => setFilters((prev) => ({ ...prev, tenantId: v ?? "", unitId: "" }))}
+                    options={tenants.map((t) => buildTenantOption(t))}
+                    placeholder="All tenants"
+                    searchable clearable size="sm"
+                  />
+                </div>
+
+                {/* Unit */}
+                <div className="w-[110px]">
+                  <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">Unit</p>
+                  <AppSelect
+                    value={filters.unitId || null}
+                    onChange={(v) => setFilters((prev) => ({ ...prev, unitId: v ?? "" }))}
+                    options={units.map((u) => ({ value: u._id, label: u.unitNumber }))}
+                    placeholder="All units"
+                    searchable clearable size="sm"
+                  />
+                </div>
+
+                {/* Landlord */}
+                {!isLandlordMode && (
+                  <div className="w-[155px]">
+                    <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">Landlord</p>
+                    <AppSelect
+                      value={filters.landlordId || null}
+                      onChange={(v) => setFilters((prev) => ({ ...prev, landlordId: v ?? "" }))}
+                      options={landlords.map((l) => ({ value: l._id, label: l.landlordName || l.name }))}
+                      placeholder="All landlords"
+                      searchable clearable size="sm"
+                    />
+                  </div>
+                )}
+
+                {/* Method */}
+                <div className="w-[130px]">
+                  <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">Method</p>
+                  <AppSelect
+                    value={filters.paymentMethod || null}
+                    onChange={(v) => setFilters((prev) => ({ ...prev, paymentMethod: v ?? "" }))}
+                    options={[
+                      { value: "cash", label: "Cash" },
+                      { value: "mobile_money", label: "Mobile money" },
+                      { value: "bank_transfer", label: "Bank transfer" },
+                      { value: "check", label: "Cheque" },
+                      { value: "credit_card", label: "Card" },
+                    ]}
+                    placeholder="All methods"
+                    clearable size="sm"
+                  />
+                </div>
+
+                {/* Cashbook */}
+                <div>
+                  <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">Cashbook</p>
+                  <input value={filters.cashbook} onChange={setFilter("cashbook")} placeholder="Contains..."
+                    className="h-7 w-[140px] rounded border border-slate-200 bg-white px-2 text-[11px] text-slate-700 transition placeholder:text-slate-400 focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                </div>
+
+                {/* Spacer */}
+                <div className="flex-1" />
+
+                {/* Actions */}
+                <div className="flex items-end gap-1.5">
+                  <button onClick={handleExportCSV} disabled={!canExportReports}
+                    title={canExportReports ? "Export CSV" : "No export permission"}
+                    className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:cursor-not-allowed disabled:opacity-40">
+                    <FaFileDownload size={10} /> Export
+                  </button>
+                  <button onClick={handlePrint} disabled={!canExportReports}
+                    title={canExportReports ? "Print" : "No print permission"}
+                    className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:cursor-not-allowed disabled:opacity-40">
+                    <FaPrint size={10} /> Print
+                  </button>
+                  <button onClick={() => loadReport()}
+                    className={`inline-flex h-7 items-center gap-1.5 rounded px-3 text-[10px] font-bold uppercase tracking-[0.08em] transition ${
+                      filtersChanged
+                        ? 'bg-[#0B3B2E] text-white hover:bg-[#0A3127]'
+                        : 'border border-slate-200 bg-white text-slate-600 hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white'
+                    }`}>
+                    <FaSyncAlt size={10} className={loading ? 'animate-spin' : ''} />
+                    {filtersChanged ? 'Apply Filters' : 'Refresh'}
+                  </button>
+                </div>
+
               </div>
             </div>
 

@@ -121,7 +121,7 @@ const CarWashQueueDisplay = () => {
             backgroundSize: "contain",
             backgroundPosition: "center center",
             backgroundRepeat: "no-repeat",
-            transform: "scale(1.3)",
+            transform: "scale(1.365)",
           }}
         />
       )}

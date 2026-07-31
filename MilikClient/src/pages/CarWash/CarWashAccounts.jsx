@@ -11,6 +11,7 @@ import { toast } from "react-toastify";
 import { carWashApi, formatMoney, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import CwSmsModal from "./CwSmsModal";
+import AppSelect from "../../components/common/AppSelect";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { useTabState } from "../../hooks/useTabState";
 
@@ -232,12 +233,17 @@ const AccountModal = ({ customers, onSave, onClose }) => {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={lc}>Account Type *</label>
-              <select className={ic} value={form.accountType} onChange={(e) => set("accountType", e.target.value)}>
-                <option value="credit">Credit (Pay-later)</option>
-                <option value="monthly">Monthly Billing</option>
-                <option value="prepaid">Prepaid (Wallet)</option>
-                <option value="voucher">Voucher</option>
-              </select>
+              <AppSelect
+                value={form.accountType}
+                onChange={(v) => set("accountType", v ?? "")}
+                options={[
+                  { value: "credit", label: "Credit (Pay-later)" },
+                  { value: "monthly", label: "Monthly Billing" },
+                  { value: "prepaid", label: "Prepaid (Wallet)" },
+                  { value: "voucher", label: "Voucher" },
+                ]}
+                size="md"
+              />
             </div>
             {!["prepaid","voucher"].includes(form.accountType) && (
               <div>
@@ -259,9 +265,12 @@ const AccountModal = ({ customers, onSave, onClose }) => {
           {form.accountType === "monthly" && (
             <div className="grid grid-cols-2 gap-3">
               <div><label className={lc}>Billing Cycle</label>
-                <select className={ic} value={form.billingCycle} onChange={(e) => set("billingCycle", e.target.value)}>
-                  <option value="monthly">Monthly</option><option value="weekly">Weekly</option>
-                </select>
+                <AppSelect
+                  value={form.billingCycle}
+                  onChange={(v) => set("billingCycle", v ?? "")}
+                  options={[{ value: "monthly", label: "Monthly" }, { value: "weekly", label: "Weekly" }]}
+                  size="md"
+                />
               </div>
               <div><label className={lc}>Billing Day (1–28)</label>
                 <input className={ic} type="number" min="1" max="28" value={form.billingDay} onChange={(e) => set("billingDay", e.target.value)} />
@@ -326,9 +335,12 @@ const PaymentModal = ({ account, cashbooks, onSave, onClose }) => {
             <div><label className={lc}>Amount (KES) *</label>
               <input className={ic} type="number" min="0" step="0.01" autoFocus value={form.amount} onChange={(e) => set("amount", e.target.value)} /></div>
             <div><label className={lc}>Method</label>
-              <select className={ic} value={form.method} onChange={(e) => set("method", e.target.value)}>
-                {paymentMethods.map((m) => <option key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>)}
-              </select></div>
+              <AppSelect
+                value={form.method}
+                onChange={(v) => set("method", v ?? "cash")}
+                options={paymentMethods.map((m) => ({ value: m, label: m.charAt(0).toUpperCase() + m.slice(1) }))}
+                size="md"
+              /></div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div><label className={lc}>{form.method === "mpesa" ? "M-Pesa Code" : "Reference"}</label>
@@ -341,10 +353,15 @@ const PaymentModal = ({ account, cashbooks, onSave, onClose }) => {
               <input className={ic} type="tel" value={form.receivedFromPhone} onChange={(e) => set("receivedFromPhone", e.target.value)} placeholder="0712345678" /></div>
           )}
           <div><label className={lc}>Cashbook Account</label>
-            <select className={ic} value={form.cashbookAccount} onChange={(e) => set("cashbookAccount", e.target.value)}>
-              <option value="">Select cashbook</option>
-              {cashbooks.map((cb) => <option key={cb._id} value={cb._id}>{cb.code} - {cb.name}</option>)}
-            </select></div>
+            <AppSelect
+              value={form.cashbookAccount}
+              onChange={(v) => set("cashbookAccount", v ?? "")}
+              options={cashbooks.map((cb) => ({ value: cb._id, label: `${cb.code} - ${cb.name}` }))}
+              placeholder="Select cashbook"
+              searchable
+              clearable
+              size="md"
+            /></div>
         </div>
         <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
           <button onClick={onClose} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
@@ -386,9 +403,12 @@ const TopUpModal = ({ account, cashbooks, onSave, onClose }) => {
             <div><label className={lc}>Amount (KES) *</label>
               <input className={ic} type="number" min="0" step="0.01" autoFocus value={form.amount} onChange={(e) => set("amount", e.target.value)} /></div>
             <div><label className={lc}>Method</label>
-              <select className={ic} value={form.method} onChange={(e) => set("method", e.target.value)}>
-                {paymentMethods.map((m) => <option key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>)}
-              </select></div>
+              <AppSelect
+                value={form.method}
+                onChange={(v) => set("method", v ?? "cash")}
+                options={paymentMethods.map((m) => ({ value: m, label: m.charAt(0).toUpperCase() + m.slice(1) }))}
+                size="md"
+              /></div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div><label className={lc}>{form.method === "mpesa" ? "M-Pesa Code" : "Reference"}</label>
@@ -397,10 +417,15 @@ const TopUpModal = ({ account, cashbooks, onSave, onClose }) => {
               <input className={ic} type="date" value={form.paymentDate} onChange={(e) => set("paymentDate", e.target.value)} /></div>
           </div>
           <div><label className={lc}>Cashbook Account</label>
-            <select className={ic} value={form.cashbookAccount} onChange={(e) => set("cashbookAccount", e.target.value)}>
-              <option value="">Select cashbook</option>
-              {cashbooks.map((cb) => <option key={cb._id} value={cb._id}>{cb.code} - {cb.name}</option>)}
-            </select></div>
+            <AppSelect
+              value={form.cashbookAccount}
+              onChange={(v) => set("cashbookAccount", v ?? "")}
+              options={cashbooks.map((cb) => ({ value: cb._id, label: `${cb.code} - ${cb.name}` }))}
+              placeholder="Select cashbook"
+              searchable
+              clearable
+              size="md"
+            /></div>
           <div><label className={lc}>Notes</label>
             <input className={ic} value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Optional" /></div>
         </div>
@@ -450,9 +475,16 @@ const EditAccountModal = ({ account, onSave, onClose }) => {
         <div className="space-y-3 p-4">
           <div className="grid grid-cols-2 gap-3">
             <div><label className={lc}>Status</label>
-              <select className={ic} value={form.status} onChange={(e) => set("status", e.target.value)}>
-                <option value="active">Active</option><option value="suspended">Suspended</option><option value="closed">Closed</option>
-              </select></div>
+              <AppSelect
+                value={form.status}
+                onChange={(v) => set("status", v ?? "")}
+                options={[
+                  { value: "active", label: "Active" },
+                  { value: "suspended", label: "Suspended" },
+                  { value: "closed", label: "Closed" },
+                ]}
+                size="md"
+              /></div>
             {!["prepaid","voucher"].includes(account.accountType) && (
               <div><label className={lc}>Credit Limit (KES)</label>
                 <input className={ic} type="number" min="0" value={form.creditLimit} onChange={(e) => set("creditLimit", e.target.value)} placeholder="0 = no limit" /></div>
@@ -461,9 +493,12 @@ const EditAccountModal = ({ account, onSave, onClose }) => {
           {account.accountType === "monthly" && (
             <div className="grid grid-cols-2 gap-3">
               <div><label className={lc}>Billing Cycle</label>
-                <select className={ic} value={form.billingCycle} onChange={(e) => set("billingCycle", e.target.value)}>
-                  <option value="monthly">Monthly</option><option value="weekly">Weekly</option>
-                </select></div>
+                <AppSelect
+                  value={form.billingCycle}
+                  onChange={(v) => set("billingCycle", v ?? "")}
+                  options={[{ value: "monthly", label: "Monthly" }, { value: "weekly", label: "Weekly" }]}
+                  size="md"
+                /></div>
               <div><label className={lc}>Billing Day (1–28)</label>
                 <input className={ic} type="number" min="1" max="28" value={form.billingDay} onChange={(e) => set("billingDay", e.target.value)} /></div>
             </div>
@@ -747,21 +782,31 @@ const CarWashAccounts = () => {
                 )}
               </div>
 
-              <select value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}
-                className="h-7 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:border-[#0B3B2E]">
-                <option value="">All Statuses</option>
-                <option value="active">Active</option>
-                <option value="suspended">Suspended</option>
-                <option value="closed">Closed</option>
-              </select>
-              <select value={filterType} onChange={(e) => { setFilterType(e.target.value); setPage(1); }}
-                className="h-7 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:border-[#0B3B2E]">
-                <option value="">All Types</option>
-                <option value="credit">Credit</option>
-                <option value="monthly">Monthly</option>
-                <option value="prepaid">Prepaid</option>
-                <option value="voucher">Voucher</option>
-              </select>
+              <AppSelect
+                value={filterStatus}
+                onChange={(v) => { setFilterStatus(v ?? ""); setPage(1); }}
+                options={[
+                  { value: "active", label: "Active" },
+                  { value: "suspended", label: "Suspended" },
+                  { value: "closed", label: "Closed" },
+                ]}
+                placeholder="All Statuses"
+                clearable
+                size="sm"
+              />
+              <AppSelect
+                value={filterType}
+                onChange={(v) => { setFilterType(v ?? ""); setPage(1); }}
+                options={[
+                  { value: "credit", label: "Credit" },
+                  { value: "monthly", label: "Monthly" },
+                  { value: "prepaid", label: "Prepaid" },
+                  { value: "voucher", label: "Voucher" },
+                ]}
+                placeholder="All Types"
+                clearable
+                size="sm"
+              />
 
               <button onClick={() => refetch()} className="flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50">
                 <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} />

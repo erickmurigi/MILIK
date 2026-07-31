@@ -21,6 +21,7 @@ import { getChartOfAccounts } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { useTabState } from "../../hooks/useTabState";
+import AppSelect from "../../components/common/AppSelect";
 import {
   approvePettyCashReplenishment,
   createPettyCashAccount,
@@ -469,15 +470,14 @@ const PettyCash = () => {
               <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
                 <span className="shrink-0 text-xs font-black text-slate-800">Petty Cash</span>
                 {accounts.length > 0 && (
-                  <select
+                  <AppSelect
                     value={selectedAccountId}
-                    onChange={(e) => setSelectedAccountId(e.target.value)}
-                    className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                  >
-                    {accounts.map((a) => (
-                      <option key={a._id} value={String(a._id)}>{a.name}</option>
-                    ))}
-                  </select>
+                    onChange={(v) => setSelectedAccountId(v ?? "")}
+                    options={accounts.map((a) => ({ value: String(a._id), label: a.name }))}
+                    searchable
+                    clearable
+                    size="sm"
+                  />
                 )}
                 {selectedAccount && <BalancePill account={selectedAccount} />}
                 {selectedAccount && (
@@ -530,18 +530,26 @@ const PettyCash = () => {
                   className="h-7 w-40 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                 />
                 {activeTab === "disbursements" && (
-                  <select value={draftCategory} onChange={(e) => setDraftCategory(e.target.value)} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                    <option value="any">Category</option>
-                    {Object.entries(CATEGORY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                  </select>
+                  <AppSelect
+                    value={draftCategory !== "any" ? draftCategory : ""}
+                    onChange={(v) => setDraftCategory(v ?? "any")}
+                    options={Object.entries(CATEGORY_LABELS).map(([v, l]) => ({ value: v, label: l }))}
+                    placeholder="Category"
+                    searchable
+                    clearable
+                    size="sm"
+                  />
                 )}
-                <select value={draftStatus} onChange={(e) => setDraftStatus(e.target.value)} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                  <option value="any">Status</option>
-                  {activeTab === "disbursements"
-                    ? [["active", "Active"], ["void", "Void"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)
-                    : [["pending", "Pending"], ["approved", "Approved"], ["posted", "Posted"], ["rejected", "Rejected"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)
-                  }
-                </select>
+                <AppSelect
+                  value={draftStatus !== "any" ? draftStatus : ""}
+                  onChange={(v) => setDraftStatus(v ?? "any")}
+                  options={activeTab === "disbursements"
+                    ? [{ value: "active", label: "Active" }, { value: "void", label: "Void" }]
+                    : [{ value: "pending", label: "Pending" }, { value: "approved", label: "Approved" }, { value: "posted", label: "Posted" }, { value: "rejected", label: "Rejected" }]}
+                  placeholder="Status"
+                  clearable
+                  size="sm"
+                />
                 <input type="date" value={draftFrom} onChange={(e) => setDraftFrom(e.target.value)} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" title="From date" />
                 <input type="date" value={draftTo} onChange={(e) => setDraftTo(e.target.value)} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" title="To date" />
                 <button onClick={applySearch} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}>
@@ -803,13 +811,12 @@ const PettyCash = () => {
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-1.5">
                     <span className="font-semibold text-slate-500">Per page:</span>
-                    <select
+                    <AppSelect
                       value={pageSize}
-                      onChange={(e) => { setPageSize(Number(e.target.value)); setDisbPage(1); setRepPage(1); }}
-                      className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition"
-                    >
-                      {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
-                    </select>
+                      onChange={(v) => { setPageSize(Number(v)); setDisbPage(1); setRepPage(1); }}
+                      options={[25, 50, 100, 200].map((n) => ({ value: n, label: String(n) }))}
+                      size="sm"
+                    />
                   </div>
                   <button type="button" onClick={() => setDisbPage((p) => Math.max(1, p - 1))} disabled={disbPage === 1} className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
                   <span className="font-semibold text-slate-700">Page {disbPage} of {disbPages}</span>
@@ -830,13 +837,12 @@ const PettyCash = () => {
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-1.5">
                     <span className="font-semibold text-slate-500">Per page:</span>
-                    <select
+                    <AppSelect
                       value={pageSize}
-                      onChange={(e) => { setPageSize(Number(e.target.value)); setDisbPage(1); setRepPage(1); }}
-                      className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition"
-                    >
-                      {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
-                    </select>
+                      onChange={(v) => { setPageSize(Number(v)); setDisbPage(1); setRepPage(1); }}
+                      options={[25, 50, 100, 200].map((n) => ({ value: n, label: String(n) }))}
+                      size="sm"
+                    />
                   </div>
                   <button type="button" onClick={() => setRepPage((p) => Math.max(1, p - 1))} disabled={repPage === 1} className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
                   <span className="font-semibold text-slate-700">Page {repPage} of {Math.max(1, Math.ceil(filteredReplenishments.length / pageSize))}</span>
@@ -873,10 +879,16 @@ const PettyCash = () => {
           </div>
           <div>
             <label className={labelCls}>Petty Cash Asset Account (GL)</label>
-            <select className={inputCls} value={accountForm.glAccountId} onChange={(e) => setAccountForm((p) => ({ ...p, glAccountId: e.target.value }))}>
-              <option value="">— Select account —</option>
-              {assetAccounts.map((a) => <option key={a._id} value={String(a._id)}>{a.code ? `${a.code} — ` : ""}{a.name}</option>)}
-            </select>
+            <AppSelect
+              value={accountForm.glAccountId}
+              onChange={(v) => setAccountForm((p) => ({ ...p, glAccountId: v ?? "" }))}
+              options={assetAccounts.map((a) => ({ value: String(a._id), label: `${a.code ? a.code + " — " : ""}${a.name}` }))}
+              placeholder="— Select account —"
+              searchable
+              clearable
+              size="md"
+              className="w-full"
+            />
           </div>
           <div>
             <label className={labelCls}>Notes</label>
@@ -910,24 +922,41 @@ const PettyCash = () => {
           </div>
           <div>
             <label className={labelCls}>Category <span className="text-red-500">*</span></label>
-            <select className={inputCls} value={disbForm.category} onChange={(e) => setDisbForm((p) => ({ ...p, category: e.target.value }))}>
-              {Object.entries(CATEGORY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
+            <AppSelect
+              value={disbForm.category}
+              onChange={(v) => setDisbForm((p) => ({ ...p, category: v ?? "maintenance" }))}
+              options={Object.entries(CATEGORY_LABELS).map(([v, l]) => ({ value: v, label: l }))}
+              searchable
+              size="md"
+              className="w-full"
+            />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Property (optional)</label>
-              <select className={inputCls} value={disbForm.propertyId} onChange={(e) => setDisbForm((p) => ({ ...p, propertyId: e.target.value }))}>
-                <option value="">— None —</option>
-                {properties.map((p) => <option key={p._id} value={String(p._id)}>{p.propertyName}</option>)}
-              </select>
+              <AppSelect
+                value={disbForm.propertyId}
+                onChange={(v) => setDisbForm((p) => ({ ...p, propertyId: v ?? "" }))}
+                options={properties.map((p) => ({ value: String(p._id), label: p.propertyName }))}
+                placeholder="— None —"
+                searchable
+                clearable
+                size="md"
+                className="w-full"
+              />
             </div>
             <div>
               <label className={labelCls}>Expense Account (GL)</label>
-              <select className={inputCls} value={disbForm.expenseAccountId} onChange={(e) => setDisbForm((p) => ({ ...p, expenseAccountId: e.target.value }))}>
-                <option value="">— Auto / None —</option>
-                {expenseAccounts.map((a) => <option key={a._id} value={String(a._id)}>{a.code ? `${a.code} — ` : ""}{a.name}</option>)}
-              </select>
+              <AppSelect
+                value={disbForm.expenseAccountId}
+                onChange={(v) => setDisbForm((p) => ({ ...p, expenseAccountId: v ?? "" }))}
+                options={expenseAccounts.map((a) => ({ value: String(a._id), label: `${a.code ? a.code + " — " : ""}${a.name}` }))}
+                placeholder="— Auto / None —"
+                searchable
+                clearable
+                size="md"
+                className="w-full"
+              />
             </div>
           </div>
           <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
@@ -965,10 +994,16 @@ const PettyCash = () => {
           </div>
           <div>
             <label className={labelCls}>Draw From (Bank Account)</label>
-            <select className={inputCls} value={repForm.bankAccountId} onChange={(e) => setRepForm((p) => ({ ...p, bankAccountId: e.target.value }))}>
-              <option value="">— Select bank account —</option>
-              {bankAccounts.map((a) => <option key={a._id} value={String(a._id)}>{a.code ? `${a.code} — ` : ""}{a.name}</option>)}
-            </select>
+            <AppSelect
+              value={repForm.bankAccountId}
+              onChange={(v) => setRepForm((p) => ({ ...p, bankAccountId: v ?? "" }))}
+              options={bankAccounts.map((a) => ({ value: String(a._id), label: `${a.code ? a.code + " — " : ""}${a.name}` }))}
+              placeholder="— Select bank account —"
+              searchable
+              clearable
+              size="md"
+              className="w-full"
+            />
           </div>
           <div>
             <label className={labelCls}>Notes</label>

@@ -47,6 +47,11 @@ const ExpensePropertySchema = new mongoose.Schema(
       type: String,
       enum: ["bank_transfer", "mobile_money", "cash", "check", "credit_card"],
     },
+    cashbook: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     business: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Company",

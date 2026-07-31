@@ -12,6 +12,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import AppSelect from "../../components/common/AppSelect";
+import { buildTenantOption } from "../../utils/tenantUtils";
 import { createRentPayment, getTenantInvoices, getChartOfAccounts } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 import { getTenants } from "../../redux/tenantsRedux";
@@ -851,14 +852,7 @@ const AddReceipt = () => {
                     <AppSelect
                       value={formData.tenantId}
                       onChange={(v) => setFormData((prev) => ({ ...prev, tenantId: v ?? "" }))}
-                      options={tenantOptions.map((t) => {
-                        const name = getTenantName(t);
-                        const unitNum = t?.unit?.unitNumber;
-                        const code = t?.tenantCode;
-                        const terminated = isTerminatedTenant(t) ? " — Terminated" : "";
-                        const suffix = [unitNum ? `Unit ${unitNum}` : "", code || ""].filter(Boolean).join(" · ");
-                        return { value: t._id, label: suffix ? `${name} — ${suffix}${terminated}` : `${name}${terminated}` };
-                      })}
+                      options={tenantOptions.map((t) => buildTenantOption(t))}
                       placeholder={formData.propertyId ? "Select tenant…" : "Select property first"}
                       searchable
                       clearable

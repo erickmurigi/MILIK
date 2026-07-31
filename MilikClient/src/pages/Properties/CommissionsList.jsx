@@ -9,6 +9,7 @@ import { toast } from 'react-toastify';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { FaEdit, FaTrash, FaPlus, FaCheck, FaTimes, FaSearch, FaArrowLeft, FaRedoAlt } from 'react-icons/fa';
 import { useConfirm } from '../../context/ConfirmContext';
+import AppSelect from '../../components/common/AppSelect';
 
 const MILIK_GREEN = "#0B3B2E";
 const MILIK_GREEN_BG = "bg-[#0B3B2E]";
@@ -232,11 +233,17 @@ const CommissionsList = () => {
                 <span className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">Visible <span className="normal-case text-slate-900">{filteredProperties.length}</span></span>
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 <input type="text" placeholder="Search by property code or name" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="h-7 w-40 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                <select value={filterMode} onChange={(e) => setFilterMode(e.target.value)} className="h-7 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-[10px] text-slate-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                  <option value="all">All Properties</option>
-                  <option value="configured">Configured Only</option>
-                  <option value="unconfigured">Unconfigured Only</option>
-                </select>
+                <AppSelect
+                  value={filterMode || null}
+                  onChange={(v) => setFilterMode(v ?? '')}
+                  options={[
+                    { value: 'all', label: 'All Properties' },
+                    { value: 'configured', label: 'Configured Only' },
+                    { value: 'unconfigured', label: 'Unconfigured Only' },
+                  ]}
+                  clearable
+                  size="sm"
+                />
                 <button onClick={resetFilters} className="h-7 shrink-0 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-700 shadow-sm hover:bg-slate-100"><FaRedoAlt size={9} /> Reset</button>
               </div>
             </div>
@@ -294,38 +301,41 @@ const CommissionsList = () => {
 
                                   <div>
                                     <label className="mb-2 block text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">Recognition Basis</label>
-                                    <select
-                                      value={editFormData.commissionRecognitionBasis}
-                                      onChange={(e) => handleEditChange('commissionRecognitionBasis', e.target.value)}
-                                      className="w-full rounded-xl border border-slate-300 px-2 py-1 text-[10px] focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-                                    >
-                                      <option value="received">Rent Collected (Cash)</option>
-                                      <option value="invoiced">Rent Expected (Accrual)</option>
-                                    </select>
+                                    <AppSelect
+                                      value={editFormData.commissionRecognitionBasis || null}
+                                      onChange={(v) => handleEditChange('commissionRecognitionBasis', v ?? '')}
+                                      options={[
+                                        { value: 'received', label: 'Rent Collected (Cash)' },
+                                        { value: 'invoiced', label: 'Rent Expected (Accrual)' },
+                                      ]}
+                                      size="sm"
+                                    />
                                   </div>
 
                                   <div>
                                     <label className="mb-2 block text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">Tenants Pay To</label>
-                                    <select
-                                      value={editFormData.tenantsPaysTo}
-                                      onChange={(e) => handleEditChange('tenantsPaysTo', e.target.value)}
-                                      className="w-full rounded-xl border border-slate-300 px-2 py-1 text-[10px] focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-                                    >
-                                      <option value="propertyManager">Manager</option>
-                                      <option value="landlord">Landlord</option>
-                                    </select>
+                                    <AppSelect
+                                      value={editFormData.tenantsPaysTo || null}
+                                      onChange={(v) => handleEditChange('tenantsPaysTo', v ?? '')}
+                                      options={[
+                                        { value: 'propertyManager', label: 'Manager' },
+                                        { value: 'landlord', label: 'Landlord' },
+                                      ]}
+                                      size="sm"
+                                    />
                                   </div>
 
                                   <div>
                                     <label className="mb-2 block text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">Deposits Held By</label>
-                                    <select
-                                      value={editFormData.depositHeldBy}
-                                      onChange={(e) => handleEditChange('depositHeldBy', e.target.value)}
-                                      className="w-full rounded-xl border border-slate-300 px-2 py-1 text-[10px] focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-                                    >
-                                      <option value="propertyManager">Manager</option>
-                                      <option value="landlord">Landlord</option>
-                                    </select>
+                                    <AppSelect
+                                      value={editFormData.depositHeldBy || null}
+                                      onChange={(v) => handleEditChange('depositHeldBy', v ?? '')}
+                                      options={[
+                                        { value: 'propertyManager', label: 'Manager' },
+                                        { value: 'landlord', label: 'Landlord' },
+                                      ]}
+                                      size="sm"
+                                    />
                                   </div>
                                 </div>
 
@@ -459,18 +469,15 @@ const CommissionsList = () => {
             <div className="grid gap-4 p-6 md:grid-cols-2">
               <div className="md:col-span-2">
                 <label className="mb-2 block text-[10px] font-bold text-slate-700">Property</label>
-                <select
-                  value={addFormData.property || ''}
-                  onChange={(e) => setAddFormData(prev => ({ ...prev, property: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-300 px-2 py-1 text-[10px] focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-                >
-                  <option value="">-- Select Property --</option>
-                  {unconfiguredProperties.map((prop) => (
-                    <option key={prop._id} value={prop._id}>
-                      {prop.propertyCode} - {prop.propertyName || prop.name}
-                    </option>
-                  ))}
-                </select>
+                <AppSelect
+                  value={addFormData.property || null}
+                  onChange={(v) => setAddFormData((prev) => ({ ...prev, property: v ?? '' }))}
+                  options={unconfiguredProperties.map((prop) => ({ value: prop._id, label: `${prop.propertyCode} - ${prop.propertyName || prop.name}` }))}
+                  placeholder="-- Select Property --"
+                  searchable
+                  clearable
+                  size="md"
+                />
               </div>
 
               <div>
@@ -488,38 +495,41 @@ const CommissionsList = () => {
 
               <div>
                 <label className="mb-2 block text-[10px] font-bold text-slate-700">Recognition Basis</label>
-                <select
-                  value={addFormData.commissionRecognitionBasis}
-                  onChange={(e) => setAddFormData(prev => ({ ...prev, commissionRecognitionBasis: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-300 px-2 py-1 text-[10px] focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-                >
-                  <option value="received">Rent Collected (Cash)</option>
-                  <option value="invoiced">Rent Expected (Accrual)</option>
-                </select>
+                <AppSelect
+                  value={addFormData.commissionRecognitionBasis || null}
+                  onChange={(v) => setAddFormData((prev) => ({ ...prev, commissionRecognitionBasis: v ?? '' }))}
+                  options={[
+                    { value: 'received', label: 'Rent Collected (Cash)' },
+                    { value: 'invoiced', label: 'Rent Expected (Accrual)' },
+                  ]}
+                  size="md"
+                />
               </div>
 
               <div>
                 <label className="mb-2 block text-[10px] font-bold text-slate-700">Tenants Pay To</label>
-                <select
-                  value={addFormData.tenantsPaysTo}
-                  onChange={(e) => setAddFormData(prev => ({ ...prev, tenantsPaysTo: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-300 px-2 py-1 text-[10px] focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-                >
-                  <option value="propertyManager">Manager</option>
-                  <option value="landlord">Landlord</option>
-                </select>
+                <AppSelect
+                  value={addFormData.tenantsPaysTo || null}
+                  onChange={(v) => setAddFormData((prev) => ({ ...prev, tenantsPaysTo: v ?? '' }))}
+                  options={[
+                    { value: 'propertyManager', label: 'Manager' },
+                    { value: 'landlord', label: 'Landlord' },
+                  ]}
+                  size="md"
+                />
               </div>
 
               <div>
                 <label className="mb-2 block text-[10px] font-bold text-slate-700">Deposits Held By</label>
-                <select
-                  value={addFormData.depositHeldBy}
-                  onChange={(e) => setAddFormData(prev => ({ ...prev, depositHeldBy: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-300 px-2 py-1 text-[10px] focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-                >
-                  <option value="propertyManager">Manager</option>
-                  <option value="landlord">Landlord</option>
-                </select>
+                <AppSelect
+                  value={addFormData.depositHeldBy || null}
+                  onChange={(v) => setAddFormData((prev) => ({ ...prev, depositHeldBy: v ?? '' }))}
+                  options={[
+                    { value: 'propertyManager', label: 'Manager' },
+                    { value: 'landlord', label: 'Landlord' },
+                  ]}
+                  size="md"
+                />
               </div>
             </div>
 

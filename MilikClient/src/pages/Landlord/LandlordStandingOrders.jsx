@@ -604,21 +604,37 @@ const LandlordStandingOrders = () => {
                   <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]" />
                   <input value={filters.search} onChange={setFilter("search")} placeholder="Search order, title…" className="h-7 w-40 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </div>
-                <select value={filters.landlordId} onChange={setFilter("landlordId")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                  <option value="all">All Landlords</option>
-                  {activeLandlords.map((landlord) => (<option key={landlord._id} value={landlord._id}>{getLandlordLabel(landlord)}</option>))}
-                </select>
-                <select value={filters.propertyId} onChange={setFilter("propertyId")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                  <option value="all">All Properties</option>
-                  {activeProperties.map((property) => (<option key={property._id} value={property._id}>{property.propertyCode ? `[${property.propertyCode}] ` : ""}{property.propertyName || property.name}</option>))}
-                </select>
-                <select value={filters.status} onChange={setFilter("status")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                  <option value="all">All Statuses</option>
-                  <option value="draft">Draft</option>
-                  <option value="active">Active</option>
-                  <option value="paused">Paused</option>
-                  <option value="stopped">Stopped</option>
-                </select>
+                <AppSelect
+                  value={filters.landlordId === "all" ? null : filters.landlordId}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, landlordId: v ?? "all" }))}
+                  options={activeLandlords.map((l) => ({ value: l._id, label: getLandlordLabel(l) }))}
+                  placeholder="All Landlords"
+                  searchable
+                  clearable
+                  size="sm"
+                />
+                <AppSelect
+                  value={filters.propertyId === "all" ? null : filters.propertyId}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "all" }))}
+                  options={activeProperties.map((p) => ({ value: p._id, label: `${p.propertyCode ? `[${p.propertyCode}] ` : ""}${p.propertyName || p.name}` }))}
+                  placeholder="All Properties"
+                  searchable
+                  clearable
+                  size="sm"
+                />
+                <AppSelect
+                  value={filters.status === "all" ? null : filters.status}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))}
+                  options={[
+                    { value: "draft", label: "Draft" },
+                    { value: "active", label: "Active" },
+                    { value: "paused", label: "Paused" },
+                    { value: "stopped", label: "Stopped" },
+                  ]}
+                  placeholder="All Statuses"
+                  clearable
+                  size="sm"
+                />
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 <span className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600">{stats.total} orders</span>
                 <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Active: {stats.active}</span>
@@ -985,15 +1001,16 @@ const LandlordStandingOrders = () => {
 
               <label className="block">
                 <span className="mb-0.5 block text-xs font-semibold text-slate-700">Initial Status</span>
-                <select
-                  value={form.status}
-                  onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}
-                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                >
-                  <option value="draft">Draft</option>
-                  <option value="active">Active</option>
-                  <option value="paused">Paused</option>
-                </select>
+                <AppSelect
+                  value={form.status || null}
+                  onChange={(v) => setForm((prev) => ({ ...prev, status: v ?? "draft" }))}
+                  options={[
+                    { value: "draft", label: "Draft" },
+                    { value: "active", label: "Active" },
+                    { value: "paused", label: "Paused" },
+                  ]}
+                  size="sm"
+                />
               </label>
 
               <label className="block xl:col-span-2">
@@ -1007,17 +1024,12 @@ const LandlordStandingOrders = () => {
 
               <label className="block">
                 <span className="mb-0.5 block text-xs font-semibold text-slate-700">Frequency</span>
-                <select
-                  value={form.frequency}
-                  onChange={(e) => setForm((prev) => ({ ...prev, frequency: e.target.value }))}
-                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                >
-                  {frequencyOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                <AppSelect
+                  value={form.frequency || null}
+                  onChange={(v) => setForm((prev) => ({ ...prev, frequency: v ?? "monthly" }))}
+                  options={frequencyOptions}
+                  size="sm"
+                />
               </label>
 
               <label className="block">
@@ -1056,33 +1068,25 @@ const LandlordStandingOrders = () => {
 
               <label className="block">
                 <span className="mb-0.5 block text-xs font-semibold text-slate-700">Payment Method</span>
-                <select
-                  value={form.paymentMethod}
-                  onChange={(e) => setForm((prev) => ({ ...prev, paymentMethod: e.target.value }))}
-                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                >
-                  {paymentMethodOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                <AppSelect
+                  value={form.paymentMethod || null}
+                  onChange={(v) => setForm((prev) => ({ ...prev, paymentMethod: v ?? "bank_transfer" }))}
+                  options={paymentMethodOptions}
+                  size="sm"
+                />
               </label>
 
               <label className="block">
                 <span className="mb-0.5 block text-xs font-semibold text-slate-700">Cashbook</span>
-                <select
-                  value={form.cashbook}
-                  onChange={(e) => setForm((prev) => ({ ...prev, cashbook: e.target.value }))}
-                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                >
-                  <option value="">Auto-resolve from payment method</option>
-                  {cashbooks.map((account) => (
-                    <option key={account._id} value={account._id}>
-                      {account.name || account.accountName || account.code || account.accountCode}
-                    </option>
-                  ))}
-                </select>
+                <AppSelect
+                  value={form.cashbook || null}
+                  onChange={(v) => setForm((prev) => ({ ...prev, cashbook: v ?? "" }))}
+                  options={cashbooks.map((account) => ({ value: account._id, label: account.name || account.accountName || account.code || account.accountCode }))}
+                  placeholder="Auto-resolve from payment method"
+                  searchable
+                  clearable
+                  size="sm"
+                />
               </label>
 
               <label className="block xl:col-span-2">
@@ -1199,17 +1203,15 @@ const LandlordStandingOrders = () => {
               </div>
               <label className="block">
                 <span className="mb-0.5 block text-xs font-semibold text-slate-700">Eligible period</span>
-                <select
-                  value={runModal.periodKey}
-                  onChange={(e) => setRunModal((prev) => ({ ...prev, periodKey: e.target.value }))}
-                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                >
-                  {(runModal.row?.eligiblePeriods || []).map((item) => (
-                    <option key={item.periodKey} value={item.periodKey}>
-                      {item.periodLabel} • Due {formatDate(item.dueDate)}
-                    </option>
-                  ))}
-                </select>
+                <AppSelect
+                  value={runModal.periodKey || null}
+                  onChange={(v) => setRunModal((prev) => ({ ...prev, periodKey: v ?? "" }))}
+                  options={(runModal.row?.eligiblePeriods || []).map((item) => ({
+                    value: item.periodKey,
+                    label: `${item.periodLabel} • Due ${formatDate(item.dueDate)}`,
+                  }))}
+                  size="sm"
+                />
               </label>
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="block">

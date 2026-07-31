@@ -8,6 +8,7 @@ import {
 import { useSearchParams } from "react-router-dom";
 import { useTabState } from "../../hooks/useTabState";
 import { LISTING_UI } from "../../utils/listingPageUtils";
+import { buildTenantOption } from "../../utils/tenantUtils";
 import {
   FaEnvelope,
   FaFileInvoice,
@@ -36,6 +37,7 @@ import {
 } from "../../redux/invoiceApi";
 import { adminRequests } from "../../utils/requestMethods";
 import useScopedSessionDraft, { buildScopedDraftKey } from "../../hooks/useScopedSessionDraft";
+import AppSelect from "../../components/common/AppSelect";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
@@ -834,24 +836,44 @@ const InvoiceNotes = () => {
                 <button type="button" onClick={() => { setNoteType("DEBIT_NOTE"); setFilters((prev) => ({ ...prev, noteType: "DEBIT_NOTE" })); const p = new URLSearchParams(searchParams); p.set("type", "debit"); setSearchParams(p, { replace: true }); }} className={`h-7 shrink-0 rounded px-2.5 text-xs font-semibold ${filters.noteType === "DEBIT_NOTE" ? `${MILIK_GREEN} text-white` : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100"}`}>Debit Notes</button>
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 <input type="text" value={filters.search} onChange={setFilter("search")} placeholder="Search…" className="h-7 w-36 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <select value={filters.propertyId} onChange={(e) => setFilters((prev) => ({ ...prev, propertyId: e.target.value, tenantId: "" }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                  <option value="">Property</option>
-                  {properties.map((p) => (<option key={p._id} value={p._id}>{p.propertyName || p.propertyCode || "Unnamed Property"}</option>))}
-                </select>
-                <select value={filters.tenantScope || "active"} onChange={(e) => setFilters((prev) => ({ ...prev, tenantScope: e.target.value, tenantId: "" }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                  <option value="active">Active</option>
-                  <option value="terminated">Terminated</option>
-                  <option value="all">All Tenants</option>
-                </select>
-                <select value={filters.tenantId} onChange={setFilter("tenantId")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                  <option value="">Tenant</option>
-                  {filterScopedTenants.map((t) => (<option key={t._id} value={t._id}>{getTenantDisplayName(t)} ({getTenantStatusLabel(t)})</option>))}
-                </select>
-                <select value={filters.status} onChange={setFilter("status")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                  <option value="active">Active</option>
-                  <option value="reversed">Reversed</option>
-                  <option value="all">All</option>
-                </select>
+                <AppSelect
+                  value={filters.propertyId}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "", tenantId: "" }))}
+                  options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.propertyCode || "Unnamed Property" }))}
+                  placeholder="Property"
+                  searchable
+                  clearable
+                  size="sm"
+                />
+                <AppSelect
+                  value={filters.tenantScope || "active"}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, tenantScope: v ?? "active", tenantId: "" }))}
+                  options={[
+                    { value: "active", label: "Active" },
+                    { value: "terminated", label: "Terminated" },
+                    { value: "all", label: "All Tenants" },
+                  ]}
+                  size="sm"
+                />
+                <AppSelect
+                  value={filters.tenantId}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, tenantId: v ?? "" }))}
+                  options={filterScopedTenants.map((t) => buildTenantOption(t))}
+                  placeholder="Tenant"
+                  searchable
+                  clearable
+                  size="sm"
+                />
+                <AppSelect
+                  value={filters.status}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "" }))}
+                  options={[
+                    { value: "active", label: "Active" },
+                    { value: "reversed", label: "Reversed" },
+                    { value: "all", label: "All" },
+                  ]}
+                  size="sm"
+                />
                 <button type="button" onClick={handleSearchFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_ORANGE} hover:bg-[#e67e00]`}><FaSearch size={10} /></button>
                 <button type="button" onClick={resetWorkspaceFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} hover:bg-[#0A3127]`}><FaRedoAlt size={10} /></button>
                 <button type="button" onClick={loadData} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} hover:bg-[#0A3127]`}><FaRedoAlt size={10} /></button>
@@ -1105,34 +1127,33 @@ const InvoiceNotes = () => {
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                   <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
                     <span>Note Type</span>
-                    <select
+                    <AppSelect
                       value={noteType}
-                      onChange={(e) => {
-                        const nextValue = e.target.value;
+                      onChange={(v) => {
+                        const nextValue = v ?? "CREDIT_NOTE";
                         setNoteType(nextValue);
                         const nextParams = new URLSearchParams(searchParams);
                         nextParams.set("type", nextValue === "DEBIT_NOTE" ? "debit" : "credit");
                         setSearchParams(nextParams, { replace: true });
                       }}
-                      className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                    >
-                      <option value="CREDIT_NOTE">Credit Note</option>
-                      <option value="DEBIT_NOTE">Debit Note</option>
-                    </select>
+                      options={[
+                        { value: "CREDIT_NOTE", label: "Credit Note" },
+                        { value: "DEBIT_NOTE", label: "Debit Note" },
+                      ]}
+                      size="md"
+                    />
                   </label>
 
                   <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
                     <span>Property</span>
-                    <select
+                    <AppSelect
                       value={propertyId}
-                      onChange={(e) => setPropertyId(e.target.value)}
-                      className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                    >
-                      <option value="">Select property</option>
-                      {properties.map((property) => (
-                        <option key={property._id} value={property._id}>{property.propertyName || property.propertyCode || "Unnamed Property"}</option>
-                      ))}
-                    </select>
+                      onChange={(v) => setPropertyId(v ?? "")}
+                      options={properties.map((property) => ({ value: property._id, label: property.propertyName || property.propertyCode || "Unnamed Property" }))}
+                      placeholder="Select property"
+                      searchable
+                      size="md"
+                    />
                   </label>
 
                   <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
@@ -1142,17 +1163,26 @@ const InvoiceNotes = () => {
 
                   <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
                     <span>Tenant</span>
-                    <select value={tenantScope} onChange={(e) => setTenantScope(e.target.value)} disabled={!propertyId} className="mb-2 w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed">
-                      <option value="active">Active tenants</option>
-                      <option value="terminated">Terminated tenants</option>
-                      <option value="all">All tenants</option>
-                    </select>
-                    <select value={tenantId} onChange={(e) => setTenantId(e.target.value)} disabled={!propertyId} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed">
-                      <option value="">{propertyId ? "Select tenant" : "Select property first"}</option>
-                      {propertyScopedTenants.map((tenant) => (
-                        <option key={tenant._id} value={tenant._id}>{getTenantDisplayName(tenant)} ({getTenantStatusLabel(tenant)})</option>
-                      ))}
-                    </select>
+                    <AppSelect
+                      value={tenantScope}
+                      onChange={(v) => setTenantScope(v ?? "active")}
+                      options={[
+                        { value: "active", label: "Active tenants" },
+                        { value: "terminated", label: "Terminated tenants" },
+                        { value: "all", label: "All tenants" },
+                      ]}
+                      disabled={!propertyId}
+                      size="md"
+                    />
+                    <AppSelect
+                      value={tenantId}
+                      onChange={(v) => setTenantId(v ?? "")}
+                      options={propertyScopedTenants.map((tenant) => buildTenantOption(tenant))}
+                      placeholder={propertyId ? "Select tenant" : "Select property first"}
+                      searchable
+                      disabled={!propertyId}
+                      size="md"
+                    />
                     {tenantScope === "terminated" ? (
                       <p className="text-[11px] font-semibold text-amber-700">You are selecting from terminated tenants for a deliberate final adjustment.</p>
                     ) : null}
@@ -1161,14 +1191,15 @@ const InvoiceNotes = () => {
                   {noteType === "CREDIT_NOTE" ? (
                     <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500 md:col-span-2">
                       <span>Source Invoice</span>
-                      <select value={sourceInvoiceId} onChange={(e) => setSourceInvoiceId(e.target.value)} disabled={!tenantId} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed">
-                        <option value="">{tenantId ? (sourceInvoiceOptions.length ? "Select source invoice" : "No matching open posted invoices") : "Select tenant first"}</option>
-                        {sourceInvoiceOptions.map((invoice) => (
-                          <option key={invoice._id} value={invoice._id}>
-                            {(invoice.invoiceNumber || "-")} | {(invoice.category || "-")} | {formatCurrency(invoice.remainingCreditableAmount ?? 0)}
-                          </option>
-                        ))}
-                      </select>
+                      <AppSelect
+                        value={sourceInvoiceId}
+                        onChange={(v) => setSourceInvoiceId(v ?? "")}
+                        options={sourceInvoiceOptions.map((invoice) => ({ value: String(invoice._id), label: `${invoice.invoiceNumber || "-"} | ${invoice.category || "-"} | ${formatCurrency(invoice.remainingCreditableAmount ?? 0)}` }))}
+                        placeholder={tenantId ? (sourceInvoiceOptions.length ? "Select source invoice" : "No matching open posted invoices") : "Select tenant first"}
+                        searchable
+                        disabled={!tenantId}
+                        size="md"
+                      />
                     </label>
                   ) : (
                     <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500 md:col-span-2">
@@ -1195,12 +1226,14 @@ const InvoiceNotes = () => {
                   {noteType === "CREDIT_NOTE" ? (
                     <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
                       <span>Charge Type</span>
-                      <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
-                        <option value="">Select charge type</option>
-                        {chargeTypes.map((item) => (
-                          <option key={item.value} value={item.value}>{item.label}</option>
-                        ))}
-                      </select>
+                      <AppSelect
+                        value={category}
+                        onChange={(v) => setCategory(v ?? "")}
+                        options={chargeTypes.map((item) => ({ value: item.value, label: item.label }))}
+                        placeholder="Select charge type"
+                        searchable
+                        size="md"
+                      />
                     </label>
                   ) : (
                     <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
@@ -1221,12 +1254,14 @@ const InvoiceNotes = () => {
 
                   <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500 xl:col-span-3">
                     <span>Posting Account (optional)</span>
-                    <select value={chartAccountId} onChange={(e) => setChartAccountId(e.target.value)} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
-                      <option value="">Use existing charge mapping</option>
-                      {postingAccounts.map((account) => (
-                        <option key={account._id} value={account._id}>{account.code} - {account.name}</option>
-                      ))}
-                    </select>
+                    <AppSelect
+                      value={chartAccountId}
+                      onChange={(v) => setChartAccountId(v ?? "")}
+                      options={postingAccounts.map((account) => ({ value: account._id, label: `${account.code} - ${account.name}` }))}
+                      placeholder="Use existing charge mapping"
+                      searchable
+                      size="md"
+                    />
                   </label>
 
                   <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500 xl:col-span-3">

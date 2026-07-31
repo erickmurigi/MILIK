@@ -12,6 +12,7 @@ import { fmtKES, saleApi } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
 import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
+import AppSelect from "../../components/common/AppSelect";
 
 const LEAD_STATUSES  = ["new", "contacted", "qualified", "site_visited", "proposal_sent", "negotiating", "converted", "lost"];
 const LEAD_SOURCES   = ["walk_in", "referral", "online", "social_media", "agent", "cold_call", "other"];
@@ -302,18 +303,31 @@ export default function SaleLeads() {
                 className="h-7 w-full border border-slate-300 pl-6 pr-2 text-xs focus:border-[#0B3B2E] focus:outline-none"
               />
             </div>
-            <select value={statusFilter} onChange={(e) => setStatus(e.target.value)} className={`${selectCls} w-[120px]`}>
-              <option value="">All Statuses</option>
-              {LEAD_STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
-            </select>
-            <select value={sourceFilter} onChange={(e) => setSource(e.target.value)} className={`${selectCls} w-[110px]`}>
-              <option value="">All Sources</option>
-              {LEAD_SOURCES.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
-            </select>
-            <select value={agentFilter} onChange={(e) => setAgent(e.target.value)} className={`${selectCls} w-[120px]`}>
-              <option value="">All Agents</option>
-              {agents.map((a) => <option key={a._id} value={a._id}>{a.fullName}</option>)}
-            </select>
+            <AppSelect
+              value={statusFilter}
+              onChange={(v) => setStatus(v ?? "")}
+              options={LEAD_STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }))}
+              placeholder="All Statuses"
+              clearable
+              size="sm"
+            />
+            <AppSelect
+              value={sourceFilter}
+              onChange={(v) => setSource(v ?? "")}
+              options={LEAD_SOURCES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }))}
+              placeholder="All Sources"
+              clearable
+              size="sm"
+            />
+            <AppSelect
+              value={agentFilter}
+              onChange={(v) => setAgent(v ?? "")}
+              options={agents.map((a) => ({ value: a._id, label: a.fullName }))}
+              placeholder="All Agents"
+              searchable
+              clearable
+              size="sm"
+            />
             <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 cursor-pointer select-none whitespace-nowrap">
               <input type="checkbox" checked={overdueOnly} onChange={(e) => setOverdue(e.target.checked)} className="accent-[#0B3B2E]" />
               Overdue only
@@ -462,16 +476,16 @@ export default function SaleLeads() {
               ) : (
                 <div className="mb-2 text-[11px] text-slate-400">No listings linked yet.</div>
               )}
-              <select
-                onChange={(e) => { if (e.target.value) { handleToggleListing(e.target.value, true); e.target.value = ""; } }}
-                className="h-7 w-full border border-slate-200 bg-white px-2 text-xs focus:border-[#0B3B2E] focus:outline-none"
-                defaultValue=""
-              >
-                <option value="">+ Link a listing…</option>
-                {allListings
+              <AppSelect
+                value=""
+                onChange={(v) => { if (v) handleToggleListing(v, true); }}
+                options={allListings
                   .filter((l) => !interestedListings.some((il) => String(il._id) === String(l._id)))
-                  .map((l) => <option key={l._id} value={l._id}>{l.listingNumber} — {l.title}</option>)}
-              </select>
+                  .map((l) => ({ value: l._id, label: `${l.listingNumber} — ${l.title}` }))}
+                placeholder="+ Link a listing…"
+                searchable
+                size="sm"
+              />
             </div>
 
             {/* Actions */}
@@ -562,22 +576,33 @@ export default function SaleLeads() {
               </div>
               <div>
                 <label className={labelCls}>Source</label>
-                <select value={form.source} onChange={(e) => setForm((f) => ({ ...f, source: e.target.value }))} className={`${modalInputCls} h-8`}>
-                  {LEAD_SOURCES.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
-                </select>
+                <AppSelect
+                  value={form.source}
+                  onChange={(v) => setForm((f) => ({ ...f, source: v ?? "" }))}
+                  options={LEAD_SOURCES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }))}
+                  size="md"
+                />
               </div>
               <div>
                 <label className={labelCls}>Status</label>
-                <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} className={`${modalInputCls} h-8`}>
-                  {LEAD_STATUSES.filter((s) => s !== "converted").map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
-                </select>
+                <AppSelect
+                  value={form.status}
+                  onChange={(v) => setForm((f) => ({ ...f, status: v ?? "" }))}
+                  options={LEAD_STATUSES.filter((s) => s !== "converted").map((s) => ({ value: s, label: s.replace(/_/g, " ") }))}
+                  size="md"
+                />
               </div>
               <div>
                 <label className={labelCls}>Assigned Agent</label>
-                <select value={form.assignedAgent} onChange={(e) => setForm((f) => ({ ...f, assignedAgent: e.target.value }))} className={`${modalInputCls} h-8`}>
-                  <option value="">— Unassigned —</option>
-                  {agents.map((a) => <option key={a._id} value={a._id}>{a.fullName}</option>)}
-                </select>
+                <AppSelect
+                  value={form.assignedAgent}
+                  onChange={(v) => setForm((f) => ({ ...f, assignedAgent: v ?? "" }))}
+                  options={agents.map((a) => ({ value: a._id, label: a.fullName }))}
+                  placeholder="— Unassigned —"
+                  searchable
+                  clearable
+                  size="md"
+                />
               </div>
               <div>
                 <label className={labelCls}>Next Follow-up</label>
@@ -628,9 +653,12 @@ export default function SaleLeads() {
             <div className="flex-1 overflow-y-auto bg-white px-5 py-4 grid grid-cols-2 gap-3">
               <div>
                 <label className={labelCls}>Type *</label>
-                <select value={actForm.type} onChange={(e) => setActForm((f) => ({ ...f, type: e.target.value }))} className={`${modalInputCls} h-8`}>
-                  {ACTIVITY_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, " ")}</option>)}
-                </select>
+                <AppSelect
+                  value={actForm.type}
+                  onChange={(v) => setActForm((f) => ({ ...f, type: v ?? "" }))}
+                  options={ACTIVITY_TYPES.map((t) => ({ value: t, label: t.replace(/_/g, " ") }))}
+                  size="md"
+                />
               </div>
               <div>
                 <label className={labelCls}>Date & Time</label>
@@ -646,9 +674,12 @@ export default function SaleLeads() {
               </div>
               <div>
                 <label className={labelCls}>Outcome</label>
-                <select value={actForm.outcome} onChange={(e) => setActForm((f) => ({ ...f, outcome: e.target.value }))} className={`${modalInputCls} h-8`}>
-                  {OUTCOMES.map((o) => <option key={o} value={o}>{o.replace(/_/g, " ")}</option>)}
-                </select>
+                <AppSelect
+                  value={actForm.outcome}
+                  onChange={(v) => setActForm((f) => ({ ...f, outcome: v ?? "" }))}
+                  options={OUTCOMES.map((o) => ({ value: o, label: o.replace(/_/g, " ") }))}
+                  size="md"
+                />
               </div>
               <div className="col-span-2">
                 <label className={labelCls}>Notes</label>

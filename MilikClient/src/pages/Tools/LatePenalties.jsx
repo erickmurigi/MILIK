@@ -20,6 +20,7 @@ import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import AppSelect from "../../components/common/AppSelect";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import {
   createLatePenaltyRule,
@@ -745,36 +746,32 @@ const LatePenalties = () => {
                       placeholder="Batch, tenant, penalty invoice, property, unit"
                       className="h-7 w-52 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                     />
-                    <select
-                      value={penaltyStatusFilter}
-                      onChange={(e) => setPenaltyStatusFilter(e.target.value)}
-                      className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-                    >
-                      <option value="all">All statuses</option>
-                      <option value="processed">Processed</option>
-                      <option value="reversed">Reversed</option>
-                      <option value="deleted">Deleted</option>
-                    </select>
-                    <select
-                      value={penaltyRuleFilter}
-                      onChange={(e) => setPenaltyRuleFilter(e.target.value)}
-                      className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-                    >
-                      <option value="all">All rules</option>
-                      {processedPenaltyRuleOptions.map((ruleName) => (
-                        <option key={ruleName} value={ruleName}>{ruleName}</option>
-                      ))}
-                    </select>
-                    <select
-                      value={penaltyPropertyFilter}
-                      onChange={(e) => setPenaltyPropertyFilter(e.target.value)}
-                      className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-                    >
-                      <option value="all">All properties</option>
-                      {processedPenaltyPropertyOptions.map((propertyName) => (
-                        <option key={propertyName} value={propertyName}>{propertyName}</option>
-                      ))}
-                    </select>
+                    <AppSelect
+                      value={penaltyStatusFilter !== "all" ? penaltyStatusFilter : ""}
+                      onChange={(v) => setPenaltyStatusFilter(v ?? "all")}
+                      options={[{ value: "processed", label: "Processed" }, { value: "reversed", label: "Reversed" }, { value: "deleted", label: "Deleted" }]}
+                      placeholder="All statuses"
+                      clearable
+                      size="sm"
+                    />
+                    <AppSelect
+                      value={penaltyRuleFilter !== "all" ? penaltyRuleFilter : ""}
+                      onChange={(v) => setPenaltyRuleFilter(v ?? "all")}
+                      options={processedPenaltyRuleOptions.map((ruleName) => ({ value: ruleName, label: ruleName }))}
+                      placeholder="All rules"
+                      searchable
+                      clearable
+                      size="sm"
+                    />
+                    <AppSelect
+                      value={penaltyPropertyFilter !== "all" ? penaltyPropertyFilter : ""}
+                      onChange={(v) => setPenaltyPropertyFilter(v ?? "all")}
+                      options={processedPenaltyPropertyOptions.map((propertyName) => ({ value: propertyName, label: propertyName }))}
+                      placeholder="All properties"
+                      searchable
+                      clearable
+                      size="sm"
+                    />
                     <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                     <button
                       type="button"
@@ -948,17 +945,14 @@ const LatePenalties = () => {
                       placeholder="Batch name, rule, status"
                       className="h-7 w-48 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                     />
-                    <select
-                      value={batchStatusFilter}
-                      onChange={(e) => setBatchStatusFilter(e.target.value)}
-                      className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-                    >
-                      <option value="all">All batch statuses</option>
-                      <option value="processed">Processed</option>
-                      <option value="partial">Partial</option>
-                      <option value="failed">Failed</option>
-                      <option value="reversed_ready">Reversed ready</option>
-                    </select>
+                    <AppSelect
+                      value={batchStatusFilter !== "all" ? batchStatusFilter : ""}
+                      onChange={(v) => setBatchStatusFilter(v ?? "all")}
+                      options={[{ value: "processed", label: "Processed" }, { value: "partial", label: "Partial" }, { value: "failed", label: "Failed" }, { value: "reversed_ready", label: "Reversed ready" }]}
+                      placeholder="All batch statuses"
+                      clearable
+                      size="sm"
+                    />
                     <span className="shrink-0 text-xs text-slate-500">Click a row to open details.</span>
                   </div>
                 </div>
@@ -1142,18 +1136,15 @@ const LatePenalties = () => {
                 <div className="flex min-h-0 flex-col rounded-xl border border-slate-200 bg-white">
                   <div className="flex-none sticky top-0 z-10 border-b border-slate-200 bg-white shadow-sm">
                     <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-                      <select
-                        className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                      <AppSelect
                         value={selectedRuleId}
-                        onChange={(e) => setSelectedRuleId(e.target.value)}
-                      >
-                        <option value="">Select rule</option>
-                        {rules.map((rule) => (
-                          <option key={rule._id} value={rule._id}>
-                            {rule.ruleName}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={(v) => setSelectedRuleId(v ?? "")}
+                        options={rules.map((rule) => ({ value: rule._id, label: rule.ruleName }))}
+                        placeholder="Select rule"
+                        searchable
+                        clearable
+                        size="sm"
+                      />
                       <input
                         type="date"
                         className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
@@ -1538,19 +1529,16 @@ const LatePenalties = () => {
                     </div>
                     <div>
                       <label className={labelClass}>Posting account</label>
-                      <select
-                        className={inputClass}
+                      <AppSelect
                         value={ruleForm.postingAccount}
-                        onChange={(e) => setRuleForm((prev) => ({ ...prev, postingAccount: e.target.value }))}
-                      >
-                        <option value="">Select account</option>
-                        {incomeAccounts.map((account) => (
-                          <option key={account._id} value={account._id}>
-                            {account.code ? `${account.code} · ` : ""}
-                            {account.name}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={(v) => setRuleForm((prev) => ({ ...prev, postingAccount: v ?? "" }))}
+                        options={incomeAccounts.map((account) => ({ value: account._id, label: `${account.code ? account.code + " · " : ""}${account.name}` }))}
+                        placeholder="Select account"
+                        searchable
+                        clearable
+                        size="md"
+                        className="w-full"
+                      />
                     </div>
                   </div>
 
@@ -1579,24 +1567,36 @@ const LatePenalties = () => {
 
                   <div>
                     <label className={labelClass}>Penalize item</label>
-                    <select className={inputClass} value={ruleForm.penalizeItem} onChange={(e) => setRuleForm((prev) => ({ ...prev, penalizeItem: e.target.value }))}>
-                      <option value="rent_only">Rent only</option>
-                      <option value="current_period_rent_only">Current period rent only</option>
-                      <option value="current_period_bill_balance_only">Current period bill balance only</option>
-                      <option value="all_arrears">All arrears</option>
-                      <option value="outstanding_invoice_balance">Outstanding invoice balance</option>
-                    </select>
+                    <AppSelect
+                      value={ruleForm.penalizeItem}
+                      onChange={(v) => setRuleForm((prev) => ({ ...prev, penalizeItem: v ?? "outstanding_invoice_balance" }))}
+                      options={[
+                        { value: "rent_only", label: "Rent only" },
+                        { value: "current_period_rent_only", label: "Current period rent only" },
+                        { value: "current_period_bill_balance_only", label: "Current period bill balance only" },
+                        { value: "all_arrears", label: "All arrears" },
+                        { value: "outstanding_invoice_balance", label: "Outstanding invoice balance" },
+                      ]}
+                      size="md"
+                      className="w-full"
+                    />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className={labelClass}>Calculation type</label>
-                      <select className={inputClass} value={ruleForm.calculationType} onChange={(e) => setRuleForm((prev) => ({ ...prev, calculationType: e.target.value }))}>
-                        <option value="flat_amount">Flat amount</option>
-                        <option value="percentage_overdue_balance">Percentage of overdue balance</option>
-                        <option value="daily_fixed_amount">Daily fixed amount</option>
-                        <option value="daily_percentage">Daily percentage</option>
-                      </select>
+                      <AppSelect
+                        value={ruleForm.calculationType}
+                        onChange={(v) => setRuleForm((prev) => ({ ...prev, calculationType: v ?? "percentage_overdue_balance" }))}
+                        options={[
+                          { value: "flat_amount", label: "Flat amount" },
+                          { value: "percentage_overdue_balance", label: "Percentage of overdue balance" },
+                          { value: "daily_fixed_amount", label: "Daily fixed amount" },
+                          { value: "daily_percentage", label: "Daily percentage" },
+                        ]}
+                        size="md"
+                        className="w-full"
+                      />
                     </div>
                     <div>
                       <label className={labelClass}>Rate / amount</label>
@@ -1651,14 +1651,13 @@ const LatePenalties = () => {
 
                   <div>
                     <label className={labelClass}>Repeat frequency</label>
-                    <select
-                      className={inputClass}
+                    <AppSelect
                       value={ruleForm.repeatFrequency}
-                      onChange={(e) => setRuleForm((prev) => ({ ...prev, repeatFrequency: e.target.value }))}
-                    >
-                      <option value="manual">Manual</option>
-                      <option value="monthly">Monthly</option>
-                    </select>
+                      onChange={(v) => setRuleForm((prev) => ({ ...prev, repeatFrequency: v ?? "manual" }))}
+                      options={[{ value: "manual", label: "Manual" }, { value: "monthly", label: "Monthly" }]}
+                      size="md"
+                      className="w-full"
+                    />
                   </div>
 
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">

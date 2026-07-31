@@ -52,6 +52,7 @@ import {
 } from "./invoiceTaxUtils";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { useTabState } from "../../hooks/useTabState";
+import AppSelect from "../../components/common/AppSelect";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -3284,20 +3285,33 @@ const createInvoiceForTenant = async (
                 <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">Total: {formatCurrency(invoicePageSummary.pageTotalAmount || 0)}</span>
                 <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">Pend: {formatCurrency(invoicePageSummary.pagePendingAmount || 0)}</span>
                 <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
-                <select value={draftFilters.status} onChange={setFilter("status")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-1 text-xs font-semibold text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                  <option value="ACTIVE">All</option>
-                  <option value="Issued">Issued</option>
-                  <option value="Paid">Paid</option>
-                </select>
+                <AppSelect
+                  value={draftFilters.status}
+                  onChange={(v) => setDraftFilters((prev) => ({ ...prev, status: v ?? "ACTIVE" }))}
+                  options={[{ value: "ACTIVE", label: "All" }, { value: "Issued", label: "Issued" }, { value: "Paid", label: "Paid" }]}
+                  size="sm"
+                />
                 <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
                 <input type="text" value={draftFilters.invoiceNo} onChange={(e) => setDraftFilters((prev) => ({ ...prev, invoiceNo: normalizeUppercaseInput(e.target.value) }))} placeholder="Invoice #" className="h-7 w-20 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
                 {!tenantId && <input type="text" value={draftFilters.tenantName} onChange={setFilter("tenantName")} placeholder="Tenant" className="h-7 w-20 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />}
-                <select value={draftFilters.property} onChange={(e) => setDraftFilters((prev) => ({ ...prev, property: e.target.value, unit: "any" }))} className="h-7 w-24 shrink-0 rounded border border-slate-200 bg-white px-1 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                  {uniqueProperties.map((property) => (<option key={property} value={property}>{property === "any" ? "Property" : property}</option>))}
-                </select>
-                <select value={draftFilters.unit} onChange={setFilter("unit")} className="h-7 w-16 shrink-0 rounded border border-slate-200 bg-white px-1 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                  {unitsForSelectedProperty.map((unit) => (<option key={unit} value={unit}>{unit === "any" ? "Unit" : unit}</option>))}
-                </select>
+                <AppSelect
+                  value={draftFilters.property === "any" ? "" : draftFilters.property}
+                  onChange={(v) => setDraftFilters((prev) => ({ ...prev, property: v ?? "any", unit: "any" }))}
+                  options={uniqueProperties.filter((p) => p !== "any").map((p) => ({ value: p, label: p }))}
+                  placeholder="Property"
+                  searchable
+                  clearable
+                  size="sm"
+                />
+                <AppSelect
+                  value={draftFilters.unit === "any" ? "" : draftFilters.unit}
+                  onChange={(v) => setDraftFilters((prev) => ({ ...prev, unit: v ?? "any" }))}
+                  options={unitsForSelectedProperty.filter((u) => u !== "any").map((u) => ({ value: u, label: u }))}
+                  placeholder="Unit"
+                  searchable
+                  clearable
+                  size="sm"
+                />
                 <input type="date" value={draftFilters.fromDate} onChange={setFilter("fromDate")} className="h-7 w-[7.5rem] shrink-0 rounded border border-slate-200 bg-white px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
                 <input type="date" value={draftFilters.toDate} onChange={setFilter("toDate")} className="h-7 w-[7.5rem] shrink-0 rounded border border-slate-200 bg-white px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
                 <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
@@ -3322,11 +3336,13 @@ const createInvoiceForTenant = async (
                 {canCreateInvoice && (
                   <div className="flex shrink-0 items-center gap-0.5">
                     <FaPlus className="text-[10px] text-[#0B3B2E]" />
-                    <select value={bookingAction} onChange={(e) => handleBookingActionChange(e.target.value)} className="h-7 rounded border border-[#0B3B2E] bg-[#E7F5EC] px-1 text-xs font-semibold text-[#0B3B2E]">
-                      <option value="">Booking</option>
-                      <option value="single">Single Booking</option>
-                      <option value="batch">Batch Booking</option>
-                    </select>
+                    <AppSelect
+                      value={bookingAction}
+                      onChange={(v) => handleBookingActionChange(v ?? "")}
+                      options={[{ value: "single", label: "Single Booking" }, { value: "batch", label: "Batch Booking" }]}
+                      placeholder="Booking"
+                      size="sm"
+                    />
                   </div>
                 )}
               </div>
@@ -3455,23 +3471,18 @@ const createInvoiceForTenant = async (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
                   <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Property Filter</label>
-                  <select
+                  <AppSelect
                     value={singleBookingPropertyFilter}
-                    onChange={(e) => {
-                      setSingleBookingPropertyFilter(e.target.value);
+                    onChange={(v) => {
+                      setSingleBookingPropertyFilter(v ?? "all");
                       setSingleBookingTenantSearch("");
                       setSingleBookingTenantDropdownOpen(false);
                       setSingleBookingForm((prev) => ({ ...prev, tenantId: "" }));
                     }}
-                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  >
-                    <option value="all">All active properties</option>
-                    {activeProperties.map((property) => (
-                      <option key={property._id} value={property._id}>
-                        {property.propertyName || property.name}
-                      </option>
-                    ))}
-                  </select>
+                    options={[{ value: "all", label: "All active properties" }, ...activeProperties.map((property) => ({ value: property._id, label: property.propertyName || property.name }))]}
+                    searchable
+                    size="md"
+                  />
                 </div>
 
                 <div className="relative md:col-span-2">
@@ -3534,26 +3545,17 @@ const createInvoiceForTenant = async (
 
                 <div>
                   <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Period</label>
-                  <select
+                  <AppSelect
                     value={singleBookingForm.month}
-                    onChange={(e) =>
+                    onChange={(v) =>
                       setSingleBookingForm((prev) => {
-                        const nextPeriod = clampBillingPeriod(Number(e.target.value), prev.year);
+                        const nextPeriod = clampBillingPeriod(Number(v), prev.year);
                         return { ...prev, month: nextPeriod.month, year: nextPeriod.year };
                       })
                     }
-                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  >
-                    {MONTH_OPTIONS.map((monthOption) => (
-                      <option
-                        key={monthOption.value}
-                        value={monthOption.value}
-                        disabled={isFutureBillingPeriod(monthOption.value, Number(singleBookingForm.year))}
-                      >
-                        {monthOption.label}
-                      </option>
-                    ))}
-                  </select>
+                    options={MONTH_OPTIONS.filter((o) => !isFutureBillingPeriod(o.value, Number(singleBookingForm.year))).map((o) => ({ value: o.value, label: o.label }))}
+                    size="md"
+                  />
                 </div>
 
                 <div>
@@ -3629,67 +3631,57 @@ const createInvoiceForTenant = async (
 
                 <div>
                   <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Booking Option</label>
-                  <select
+                  <AppSelect
                     value={singleBookingForm.billingMode}
-                    onChange={(e) =>
-                      setSingleBookingForm((prev) => ({ ...prev, billingMode: e.target.value }))
-                    }
-                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  >
-                    <option value="separate">Rent + Utility (separate)</option>
-                    <option value="combined">Rent + Utility (combined)</option>
-                    <option value="rent">Rent only</option>
-                    <option value="utility">Utility only</option>
-                  </select>
+                    onChange={(v) => setSingleBookingForm((prev) => ({ ...prev, billingMode: v ?? "separate" }))}
+                    options={[
+                      { value: "separate", label: "Rent + Utility (separate)" },
+                      { value: "combined", label: "Rent + Utility (combined)" },
+                      { value: "rent", label: "Rent only" },
+                      { value: "utility", label: "Utility only" },
+                    ]}
+                    size="md"
+                  />
                 </div>
 
                 <div>
                   <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tax Handling</label>
-                  <select
+                  <AppSelect
                     value={singleBookingForm.taxHandling}
-                    onChange={(e) =>
-                      setSingleBookingForm((prev) => ({ ...prev, taxHandling: e.target.value }))
-                    }
-                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  >
-                    <option value="company_default">Use company default</option>
-                    <option value="taxable" disabled={!companyTaxEnabled}>Force taxable</option>
-                    <option value="non_taxable">Force non-taxable</option>
-                  </select>
+                    onChange={(v) => setSingleBookingForm((prev) => ({ ...prev, taxHandling: v ?? "company_default" }))}
+                    options={[
+                      { value: "company_default", label: "Use company default" },
+                      ...(companyTaxEnabled ? [{ value: "taxable", label: "Force taxable" }] : []),
+                      { value: "non_taxable", label: "Force non-taxable" },
+                    ]}
+                    size="md"
+                  />
                 </div>
 
                 <div>
                   <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tax Code</label>
-                  <select
+                  <AppSelect
                     value={singleBookingForm.taxCodeKey}
-                    onChange={(e) =>
-                      setSingleBookingForm((prev) => ({ ...prev, taxCodeKey: e.target.value }))
-                    }
+                    onChange={(v) => setSingleBookingForm((prev) => ({ ...prev, taxCodeKey: v ?? "vat_standard" }))}
+                    options={activeTaxCodes.map((code) => ({ value: code.key, label: `${code.name} (${Number(code.rate || 0)}%)` }))}
                     disabled={singleBookingForm.taxHandling === "non_taxable"}
-                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed"
-                  >
-                    {activeTaxCodes.map((code) => (
-                      <option key={code.key} value={code.key}>
-                        {code.name} ({Number(code.rate || 0)}%)
-                      </option>
-                    ))}
-                  </select>
+                    size="md"
+                  />
                 </div>
 
                 <div>
                   <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tax Mode</label>
-                  <select
+                  <AppSelect
                     value={singleBookingForm.taxMode}
-                    onChange={(e) =>
-                      setSingleBookingForm((prev) => ({ ...prev, taxMode: e.target.value }))
-                    }
+                    onChange={(v) => setSingleBookingForm((prev) => ({ ...prev, taxMode: v ?? "company_default" }))}
+                    options={[
+                      { value: "company_default", label: "Use company default" },
+                      { value: "exclusive", label: "Exclusive" },
+                      { value: "inclusive", label: "Inclusive" },
+                    ]}
                     disabled={singleBookingForm.taxHandling === "non_taxable"}
-                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed"
-                  >
-                    <option value="company_default">Use company default</option>
-                    <option value="exclusive">Exclusive</option>
-                    <option value="inclusive">Inclusive</option>
-                  </select>
+                    size="md"
+                  />
                 </div>
               </div>
 
@@ -3800,20 +3792,15 @@ const createInvoiceForTenant = async (
                   <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
                     Property Scope
                   </label>
-                  <select
+                  <AppSelect
                     value={batchBookingForm.propertyId}
-                    onChange={(e) => {
-                      setBatchBookingForm((prev) => ({ ...prev, propertyId: e.target.value }));
+                    onChange={(v) => {
+                      setBatchBookingForm((prev) => ({ ...prev, propertyId: v ?? "all" }));
                     }}
-                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  >
-                    <option value="all">All active properties</option>
-                    {activeProperties.map((property) => (
-                      <option key={property._id} value={property._id}>
-                        {property.propertyName || property.name}
-                      </option>
-                    ))}
-                  </select>
+                    options={[{ value: "all", label: "All active properties" }, ...activeProperties.map((property) => ({ value: property._id, label: property.propertyName || property.name }))]}
+                    searchable
+                    size="md"
+                  />
                 </div>
 
 
@@ -3823,26 +3810,17 @@ const createInvoiceForTenant = async (
 
                 <div>
                   <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Period</label>
-                  <select
+                  <AppSelect
                     value={batchBookingForm.month}
-                    onChange={(e) =>
+                    onChange={(v) =>
                       setBatchBookingForm((prev) => {
-                        const nextPeriod = clampBillingPeriod(Number(e.target.value), prev.year);
+                        const nextPeriod = clampBillingPeriod(Number(v), prev.year);
                         return { ...prev, month: nextPeriod.month, year: nextPeriod.year };
                       })
                     }
-                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  >
-                    {MONTH_OPTIONS.map((monthOption) => (
-                      <option
-                        key={monthOption.value}
-                        value={monthOption.value}
-                        disabled={isFutureBillingPeriod(monthOption.value, Number(batchBookingForm.year))}
-                      >
-                        {monthOption.label}
-                      </option>
-                    ))}
-                  </select>
+                    options={MONTH_OPTIONS.filter((o) => !isFutureBillingPeriod(o.value, Number(batchBookingForm.year))).map((o) => ({ value: o.value, label: o.label }))}
+                    size="md"
+                  />
                 </div>
 
                 <div>
@@ -3917,67 +3895,57 @@ const createInvoiceForTenant = async (
 
                 <div>
                   <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Booking Option</label>
-                  <select
+                  <AppSelect
                     value={batchBookingForm.billingMode}
-                    onChange={(e) =>
-                      setBatchBookingForm((prev) => ({ ...prev, billingMode: e.target.value }))
-                    }
-                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  >
-                    <option value="separate">Rent + Utility (separate)</option>
-                    <option value="combined">Rent + Utility (combined)</option>
-                    <option value="rent">Rent only</option>
-                    <option value="utility">Utility only</option>
-                  </select>
+                    onChange={(v) => setBatchBookingForm((prev) => ({ ...prev, billingMode: v ?? "separate" }))}
+                    options={[
+                      { value: "separate", label: "Rent + Utility (separate)" },
+                      { value: "combined", label: "Rent + Utility (combined)" },
+                      { value: "rent", label: "Rent only" },
+                      { value: "utility", label: "Utility only" },
+                    ]}
+                    size="md"
+                  />
                 </div>
 
                 <div>
                   <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tax Handling</label>
-                  <select
+                  <AppSelect
                     value={batchBookingForm.taxHandling}
-                    onChange={(e) =>
-                      setBatchBookingForm((prev) => ({ ...prev, taxHandling: e.target.value }))
-                    }
-                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  >
-                    <option value="company_default">Use company default</option>
-                    <option value="taxable" disabled={!companyTaxEnabled}>Force taxable</option>
-                    <option value="non_taxable">Force non-taxable</option>
-                  </select>
+                    onChange={(v) => setBatchBookingForm((prev) => ({ ...prev, taxHandling: v ?? "company_default" }))}
+                    options={[
+                      { value: "company_default", label: "Use company default" },
+                      ...(companyTaxEnabled ? [{ value: "taxable", label: "Force taxable" }] : []),
+                      { value: "non_taxable", label: "Force non-taxable" },
+                    ]}
+                    size="md"
+                  />
                 </div>
 
                 <div>
                   <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tax Code</label>
-                  <select
+                  <AppSelect
                     value={batchBookingForm.taxCodeKey}
-                    onChange={(e) =>
-                      setBatchBookingForm((prev) => ({ ...prev, taxCodeKey: e.target.value }))
-                    }
+                    onChange={(v) => setBatchBookingForm((prev) => ({ ...prev, taxCodeKey: v ?? "vat_standard" }))}
+                    options={activeTaxCodes.map((code) => ({ value: code.key, label: `${code.name} (${Number(code.rate || 0)}%)` }))}
                     disabled={batchBookingForm.taxHandling === "non_taxable"}
-                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed"
-                  >
-                    {activeTaxCodes.map((code) => (
-                      <option key={code.key} value={code.key}>
-                        {code.name} ({Number(code.rate || 0)}%)
-                      </option>
-                    ))}
-                  </select>
+                    size="md"
+                  />
                 </div>
 
                 <div>
                   <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tax Mode</label>
-                  <select
+                  <AppSelect
                     value={batchBookingForm.taxMode}
-                    onChange={(e) =>
-                      setBatchBookingForm((prev) => ({ ...prev, taxMode: e.target.value }))
-                    }
+                    onChange={(v) => setBatchBookingForm((prev) => ({ ...prev, taxMode: v ?? "company_default" }))}
+                    options={[
+                      { value: "company_default", label: "Use company default" },
+                      { value: "exclusive", label: "Exclusive" },
+                      { value: "inclusive", label: "Inclusive" },
+                    ]}
                     disabled={batchBookingForm.taxHandling === "non_taxable"}
-                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed"
-                  >
-                    <option value="company_default">Use company default</option>
-                    <option value="exclusive">Exclusive</option>
-                    <option value="inclusive">Inclusive</option>
-                  </select>
+                    size="md"
+                  />
                 </div>
               </div>
 

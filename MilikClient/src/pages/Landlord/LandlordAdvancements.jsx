@@ -668,18 +668,32 @@ const LandlordAdvancements = () => {
               <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]" />
               <input value={filters.search} onChange={setFilter("search")} placeholder="Reference, title…" className="h-7 w-40 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs outline-none focus:border-[#0B3B2E]" />
             </div>
-            <select value={filters.status} onChange={setFilter("status")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-              <option value="all">All statuses</option>
-              {["draft", "submitted", "approved", "disbursed", "recovering", "paused", "cleared", "cancelled", "rejected", "reversed"].map((status) => (<option key={status} value={status}>{statusLabel(status)}</option>))}
-            </select>
-            <select value={filters.landlordId} onChange={setFilter("landlordId")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-              <option value="all">All landlords</option>
-              {activeLandlords.map((landlord) => (<option key={landlord._id} value={landlord._id}>{landlord.landlordName || landlord.firstName || landlord.email || "Landlord"}</option>))}
-            </select>
-            <select value={filters.advanceType} onChange={setFilter("advanceType")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-              <option value="all">All types</option>
-              {TYPE_OPTIONS.map((item) => (<option key={item.value} value={item.value}>{item.label}</option>))}
-            </select>
+            <AppSelect
+              value={filters.status === "all" ? null : filters.status}
+              onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))}
+              options={["draft", "submitted", "approved", "disbursed", "recovering", "paused", "cleared", "cancelled", "rejected", "reversed"].map((s) => ({ value: s, label: statusLabel(s) }))}
+              placeholder="All statuses"
+              searchable
+              clearable
+              size="sm"
+            />
+            <AppSelect
+              value={filters.landlordId === "all" ? null : filters.landlordId}
+              onChange={(v) => setFilters((prev) => ({ ...prev, landlordId: v ?? "all" }))}
+              options={activeLandlords.map((l) => ({ value: l._id, label: l.landlordName || l.firstName || l.email || "Landlord" }))}
+              placeholder="All landlords"
+              searchable
+              clearable
+              size="sm"
+            />
+            <AppSelect
+              value={filters.advanceType === "all" ? null : filters.advanceType}
+              onChange={(v) => setFilters((prev) => ({ ...prev, advanceType: v ?? "all" }))}
+              options={TYPE_OPTIONS.map((item) => ({ value: item.value, label: item.label }))}
+              placeholder="All types"
+              clearable
+              size="sm"
+            />
             <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
             <button onClick={openCreate} disabled={!canWrite} className="h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white bg-[#FF8C00] hover:bg-[#e67e00] disabled:cursor-not-allowed disabled:bg-slate-300"><FaPlus /> New Advance</button>
           </div>
@@ -841,15 +855,12 @@ const LandlordAdvancements = () => {
 
                 <label className="block">
                   <span className="mb-0.5 block text-xs font-semibold text-slate-700">Initial workflow step</span>
-                  <select
-                    value={form.status}
-                    onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}
-                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  >
-                    {INITIAL_STATUS_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
+                  <AppSelect
+                    value={form.status || null}
+                    onChange={(v) => setForm((prev) => ({ ...prev, status: v ?? "draft" }))}
+                    options={INITIAL_STATUS_OPTIONS}
+                    size="sm"
+                  />
                 </label>
 
                 <label className="block xl:col-span-2">
@@ -884,33 +895,31 @@ const LandlordAdvancements = () => {
 
                 <label className="block">
                   <span className="mb-0.5 block text-xs font-semibold text-slate-700">Payment method</span>
-                  <select
-                    value={form.paymentMethod}
-                    onChange={(e) => setForm((prev) => ({ ...prev, paymentMethod: e.target.value }))}
-                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  >
-                    <option value="bank_transfer">Bank transfer</option>
-                    <option value="mpesa">M-Pesa</option>
-                    <option value="cheque">Cheque</option>
-                    <option value="cash">Cash</option>
-                    <option value="other">Other</option>
-                  </select>
+                  <AppSelect
+                    value={form.paymentMethod || null}
+                    onChange={(v) => setForm((prev) => ({ ...prev, paymentMethod: v ?? "bank_transfer" }))}
+                    options={[
+                      { value: "bank_transfer", label: "Bank transfer" },
+                      { value: "mpesa", label: "M-Pesa" },
+                      { value: "cheque", label: "Cheque" },
+                      { value: "cash", label: "Cash" },
+                      { value: "other", label: "Other" },
+                    ]}
+                    size="sm"
+                  />
                 </label>
 
                 <label className="block">
                   <span className="mb-0.5 block text-xs font-semibold text-slate-700">Cashbook / payout account</span>
-                  <select
-                    value={form.cashbook}
-                    onChange={(e) => setForm((prev) => ({ ...prev, cashbook: e.target.value }))}
-                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  >
-                    <option value="">Use system default</option>
-                    {cashbooks.map((account) => (
-                      <option key={account._id} value={account._id}>
-                        {account.name || account.accountName || account.code}
-                      </option>
-                    ))}
-                  </select>
+                  <AppSelect
+                    value={form.cashbook || null}
+                    onChange={(v) => setForm((prev) => ({ ...prev, cashbook: v ?? "" }))}
+                    options={cashbooks.map((account) => ({ value: account._id, label: account.name || account.accountName || account.code }))}
+                    placeholder="Use system default"
+                    searchable
+                    clearable
+                    size="sm"
+                  />
                 </label>
 
                 {form.advanceType === "future_recoverable" ? (
@@ -946,16 +955,17 @@ const LandlordAdvancements = () => {
                     </label>
                     <label className="block">
                       <span className="mb-0.5 block text-xs font-semibold text-slate-700">Frequency</span>
-                      <select
-                        value={form.frequency}
-                        onChange={(e) => setForm((prev) => ({ ...prev, frequency: e.target.value }))}
-                        className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                      >
-                        <option value="monthly">Monthly</option>
-                        <option value="weekly">Weekly</option>
-                        <option value="quarterly">Quarterly</option>
-                        <option value="yearly">Yearly</option>
-                      </select>
+                      <AppSelect
+                        value={form.frequency || null}
+                        onChange={(v) => setForm((prev) => ({ ...prev, frequency: v ?? "monthly" }))}
+                        options={[
+                          { value: "monthly", label: "Monthly" },
+                          { value: "weekly", label: "Weekly" },
+                          { value: "quarterly", label: "Quarterly" },
+                          { value: "yearly", label: "Yearly" },
+                        ]}
+                        size="sm"
+                      />
                     </label>
                     <label className="block">
                       <span className="mb-0.5 block text-xs font-semibold text-slate-700">Computed recovery end date</span>
@@ -1030,24 +1040,22 @@ const LandlordAdvancements = () => {
 
               <label className="block">
                 <span className="mb-0.5 block text-xs font-semibold text-slate-700">Eligible statement period</span>
-                <select
-                  value={recoveryModal.periodKey}
-                  onChange={(e) => {
-                    const selected = (recoveryModal.row?.eligibleRecoveryPeriods || []).find((item) => item.periodKey === e.target.value);
+                <AppSelect
+                  value={recoveryModal.periodKey || null}
+                  onChange={(v) => {
+                    const selected = (recoveryModal.row?.eligibleRecoveryPeriods || []).find((item) => item.periodKey === v);
                     setRecoveryModal((prev) => ({
                       ...prev,
-                      periodKey: e.target.value,
+                      periodKey: v ?? "",
                       amount: selected?.scheduledAmount ? String(selected.scheduledAmount) : prev.amount,
                     }));
                   }}
-                  className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-xs outline-none focus:border-amber-600"
-                >
-                  {(recoveryModal.row?.eligibleRecoveryPeriods || []).map((item) => (
-                    <option key={item.periodKey} value={item.periodKey}>
-                      {item.periodLabel} • Scheduled {money(item.scheduledAmount)}
-                    </option>
-                  ))}
-                </select>
+                  options={(recoveryModal.row?.eligibleRecoveryPeriods || []).map((item) => ({
+                    value: item.periodKey,
+                    label: `${item.periodLabel} • Scheduled ${money(item.scheduledAmount)}`,
+                  }))}
+                  size="sm"
+                />
               </label>
 
               <div className="grid gap-4 md:grid-cols-2">

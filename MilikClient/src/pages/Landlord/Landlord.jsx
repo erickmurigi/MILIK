@@ -40,6 +40,7 @@ import { adminRequests } from "../../utils/requestMethods";
 import { printTabularList } from "../../utils/printList";
 import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
 import { hasCompanyPermission } from "../../utils/permissions";
+import AppSelect from "../../components/common/AppSelect";
 
 const STORAGE_KEY = "milik_landlords_v1";
 const DEFAULT_PAGE_SIZE = 50;
@@ -585,25 +586,29 @@ const Landlords = () => {
         {/* Toolbar — single scrollable row */}
         <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
           <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-            <select
-              value={draftFilters.status}
-              onChange={(e) => setDraftFilters((p) => ({ ...p, status: e.target.value }))}
-              className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
-            >
-              <option value="Active">Active</option>
-              <option value="any">All Status</option>
-              <option value="Archived">Archived</option>
-            </select>
+            <AppSelect
+              value={draftFilters.status === "any" ? null : draftFilters.status}
+              onChange={(v) => setDraftFilters((p) => ({ ...p, status: v ?? "any" }))}
+              options={[
+                { value: "Active", label: "Active" },
+                { value: "Archived", label: "Archived" },
+              ]}
+              placeholder="All Status"
+              clearable
+              size="sm"
+            />
 
-            <select
-              value={draftFilters.portal}
-              onChange={(e) => setDraftFilters((p) => ({ ...p, portal: e.target.value }))}
-              className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
-            >
-              <option value="any">Portal</option>
-              <option value="Enabled">Enabled</option>
-              <option value="Disabled">Disabled</option>
-            </select>
+            <AppSelect
+              value={draftFilters.portal === "any" ? null : draftFilters.portal}
+              onChange={(v) => setDraftFilters((p) => ({ ...p, portal: v ?? "any" }))}
+              options={[
+                { value: "Enabled", label: "Enabled" },
+                { value: "Disabled", label: "Disabled" },
+              ]}
+              placeholder="Portal"
+              clearable
+              size="sm"
+            />
 
             <input
               value={draftFilters.location}
@@ -889,13 +894,12 @@ const Landlords = () => {
                 <div className="flex items-center gap-2">
                   <div className="flex items-center gap-1">
                     <span className="font-semibold text-slate-500 text-xs">Per page:</span>
-                    <select
+                    <AppSelect
                       value={pageSize}
-                      onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                      className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition"
-                    >
-                      {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
-                    </select>
+                      onChange={(v) => { setPageSize(Number(v)); setCurrentPage(1); }}
+                      options={[25, 50, 100, 200].map((n) => ({ value: n, label: String(n) }))}
+                      size="sm"
+                    />
                   </div>
                   <button
                     onClick={() => goToPage(safeCurrentPage - 1)}

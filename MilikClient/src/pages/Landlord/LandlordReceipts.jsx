@@ -535,20 +535,35 @@ const LandlordReceipts = () => {
                 <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"><FaSearch /></span>
                 <input value={filters.search} onChange={(e) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, search: e.target.value })); }} placeholder="Search receipt, landlord…" className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </label>
-              <select value={filters.status} onChange={(e) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, status: e.target.value })); }} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                <option value="all">All Statuses</option>
-                <option value="draft">Draft</option>
-                <option value="posted">Posted</option>
-                <option value="reversed">Reversed</option>
-              </select>
-              <select value={filters.category} onChange={(e) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, category: e.target.value })); }} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                <option value="all">All Categories</option>
-                {CATEGORY_OPTIONS.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}
-              </select>
-              <select value={filters.landlord} onChange={(e) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, landlord: e.target.value })); }} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                <option value="all">All Landlords</option>
-                {activeLandlords.map((landlord) => (<option key={landlord._id} value={landlord._id}>{landlord.landlordName}</option>))}
-              </select>
+              <AppSelect
+                value={filters.status === "all" ? null : filters.status}
+                onChange={(v) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, status: v ?? "all" })); }}
+                options={[
+                  { value: "draft", label: "Draft" },
+                  { value: "posted", label: "Posted" },
+                  { value: "reversed", label: "Reversed" },
+                ]}
+                placeholder="All Statuses"
+                clearable
+                size="sm"
+              />
+              <AppSelect
+                value={filters.category === "all" ? null : filters.category}
+                onChange={(v) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, category: v ?? "all" })); }}
+                options={CATEGORY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                placeholder="All Categories"
+                clearable
+                size="sm"
+              />
+              <AppSelect
+                value={filters.landlord === "all" ? null : filters.landlord}
+                onChange={(v) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, landlord: v ?? "all" })); }}
+                options={activeLandlords.map((l) => ({ value: l._id, label: l.landlordName }))}
+                placeholder="All Landlords"
+                searchable
+                clearable
+                size="sm"
+              />
 
               <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
               <span className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600">{totalReceipts} receipts</span>
@@ -674,22 +689,34 @@ const LandlordReceipts = () => {
               </div>
               <div className="md:col-span-2">
                 <span className="mb-0.5 block text-xs font-semibold text-slate-700">Receipt category</span>
-                <select value={formData.category} onChange={(e) => setFormData((prev) => ({ ...prev, category: e.target.value, linkedDocumentType: "", linkedDocumentId: "", linkedDocumentRef: "" }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
-                  {CATEGORY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                </select>
+                <AppSelect
+                  value={formData.category || null}
+                  onChange={(v) => setFormData((prev) => ({ ...prev, category: v ?? "owner_float", linkedDocumentType: "", linkedDocumentId: "", linkedDocumentRef: "" }))}
+                  options={CATEGORY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                  size="sm"
+                />
                 <p className="mt-0.5 text-[10px] text-slate-500">Posting rule: Dr selected cashbook, {CATEGORY_OPTIONS.find((item) => item.value === formData.category)?.accountHint || "controlled category account"}.</p>
               </div>
               <div>
                 <span className="mb-0.5 block text-xs font-semibold text-slate-700">Payment method</span>
-                <select value={formData.paymentMethod} onChange={(e) => setFormData((prev) => ({ ...prev, paymentMethod: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
-                  {PAYMENT_METHOD_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                </select>
+                <AppSelect
+                  value={formData.paymentMethod || null}
+                  onChange={(v) => setFormData((prev) => ({ ...prev, paymentMethod: v ?? "bank_transfer" }))}
+                  options={PAYMENT_METHOD_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                  size="sm"
+                />
               </div>
               <div>
                 <span className="mb-0.5 block text-xs font-semibold text-slate-700">Cashbook</span>
-                <select value={formData.cashbook} onChange={(e) => setFormData((prev) => ({ ...prev, cashbook: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
-                  {cashbooks.map((account) => <option key={account._id} value={account.name}>{account.name}</option>)}
-                </select>
+                <AppSelect
+                  value={formData.cashbook || null}
+                  onChange={(v) => setFormData((prev) => ({ ...prev, cashbook: v ?? "" }))}
+                  options={cashbooks.map((account) => ({ value: account.name, label: account.name }))}
+                  placeholder="Select cashbook…"
+                  searchable
+                  clearable
+                  size="sm"
+                />
               </div>
               <div>
                 <span className="mb-0.5 block text-xs font-semibold text-slate-700">Reference number</span>
@@ -729,9 +756,14 @@ const LandlordReceipts = () => {
                 <>
                   <div>
                     <span className="mb-0.5 block text-xs font-semibold text-slate-700">Linked document type</span>
-                    <select value={formData.linkedDocumentType} onChange={(e) => setFormData((prev) => ({ ...prev, linkedDocumentType: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
-                      {LINKED_DOCUMENT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                    </select>
+                    <AppSelect
+                      value={formData.linkedDocumentType || null}
+                      onChange={(v) => setFormData((prev) => ({ ...prev, linkedDocumentType: v ?? "" }))}
+                      options={LINKED_DOCUMENT_OPTIONS.filter((o) => o.value !== "")}
+                      placeholder="None"
+                      clearable
+                      size="sm"
+                    />
                   </div>
                   <div>
                     <span className="mb-0.5 block text-xs font-semibold text-slate-700">Linked document ID</span>

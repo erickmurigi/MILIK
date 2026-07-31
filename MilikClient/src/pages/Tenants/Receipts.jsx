@@ -1,4 +1,5 @@
 ﻿import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtils";
+import { buildTenantOption } from "../../utils/tenantUtils";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -61,6 +62,7 @@ import { getProperties } from "../../redux/propertyRedux";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { printTabularList } from "../../utils/printList";
 import { useTabState } from "../../hooks/useTabState";
+import AppSelect from "../../components/common/AppSelect";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -1773,77 +1775,96 @@ const Receipts = ({ viewMode = "tenant" }) => {
               <span className="shrink-0 rounded border border-orange-300 bg-orange-50 px-1.5 py-0.5 text-[9px] font-bold text-orange-700">{stats.pendingCount} Pend.</span>
               <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
               <input value={draftFilters.tenantSearch} onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenantSearch: normalizeUppercaseInput(e.target.value) }))} placeholder="Tenant" className="h-7 w-20 shrink-0 rounded border border-slate-200 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-              <select value={draftFilters.property} onChange={(e) => setDraftFilters((prev) => ({ ...prev, property: e.target.value, unit: "all" }))} className="h-7 w-24 shrink-0 rounded border border-slate-200 bg-white px-1 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                {propertyOptions.map((p) => (<option key={p} value={p}>{p === "all" ? "Property" : p}</option>))}
-              </select>
+              <AppSelect
+                value={draftFilters.property === "all" ? "" : draftFilters.property}
+                onChange={(v) => setDraftFilters((prev) => ({ ...prev, property: v ?? "all", unit: "all" }))}
+                options={propertyOptions.filter((p) => p !== "all").map((p) => ({ value: p, label: p }))}
+                placeholder="Property"
+                searchable
+                clearable
+                size="sm"
+              />
               <input
                 value={draftFilters.unit === "all" ? "" : draftFilters.unit}
                 onChange={(e) => setDraftFilters((prev) => ({ ...prev, unit: e.target.value || "all" }))}
                 placeholder="Unit"
                 className="h-7 w-16 shrink-0 rounded border border-slate-200 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
-              <select value={draftFilters.ledger} onChange={setFilter("ledger")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-1 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                <option value="all">Ledger</option>
-                <option value="receipts">Receipts</option>
-                <option value="cashbook">Cashbook</option>
-              </select>
-              <select value={draftFilters.status} onChange={setFilter("status")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-1 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                <option value="active">Active</option>
-                <option value="confirmed">Confirmed</option>
-                <option value="pending">Pending</option>
-                <option value="reversed">Reversed</option>
-                <option value="all">All</option>
-              </select>
-              <select value={draftFilters.paymentType} onChange={setFilter("paymentType")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-1 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                <option value="all">Type</option>
-                <option value="rent">Rent</option>
-                <option value="deposit">Deposit</option>
-                <option value="utility">Utility</option>
-                <option value="late_fee">Late Fee</option>
-                <option value="other">Other</option>
-              </select>
+              <AppSelect
+                value={draftFilters.ledger === "all" ? "" : draftFilters.ledger}
+                onChange={(v) => setDraftFilters((prev) => ({ ...prev, ledger: v ?? "all" }))}
+                options={[{ value: "receipts", label: "Receipts" }, { value: "cashbook", label: "Cashbook" }]}
+                placeholder="Ledger"
+                clearable
+                size="sm"
+              />
+              <AppSelect
+                value={draftFilters.status}
+                onChange={(v) => setDraftFilters((prev) => ({ ...prev, status: v ?? "active" }))}
+                options={[
+                  { value: "active", label: "Active" },
+                  { value: "confirmed", label: "Confirmed" },
+                  { value: "pending", label: "Pending" },
+                  { value: "reversed", label: "Reversed" },
+                  { value: "all", label: "All" },
+                ]}
+                size="sm"
+              />
+              <AppSelect
+                value={draftFilters.paymentType === "all" ? "" : draftFilters.paymentType}
+                onChange={(v) => setDraftFilters((prev) => ({ ...prev, paymentType: v ?? "all" }))}
+                options={[
+                  { value: "rent", label: "Rent" },
+                  { value: "deposit", label: "Deposit" },
+                  { value: "utility", label: "Utility" },
+                  { value: "late_fee", label: "Late Fee" },
+                  { value: "other", label: "Other" },
+                ]}
+                placeholder="Type"
+                clearable
+                size="sm"
+              />
               <input type="date" value={draftFilters.from} onChange={setFilter("from")} className="h-7 w-[7.5rem] shrink-0 rounded border border-slate-200 bg-white px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
               <input type="date" value={draftFilters.to} onChange={setFilter("to")} className="h-7 w-[7.5rem] shrink-0 rounded border border-slate-200 bg-white px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
               <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
-              <select
+              <AppSelect
                 value=""
-                onChange={(e) => { if (e.target.value) applyDatePresetAndSearch(e.target.value); e.target.value = ""; }}
-                className="h-7 shrink-0 rounded border border-slate-200 bg-white px-1 text-xs font-semibold text-slate-700 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-              >
-                <option value="">Period</option>
-                <option value="today">Today</option>
-                <option value="yesterday">Yesterday</option>
-                <option value="thisWeek">This Week</option>
-                <option value="lastWeek">Last Week</option>
-                <option value="thisMonth">This Month</option>
-                <option value="lastMonth">Last Month</option>
-                <option value="thisQuarter">This Quarter</option>
-                <option value="lastQuarter">Last Quarter</option>
-                <option value="thisYear">This Year</option>
-                <option value="lastYear">Last Year</option>
-              </select>
+                onChange={(v) => { if (v) applyDatePresetAndSearch(v); }}
+                options={[
+                  { value: "today", label: "Today" },
+                  { value: "yesterday", label: "Yesterday" },
+                  { value: "thisWeek", label: "This Week" },
+                  { value: "lastWeek", label: "Last Week" },
+                  { value: "thisMonth", label: "This Month" },
+                  { value: "lastMonth", label: "Last Month" },
+                  { value: "thisQuarter", label: "This Quarter" },
+                  { value: "lastQuarter", label: "Last Quarter" },
+                  { value: "thisYear", label: "This Year" },
+                  { value: "lastYear", label: "Last Year" },
+                ]}
+                placeholder="Period"
+                size="sm"
+              />
               <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
               <button onClick={applySearchFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2 text-xs font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSearch size={10} /></button>
               <button onClick={resetSearchFilters} className="h-7 shrink-0 flex items-center gap-1 rounded bg-slate-500 px-2 text-xs font-semibold text-white hover:bg-slate-600"><FaRedoAlt size={10} /></button>
               <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
-              <select
+              <AppSelect
                 value=""
                 disabled={selectedIds.length === 0}
-                onChange={(e) => {
-                  const action = e.target.value;
-                  if (action === "confirm") handleConfirmSelected();
-                  else if (action === "reverse") handleReverseSelected();
-                  else if (action === "delete") handleDeleteSelected();
-                  e.target.value = "";
+                onChange={(v) => {
+                  if (v === "confirm") handleConfirmSelected();
+                  else if (v === "reverse") handleReverseSelected();
+                  else if (v === "delete") handleDeleteSelected();
                 }}
-                title={selectedIds.length === 0 ? "Select receipts first" : "Bulk actions"}
-                className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <option value="">Actions</option>
-                {canProcessReceipt && <option value="confirm">Confirm selected</option>}
-                {canReverseReceipt && <option value="reverse">Reverse selected</option>}
-                {canDeleteReceipt && <option value="delete">Delete selected</option>}
-              </select>
+                options={[
+                  ...(canProcessReceipt ? [{ value: "confirm", label: "Confirm selected" }] : []),
+                  ...(canReverseReceipt ? [{ value: "reverse", label: "Reverse selected" }] : []),
+                  ...(canDeleteReceipt ? [{ value: "delete", label: "Delete selected" }] : []),
+                ]}
+                placeholder="Actions"
+                size="sm"
+              />
               {canExportReceipt && <button onClick={handlePrintList} title="Print list" className="h-7 shrink-0 flex items-center rounded bg-indigo-600 px-2 text-xs text-white hover:bg-indigo-700"><FaPrint size={10} /></button>}
               <button onClick={() => setShowSmsModal(true)} disabled={selectedIds.length === 0} title={selectedIds.length > 0 ? `SMS ${selectedIds.length} receipt${selectedIds.length !== 1 ? "s" : ""}` : "Select receipts to SMS"} className="h-7 shrink-0 flex items-center rounded bg-teal-600 px-2 text-xs text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"><FaSms size={10} /></button>
               <button onClick={() => setShowEmailModal(true)} disabled={selectedIds.length === 0} title={selectedIds.length > 0 ? `Email ${selectedIds.length} receipt${selectedIds.length !== 1 ? "s" : ""}` : "Select receipts to email"} className="h-7 shrink-0 flex items-center rounded bg-blue-600 px-2 text-xs text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><FaEnvelope size={10} /></button>
@@ -2168,24 +2189,19 @@ const Receipts = ({ viewMode = "tenant" }) => {
                     {prepaymentLines.map((line, i) => {
                       return (
                         <div key={i} className="flex items-center gap-2">
-                          <select
+                          <AppSelect
                             value={line.billItemKey}
-                            onChange={(e) => {
-                              const opt = prepaymentTypeOptions.find((o) => o.billItemKey === e.target.value);
+                            onChange={(v) => {
+                              const opt = prepaymentTypeOptions.find((o) => o.billItemKey === (v ?? ""));
                               setPrepaymentLines((prev) =>
                                 prev.map((l, idx) =>
-                                  idx === i ? { ...l, billItemKey: e.target.value, label: opt?.label || e.target.value } : l
+                                  idx === i ? { ...l, billItemKey: v ?? "", label: opt?.label || v || "" } : l
                                 )
                               );
                             }}
-                            className="flex-1 border border-slate-300 px-2 py-1.5 text-xs"
-                          >
-                            {prepaymentTypeOptions.map((o) => (
-                              <option key={o.billItemKey} value={o.billItemKey}>
-                                {o.label}
-                              </option>
-                            ))}
-                          </select>
+                            options={prepaymentTypeOptions.map((o) => ({ value: o.billItemKey, label: o.label }))}
+                            size="sm"
+                          />
                           <input
                             type="number"
                             min="0"
@@ -2235,24 +2251,21 @@ const Receipts = ({ viewMode = "tenant" }) => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tenant *</label>
-                  <select
+                  <AppSelect
                     value={formData.tenantId}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, tenantId: e.target.value }))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 text-sm"
-                  >
-                    <option value="">Select tenant</option>
-                    {tenants
+                    onChange={(v) => setFormData((prev) => ({ ...prev, tenantId: v ?? "" }))}
+                    options={tenants
                       .filter((tenant) => {
                         if (String(tenant?._id || "") === String(formData.tenantId)) return true;
                         const s = String(tenant?.status || "active").trim().toLowerCase();
                         return !["terminated", "moved_out", "evicted", "inactive"].includes(s);
                       })
-                      .map((tenant) => (
-                        <option key={tenant._id} value={tenant._id}>
-                          {tenant.name}
-                        </option>
-                      ))}
-                  </select>
+                      .map((tenant) => buildTenantOption(tenant))}
+                    placeholder="Select tenant"
+                    searchable
+                    clearable
+                    size="md"
+                  />
                 </div>
 
                 <div>
@@ -2268,32 +2281,34 @@ const Receipts = ({ viewMode = "tenant" }) => {
 
                 <div>
                   <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Payment Type *</label>
-                  <select
+                  <AppSelect
                     value={formData.paymentType}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, paymentType: e.target.value }))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 text-sm"
-                  >
-                    <option value="rent">Rent</option>
-                    <option value="deposit">Deposit</option>
-                    <option value="utility">Utility</option>
-                    <option value="late_fee">Late Fee</option>
-                    <option value="other">Other</option>
-                  </select>
+                    onChange={(v) => setFormData((prev) => ({ ...prev, paymentType: v ?? "rent" }))}
+                    options={[
+                      { value: "rent", label: "Rent" },
+                      { value: "deposit", label: "Deposit" },
+                      { value: "utility", label: "Utility" },
+                      { value: "late_fee", label: "Late Fee" },
+                      { value: "other", label: "Other" },
+                    ]}
+                    size="md"
+                  />
                 </div>
 
                 <div>
                   <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Payment Method *</label>
-                  <select
+                  <AppSelect
                     value={formData.paymentMethod}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, paymentMethod: e.target.value }))}
-                    className="w-full mt-1 px-3 py-2 border border-slate-300 text-sm"
-                  >
-                    <option value="mobile_money">Mobile Money</option>
-                    <option value="bank_transfer">Bank Transfer</option>
-                    <option value="cash">Cash</option>
-                    <option value="check">Check</option>
-                    <option value="credit_card">Credit Card</option>
-                  </select>
+                    onChange={(v) => setFormData((prev) => ({ ...prev, paymentMethod: v ?? "mobile_money" }))}
+                    options={[
+                      { value: "mobile_money", label: "Mobile Money" },
+                      { value: "bank_transfer", label: "Bank Transfer" },
+                      { value: "cash", label: "Cash" },
+                      { value: "check", label: "Check" },
+                      { value: "credit_card", label: "Credit Card" },
+                    ]}
+                    size="md"
+                  />
                 </div>
 
                 <div>
@@ -2305,17 +2320,12 @@ const Receipts = ({ viewMode = "tenant" }) => {
                       Direct-to-landlord receipts do not hit MILIK-managed cashbooks.
                     </div>
                   ) : (
-                    <select
+                    <AppSelect
                       value={formData.cashbook}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, cashbook: e.target.value }))}
-                      className="w-full mt-1 px-3 py-2 border border-slate-300 text-sm"
-                    >
-                      {cashbookOptions.map((option) => (
-                        <option key={option._id || option.name} value={option.name}>
-                          {option.code ? `${option.code} · ${option.name}` : option.name}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(v) => setFormData((prev) => ({ ...prev, cashbook: v ?? "" }))}
+                      options={cashbookOptions.map((option) => ({ value: option.name, label: option.code ? `${option.code} · ${option.name}` : option.name }))}
+                      size="md"
+                    />
                   )}
                 </div>
 
@@ -3047,18 +3057,15 @@ const Receipts = ({ viewMode = "tenant" }) => {
                         <div className="space-y-2">
                           {prepaymentWorkspaceLines.map((line, idx) => (
                             <div key={idx} className="flex items-center gap-2">
-                              <select
+                              <AppSelect
                                 value={line.billItemKey}
-                                onChange={(e) => {
-                                  const opt = allocationPrepaymentTypes.find((o) => o.billItemKey === e.target.value);
-                                  setPrepaymentWorkspaceLines((prev) => prev.map((l, i) => i !== idx ? l : { ...l, billItemKey: e.target.value, label: opt?.label || e.target.value }));
+                                onChange={(v) => {
+                                  const opt = allocationPrepaymentTypes.find((o) => o.billItemKey === (v ?? ""));
+                                  setPrepaymentWorkspaceLines((prev) => prev.map((l, i) => i !== idx ? l : { ...l, billItemKey: v ?? "", label: opt?.label || v || "" }));
                                 }}
-                                className="h-7 flex-1 border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
-                              >
-                                {allocationPrepaymentTypes.map((o) => (
-                                  <option key={o.billItemKey} value={o.billItemKey}>{o.label}</option>
-                                ))}
-                              </select>
+                                options={allocationPrepaymentTypes.map((o) => ({ value: o.billItemKey, label: o.label }))}
+                                size="sm"
+                              />
                               <input
                                 type="number"
                                 min={0}

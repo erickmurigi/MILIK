@@ -347,11 +347,16 @@ const PropertyCommissionSettings = () => {
                   <div className="mt-5 space-y-4">
                     <div>
                       <label className="mb-0.5 block text-xs font-semibold text-slate-700">Commission Mode</label>
-                      <select name="commissionPaymentMode" value={formData.commissionPaymentMode} onChange={handleFieldChange} className={SELECT}>
-                        <option value="percentage">Percentage (%)</option>
-                        <option value="fixed">Fixed Amount</option>
-                        <option value="both">Percentage + Fixed</option>
-                      </select>
+                      <AppSelect
+                        value={formData.commissionPaymentMode || null}
+                        onChange={(v) => setFormData((f) => ({ ...f, commissionPaymentMode: v ?? '' }))}
+                        options={[
+                          { value: 'percentage', label: 'Percentage (%)' },
+                          { value: 'fixed', label: 'Fixed Amount' },
+                          { value: 'both', label: 'Percentage + Fixed' },
+                        ]}
+                        size="sm"
+                      />
                     </div>
 
                     <div>
@@ -386,27 +391,42 @@ const PropertyCommissionSettings = () => {
 
                     <div>
                       <label className="mb-0.5 block text-xs font-semibold text-slate-700">Commission Recognition Basis</label>
-                      <select name="commissionRecognitionBasis" value={formData.commissionRecognitionBasis} onChange={handleFieldChange} className={SELECT}>
-                        <option value="received">Collections Received</option>
-                        <option value="invoiced">Rent Expected (Invoiced / Accrual)</option>
-                        <option value="received_manager_only">Manager-Held Collections Only</option>
-                      </select>
+                      <AppSelect
+                        value={formData.commissionRecognitionBasis || null}
+                        onChange={(v) => setFormData((f) => ({ ...f, commissionRecognitionBasis: v ?? '' }))}
+                        options={[
+                          { value: 'received', label: 'Collections Received' },
+                          { value: 'invoiced', label: 'Rent Expected (Invoiced / Accrual)' },
+                          { value: 'received_manager_only', label: 'Manager-Held Collections Only' },
+                        ]}
+                        size="sm"
+                      />
                     </div>
 
                     <div>
                       <label className="mb-0.5 block text-xs font-semibold text-slate-700">Tenants Pay To</label>
-                      <select name="tenantsPaysTo" value={formData.tenantsPaysTo} onChange={handleFieldChange} className={SELECT}>
-                        <option value="propertyManager">Property Manager</option>
-                        <option value="landlord">Landlord</option>
-                      </select>
+                      <AppSelect
+                        value={formData.tenantsPaysTo || null}
+                        onChange={(v) => setFormData((f) => ({ ...f, tenantsPaysTo: v ?? '' }))}
+                        options={[
+                          { value: 'propertyManager', label: 'Property Manager' },
+                          { value: 'landlord', label: 'Landlord' },
+                        ]}
+                        size="sm"
+                      />
                     </div>
 
                     <div>
                       <label className="mb-0.5 block text-xs font-semibold text-slate-700">Deposit Held By</label>
-                      <select name="depositHeldBy" value={formData.depositHeldBy} onChange={handleFieldChange} className={SELECT}>
-                        <option value="propertyManager">Property Manager</option>
-                        <option value="landlord">Landlord</option>
-                      </select>
+                      <AppSelect
+                        value={formData.depositHeldBy || null}
+                        onChange={(v) => setFormData((f) => ({ ...f, depositHeldBy: v ?? '' }))}
+                        options={[
+                          { value: 'propertyManager', label: 'Property Manager' },
+                          { value: 'landlord', label: 'Landlord' },
+                        ]}
+                        size="sm"
+                      />
                     </div>
 
                     <div>
@@ -473,34 +493,28 @@ const PropertyCommissionSettings = () => {
 
                     <div>
                       <label className="mb-0.5 block text-xs font-semibold text-slate-700">Tax Code</label>
-                      <select
-                        name="taxCodeKey"
-                        value={formData.commissionTaxSettings.taxCodeKey}
-                        onChange={handleTaxFieldChange}
-                        className={SELECT}
+                      <AppSelect
+                        value={formData.commissionTaxSettings.taxCodeKey || null}
+                        onChange={(v) => setFormData((f) => ({ ...f, commissionTaxSettings: { ...f.commissionTaxSettings, taxCodeKey: v ?? '' } }))}
+                        options={activeTaxCodes.map((taxCode) => ({ value: taxCode.key, label: `${taxCode.name} (${Number(taxCode.rate || 0)}%)` }))}
                         disabled={!formData.commissionTaxSettings.enabled}
-                      >
-                        {activeTaxCodes.map((taxCode) => (
-                          <option key={taxCode.key} value={taxCode.key}>
-                            {taxCode.name} ({Number(taxCode.rate || 0)}%)
-                          </option>
-                        ))}
-                      </select>
+                        size="sm"
+                      />
                     </div>
 
                     <div>
                       <label className="mb-0.5 block text-xs font-semibold text-slate-700">Tax Mode</label>
-                      <select
-                        name="taxMode"
-                        value={formData.commissionTaxSettings.taxMode}
-                        onChange={handleTaxFieldChange}
-                        className={SELECT}
+                      <AppSelect
+                        value={formData.commissionTaxSettings.taxMode || null}
+                        onChange={(v) => setFormData((f) => ({ ...f, commissionTaxSettings: { ...f.commissionTaxSettings, taxMode: v ?? '' } }))}
+                        options={[
+                          { value: 'company_default', label: 'Use Company Default' },
+                          { value: 'exclusive', label: 'Tax Exclusive' },
+                          { value: 'inclusive', label: 'Tax Inclusive' },
+                        ]}
                         disabled={!formData.commissionTaxSettings.enabled}
-                      >
-                        <option value="company_default">Use Company Default</option>
-                        <option value="exclusive">Tax Exclusive</option>
-                        <option value="inclusive">Tax Inclusive</option>
-                      </select>
+                        size="sm"
+                      />
                     </div>
 
                     <div>

@@ -12,11 +12,13 @@ import { adminRequests } from "../../utils/requestMethods";
 import { selectCurrentCompany } from "../../redux/selectors";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { useTabState } from "../../hooks/useTabState";
+import AppSelect from "../../components/common/AppSelect";
 
 const PAGE_SIZE   = 50;
 const AUTO_RELOAD = 30; // seconds
 
-const todayISO    = () => new Date().toISOString().slice(0, 10);
+const todayISO        = () => new Date().toISOString().slice(0, 10);
+const firstOfMonthISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`; };
 const formatMoney = (v) => `Ksh ${Number(v || 0).toLocaleString()}`;
 const fmtDate     = (v) =>
   v ? new Date(v).toLocaleString("en-KE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
@@ -393,18 +395,15 @@ function UploadModal({ businessId, paybills = [], onClose, onUploaded }) {
           <div className="shrink-0 border-b border-slate-200 bg-slate-50 px-4 py-2.5">
             <div className="flex items-center gap-3">
               <span className="text-[11px] font-black uppercase tracking-wide text-slate-500">Paybill</span>
-              <select
+              <AppSelect
                 value={selectedShortCode}
-                onChange={(e) => setSelectedShortCode(e.target.value)}
-                className="h-8 flex-1 border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-              >
-                <option value="">Auto-detect (primary paybill)</option>
-                {paybills.map((pb) => (
-                  <option key={pb.shortCode} value={pb.shortCode}>
-                    {pb.name ? `${pb.name} (${pb.shortCode})` : pb.shortCode}
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => setSelectedShortCode(v ?? "")}
+                options={paybills.map((pb) => ({ value: pb.shortCode, label: pb.name ? `${pb.name} (${pb.shortCode})` : pb.shortCode }))}
+                placeholder="Auto-detect (primary paybill)"
+                searchable
+                clearable
+                size="sm"
+              />
             </div>
           </div>
         )}
@@ -549,8 +548,8 @@ export default function PmsMpesaNotifications() {
   const [unignoringId,  setUnignoringId]  = useState(null);
   const [countdown,     setCountdown]     = useState(AUTO_RELOAD);
 
-  const [filters, setFilters] = useTabState("/receipts/mpesa-collections:filters", () => ({ status: "", shortCode: "", ref: "", search: "", dateFrom: todayISO(), dateTo: todayISO() }));
-  const [applied, setApplied] = useTabState("/receipts/mpesa-collections:applied", () => ({ status: "", shortCode: "", ref: "", search: "", dateFrom: todayISO(), dateTo: todayISO() }));
+  const [filters, setFilters] = useTabState("/receipts/mpesa-collections:filters", () => ({ status: "", shortCode: "", ref: "", search: "", dateFrom: firstOfMonthISO(), dateTo: todayISO() }));
+  const [applied, setApplied] = useTabState("/receipts/mpesa-collections:applied", () => ({ status: "", shortCode: "", ref: "", search: "", dateFrom: firstOfMonthISO(), dateTo: todayISO() }));
   const [page,    setPage]    = useTabState("/receipts/mpesa-collections:page", 1);
 
   const load = useCallback(async (silent = false) => {
@@ -593,7 +592,7 @@ export default function PmsMpesaNotifications() {
 
   const apply = (e) => { e.preventDefault(); setPage(1); setApplied({ ...filters }); };
   const reset = () => {
-    const d = { status: "", shortCode: "", ref: "", search: "", dateFrom: todayISO(), dateTo: todayISO() };
+    const d = { status: "", shortCode: "", ref: "", search: "", dateFrom: firstOfMonthISO(), dateTo: todayISO() };
     setFilters(d); setApplied(d); setPage(1);
   };
 
@@ -690,21 +689,24 @@ export default function PmsMpesaNotifications() {
 
         {/* Filter bar */}
         <form onSubmit={apply} className="shrink-0 flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
-          <select value={filters.status} onChange={e => setFilters(p => ({ ...p, status: e.target.value }))}
-            className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none">
-            <option value="">All statuses</option>
-            {Object.entries(STATUS_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-          </select>
+          <AppSelect
+            value={filters.status}
+            onChange={(v) => setFilters(p => ({ ...p, status: v ?? "" }))}
+            options={Object.entries(STATUS_META).map(([k, v]) => ({ value: k, label: v.label }))}
+            placeholder="All statuses"
+            clearable
+            size="sm"
+          />
           {paybills.length > 1 && (
-            <select value={filters.shortCode} onChange={e => setFilters(p => ({ ...p, shortCode: e.target.value }))}
-              className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none">
-              <option value="">All paybills</option>
-              {paybills.map((pb) => (
-                <option key={pb.shortCode} value={pb.shortCode}>
-                  {pb.name || pb.shortCode} ({pb.shortCode})
-                </option>
-              ))}
-            </select>
+            <AppSelect
+              value={filters.shortCode}
+              onChange={(v) => setFilters(p => ({ ...p, shortCode: v ?? "" }))}
+              options={paybills.map((pb) => ({ value: pb.shortCode, label: `${pb.name || pb.shortCode} (${pb.shortCode})` }))}
+              placeholder="All paybills"
+              searchable
+              clearable
+              size="sm"
+            />
           )}
           <input
             className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 placeholder:font-normal focus:border-[#0B3B2E] focus:outline-none"

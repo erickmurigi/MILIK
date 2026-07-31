@@ -1,4 +1,5 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { buildTenantOption } from "../../utils/tenantUtils";
 import { useDispatch, useSelector } from "react-redux";
 import {
   selectCurrentCompany,
@@ -30,6 +31,7 @@ import {
 } from "../../redux/invoiceApi";
 import { createRentPayment, reverseRentPayment, getChartOfAccounts } from "../../redux/apiCalls";
 import { useTabState } from "../../hooks/useTabState";
+import AppSelect from "../../components/common/AppSelect";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -237,22 +239,15 @@ function TakeOnBalanceModal({
             <div className="space-y-4">
               <div>
                 <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Property</label>
-                <select
+                <AppSelect
                   value={form.propertyId}
-                  onChange={(e) => setForm((prev) => ({ ...prev, propertyId: e.target.value, tenantId: "" }))}
+                  onChange={(v) => setForm((prev) => ({ ...prev, propertyId: v ?? "", tenantId: "" }))}
+                  options={propertyOptions.map((property) => ({ value: normalizeId(property?._id || property?.id), label: getPropertyDisplay(property) }))}
+                  placeholder="Select property"
+                  searchable
                   disabled={mode === "edit"}
-                  className="w-full border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10 disabled:bg-slate-100 disabled:text-slate-500"
-                >
-                  <option value="">Select property</option>
-                  {propertyOptions.map((property) => {
-                    const propertyId = normalizeId(property?._id || property?.id);
-                    return (
-                      <option key={propertyId} value={propertyId}>
-                        {getPropertyDisplay(property)}
-                      </option>
-                    );
-                  })}
-                </select>
+                  size="md"
+                />
               </div>
 
               <div>
@@ -270,22 +265,15 @@ function TakeOnBalanceModal({
 
               <div>
                 <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tenant</label>
-                <select
+                <AppSelect
                   value={form.tenantId}
-                  onChange={(e) => setForm((prev) => ({ ...prev, tenantId: e.target.value }))}
+                  onChange={(v) => setForm((prev) => ({ ...prev, tenantId: v ?? "" }))}
+                  options={filteredTenants.map((tenant) => buildTenantOption(tenant))}
+                  placeholder={form.propertyId ? "Select tenant" : "Select property first"}
+                  searchable
                   disabled={mode === "edit" || (!form.propertyId && mode !== "edit")}
-                  className="w-full border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10 disabled:bg-slate-100 disabled:text-slate-500"
-                >
-                  <option value="">
-                    {form.propertyId ? "Select tenant" : "Select property first"}
-                  </option>
-                  {filteredTenants.map((tenant) => (
-                    <option key={tenant._id} value={tenant._id}>
-                      {getTenantDisplayName(tenant)}
-                      {tenant?.unit?.unitNumber ? ` — Unit ${tenant.unit.unitNumber}` : ""}
-                    </option>
-                  ))}
-                </select>
+                  size="md"
+                />
                 {!filteredTenants.length && form.propertyId && (
                   <p className="mt-1.5 text-[10px] text-slate-400">No tenants matched.</p>
                 )}
@@ -294,34 +282,32 @@ function TakeOnBalanceModal({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Bill Item</label>
-                  <select
+                  <AppSelect
                     value={form.billItem}
-                    onChange={(e) => setForm((prev) => ({ ...prev, billItem: e.target.value }))}
-                    className="w-full border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
-                  >
-                    {(Array.isArray(filterBillItemOptions) ? filterBillItemOptions : []).map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
+                    onChange={(v) => setForm((prev) => ({ ...prev, billItem: v ?? "rent" }))}
+                    options={(Array.isArray(filterBillItemOptions) ? filterBillItemOptions : []).map((option) => ({ value: option.value, label: option.label }))}
+                    size="md"
+                  />
                 </div>
 
                 {form.billItem === "utility" ? (
                   <div>
                     <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Utility Type</label>
-                    <select
+                    <AppSelect
                       value={form.utilityLabel}
-                      onChange={(e) => setForm((prev) => ({ ...prev, utilityLabel: e.target.value }))}
-                      className="w-full border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
-                    >
-                      <option value="">Select type</option>
-                      <option value="Water">Water</option>
-                      <option value="Electricity">Electricity</option>
-                      <option value="Gas">Gas</option>
-                      <option value="Garbage">Garbage</option>
-                      <option value="Internet">Internet</option>
-                      <option value="Security">Security</option>
-                      <option value="Service Charge">Service Charge</option>
-                    </select>
+                      onChange={(v) => setForm((prev) => ({ ...prev, utilityLabel: v ?? "" }))}
+                      options={[
+                        { value: "Water", label: "Water" },
+                        { value: "Electricity", label: "Electricity" },
+                        { value: "Gas", label: "Gas" },
+                        { value: "Garbage", label: "Garbage" },
+                        { value: "Internet", label: "Internet" },
+                        { value: "Security", label: "Security" },
+                        { value: "Service Charge", label: "Service Charge" },
+                      ]}
+                      placeholder="Select type"
+                      size="md"
+                    />
                   </div>
                 ) : <div />}
               </div>
@@ -329,15 +315,16 @@ function TakeOnBalanceModal({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Type</label>
-                  <select
+                  <AppSelect
                     value={form.type}
-                    onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value }))}
+                    onChange={(v) => setForm((prev) => ({ ...prev, type: v ?? "debit" }))}
+                    options={[
+                      { value: "debit", label: "Debit" },
+                      { value: "credit", label: "Credit" },
+                    ]}
                     disabled={mode === "edit" && form.type === "credit"}
-                    className="w-full border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10 disabled:bg-slate-100 disabled:text-slate-500"
-                  >
-                    <option value="debit">Debit</option>
-                    <option value="credit">Credit</option>
-                  </select>
+                    size="md"
+                  />
                   <p className="mt-1 text-[10px] leading-4 text-slate-400">
                     {form.type === "credit"
                       ? "Creates an opening credit posted through the selected account."
@@ -361,18 +348,14 @@ function TakeOnBalanceModal({
               {form.type === "credit" && (
                 <div>
                   <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Opening Balance Posting Account</label>
-                  <select
+                  <AppSelect
                     value={form.openingBalanceAccountId}
-                    onChange={(e) => setForm((prev) => ({ ...prev, openingBalanceAccountId: e.target.value }))}
-                    className="w-full border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
-                  >
-                    <option value="">Select account</option>
-                    {chartAccounts.map((account) => (
-                      <option key={account._id} value={account._id}>
-                        [{account.code || "---"}] {account.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(v) => setForm((prev) => ({ ...prev, openingBalanceAccountId: v ?? "" }))}
+                    options={chartAccounts.map((account) => ({ value: account._id, label: `[${account.code || "---"}] ${account.name}` }))}
+                    placeholder="Select account"
+                    searchable
+                    size="md"
+                  />
                 </div>
               )}
 
@@ -957,29 +940,55 @@ const TakeOnBalances = () => {
                 <span className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">Rows <span className="text-slate-900 normal-case">{filteredRows.length}</span></span>
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 <input value={draftFilters.search} onChange={setFilter("search")} placeholder="Search…" className="h-7 w-40 shrink-0 rounded border border-slate-200 bg-white px-2 text-[10px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <select value={draftFilters.propertyId} onChange={(e) => setDraftFilters((prev) => ({ ...prev, propertyId: e.target.value, tenant: "" }))} className="h-7 shrink-0 rounded border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                  <option value="">Property</option>
-                  {propertyOptions.map((property) => (<option key={property._id || property.id} value={normalizeId(property._id || property.id)}>{getPropertyDisplay(property)}</option>))}
-                </select>
-                <select value={draftFilters.tenant} onChange={setFilter("tenant")} className="h-7 shrink-0 rounded border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                  <option value="">Tenant</option>
-                  {tenantSelectOptions}
-                </select>
-                <select value={draftFilters.billItem} onChange={setFilter("billItem")} className="h-7 shrink-0 rounded border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                  <option value="">Bill Item</option>
-                  {filterBillItemOptions.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}
-                </select>
-                <select value={draftFilters.type} onChange={setFilter("type")} className="h-7 shrink-0 rounded border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                  <option value="">Type</option>
-                  <option value="Debit">Debit</option>
-                  <option value="Credit">Credit</option>
-                </select>
-                <select value={draftFilters.status} onChange={setFilter("status")} className="h-7 shrink-0 rounded border border-orange-300 bg-orange-50 px-2 text-[10px] text-slate-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                  <option value="">Status</option>
-                  <option value="unallocated">Unallocated</option>
-                  <option value="partially_allocated">Partially Allocated</option>
-                  <option value="fully_allocated">Fully Allocated</option>
-                </select>
+                <AppSelect
+                  value={draftFilters.propertyId}
+                  onChange={(v) => setDraftFilters((prev) => ({ ...prev, propertyId: v ?? "", tenant: "" }))}
+                  options={propertyOptions.map((property) => ({ value: normalizeId(property._id || property.id), label: getPropertyDisplay(property) }))}
+                  placeholder="Property"
+                  searchable
+                  clearable
+                  size="sm"
+                />
+                <AppSelect
+                  value={draftFilters.tenant}
+                  onChange={(v) => setDraftFilters((prev) => ({ ...prev, tenant: v ?? "" }))}
+                  options={tenants.filter((t) => !draftFilters.propertyId || getTenantPropertyId(t) === draftFilters.propertyId).map((t) => buildTenantOption(t))}
+                  placeholder="Tenant"
+                  searchable
+                  clearable
+                  size="sm"
+                />
+                <AppSelect
+                  value={draftFilters.billItem}
+                  onChange={(v) => setDraftFilters((prev) => ({ ...prev, billItem: v ?? "" }))}
+                  options={filterBillItemOptions.map((option) => ({ value: option.value, label: option.label }))}
+                  placeholder="Bill Item"
+                  clearable
+                  size="sm"
+                />
+                <AppSelect
+                  value={draftFilters.type}
+                  onChange={(v) => setDraftFilters((prev) => ({ ...prev, type: v ?? "" }))}
+                  options={[
+                    { value: "Debit", label: "Debit" },
+                    { value: "Credit", label: "Credit" },
+                  ]}
+                  placeholder="Type"
+                  clearable
+                  size="sm"
+                />
+                <AppSelect
+                  value={draftFilters.status}
+                  onChange={(v) => setDraftFilters((prev) => ({ ...prev, status: v ?? "" }))}
+                  options={[
+                    { value: "unallocated", label: "Unallocated" },
+                    { value: "partially_allocated", label: "Partially Allocated" },
+                    { value: "fully_allocated", label: "Fully Allocated" },
+                  ]}
+                  placeholder="Status"
+                  clearable
+                  size="sm"
+                />
                 <button type="button" onClick={() => setAppliedFilters(draftFilters)} className={`h-7 shrink-0 rounded px-2 text-[10px] font-semibold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}>Apply</button>
                 <button type="button" onClick={() => { setDraftFilters(emptyFilters); setAppliedFilters(emptyFilters); }} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-700 shadow-sm hover:bg-slate-100">Reset</button>
                 <button type="button" onClick={loadRows} className={`h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-700 shadow-sm hover:bg-slate-50`}><FaRedoAlt size={9} /></button>

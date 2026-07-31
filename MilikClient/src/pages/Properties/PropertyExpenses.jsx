@@ -18,7 +18,9 @@ import {
   createExpenseProperty,
   updateExpenseProperty,
   deleteExpenseProperty,
+  getChartOfAccounts,
 } from '../../redux/apiCalls';
+import AppSelect from '../../components/common/AppSelect';
 
 // ─── constants ────────────────────────────────────────────────────────────────
 const CATEGORIES = ['maintenance', 'repair', 'utility', 'tax', 'insurance', 'supplies', 'other'];
@@ -42,16 +44,43 @@ const normalizeId = (v) => (typeof v === 'string' ? v : v?._id || v?.id || '');
 
 const defaultStart = toInput(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
 
+const isCashbookAccount = (account) => {
+  if (!account) return false;
+  const name = String(account?.name || '').toLowerCase();
+  const group = String(account?.group || '').toLowerCase();
+  const subGroup = String(account?.subGroup || '').toLowerCase();
+  return (
+    String(account?.type || '').toLowerCase() === 'asset' &&
+    account?.isHeader !== true &&
+    account?.isPosting !== false &&
+    /cash|bank|m-?pesa|mobile money|wallet|petty|till|collection/.test(`${name} ${group} ${subGroup}`)
+  );
+};
+
 const EMPTY_FORM = {
   property: '', unit: '', category: 'maintenance', amount: '',
   description: '', date: today(), receiptNumber: '', paidBy: '', paymentMethod: 'cash',
+  cashbook: '',
 };
 
 // ─── ExpenseModal ─────────────────────────────────────────────────────────────
-const ExpenseModal = ({ open, editing, properties, units, onClose, onSave }) => {
+const ExpenseModal = ({ open, editing, properties, units, businessId, onClose, onSave }) => {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [cashbookOptions, setCashbookOptions] = useState([]);
   const firstRef = useRef(null);
+
+  useEffect(() => {
+    if (!open || !businessId) return;
+    getChartOfAccounts({ business: businessId, type: 'asset' }).then((rows) => {
+      const books = (rows || []).filter(isCashbookAccount);
+      setCashbookOptions(books);
+      if (!editing && books.length > 0) {
+        const preferred = books.find((b) => b.name === 'Main Cashbook') || books[0];
+        setForm((f) => ({ ...f, cashbook: f.cashbook || preferred.name }));
+      }
+    }).catch(() => {});
+  }, [open, businessId, editing]);
 
   useEffect(() => {
     if (!open) return;
@@ -66,6 +95,7 @@ const ExpenseModal = ({ open, editing, properties, units, onClose, onSave }) => 
           receiptNumber: editing.receiptNumber || '',
           paidBy: editing.paidBy || '',
           paymentMethod: editing.paymentMethod || 'cash',
+          cashbook: editing.cashbook || '',
         }
       : { ...EMPTY_FORM, date: today() }
     );
@@ -86,6 +116,7 @@ const ExpenseModal = ({ open, editing, properties, units, onClose, onSave }) => 
       return;
     }
     if (Number(form.amount) <= 0) { toast.error('Amount must be greater than zero.'); return; }
+    if (!form.cashbook) { toast.error('Please select the cashbook this expense was paid from.'); return; }
     setSaving(true);
     try {
       await onSave({ ...form, amount: Number(form.amount) });
@@ -99,44 +130,59 @@ const ExpenseModal = ({ open, editing, properties, units, onClose, onSave }) => 
 
   if (!open) return null;
 
+  const cashbookSelectOptions = cashbookOptions.map((b) => ({
+    value: b.name,
+    label: b.code ? `${b.code} · ${b.name}` : b.name,
+  }));
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
       <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
-          <h2 className="text-sm font-extrabold uppercase tracking-tight text-[#1f4a35]">
+        <div className="flex items-center justify-between bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl">
+          <h2 className="text-sm font-black">
             {editing ? 'Edit Expense' : 'Record Property Expense'}
           </h2>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition">
-            <FaTimes size={14} />
+          <button onClick={onClose} className="rounded-full border border-white/30 p-1.5 hover:bg-white/10 transition">
+            <FaTimes size={12} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
+        <form onSubmit={handleSubmit} className="max-h-[78vh] overflow-y-auto px-6 py-5 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2 sm:col-span-1">
               <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e] mb-1">Property</label>
-              <select ref={firstRef} value={form.property} onChange={(e) => setForm((f) => ({ ...f, property: e.target.value, unit: '' }))}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#31694E] focus:outline-none focus:ring-1 focus:ring-[#31694E]">
-                <option value="">— All properties —</option>
-                {properties.map((p) => <option key={p._id} value={p._id}>{p.propertyName || p.name}</option>)}
-              </select>
+              <AppSelect
+                value={form.property || null}
+                onChange={(v) => setForm((f) => ({ ...f, property: v ?? '', unit: '' }))}
+                options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))}
+                placeholder="— All properties —"
+                searchable
+                clearable
+                size="md"
+              />
             </div>
 
             <div className="col-span-2 sm:col-span-1">
               <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e] mb-1">Unit <span className="font-normal text-gray-400">(optional)</span></label>
-              <select value={form.unit} onChange={set('unit')}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#31694E] focus:outline-none focus:ring-1 focus:ring-[#31694E]">
-                <option value="">— No specific unit —</option>
-                {filteredUnits.map((u) => <option key={u._id} value={u._id}>{u.unitNumber || u.name}</option>)}
-              </select>
+              <AppSelect
+                value={form.unit || null}
+                onChange={(v) => setForm((f) => ({ ...f, unit: v ?? '' }))}
+                options={filteredUnits.map((u) => ({ value: u._id, label: u.unitNumber || u.name }))}
+                placeholder="— No specific unit —"
+                searchable
+                clearable
+                size="md"
+              />
             </div>
 
             <div>
               <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e] mb-1">Category <span className="text-red-500">*</span></label>
-              <select value={form.category} onChange={set('category')} required
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#31694E] focus:outline-none focus:ring-1 focus:ring-[#31694E]">
-                {CATEGORIES.map((c) => <option key={c} value={c}>{humanize(c)}</option>)}
-              </select>
+              <AppSelect
+                value={form.category || null}
+                onChange={(v) => setForm((f) => ({ ...f, category: v ?? '' }))}
+                options={CATEGORIES.map((c) => ({ value: c, label: humanize(c) }))}
+                size="md"
+              />
             </div>
 
             <div>
@@ -159,10 +205,28 @@ const ExpenseModal = ({ open, editing, properties, units, onClose, onSave }) => 
 
             <div>
               <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e] mb-1">Payment Method</label>
-              <select value={form.paymentMethod} onChange={set('paymentMethod')}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#31694E] focus:outline-none focus:ring-1 focus:ring-[#31694E]">
-                {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{humanize(m)}</option>)}
-              </select>
+              <AppSelect
+                value={form.paymentMethod || null}
+                onChange={(v) => setForm((f) => ({ ...f, paymentMethod: v ?? '' }))}
+                options={PAYMENT_METHODS.map((m) => ({ value: m, label: humanize(m) }))}
+                size="md"
+              />
+            </div>
+
+            <div className="col-span-2">
+              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e] mb-1">
+                Cashbook <span className="text-red-500">*</span>
+              </label>
+              <AppSelect
+                value={form.cashbook || null}
+                onChange={(v) => setForm((f) => ({ ...f, cashbook: v ?? '' }))}
+                options={cashbookSelectOptions}
+                placeholder="Select cashbook paid from…"
+                searchable
+                clearable
+                size="md"
+                emptyMessage="No cashbooks found — check Chart of Accounts"
+              />
             </div>
 
             <div>
@@ -307,7 +371,7 @@ const PropertyExpenses = () => {
 
   // ─── CSV export ───────────────────────────────────────────────────────────
   const handleExport = () => {
-    const header = ['Date', 'Property', 'Unit', 'Category', 'Description', 'Amount', 'Payment Method', 'Receipt No.', 'Paid By'];
+    const header = ['Date', 'Property', 'Unit', 'Category', 'Description', 'Amount', 'Payment Method', 'Cashbook', 'Receipt No.', 'Paid By'];
     const rows = filtered.map((e) => [
       toInput(e.date),
       propertyMap.get(normalizeId(e.property)) || '',
@@ -316,6 +380,7 @@ const PropertyExpenses = () => {
       e.description,
       Number(e.amount || 0).toFixed(2),
       humanize(e.paymentMethod),
+      e.cashbook || '',
       e.receiptNumber || '',
       e.paidBy || '',
     ]);
@@ -336,6 +401,7 @@ const PropertyExpenses = () => {
         editing={editing}
         properties={properties}
         units={units}
+        businessId={businessId}
         onClose={() => { setModalOpen(false); setEditing(null); }}
         onSave={handleSave}
       />
@@ -410,20 +476,27 @@ const PropertyExpenses = () => {
 
             <div className="flex flex-col gap-1">
               <label className="text-[9px] font-extrabold uppercase tracking-widest text-gray-400">Property</label>
-              <select value={filters.propertyId} onChange={setFilter('propertyId')}
-                className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:border-[#31694E] focus:outline-none">
-                <option value="">All properties</option>
-                {properties.map((p) => <option key={p._id} value={p._id}>{p.propertyName || p.name}</option>)}
-              </select>
+              <AppSelect
+                value={filters.propertyId || null}
+                onChange={(v) => { setFilters((f) => ({ ...f, propertyId: v ?? '' })); setPage(1); }}
+                options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))}
+                placeholder="All properties"
+                searchable
+                clearable
+                size="sm"
+              />
             </div>
 
             <div className="flex flex-col gap-1">
               <label className="text-[9px] font-extrabold uppercase tracking-widest text-gray-400">Category</label>
-              <select value={filters.category} onChange={setFilter('category')}
-                className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:border-[#31694E] focus:outline-none">
-                <option value="">All categories</option>
-                {CATEGORIES.map((c) => <option key={c} value={c}>{humanize(c)}</option>)}
-              </select>
+              <AppSelect
+                value={filters.category || null}
+                onChange={(v) => { setFilters((f) => ({ ...f, category: v ?? '' })); setPage(1); }}
+                options={[{ value: '', label: 'All categories' }, ...CATEGORIES.map((c) => ({ value: c, label: humanize(c) }))]}
+                placeholder="All categories"
+                clearable
+                size="sm"
+              />
             </div>
 
             <div className="flex flex-col gap-1 flex-1 min-w-[160px]">
@@ -457,7 +530,7 @@ const PropertyExpenses = () => {
                   <table className="w-full text-[11px] border-collapse">
                     <thead>
                       <tr className="bg-[#0B3B2E] text-white">
-                        {['Date', 'Property / Unit', 'Category', 'Description', 'Amount', 'Payment', 'Ref / By', ''].map((h, i, arr) => (
+                        {['Date', 'Property / Unit', 'Category', 'Description', 'Amount', 'Payment', 'Cashbook', 'Ref / By', ''].map((h, i, arr) => (
                           <th key={h} className={`px-3 py-1 text-left font-bold ${i < arr.length - 1 ? "border-r border-white/10" : ""}`}>{h}</th>
                         ))}
                       </tr>
@@ -495,6 +568,7 @@ const PropertyExpenses = () => {
                               {formatMoney(exp.amount, currency)}
                             </td>
                             <td className="px-3 py-1 border-r border-gray-100 text-gray-500">{humanize(exp.paymentMethod)}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-gray-500 whitespace-nowrap">{exp.cashbook || '—'}</td>
                             <td className="px-3 py-1 border-r border-gray-100 text-gray-500">
                               {exp.receiptNumber && <div className="font-medium text-gray-600">{exp.receiptNumber}</div>}
                               {exp.paidBy && <div className="text-[10px]">{exp.paidBy}</div>}
@@ -503,7 +577,7 @@ const PropertyExpenses = () => {
                               <div className="flex items-center gap-1">
                                 {canUpdateExpense && (
                                   <button onClick={() => { setEditing(exp); setModalOpen(true); }}
-                                    className="rounded p-1.5 text-[#31694E] hover:bg-[#ECF6F1] transition" title="Edit">
+                                    className="rounded p-1.5 text-[#0B3B2E] hover:bg-[#ECF6F1] transition" title="Edit">
                                     <FaEdit size={11} />
                                   </button>
                                 )}
@@ -524,7 +598,7 @@ const PropertyExpenses = () => {
                         <td colSpan={4} className="px-3 py-2.5 text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e]">
                           Total ({filtered.length} expense{filtered.length !== 1 ? 's' : ''})
                         </td>
-                        <td className="px-3 py-2.5 font-extrabold text-[#1f4a35]" colSpan={4}>
+                        <td className="px-3 py-2.5 font-extrabold text-[#1f4a35]" colSpan={5}>
                           {formatMoney(summary.total, currency)}
                         </td>
                       </tr>

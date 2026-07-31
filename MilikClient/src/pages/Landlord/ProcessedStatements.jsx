@@ -30,6 +30,7 @@ import CommunicationComposerModal from "../../components/Communications/Communic
 import { adminRequests } from "../../utils/requestMethods";
 import { getChartOfAccounts } from "../../redux/apiCalls";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
+import AppSelect from "../../components/common/AppSelect";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -586,10 +587,15 @@ const ProcessedStatements = () => {
                 <button onClick={() => handleTabChange("paid")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "paid" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaCheckCircle /> Paid {activeTab === "paid" ? `(${pagination.total})` : ""}</button>
                 <button onClick={() => handleTabChange("management_fees")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "management_fees" ? "bg-[#FF8C00] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaDownload /> Mgmt Fees {activeTab === "management_fees" ? `(${pagination.total})` : ""}</button>
                 <input type="text" placeholder="Search landlord, property…" value={searchText} onChange={(e) => handleSearchChange(e.target.value)} onBlur={applySearch} onKeyDown={(e) => e.key === "Enter" && applySearch()} className="h-7 w-44 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                <select value={sortBy} onChange={(e) => handleSortChange(e.target.value)} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                  <option value="date-desc">Newest First</option>
-                  <option value="date-asc">Oldest First</option>
-                </select>
+                <AppSelect
+                  value={sortBy || null}
+                  onChange={(v) => handleSortChange(v ?? "date-desc")}
+                  options={[
+                    { value: "date-desc", label: "Newest First" },
+                    { value: "date-asc", label: "Oldest First" },
+                  ]}
+                  size="sm"
+                />
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 <span className="shrink-0 rounded border border-yellow-200 bg-yellow-50 px-2 py-0.5 text-[10px] font-bold text-yellow-700">Outstanding: {activeTab === "outstanding" ? pagination.total : "—"} • {activeTab === "outstanding" ? money(stats.totalAmountUnpaid) : "—"}</span>
                 <span className="shrink-0 rounded border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-700">Recoveries: {activeTab === "recoveries" ? pagination.total : "—"} • {activeTab === "recoveries" ? money(stats.totalRecoveryAmount) : "—"}</span>

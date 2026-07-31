@@ -40,6 +40,7 @@ import {
 import { adminRequests } from "../../utils/requestMethods";
 import { printTabularList } from "../../utils/printList";
 import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
+import AppSelect from "../../components/common/AppSelect";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -825,26 +826,41 @@ const Units = () => {
         {/* Toolbar — single scrollable row */}
         <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
           <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-            <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
-              value={draftFilters.property} onChange={(e) => setDraftFilters((p) => ({ ...p, property: e.target.value }))}>
-              {uniqueProperties.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-            </select>
+            <AppSelect
+              value={draftFilters.property === "any" ? "" : draftFilters.property}
+              onChange={(v) => setDraftFilters((p) => ({ ...p, property: v ?? "any" }))}
+              options={uniqueProperties.filter((p) => p.value !== "any")}
+              placeholder="Property"
+              searchable
+              clearable
+              size="sm"
+            />
 
-            <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
-              value={draftFilters.status} onChange={(e) => setDraftFilters((p) => ({ ...p, status: e.target.value }))}>
-              <option value="active">Active</option>
-              <option value="any">All Statuses</option>
-              <option value="occupied">Occupied</option>
-              <option value="vacant">Vacant</option>
-              <option value="maintenance">Maintenance</option>
-              <option value="archived">Archived</option>
-            </select>
+            <AppSelect
+              value={draftFilters.status}
+              onChange={(v) => setDraftFilters((p) => ({ ...p, status: v ?? "active" }))}
+              options={[
+                { value: "active", label: "Active" },
+                { value: "any", label: "All Statuses" },
+                { value: "occupied", label: "Occupied" },
+                { value: "vacant", label: "Vacant" },
+                { value: "maintenance", label: "Maintenance" },
+                { value: "archived", label: "Archived" },
+              ]}
+              placeholder="All Statuses"
+              clearable
+              size="sm"
+            />
 
-            <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
-              value={draftFilters.unitType} onChange={(e) => setDraftFilters((p) => ({ ...p, unitType: e.target.value }))}>
-              <option value="any">Unit Type</option>
-              {unitTypeOptions.map((type) => <option key={type} value={type}>{formatUnitTypeLabel(type)}</option>)}
-            </select>
+            <AppSelect
+              value={draftFilters.unitType === "any" ? "" : draftFilters.unitType}
+              onChange={(v) => setDraftFilters((p) => ({ ...p, unitType: v ?? "any" }))}
+              options={unitTypeOptions.map((type) => ({ value: type, label: formatUnitTypeLabel(type) }))}
+              placeholder="Unit Type"
+              searchable
+              clearable
+              size="sm"
+            />
 
             <div className="h-4 w-px shrink-0 bg-slate-200" />
 
@@ -1180,13 +1196,12 @@ const Units = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-slate-500 text-xs">Per page:</span>
-                  <select
-                    value={ITEMS_PER_PAGE}
-                    disabled
-                    className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:outline-none"
-                  >
-                    <option value={500}>500</option>
-                  </select>
+                  <AppSelect
+                    value={String(ITEMS_PER_PAGE)}
+                    onChange={() => {}}
+                    options={[{ value: String(ITEMS_PER_PAGE), label: String(ITEMS_PER_PAGE) }]}
+                    size="sm"
+                  />
                   <button onClick={() => handlePageChange(safeCurrentPage - 1)} disabled={safeCurrentPage === 1}
                     className="px-2.5 py-0.5 text-xs border border-gray-300 rounded flex items-center gap-1 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed font-bold">
                     <FaChevronLeft size={10} /> Previous
@@ -1240,20 +1255,15 @@ const Units = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Property <span className="text-red-500">*</span></label>
-                        <select
-                          name="property"
+                        <AppSelect
                           value={formData.property}
-                          onChange={handleInputChange}
-                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                          required
-                        >
-                          <option value="">Select Property</option>
-                          {propertiesForDropdown.map((p) => (
-                            <option key={p} value={p}>
-                              {p}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(v) => setFormData((p) => ({ ...p, property: v ?? "" }))}
+                          options={propertiesForDropdown.map((p) => ({ value: p, label: p }))}
+                          placeholder="Select Property"
+                          searchable
+                          clearable
+                          size="md"
+                        />
                       </div>
 
                       <div>
@@ -1369,19 +1379,14 @@ const Units = () => {
 
                       <div>
                         <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Charge Freq.</label>
-                        <select
-                          name="chargeFreq"
+                        <AppSelect
                           value={formData.chargeFreq}
-                          onChange={handleInputChange}
-                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                        >
-                          <option value="">Select Frequency</option>
-                          {chargeFrequencies.map((f) => (
-                            <option key={f} value={f}>
-                              {f}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(v) => setFormData((p) => ({ ...p, chargeFreq: v ?? "" }))}
+                          options={chargeFrequencies.map((f) => ({ value: f, label: f }))}
+                          placeholder="Select Frequency"
+                          clearable
+                          size="md"
+                        />
                       </div>
                     </div>
 

@@ -66,6 +66,7 @@ import {
 import { hasCompanyPermission } from "../../utils/permissions";
 import { LISTING_UI, normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
 import { useTabState } from "../../hooks/useTabState";
+import AppSelect from "../../components/common/AppSelect";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
@@ -448,14 +449,16 @@ function AddUtilityModal({ tenants, allUnits, company, dispatch, onClose, onSave
                   <div key={row.utility || row.type || row.utilityLabel || idx} className="grid grid-cols-[1fr_120px_auto_auto] items-end gap-2 border border-indigo-100 bg-indigo-50/40 p-3">
                     <div>
                       <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Utility Type</label>
-                      <select
+                      <AppSelect
                         value={row.utility}
-                        onChange={(e) => updateRow(idx, "utility", e.target.value)}
-                        className="h-8 w-full border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-                      >
-                        <option value="">Select type…</option>
-                        {allOptions.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-                      </select>
+                        onChange={(v) => updateRow(idx, "utility", v ?? "")}
+                        options={allOptions.map((opt) => ({ value: opt, label: opt }))}
+                        placeholder="Select type…"
+                        searchable
+                        clearable
+                        size="md"
+                        className="w-full"
+                      />
                     </div>
                     <div>
                       <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Charge (Ksh)</label>
@@ -2025,26 +2028,33 @@ const confirmTransferUnit = useCallback(async () => {
           <div className="flex items-center gap-0">
             {/* Scrollable filters section */}
             <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5 min-w-0 flex-1">
-              <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
-                value={draftFilters.property} onChange={(e) => setDraftFilters({ ...draftFilters, property: e.target.value })}>
-                {uniqueProperties.map((prop) => (
-                  <option key={prop} value={prop}>{prop === "any" ? "All Properties" : prop}</option>
-                ))}
-              </select>
+              <AppSelect
+                value={draftFilters.property !== "any" ? draftFilters.property : ""}
+                onChange={(v) => setDraftFilters({ ...draftFilters, property: v ?? "any" })}
+                options={uniqueProperties.filter((p) => p !== "any").map((p) => ({ value: p, label: p }))}
+                placeholder="All Properties"
+                searchable
+                clearable
+                size="sm"
+              />
 
-              <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
-                value={draftFilters.status} onChange={(e) => setDraftFilters({ ...draftFilters, status: e.target.value })}>
-                {statusOptions.map((s) => (
-                  <option key={s} value={s}>{s === "any" ? "All Status" : s.charAt(0).toUpperCase() + s.slice(1)}</option>
-                ))}
-              </select>
+              <AppSelect
+                value={draftFilters.status !== "any" ? draftFilters.status : ""}
+                onChange={(v) => setDraftFilters({ ...draftFilters, status: v ?? "any" })}
+                options={statusOptions.filter((s) => s !== "any").map((s) => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))}
+                placeholder="All Status"
+                clearable
+                size="sm"
+              />
 
-              <select className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
-                value={draftFilters.balanceScope} onChange={(e) => setDraftFilters({ ...draftFilters, balanceScope: e.target.value })}>
-                {balanceScopeOptions.map((s) => (
-                  <option key={s} value={s}>{s === "with_balance" ? "With Balance" : "All Balances"}</option>
-                ))}
-              </select>
+              <AppSelect
+                value={draftFilters.balanceScope !== "any" ? draftFilters.balanceScope : ""}
+                onChange={(v) => setDraftFilters({ ...draftFilters, balanceScope: v ?? "any" })}
+                options={[{ value: "with_balance", label: "With Balance" }]}
+                placeholder="All Balances"
+                clearable
+                size="sm"
+              />
 
               <div className="h-4 w-px shrink-0 bg-slate-200" />
 
@@ -2599,13 +2609,12 @@ const confirmTransferUnit = useCallback(async () => {
           <div className="flex items-center gap-1.5">
             <div className="flex items-center gap-1">
               <span className="font-semibold text-slate-500 text-xs">Per page:</span>
-              <select
+              <AppSelect
                 value={pageSize}
-                onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition"
-              >
-                {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
+                onChange={(v) => { setPageSize(Number(v)); setCurrentPage(1); }}
+                options={[25, 50, 100, 200].map((n) => ({ value: n, label: String(n) }))}
+                size="sm"
+              />
             </div>
             <button
               onClick={() => setCurrentPage(safeCurrentPage - 1)}
@@ -2718,15 +2727,15 @@ const confirmTransferUnit = useCallback(async () => {
             <div>
               <p className="mb-2 text-xs font-black uppercase tracking-wider text-slate-700">Available Vacant Units ({allVacantUnits.length})</p>
               <div className="flex flex-wrap gap-2">
-                <select
+                <AppSelect
                   value={transferForm.filterProperty}
-                  onChange={(e) => setTransferForm((p) => ({ ...p, filterProperty: e.target.value }))}
-                  className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 appearance-none outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
-                  <option value="">All properties</option>
-                  {uniqueProperties.map((prop) => (
-                    <option key={prop.id} value={prop.id}>{prop.name}</option>
-                  ))}
-                </select>
+                  onChange={(v) => setTransferForm((p) => ({ ...p, filterProperty: v ?? "" }))}
+                  options={(uniqueProperties || []).map((prop) => ({ value: prop.id, label: prop.name }))}
+                  placeholder="All properties"
+                  searchable
+                  clearable
+                  size="sm"
+                />
                 <div className="relative">
                   <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" size={9} />
                   <input
@@ -3267,19 +3276,17 @@ const confirmTransferUnit = useCallback(async () => {
                     <div className="mt-3 grid gap-3 md:grid-cols-2">
                       <div>
                         <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Cash / bank account for refund</label>
-                        <select
+                        <AppSelect
                           value={depositSettlementForm.cashbookAccountId}
+                          onChange={(v) => setDepositSettlementForm((prev) => ({ ...prev, cashbookAccountId: v ?? "" }))}
+                          options={cashbookAccounts.map((account) => ({ value: normalizeId(account?._id), label: account?.name || account?.accountName || "Unnamed account" }))}
+                          placeholder="Select cash or bank account"
+                          searchable
+                          clearable
+                          size="md"
                           disabled={depositSettlementAction !== "refund" || !depositSettlementDerived.canRefund}
-                          onChange={(e) => setDepositSettlementForm((prev) => ({ ...prev, cashbookAccountId: e.target.value }))}
-                          className="mt-1 w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10 disabled:bg-slate-100"
-                        >
-                          <option value="">Select cash or bank account</option>
-                          {cashbookAccounts.map((account) => (
-                            <option key={normalizeId(account?._id)} value={normalizeId(account?._id)}>
-                              {account?.name || account?.accountName || "Unnamed account"}
-                            </option>
-                          ))}
-                        </select>
+                          className="w-full"
+                        />
                       </div>
                       <div>
                         <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Reason / narration</label>

@@ -795,7 +795,7 @@ const attemptAutoReceipt = async ({ stored, config }) => {
       paymentDate: stored.transactionDate instanceof Date ? stored.transactionDate : new Date(),
       cashbookAccountId: config?.defaultCashbookAccountId || null,
       cashbookAccountName: config?.defaultCashbookAccountName || "M-Pesa",
-      description: `M-Pesa C2B – ${stored.transactionCode}${stored.payerName ? ` – ${stored.payerName}` : ""}`,
+      description: `M-Pesa Auto – ${stored.transactionCode}${stored.payerName ? ` – ${stored.payerName}` : ""}`,
     });
     await MpesaCollection.findByIdAndUpdate(stored._id, {
       $set: { matchingStatus: "captured", matchedReceipt: receipt._id },

@@ -14,6 +14,7 @@ import CwSmsModal from "./CwSmsModal";
 import { clearDraft, readDraft, writeDraft } from "../../hooks/useFormDraft";
 import { useTabState } from "../../hooks/useTabState";
 import PaginationBar from "../../components/PaginationBar";
+import AppSelect from "../../components/common/AppSelect";
 
 const Lightbox = ({ src, onClose }) => (
   <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 p-4" onClick={onClose}>
@@ -192,15 +193,12 @@ const MobileJobCard = React.memo(({
         </div>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        <select
-          className="h-7 border border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-700 focus:outline-none"
+        <AppSelect
           value={job.status}
-          onChange={(e) => onUpdateStatus(job, e.target.value)}
-        >
-          {statuses.filter((s) => job.status === "paid" ? s === "paid" : s !== "paid").map((s) => (
-            <option key={s} value={s}>{getJobStatusLabel(s, job.jobType)}</option>
-          ))}
-        </select>
+          onChange={(v) => onUpdateStatus(job, v ?? "")}
+          options={statuses.filter((s) => job.status === "paid" ? s === "paid" : s !== "paid").map((s) => ({ value: s, label: getJobStatusLabel(s, job.jobType) }))}
+          size="sm"
+        />
         {job.status === "waiting" && (
           <button
             type="button"
@@ -337,19 +335,14 @@ const DesktopJobRow = React.memo(({
         {isConsolidated && <td className="px-2 py-1 text-slate-600">{job.branch?.name || <span className="text-slate-400">—</span>}</td>}
         <td className="px-2 py-1">
           <div className="flex items-center gap-1">
-            <select
-              className="h-6 max-w-[76px] border border-slate-300 bg-white px-1 text-[11px] font-bold text-slate-700"
+            <AppSelect
               value={job.status}
-              onChange={(event) => onUpdateStatus(job, event.target.value)}
-            >
-              {statuses
+              onChange={(v) => onUpdateStatus(job, v ?? "")}
+              options={statuses
                 .filter((status) => job.status === "paid" ? status === "paid" : status !== "paid" || job.paymentStatus === "paid")
-                .map((status) => (
-                  <option key={status} value={status}>
-                    {getJobStatusLabel(status, job.jobType)}
-                  </option>
-                ))}
-            </select>
+                .map((status) => ({ value: status, label: getJobStatusLabel(status, job.jobType) }))}
+              size="sm"
+            />
             {job.status === "waiting" && (
               <button
                 type="button"
@@ -1227,51 +1220,75 @@ ${taxAmt > 0 ? `<tr class="vat"><td>VAT (incl.)</td><td class="amt">${fmtAmt(tax
           onChange={(e) => setFilterValue("customer", e.target.value)}
         />
         {/* Category dropdowns */}
-        <select className="h-7 w-[110px] grow border border-[#B7C9C0] bg-[#F1F6F3] px-1.5 text-xs font-semibold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
-          value={filters.service} onChange={(e) => setFilterValue("service", e.target.value)}>
-          <option value="">All Services</option>
-          {services.map((s) => <option key={s._id} value={s._id}>{s.category ? `${s.category} — ${s.name}` : s.name}</option>)}
-        </select>
-        <select className="h-7 w-[100px] grow border border-[#B7C9C0] bg-[#F1F6F3] px-1.5 text-xs font-semibold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
-          value={filters.staff} onChange={(e) => setFilterValue("staff", e.target.value)}>
-          <option value="">All Staff</option>
-          {staff.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
-        </select>
-        <select className="h-7 w-[100px] grow border border-slate-300 bg-white px-1.5 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-          value={filters.status} onChange={(e) => setFilterValue("status", e.target.value)}>
-          <option value="">All Statuses</option>
-          {statuses.map((s) => <option key={s} value={s}>{getJobStatusLabel(s, filters.jobType)}</option>)}
-        </select>
-        <select className="h-7 w-[100px] grow border border-slate-300 bg-white px-1.5 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-          value={filters.paymentStatus} onChange={(e) => setFilterValue("paymentStatus", e.target.value)}>
-          <option value="">All Payments</option>
-          <option value="unpaid">Unpaid</option>
-          <option value="partial">Partial</option>
-          <option value="paid">Paid</option>
-        </select>
-        <select className="h-7 w-[88px] grow border border-slate-300 bg-white px-1.5 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-          value={filters.jobType} onChange={(e) => setFilterValue("jobType", e.target.value)}>
-          <option value="">All Types</option>
-          <option value="vehicle">Vehicle</option>
-          <option value="carpet">Carpet</option>
-        </select>
+        <AppSelect
+          value={filters.service}
+          onChange={(v) => setFilterValue("service", v ?? "")}
+          options={services.map((s) => ({ value: s._id, label: s.category ? `${s.category} — ${s.name}` : s.name }))}
+          placeholder="All Services"
+          searchable
+          clearable
+          size="sm"
+        />
+        <AppSelect
+          value={filters.staff}
+          onChange={(v) => setFilterValue("staff", v ?? "")}
+          options={staff.map((s) => ({ value: s._id, label: s.name }))}
+          placeholder="All Staff"
+          searchable
+          clearable
+          size="sm"
+        />
+        <AppSelect
+          value={filters.status}
+          onChange={(v) => setFilterValue("status", v ?? "")}
+          options={statuses.map((s) => ({ value: s, label: getJobStatusLabel(s, filters.jobType) }))}
+          placeholder="All Statuses"
+          clearable
+          size="sm"
+        />
+        <AppSelect
+          value={filters.paymentStatus}
+          onChange={(v) => setFilterValue("paymentStatus", v ?? "")}
+          options={[
+            { value: "unpaid", label: "Unpaid" },
+            { value: "partial", label: "Partial" },
+            { value: "paid", label: "Paid" },
+          ]}
+          placeholder="All Payments"
+          clearable
+          size="sm"
+        />
+        <AppSelect
+          value={filters.jobType}
+          onChange={(v) => setFilterValue("jobType", v ?? "")}
+          options={[
+            { value: "vehicle", label: "Vehicle" },
+            { value: "carpet", label: "Carpet" },
+          ]}
+          placeholder="All Types"
+          clearable
+          size="sm"
+        />
         {/* Date preset */}
-        <select value={quickPickActive}
-          onChange={(e) => {
-            const v = e.target.value;
+        <AppSelect
+          value={quickPickActive}
+          onChange={(v) => {
             const { today, week, lweek, month } = dateBounds;
             if (v === "today")    setFilters((p) => ({ ...p, dateFrom: today,      dateTo: today     }));
             if (v === "thisWeek") setFilters((p) => ({ ...p, dateFrom: week.from,  dateTo: week.to   }));
             if (v === "lastWeek") setFilters((p) => ({ ...p, dateFrom: lweek.from, dateTo: lweek.to  }));
             if (v === "month")    setFilters((p) => ({ ...p, dateFrom: month.from, dateTo: month.to  }));
           }}
-          className="h-7 w-[100px] shrink-0 border border-slate-200 bg-white px-1.5 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none">
-          <option value="">Quick pick…</option>
-          <option value="today">Today</option>
-          <option value="thisWeek">This Week</option>
-          <option value="lastWeek">Last Week</option>
-          <option value="month">This Month</option>
-        </select>
+          options={[
+            { value: "today", label: "Today" },
+            { value: "thisWeek", label: "This Week" },
+            { value: "lastWeek", label: "Last Week" },
+            { value: "month", label: "This Month" },
+          ]}
+          placeholder="Quick pick…"
+          clearable
+          size="sm"
+        />
         {/* Date range */}
         <input type="date" title="From"
           className="h-7 w-[120px] shrink-0 border border-slate-300 px-1 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
@@ -1469,11 +1486,10 @@ ${taxAmt > 0 ? `<tr class="vat"><td>VAT (incl.)</td><td class="amt">${fmtAmt(tax
           <form id="carwash-payment-form" onSubmit={recordPayment} className="grid gap-3 md:grid-cols-2">
             <div className="md:col-span-2">
               <label className={labelClass}>Job *</label>
-              <select
-                className={inputClass}
+              <AppSelect
                 value={paymentForm.job}
-                onChange={async (event) => {
-                  const jobId = event.target.value;
+                onChange={async (v) => {
+                  const jobId = v ?? "";
                   setPaymentForm((prev) => ({ ...prev, job: jobId, amount: "" }));
                   setPaymentJobPaidSoFar(0);
                   if (!jobId) return;
@@ -1488,15 +1504,15 @@ ${taxAmt > 0 ? `<tr class="vat"><td>VAT (incl.)</td><td class="amt">${fmtAmt(tax
                     } catch { /* keep 0 */ }
                   }
                 }}
-                required
-              >
-                <option value="">Select job</option>
-                {allPaymentJobs.filter((j) => j.paymentStatus !== "paid").map((job) => (
-                  <option key={job._id} value={job._id}>
-                    {job.jobNumber} - {job.jobType === "carpet" ? job.itemDescription : job.plateNumber} - {formatMoney(job.price)}
-                  </option>
-                ))}
-              </select>
+                options={allPaymentJobs.filter((j) => j.paymentStatus !== "paid").map((job) => ({
+                  value: job._id,
+                  label: `${job.jobNumber} - ${job.jobType === "carpet" ? job.itemDescription : job.plateNumber} - ${formatMoney(job.price)}`,
+                }))}
+                placeholder="Select job"
+                searchable
+                clearable
+                size="md"
+              />
             </div>
             <div>
               <div className="mb-1 flex items-center justify-between">
@@ -1566,13 +1582,12 @@ ${taxAmt > 0 ? `<tr class="vat"><td>VAT (incl.)</td><td class="amt">${fmtAmt(tax
             </div>
             <div>
               <label className={labelClass}>Method</label>
-              <select className={inputClass} value={paymentForm.method} onChange={(event) => setPaymentForm((prev) => ({ ...prev, method: event.target.value, cashbookAccount: preferredCashbookForMethod(cashbooks, event.target.value, cashbookDefaults) }))}>
-                {paymentMethods.map((method) => (
-                  <option key={method} value={method}>
-                    {method.toUpperCase()}
-                  </option>
-                ))}
-              </select>
+              <AppSelect
+                value={paymentForm.method}
+                onChange={(v) => setPaymentForm((prev) => ({ ...prev, method: v ?? "cash", cashbookAccount: preferredCashbookForMethod(cashbooks, v ?? "cash", cashbookDefaults) }))}
+                options={paymentMethods.map((method) => ({ value: method, label: method.toUpperCase() }))}
+                size="md"
+              />
             </div>
             <div>
               <label className={labelClass}>Payment Date *</label>
@@ -1580,14 +1595,15 @@ ${taxAmt > 0 ? `<tr class="vat"><td>VAT (incl.)</td><td class="amt">${fmtAmt(tax
             </div>
             <div>
               <label className={labelClass}>Cashbook *</label>
-              <select className={inputClass} value={paymentForm.cashbookAccount} onChange={(event) => setPaymentForm((prev) => ({ ...prev, cashbookAccount: event.target.value }))} required>
-                <option value="">Select cashbook</option>
-                {cashbooks.map((account) => (
-                  <option key={account._id} value={account._id}>
-                    {account.code} - {account.name}
-                  </option>
-                ))}
-              </select>
+              <AppSelect
+                value={paymentForm.cashbookAccount}
+                onChange={(v) => setPaymentForm((prev) => ({ ...prev, cashbookAccount: v ?? "" }))}
+                options={cashbooks.map((account) => ({ value: account._id, label: `${account.code} - ${account.name}` }))}
+                placeholder="Select cashbook"
+                searchable
+                clearable
+                size="md"
+              />
             </div>
             <div className={paymentForm.method === "mpesa" ? "" : "md:col-span-2"}>
               <label className={labelClass}>
