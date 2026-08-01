@@ -31,6 +31,7 @@ import {
 import { getProperties } from "../../redux/propertyRedux";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { useTabState } from "../../hooks/useTabState";
+import AppSelect from "../../components/common/AppSelect";
 
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -462,32 +463,30 @@ const ExpenseRequisition = () => {
                     className="h-7 w-48 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                   />
                 </div>
-                <select
-                  value={filters.propertyId}
-                  onChange={setFilter("propertyId")}
-                  className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                >
-                  <option value="all">All properties</option>
-                  {properties.map((property) => (
-                    <option key={property._id} value={property._id}>
-                      {property.propertyCode ? `[${property.propertyCode}] ` : ""}
-                      {property.propertyName || property.name}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={filters.status}
-                  onChange={setFilter("status")}
-                  className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                >
-                  <option value="all">All statuses</option>
-                  <option value="draft">Draft</option>
-                  <option value="submitted">Submitted</option>
-                  <option value="approved">Approved</option>
-                  <option value="converted">Converted</option>
-                  <option value="rejected">Rejected</option>
-                  <option value="cancelled">Cancelled</option>
-                </select>
+                <AppSelect
+                  value={filters.propertyId !== "all" ? filters.propertyId : ""}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "all" }))}
+                  options={properties.map((p) => ({ value: p._id, label: `${p.propertyCode ? `[${p.propertyCode}] ` : ""}${p.propertyName || p.name}` }))}
+                  placeholder="All properties"
+                  size="sm"
+                  clearable
+                  searchable
+                />
+                <AppSelect
+                  value={filters.status !== "all" ? filters.status : ""}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))}
+                  options={[
+                    { value: "draft", label: "Draft" },
+                    { value: "submitted", label: "Submitted" },
+                    { value: "approved", label: "Approved" },
+                    { value: "converted", label: "Converted" },
+                    { value: "rejected", label: "Rejected" },
+                    { value: "cancelled", label: "Cancelled" },
+                  ]}
+                  placeholder="All statuses"
+                  size="sm"
+                  clearable
+                />
                 <button onClick={() => setFilters({ search: "", status: "all", propertyId: "all" })} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaUndo size={9} /> Reset</button>
                 <button onClick={loadRows} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaRedoAlt size={9} /></button>
                 <button onClick={handleBulkDelete} disabled={!canDelete} className="h-7 shrink-0 flex items-center gap-1 rounded border border-rose-300 bg-rose-50 px-2.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"><FaTrash size={9} /> Delete</button>
@@ -536,13 +535,12 @@ const ExpenseRequisition = () => {
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
                   <span className="font-semibold text-slate-500">Per page:</span>
-                  <select
+                  <AppSelect
                     value={pageSize}
-                    onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                    className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition"
-                  >
-                    {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
-                  </select>
+                    onChange={(v) => { setPageSize(Number(v ?? DEFAULT_PAGE_SIZE)); setCurrentPage(1); }}
+                    options={[25, 50, 100, 200].map((n) => ({ value: n, label: String(n) }))}
+                    size="sm"
+                  />
                 </div>
                 <button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
                 <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>
@@ -566,10 +564,53 @@ const ExpenseRequisition = () => {
             <div className="grid gap-2 p-6 md:grid-cols-2 xl:grid-cols-3">
               <label className="block xl:col-span-2"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Title <span className="text-red-500">*</span></span><input value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" /></label>
               <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Amount <span className="text-red-500">*</span></span><input type="number" value={form.amount} onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" /></label>
-              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Property</span><select value={form.property} onChange={(e) => setForm((prev) => ({ ...prev, property: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"><option value="">Select property</option>{properties.map((property) => <option key={property._id} value={property._id}>{property.propertyCode ? `[${property.propertyCode}] ` : ""}{property.propertyName || property.name}</option>)}</select></label>
-              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Service Provider</span><select value={form.serviceProvider} onChange={(e) => setForm((prev) => ({ ...prev, serviceProvider: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"><option value="">Select provider</option>{providers.map((provider) => <option key={provider._id} value={provider._id}>{provider.providerCode} - {provider.name}</option>)}</select></label>
-              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Priority</span><select value={form.priority} onChange={(e) => setForm((prev) => ({ ...prev, priority: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></select></label>
-              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Category</span><select value={form.category} onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"><option value="general">General</option><option value="maintenance">Maintenance</option><option value="repair">Repair</option><option value="utility">Utility</option><option value="tax">Tax</option><option value="insurance">Insurance</option><option value="supplies">Supplies</option><option value="other">Other</option></select></label>
+              <AppSelect
+                label="Property"
+                value={form.property}
+                onChange={(v) => setForm((prev) => ({ ...prev, property: v ?? "" }))}
+                options={properties.map((p) => ({ value: p._id, label: `${p.propertyCode ? `[${p.propertyCode}] ` : ""}${p.propertyName || p.name}` }))}
+                placeholder="Select property"
+                size="md"
+                searchable
+              />
+              <AppSelect
+                label="Service Provider"
+                value={form.serviceProvider}
+                onChange={(v) => setForm((prev) => ({ ...prev, serviceProvider: v ?? "" }))}
+                options={providers.map((p) => ({ value: p._id, label: `${p.providerCode} - ${p.name}` }))}
+                placeholder="Select provider"
+                size="md"
+                searchable
+                clearable
+              />
+              <AppSelect
+                label="Priority"
+                value={form.priority}
+                onChange={(v) => setForm((prev) => ({ ...prev, priority: v ?? "normal" }))}
+                options={[
+                  { value: "low", label: "Low" },
+                  { value: "normal", label: "Normal" },
+                  { value: "high", label: "High" },
+                  { value: "urgent", label: "Urgent" },
+                ]}
+                size="md"
+              />
+              <AppSelect
+                label="Category"
+                value={form.category}
+                onChange={(v) => setForm((prev) => ({ ...prev, category: v ?? "general" }))}
+                options={[
+                  { value: "general", label: "General" },
+                  { value: "maintenance", label: "Maintenance" },
+                  { value: "repair", label: "Repair" },
+                  { value: "utility", label: "Utility" },
+                  { value: "tax", label: "Tax" },
+                  { value: "insurance", label: "Insurance" },
+                  { value: "supplies", label: "Supplies" },
+                  { value: "other", label: "Other" },
+                ]}
+                size="md"
+              />
               <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Request Date</span><input type="date" value={form.requestDate} onChange={(e) => setForm((prev) => ({ ...prev, requestDate: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" /></label>
               <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Needed By</span><input type="date" value={form.neededBy} onChange={(e) => setForm((prev) => ({ ...prev, neededBy: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" /></label>
               <label className="block xl:col-span-3"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Description</span><textarea rows={3} value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" /></label>

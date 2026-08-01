@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import { FaPlus, FaSearch, FaTimes, FaUser } from 'react-icons/fa';
 import ClientsShell from './ClientsShell';
 import { clientsApi } from '../../services/clientsApi';
+import AppSelect from '../../components/common/AppSelect';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -145,17 +146,25 @@ const AddClientModal = ({ onClose, onCreated }) => {
           </div>
           <div>
             <label className={labelCls}>Category</label>
-            <select className={inputCls} value={form.category} onChange={(e) => set('category', e.target.value)}>
-              <option value="">Select…</option>
-              {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-            </select>
+            <AppSelect
+              size="md"
+              clearable
+              placeholder="Select…"
+              value={form.category}
+              onChange={(v) => set('category', v ?? '')}
+              options={CATEGORIES.map((c) => ({ value: c, label: c }))}
+            />
           </div>
           <div>
             <label className={labelCls}>Source</label>
-            <select className={inputCls} value={form.source} onChange={(e) => set('source', e.target.value)}>
-              <option value="">Select…</option>
-              {SOURCES.map((s) => <option key={s}>{s}</option>)}
-            </select>
+            <AppSelect
+              size="md"
+              clearable
+              placeholder="Select…"
+              value={form.source}
+              onChange={(v) => set('source', v ?? '')}
+              options={SOURCES.map((s) => ({ value: s, label: s }))}
+            />
           </div>
           <div>
             <label className={labelCls}>Email</label>
@@ -284,14 +293,14 @@ const ClientsList = () => {
             </div>
 
             {/* Category filter */}
-            <select
+            <AppSelect
+              size="sm"
+              clearable
+              placeholder="All Categories"
               value={categoryFilter}
-              onChange={(e) => { setCategoryFilter(e.target.value); setPage(1); }}
-              className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-            >
-              <option value="">All Categories</option>
-              {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-            </select>
+              onChange={(v) => { setCategoryFilter(v ?? ''); setPage(1); }}
+              options={CATEGORIES.map((c) => ({ value: c, label: c }))}
+            />
 
             <span className="text-[10px] text-slate-400 ml-auto">
               {pagination.total || 0} client{(pagination.total || 0) !== 1 ? 's' : ''}

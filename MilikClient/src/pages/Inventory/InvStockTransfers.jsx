@@ -5,6 +5,7 @@ import { FaCheck, FaExchangeAlt, FaPlus, FaRedoAlt, FaTimes, FaTrash } from "rea
 import { toast } from "react-toastify";
 import InventoryShell from "./InventoryShell";
 import { inventoryApi } from "../../services/inventoryApi";
+import AppSelect from "../../components/common/AppSelect";
 
 const STATUSES = ["draft", "in_transit", "partially_received", "received", "cancelled"];
 
@@ -213,11 +214,7 @@ const InvStockTransfers = () => {
             </span>
           )}
           <div className="ml-auto">
-            <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#0B3B2E]">
-              <option value="">All Statuses</option>
-              {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
-            </select>
+            <AppSelect value={statusFilter} onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }} options={STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }))} placeholder="All Statuses" clearable size="sm" />
           </div>
         </div>
 
@@ -306,18 +303,10 @@ const InvStockTransfers = () => {
           <form id="create-transfer-form" onSubmit={handleCreate} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={labelClass}>From Location *</label>
-                <select required className={inputClass} value={createForm.fromLocation} onChange={(e) => setCreateForm((f) => ({ ...f, fromLocation: e.target.value }))}>
-                  <option value="">— Select —</option>
-                  {locations.map((l) => <option key={l._id} value={l._id}>{l.name}</option>)}
-                </select>
+                <AppSelect label="From Location" required value={createForm.fromLocation} onChange={(v) => setCreateForm((f) => ({ ...f, fromLocation: v ?? "" }))} options={locations.map((l) => ({ value: l._id, label: l.name }))} placeholder="— Select —" size="md" searchable />
               </div>
               <div>
-                <label className={labelClass}>To Location *</label>
-                <select required className={inputClass} value={createForm.toLocation} onChange={(e) => setCreateForm((f) => ({ ...f, toLocation: e.target.value }))}>
-                  <option value="">— Select —</option>
-                  {locations.map((l) => <option key={l._id} value={l._id}>{l.name}</option>)}
-                </select>
+                <AppSelect label="To Location" required value={createForm.toLocation} onChange={(v) => setCreateForm((f) => ({ ...f, toLocation: v ?? "" }))} options={locations.map((l) => ({ value: l._id, label: l.name }))} placeholder="— Select —" size="md" searchable />
               </div>
               <div className="col-span-2">
                 <label className={labelClass}>Notes</label>
@@ -347,11 +336,7 @@ const InvStockTransfers = () => {
                     {createForm.lines.map((line, idx) => (
                       <tr key={idx} className="border-b border-slate-100">
                         <td className="px-2 py-1.5">
-                          <select required value={line.product} onChange={(e) => setLineField(idx, "product", e.target.value)}
-                            className="h-8 w-full border border-slate-300 px-1.5 text-xs text-slate-800 outline-none focus:border-[#0B3B2E]">
-                            <option value="">— Select product —</option>
-                            {products.map((p) => <option key={p._id} value={p._id}>{p.name}{p.sku ? ` · ${p.sku}` : ""}</option>)}
-                          </select>
+                          <AppSelect required value={line.product} onChange={(v) => setLineField(idx, "product", v ?? "")} options={products.map((p) => ({ value: p._id, label: p.name + (p.sku ? ` · ${p.sku}` : "") }))} placeholder="— Select product —" size="sm" searchable />
                         </td>
                         <td className="px-2 py-1.5">
                           <input type="number" required min="0.001" step="0.001" placeholder="0" value={line.qtyDispatched}

@@ -8,13 +8,14 @@ import {
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
-import SaleFilterBar, { FilterSearch, FilterSelect } from "./SaleFilterBar";
+import SaleFilterBar, { FilterSearch } from "./SaleFilterBar";
 import PaginationBar from "../../components/PaginationBar";
 import { saleApi, fmtKES, todayISO } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
 import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
 import AmountInput from "./AmountInput";
+import AppSelect from "../../components/common/AppSelect";
 
 // Normalise image URLs — strips absolute origin from legacy URLs so relative
 // path proxy (/uploads/...) works in both dev and production.
@@ -325,18 +326,9 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           placeholder="Search listings..."
         />
-        <FilterSelect value={statusFilt} onChange={(e) => { setStatusFilt(e.target.value); setPage(1); }}>
-          <option value="">All Statuses</option>
-          {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
-        </FilterSelect>
-        <FilterSelect value={typeFilt} onChange={(e) => { setTypeFilt(e.target.value); setPage(1); }}>
-          <option value="">All Types</option>
-          {PROPERTY_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-        </FilterSelect>
-        <FilterSelect value={agentFilt} onChange={(e) => { setAgentFilt(e.target.value); setPage(1); }}>
-          <option value="">All Agents</option>
-          {agents.map((a) => <option key={a._id} value={a._id}>{a.fullName}</option>)}
-        </FilterSelect>
+        <AppSelect value={statusFilt} onChange={(v) => { setStatusFilt(v ?? ""); setPage(1); }} options={STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }))} placeholder="All Statuses" clearable size="sm" />
+        <AppSelect value={typeFilt} onChange={(v) => { setTypeFilt(v ?? ""); setPage(1); }} options={PROPERTY_TYPES.map((t) => ({ value: t, label: t }))} placeholder="All Types" clearable size="sm" />
+        <AppSelect value={agentFilt} onChange={(v) => { setAgentFilt(v ?? ""); setPage(1); }} options={agents.map((a) => ({ value: a._id, label: a.fullName }))} placeholder="All Agents" clearable size="sm" searchable />
       </SaleFilterBar>
 
       {/* Table + images panel */}
@@ -658,10 +650,7 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
               <input value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Property Type</label>
-              <select value={form.propertyType} onChange={(e) => setForm((p) => ({ ...p, propertyType: e.target.value }))} className={inputCls}>
-                {PROPERTY_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
+              <AppSelect label="Property Type" value={form.propertyType} onChange={(v) => setForm((p) => ({ ...p, propertyType: v ?? "" }))} options={PROPERTY_TYPES.map((t) => ({ value: t, label: t }))} size="md" />
             </div>
             <div>
               <label className={labelCls}>Asking Price (KES)</label>
@@ -671,17 +660,11 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
               <label className={labelCls}>Size</label>
               <div className="flex gap-1.5">
                 <input type="number" value={form.size} onChange={(e) => setForm((p) => ({ ...p, size: e.target.value }))} className="h-8 flex-1 border border-slate-200 bg-white px-3 text-xs focus:border-[#0B3B2E] focus:outline-none" placeholder="e.g. 50" />
-                <select value={form.sizeUnit} onChange={(e) => setForm((p) => ({ ...p, sizeUnit: e.target.value }))} className="h-8 border border-slate-200 bg-white px-2 text-xs focus:border-[#0B3B2E] focus:outline-none">
-                  {SIZE_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-                </select>
+                <AppSelect value={form.sizeUnit} onChange={(v) => setForm((p) => ({ ...p, sizeUnit: v ?? "" }))} options={SIZE_UNITS.map((u) => ({ value: u, label: u }))} size="md" />
               </div>
             </div>
             <div>
-              <label className={labelCls}>Assigned Agent</label>
-              <select value={form.assignedAgent} onChange={(e) => setForm((p) => ({ ...p, assignedAgent: e.target.value }))} className={inputCls}>
-                <option value="">Unassigned</option>
-                {agents.map((a) => <option key={a._id} value={a._id}>{a.fullName} ({a.agentNumber})</option>)}
-              </select>
+              <AppSelect label="Assigned Agent" value={form.assignedAgent} onChange={(v) => setForm((p) => ({ ...p, assignedAgent: v ?? "" }))} options={agents.map((a) => ({ value: a._id, label: `${a.fullName} (${a.agentNumber})` }))} placeholder="Unassigned" size="md" searchable clearable />
             </div>
             <div>
               <label className={labelCls}>Location / Address</label>

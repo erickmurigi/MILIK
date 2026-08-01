@@ -5,12 +5,13 @@ import { useNavigate } from "react-router-dom";
 import { FaChartLine, FaEdit, FaPlus, FaPrint, FaRedoAlt, FaTimes, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
-import SaleFilterBar, { FilterSearch, FilterSelect } from "./SaleFilterBar";
+import SaleFilterBar, { FilterSearch } from "./SaleFilterBar";
 import PaginationBar from "../../components/PaginationBar";
 import { saleApi, fmtKES } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
 import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
+import AppSelect from "../../components/common/AppSelect";
 
 const PAGE_SIZE = 50;
 
@@ -209,16 +210,8 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search agents…"
         />
-        <FilterSelect value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-          <option value="">All Statuses</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-        </FilterSelect>
-        <FilterSelect value={commTypeFilt} onChange={(e) => setCommTypeFilt(e.target.value)}>
-          <option value="">All Commission Types</option>
-          <option value="percentage">Percentage</option>
-          <option value="flat">Flat</option>
-        </FilterSelect>
+        <AppSelect value={statusFilter} onChange={(v) => setStatusFilter(v ?? "")} options={[{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }]} placeholder="All Statuses" clearable size="sm" />
+        <AppSelect value={commTypeFilt} onChange={(v) => setCommTypeFilt(v ?? "")} options={[{ value: "percentage", label: "Percentage" }, { value: "flat", label: "Flat" }]} placeholder="All Commission Types" clearable size="sm" />
       </SaleFilterBar>
 
       {/* Table */}
@@ -303,18 +296,10 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
               <input value={form.idNumber} onChange={f("idNumber")} className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Status</label>
-              <select value={form.status} onChange={f("status")} className={inputCls}>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
+              <AppSelect label="Status" value={form.status} onChange={(v) => setForm((p) => ({ ...p, status: v ?? "" }))} options={[{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }]} size="md" />
             </div>
             <div>
-              <label className={labelCls}>Commission Type</label>
-              <select value={form.commissionType} onChange={f("commissionType")} className={inputCls}>
-                <option value="percentage">Percentage (%)</option>
-                <option value="flat">Flat Amount (KES)</option>
-              </select>
+              <AppSelect label="Commission Type" value={form.commissionType} onChange={(v) => setForm((p) => ({ ...p, commissionType: v ?? "" }))} options={[{ value: "percentage", label: "Percentage (%)" }, { value: "flat", label: "Flat Amount (KES)" }]} size="md" />
             </div>
             <div>
               <label className={labelCls}>Rate {form.commissionType === "percentage" ? "(%)" : "(KES)"}</label>

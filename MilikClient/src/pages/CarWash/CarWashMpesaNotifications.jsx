@@ -11,6 +11,7 @@ import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { selectCurrentCompany } from "../../redux/selectors";
 import { useTabState } from "../../hooks/useTabState";
+import AppSelect from "../../components/common/AppSelect";
 
 const PAGE_SIZE = 50;
 
@@ -705,18 +706,14 @@ function UploadModal({ onClose, onUploaded, paybills = [] }) {
               {paybills.length > 1 && (
                 <div className="rounded border border-slate-200 bg-slate-50 px-3 py-2.5">
                   <p className="mb-1.5 text-[11px] font-black uppercase tracking-wide text-slate-500">Paybill</p>
-                  <select
+                  <AppSelect
                     value={selectedShortCode}
-                    onChange={(e) => setSelectedShortCode(e.target.value)}
-                    className="h-8 w-full border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-                  >
-                    <option value="">Auto-detect (primary paybill)</option>
-                    {paybills.map((pb) => (
-                      <option key={pb.shortCode} value={pb.shortCode}>
-                        {pb.name ? `${pb.name} (${pb.shortCode})` : pb.shortCode}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(v) => setSelectedShortCode(v ?? "")}
+                    options={paybills.map((pb) => ({ value: pb.shortCode, label: pb.name ? `${pb.name} (${pb.shortCode})` : pb.shortCode }))}
+                    placeholder="Auto-detect (primary paybill)"
+                    size="md"
+                    clearable
+                  />
                   <p className="mt-1 text-[10px] text-slate-400">
                     Select the paybill this statement belongs to. Notifications will be tagged accordingly.
                   </p>
@@ -996,27 +993,23 @@ export default function CarWashMpesaNotifications() {
 
       {/* Filters */}
       <form onSubmit={apply} className="mb-2 flex flex-wrap items-center gap-2 border border-slate-200 bg-white p-2 shadow-sm">
-        <select
-          className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+        <AppSelect
           value={filters.status}
-          onChange={e => setFilters(p => ({ ...p, status: e.target.value }))}
-        >
-          <option value="">All statuses</option>
-          {Object.entries(STATUS_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-        </select>
+          onChange={(v) => setFilters(p => ({ ...p, status: v ?? "" }))}
+          options={Object.entries(STATUS_META).map(([k, v]) => ({ value: k, label: v.label }))}
+          placeholder="All statuses"
+          size="sm"
+          clearable
+        />
         {paybills.length > 1 && (
-          <select
-            className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+          <AppSelect
             value={filters.shortCode}
-            onChange={e => setFilters(p => ({ ...p, shortCode: e.target.value }))}
-          >
-            <option value="">All paybills</option>
-            {paybills.map((pb) => (
-              <option key={pb.shortCode} value={pb.shortCode}>
-                {pb.name || pb.shortCode} ({pb.shortCode})
-              </option>
-            ))}
-          </select>
+            onChange={(v) => setFilters(p => ({ ...p, shortCode: v ?? "" }))}
+            options={paybills.map((pb) => ({ value: pb.shortCode, label: `${pb.name || pb.shortCode} (${pb.shortCode})` }))}
+            placeholder="All paybills"
+            size="sm"
+            clearable
+          />
         )}
         <input
           className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none uppercase placeholder:normal-case"

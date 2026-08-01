@@ -25,6 +25,7 @@ import {
   FaTint,
   FaTrash,
 } from "react-icons/fa";
+import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import { hasCompanyPermission } from "../../utils/permissions";
@@ -1009,41 +1010,26 @@ const MeterReadings = () => {
                   <div className="flex-1 overflow-y-auto bg-white px-5 py-4 space-y-4">
                     {/* ── Property + Unit ── */}
                     <div className="grid gap-4 md:grid-cols-2">
-                      <label className="block">
-                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
-                          Property <span className="text-red-500">*</span>
-                        </span>
-                        <select
-                          value={form.property}
-                          onChange={(e) => handleFormChange("property", e.target.value)}
-                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                        >
-                          <option value="">Select property</option>
-                          {properties.map((property) => (
-                            <option key={property._id} value={property._id}>
-                              {property.propertyName || property.name || property.propertyCode}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                      <AppSelect
+                        label="Property"
+                        required
+                        value={form.property}
+                        onChange={(v) => handleFormChange("property", v ?? "")}
+                        options={properties.map((property) => ({ value: property._id, label: property.propertyName || property.name || property.propertyCode }))}
+                        placeholder="Select property"
+                        searchable
+                        size="md"
+                      />
 
-                      <label className="block">
-                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
-                          Unit <span className="text-red-500">*</span>
-                        </span>
-                        <select
-                          value={form.unit}
-                          onChange={(e) => handleFormChange("unit", e.target.value)}
-                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                        >
-                          <option value="">Select unit</option>
-                          {filteredUnits.map((unit) => (
-                            <option key={unit._id} value={unit._id}>
-                              {unit.unitNumber}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                      <AppSelect
+                        label="Unit"
+                        required
+                        value={form.unit}
+                        onChange={(v) => handleFormChange("unit", v ?? "")}
+                        options={filteredUnits.map((unit) => ({ value: unit._id, label: unit.unitNumber }))}
+                        placeholder="Select unit"
+                        size="md"
+                      />
                     </div>
 
                     {/* ── Tenant (read-only, auto-detected from unit) ── */}
@@ -1074,23 +1060,15 @@ const MeterReadings = () => {
 
                     {/* ── Utility + Billing Period ── */}
                     <div className="grid gap-4 md:grid-cols-2">
-                      <label className="block">
-                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
-                          Utility type <span className="text-red-500">*</span>
-                        </span>
-                        <select
-                          value={form.utilityType}
-                          onChange={(e) => handleFormChange("utilityType", e.target.value)}
-                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                        >
-                          <option value="">Select utility</option>
-                          {selectedUnitUtilityOptions.map((utility) => (
-                            <option key={utility} value={utility}>
-                              {utility}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                      <AppSelect
+                        label="Utility type"
+                        required
+                        value={form.utilityType}
+                        onChange={(v) => handleFormChange("utilityType", v ?? "")}
+                        options={selectedUnitUtilityOptions.map((utility) => ({ value: utility, label: utility }))}
+                        placeholder="Select utility"
+                        size="md"
+                      />
 
                       <label className="block">
                         <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
@@ -1242,18 +1220,9 @@ const MeterReadings = () => {
                 ))}
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 <input type="text" value={draftFilters.search} onChange={setFilter("search")} placeholder="Search…" className="h-7 w-44 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <select value={draftFilters.property} onChange={(e) => setDraftFilters((prev) => ({ ...prev, property: e.target.value, unit: "any" }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs text-gray-800 appearance-none">
-                  <option value="any">Property</option>
-                  {properties.map((property) => (<option key={property._id} value={property._id}>{property.propertyName || property.name || property.propertyCode}</option>))}
-                </select>
-                <select value={draftFilters.unit} onChange={setFilter("unit")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs text-gray-800 appearance-none">
-                  <option value="any">Unit</option>
-                  {unitsForSelectedProperty.map((unit) => (<option key={unit._id} value={unit._id}>{unit.unitNumber}</option>))}
-                </select>
-                <select value={draftFilters.utilityType} onChange={setFilter("utilityType")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs text-gray-800 appearance-none">
-                  <option value="any">Utility</option>
-                  {utilityOptions.map((utility) => (<option key={utility} value={utility}>{utility}</option>))}
-                </select>
+                <AppSelect value={draftFilters.property} onChange={(v) => setDraftFilters((prev) => ({ ...prev, property: v ?? "any", unit: "any" }))} options={properties.map((property) => ({ value: property._id, label: property.propertyName || property.name || property.propertyCode }))} placeholder="Property" clearable searchable size="sm" />
+                <AppSelect value={draftFilters.unit} onChange={(v) => setDraftFilters((prev) => ({ ...prev, unit: v ?? "any" }))} options={unitsForSelectedProperty.map((unit) => ({ value: unit._id, label: unit.unitNumber }))} placeholder="Unit" clearable size="sm" />
+                <AppSelect value={draftFilters.utilityType} onChange={(v) => setDraftFilters((prev) => ({ ...prev, utilityType: v ?? "any" }))} options={utilityOptions.map((utility) => ({ value: utility, label: utility }))} placeholder="Utility" clearable size="sm" />
                 <input type="month" value={draftFilters.billingPeriod} onChange={setFilter("billingPeriod")} className="h-7 w-28 shrink-0 rounded border border-gray-300 px-2 text-xs" />
                 <button onClick={applySearch} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaSearch size={10} /></button>
                 <button onClick={resetFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={10} /></button>

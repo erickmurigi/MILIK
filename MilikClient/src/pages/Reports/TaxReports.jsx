@@ -5,6 +5,7 @@ import { selectCurrentCompany, selectCurrentUser } from '../../redux/selectors';
 import { FaFileDownload, FaFilter, FaPrint, FaReceipt } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import { hasCompanyPermission } from '../../utils/permissions';
+import AppSelect from '../../components/common/AppSelect';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { getProperties } from '../../redux/propertyRedux';
 import { fetchCompanySettings, selectCompanySettings } from '../../redux/companySettingsRedux';
@@ -355,12 +356,15 @@ const TaxReports = () => {
               </div>
               <div>
                 <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-700">Property</label>
-                <select value={filters.propertyId} onChange={setFilter("propertyId")} className="w-full rounded-md border border-orange-300 bg-orange-50 px-2 py-1.5 text-xs">
-                  <option value="">All Properties</option>
-                  {properties.map((property) => (
-                    <option key={property._id} value={property._id}>{property.propertyName}</option>
-                  ))}
-                </select>
+                <AppSelect
+                  value={filters.propertyId}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? '' }))}
+                  options={properties.map((p) => ({ value: p._id, label: p.propertyName }))}
+                  placeholder="All Properties"
+                  searchable
+                  clearable
+                  size="sm"
+                />
               </div>
             </div>
             <div className="mt-2 flex flex-wrap justify-end gap-2">

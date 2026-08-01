@@ -13,6 +13,7 @@ import {
 import { hasCompanyPermission } from "../../utils/permissions";
 import { useConfirm } from "../../context/ConfirmContext";
 import { useTabState } from "../../hooks/useTabState";
+import AppSelect from "../../components/common/AppSelect";
 
 const blankForm = {
   name: "",
@@ -243,9 +244,14 @@ const ServiceProviders = () => {
                 <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Provider code, contact, phone, email" className="h-7 w-52 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
               </div>
               <input value={nameFilter} onChange={(e) => setNameFilter(e.target.value)} placeholder="Provider name" className="h-7 w-36 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-              <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                {CATEGORY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
+              <AppSelect
+                value={categoryFilter !== "all" ? categoryFilter : ""}
+                onChange={(v) => setCategoryFilter(v ?? "all")}
+                options={CATEGORY_OPTIONS.filter((o) => o.value !== "all")}
+                placeholder="All categories"
+                size="sm"
+                clearable
+              />
               <button onClick={clearFilters} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Clear</button>
               <button onClick={openCreate} disabled={!canCreate} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#FF8C00] px-2.5 text-xs font-semibold text-white hover:bg-[#e67e00] disabled:cursor-not-allowed disabled:bg-slate-300"><FaPlus size={10} /> Add Provider</button>
             </div>
@@ -274,7 +280,7 @@ const ServiceProviders = () => {
           </div>
           <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
             <div className="font-semibold">Showing <span className="font-bold text-slate-900">{serverTotal === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1}</span> to <span className="font-bold text-slate-900">{Math.min(safeCurrentPage * pageSize, serverTotal)}</span> of <span className="font-bold text-slate-900">{serverTotal}</span> provider(s)</div>
-            <div className="flex items-center gap-3"><div className="flex items-center gap-1.5"><span className="font-semibold text-slate-500">Per page:</span><select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }} className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition">{[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}</select></div><button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button><span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span><button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button></div>
+            <div className="flex items-center gap-3"><div className="flex items-center gap-1.5"><span className="font-semibold text-slate-500">Per page:</span><AppSelect value={pageSize} onChange={(v) => { setPageSize(Number(v ?? 25)); setCurrentPage(1); }} options={[25, 50, 100, 200].map((n) => ({ value: n, label: String(n) }))} size="sm" /></div><button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button><span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span><button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button></div>
           </div>
         </div>
       </div>
@@ -377,22 +383,22 @@ const ServiceProviders = () => {
                         className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E]"
                       />
                     </label>
-                    <label className="block">
-                      <span className="mb-0.5 block text-xs font-semibold text-slate-700">WHT Category</span>
-                      <select
-                        value={form.whtCategory}
-                        onChange={(e) => setForm((prev) => ({ ...prev, whtCategory: e.target.value }))}
-                        className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E]"
-                      >
-                        <option value="">— Select category —</option>
-                        <option value="professional_services">Professional Services (5%)</option>
-                        <option value="management_fees">Management Fees (5%)</option>
-                        <option value="rent">Rent (5%)</option>
-                        <option value="contractors">Contractors (3%)</option>
-                        <option value="dividends">Dividends (5%)</option>
-                        <option value="other">Other</option>
-                      </select>
-                    </label>
+                    <AppSelect
+                      label="WHT Category"
+                      value={form.whtCategory}
+                      onChange={(v) => setForm((prev) => ({ ...prev, whtCategory: v ?? "" }))}
+                      options={[
+                        { value: "professional_services", label: "Professional Services (5%)" },
+                        { value: "management_fees", label: "Management Fees (5%)" },
+                        { value: "rent", label: "Rent (5%)" },
+                        { value: "contractors", label: "Contractors (3%)" },
+                        { value: "dividends", label: "Dividends (5%)" },
+                        { value: "other", label: "Other" },
+                      ]}
+                      placeholder="— Select category —"
+                      size="md"
+                      clearable
+                    />
                   </div>
                 )}
               </div>

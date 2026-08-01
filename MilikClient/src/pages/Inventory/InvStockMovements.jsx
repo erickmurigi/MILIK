@@ -5,6 +5,7 @@ import { FaArrowDown, FaArrowUp, FaExchangeAlt, FaPlus, FaRedoAlt, FaTimes } fro
 import { toast } from "react-toastify";
 import InventoryShell from "./InventoryShell";
 import { inventoryApi, formatMoney } from "../../services/inventoryApi";
+import AppSelect from "../../components/common/AppSelect";
 
 const TYPE_LABELS = {
   purchase:      { label: "Purchase",     color: "border-emerald-200 bg-emerald-50 text-emerald-700", in: true },
@@ -122,16 +123,8 @@ const InvStockMovements = () => {
             Entries: <strong className="text-[#0B3B2E]">{total}</strong>
           </span>
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            <select value={locationFilter} onChange={(e) => { setLocationFilter(e.target.value); setPage(1); }}
-              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#0B3B2E]">
-              <option value="">All Locations</option>
-              {locations.map((l) => <option key={l._id} value={l._id}>{l.name}</option>)}
-            </select>
-            <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
-              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#0B3B2E]">
-              <option value="">All Types</option>
-              {Object.entries(TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-            </select>
+            <AppSelect value={locationFilter} onChange={(v) => { setLocationFilter(v ?? ""); setPage(1); }} options={locations.map((l) => ({ value: l._id, label: l.name }))} placeholder="All Locations" clearable size="sm" />
+            <AppSelect value={typeFilter} onChange={(v) => { setTypeFilter(v ?? ""); setPage(1); }} options={Object.entries(TYPE_LABELS).map(([k, v]) => ({ value: k, label: v.label }))} placeholder="All Types" clearable size="sm" />
             <div className="flex items-center gap-1 text-xs text-slate-500">
               <span>From</span>
               <input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(1); }}
@@ -216,24 +209,13 @@ const InvStockMovements = () => {
         }>
           <form id="manual-entry-form" onSubmit={handleSave} className="grid grid-cols-2 gap-3">
             <div>
-              <label className={labelClass}>Location *</label>
-              <select required className={inputClass} value={form.location} onChange={set("location")}>
-                <option value="">— Select —</option>
-                {locations.map((l) => <option key={l._id} value={l._id}>{l.name}</option>)}
-              </select>
+              <AppSelect label="Location" required value={form.location} onChange={(v) => setForm((f) => ({ ...f, location: v ?? "" }))} options={locations.map((l) => ({ value: l._id, label: l.name }))} placeholder="— Select —" size="md" searchable />
             </div>
             <div>
-              <label className={labelClass}>Product *</label>
-              <select required className={inputClass} value={form.product} onChange={set("product")}>
-                <option value="">— Select —</option>
-                {products.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}
-              </select>
+              <AppSelect label="Product" required value={form.product} onChange={(v) => setForm((f) => ({ ...f, product: v ?? "" }))} options={products.map((p) => ({ value: p._id, label: p.name }))} placeholder="— Select —" size="md" searchable />
             </div>
             <div>
-              <label className={labelClass}>Entry Type *</label>
-              <select required className={inputClass} value={form.type} onChange={set("type")}>
-                {MANUAL_TYPES.map((t) => <option key={t} value={t}>{TYPE_LABELS[t]?.label || t}</option>)}
-              </select>
+              <AppSelect label="Entry Type" required value={form.type} onChange={(v) => setForm((f) => ({ ...f, type: v ?? "" }))} options={MANUAL_TYPES.map((t) => ({ value: t, label: TYPE_LABELS[t]?.label || t }))} size="md" />
             </div>
             <div>
               <label className={labelClass}>

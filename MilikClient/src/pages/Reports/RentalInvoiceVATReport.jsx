@@ -5,6 +5,7 @@ import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import { FaFileDownload, FaFilter, FaPercent, FaPrint, FaSyncAlt } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
+import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getTenantInvoices } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
@@ -281,18 +282,27 @@ const RentalInvoiceVATReport = () => {
                     className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
-                <select value={filters.propertyId} onChange={setFilter("propertyId")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
-                  <option value="all">All properties</option>
-                  {properties.map((property) => (
-                    <option key={property._id} value={property._id}>{property.propertyName || property.name}</option>
-                  ))}
-                </select>
-                <select value={filters.category} onChange={setFilter("category")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
-                  <option value="all">All charge types</option>
-                  <option value="RENT_CHARGE">Rent</option>
-                  <option value="UTILITY_CHARGE">Utility</option>
-                  <option value="LATE_PENALTY_CHARGE">Late penalty</option>
-                </select>
+                <AppSelect
+                  value={filters.propertyId === "all" ? "" : filters.propertyId}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "all" }))}
+                  options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))}
+                  placeholder="All properties"
+                  searchable
+                  clearable
+                  size="sm"
+                />
+                <AppSelect
+                  value={filters.category === "all" ? "" : filters.category}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, category: v ?? "all" }))}
+                  options={[
+                    { value: "RENT_CHARGE", label: "Rent" },
+                    { value: "UTILITY_CHARGE", label: "Utility" },
+                    { value: "LATE_PENALTY_CHARGE", label: "Late penalty" },
+                  ]}
+                  placeholder="All charge types"
+                  clearable
+                  size="sm"
+                />
                 <span className="shrink-0 rounded border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700"><FaPercent className="inline mr-1" />{filteredRows.length} rows</span>
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 {[

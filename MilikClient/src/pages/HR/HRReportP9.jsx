@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTabState } from '../../hooks/useTabState';
 import { useSelector } from 'react-redux';
 import { FaFileAlt, FaRedoAlt, FaPrint, FaSearch } from 'react-icons/fa';
+import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import PrintLetterhead from '../../components/HR/PrintLetterhead';
 import { selectCurrentCompany } from '../../redux/selectors';
@@ -207,13 +208,12 @@ export default function HRReportP9() {
                   className="h-7 w-full rounded border border-slate-200 bg-slate-50 pl-7 pr-3 text-[11px] text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                 />
               </div>
-              <select
+              <AppSelect
                 value={year}
-                onChange={(e) => setYear(Number(e.target.value))}
-                className="h-8 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-              >
-                {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
-              </select>
+                onChange={(v) => setYear(v ?? currentYear)}
+                options={YEARS.map((y) => ({ value: y, label: String(y) }))}
+                size="sm"
+              />
             </div>
             <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
               {filtered.map((e) => (

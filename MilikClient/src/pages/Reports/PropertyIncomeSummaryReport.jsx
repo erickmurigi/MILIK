@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTabState } from '../../hooks/useTabState';
 import { useDispatch, useSelector } from 'react-redux';
+import AppSelect from '../../components/common/AppSelect';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { selectCurrentUser, selectCurrentCompany, selectAllProperties, selectAllLandlords } from '../../redux/selectors';
 import { getLandlords, getPropertyIncomeSummaryReport } from '../../redux/apiCalls';
@@ -353,15 +354,25 @@ const PropertyIncomeSummaryReport = () => {
               <div className={`grid gap-1.5 md:grid-cols-2 ${isLandlordMode ? 'xl:grid-cols-3' : 'xl:grid-cols-4'}`}>
                 <input type="date" value={filters.startDate} onChange={setFilter("startDate")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 <input type="date" value={filters.endDate} onChange={setFilter("endDate")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                <select value={filters.propertyId} onChange={setFilter("propertyId")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
-                  <option value="">All properties</option>
-                  {properties.map((p) => <option key={p._id} value={p._id}>{p.propertyName || p.name}</option>)}
-                </select>
+                <AppSelect
+                  value={filters.propertyId}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? '' }))}
+                  options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))}
+                  placeholder="All properties"
+                  searchable
+                  clearable
+                  size="sm"
+                />
                 {!isLandlordMode && (
-                  <select value={filters.landlordId} onChange={setFilter("landlordId")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
-                    <option value="">All landlords</option>
-                    {landlords.map((l) => <option key={l._id} value={l._id}>{l.landlordName || l.name}</option>)}
-                  </select>
+                  <AppSelect
+                    value={filters.landlordId}
+                    onChange={(v) => setFilters((prev) => ({ ...prev, landlordId: v ?? '' }))}
+                    options={landlords.map((l) => ({ value: l._id, label: l.landlordName || l.name }))}
+                    placeholder="All landlords"
+                    searchable
+                    clearable
+                    size="sm"
+                  />
                 )}
               </div>
               <div className="mt-1.5 flex flex-wrap justify-end gap-1.5">

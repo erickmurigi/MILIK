@@ -584,22 +584,34 @@ const JournalEntries = () => {
                     className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
-                <select value={filters.status} onChange={(e) => { setFilter("status")(e); setCurrentPage(1); }} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
-                  <option value="all">All Statuses</option>
-                  <option value="draft">Draft</option>
-                  <option value="posted">Posted</option>
-                  <option value="reversed">Reversed</option>
-                </select>
-                <select value={filters.journalType} onChange={(e) => { setFilter("journalType")(e); setCurrentPage(1); }} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
-                  <option value="all">All Journal Types</option>
-                  {JOURNAL_TYPES.map((type) => (
-                    <option key={type.value} value={type.value}>{getJournalTypePresentation(type.value)?.label || type.label}</option>
-                  ))}
-                </select>
-                <select value={filters.propertyId} onChange={(e) => { setFilter("propertyId")(e); setCurrentPage(1); }} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
-                  <option value="all">All Properties</option>
-                  {propertyOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-                </select>
+                <AppSelect
+                  value={filters.status !== "all" ? filters.status : ""}
+                  onChange={(v) => { setFilters((p) => ({ ...p, status: v ?? "all" })); setCurrentPage(1); }}
+                  options={[
+                    { value: "draft", label: "Draft" },
+                    { value: "posted", label: "Posted" },
+                    { value: "reversed", label: "Reversed" },
+                  ]}
+                  placeholder="All Statuses"
+                  size="sm"
+                  clearable
+                />
+                <AppSelect
+                  value={filters.journalType !== "all" ? filters.journalType : ""}
+                  onChange={(v) => { setFilters((p) => ({ ...p, journalType: v ?? "all" })); setCurrentPage(1); }}
+                  options={JOURNAL_TYPES.map((type) => ({ value: type.value, label: getJournalTypePresentation(type.value)?.label || type.label }))}
+                  placeholder="All Journal Types"
+                  size="sm"
+                  clearable
+                />
+                <AppSelect
+                  value={filters.propertyId !== "all" ? filters.propertyId : ""}
+                  onChange={(v) => { setFilters((p) => ({ ...p, propertyId: v ?? "all" })); setCurrentPage(1); }}
+                  options={propertyOptions}
+                  placeholder="All Properties"
+                  size="sm"
+                  clearable
+                />
                 <button onClick={() => { setFilters({ search: "", status: "all", journalType: "all", propertyId: "all" }); setCurrentPage(1); }} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
                   <FaFilter size={9} /> Reset
                 </button>
@@ -671,7 +683,7 @@ const JournalEntries = () => {
             </div>
             <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
               <div className="font-semibold">Showing <span className="font-bold text-slate-900">{journals.length === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1}</span> to <span className="font-bold text-slate-900">{Math.min(safeCurrentPage * pageSize, serverTotal)}</span> of <span className="font-bold text-slate-900">{serverTotal}</span> journal(s)</div>
-              <div className="flex items-center gap-3"><div className="flex items-center gap-1.5"><span className="font-semibold text-slate-500">Per page:</span><select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }} className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none">{[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}</select></div><button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button><span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span><button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button></div>
+              <div className="flex items-center gap-3"><div className="flex items-center gap-1.5"><span className="font-semibold text-slate-500">Per page:</span><AppSelect value={pageSize} onChange={(v) => { setPageSize(Number(v ?? 25)); setCurrentPage(1); }} options={[25, 50, 100, 200].map((n) => ({ value: n, label: String(n) }))} size="sm" /></div><button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button><span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span><button onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))} disabled={safeCurrentPage === totalPages} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Next</button></div>
             </div>
           </div>
         </div>

@@ -4,6 +4,7 @@ import { FaCashRegister, FaPlus, FaRedoAlt, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import InventoryShell from "./InventoryShell";
 import { inventoryApi } from "../../services/inventoryApi";
+import AppSelect from "../../components/common/AppSelect";
 
 const labelClass = "mb-0.5 block text-xs font-semibold text-slate-700";
 const inputClass = "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
@@ -127,14 +128,7 @@ const InvTills = () => {
             {activeCount > 0 && <> &nbsp;·&nbsp; Active: <strong className="text-emerald-600">{activeCount}</strong></>}
           </span>
           <div className="ml-auto">
-            <select
-              value={locFilter}
-              onChange={(e) => setLocFilter(e.target.value)}
-              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#0B3B2E]"
-            >
-              <option value="">All Locations</option>
-              {locations.map((l) => <option key={l._id} value={l._id}>{l.name}</option>)}
-            </select>
+            <AppSelect value={locFilter} onChange={(v) => setLocFilter(v ?? "")} options={locations.map((l) => ({ value: l._id, label: l.name }))} placeholder="All Locations" clearable size="sm" />
           </div>
         </div>
 
@@ -205,11 +199,7 @@ const InvTills = () => {
           <form id="till-form" onSubmit={handleSave} className="space-y-3">
             {!editing && (
               <div>
-                <label className={labelClass}>Location *</label>
-                <select required className={inputClass} value={form.location} onChange={set("location")}>
-                  <option value="">— Select location —</option>
-                  {locations.map((l) => <option key={l._id} value={l._id}>{l.name}</option>)}
-                </select>
+                <AppSelect label="Location" required value={form.location} onChange={(v) => setForm((f) => ({ ...f, location: v ?? "" }))} options={locations.map((l) => ({ value: l._id, label: l.name }))} placeholder="— Select location —" size="md" searchable />
               </div>
             )}
             {editing && (

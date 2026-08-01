@@ -6,6 +6,7 @@ import {
   FaEdit, FaPlus, FaSyncAlt, FaTimes, FaTrash, FaTools,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import AppSelect from "../../components/common/AppSelect";
 import {
   getFixedAssets, createFixedAsset, updateFixedAsset,
   disposeFixedAsset, getChartOfAccounts,
@@ -210,9 +211,10 @@ const FixedAssets = () => {
 
   // ── Account options ─────────────────────────────────────────────────────────
   const accountOptions = useMemo(
-    () => accounts.map((a) => (
-      <option key={a._id} value={a._id}>{a.code ? `${a.code} — ` : ""}{a.name}</option>
-    )),
+    () => accounts.map((a) => ({
+      value: a._id,
+      label: `${a.code ? `${a.code} — ` : ""}${a.name}`,
+    })),
     [accounts]
   );
 
@@ -243,23 +245,27 @@ const FixedAssets = () => {
           <div className="mx-1 h-4 w-px bg-slate-200" />
 
           {/* Filters */}
-          <select
-            value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
-            className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-          >
-            <option value="">All Statuses</option>
-            <option value="active">Active</option>
-            <option value="fully_depreciated">Fully Depreciated</option>
-            <option value="disposed">Disposed</option>
-          </select>
+          <AppSelect
+            size="sm"
+            clearable
+            placeholder="All Statuses"
+            value={filterStatus}
+            onChange={(v) => setFilterStatus(v ?? "")}
+            options={[
+              { value: "active", label: "Active" },
+              { value: "fully_depreciated", label: "Fully Depreciated" },
+              { value: "disposed", label: "Disposed" },
+            ]}
+          />
 
-          <select
-            value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}
-            className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-          >
-            <option value="">All Categories</option>
-            {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
+          <AppSelect
+            size="sm"
+            clearable
+            placeholder="All Categories"
+            value={filterCategory}
+            onChange={(v) => setFilterCategory(v ?? "")}
+            options={CATEGORIES.map((c) => ({ value: c, label: c }))}
+          />
 
           <input
             value={search} onChange={(e) => setSearch(e.target.value)}
@@ -317,11 +323,14 @@ const FixedAssets = () => {
               </div>
               <div>
                 <label className="mb-0.5 block text-[9px] font-semibold uppercase text-slate-400">Category</label>
-                <select value={form.category} onChange={(e) => fc("category", e.target.value)}
-                  className="h-7 w-full rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                  <option value="">Select…</option>
-                  {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <AppSelect
+                  size="sm"
+                  clearable
+                  placeholder="Select…"
+                  value={form.category}
+                  onChange={(v) => fc("category", v ?? "")}
+                  options={CATEGORIES.map((c) => ({ value: c, label: c }))}
+                />
               </div>
               <div>
                 <label className="mb-0.5 block text-[9px] font-semibold uppercase text-slate-400">Purchase Date *</label>
@@ -342,10 +351,12 @@ const FixedAssets = () => {
               </div>
               <div>
                 <label className="mb-0.5 block text-[9px] font-semibold uppercase text-slate-400">Dep. Method</label>
-                <select value={form.depreciationMethod} onChange={(e) => fc("depreciationMethod", e.target.value)}
-                  className="h-7 w-full rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                  {METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-                </select>
+                <AppSelect
+                  size="sm"
+                  value={form.depreciationMethod}
+                  onChange={(v) => fc("depreciationMethod", v ?? "straight_line")}
+                  options={METHODS.map((m) => ({ value: m.value, label: m.label }))}
+                />
               </div>
 
               {form.depreciationMethod === "straight_line" && (
@@ -376,29 +387,38 @@ const FixedAssets = () => {
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <div>
                   <label className="mb-0.5 block text-[9px] font-semibold uppercase text-slate-400">Asset Account *</label>
-                  <select value={form.assetAccount} onChange={(e) => fc("assetAccount", e.target.value)}
-                    className="h-7 w-full rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                    <option value="">Select account…</option>
-                    {accountOptions}
-                  </select>
+                  <AppSelect
+                    size="sm"
+                    searchable
+                    placeholder="Select account…"
+                    value={form.assetAccount}
+                    onChange={(v) => fc("assetAccount", v ?? "")}
+                    options={accountOptions}
+                  />
                 </div>
                 {form.depreciationMethod !== "none" && (
                   <>
                     <div>
                       <label className="mb-0.5 block text-[9px] font-semibold uppercase text-slate-400">Dep. Expense Account *</label>
-                      <select value={form.depreciationExpenseAccount} onChange={(e) => fc("depreciationExpenseAccount", e.target.value)}
-                        className="h-7 w-full rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                        <option value="">Select account…</option>
-                        {accountOptions}
-                      </select>
+                      <AppSelect
+                        size="sm"
+                        searchable
+                        placeholder="Select account…"
+                        value={form.depreciationExpenseAccount}
+                        onChange={(v) => fc("depreciationExpenseAccount", v ?? "")}
+                        options={accountOptions}
+                      />
                     </div>
                     <div>
                       <label className="mb-0.5 block text-[9px] font-semibold uppercase text-slate-400">Accum. Dep. Account *</label>
-                      <select value={form.accumulatedDepreciationAccount} onChange={(e) => fc("accumulatedDepreciationAccount", e.target.value)}
-                        className="h-7 w-full rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                        <option value="">Select account…</option>
-                        {accountOptions}
-                      </select>
+                      <AppSelect
+                        size="sm"
+                        searchable
+                        placeholder="Select account…"
+                        value={form.accumulatedDepreciationAccount}
+                        onChange={(v) => fc("accumulatedDepreciationAccount", v ?? "")}
+                        options={accountOptions}
+                      />
                     </div>
                   </>
                 )}

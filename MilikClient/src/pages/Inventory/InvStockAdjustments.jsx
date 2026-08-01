@@ -5,6 +5,7 @@ import { FaArrowDown, FaArrowUp, FaClipboardCheck, FaPlus, FaRedoAlt, FaTimes } 
 import { toast } from "react-toastify";
 import InventoryShell from "./InventoryShell";
 import { inventoryApi, formatMoney } from "../../services/inventoryApi";
+import AppSelect from "../../components/common/AppSelect";
 
 const ADJ_TYPES = {
   adjustment: {
@@ -137,16 +138,8 @@ const InvStockAdjustments = () => {
             Adjustments: <strong className="text-[#0B3B2E]">{total}</strong>
           </span>
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            <select value={locFilter} onChange={(e) => { setLocFilter(e.target.value); setPage(1); }}
-              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#0B3B2E]">
-              <option value="">All Locations</option>
-              {locations.map((l) => <option key={l._id} value={l._id}>{l.name}</option>)}
-            </select>
-            <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
-              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#0B3B2E]">
-              <option value="">All Types</option>
-              {Object.entries(ADJ_TYPES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-            </select>
+            <AppSelect value={locFilter} onChange={(v) => { setLocFilter(v ?? ""); setPage(1); }} options={locations.map((l) => ({ value: l._id, label: l.name }))} placeholder="All Locations" clearable size="sm" />
+            <AppSelect value={typeFilter} onChange={(v) => { setTypeFilter(v ?? ""); setPage(1); }} options={Object.entries(ADJ_TYPES).map(([k, v]) => ({ value: k, label: v.label }))} placeholder="All Types" clearable size="sm" />
           </div>
         </div>
 
@@ -222,18 +215,10 @@ const InvStockAdjustments = () => {
             <form id="adj-form" onSubmit={handleSave} className="p-4 space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={labelClass}>Location *</label>
-                  <select required className={inputClass} value={form.location} onChange={set("location")}>
-                    <option value="">— Select —</option>
-                    {locations.map((l) => <option key={l._id} value={l._id}>{l.name}</option>)}
-                  </select>
+                  <AppSelect label="Location" required value={form.location} onChange={(v) => setForm((f) => ({ ...f, location: v ?? "" }))} options={locations.map((l) => ({ value: l._id, label: l.name }))} placeholder="— Select —" size="md" searchable />
                 </div>
                 <div>
-                  <label className={labelClass}>Product *</label>
-                  <select required className={inputClass} value={form.product} onChange={set("product")}>
-                    <option value="">— Select —</option>
-                    {products.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}
-                  </select>
+                  <AppSelect label="Product" required value={form.product} onChange={(v) => setForm((f) => ({ ...f, product: v ?? "" }))} options={products.map((p) => ({ value: p._id, label: p.name }))} placeholder="— Select —" size="md" searchable />
                 </div>
               </div>
 
@@ -254,10 +239,7 @@ const InvStockAdjustments = () => {
               )}
 
               <div>
-                <label className={labelClass}>Adjustment Type *</label>
-                <select required className={inputClass} value={form.type} onChange={set("type")}>
-                  {Object.entries(ADJ_TYPES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                </select>
+                <AppSelect label="Adjustment Type" required value={form.type} onChange={(v) => setForm((f) => ({ ...f, type: v ?? "" }))} options={Object.entries(ADJ_TYPES).map(([k, v]) => ({ value: k, label: v.label }))} size="md" />
                 {typeInfo && <p className="mt-1 text-[10px] text-slate-500">{typeInfo.desc}</p>}
               </div>
 

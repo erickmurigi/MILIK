@@ -8,6 +8,7 @@ import PrintLetterhead from '../../components/HR/PrintLetterhead';
 import { selectCurrentCompany } from '../../redux/selectors';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
+import AppSelect from "../../components/common/AppSelect";
 
 const currentYear = new Date().getFullYear();
 const YEARS = Array.from({ length: 6 }, (_, i) => currentYear - 5 + i);
@@ -186,17 +187,9 @@ export default function LeaveBalances() {
         <div className="flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-4 py-2.5 print-hide">
           <div className="flex flex-wrap items-center gap-2">
             <FaFilter size={10} className="text-slate-400" />
-            <select value={year} onChange={(e) => setYear(Number(e.target.value))} className={inputCls}>
-              {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
-            </select>
-            <select value={departmentId} onChange={(e) => setDeptId(e.target.value)} className={inputCls}>
-              <option value="">All departments</option>
-              {departments.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
-            </select>
-            <select value={leaveTypeId} onChange={(e) => setLtId(e.target.value)} className={inputCls}>
-              <option value="">All leave types</option>
-              {leaveTypes.map((t) => <option key={t._id} value={t._id}>{t.name}</option>)}
-            </select>
+            <AppSelect value={year} onChange={(v) => setYear(Number(v ?? currentYear))} options={YEARS.map((y) => ({ value: y, label: String(y) }))} size="sm" />
+            <AppSelect value={departmentId} onChange={(v) => setDeptId(v ?? "")} options={departments.map((d) => ({ value: d._id, label: d.name }))} placeholder="All departments" clearable searchable size="sm" />
+            <AppSelect value={leaveTypeId} onChange={(v) => setLtId(v ?? "")} options={leaveTypes.map((t) => ({ value: t._id, label: t.name }))} placeholder="All leave types" clearable size="sm" />
             {rows.length > 0 && (
               <span className="ml-auto text-[11px] font-semibold text-slate-500">
                 {rows.length} balance{rows.length !== 1 ? 's' : ''} · {uniqueEmployeeCount} employees

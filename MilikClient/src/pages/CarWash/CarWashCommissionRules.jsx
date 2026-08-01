@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import { carWashApi, normalizeListPayload } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
+import AppSelect from "../../components/common/AppSelect";
 
 const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
@@ -175,11 +176,16 @@ const CarWashCommissionRules = () => {
               <input className={inputClass} value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} required />
             </div>
             <div>
-              <label className={labelClass}>Commission Type</label>
-              <select className={inputClass} value={form.commissionType} onChange={(e) => setForm((p) => ({ ...p, commissionType: e.target.value }))}>
-                <option value="fixed">Fixed amount (Ksh)</option>
-                <option value="percentage">Percentage of job price</option>
-              </select>
+              <AppSelect
+                label="Commission Type"
+                value={form.commissionType}
+                onChange={(v) => setForm((p) => ({ ...p, commissionType: v ?? "fixed" }))}
+                options={[
+                  { value: "fixed", label: "Fixed amount (Ksh)" },
+                  { value: "percentage", label: "Percentage of job price" },
+                ]}
+                size="md"
+              />
             </div>
             <div>
               <label className={labelClass}>Rate ({form.commissionType === "percentage" ? "%" : "Ksh"}) *</label>
@@ -198,18 +204,26 @@ const CarWashCommissionRules = () => {
               )}
             </div>
             <div>
-              <label className={labelClass}>Applies to Service</label>
-              <select className={inputClass} value={form.service} onChange={(e) => setForm((p) => ({ ...p, service: e.target.value }))}>
-                <option value="">All services</option>
-                {services.map((s) => <option key={s._id} value={s._id}>{s.category ? `${s.category} — ${s.name}` : s.name}</option>)}
-              </select>
+              <AppSelect
+                label="Applies to Service"
+                value={form.service}
+                onChange={(v) => setForm((p) => ({ ...p, service: v ?? "" }))}
+                options={services.map((s) => ({ value: s._id, label: s.category ? `${s.category} — ${s.name}` : s.name }))}
+                placeholder="All services"
+                size="md"
+                searchable
+              />
             </div>
             <div>
-              <label className={labelClass}>Applies to Staff</label>
-              <select className={inputClass} value={form.staff} onChange={(e) => setForm((p) => ({ ...p, staff: e.target.value }))}>
-                <option value="">All staff</option>
-                {staff.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
-              </select>
+              <AppSelect
+                label="Applies to Staff"
+                value={form.staff}
+                onChange={(v) => setForm((p) => ({ ...p, staff: v ?? "" }))}
+                options={staff.map((s) => ({ value: s._id, label: s.name }))}
+                placeholder="All staff"
+                size="md"
+                searchable
+              />
             </div>
             <div>
               <label className={labelClass}>Priority</label>

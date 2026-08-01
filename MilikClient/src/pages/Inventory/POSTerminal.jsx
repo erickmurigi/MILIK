@@ -10,6 +10,7 @@ import {
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { inventoryApi, formatMoney } from "../../services/inventoryApi";
+import AppSelect from "../../components/common/AppSelect";
 
 const round2 = (n) => Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100;
 
@@ -420,11 +421,7 @@ const POSTerminal = () => {
           <div className="w-full max-w-xs space-y-3">
             <div>
               <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-emerald-300">1. Select Location</label>
-              <select value={selectedLocation} onChange={(e) => setSelectedLocation(e.target.value)}
-                className="w-full bg-white px-3 py-2 text-sm outline-none">
-                <option value="">— Choose location —</option>
-                {locations.map((l) => <option key={l._id} value={l._id}>{l.name}</option>)}
-              </select>
+              <AppSelect value={selectedLocation} onChange={(v) => setSelectedLocation(v ?? "")} options={locations.map((l) => ({ value: l._id, label: l.name }))} placeholder="— Choose location —" size="md" />
               {selectedLocation && !tills.length && (
                 <p className="mt-1 text-center text-[11px] text-amber-300">
                   No tills at this location. Add one in Setup → Tills.
@@ -434,11 +431,7 @@ const POSTerminal = () => {
             {selectedLocation && tills.length > 0 && (
               <div>
                 <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-emerald-300">2. Select Till / Register</label>
-                <select value={selectedTill} onChange={(e) => setSelectedTill(e.target.value)}
-                  className="w-full bg-white px-3 py-2 text-sm outline-none">
-                  <option value="">— Choose till —</option>
-                  {tills.map((t) => <option key={t._id} value={t._id}>{t.name}</option>)}
-                </select>
+                <AppSelect value={selectedTill} onChange={(v) => setSelectedTill(v ?? "")} options={tills.map((t) => ({ value: t._id, label: t.name }))} placeholder="— Choose till —" size="md" />
               </div>
             )}
           </div>
@@ -872,10 +865,7 @@ const POSTerminal = () => {
                 </div>
                 {payments.map((p, idx) => (
                   <div key={idx} className="mb-1.5 flex items-center gap-2">
-                    <select value={p.method} onChange={(e) => setPayLine(idx, "method", e.target.value)}
-                      className="border border-slate-200 px-1.5 py-1.5 text-xs outline-none focus:border-[#0B3B2E]">
-                      {METHODS.map((m) => <option key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>)}
-                    </select>
+                    <AppSelect value={p.method} onChange={(v) => setPayLine(idx, "method", v ?? "")} options={METHODS.map((m) => ({ value: m, label: m.charAt(0).toUpperCase() + m.slice(1) }))} size="sm" />
                     <input type="number" min="0" step="0.01" value={p.amount} onChange={(e) => setPayLine(idx, "amount", e.target.value)}
                       className="flex-1 border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-[#0B3B2E]" placeholder="Amount" />
                     {payments.length > 1 && (

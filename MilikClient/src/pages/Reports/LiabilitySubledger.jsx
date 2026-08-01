@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "../../redux/selectors";
 import { getLiabilitySubledger } from "../../redux/apiCalls";
+import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import {
   FaBuilding, FaChevronDown, FaChevronRight, FaFileDownload, FaSyncAlt,
@@ -454,16 +455,15 @@ const LiabilitySubledger = () => {
         <div className="mx-1 h-4 w-px bg-slate-200" />
 
         <span className="text-[11px] text-slate-500">Property</span>
-        <select
+        <AppSelect
           value={filters.property}
-          onChange={(e) => setFilters((p) => ({ ...p, property: e.target.value }))}
-          className="rounded border border-slate-200 bg-white px-2 py-1 text-[11px] focus:border-[#0B3B2E] focus:outline-none"
-        >
-          <option value="">All properties</option>
-          {activeProperties.map((p) => (
-            <option key={p._id} value={p._id}>{p.propertyName}</option>
-          ))}
-        </select>
+          onChange={(v) => setFilters((p) => ({ ...p, property: v ?? '' }))}
+          options={activeProperties.map((p) => ({ value: p._id, label: p.propertyName }))}
+          placeholder="All properties"
+          searchable
+          clearable
+          size="sm"
+        />
 
         <button
           onClick={() => load(tab, filters)}

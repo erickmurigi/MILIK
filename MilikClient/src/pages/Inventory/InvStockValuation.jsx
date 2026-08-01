@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { FaBoxes, FaRedoAlt } from "react-icons/fa";
 import InventoryShell from "./InventoryShell";
 import { inventoryApi, formatMoney } from "../../services/inventoryApi";
+import AppSelect from "../../components/common/AppSelect";
 
 const InvStockValuation = () => {
   const [locFilter, setLocFilter] = useState("");
@@ -55,11 +56,7 @@ const InvStockValuation = () => {
             <span>Stock Value: <strong className="text-[#0B3B2E]">{formatMoney(grandTotal)}</strong></span>
           </div>
           <div className="ml-auto">
-            <select value={locFilter} onChange={(e) => setLocFilter(e.target.value)}
-              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#0B3B2E]">
-              <option value="">All Locations</option>
-              {locations.map((l) => <option key={l._id} value={l._id}>{l.name}</option>)}
-            </select>
+            <AppSelect value={locFilter} onChange={(v) => setLocFilter(v ?? "")} options={locations.map((l) => ({ value: l._id, label: l.name }))} placeholder="All Locations" clearable size="sm" />
           </div>
         </div>
 

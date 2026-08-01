@@ -5,6 +5,7 @@ import {
   FaTag, FaPlus, FaEdit, FaTrash, FaToggleOn, FaToggleOff,
   FaRedoAlt, FaCheck, FaTimes, FaSearch,
 } from 'react-icons/fa';
+import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import MilikConfirmDialog from '../../components/Modals/MilikConfirmDialog';
 import { adminRequests } from '../../utils/requestMethods';
@@ -45,17 +46,32 @@ function LeaveTypeForm({ initial = BLANK, onSave, onCancel, saving }) {
           <input type="number" min="0" value={f.maxCarryover} onChange={set('maxCarryover')} className={inputCls} />
         </div>
         <div>
-          <label className="mb-0.5 block text-xs font-semibold text-slate-700">Applicable To</label>
-          <select value={f.applicableTo} onChange={set('applicableTo')} className={inputCls}>
-            <option>All</option><option>Permanent</option><option>Contract</option>
-            <option>Casual</option><option>Intern</option>
-          </select>
+          <AppSelect
+            label="Applicable To"
+            value={f.applicableTo}
+            onChange={(v) => setF((p) => ({ ...p, applicableTo: v ?? 'All' }))}
+            options={[
+              { value: 'All', label: 'All' },
+              { value: 'Permanent', label: 'Permanent' },
+              { value: 'Contract', label: 'Contract' },
+              { value: 'Casual', label: 'Casual' },
+              { value: 'Intern', label: 'Intern' },
+            ]}
+            size="md"
+          />
         </div>
         <div>
-          <label className="mb-0.5 block text-xs font-semibold text-slate-700">Gender Restriction</label>
-          <select value={f.genderRestriction} onChange={set('genderRestriction')} className={inputCls}>
-            <option>None</option><option>Male</option><option>Female</option>
-          </select>
+          <AppSelect
+            label="Gender Restriction"
+            value={f.genderRestriction}
+            onChange={(v) => setF((p) => ({ ...p, genderRestriction: v ?? 'None' }))}
+            options={[
+              { value: 'None', label: 'None' },
+              { value: 'Male', label: 'Male' },
+              { value: 'Female', label: 'Female' },
+            ]}
+            size="md"
+          />
         </div>
         <div>
           <label className="mb-0.5 block text-xs font-semibold text-slate-700">Min. Service (days)</label>

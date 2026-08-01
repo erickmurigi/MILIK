@@ -1,6 +1,7 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useEntityCache } from "../../hooks/useEntityCache";
+import AppSelect from "../../components/common/AppSelect";
 import {
   selectCurrentUser,
   selectCurrentCompany,
@@ -762,23 +763,41 @@ const TenantDeposits = () => {
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 <input type="text" value={draftFilters.invoiceNo} onChange={(e) => setDraftFilters((prev) => ({ ...prev, invoiceNo: normalizeUppercaseInput(e.target.value) }))} placeholder="Invoice #" className="h-7 w-24 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
                 <input type="text" value={draftFilters.tenantName} onChange={setFilter("tenantName")} placeholder="Tenant" className="h-7 w-24 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <select value={draftFilters.propertyId} onChange={(e) => setDraftFilters((prev) => ({ ...prev, propertyId: e.target.value, unitId: "any" }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                  <option value="any">Property</option>
-                  {activeProperties.map((property) => (<option key={property._id} value={property._id}>{formatPropertyName(property)}</option>))}
-                </select>
-                <select value={draftFilters.unitId} onChange={setFilter("unitId")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                  <option value="any">Unit</option>
-                  {unitsForFilter.map((unit) => (<option key={unit._id} value={unit._id}>{formatUnitName(unit)}</option>))}
-                </select>
-                <select value={draftFilters.depositTypeId} onChange={setFilter("depositTypeId")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                  <option value="any">Deposit Type</option>
-                  {activeDepositTypes.map((type) => (<option key={type._id || type.code || type.name} value={type._id || `deposit:${slugify(type.code || type.name)}`}>{type.name}</option>))}
-                </select>
-                <select value={draftFilters.holder} onChange={setFilter("holder")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                  <option value="any">{holderColumnLabel}</option>
-                  {!isLandlordWorkspace && <option value="manager">Management Company</option>}
-                  <option value="landlord">{isLandlordWorkspace ? "Owner / Landlord" : "Landlord"}</option>
-                </select>
+                <AppSelect
+                  size="sm"
+                  clearable
+                  placeholder="Property"
+                  value={draftFilters.propertyId}
+                  onChange={(v) => setDraftFilters((prev) => ({ ...prev, propertyId: v ?? "any", unitId: "any" }))}
+                  options={activeProperties.map((property) => ({ value: property._id, label: formatPropertyName(property) }))}
+                />
+                <AppSelect
+                  size="sm"
+                  clearable
+                  placeholder="Unit"
+                  value={draftFilters.unitId}
+                  onChange={(v) => setDraftFilters((prev) => ({ ...prev, unitId: v ?? "any" }))}
+                  options={unitsForFilter.map((unit) => ({ value: unit._id, label: formatUnitName(unit) }))}
+                />
+                <AppSelect
+                  size="sm"
+                  clearable
+                  placeholder="Deposit Type"
+                  value={draftFilters.depositTypeId}
+                  onChange={(v) => setDraftFilters((prev) => ({ ...prev, depositTypeId: v ?? "any" }))}
+                  options={activeDepositTypes.map((type) => ({ value: type._id || `deposit:${slugify(type.code || type.name)}`, label: type.name }))}
+                />
+                <AppSelect
+                  size="sm"
+                  clearable
+                  placeholder={holderColumnLabel}
+                  value={draftFilters.holder}
+                  onChange={(v) => setDraftFilters((prev) => ({ ...prev, holder: v ?? "any" }))}
+                  options={[
+                    ...(!isLandlordWorkspace ? [{ value: "manager", label: "Management Company" }] : []),
+                    { value: "landlord", label: isLandlordWorkspace ? "Owner / Landlord" : "Landlord" },
+                  ]}
+                />
                 <input type="date" value={draftFilters.fromDate} onChange={setFilter("fromDate")} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
                 <input type="date" value={draftFilters.toDate} onChange={setFilter("toDate")} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
                 <button onClick={applySearch} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSearch size={10} /></button>
@@ -1002,50 +1021,40 @@ const TenantDeposits = () => {
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div>
                   <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Property Filter</label>
-                  <select
+                  <AppSelect
+                    size="md"
+                    clearable
+                    placeholder="All properties"
                     value={tenantPropertyFilter}
-                    onChange={(e) => {
-                      setTenantPropertyFilter(e.target.value);
+                    onChange={(v) => {
+                      setTenantPropertyFilter(v ?? "any");
                       setDepositForm((prev) => ({ ...prev, tenantId: "" }));
                     }}
-                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  >
-                    <option value="any">All properties</option>
-                    {activeProperties.map((property) => (
-                      <option key={property._id} value={property._id}>
-                        {formatPropertyName(property)}
-                      </option>
-                    ))}
-                  </select>
+                    options={activeProperties.map((property) => ({ value: property._id, label: formatPropertyName(property) }))}
+                  />
                 </div>
                 <div>
                   <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tenant <span className="text-red-500">*</span></label>
-                  <select
+                  <AppSelect
+                    size="md"
+                    searchable
+                    placeholder="Select tenant"
                     value={depositForm.tenantId}
-                    onChange={(e) => updateDepositTenant(e.target.value)}
-                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  >
-                    <option value="">Select tenant</option>
-                    {tenantOptions.map((option) => (
-                      <option key={option.tenantId} value={option.tenantId}>
-                        {option.tenantName} - {option.propertyName} / {option.unitName}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(v) => updateDepositTenant(v ?? "")}
+                    options={tenantOptions.map((option) => ({
+                      value: option.tenantId,
+                      label: `${option.tenantName} - ${option.propertyName} / ${option.unitName}`,
+                    }))}
+                  />
                 </div>
                 <div>
                   <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Deposit Type *</label>
-                  <select
+                  <AppSelect
+                    size="md"
                     value={depositForm.depositTypeId}
-                    onChange={(e) => updateDepositType(e.target.value)}
-                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  >
-                    {activeDepositTypes.map((type) => (
-                      <option key={type._id || type.code || type.name} value={type._id || type.code || type.name}>
-                        {type.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(v) => updateDepositType(v ?? "")}
+                    options={activeDepositTypes.map((type) => ({ value: type._id || type.code || type.name, label: type.name }))}
+                  />
                 </div>
                 <div>
                   <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Amount *</label>
@@ -1078,15 +1087,16 @@ const TenantDeposits = () => {
                 </div>
                 <div>
                   <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">{holderColumnLabel}</label>
-                  <select
+                  <AppSelect
+                    size="md"
                     value={depositForm.depositHeldBy}
-                    onChange={(e) => setDepositForm((prev) => ({ ...prev, depositHeldBy: e.target.value }))}
-                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    onChange={(v) => setDepositForm((prev) => ({ ...prev, depositHeldBy: v ?? "landlord" }))}
+                    options={[
+                      ...(!isLandlordWorkspace ? [{ value: "manager", label: "Management Company" }] : []),
+                      { value: "landlord", label: isLandlordWorkspace ? "Owner / Landlord" : "Landlord" },
+                    ]}
                     disabled={isLandlordWorkspace}
-                  >
-                    {!isLandlordWorkspace && <option value="manager">Management Company</option>}
-                    <option value="landlord">{isLandlordWorkspace ? "Owner / Landlord" : "Landlord"}</option>
-                  </select>
+                  />
                 </div>
                 <div className="md:col-span-2">
                   <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Description</label>

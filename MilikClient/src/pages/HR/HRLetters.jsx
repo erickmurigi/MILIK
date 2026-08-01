@@ -13,6 +13,7 @@ import EmailSendModal from '../../components/HR/EmailSendModal';
 import { selectCurrentUser } from '../../redux/selectors';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
+import AppSelect from "../../components/common/AppSelect";
 
 const STATUS_STYLE = {
   draft:   'bg-slate-100 text-slate-600',
@@ -160,13 +161,12 @@ function ComposeModal({ employees, letterMeta, onClose, onCreate }) {
                       className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 resize-none"
                     />
                   ) : f.type === 'select' ? (
-                    <select
+                    <AppSelect
                       value={fields[f.key] ?? (f.default || '')}
-                      onChange={(e) => setFields((p) => ({ ...p, [f.key]: e.target.value }))}
-                      className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                    >
-                      {(f.options || []).map((o) => <option key={o} value={o}>{o}</option>)}
-                    </select>
+                      onChange={(v) => setFields((p) => ({ ...p, [f.key]: v ?? '' }))}
+                      options={(f.options || []).map((o) => ({ value: o, label: o }))}
+                      size="md"
+                    />
                   ) : (
                     <input
                       type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
@@ -507,24 +507,8 @@ export default function HRLetters() {
                 />
               </div>
               <div className="flex gap-1.5">
-                <select
-                  value={filterType}
-                  onChange={(e) => setFilterType(e.target.value)}
-                  className="h-7 flex-1 rounded border border-slate-200 bg-white px-2 text-[11px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                >
-                  <option value="">All types</option>
-                  {Object.entries(TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                </select>
-                <select
-                  value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value)}
-                  className="h-7 w-24 rounded border border-slate-200 bg-white px-2 text-[11px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                >
-                  <option value="">All</option>
-                  <option value="draft">Draft</option>
-                  <option value="issued">Issued</option>
-                  <option value="revoked">Revoked</option>
-                </select>
+                <AppSelect value={filterType} onChange={(v) => setFilterType(v ?? "")} options={Object.entries(TYPE_LABELS).map(([k, v]) => ({ value: k, label: v }))} placeholder="All types" clearable searchable size="sm" />
+                <AppSelect value={filterStatus} onChange={(v) => setFilterStatus(v ?? "")} options={[{ value: "draft", label: "Draft" }, { value: "issued", label: "Issued" }, { value: "revoked", label: "Revoked" }]} placeholder="All" clearable size="sm" />
               </div>
             </div>
 

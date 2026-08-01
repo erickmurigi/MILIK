@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
+import AppSelect from "../../components/common/AppSelect";
 import { useTabState } from "../../hooks/useTabState";
 
 const icc = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
@@ -225,18 +226,26 @@ export default function CarWashStaffDamages() {
 
         {/* Filters */}
         <div className="flex-shrink-0 flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2">
-          <select value={filterStaff} onChange={(e) => { setFilterStaff(e.target.value); setPage(1); }}
-            className="h-8 border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none">
-            <option value="">All Staff</option>
-            {staffList.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
-          </select>
-          <select value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}
-            className="h-8 border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none">
-            <option value="all">All Statuses</option>
-            <option value="pending">Pending</option>
-            <option value="deducted">Deducted</option>
-            <option value="waived">Waived</option>
-          </select>
+          <AppSelect
+            size="sm"
+            clearable
+            searchable
+            placeholder="All Staff"
+            value={filterStaff}
+            onChange={(v) => { setFilterStaff(v ?? ""); setPage(1); }}
+            options={staffList.map((s) => ({ value: s._id, label: s.name }))}
+          />
+          <AppSelect
+            size="sm"
+            value={filterStatus}
+            onChange={(v) => { setFilterStatus(v ?? "all"); setPage(1); }}
+            options={[
+              { value: "all", label: "All Statuses" },
+              { value: "pending", label: "Pending" },
+              { value: "deducted", label: "Deducted" },
+              { value: "waived", label: "Waived" },
+            ]}
+          />
           <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
             className="h-8 border border-slate-300 bg-white px-2 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none" />
           <input type="date" value={dateTo}   onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
@@ -376,11 +385,16 @@ export default function CarWashStaffDamages() {
             </div>
             <form onSubmit={handleAdd} className="space-y-3 p-4">
               <div>
-                <label className={lc}>Staff Member *</label>
-                <select value={form.staff} onChange={(e) => setForm((f) => ({ ...f, staff: e.target.value }))} className={icc} required>
-                  <option value="">Select staff…</option>
-                  {staffList.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
-                </select>
+                <AppSelect
+                  size="md"
+                  label="Staff Member"
+                  required
+                  searchable
+                  placeholder="Select staff…"
+                  value={form.staff}
+                  onChange={(v) => setForm((f) => ({ ...f, staff: v ?? "" }))}
+                  options={staffList.map((s) => ({ value: s._id, label: s.name }))}
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -405,16 +419,17 @@ export default function CarWashStaffDamages() {
 
               {/* Recovery mode */}
               <div>
-                <label className={lc}>Recovery mode</label>
-                <select
-                  className={icc}
+                <AppSelect
+                  size="md"
+                  label="Recovery mode"
                   value={form.deductionMode}
-                  onChange={(e) => setForm((f) => ({ ...f, deductionMode: e.target.value, deductionValue: "" }))}
-                >
-                  <option value="full">Full — deduct entire balance at next payout</option>
-                  <option value="percent">Installment % — fixed % of damage per payout</option>
-                  <option value="fixed">Fixed amount — fixed Ksh per payout</option>
-                </select>
+                  onChange={(v) => setForm((f) => ({ ...f, deductionMode: v ?? "full", deductionValue: "" }))}
+                  options={[
+                    { value: "full", label: "Full — deduct entire balance at next payout" },
+                    { value: "percent", label: "Installment % — fixed % of damage per payout" },
+                    { value: "fixed", label: "Fixed amount — fixed Ksh per payout" },
+                  ]}
+                />
               </div>
               {form.deductionMode === "percent" && (
                 <div>

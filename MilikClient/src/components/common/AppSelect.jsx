@@ -194,7 +194,7 @@ const AppSelect = ({
   const hasWarning = !hasError && Boolean(warning);
 
   return (
-    <div className={`w-full ${className}`}>
+    <div className={`${label ? "w-full" : "min-w-[110px]"} ${className}`}>
       {label && (
         <label className="mb-1 block text-xs font-bold text-slate-700">
           {label}

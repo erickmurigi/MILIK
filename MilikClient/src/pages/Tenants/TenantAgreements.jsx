@@ -1,6 +1,7 @@
 ﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useEntityCache } from "../../hooks/useEntityCache";
+import AppSelect from "../../components/common/AppSelect";
 import {
   selectCurrentCompany,
   selectAllLeases,
@@ -220,9 +221,10 @@ const TenantAgreements = () => {
   }, [tenants]);
 
   const tenantSelectOptions = useMemo(
-    () => (Array.isArray(tenants) ? tenants : []).filter((t) => includeTerminatedTenants || isActiveTenant(t)).map((t) => (
-      <option key={t._id} value={t._id}>{t.name} {t.tenantCode ? `(${t.tenantCode})` : ""}</option>
-    )),
+    () => (Array.isArray(tenants) ? tenants : []).filter((t) => includeTerminatedTenants || isActiveTenant(t)).map((t) => ({
+      value: t._id,
+      label: `${t.name}${t.tenantCode ? ` (${t.tenantCode})` : ""}`,
+    })),
     [tenants, includeTerminatedTenants]
   );
 
@@ -680,13 +682,22 @@ const TenantAgreements = () => {
             <button onClick={expandAllAgreements} className="h-7 shrink-0 rounded p-1.5 text-gray-700 hover:bg-gray-200" title="Expand all"><FaExpandAlt size={11} /></button>
             <button onClick={collapseAllAgreements} className="h-7 shrink-0 rounded p-1.5 text-gray-700 hover:bg-gray-200" title="Collapse all"><FaCompressAlt size={11} /></button>
             <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-            <select value={draftFilters.property} onChange={(event) => setDraftFilters((prev) => ({ ...prev, property: event.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-              {uniqueProperties.map((propertyName) => (<option key={propertyName} value={propertyName}>{propertyName === "any" ? "Property" : toListingCaps(propertyName)}</option>))}
-            </select>
-            <select value={draftFilters.status} onChange={(event) => setDraftFilters((prev) => ({ ...prev, status: event.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-              <option value="any">Status</option>
-              {AGREEMENT_STATUS_OPTIONS.map((status) => (<option key={status} value={status}>{getStatusLabel(status)}</option>))}
-            </select>
+            <AppSelect
+              size="sm"
+              clearable
+              placeholder="Property"
+              value={draftFilters.property}
+              onChange={(v) => setDraftFilters((prev) => ({ ...prev, property: v ?? "any" }))}
+              options={uniqueProperties.filter((n) => n !== "any").map((n) => ({ value: n, label: toListingCaps(n) }))}
+            />
+            <AppSelect
+              size="sm"
+              clearable
+              placeholder="Status"
+              value={draftFilters.status}
+              onChange={(v) => setDraftFilters((prev) => ({ ...prev, status: v ?? "any" }))}
+              options={AGREEMENT_STATUS_OPTIONS.map((s) => ({ value: s, label: getStatusLabel(s) }))}
+            />
             <label className="h-7 shrink-0 inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2 text-xs text-gray-800 hover:bg-white cursor-pointer">
               <input type="checkbox" checked={draftFilters.expiringOnly} onChange={(event) => setDraftFilters((prev) => ({ ...prev, expiringOnly: event.target.checked }))} className="rounded border-gray-300 text-orange-600 focus:ring-[#0B3B2E]/20" />
               Expiring 30d
@@ -995,10 +1006,14 @@ const TenantAgreements = () => {
                     {[
                       { label: "Tenant", content: (
                         <>
-                          <select value={form.tenant} onChange={(e) => handleTenantChange(e.target.value)} className="w-full border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none focus:border-[#0B3B2E]">
-                            <option value="">Select tenant</option>
-                            {tenantSelectOptions}
-                          </select>
+                          <AppSelect
+                            size="md"
+                            searchable
+                            placeholder="Select tenant"
+                            value={form.tenant}
+                            onChange={(v) => handleTenantChange(v ?? "")}
+                            options={tenantSelectOptions}
+                          />
                           <label className="mt-1.5 inline-flex cursor-pointer items-center gap-2 text-[10px] text-slate-500">
                             <input type="checkbox" checked={includeTerminatedTenants} onChange={(e) => setIncludeTerminatedTenants(e.target.checked)} className="border-slate-300" />
                             Include terminated tenants
@@ -1006,23 +1021,34 @@ const TenantAgreements = () => {
                         </>
                       )},
                       { label: "Unit", content: (
-                        <select value={form.unit} onChange={(e) => setForm((p) => ({ ...p, unit: e.target.value }))} className="w-full border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none focus:border-[#0B3B2E]">
-                          <option value="">Select unit</option>
-                          {(Array.isArray(units) ? units : []).map((u) => (<option key={u._id} value={u._id}>{u.unitNumber || u.unitName || u.name}</option>))}
-                        </select>
+                        <AppSelect
+                          size="md"
+                          placeholder="Select unit"
+                          value={form.unit}
+                          onChange={(v) => setForm((p) => ({ ...p, unit: v ?? "" }))}
+                          options={(Array.isArray(units) ? units : []).map((u) => ({ value: u._id, label: u.unitNumber || u.unitName || u.name }))}
+                        />
                       )},
                       { label: "Status", content: (
-                        <select value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))} className="w-full border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none focus:border-[#0B3B2E]">
-                          {AGREEMENT_STATUS_OPTIONS.map((s) => (<option key={s} value={s}>{getStatusLabel(s)}</option>))}
-                        </select>
+                        <AppSelect
+                          size="md"
+                          value={form.status}
+                          onChange={(v) => setForm((p) => ({ ...p, status: v ?? "active" }))}
+                          options={AGREEMENT_STATUS_OPTIONS.map((s) => ({ value: s, label: getStatusLabel(s) }))}
+                        />
                       )},
                       { label: "Start Date", content: <input type="date" value={form.startDate} onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))} className="w-full border border-slate-300 px-3 py-2 text-xs outline-none focus:border-[#0B3B2E]" /> },
                       { label: "End Date", content: <input type="date" value={form.endDate} onChange={(e) => setForm((p) => ({ ...p, endDate: e.target.value }))} className="w-full border border-slate-300 px-3 py-2 text-xs outline-none focus:border-[#0B3B2E]" /> },
                       { label: "Lease Type", content: (
-                        <select value={form.leaseType} onChange={(e) => setForm((p) => ({ ...p, leaseType: e.target.value }))} className="w-full border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none focus:border-[#0B3B2E]">
-                          <option value="fixed">Fixed Term</option>
-                          <option value="at_will">At Will</option>
-                        </select>
+                        <AppSelect
+                          size="md"
+                          value={form.leaseType}
+                          onChange={(v) => setForm((p) => ({ ...p, leaseType: v ?? "fixed" }))}
+                          options={[
+                            { value: "fixed", label: "Fixed Term" },
+                            { value: "at_will", label: "At Will" },
+                          ]}
+                        />
                       )},
                       { label: "Monthly Rent", content: <input type="number" min="0" step="0.01" value={form.rentAmount} onChange={(e) => setForm((p) => ({ ...p, rentAmount: e.target.value }))} className="w-full border border-slate-300 px-3 py-2 text-xs outline-none focus:border-[#0B3B2E]" /> },
                       { label: "Deposit Amount", content: <input type="number" min="0" step="0.01" value={form.depositAmount} onChange={(e) => setForm((p) => ({ ...p, depositAmount: e.target.value }))} className="w-full border border-slate-300 px-3 py-2 text-xs outline-none focus:border-[#0B3B2E]" /> },

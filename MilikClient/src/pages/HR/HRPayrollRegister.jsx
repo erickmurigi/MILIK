@@ -3,6 +3,7 @@ import { FaArrowLeft, FaPrint, FaRedoAlt, FaFileAlt, FaEnvelope } from 'react-ic
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { useTabState } from "../../hooks/useTabState";
+import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import PrintLetterhead from '../../components/HR/PrintLetterhead';
 import EmailSendModal from '../../components/HR/EmailSendModal';
@@ -181,15 +182,14 @@ export default function HRPayrollRegister() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <select
+              <AppSelect
                 value={periodId}
-                onChange={(e) => setPeriodId(e.target.value)}
-                className="h-8 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] print-hide"
-              >
-                {periods.map((p) => (
-                  <option key={p._id} value={p._id}>{p.label}</option>
-                ))}
-              </select>
+                onChange={(v) => setPeriodId(v ?? '')}
+                options={periods.map((p) => ({ value: p._id, label: p.label }))}
+                placeholder="Select period…"
+                searchable
+                size="sm"
+              />
               <button onClick={load} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 print-hide">
                 <FaRedoAlt size={9} />
               </button>

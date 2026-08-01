@@ -18,6 +18,7 @@ import {
   getChartOfAccounts,
 } from "../../redux/apiCalls";
 import { useConfirm } from "../../context/ConfirmContext";
+import AppSelect from "../../components/common/AppSelect";
 
 const GRN    = "#0B3B2E";
 const MONTHS = [
@@ -283,14 +284,18 @@ export default function WhtRemittance() {
           </div>
           <div className="flex items-center gap-2">
             <FaCalendarAlt className="shrink-0 text-slate-400" size={11} />
-            <select value={month} onChange={(e) => setMonth(Number(e.target.value))}
-              className="h-8 border border-slate-300 px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none">
-              {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-            </select>
-            <select value={year} onChange={(e) => setYear(Number(e.target.value))}
-              className="h-8 border border-slate-300 px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none">
-              {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
-            </select>
+            <AppSelect
+              value={month}
+              onChange={(v) => setMonth(Number(v ?? month))}
+              options={MONTHS.map((m, i) => ({ value: i + 1, label: m }))}
+              size="sm"
+            />
+            <AppSelect
+              value={year}
+              onChange={(v) => setYear(Number(v ?? year))}
+              options={yearOptions.map((y) => ({ value: y, label: String(y) }))}
+              size="sm"
+            />
             <button type="button" onClick={() => load(true)} disabled={refreshing}
               className="flex h-8 w-8 items-center justify-center border border-slate-300 text-slate-500 hover:border-[#0B3B2E] hover:text-[#0B3B2E] disabled:opacity-40"
               title="Refresh">
@@ -500,14 +505,14 @@ export default function WhtRemittance() {
             </Field>
 
             <Field label="Cashbook / Bank Account" required>
-              <select required value={form.cashbookAccountId}
-                onChange={(e) => setForm((f) => ({ ...f, cashbookAccountId: e.target.value }))}
-                className={inputCls}>
-                <option value="">Select account…</option>
-                {cashbooks.map((a) => (
-                  <option key={a._id} value={a._id}>{a.code} — {a.name}</option>
-                ))}
-              </select>
+              <AppSelect
+                value={form.cashbookAccountId}
+                onChange={(v) => setForm((f) => ({ ...f, cashbookAccountId: v ?? "" }))}
+                options={cashbooks.map((a) => ({ value: a._id, label: `${a.code} — ${a.name}` }))}
+                placeholder="Select account…"
+                size="md"
+                searchable
+              />
             </Field>
 
             <Field label="Notes">

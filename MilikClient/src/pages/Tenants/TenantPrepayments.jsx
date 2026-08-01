@@ -10,6 +10,7 @@ import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { listRentPaymentsPage } from "../../redux/apiCalls";
 import { useTabState } from "../../hooks/useTabState";
 import { getProperties } from "../../redux/propertyRedux";
+import AppSelect from "../../components/common/AppSelect";
 
 const ITEMS_PER_PAGE = 50;
 const MILIK_GREEN = "bg-[#0B3B2E]";
@@ -255,15 +256,25 @@ const TenantPrepayments = () => {
                 ))}
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…" className="h-7 w-40 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-[11px] outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                <select value={propertyFilter} onChange={(e) => setPropertyFilter(e.target.value)} className="h-7 shrink-0 rounded-md border border-orange-200 bg-orange-50/70 px-2 text-[11px] font-semibold text-slate-800 appearance-none outline-none focus:border-[#0B3B2E]">
-                  <option value="all">Property</option>
-                  {propertyOptions.map((property) => (<option key={property._id} value={property._id}>{property.propertyName}</option>))}
-                </select>
-                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-7 shrink-0 rounded-md border border-orange-200 bg-orange-50/70 px-2 text-[11px] font-semibold text-slate-800 appearance-none outline-none focus:border-[#0B3B2E]">
-                  <option value="all">All Active</option>
-                  <option value="confirmed">Confirmed</option>
-                  <option value="unconfirmed">Unconfirmed</option>
-                </select>
+                <AppSelect
+                  value={propertyFilter}
+                  onChange={(v) => setPropertyFilter(v ?? "all")}
+                  options={propertyOptions.map((property) => ({ value: property._id, label: property.propertyName }))}
+                  placeholder="Property"
+                  clearable
+                  size="sm"
+                />
+                <AppSelect
+                  value={statusFilter}
+                  onChange={(v) => setStatusFilter(v ?? "all")}
+                  options={[
+                    { value: "confirmed", label: "Confirmed" },
+                    { value: "unconfirmed", label: "Unconfirmed" },
+                  ]}
+                  placeholder="All Active"
+                  clearable
+                  size="sm"
+                />
                 <button onClick={() => navigate("/receipts/new")} className="h-7 shrink-0 flex items-center gap-1.5 rounded-md bg-[#0B3B2E] px-2.5 text-[11px] font-bold text-white shadow-sm hover:bg-[#0A3127]"><FaReceipt size={10} /> New Receipt</button>
                 <button onClick={() => { setSearch(""); setPropertyFilter("all"); setStatusFilter("all"); }} className="h-7 shrink-0 flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[11px] font-bold text-slate-700 shadow-sm hover:bg-slate-50"><FaCoins size={10} /> Reset</button>
               </div>

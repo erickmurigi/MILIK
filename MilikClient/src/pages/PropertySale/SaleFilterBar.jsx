@@ -1,5 +1,6 @@
 import React from "react";
 import { FaRedoAlt, FaSearch } from "react-icons/fa";
+import AppSelect from "../../components/common/AppSelect";
 
 export const FilterSearch = ({ value, onChange, placeholder, minWidth = "160px" }) => (
   <div className="relative flex-1" style={{ minWidth }}>
@@ -13,19 +14,6 @@ export const FilterSearch = ({ value, onChange, placeholder, minWidth = "160px" 
   </div>
 );
 
-export const FilterSelect = ({ value, onChange, children, className = "" }) => (
-  <select
-    value={value}
-    onChange={onChange}
-    className={`h-8 border px-2 text-xs focus:outline-none ${
-      value
-        ? "border-[#0B3B2E] bg-[#F1F6F3] font-semibold text-[#0B3B2E]"
-        : "border-slate-200 bg-white text-slate-600 focus:border-[#0B3B2E]"
-    } ${className}`}
-  >
-    {children}
-  </select>
-);
 
 export const FilterDate = ({ value, onChange, title }) => (
   <input

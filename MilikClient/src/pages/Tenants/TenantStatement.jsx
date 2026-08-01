@@ -26,6 +26,7 @@ import {
 import { deleteTenantInvoice } from "../../redux/invoiceApi";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import InvoiceCreationModal from "./InvoiceCreationModal";
+import AppSelect from "../../components/common/AppSelect";
 import { toast } from "react-toastify";
 import { adminRequests } from "../../utils/requestMethods";
 import { fetchCompanySettings, selectCompanySettings } from "../../redux/companySettingsRedux";
@@ -2056,17 +2057,19 @@ const TenantStatement = () => {
               ));
             })()}
             <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
-            <select
+            <AppSelect
               value={transactionType}
-              onChange={(e) => setTransactionType(e.target.value)}
-              className="h-7 shrink-0 border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:border-[#0B3B2E]"
-            >
-              <option value="ALL">All Types</option>
-              <option value="CHARGE">Invoices</option>
-              <option value="DEBIT_NOTE">Debit Notes</option>
-              <option value="CREDIT_NOTE">Credit Notes</option>
-              <option value="PAYMENT">Receipts</option>
-            </select>
+              onChange={(v) => setTransactionType(v ?? "ALL")}
+              options={[
+                { value: "CHARGE", label: "Invoices" },
+                { value: "DEBIT_NOTE", label: "Debit Notes" },
+                { value: "CREDIT_NOTE", label: "Credit Notes" },
+                { value: "PAYMENT", label: "Receipts" },
+              ]}
+              placeholder="All Types"
+              clearable
+              size="sm"
+            />
             <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
             <button
               type="button"
@@ -2402,10 +2405,10 @@ const TenantStatement = () => {
 
           {/* ── Filter row ── */}
           <div className="flex items-center gap-1.5 overflow-x-auto border-b border-slate-100 px-2 py-1.5">
-            <select
+            <AppSelect
               value={scheduleDefinedPeriod}
-              onChange={(e) => {
-                const value = e.target.value;
+              onChange={(v) => {
+                const value = v ?? "custom";
                 setScheduleDefinedPeriod(value);
                 const today = new Date();
                 if (value === "this_year") {
@@ -2418,12 +2421,14 @@ const TenantStatement = () => {
                   setScheduleFilterTo(formatInputDate(to));
                 }
               }}
-              className="h-7 shrink-0 border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:border-[#0B3B2E]"
-            >
-              <option value="custom">Custom Period</option>
-              <option value="this_year">This Year</option>
-              <option value="next_12_months">Next 12 Months</option>
-            </select>
+              options={[
+                { value: "this_year", label: "This Year" },
+                { value: "next_12_months", label: "Next 12 Months" },
+              ]}
+              placeholder="Custom Period"
+              clearable
+              size="sm"
+            />
             <input
               type="date"
               value={scheduleFilterFrom}
@@ -3254,14 +3259,16 @@ const TenantStatement = () => {
                   {/* Adjustment Type */}
                   <div>
                     <label className={reviewLabelCls}>Adjustment Type</label>
-                    <select value={reviewForm.type}
-                      onChange={(e) => setReviewForm((p) => ({ ...p, type: e.target.value, direction: e.target.value === "fixed_rent" ? "increase" : p.direction }))}
-                      className={reviewInputCls}>
-                      <option value="percentage">Percentage (%)</option>
-                      <option value="amount">By Amount (KES)</option>
-                      {/* fixed_rent only available for reviews */}
-                      {!isEscalation && <option value="fixed_rent">Set Fixed Rent</option>}
-                    </select>
+                    <AppSelect
+                      value={reviewForm.type}
+                      onChange={(v) => setReviewForm((p) => ({ ...p, type: v ?? "percentage", direction: v === "fixed_rent" ? "increase" : p.direction }))}
+                      options={[
+                        { value: "percentage", label: "Percentage (%)" },
+                        { value: "amount", label: "By Amount (KES)" },
+                        ...(!isEscalation ? [{ value: "fixed_rent", label: "Set Fixed Rent" }] : []),
+                      ]}
+                      size="md"
+                    />
                   </div>
 
                   {/* Direction — only for reviews and non-fixed-rent types */}
@@ -3305,15 +3312,15 @@ const TenantStatement = () => {
                   {/* Frequency */}
                   <div>
                     <label className={reviewLabelCls}>Frequency</label>
-                    <select value={reviewForm.frequency} onChange={(e) => setReviewForm((p) => ({ ...p, frequency: e.target.value }))} className={reviewInputCls}>
-                      {isEscalation && <option value="yearly">Yearly</option>}
-                      {isEscalation && <option value="biannual">Bi-Annual</option>}
-                      {isEscalation && <option value="quarterly">Quarterly</option>}
-                      {!isEscalation && <option value="once">One-Off</option>}
-                      {!isEscalation && <option value="yearly">Yearly</option>}
-                      {!isEscalation && <option value="biannual">Bi-Annual</option>}
-                      {!isEscalation && <option value="quarterly">Quarterly</option>}
-                    </select>
+                    <AppSelect
+                      value={reviewForm.frequency}
+                      onChange={(v) => setReviewForm((p) => ({ ...p, frequency: v ?? (isEscalation ? "yearly" : "once") }))}
+                      options={isEscalation
+                        ? [{ value: "yearly", label: "Yearly" }, { value: "biannual", label: "Bi-Annual" }, { value: "quarterly", label: "Quarterly" }]
+                        : [{ value: "once", label: "One-Off" }, { value: "yearly", label: "Yearly" }, { value: "biannual", label: "Bi-Annual" }, { value: "quarterly", label: "Quarterly" }]
+                      }
+                      size="md"
+                    />
                   </div>
 
                   {/* Effective Date */}

@@ -5,6 +5,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { FaChevronDown, FaChevronRight, FaFileDownload, FaFilePdf, FaSyncAlt } from "react-icons/fa";
+import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getIncomeStatementReport } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
@@ -379,16 +380,15 @@ const IncomeStatementReport = () => {
               className="h-7 border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
             />
             {properties.length > 0 && (
-              <select
+              <AppSelect
                 value={filters.propertyId}
-                onChange={(e) => setFilters((p) => ({ ...p, propertyId: e.target.value }))}
-                className="h-7 border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-              >
-                <option value="">All Properties</option>
-                {properties.map((p) => (
-                  <option key={p._id} value={p._id}>{p.propertyCode} – {p.propertyName}</option>
-                ))}
-              </select>
+                onChange={(v) => setFilters((p) => ({ ...p, propertyId: v ?? '' }))}
+                options={properties.map((p) => ({ value: p._id, label: `${p.propertyCode} – ${p.propertyName}` }))}
+                placeholder="All Properties"
+                searchable
+                clearable
+                size="sm"
+              />
             )}
             <span className="border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-semibold text-slate-500">{businessName}</span>
             {selectedProperty ? (

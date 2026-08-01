@@ -5,6 +5,7 @@ import { FaCheck, FaFileInvoice, FaPlus, FaRedoAlt, FaSearch, FaTimes, FaTrash }
 import { toast } from "react-toastify";
 import InventoryShell from "./InventoryShell";
 import { inventoryApi, formatMoney } from "../../services/inventoryApi";
+import AppSelect from "../../components/common/AppSelect";
 
 const STATUSES = ["draft", "sent", "partially_received", "received", "cancelled"];
 
@@ -221,11 +222,7 @@ const InvPurchaseOrders = () => {
             </span>
           )}
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#0B3B2E]">
-              <option value="">All Statuses</option>
-              {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
-            </select>
+            <AppSelect value={statusFilter} onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }} options={STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }))} placeholder="All Statuses" clearable size="sm" />
             <div className="flex items-center gap-1.5 border border-slate-300 bg-white px-2 py-1 text-xs">
               <FaSearch className="text-slate-400 text-[10px]" />
               <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
@@ -316,18 +313,10 @@ const InvPurchaseOrders = () => {
             {/* Header fields */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={labelClass}>Supplier *</label>
-                <select required className={inputClass} value={createForm.supplier} onChange={(e) => setCreateForm((f) => ({ ...f, supplier: e.target.value }))}>
-                  <option value="">— Select Supplier —</option>
-                  {suppliers.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
-                </select>
+                <AppSelect label="Supplier" required value={createForm.supplier} onChange={(v) => setCreateForm((f) => ({ ...f, supplier: v ?? "" }))} options={suppliers.map((s) => ({ value: s._id, label: s.name }))} placeholder="— Select Supplier —" size="md" searchable />
               </div>
               <div>
-                <label className={labelClass}>Receiving Location *</label>
-                <select required className={inputClass} value={createForm.location} onChange={(e) => setCreateForm((f) => ({ ...f, location: e.target.value }))}>
-                  <option value="">— Select Location —</option>
-                  {locations.map((l) => <option key={l._id} value={l._id}>{l.name}</option>)}
-                </select>
+                <AppSelect label="Receiving Location" required value={createForm.location} onChange={(v) => setCreateForm((f) => ({ ...f, location: v ?? "" }))} options={locations.map((l) => ({ value: l._id, label: l.name }))} placeholder="— Select Location —" size="md" searchable />
               </div>
               <div>
                 <label className={labelClass}>Expected Delivery Date</label>
@@ -363,11 +352,7 @@ const InvPurchaseOrders = () => {
                     {createForm.lines.map((line, idx) => (
                       <tr key={idx} className="border-b border-slate-100">
                         <td className="px-2 py-1.5">
-                          <select required value={line.product} onChange={(e) => setLineField(idx, "product", e.target.value)}
-                            className="h-8 w-full border border-slate-300 px-1.5 text-xs text-slate-800 outline-none focus:border-[#0B3B2E]">
-                            <option value="">— Select product —</option>
-                            {products.map((p) => <option key={p._id} value={p._id}>{p.name}{p.sku ? ` · ${p.sku}` : ""}</option>)}
-                          </select>
+                          <AppSelect required value={line.product} onChange={(v) => setLineField(idx, "product", v ?? "")} options={products.map((p) => ({ value: p._id, label: p.name + (p.sku ? ` · ${p.sku}` : "") }))} placeholder="— Select product —" size="sm" searchable />
                         </td>
                         <td className="px-2 py-1.5">
                           <input type="number" required min="0.001" step="0.001" placeholder="0" value={line.qtyOrdered}

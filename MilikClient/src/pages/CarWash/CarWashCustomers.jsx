@@ -15,6 +15,7 @@ import CarWashShell from "./CarWashShell";
 import CwSmsModal from "./CwSmsModal";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { useTabState } from "../../hooks/useTabState";
+import AppSelect from "../../components/common/AppSelect";
 
 const GRN = "#0B3B2E";
 const fmt = formatMoney;
@@ -748,28 +749,38 @@ export default function CarWashCustomers() {
                 {/* Dormant */}
                 <div className="min-w-[140px]">
                   <label className="mb-1 block text-[9px] font-bold uppercase tracking-widest text-violet-600">Not visited in</label>
-                  <select value={dormantDays} onChange={(e) => { setDormantDays(Number(e.target.value)); setPage(1); }}
-                    className="h-7 w-full rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 focus:border-violet-400 focus:outline-none">
-                    <option value={0}>Any time</option>
-                    <option value={30}>30+ days</option>
-                    <option value={60}>60+ days</option>
-                    <option value={90}>90+ days</option>
-                    <option value={180}>180+ days</option>
-                    <option value={365}>1+ year</option>
-                  </select>
+                  <AppSelect
+                    value={dormantDays || ""}
+                    onChange={(v) => { setDormantDays(Number(v ?? 0)); setPage(1); }}
+                    options={[
+                      { value: 30, label: "30+ days" },
+                      { value: 60, label: "60+ days" },
+                      { value: 90, label: "90+ days" },
+                      { value: 180, label: "180+ days" },
+                      { value: 365, label: "1+ year" },
+                    ]}
+                    placeholder="Any time"
+                    size="sm"
+                    clearable
+                  />
                 </div>
 
                 {/* Loyalty */}
                 <div className="min-w-[160px]">
                   <label className="mb-1 block text-[9px] font-bold uppercase tracking-widest text-violet-600">Loyalty</label>
-                  <select value={loyaltyFilter} onChange={(e) => { setLoyaltyFilter(e.target.value); setPage(1); }}
-                    className="h-7 w-full rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 focus:border-violet-400 focus:outline-none">
-                    <option value="">All customers</option>
-                    <option value="member">Loyalty members</option>
-                    <option value="near_reward">Near reward (≤2 stamps away)</option>
-                    <option value="has_reward">Has pending reward</option>
-                    <option value="no_stamps">No stamps yet</option>
-                  </select>
+                  <AppSelect
+                    value={loyaltyFilter}
+                    onChange={(v) => { setLoyaltyFilter(v ?? ""); setPage(1); }}
+                    options={[
+                      { value: "member", label: "Loyalty members" },
+                      { value: "near_reward", label: "Near reward (≤2 stamps away)" },
+                      { value: "has_reward", label: "Has pending reward" },
+                      { value: "no_stamps", label: "No stamps yet" },
+                    ]}
+                    placeholder="All customers"
+                    size="sm"
+                    clearable
+                  />
                 </div>
 
                 {/* Spend range */}
@@ -1094,10 +1105,12 @@ export default function CarWashCustomers() {
         <div className="flex-shrink-0 flex min-h-8 items-center justify-between border-t border-slate-200 bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-slate-600">
           <div className="flex items-center gap-1.5">
             <span className="font-semibold text-slate-500 normal-case">Per page:</span>
-            <select value={limit} onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
-              className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none transition normal-case">
-              {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
+            <AppSelect
+              value={limit}
+              onChange={(v) => { setLimit(Number(v ?? 25)); setPage(1); }}
+              options={[25, 50, 100, 200].map((n) => ({ value: n, label: String(n) }))}
+              size="sm"
+            />
           </div>
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => setPage((p) => Math.max(p - 1, 1))} disabled={page <= 1}
@@ -1180,21 +1193,23 @@ export default function CarWashCustomers() {
             ) : (
               <form id="cw-settle-form" onSubmit={submitPayment} className="space-y-3">
                 <div>
-                  <label className={labelCls}>Select Job *</label>
-                  <select className={inputCls} value={payForm.job}
-                    onChange={(e) => {
-                      const j = payJobs.find((x) => x._id === e.target.value);
+                  <AppSelect
+                    label="Select Job"
+                    required
+                    value={payForm.job}
+                    onChange={(v) => {
+                      const j = payJobs.find((x) => x._id === (v ?? ""));
                       const amt = j ? Math.max(0, Number(j.price || 0) - Number(j.discountAmount || 0)) : 0;
-                      setPayForm((f) => ({ ...f, job: e.target.value, amount: String(amt) }));
-                    }} required>
-                    <option value="">— Select unpaid job —</option>
-                    {payJobs.map((j) => (
-                      <option key={j._id} value={j._id}>
-                        {j.jobNumber} · {j.plateNumber || j.itemDescription || "—"} · {fmt(j.price)}
-                        {j.paymentStatus === "partial" ? " (partial)" : ""}
-                      </option>
-                    ))}
-                  </select>
+                      setPayForm((f) => ({ ...f, job: v ?? "", amount: String(amt) }));
+                    }}
+                    options={payJobs.map((j) => ({
+                      value: j._id,
+                      label: `${j.jobNumber} · ${j.plateNumber || j.itemDescription || "—"} · ${fmt(j.price)}${j.paymentStatus === "partial" ? " (partial)" : ""}`,
+                    }))}
+                    placeholder="— Select unpaid job —"
+                    size="md"
+                    searchable
+                  />
                 </div>
                 {selectedJob && (
                   <div className="flex flex-wrap gap-3 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px]">
@@ -1223,17 +1238,25 @@ export default function CarWashCustomers() {
                     )}
                   </div>
                   <div>
-                    <label className={labelCls}>Method</label>
-                    <select className={inputCls} value={payForm.method} onChange={(e) => setPayForm((f) => ({ ...f, method: e.target.value }))}>
-                      {["cash", "mpesa", "bank", "card", "other"].map((m) => <option key={m} value={m}>{m.toUpperCase()}</option>)}
-                    </select>
+                    <AppSelect
+                      label="Method"
+                      value={payForm.method}
+                      onChange={(v) => setPayForm((f) => ({ ...f, method: v ?? "cash" }))}
+                      options={["cash", "mpesa", "bank", "card", "other"].map((m) => ({ value: m, label: m.toUpperCase() }))}
+                      size="md"
+                    />
                   </div>
                   <div>
-                    <label className={labelCls}>Cashbook *</label>
-                    <select className={inputCls} value={payForm.cashbookAccount} onChange={(e) => setPayForm((f) => ({ ...f, cashbookAccount: e.target.value }))} required>
-                      <option value="">— Select —</option>
-                      {cashbooks.map((cb) => <option key={cb._id} value={cb._id}>{cb.code ? `${cb.code} - ` : ""}{cb.name}</option>)}
-                    </select>
+                    <AppSelect
+                      label="Cashbook"
+                      required
+                      value={payForm.cashbookAccount}
+                      onChange={(v) => setPayForm((f) => ({ ...f, cashbookAccount: v ?? "" }))}
+                      options={cashbooks.map((cb) => ({ value: cb._id, label: `${cb.code ? `${cb.code} - ` : ""}${cb.name}` }))}
+                      placeholder="— Select —"
+                      size="md"
+                      searchable
+                    />
                   </div>
                   <div>
                     <label className={labelCls}>Payment Date *</label>

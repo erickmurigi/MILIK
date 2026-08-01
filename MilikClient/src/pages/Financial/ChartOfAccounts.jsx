@@ -441,15 +441,14 @@ const ChartOfAccounts = () => {
           </div>
 
           {/* Module scope */}
-          <select
+          <AppSelect
+            size="sm"
+            clearable
+            placeholder="All Modules"
             value={moduleScope}
-            onChange={(e) => setModuleScope(e.target.value)}
-            className="h-7 border border-slate-200 bg-slate-50 px-2 text-xs font-semibold text-slate-700 focus:outline-none focus:border-[#0B3B2E]"
-          >
-            {MODULE_SCOPE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
+            onChange={(v) => setModuleScope(v ?? "")}
+            options={MODULE_SCOPE_OPTIONS.filter((o) => o.value !== "").map((o) => ({ value: o.value, label: o.label }))}
+          />
 
           {/* Control accounts */}
           <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 cursor-pointer select-none">
@@ -783,15 +782,12 @@ const ChartOfAccounts = () => {
                   {/* Account class */}
                   <div>
                     <label className={labelCls}>Account Class</label>
-                    <select
+                    <AppSelect
                       value={formData.subGroup}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, subGroup: e.target.value }))}
-                      className={inputCls}
-                    >
-                      {currentSubGroupOptions.map((opt) => (
-                        <option key={opt} value={opt}>{opt}</option>
-                      ))}
-                    </select>
+                      onChange={(v) => setFormData((prev) => ({ ...prev, subGroup: v ?? "" }))}
+                      options={currentSubGroupOptions.map((opt) => ({ value: opt, label: opt }))}
+                      size="sm"
+                    />
                   </div>
 
                   {/* Parent account */}

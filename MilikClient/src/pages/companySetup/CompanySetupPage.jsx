@@ -5,6 +5,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { selectCurrentCompany } from "../../redux/selectors";
 import toast from "react-hot-toast";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import AppSelect from "../../components/common/AppSelect";
 import {
   FaBuilding,
   FaSitemap,
@@ -111,12 +112,6 @@ const Input = ({ className = "", ...props }) => (
   />
 );
 
-const Select = ({ className = "", ...props }) => (
-  <select
-    {...props}
-    className={`w-full border border-slate-300 bg-white px-3 py-2 text-[12px] text-slate-800 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 ${className}`}
-  />
-);
 
 const ToggleRow = ({ checked, onChange, title, description, disabled = false }) => (
   <label
@@ -2304,30 +2299,30 @@ export default function CompanySetupPage() {
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div>
               <label className="text-xs font-bold text-slate-700">Currency</label>
-              <Select value={company.baseCurrency} onChange={(e) => handleCompanyFieldChange("baseCurrency", e.target.value)}>
-                <option value="KES">KES</option>
-                <option value="USD">USD</option>
-                <option value="UGX">UGX</option>
-                <option value="TZS">TZS</option>
-              </Select>
+              <AppSelect
+                value={company.baseCurrency}
+                onChange={(v) => handleCompanyFieldChange("baseCurrency", v ?? "")}
+                options={[{ value:"KES", label:"KES" }, { value:"USD", label:"USD" }, { value:"UGX", label:"UGX" }, { value:"TZS", label:"TZS" }]}
+                size="md"
+              />
             </div>
             <div>
               <label className="text-xs font-bold text-slate-700">Tax Regime</label>
-              <Select value={company.taxRegime} onChange={(e) => handleCompanyFieldChange("taxRegime", e.target.value)}>
-                <option value="VAT">VAT</option>
-                <option value="No Tax">No Tax</option>
-                <option value="GST">GST</option>
-              </Select>
+              <AppSelect
+                value={company.taxRegime}
+                onChange={(v) => handleCompanyFieldChange("taxRegime", v ?? "")}
+                options={[{ value:"VAT", label:"VAT" }, { value:"No Tax", label:"No Tax" }, { value:"GST", label:"GST" }]}
+                size="md"
+              />
             </div>
             <div>
               <label className="text-xs font-bold text-slate-700">Fiscal Start Month</label>
-              <Select value={company.fiscalStartMonth} onChange={(e) => handleCompanyFieldChange("fiscalStartMonth", e.target.value)}>
-                {months.map((month) => (
-                  <option key={month} value={month}>
-                    {month}
-                  </option>
-                ))}
-              </Select>
+              <AppSelect
+                value={company.fiscalStartMonth}
+                onChange={(v) => handleCompanyFieldChange("fiscalStartMonth", v ?? "")}
+                options={months.map((month) => ({ value: month, label: month }))}
+                size="md"
+              />
             </div>
             <div>
               <label className="text-xs font-bold text-slate-700">Fiscal Start Year</label>
@@ -2339,12 +2334,12 @@ export default function CompanySetupPage() {
             </div>
             <div>
               <label className="text-xs font-bold text-slate-700">Operation Period Type</label>
-              <Select value={company.operationPeriodType} onChange={(e) => handleCompanyFieldChange("operationPeriodType", e.target.value)}>
-                <option value="Monthly">Monthly</option>
-                <option value="Quarterly">Quarterly</option>
-                <option value="Semi Annual">Semi Annual</option>
-                <option value="Annual">Annual</option>
-              </Select>
+              <AppSelect
+                value={company.operationPeriodType}
+                onChange={(v) => handleCompanyFieldChange("operationPeriodType", v ?? "")}
+                options={[{ value:"Monthly", label:"Monthly" }, { value:"Quarterly", label:"Quarterly" }, { value:"Semi Annual", label:"Semi Annual" }, { value:"Annual", label:"Annual" }]}
+                size="md"
+              />
             </div>
           </div>
 
@@ -3071,35 +3066,40 @@ export default function CompanySetupPage() {
                 className="h-8 w-52 rounded border border-slate-200 bg-white pl-8 pr-3 text-xs text-slate-800 shadow-sm transition hover:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
             </div>
-            <select
+            <AppSelect
               value={smsTemplateRecipientFilter}
-              onChange={(e) => setSmsTemplateRecipientFilter(e.target.value)}
-              className="h-8 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-            >
-              <option value="all">All Recipients</option>
-              {hasPM && <option value="tenant">Tenant</option>}
-              {hasPM && <option value="landlord">Landlord</option>}
-              {hasCW && <option value="customer">Customer</option>}
-              {!hasPM && !hasCW && <option value="internal">Internal</option>}
-            </select>
-            <select
+              onChange={(v) => setSmsTemplateRecipientFilter(v ?? "all")}
+              options={[
+                ...(hasPM ? [{ value: "tenant", label: "Tenant" }, { value: "landlord", label: "Landlord" }] : []),
+                ...(hasCW ? [{ value: "customer", label: "Customer" }] : []),
+                ...(!hasPM && !hasCW ? [{ value: "internal", label: "Internal" }] : []),
+              ]}
+              placeholder="All Recipients"
+              clearable
+              size="sm"
+            />
+            <AppSelect
               value={smsTemplateStatusFilter}
-              onChange={(e) => setSmsTemplateStatusFilter(e.target.value)}
-              className="h-8 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-            >
-              <option value="all">All Status</option>
-              <option value="enabled">Enabled</option>
-              <option value="disabled">Disabled</option>
-            </select>
-            <select
+              onChange={(v) => setSmsTemplateStatusFilter(v ?? "all")}
+              options={[
+                { value: "enabled", label: "Enabled" },
+                { value: "disabled", label: "Disabled" },
+              ]}
+              placeholder="All Status"
+              clearable
+              size="sm"
+            />
+            <AppSelect
               value={smsTemplatesModeFilter}
-              onChange={(e) => setSmsTemplatesModeFilter(e.target.value)}
-              className="h-8 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-            >
-              <option value="all">All Modes</option>
-              <option value="manual">Manual</option>
-              <option value="automatic">Automatic</option>
-            </select>
+              onChange={(v) => setSmsTemplatesModeFilter(v ?? "all")}
+              options={[
+                { value: "manual", label: "Manual" },
+                { value: "automatic", label: "Automatic" },
+              ]}
+              placeholder="All Modes"
+              clearable
+              size="sm"
+            />
           </div>
           <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
             <span className="rounded-full border border-slate-200 bg-white px-3 py-1 font-semibold">{filteredTemplates.length} / {moduleVisibleTemplates.length} templates</span>
@@ -3445,15 +3445,21 @@ export default function CompanySetupPage() {
                   <FaSearch className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400" />
                   <input value={activitySearch} onChange={(e) => { setActivitySearch(e.target.value); setActivitiesPage(1); }} placeholder="Search events…" className="h-7 w-48 rounded border border-slate-200 bg-white pl-7 pr-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
                 </div>
-                <select value={activityCategory} onChange={(e) => { setActivityCategory(e.target.value); setActivitiesPage(1); }} className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 appearance-none outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
-                  <option value="all">All categories</option>
-                  <option value="auth">Sign-ins</option>
-                  <option value="users">User access</option>
-                  <option value="company">Company setup</option>
-                  <option value="settings">Operational settings</option>
-                  <option value="finance">Receipts & finance</option>
-                  <option value="property">Tenants & property</option>
-                </select>
+                <AppSelect
+                  value={activityCategory}
+                  onChange={(v) => { setActivityCategory(v ?? "all"); setActivitiesPage(1); }}
+                  options={[
+                    { value: "auth", label: "Sign-ins" },
+                    { value: "users", label: "User access" },
+                    { value: "company", label: "Company setup" },
+                    { value: "settings", label: "Operational settings" },
+                    { value: "finance", label: "Receipts & finance" },
+                    { value: "property", label: "Tenants & property" },
+                  ]}
+                  placeholder="All categories"
+                  clearable
+                  size="sm"
+                />
                 <span className="text-[11px] font-semibold text-slate-500">{loadingAudit ? "Loading…" : `${filteredLogs.length} event${filteredLogs.length !== 1 ? "s" : ""}`}</span>
               </div>
               <div className="flex-1 overflow-x-auto overflow-y-auto">
@@ -3881,21 +3887,24 @@ export default function CompanySetupPage() {
                 </div>
                 <div>
                   <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Send Mode</label>
-                  <Select value={smsTemplateForm.sendMode} onChange={(e) => setSmsTemplateForm((prev) => ({ ...prev, sendMode: e.target.value }))}>
-                    <option value="manual">Manual</option>
-                    <option value="automatic">Automatic</option>
-                  </Select>
+                  <AppSelect
+                    value={smsTemplateForm.sendMode}
+                    onChange={(v) => setSmsTemplateForm((prev) => ({ ...prev, sendMode: v ?? "" }))}
+                    options={[{ value:"manual", label:"Manual" }, { value:"automatic", label:"Automatic" }]}
+                    size="md"
+                  />
                 </div>
                 <div>
                   <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">SMS Profile</label>
-                  <Select value={smsTemplateForm.profileId} onChange={(e) => setSmsTemplateForm((prev) => ({ ...prev, profileId: e.target.value }))}>
-                    <option value="">Company default</option>
-                    {smsProfiles.map((profile) => (
-                      <option key={profile._id} value={profile._id}>
-                        {profile.name}{profile.enabled ? "" : " (disabled)"}
-                      </option>
-                    ))}
-                  </Select>
+                  <AppSelect
+                    value={smsTemplateForm.profileId}
+                    onChange={(v) => setSmsTemplateForm((prev) => ({ ...prev, profileId: v ?? "" }))}
+                    options={smsProfiles.map((profile) => ({ value: profile._id, label: profile.name + (profile.enabled ? "" : " (disabled)") }))}
+                    placeholder="Company default"
+                    clearable
+                    searchable
+                    size="md"
+                  />
                 </div>
               </div>
 
@@ -4021,19 +4030,18 @@ export default function CompanySetupPage() {
 
           <div>
             <label className="text-xs font-bold text-slate-700">Default Receiving Cashbook</label>
-            <Select
+            <AppSelect
               value={paymentForm.defaultCashbookAccountId}
-              onChange={(e) => {
-                const selected = cashbookOptions.find((item) => String(item._id) === String(e.target.value));
-                setPaymentForm((prev) => ({ ...prev, defaultCashbookAccountId: e.target.value, defaultCashbookAccountName: selected?.name || prev.defaultCashbookAccountName || "" }));
+              onChange={(v) => {
+                const selected = cashbookOptions.find((item) => String(item._id) === String(v));
+                setPaymentForm((prev) => ({ ...prev, defaultCashbookAccountId: v ?? "", defaultCashbookAccountName: selected?.name || prev.defaultCashbookAccountName || "" }));
               }}
+              options={cashbookOptions.map((account) => ({ value: account._id, label: account.name + (account.code ? ` (${account.code})` : "") }))}
+              placeholder={loadingCashbooks ? "Loading cashbooks..." : "Select receiving cashbook"}
+              searchable
+              size="md"
               disabled={loadingCashbooks}
-            >
-              <option value="">{loadingCashbooks ? "Loading cashbooks..." : "Select receiving cashbook"}</option>
-              {cashbookOptions.map((account) => (
-                <option key={account._id} value={account._id}>{account.name} {account.code ? `(${account.code})` : ""}</option>
-              ))}
-            </Select>
+            />
           </div>
 
           <div>
@@ -4056,10 +4064,12 @@ export default function CompanySetupPage() {
 
           <div>
             <label className="text-xs font-bold text-slate-700">M-Pesa Response Mode</label>
-            <Select value={paymentForm.responseType} onChange={(e) => setPaymentForm((prev) => ({ ...prev, responseType: e.target.value }))}>
-              <option value="Completed">Completed</option>
-              <option value="Cancelled">Cancelled</option>
-            </Select>
+            <AppSelect
+              value={paymentForm.responseType}
+              onChange={(v) => setPaymentForm((prev) => ({ ...prev, responseType: v ?? "" }))}
+              options={[{ value:"Completed", label:"Completed" }, { value:"Cancelled", label:"Cancelled" }]}
+              size="md"
+            />
           </div>
 
           <div className="md:col-span-2 border-t border-slate-200 pt-3">
@@ -4087,17 +4097,21 @@ export default function CompanySetupPage() {
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <div>
                 <label className="text-xs font-bold text-slate-700">Unmatched Payment Handling</label>
-                <Select value={paymentForm.unmatchedPaymentMode} onChange={(e) => setPaymentForm((prev) => ({ ...prev, unmatchedPaymentMode: e.target.value }))}>
-                  <option value="manual_review">Send to manual review</option>
-                  <option value="hold_unallocated">Hold as unallocated payment</option>
-                </Select>
+                <AppSelect
+                  value={paymentForm.unmatchedPaymentMode}
+                  onChange={(v) => setPaymentForm((prev) => ({ ...prev, unmatchedPaymentMode: v ?? "" }))}
+                  options={[{ value:"manual_review", label:"Send to manual review" }, { value:"hold_unallocated", label:"Hold as unallocated payment" }]}
+                  size="md"
+                />
               </div>
               <div>
                 <label className="text-xs font-bold text-slate-700">Matched Payment Processing</label>
-                <Select value={paymentForm.postingMode} onChange={(e) => setPaymentForm((prev) => ({ ...prev, postingMode: e.target.value }))}>
-                  <option value="manual_review">Manual review before posting</option>
-                  <option value="auto_post_matched">Auto-post matched payments</option>
-                </Select>
+                <AppSelect
+                  value={paymentForm.postingMode}
+                  onChange={(v) => setPaymentForm((prev) => ({ ...prev, postingMode: v ?? "" }))}
+                  options={[{ value:"manual_review", label:"Manual review before posting" }, { value:"auto_post_matched", label:"Auto-post matched payments" }]}
+                  size="md"
+                />
               </div>
             </div>
           </div>
@@ -4186,25 +4200,28 @@ export default function CompanySetupPage() {
 
             <div>
               <label className="text-xs font-bold text-slate-700">Default Receiving Cashbook</label>
-              <Select
+              <AppSelect
                 value={coopForm.defaultCashbookAccountId}
-                onChange={(e) => {
-                  const sel = cashbookOptions.find((a) => String(a._id) === String(e.target.value));
-                  setCoopForm((p) => ({ ...p, defaultCashbookAccountId: e.target.value, defaultCashbookAccountName: sel?.name || p.defaultCashbookAccountName || "" }));
+                onChange={(v) => {
+                  const sel = cashbookOptions.find((a) => String(a._id) === String(v));
+                  setCoopForm((p) => ({ ...p, defaultCashbookAccountId: v ?? "", defaultCashbookAccountName: sel?.name || p.defaultCashbookAccountName || "" }));
                 }}
+                options={cashbookOptions.map((a) => ({ value: a._id, label: a.name + (a.code ? ` (${a.code})` : "") }))}
+                placeholder={loadingCashbooks ? "Loading..." : "Select receiving cashbook"}
+                searchable
+                size="md"
                 disabled={loadingCashbooks}
-              >
-                <option value="">{loadingCashbooks ? "Loading..." : "Select receiving cashbook"}</option>
-                {cashbookOptions.map((a) => <option key={a._id} value={a._id}>{a.name}{a.code ? ` (${a.code})` : ""}</option>)}
-              </Select>
+              />
             </div>
 
             <div>
               <label className="text-xs font-bold text-slate-700">Matched Payment Processing</label>
-              <Select value={coopForm.postingMode} onChange={(e) => setCoopForm((p) => ({ ...p, postingMode: e.target.value }))}>
-                <option value="manual_review">Manual review before posting</option>
-                <option value="auto_post_matched">Auto-post matched payments</option>
-              </Select>
+              <AppSelect
+                value={coopForm.postingMode}
+                onChange={(v) => setCoopForm((p) => ({ ...p, postingMode: v ?? "" }))}
+                options={[{ value:"manual_review", label:"Manual review before posting" }, { value:"auto_post_matched", label:"Auto-post matched payments" }]}
+                size="md"
+              />
             </div>
 
             {selectedCoopConfigId !== COOP_DRAFT_ID && coopForm.institutionCode && (
@@ -4297,11 +4314,12 @@ export default function CompanySetupPage() {
           </div>
           <div>
             <label className="text-xs font-bold text-slate-700">Encryption</label>
-            <Select value={emailForm.encryption} onChange={(e) => setEmailForm((prev) => ({ ...prev, encryption: e.target.value }))}>
-              <option value="ssl">SSL</option>
-              <option value="tls">TLS</option>
-              <option value="none">None</option>
-            </Select>
+            <AppSelect
+              value={emailForm.encryption}
+              onChange={(v) => setEmailForm((prev) => ({ ...prev, encryption: v ?? "" }))}
+              options={[{ value:"ssl", label:"SSL" }, { value:"tls", label:"TLS" }, { value:"none", label:"None" }]}
+              size="md"
+            />
           </div>
           <div>
             <label className="text-xs font-bold text-slate-700">SMTP Username</label>
@@ -4322,11 +4340,12 @@ export default function CompanySetupPage() {
               </div>
               <div>
                 <label className="text-xs font-bold text-slate-700">Internal Copy Mode</label>
-                <Select value={emailForm.internalCopyMode} onChange={(e) => setEmailForm((prev) => ({ ...prev, internalCopyMode: e.target.value }))}>
-                  <option value="none">No internal copy</option>
-                  <option value="bcc">BCC internal copy</option>
-                  <option value="cc">CC internal copy</option>
-                </Select>
+                <AppSelect
+                  value={emailForm.internalCopyMode}
+                  onChange={(v) => setEmailForm((prev) => ({ ...prev, internalCopyMode: v ?? "" }))}
+                  options={[{ value:"none", label:"No internal copy" }, { value:"bcc", label:"BCC internal copy" }, { value:"cc", label:"CC internal copy" }]}
+                  size="md"
+                />
               </div>
             </div>
 

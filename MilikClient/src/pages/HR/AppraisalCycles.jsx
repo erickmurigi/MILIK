@@ -8,6 +8,7 @@ import {
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
+import AppSelect from "../../components/common/AppSelect";
 
 const DEFAULT_PAGE_SIZE = 25;
 const PERIOD_TYPES = ['Annual', 'Semi-Annual', 'Quarterly', 'Custom'];
@@ -169,16 +170,8 @@ export default function AppraisalCycles() {
           <span className="text-[11px] font-bold text-emerald-600 tabular-nums whitespace-nowrap">{nOpen} <span className="font-normal text-slate-400">open</span></span>
           <span className="text-[11px] font-bold text-rose-500 tabular-nums whitespace-nowrap">{nClosed} <span className="font-normal text-slate-400">closed</span></span>
           <div className="h-4 w-px bg-slate-300 mx-0.5" />
-          <select className={`${F} w-28 appearance-none`} value={yearFilter} onChange={(e) => setYearFilter(e.target.value)}>
-            <option value="">All years</option>
-            {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
-          </select>
-          <select className={`${F} w-30 appearance-none`} value={statusFilter} onChange={(e) => setStatus(e.target.value)}>
-            <option value="">All statuses</option>
-            <option value="Draft">Draft</option>
-            <option value="Open">Open</option>
-            <option value="Closed">Closed</option>
-          </select>
+          <AppSelect value={yearFilter} onChange={(v) => setYearFilter(v ?? "")} options={YEARS.map((y) => ({ value: y, label: String(y) }))} placeholder="All years" clearable size="sm" />
+          <AppSelect value={statusFilter} onChange={(v) => setStatus(v ?? "")} options={[{ value: "Draft", label: "Draft" }, { value: "Open", label: "Open" }, { value: "Closed", label: "Closed" }]} placeholder="All statuses" clearable size="sm" />
           {(yearFilter || statusFilter) && (
             <button onClick={() => { setYearFilter(''); setStatus(''); }} className="flex h-7 items-center gap-0.5 rounded border border-slate-200 bg-white px-2 text-[10px] text-slate-400 hover:text-slate-600">
               <FaTimes size={8} /> Clear
@@ -272,13 +265,7 @@ export default function AppraisalCycles() {
           <div className="flex items-center gap-1.5">
             <div className="flex items-center gap-1">
               <span className="font-semibold text-slate-500 text-[10px]">Per page:</span>
-              <select
-                value={pageSize}
-                onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-                className="h-6 rounded-lg border border-slate-200 bg-slate-50 px-1.5 text-[10px] font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition"
-              >
-                {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
+              <AppSelect value={pageSize} onChange={(v) => { setPageSize(Number(v ?? pageSize)); setPage(1); }} options={[25, 50, 100, 200].map((n) => ({ value: n, label: String(n) }))} size="sm" />
             </div>
             <button disabled={page === 1} onClick={() => setPage(1)} className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] hover:bg-slate-50 disabled:opacity-30">«</button>
             <button disabled={page === 1} onClick={() => setPage((p) => p - 1)} className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] hover:bg-slate-50 disabled:opacity-30">‹</button>
@@ -313,16 +300,10 @@ export default function AppraisalCycles() {
                   <input className={FW} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Annual Review 2025" />
                 </div>
                 <div>
-                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Year *</label>
-                  <select className={`${FW} appearance-none`} value={form.year} onChange={(e) => setForm((f) => ({ ...f, year: Number(e.target.value) }))}>
-                    {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
-                  </select>
+                  <AppSelect label="Year" required value={form.year} onChange={(v) => setForm((f) => ({ ...f, year: Number(v ?? f.year) }))} options={YEARS.map((y) => ({ value: y, label: String(y) }))} size="md" />
                 </div>
                 <div>
-                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Period Type</label>
-                  <select className={`${FW} appearance-none`} value={form.periodType} onChange={(e) => setForm((f) => ({ ...f, periodType: e.target.value }))}>
-                    {PERIOD_TYPES.map((p) => <option key={p} value={p}>{p}</option>)}
-                  </select>
+                  <AppSelect label="Period Type" value={form.periodType} onChange={(v) => setForm((f) => ({ ...f, periodType: v ?? f.periodType }))} options={PERIOD_TYPES.map((p) => ({ value: p, label: p }))} size="md" />
                 </div>
                 <div>
                   <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Notes</label>

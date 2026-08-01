@@ -19,6 +19,7 @@ import { adminRequests } from "../../utils/requestMethods";
 import { getTenants, getChartOfAccounts } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 import { useTabState } from "../../hooks/useTabState";
+import AppSelect from "../../components/common/AppSelect";
 
 const MONTHS = [
   { value: 1,  label: "January"   }, { value: 2,  label: "February"  }, { value: 3,  label: "March"     },
@@ -340,16 +341,14 @@ const BatchReceipts = () => {
           {!shared.paidDirectToLandlord ? (
             <div className="flex items-center gap-1.5">
               <label className="text-[10px] font-semibold text-slate-500">Cashbook</label>
-              <select
+              <AppSelect
+                size="sm"
+                placeholder="— Required —"
                 value={shared.cashbook}
-                onChange={(e) => setSharedField("cashbook", e.target.value)}
-                className={`h-7 rounded border px-2 text-[11px] text-slate-800 focus:outline-none focus:border-emerald-500 ${
-                  !shared.cashbook ? "border-rose-300 bg-rose-50/50" : "border-slate-200 bg-white"
-                }`}
-              >
-                <option value="">— Required —</option>
-                {cashbookOptions.map((a) => <option key={a._id} value={a.name}>{a.name}</option>)}
-              </select>
+                onChange={(v) => setSharedField("cashbook", v ?? "")}
+                options={cashbookOptions.map((a) => ({ value: a.name, label: a.name }))}
+                error={!shared.cashbook ? "Required" : ""}
+              />
             </div>
           ) : (
             <span className="rounded border border-[#0B3B2E]/20 bg-[#0B3B2E]/8 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-[#0B3B2E]">
@@ -359,13 +358,12 @@ const BatchReceipts = () => {
 
           <div className="flex items-center gap-1.5">
             <label className="text-[10px] font-semibold text-slate-500">Method</label>
-            <select
+            <AppSelect
+              size="sm"
               value={shared.paymentMethod}
-              onChange={(e) => setSharedField("paymentMethod", e.target.value)}
-              className="h-7 rounded border border-slate-200 bg-white px-2 text-[11px] text-slate-800 focus:border-emerald-500 focus:outline-none"
-            >
-              {METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-            </select>
+              onChange={(v) => setSharedField("paymentMethod", v ?? "mobile_money")}
+              options={METHODS.map((m) => ({ value: m.value, label: m.label }))}
+            />
           </div>
 
           <div className="flex items-center gap-1.5">
@@ -380,13 +378,12 @@ const BatchReceipts = () => {
 
           <div className="flex items-center gap-1.5">
             <label className="text-[10px] font-semibold text-slate-500">Period</label>
-            <select
-              value={shared.month}
-              onChange={(e) => setSharedField("month", Number(e.target.value))}
-              className="h-7 rounded border border-slate-200 bg-white px-2 text-[11px] text-slate-800 focus:border-emerald-500 focus:outline-none"
-            >
-              {MONTHS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-            </select>
+            <AppSelect
+              size="sm"
+              value={String(shared.month)}
+              onChange={(v) => setSharedField("month", Number(v ?? shared.month))}
+              options={MONTHS.map((m) => ({ value: String(m.value), label: m.label }))}
+            />
             <input
               type="number"
               value={shared.year}
@@ -463,14 +460,14 @@ const BatchReceipts = () => {
                     className="h-7 rounded border border-slate-200 bg-white px-2 text-[11px] focus:border-emerald-500 focus:outline-none" />
                 </div>
                 {mpesaPropertyOptions.length > 1 && (
-                  <select
+                  <AppSelect
+                    size="sm"
+                    clearable
+                    placeholder="All Properties"
                     value={mpesaPropertyFilter}
-                    onChange={(e) => setMpesaPropertyFilter(e.target.value)}
-                    className="h-7 rounded border border-slate-200 bg-white px-2 text-[11px] text-slate-700 focus:border-emerald-500 focus:outline-none"
-                  >
-                    <option value="">All Properties</option>
-                    {mpesaPropertyOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
+                    onChange={(v) => setMpesaPropertyFilter(v ?? "")}
+                    options={mpesaPropertyOptions.map((p) => ({ value: p.id, label: p.name }))}
+                  />
                 )}
                 <button
                   onClick={loadCollections}
@@ -618,16 +615,14 @@ const BatchReceipts = () => {
 
               {/* Toolbar */}
               <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 bg-slate-50/60 px-4 py-2.5">
-                <select
+                <AppSelect
+                  size="sm"
+                  clearable
+                  placeholder="— Select Property —"
                   value={propertyId}
-                  onChange={(e) => setPropertyId(e.target.value)}
-                  className="h-7 rounded border border-slate-200 bg-white px-2 text-[11px] text-slate-800 focus:border-emerald-500 focus:outline-none"
-                >
-                  <option value="">— Select Property —</option>
-                  {allProperties.map((p) => (
-                    <option key={p._id} value={p._id}>{p.propertyName || p.name}</option>
-                  ))}
-                </select>
+                  onChange={(v) => setPropertyId(v ?? "")}
+                  options={allProperties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))}
+                />
 
                 {propertyId && propertyTenants.length > 0 && (
                   <button

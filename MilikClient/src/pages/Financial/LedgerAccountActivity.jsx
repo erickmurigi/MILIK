@@ -12,6 +12,7 @@ import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { adminRequests } from "../../utils/requestMethods";
 import { deleteTenantInvoice, getChartOfAccounts } from "../../redux/apiCalls";
 import { hasCompanyPermission } from "../../utils/permissions";
+import AppSelect from "../../components/common/AppSelect";
 
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -360,15 +361,17 @@ const LedgerAccountActivity = () => {
             className={inputCls}
             title="To date"
           />
-          <select
-            value={filters.direction}
-            onChange={(e) => setFilters((p) => ({ ...p, direction: e.target.value }))}
-            className={`${inputCls} pr-2`}
-          >
-            <option value="all">All directions</option>
-            <option value="debit">Debits only</option>
-            <option value="credit">Credits only</option>
-          </select>
+          <AppSelect
+            value={filters.direction !== "all" ? filters.direction : ""}
+            onChange={(v) => setFilters((p) => ({ ...p, direction: v ?? "all" }))}
+            options={[
+              { value: "debit", label: "Debits only" },
+              { value: "credit", label: "Credits only" },
+            ]}
+            placeholder="All directions"
+            size="sm"
+            clearable
+          />
           <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 cursor-pointer select-none">
             <input
               type="checkbox"
@@ -557,13 +560,12 @@ const LedgerAccountActivity = () => {
             </span>
             <div className="flex items-center gap-2">
               <span className="text-slate-500 font-semibold">Per page:</span>
-              <select
+              <AppSelect
                 value={pageSize}
-                onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                className="h-7 border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:outline-none"
-              >
-                {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
+                onChange={(v) => { setPageSize(Number(v ?? 25)); setCurrentPage(1); }}
+                options={[25, 50, 100, 200].map((n) => ({ value: n, label: String(n) }))}
+                size="sm"
+              />
               <button
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={safePage === 1}
@@ -626,17 +628,14 @@ const LedgerAccountActivity = () => {
                 {/* Destination */}
                 <div>
                   <label className={labelCls}>Move To *</label>
-                  <select
+                  <AppSelect
                     value={moveModal.newAccountId}
-                    onChange={(e) => setMoveModal((p) => ({ ...p, newAccountId: e.target.value }))}
-                    className={panelInputCls}
-                    required
-                  >
-                    <option value="">Select destination account…</option>
-                    {reclassifyOptions.map((a) => (
-                      <option key={a._id} value={a._id}>{a.code} — {a.name}</option>
-                    ))}
-                  </select>
+                    onChange={(v) => setMoveModal((p) => ({ ...p, newAccountId: v ?? "" }))}
+                    options={reclassifyOptions.map((a) => ({ value: a._id, label: `${a.code} — ${a.name}` }))}
+                    placeholder="Select destination account…"
+                    size="md"
+                    searchable
+                  />
                 </div>
 
                 {/* Reason */}

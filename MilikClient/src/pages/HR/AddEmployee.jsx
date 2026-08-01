@@ -4,6 +4,7 @@ import {
   FaArrowLeft, FaSave, FaUser, FaBriefcase, FaMoneyBillWave,
   FaHeartbeat, FaPlus, FaTrash,
 } from 'react-icons/fa';
+import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
@@ -38,11 +39,6 @@ const Input = (props) => (
   <input {...props} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
 );
 
-const Select = ({ children, ...props }) => (
-  <select {...props} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
-    {children}
-  </select>
-);
 
 export default function AddEmployee() {
   const navigate = useNavigate();
@@ -235,10 +231,18 @@ export default function AddEmployee() {
                       <Field label="Surname" required><Input value={form.surname} onChange={(e) => set('surname', e.target.value)} /></Field>
                       <Field label="Other Names" required><Input value={form.otherNames} onChange={(e) => set('otherNames', e.target.value)} /></Field>
                       <Field label="Gender">
-                        <Select value={form.gender} onChange={(e) => set('gender', e.target.value)}>
-                          <option value="">Select gender</option>
-                          <option>Male</option><option>Female</option><option>Other</option>
-                        </Select>
+                        <AppSelect
+                          value={form.gender}
+                          onChange={(v) => set('gender', v ?? '')}
+                          options={[
+                            { value: 'Male', label: 'Male' },
+                            { value: 'Female', label: 'Female' },
+                            { value: 'Other', label: 'Other' },
+                          ]}
+                          placeholder="Select gender"
+                          clearable
+                          size="md"
+                        />
                       </Field>
                       <Field label="Date of Birth"><Input type="date" value={form.dateOfBirth} onChange={(e) => set('dateOfBirth', e.target.value)} /></Field>
                       <Field label="National ID / Passport"><Input value={form.nationalId} onChange={(e) => set('nationalId', e.target.value)} /></Field>
@@ -272,29 +276,50 @@ export default function AddEmployee() {
                 <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     <Field label="Department">
-                      <Select value={form.department} onChange={(e) => { set('department', e.target.value); set('designation', ''); }}>
-                        <option value="">Select department</option>
-                        {departments.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
-                      </Select>
+                      <AppSelect
+                        value={form.department}
+                        onChange={(v) => { set('department', v ?? ''); set('designation', ''); }}
+                        options={departments.map((d) => ({ value: d._id, label: d.name }))}
+                        placeholder="Select department"
+                        searchable
+                        clearable
+                        size="md"
+                      />
                     </Field>
                     <Field label="Designation">
-                      <Select value={form.designation} onChange={(e) => set('designation', e.target.value)} disabled={!form.department}>
-                        <option value="">Select designation</option>
-                        {designations.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
-                      </Select>
+                      <AppSelect
+                        value={form.designation}
+                        onChange={(v) => set('designation', v ?? '')}
+                        options={designations.map((d) => ({ value: d._id, label: d.name }))}
+                        placeholder="Select designation"
+                        disabled={!form.department}
+                        size="md"
+                      />
                     </Field>
                     <Field label="Reports To">
-                      <Select value={form.reportsTo} onChange={(e) => set('reportsTo', e.target.value)}>
-                        <option value="">Select supervisor</option>
-                        {employees.map((e) => <option key={e._id} value={e._id}>{e.surname} {e.otherNames} ({e.employeeNumber})</option>)}
-                      </Select>
+                      <AppSelect
+                        value={form.reportsTo}
+                        onChange={(v) => set('reportsTo', v ?? '')}
+                        options={employees.map((e) => ({ value: e._id, label: `${e.surname} ${e.otherNames} (${e.employeeNumber})` }))}
+                        placeholder="Select supervisor"
+                        searchable
+                        clearable
+                        size="md"
+                      />
                     </Field>
                     <Field label="Employment Type" required>
-                      <Select value={form.employmentType} onChange={(e) => set('employmentType', e.target.value)}>
-                        <option value="">Select type</option>
-                        <option>Permanent</option><option>Contract</option>
-                        <option>Casual</option><option>Intern</option>
-                      </Select>
+                      <AppSelect
+                        value={form.employmentType}
+                        onChange={(v) => set('employmentType', v ?? '')}
+                        options={[
+                          { value: 'Permanent', label: 'Permanent' },
+                          { value: 'Contract', label: 'Contract' },
+                          { value: 'Casual', label: 'Casual' },
+                          { value: 'Intern', label: 'Intern' },
+                        ]}
+                        placeholder="Select type"
+                        size="md"
+                      />
                     </Field>
                     <Field label="Date Joined" required><Input type="date" value={form.dateJoined} onChange={(e) => set('dateJoined', e.target.value)} /></Field>
                     <Field label="Probation End Date"><Input type="date" value={form.probationEndDate} onChange={(e) => set('probationEndDate', e.target.value)} /></Field>
@@ -314,9 +339,16 @@ export default function AddEmployee() {
                         <Input type="number" min="0" value={form.basicSalary} onChange={(e) => set('basicSalary', e.target.value)} placeholder="0.00" />
                       </Field>
                       <Field label="Payment Method">
-                        <Select value={form.paymentMethod} onChange={(e) => set('paymentMethod', e.target.value)}>
-                          <option>Bank Transfer</option><option>Cash</option><option>M-Pesa</option>
-                        </Select>
+                        <AppSelect
+                          value={form.paymentMethod}
+                          onChange={(v) => set('paymentMethod', v ?? 'Bank Transfer')}
+                          options={[
+                            { value: 'Bank Transfer', label: 'Bank Transfer' },
+                            { value: 'Cash', label: 'Cash' },
+                            { value: 'M-Pesa', label: 'M-Pesa' },
+                          ]}
+                          size="md"
+                        />
                       </Field>
                     </div>
                     {form.paymentMethod === 'Bank Transfer' && (
@@ -352,35 +384,32 @@ export default function AddEmployee() {
                             <div className="sm:col-span-2">
                               <label className="mb-0.5 block text-[10px] font-semibold text-slate-500">Name</label>
                               {!comp._isCustom ? (
-                                <Select
+                                <AppSelect
                                   value={comp.name}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    if (val === '__custom__') {
+                                  onChange={(v) => {
+                                    if (v === '__custom__') {
                                       updateComponent(idx, '_isCustom', true);
                                       updateComponent(idx, 'name', '');
                                     } else {
-                                      const found = payComponents.find((c) => c.name === val);
-                                      updateComponent(idx, 'name', val);
+                                      const found = payComponents.find((c) => c.name === v);
+                                      updateComponent(idx, 'name', v ?? '');
                                       if (found) updateComponent(idx, 'type', found.type === 'allowance' ? 'Allowance' : 'Deduction');
                                     }
                                   }}
-                                >
-                                  <option value="">— Select component —</option>
-                                  {allowances.length > 0 && (
-                                    <optgroup label="Allowances">
-                                      {allowances.map((c) => <option key={c._id} value={c.name}>{c.name}</option>)}
-                                    </optgroup>
-                                  )}
-                                  {deductions.length > 0 && (
-                                    <optgroup label="Deductions">
-                                      {deductions.map((c) => <option key={c._id} value={c.name}>{c.name}</option>)}
-                                    </optgroup>
-                                  )}
-                                  <optgroup label="">
-                                    <option value="__custom__">Other (custom name…)</option>
-                                  </optgroup>
-                                </Select>
+                                  options={[
+                                    ...(allowances.length > 0 ? [
+                                      { value: '__h_allowances__', label: 'Allowances', disabled: true },
+                                      ...allowances.map((c) => ({ value: c.name, label: c.name })),
+                                    ] : []),
+                                    ...(deductions.length > 0 ? [
+                                      { value: '__h_deductions__', label: 'Deductions', disabled: true },
+                                      ...deductions.map((c) => ({ value: c.name, label: c.name })),
+                                    ] : []),
+                                    { value: '__custom__', label: 'Other (custom name…)' },
+                                  ]}
+                                  placeholder="— Select component —"
+                                  size="md"
+                                />
                               ) : (
                                 <div className="flex gap-1">
                                   <Input
@@ -400,9 +429,15 @@ export default function AddEmployee() {
                             </div>
                             <div>
                               <label className="mb-0.5 block text-[10px] font-semibold text-slate-500">Type</label>
-                              <Select value={comp.type} onChange={(e) => updateComponent(idx, 'type', e.target.value)}>
-                                <option>Allowance</option><option>Deduction</option>
-                              </Select>
+                              <AppSelect
+                                value={comp.type}
+                                onChange={(v) => updateComponent(idx, 'type', v ?? 'Allowance')}
+                                options={[
+                                  { value: 'Allowance', label: 'Allowance' },
+                                  { value: 'Deduction', label: 'Deduction' },
+                                ]}
+                                size="md"
+                              />
                             </div>
                             <div>
                               <label className="mb-0.5 block text-[10px] font-semibold text-slate-500">
@@ -414,9 +449,15 @@ export default function AddEmployee() {
                               <label className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-600">
                                 <input type="checkbox" checked={comp.isPercentage} onChange={(e) => updateComponent(idx, 'isPercentage', e.target.checked)} />
                                 % of {comp.isPercentage ? (
-                                  <select value={comp.percentageBase} onChange={(e) => updateComponent(idx, 'percentageBase', e.target.value)} className="h-6 rounded border border-slate-200 px-1 text-[10px]">
-                                    <option>Basic</option><option>Gross</option>
-                                  </select>
+                                  <AppSelect
+                                    value={comp.percentageBase}
+                                    onChange={(v) => updateComponent(idx, 'percentageBase', v ?? 'Basic')}
+                                    options={[
+                                      { value: 'Basic', label: 'Basic' },
+                                      { value: 'Gross', label: 'Gross' },
+                                    ]}
+                                    size="sm"
+                                  />
                                 ) : 'basic'}
                               </label>
                               <button type="button" onClick={() => removeComponent(idx)} className="ml-auto rounded border border-rose-200 bg-rose-50 p-1 text-rose-600 hover:bg-rose-100">

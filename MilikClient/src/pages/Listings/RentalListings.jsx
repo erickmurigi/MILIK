@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useTabState } from "../../hooks/useTabState";
+import AppSelect from "../../components/common/AppSelect";
 
 const API_BASE = String(import.meta.env?.VITE_API_URL || "/api").replace(/\/$/, "");
 
@@ -309,16 +310,7 @@ const RentalListings = () => {
               onChange={(e) => setFilter("maxRent", e.target.value)}
               className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] focus:border-[#0B3B2E]"
             />
-            <select
-              value={filters.furnished}
-              onChange={(e) => setFilter("furnished", e.target.value)}
-              className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] appearance-none"
-            >
-              <option value="">Any furnishing</option>
-              <option value="furnished">Furnished</option>
-              <option value="semi-furnished">Semi-Furnished</option>
-              <option value="unfurnished">Unfurnished</option>
-            </select>
+            <AppSelect value={filters.furnished} onChange={(v) => setFilter("furnished", v ?? "")} options={[{value:"furnished",label:"Furnished"},{value:"semi-furnished",label:"Semi-Furnished"},{value:"unfurnished",label:"Unfurnished"}]} placeholder="Any furnishing" clearable size="sm" />
           </div>
 
           {/* Clear filters */}

@@ -1212,14 +1212,18 @@ const InvoiceNotes = () => {
                         placeholder="Search rent month, utility, deposit, late payment..."
                         className="mb-2 w-full border border-slate-200 bg-white px-3 py-1.5 text-xs normal-case text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed"
                       />
-                      <select value={invoiceItemSelection} onChange={(e) => setInvoiceItemSelection(e.target.value)} disabled={!tenantId} size={Math.min(8, Math.max(3, filteredDebitInvoiceItemOptions.length + 1))} className="max-h-56 w-full overflow-y-auto border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed">
-                        <option value="">{tenantId ? (debitInvoiceItemOptions.length ? "Select charge item" : "No charge items available") : "Select tenant first"}</option>
-                        {filteredDebitInvoiceItemOptions.map((item) => (
-                          <option key={item.key} value={item.key}>
-                            {item.label} | {humanizeCategory(item.category)} | {item.anchorInvoice?.invoiceNumber || "Standalone"}
-                          </option>
-                        ))}
-                      </select>
+                      <AppSelect
+                        value={invoiceItemSelection}
+                        onChange={(v) => setInvoiceItemSelection(v ?? "")}
+                        options={filteredDebitInvoiceItemOptions.map((item) => ({
+                          value: item.key,
+                          label: `${item.label} | ${humanizeCategory(item.category)} | ${item.anchorInvoice?.invoiceNumber || "Standalone"}`,
+                        }))}
+                        placeholder={tenantId ? (debitInvoiceItemOptions.length ? "Select charge item" : "No charge items available") : "Select tenant first"}
+                        disabled={!tenantId}
+                        searchable
+                        size="md"
+                      />
                     </label>
                   )}
 

@@ -13,6 +13,7 @@ import { toast } from "react-toastify";
 import { carWashApi, formatMoney } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
+import AppSelect from "../../components/common/AppSelect";
 
 const fmt = formatMoney;
 const fmtDate = (v) =>
@@ -194,19 +195,15 @@ const RefundModal = ({ credit, cashbooks, onRefund, onClose }) => {
             Cash will be paid out to the customer. The credit liability will be removed from your books.
           </div>
           <div>
-            <label className="mb-1 block text-[11px] font-extrabold uppercase tracking-widest text-slate-500">
-              Pay from Cashbook *
-            </label>
-            <select
-              className="h-9 w-full border border-slate-300 px-2 text-sm focus:border-orange-400 focus:outline-none"
+            <AppSelect
+              label="Pay from Cashbook *"
               value={cashbookAccount}
-              onChange={(e) => setCashbook(e.target.value)}
-            >
-              <option value="">Select account</option>
-              {cashbooks.map((cb) => (
-                <option key={cb._id} value={cb._id}>{cb.code} - {cb.name}</option>
-              ))}
-            </select>
+              onChange={(v) => setCashbook(v ?? "")}
+              options={cashbooks.map((cb) => ({ value: cb._id, label: `${cb.code} - ${cb.name}` }))}
+              placeholder="Select account"
+              searchable
+              size="md"
+            />
           </div>
           <div>
             <label className="mb-1 block text-[11px] font-extrabold uppercase tracking-widest text-slate-500">

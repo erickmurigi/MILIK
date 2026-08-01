@@ -6,6 +6,7 @@ import { FaBoxOpen, FaExclamationTriangle, FaFileInvoice, FaRedoAlt } from "reac
 import { toast } from "react-toastify";
 import InventoryShell from "./InventoryShell";
 import { inventoryApi } from "../../services/inventoryApi";
+import AppSelect from "../../components/common/AppSelect";
 
 const Pill = ({ children, color }) => (
   <span className={`inline-flex border px-1.5 py-0.5 text-[9px] font-bold uppercase ${color}`}>{children}</span>
@@ -68,14 +69,7 @@ const InvLowStock = () => {
             </span>
           )}
           <div className="ml-auto flex items-center gap-2">
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#0B3B2E]"
-            >
-              <option value="">All Categories</option>
-              {categories.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <AppSelect value={categoryFilter} onChange={(v) => setCategoryFilter(v ?? "")} options={categories.map((c) => ({ value: c, label: c }))} placeholder="All Categories" clearable size="sm" />
             <button
               type="button"
               onClick={() => navigate("/inventory/purchase-orders")}

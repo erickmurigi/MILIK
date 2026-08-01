@@ -3,6 +3,7 @@ import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { FaFileDownload, FaFilePdf, FaSearch, FaSyncAlt, FaTimes } from "react-icons/fa";
+import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getAPAgingReport } from "../../redux/apiCalls";
 
@@ -290,25 +291,26 @@ td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
           </div>
 
           {properties.length > 1 && (
-            <select
+            <AppSelect
               value={selectedProperty}
-              onChange={(e) => setSelectedProperty(e.target.value)}
-              className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-            >
-              <option value="">All Properties</option>
-              {properties.map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
+              onChange={(v) => setSelectedProperty(v ?? "")}
+              options={properties.map((p) => ({ value: p, label: p }))}
+              placeholder="All Properties"
+              searchable
+              clearable
+              size="sm"
+            />
           )}
 
           {categories.length > 1 && (
-            <select
+            <AppSelect
               value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-            >
-              <option value="">All Categories</option>
-              {categories.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c] || c}</option>)}
-            </select>
+              onChange={(v) => setSelectedCategory(v ?? "")}
+              options={categories.map((c) => ({ value: c, label: CATEGORY_LABELS[c] || c }))}
+              placeholder="All Categories"
+              clearable
+              size="sm"
+            />
           )}
 
           {isFiltered && (

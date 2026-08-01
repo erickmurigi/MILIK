@@ -10,6 +10,7 @@ import { adminRequests } from "../../utils/requestMethods";
 import { selectCurrentCompany } from "../../redux/selectors";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { useTabState } from "../../hooks/useTabState";
+import AppSelect from "../../components/common/AppSelect";
 
 const PAGE_SIZE   = 50;
 const AUTO_RELOAD = 30;
@@ -287,14 +288,19 @@ export default function CoopCollections() {
             />
           </div>
 
-          <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); fetchData(1); }}
-            className="h-7 border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none">
-            <option value="">All statuses</option>
-            <option value="unmatched">Unmatched</option>
-            <option value="matched_tenant">Matched</option>
-            <option value="captured">Captured</option>
-            <option value="ignored">Ignored</option>
-          </select>
+          <AppSelect
+            value={statusFilter}
+            onChange={(v) => { setStatusFilter(v ?? ""); fetchData(1); }}
+            options={[
+              { value: "unmatched", label: "Unmatched" },
+              { value: "matched_tenant", label: "Matched" },
+              { value: "captured", label: "Captured" },
+              { value: "ignored", label: "Ignored" },
+            ]}
+            placeholder="All statuses"
+            clearable
+            size="sm"
+          />
 
           <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
             className="h-7 border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none" />

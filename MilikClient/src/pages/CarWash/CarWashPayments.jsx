@@ -7,6 +7,7 @@ import { toast } from "react-toastify";
 import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import CwSmsModal from "./CwSmsModal";
+import AppSelect from "../../components/common/AppSelect";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import PaginationBar from "../../components/PaginationBar";
 import { useTabState } from "../../hooks/useTabState";
@@ -274,30 +275,31 @@ const CarWashPayments = () => {
 
         {/* Row 2: method, cashbook, reconciliation, reference, actions */}
         <div className="flex flex-wrap items-center gap-1.5">
-          <select
-            className="h-8 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
+          <AppSelect
+            size="sm"
+            clearable
+            placeholder="All methods"
             value={filters.method}
-            onChange={e => setF("method", e.target.value)}
-          >
-            <option value="">All methods</option>
-            {paymentMethods.map(m => <option key={m} value={m}>{m.toUpperCase()}</option>)}
-          </select>
-          <select
-            className="h-8 min-w-[180px] border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
+            onChange={(v) => setF("method", v ?? "")}
+            options={paymentMethods.map(m => ({ value: m, label: m.toUpperCase() }))}
+          />
+          <AppSelect
+            size="sm"
+            clearable
+            searchable
+            placeholder="All cashbooks"
             value={filters.cashbookAccount}
-            onChange={e => setF("cashbookAccount", e.target.value)}
-          >
-            <option value="">All cashbooks</option>
-            {cashbooks.map(a => <option key={a._id} value={a._id}>{a.code} - {a.name}</option>)}
-          </select>
-          <select
-            className="h-8 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
+            onChange={(v) => setF("cashbookAccount", v ?? "")}
+            options={cashbooks.map(a => ({ value: a._id, label: `${a.code} - ${a.name}` }))}
+          />
+          <AppSelect
+            size="sm"
+            clearable
+            placeholder="All reconciliation"
             value={filters.reconciliationStatus}
-            onChange={e => setF("reconciliationStatus", e.target.value)}
-          >
-            <option value="">All reconciliation</option>
-            {reconciliationStatuses.map(s => <option key={s} value={s}>{s.toUpperCase()}</option>)}
-          </select>
+            onChange={(v) => setF("reconciliationStatus", v ?? "")}
+            options={reconciliationStatuses.map(s => ({ value: s, label: s.toUpperCase() }))}
+          />
           <input
             className="h-8 flex-1 min-w-[140px] border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
             placeholder="Reference / receipt code"
@@ -358,13 +360,13 @@ const CarWashPayments = () => {
                     <div className="flex-shrink-0 text-right">
                       <div className="font-extrabold text-slate-900">{formatMoney(row.amount)}</div>
                       {canReconcile ? (
-                        <select
-                          className={`mt-1 h-6 border px-1.5 text-[10px] font-bold uppercase ${reconciliationBadgeClass[status] || reconciliationBadgeClass.pending}`}
+                        <AppSelect
+                          size="sm"
                           value={status}
-                          onChange={e => updateReconciliation(row, e.target.value)}
-                        >
-                          {reconciliationStatuses.map(s => <option key={s} value={s}>{s.toUpperCase()}</option>)}
-                        </select>
+                          onChange={(v) => updateReconciliation(row, v ?? "pending")}
+                          className={`mt-1 ${reconciliationBadgeClass[status] || reconciliationBadgeClass.pending}`}
+                          options={reconciliationStatuses.map(s => ({ value: s, label: s.toUpperCase() }))}
+                        />
                       ) : (
                         <span className={`mt-1 inline-flex border px-1.5 py-0.5 text-[10px] font-bold uppercase ${reconciliationBadgeClass[status] || reconciliationBadgeClass.pending}`}>{status}</span>
                       )}
@@ -441,13 +443,13 @@ const CarWashPayments = () => {
                         <td className="px-2 py-1 text-slate-600">{row.reference || "-"}</td>
                         <td className="px-2 py-1">
                           {canReconcile ? (
-                            <select
-                              className={`h-6 border px-2 text-[11px] font-bold uppercase ${reconciliationBadgeClass[status] || reconciliationBadgeClass.pending}`}
+                            <AppSelect
+                              size="sm"
                               value={status}
-                              onChange={e => updateReconciliation(row, e.target.value)}
-                            >
-                              {reconciliationStatuses.map(s => <option key={s} value={s}>{s.toUpperCase()}</option>)}
-                            </select>
+                              onChange={(v) => updateReconciliation(row, v ?? "pending")}
+                              className={reconciliationBadgeClass[status] || reconciliationBadgeClass.pending}
+                              options={reconciliationStatuses.map(s => ({ value: s, label: s.toUpperCase() }))}
+                            />
                           ) : (
                             <span className={`inline-flex border px-2 py-0.5 text-[11px] font-bold uppercase ${reconciliationBadgeClass[status] || reconciliationBadgeClass.pending}`}>
                               {status}

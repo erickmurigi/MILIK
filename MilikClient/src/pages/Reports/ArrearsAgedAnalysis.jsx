@@ -3,6 +3,7 @@ import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { FaFileDownload, FaFilePdf, FaSearch, FaSyncAlt, FaTimes } from "react-icons/fa";
+import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getARAgingReport } from "../../redux/apiCalls";
 
@@ -242,14 +243,15 @@ td{padding:3px 6px;border-bottom:1px solid #e2e8f0}
           </div>
 
           {properties.length > 1 && (
-            <select
+            <AppSelect
               value={selectedProperty}
-              onChange={(e) => setSelectedProperty(e.target.value)}
-              className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-            >
-              <option value="">All Properties</option>
-              {properties.map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
+              onChange={(v) => setSelectedProperty(v ?? "")}
+              options={properties.map((p) => ({ value: p, label: p }))}
+              placeholder="All Properties"
+              searchable
+              clearable
+              size="sm"
+            />
           )}
 
           {isFiltered && (

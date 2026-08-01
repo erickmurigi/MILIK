@@ -6,6 +6,7 @@ import { FaExternalLinkAlt, FaPrint, FaRedoAlt, FaSearch } from "react-icons/fa"
 import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import { selectCurrentCompany } from "../../redux/selectors";
 import CarWashShell from "./CarWashShell";
+import AppSelect from "../../components/common/AppSelect";
 
 // ── module-level constants ──────────────────────────────────────────────────
 const statusLabels = { waiting: "Waiting", washing: "Washing", done: "Done", paid: "Paid", cancelled: "Cancelled" };
@@ -402,14 +403,14 @@ const CarWashReports = () => {
 
         {/* branch filter */}
         {branches.length > 0 && (
-          <select
-            className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+          <AppSelect
             value={branch}
-            onChange={(e) => setBranch(e.target.value)}
-          >
-            <option value="">All Branches</option>
-            {branches.map((b) => <option key={b._id} value={b._id}>{b.name}</option>)}
-          </select>
+            onChange={(v) => setBranch(v ?? "")}
+            options={branches.map((b) => ({ value: b._id, label: b.name }))}
+            placeholder="All Branches"
+            clearable
+            size="sm"
+          />
         )}
 
         <button type="submit" className="inline-flex h-8 items-center gap-1.5 bg-[#FF8C00] px-4 text-xs font-bold text-white hover:bg-[#E67E00]">

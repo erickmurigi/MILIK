@@ -11,6 +11,7 @@ import {
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
+import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { adminRequests } from "../../utils/requestMethods";
 
@@ -425,11 +426,16 @@ const CommissionReports = () => {
             <div className="flex flex-wrap items-center gap-1.5">
               <input type="month" value={draftFilters.monthFrom} onChange={setFilter("monthFrom")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />
               <input type="month" value={draftFilters.monthTo} onChange={setFilter("monthTo")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />
-              <select value={draftFilters.status} onChange={setFilter("status")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none">
-                <option value="recognized">Recognized only</option>
-                <option value="reversed">Reversed only</option>
-                <option value="all">All statuses</option>
-              </select>
+              <AppSelect
+                value={draftFilters.status}
+                onChange={(v) => setDraftFilters((prev) => ({ ...prev, status: v ?? "recognized" }))}
+                options={[
+                  { value: "recognized", label: "Recognized only" },
+                  { value: "reversed", label: "Reversed only" },
+                  { value: "all", label: "All statuses" },
+                ]}
+                size="sm"
+              />
               <div className="relative flex min-w-[200px] flex-1">
                 <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" size={9} />
                 <input value={draftFilters.search} onChange={setFilter("search")} onKeyDown={(e) => e.key === 'Enter' && applySearch()} placeholder="Search statement, property, landlord or basis…" className="h-7 w-full rounded-md border border-slate-200 bg-white pl-6 pr-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />

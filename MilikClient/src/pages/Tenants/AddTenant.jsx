@@ -37,6 +37,7 @@ import { fetchCompanySettings, selectCompanySettings } from "../../redux/company
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
+import AppSelect from "../../components/common/AppSelect";
 
 // Milik theme constants
 const MILIK_GREEN_BG = "bg-[#0B3B2E]";
@@ -1774,25 +1775,19 @@ await Promise.all(invoiceRequests.map((req) => createTenantInvoice(req)));
                     </div>
 
                     <div>
-                      <label className={labelClass}>
-                        Who Holds Deposit? <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        name="depositHeldBy"
+                      <AppSelect
+                        label="Who Holds Deposit?"
+                        required
                         value={formData.depositHeldBy}
-                        onChange={handleInputChange}
+                        onChange={(v) => handleInputChange({ target: { name: "depositHeldBy", value: v ?? (isSelfManagingLandlordMode ? "Landlord" : "Management Company") } })}
+                        options={isSelfManagingLandlordMode
+                          ? [{ value: "Landlord", label: "Landlord" }]
+                          : [{ value: "Management Company", label: "Management Company" }, { value: "Landlord", label: "Landlord" }]
+                        }
                         disabled={isSelfManagingLandlordMode}
-                        className={`${inputClass} ${fieldErrors.depositHeldBy ? "border-red-500" : ""} ${isSelfManagingLandlordMode ? "bg-slate-100 text-slate-600 cursor-not-allowed" : ""}`}
-                      >
-                        {isSelfManagingLandlordMode ? (
-                          <option value="Landlord">Landlord</option>
-                        ) : (
-                          <>
-                            <option value="Management Company">Management Company</option>
-                            <option value="Landlord">Landlord</option>
-                          </>
-                        )}
-                      </select>
+                        error={fieldErrors.depositHeldBy || ""}
+                        size="md"
+                      />
                       <p className="mt-1 text-xs text-slate-500">
                         {isSelfManagingLandlordMode
                           ? "This company is operating as the owner, so deposits default to landlord-held for new tenants."
@@ -1847,18 +1842,17 @@ await Promise.all(invoiceRequests.map((req) => createTenantInvoice(req)));
                     </div>
 
                     <div className="md:col-span-1">
-                      <label className={labelClass}>
-                        Lease Type <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        name="leaseType"
+                      <AppSelect
+                        label="Lease Type"
+                        required
                         value={formData.leaseType}
-                        onChange={handleInputChange}
-                        className={inputClass}
-                      >
-                        <option value="at_will">At Will</option>
-                        <option value="fixed">Fixed Term</option>
-                      </select>
+                        onChange={(v) => handleInputChange({ target: { name: "leaseType", value: v ?? "at_will" } })}
+                        options={[
+                          { value: "at_will", label: "At Will" },
+                          { value: "fixed", label: "Fixed Term" },
+                        ]}
+                        size="md"
+                      />
                       <p className="mt-1 text-xs text-gray-600">At Will / Fixed Term</p>
                     </div>
 </div>
@@ -2141,18 +2135,18 @@ await Promise.all(invoiceRequests.map((req) => createTenantInvoice(req)));
 
                     <div>
                       <label className={labelClass}>Relationship</label>
-                      <select
-                        name="emergencyContactRelationship"
+                      <AppSelect
                         value={formData.emergencyContactRelationship}
-                        onChange={handleInputChange}
-                        className={inputClass}
-                      >
-                        <option value="Family">Family</option>
-                        <option value="Friend">Friend</option>
-                        <option value="Guardian">Guardian</option>
-                        <option value="Colleague">Colleague</option>
-                        <option value="Other">Other</option>
-                      </select>
+                        onChange={(v) => handleInputChange({ target: { name: "emergencyContactRelationship", value: v ?? "Family" } })}
+                        options={[
+                          { value: "Family", label: "Family" },
+                          { value: "Friend", label: "Friend" },
+                          { value: "Guardian", label: "Guardian" },
+                          { value: "Colleague", label: "Colleague" },
+                          { value: "Other", label: "Other" },
+                        ]}
+                        size="md"
+                      />
                     </div>
                   </div>
                 </div>

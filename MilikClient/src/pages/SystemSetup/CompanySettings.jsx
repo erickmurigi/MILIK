@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import AppSelect from "../../components/common/AppSelect";
 import { useConfirm } from "../../context/ConfirmContext";
 import { adminRequests } from "../../utils/requestMethods";
 import { hasCompanyModule } from "../../utils/companyModules";
@@ -414,12 +415,6 @@ const Input = ({ className = "", ...props }) => (
   />
 );
 
-const Select = ({ className = "", ...props }) => (
-  <select
-    {...props}
-    className={`w-full border border-slate-300 bg-white px-3 py-2 text-[12px] text-slate-800 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 ${className}`}
-  />
-);
 
 const ActionButton = ({ children, onClick, variant = "default", disabled = false }) => {
   const classes = {
@@ -1175,19 +1170,17 @@ const CompanySettings = () => {
           />
 
           <div>
-            <label className="mb-1 block text-xs font-bold text-slate-700">
-              Billing Day <span className="font-normal text-slate-500">(1–28, day of month rent is due)</span>
-            </label>
-            <Select
+            <AppSelect
+              label="Billing Day"
+              hint="1–28, day of month rent is due"
               value={autoInvoicing.billingDay}
-              onChange={(e) => setAutoInvoicing((p) => ({ ...p, billingDay: Number(e.target.value) }))}
-            >
-              {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
-                <option key={d} value={d}>
-                  {d === 1 ? "1st (Start of month)" : `${d}${d === 2 ? "nd" : d === 3 ? "rd" : "th"}`}
-                </option>
-              ))}
-            </Select>
+              onChange={(v) => setAutoInvoicing((p) => ({ ...p, billingDay: Number(v ?? 1) }))}
+              options={Array.from({ length: 28 }, (_, i) => {
+                const d = i + 1;
+                return { value: d, label: d === 1 ? "1st (Start of month)" : `${d}${d === 2 ? "nd" : d === 3 ? "rd" : "th"}` };
+              })}
+              size="md"
+            />
             <p className="mt-1 text-[11px] text-slate-500">
               Invoices for billing day {autoInvoicing.billingDay} will be generated{" "}
               {autoInvoicing.daysInAdvance > 0
@@ -1218,18 +1211,18 @@ const CompanySettings = () => {
           </div>
 
           {autoInvoicing.notifyTenants && (
-            <div>
-              <label className="mb-1 block text-xs font-bold text-slate-700">Notification Channel</label>
-              <Select
-                value={autoInvoicing.notifyChannel}
-                onChange={(e) => setAutoInvoicing((p) => ({ ...p, notifyChannel: e.target.value }))}
-              >
-                <option value="none">None</option>
-                <option value="sms">SMS only</option>
-                <option value="email">Email only</option>
-                <option value="both">SMS + Email</option>
-              </Select>
-            </div>
+            <AppSelect
+              label="Notification Channel"
+              value={autoInvoicing.notifyChannel}
+              onChange={(v) => setAutoInvoicing((p) => ({ ...p, notifyChannel: v ?? "none" }))}
+              options={[
+                { value: "none", label: "None" },
+                { value: "sms", label: "SMS only" },
+                { value: "email", label: "Email only" },
+                { value: "both", label: "SMS + Email" },
+              ]}
+              size="md"
+            />
           )}
         </div>
       </Card>
@@ -1288,13 +1281,16 @@ const CompanySettings = () => {
             title="Invoices taxable by default"
             description="Used as the fallback taxability rule when category-specific rules are not stricter."
           />
-          <div>
-            <label className="mb-1 block text-xs font-bold text-slate-700">Default Tax Mode</label>
-            <Select value={taxConfig.taxSettings.defaultTaxMode} onChange={(e) => handleTaxSettingChange("defaultTaxMode", e.target.value)}>
-              <option value="exclusive">Exclusive</option>
-              <option value="inclusive">Inclusive</option>
-            </Select>
-          </div>
+          <AppSelect
+            label="Default Tax Mode"
+            value={taxConfig.taxSettings.defaultTaxMode}
+            onChange={(v) => handleTaxSettingChange("defaultTaxMode", v ?? "exclusive")}
+            options={[
+              { value: "exclusive", label: "Exclusive" },
+              { value: "inclusive", label: "Inclusive" },
+            ]}
+            size="md"
+          />
           <div>
             <label className="mb-1 block text-xs font-bold text-slate-700">Default VAT Rate (%)</label>
             <Input
@@ -1305,19 +1301,16 @@ const CompanySettings = () => {
               onChange={(e) => handleTaxSettingChange("defaultVatRate", Number(e.target.value || 0))}
             />
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-bold text-slate-700">Default Tax Code</label>
-            <Select
-              value={taxConfig.taxSettings.defaultTaxCodeKey}
-              onChange={(e) => handleTaxSettingChange("defaultTaxCodeKey", e.target.value)}
-            >
-              {taxConfig.taxCodes.map((code) => (
-                <option key={code._id || code.key} value={code.key}>
-                  {code.name} ({code.key})
-                </option>
-              ))}
-            </Select>
-          </div>
+          <AppSelect
+            label="Default Tax Code"
+            value={taxConfig.taxSettings.defaultTaxCodeKey}
+            onChange={(v) => handleTaxSettingChange("defaultTaxCodeKey", v ?? "")}
+            options={taxConfig.taxCodes.map((code) => ({
+              value: code.key,
+              label: `${code.name} (${code.key})`,
+            }))}
+            size="md"
+          />
           <div>
             <label className="mb-1 block text-xs font-bold text-slate-700">Output VAT Account Code</label>
             <Input
@@ -1326,19 +1319,16 @@ const CompanySettings = () => {
               placeholder="2140"
             />
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-bold text-slate-700">Rounding Precision</label>
-            <Select
-              value={taxConfig.taxSettings.roundingPrecision}
-              onChange={(e) => handleTaxSettingChange("roundingPrecision", Number(e.target.value || 2))}
-            >
-              {[0, 1, 2, 3, 4].map((value) => (
-                <option key={value} value={value}>
-                  {value} decimal place{value === 1 ? "" : "s"}
-                </option>
-              ))}
-            </Select>
-          </div>
+          <AppSelect
+            label="Rounding Precision"
+            value={taxConfig.taxSettings.roundingPrecision}
+            onChange={(v) => handleTaxSettingChange("roundingPrecision", Number(v ?? 2))}
+            options={[0, 1, 2, 3, 4].map((value) => ({
+              value,
+              label: `${value} decimal place${value === 1 ? "" : "s"}`,
+            }))}
+            size="md"
+          />
         </div>
 
         <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -1403,15 +1393,18 @@ const CompanySettings = () => {
                   <label className="mb-1 block text-xs font-bold text-slate-700">Name</label>
                   <Input value={code.name} onChange={(e) => handleTaxCodeChange(index, "name", e.target.value)} />
                 </div>
-                <div>
-                  <label className="mb-1 block text-xs font-bold text-slate-700">Type</label>
-                  <Select value={code.type} onChange={(e) => handleTaxCodeChange(index, "type", e.target.value)}>
-                    <option value="vat">VAT</option>
-                    <option value="zero_rated">Zero Rated</option>
-                    <option value="exempt">Exempt</option>
-                    <option value="none">None</option>
-                  </Select>
-                </div>
+                <AppSelect
+                  label="Type"
+                  value={code.type}
+                  onChange={(v) => handleTaxCodeChange(index, "type", v ?? "vat")}
+                  options={[
+                    { value: "vat", label: "VAT" },
+                    { value: "zero_rated", label: "Zero Rated" },
+                    { value: "exempt", label: "Exempt" },
+                    { value: "none", label: "None" },
+                  ]}
+                  size="md"
+                />
                 <div>
                   <label className="mb-1 block text-xs font-bold text-slate-700">Rate (%)</label>
                   <Input type="number" min="0" step="0.01" value={code.rate} onChange={(e) => handleTaxCodeChange(index, "rate", e.target.value)} />
@@ -1466,18 +1459,18 @@ const CompanySettings = () => {
             <div className="mt-1 text-xs leading-5 text-slate-600">{field.description}</div>
 
             <div className="mt-3">
-              <Select
+              <AppSelect
                 value={defaults[field.key] || ""}
-                onChange={(e) => setField(field.key, e.target.value)}
-              >
-                <option value="">Use automatic fallback</option>
-                {options.map((account) => (
-                  <option key={account._id} value={account._id}>
-                    {account.code ? `${account.code} — ` : ""}
-                    {account.name}
-                  </option>
-                ))}
-              </Select>
+                onChange={(v) => setField(field.key, v ?? "")}
+                options={options.map((account) => ({
+                  value: account._id,
+                  label: account.code ? `${account.code} — ${account.name}` : account.name,
+                }))}
+                placeholder="Use automatic fallback"
+                clearable
+                searchable
+                size="md"
+              />
             </div>
 
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
@@ -1592,14 +1585,17 @@ const CompanySettings = () => {
             <label className="mb-1 block text-xs font-bold text-slate-700">Description</label>
             <Input value={formData.description || ""} onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))} placeholder="Optional description" />
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-bold text-slate-700">Category</label>
-            <Select value={formData.category || "utility"} onChange={(e) => setFormData((prev) => ({ ...prev, category: e.target.value }))}>
-              <option value="utility">Utility</option>
-              <option value="service_charge">Service charge</option>
-              <option value="maintenance">Maintenance</option>
-            </Select>
-          </div>
+          <AppSelect
+            label="Category"
+            value={formData.category || "utility"}
+            onChange={(v) => setFormData((prev) => ({ ...prev, category: v ?? "utility" }))}
+            options={[
+              { value: "utility", label: "Utility" },
+              { value: "service_charge", label: "Service charge" },
+              { value: "maintenance", label: "Maintenance" },
+            ]}
+            size="md"
+          />
         </div>
       );
     }
@@ -1637,14 +1633,17 @@ const CompanySettings = () => {
               <label className="mb-1 block text-xs font-bold text-slate-700">Percentage (%) *</label>
               <Input type="number" min="0" step="0.01" value={formData.percentage || ""} onChange={(e) => setFormData((prev) => ({ ...prev, percentage: e.target.value }))} />
             </div>
-            <div>
-              <label className="mb-1 block text-xs font-bold text-slate-700">Applies To</label>
-              <Select value={formData.applicableTo || "rent"} onChange={(e) => setFormData((prev) => ({ ...prev, applicableTo: e.target.value }))}>
-                <option value="rent">Rent</option>
-                <option value="utilities">Utilities</option>
-                <option value="all">All</option>
-              </Select>
-            </div>
+            <AppSelect
+              label="Applies To"
+              value={formData.applicableTo || "rent"}
+              onChange={(v) => setFormData((prev) => ({ ...prev, applicableTo: v ?? "rent" }))}
+              options={[
+                { value: "rent", label: "Rent" },
+                { value: "utilities", label: "Utilities" },
+                { value: "all", label: "All" },
+              ]}
+              size="md"
+            />
           </div>
           <div>
             <label className="mb-1 block text-xs font-bold text-slate-700">Description</label>
@@ -1699,16 +1698,19 @@ const CompanySettings = () => {
             <label className="mb-1 block text-xs font-bold text-slate-700">Code</label>
             <Input value={formData.code || ""} onChange={(e) => setFormData((prev) => ({ ...prev, code: e.target.value }))} placeholder="Optional code" />
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-bold text-slate-700">Category</label>
-            <Select value={formData.category || "other"} onChange={(e) => setFormData((prev) => ({ ...prev, category: e.target.value }))}>
-              <option value="maintenance">Maintenance</option>
-              <option value="utilities">Utilities</option>
-              <option value="staffing">Staffing</option>
-              <option value="supplies">Supplies</option>
-              <option value="other">Other</option>
-            </Select>
-          </div>
+          <AppSelect
+            label="Category"
+            value={formData.category || "other"}
+            onChange={(v) => setFormData((prev) => ({ ...prev, category: v ?? "other" }))}
+            options={[
+              { value: "maintenance", label: "Maintenance" },
+              { value: "utilities", label: "Utilities" },
+              { value: "staffing", label: "Staffing" },
+              { value: "supplies", label: "Supplies" },
+              { value: "other", label: "Other" },
+            ]}
+            size="md"
+          />
         </div>
         <div>
           <label className="mb-1 block text-xs font-bold text-slate-700">Default Amount</label>

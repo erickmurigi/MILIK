@@ -8,6 +8,7 @@ import { toast } from "react-toastify";
 import { carWashApi, normalizeListPayload } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
+import AppSelect from "../../components/common/AppSelect";
 
 const labelCls = "mb-1 block text-[10px] font-extrabold uppercase tracking-widest text-slate-500";
 const inputCls = "h-9 w-full border border-slate-300 bg-white px-2.5 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20 transition";
@@ -324,13 +325,17 @@ export default function CarWashSettings() {
                   <div className="grid gap-4 sm:grid-cols-2">
                     {METHODS.map((method) => (
                       <div key={method}>
-                        <label className={labelCls}>{METHOD_LABELS[method]}</label>
-                        <select className={inputCls} value={defaults[method]} onChange={(e) => setDefault(method, e.target.value)} disabled={!canManage}>
-                          <option value="">— No default —</option>
-                          {cashbooks.map((cb) => (
-                            <option key={cb._id} value={cb._id}>{cb.code} – {cb.name}</option>
-                          ))}
-                        </select>
+                        <AppSelect
+                          label={METHOD_LABELS[method]}
+                          value={defaults[method]}
+                          onChange={(v) => setDefault(method, v ?? "")}
+                          options={cashbooks.map((cb) => ({ value: cb._id, label: `${cb.code} – ${cb.name}` }))}
+                          placeholder="— No default —"
+                          clearable
+                          searchable
+                          size="md"
+                          disabled={!canManage}
+                        />
                       </div>
                     ))}
                   </div>
@@ -347,17 +352,18 @@ export default function CarWashSettings() {
               />
               <div className="p-5 space-y-4">
                 <div>
-                  <label className={labelCls}>Default recovery mode</label>
-                  <select
-                    className={inputCls}
+                  <AppSelect
+                    label="Default recovery mode"
                     value={dmgDeductionMode}
-                    onChange={(e) => { setDmgDeductionMode(e.target.value); setDmgDeductionValue(""); setDirty(true); }}
+                    onChange={(v) => { setDmgDeductionMode(v ?? "full"); setDmgDeductionValue(""); setDirty(true); }}
+                    options={[
+                      { value: "full", label: "Full — deduct entire remaining balance at next payout" },
+                      { value: "percent", label: "Installment % — deduct a percentage of original damage each payout" },
+                      { value: "fixed", label: "Fixed amount — deduct a fixed Ksh amount each payout" },
+                    ]}
+                    size="md"
                     disabled={!canManage}
-                  >
-                    <option value="full">Full — deduct entire remaining balance at next payout</option>
-                    <option value="percent">Installment % — deduct a percentage of original damage each payout</option>
-                    <option value="fixed">Fixed amount — deduct a fixed Ksh amount each payout</option>
-                  </select>
+                  />
                 </div>
                 {dmgDeductionMode === "percent" && (
                   <div>

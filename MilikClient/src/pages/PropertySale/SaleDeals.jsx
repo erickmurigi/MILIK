@@ -9,12 +9,13 @@ import CwSmsModal from "../CarWash/CwSmsModal";
 import SaleEmailModal from "./SaleEmailModal";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
-import SaleFilterBar, { FilterSearch, FilterSelect, FilterDateRange } from "./SaleFilterBar";
+import SaleFilterBar, { FilterSearch, FilterDateRange } from "./SaleFilterBar";
 import PaginationBar from "../../components/PaginationBar";
 import { saleApi, fmtKES, todayISO } from "../../services/propertySaleApi";
 import AmountInput from "./AmountInput";
 import { useConfirm } from "../../context/ConfirmContext";
 import { useTabState } from "../../hooks/useTabState";
+import AppSelect from "../../components/common/AppSelect";
 
 const PAGE_SIZE = 25;
 
@@ -386,24 +387,10 @@ const SaleDeals = () => {
         <button type="submit" className="inline-flex h-8 shrink-0 items-center gap-1.5 border border-[#C8511A] bg-[#C8511A] px-3 text-xs font-bold text-white hover:bg-[#a84115]">
           <FaSearch size={9} /> Search
         </button>
-        <FilterSelect value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
-          <option value="">All Statuses</option>
-          <option value="active">Active</option>
-          <option value="closed">Closed</option>
-          <option value="cancelled">Cancelled</option>
-        </FilterSelect>
-        <FilterSelect value={agentFilt} onChange={(e) => { setAgentFilt(e.target.value); setPage(1); }}>
-          <option value="">All Agents</option>
-          {agents.map((a) => <option key={a._id} value={a._id}>{a.fullName}{a.agentNumber ? ` (${a.agentNumber})` : ""}</option>)}
-        </FilterSelect>
-        <FilterSelect value={buyerFilt} onChange={(e) => { setBuyerFilt(e.target.value); setPage(1); }}>
-          <option value="">All Buyers</option>
-          {buyers.map((b) => <option key={b._id} value={b._id}>{b.fullName}{b.buyerNumber ? ` (${b.buyerNumber})` : ""}</option>)}
-        </FilterSelect>
-        <FilterSelect value={listingFilt} onChange={(e) => { setListingFilt(e.target.value); setPage(1); }}>
-          <option value="">All Listings</option>
-          {listings.map((l) => <option key={l._id} value={l._id}>{l.listingNumber} — {l.title}</option>)}
-        </FilterSelect>
+        <AppSelect value={statusFilter} onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }} options={[{ value: "active", label: "Active" }, { value: "closed", label: "Closed" }, { value: "cancelled", label: "Cancelled" }]} placeholder="All Statuses" clearable size="sm" />
+        <AppSelect value={agentFilt} onChange={(v) => { setAgentFilt(v ?? ""); setPage(1); }} options={agents.map((a) => ({ value: a._id, label: `${a.fullName}${a.agentNumber ? ` (${a.agentNumber})` : ""}` }))} placeholder="All Agents" clearable size="sm" searchable />
+        <AppSelect value={buyerFilt} onChange={(v) => { setBuyerFilt(v ?? ""); setPage(1); }} options={buyers.map((b) => ({ value: b._id, label: `${b.fullName}${b.buyerNumber ? ` (${b.buyerNumber})` : ""}` }))} placeholder="All Buyers" clearable size="sm" searchable />
+        <AppSelect value={listingFilt} onChange={(v) => { setListingFilt(v ?? ""); setPage(1); }} options={listings.map((l) => ({ value: l._id, label: `${l.listingNumber} — ${l.title}` }))} placeholder="All Listings" clearable size="sm" searchable />
         <FilterDateRange
           from={dateFrom} to={dateTo}
           onFromChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
@@ -770,27 +757,13 @@ const SaleDeals = () => {
         >
           <div className="grid gap-3 md:grid-cols-2">
             <div>
-              <label className={labelCls}>Listing / Property</label>
-              <select value={form.listing} onChange={(e) => setForm((p) => ({ ...p, listing: e.target.value }))} className={inputCls}>
-                <option value="">Select listing…</option>
-                {listings.filter((l) => ["available", "reserved", "under_contract"].includes(l.status)).map((l) => (
-                  <option key={l._id} value={l._id}>{l.listingNumber} — {l.title}</option>
-                ))}
-              </select>
+              <AppSelect label="Listing / Property" value={form.listing} onChange={(v) => setForm((p) => ({ ...p, listing: v ?? "" }))} options={listings.filter((l) => ["available", "reserved", "under_contract"].includes(l.status)).map((l) => ({ value: l._id, label: `${l.listingNumber} — ${l.title}` }))} placeholder="Select listing…" size="md" searchable />
             </div>
             <div>
-              <label className={labelCls}>Buyer</label>
-              <select value={form.buyer} onChange={(e) => setForm((p) => ({ ...p, buyer: e.target.value }))} className={inputCls}>
-                <option value="">Select buyer…</option>
-                {buyers.map((b) => <option key={b._id} value={b._id}>{b.fullName} ({b.buyerNumber})</option>)}
-              </select>
+              <AppSelect label="Buyer" value={form.buyer} onChange={(v) => setForm((p) => ({ ...p, buyer: v ?? "" }))} options={buyers.map((b) => ({ value: b._id, label: `${b.fullName} (${b.buyerNumber})` }))} placeholder="Select buyer…" size="md" searchable />
             </div>
             <div>
-              <label className={labelCls}>Sales Agent (Optional)</label>
-              <select value={form.agent} onChange={(e) => setForm((p) => ({ ...p, agent: e.target.value, commOverrideEnabled: false, commissionRateOverride: "", commissionTypeOverride: "", commissionAmountOverride: "" }))} className={inputCls}>
-                <option value="">No agent</option>
-                {agents.map((a) => <option key={a._id} value={a._id}>{a.fullName} ({a.agentNumber})</option>)}
-              </select>
+              <AppSelect label="Sales Agent (Optional)" value={form.agent} onChange={(v) => setForm((p) => ({ ...p, agent: v ?? "", commOverrideEnabled: false, commissionRateOverride: "", commissionTypeOverride: "", commissionAmountOverride: "" }))} options={agents.map((a) => ({ value: a._id, label: `${a.fullName} (${a.agentNumber})` }))} placeholder="No agent" size="md" searchable clearable />
             </div>
             {!editingId && form.agent && (() => {
               const selAgent = agents.find((a) => a._id === form.agent);
@@ -808,11 +781,7 @@ const SaleDeals = () => {
                   {form.commOverrideEnabled && (
                     <div className="mt-2.5 grid gap-3 sm:grid-cols-3">
                       <div>
-                        <label className={labelCls}>Commission Type</label>
-                        <select value={form.commissionTypeOverride || selAgent?.commissionType || "percentage"} onChange={(e) => setForm((p) => ({ ...p, commissionTypeOverride: e.target.value, commissionAmountOverride: "" }))} className={inputCls}>
-                          <option value="percentage">Percentage (%)</option>
-                          <option value="fixed">Fixed Amount (KES)</option>
-                        </select>
+                        <AppSelect label="Commission Type" value={form.commissionTypeOverride || selAgent?.commissionType || "percentage"} onChange={(v) => setForm((p) => ({ ...p, commissionTypeOverride: v ?? "", commissionAmountOverride: "" }))} options={[{ value: "percentage", label: "Percentage (%)" }, { value: "fixed", label: "Fixed Amount (KES)" }]} size="md" />
                       </div>
                       <div>
                         <label className={labelCls}>{(form.commissionTypeOverride || selAgent?.commissionType) === "fixed" ? "Commission Amount (KES)" : "Commission Rate (%)"}</label>
@@ -977,16 +946,10 @@ const SaleDeals = () => {
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             <div>
-              <label className={labelCls}>Payment Type</label>
-              <select value={payForm.paymentType} onChange={(e) => setPayForm((f) => ({ ...f, paymentType: e.target.value }))} className={inputCls}>
-                {PAYMENT_TYPES.map((t) => <option key={t} value={t}>{fmtLabel(t)}</option>)}
-              </select>
+              <AppSelect label="Payment Type" value={payForm.paymentType} onChange={(v) => setPayForm((f) => ({ ...f, paymentType: v ?? "" }))} options={PAYMENT_TYPES.map((t) => ({ value: t, label: fmtLabel(t) }))} size="md" />
             </div>
             <div>
-              <label className={labelCls}>Method</label>
-              <select value={payForm.paymentMethod} onChange={(e) => setPayForm((f) => ({ ...f, paymentMethod: e.target.value }))} className={inputCls}>
-                {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{fmtLabel(m)}</option>)}
-              </select>
+              <AppSelect label="Method" value={payForm.paymentMethod} onChange={(v) => setPayForm((f) => ({ ...f, paymentMethod: v ?? "" }))} options={PAYMENT_METHODS.map((m) => ({ value: m, label: fmtLabel(m) }))} size="md" />
             </div>
             <div>
               <label className={labelCls}>Amount (KES)</label>

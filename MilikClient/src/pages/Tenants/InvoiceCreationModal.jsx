@@ -7,6 +7,7 @@ import {
   normalizeCompanyTaxConfig,
   getTaxCodeLabel,
 } from "./invoiceTaxUtils";
+import AppSelect from "../../components/common/AppSelect";
 
 const InvoiceCreationModal = ({
   isOpen,
@@ -180,47 +181,41 @@ const InvoiceCreationModal = ({
                 </div>
               )}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className={labelCls}>Tax handling</label>
-                  <select
-                    value={taxSelection.handling}
-                    onChange={(e) => setTaxSelection((p) => ({ ...p, handling: e.target.value }))}
-                    disabled={isCreating}
-                    className={inputCls}
-                  >
-                    <option value="company_default">Use company default</option>
-                    <option value="taxable" disabled={!taxEnabled}>Force taxable</option>
-                    <option value="non_taxable">Force non-taxable</option>
-                  </select>
-                </div>
-                <div>
-                  <label className={labelCls}>Tax code</label>
-                  <select
-                    value={taxSelection.taxCodeKey}
-                    onChange={(e) => setTaxSelection((p) => ({ ...p, taxCodeKey: e.target.value }))}
-                    disabled={isCreating || taxSelection.handling === "non_taxable"}
-                    className={inputCls}
-                  >
-                    {activeTaxCodes.map((code) => (
-                      <option key={code.key} value={code.key}>
-                        {code.name} ({Number(code.rate || 0)}%)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className={labelCls}>Tax mode</label>
-                  <select
-                    value={taxSelection.taxMode}
-                    onChange={(e) => setTaxSelection((p) => ({ ...p, taxMode: e.target.value }))}
-                    disabled={isCreating || taxSelection.handling === "non_taxable"}
-                    className={inputCls}
-                  >
-                    <option value="company_default">Use company default</option>
-                    <option value="exclusive">Exclusive</option>
-                    <option value="inclusive">Inclusive</option>
-                  </select>
-                </div>
+                <AppSelect
+                  label="Tax handling"
+                  value={taxSelection.handling}
+                  onChange={(v) => setTaxSelection((p) => ({ ...p, handling: v ?? "company_default" }))}
+                  options={[
+                    { value: "company_default", label: "Use company default" },
+                    { value: "taxable", label: "Force taxable", disabled: !taxEnabled },
+                    { value: "non_taxable", label: "Force non-taxable" },
+                  ]}
+                  disabled={isCreating}
+                  size="md"
+                />
+                <AppSelect
+                  label="Tax code"
+                  value={taxSelection.taxCodeKey}
+                  onChange={(v) => setTaxSelection((p) => ({ ...p, taxCodeKey: v ?? "" }))}
+                  options={activeTaxCodes.map((code) => ({
+                    value: code.key,
+                    label: `${code.name} (${Number(code.rate || 0)}%)`,
+                  }))}
+                  disabled={isCreating || taxSelection.handling === "non_taxable"}
+                  size="md"
+                />
+                <AppSelect
+                  label="Tax mode"
+                  value={taxSelection.taxMode}
+                  onChange={(v) => setTaxSelection((p) => ({ ...p, taxMode: v ?? "company_default" }))}
+                  options={[
+                    { value: "company_default", label: "Use company default" },
+                    { value: "exclusive", label: "Exclusive" },
+                    { value: "inclusive", label: "Inclusive" },
+                  ]}
+                  disabled={isCreating || taxSelection.handling === "non_taxable"}
+                  size="md"
+                />
               </div>
               <div className="bg-slate-50 border border-slate-100 px-3 py-2 text-[11px] text-slate-600">
                 Tax code: <strong>{getTaxCodeLabel(taxSelection.taxCodeKey, normalizedTaxConfig)}</strong>

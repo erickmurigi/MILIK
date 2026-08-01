@@ -4,11 +4,12 @@ import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { FaCheck, FaMoneyBillWave, FaPrint, FaRedoAlt, FaTimes, FaUndo } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
-import SaleFilterBar, { FilterSearch, FilterSelect, FilterDateRange } from "./SaleFilterBar";
+import SaleFilterBar, { FilterSearch, FilterDateRange } from "./SaleFilterBar";
 import PaginationBar from "../../components/PaginationBar";
 import { fmtKES, saleApi, todayISO } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
 import { useTabState } from "../../hooks/useTabState";
+import AppSelect from "../../components/common/AppSelect";
 
 const STATUS_BADGE = {
   pending:   "border-amber-200 bg-amber-50 text-amber-700",
@@ -193,18 +194,9 @@ const SaleCommissions = () => {
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           placeholder="Agent, deal, comm. no."
         />
-        <FilterSelect value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
-          <option value="">All Statuses</option>
-          {["pending", "approved", "paid", "cancelled"].map((s) => <option key={s} value={s}>{fmtLabel(s)}</option>)}
-        </FilterSelect>
-        <FilterSelect value={agentFilt} onChange={(e) => { setAgentFilt(e.target.value); setPage(1); }}>
-          <option value="">All Agents</option>
-          {agentsRef.map((a) => <option key={a._id} value={a._id}>{a.fullName}{a.agentNumber ? ` (${a.agentNumber})` : ""}</option>)}
-        </FilterSelect>
-        <FilterSelect value={dealFilt} onChange={(e) => { setDealFilt(e.target.value); setPage(1); }}>
-          <option value="">All Deals</option>
-          {dealsRef.map((d) => <option key={d._id} value={d._id}>{d.dealNumber}{d.listing?.title ? ` — ${d.listing.title}` : ""}</option>)}
-        </FilterSelect>
+        <AppSelect value={statusFilter} onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }} options={["pending", "approved", "paid", "cancelled"].map((s) => ({ value: s, label: fmtLabel(s) }))} placeholder="All Statuses" clearable size="sm" />
+        <AppSelect value={agentFilt} onChange={(v) => { setAgentFilt(v ?? ""); setPage(1); }} options={agentsRef.map((a) => ({ value: a._id, label: `${a.fullName}${a.agentNumber ? ` (${a.agentNumber})` : ""}` }))} placeholder="All Agents" clearable size="sm" searchable />
+        <AppSelect value={dealFilt} onChange={(v) => { setDealFilt(v ?? ""); setPage(1); }} options={dealsRef.map((d) => ({ value: d._id, label: `${d.dealNumber}${d.listing?.title ? ` — ${d.listing.title}` : ""}` }))} placeholder="All Deals" clearable size="sm" searchable />
         <FilterDateRange
           from={dateFrom} to={dateTo}
           onFromChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
@@ -321,15 +313,7 @@ const SaleCommissions = () => {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Payout Method *</label>
-              <select
-                value={payoutForm.payoutMethod}
-                onChange={(e) => setPayoutForm((f) => ({ ...f, payoutMethod: e.target.value }))}
-                className="h-8 w-full border border-slate-200 bg-white px-2 text-xs focus:border-[#0B3B2E] focus:outline-none"
-                required
-              >
-                {PAYOUT_METHODS.map((m) => <option key={m} value={m}>{fmtLabel(m)}</option>)}
-              </select>
+              <AppSelect label="Payout Method *" value={payoutForm.payoutMethod} onChange={(v) => setPayoutForm((f) => ({ ...f, payoutMethod: v ?? "" }))} options={PAYOUT_METHODS.map((m) => ({ value: m, label: fmtLabel(m) }))} size="md" />
             </div>
             <div>
               <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Payout Date *</label>

@@ -5,6 +5,7 @@ import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import { FaClock, FaFileDownload, FaFilter, FaPrint, FaSyncAlt } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
+import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getTenantInvoices } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
@@ -340,16 +341,27 @@ const RentalAgedAnalysisReport = () => {
                   <FaFilter className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-orange-500" />
                   <input value={filters.search} onChange={setFilter("search")} placeholder="Tenant, property, unit" className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </div>
-                <select value={filters.propertyId} onChange={setFilter("propertyId")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
-                  <option value="all">All properties</option>
-                  {properties.map((property) => <option key={property._id} value={property._id}>{property.propertyName || property.name}</option>)}
-                </select>
-                <select value={filters.category} onChange={setFilter("category")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
-                  <option value="all">All charges</option>
-                  <option value="RENT_CHARGE">Rent only</option>
-                  <option value="UTILITY_CHARGE">Utility only</option>
-                  <option value="LATE_PENALTY_CHARGE">Late penalties only</option>
-                </select>
+                <AppSelect
+                  value={filters.propertyId === "all" ? "" : filters.propertyId}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "all" }))}
+                  options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))}
+                  placeholder="All properties"
+                  searchable
+                  clearable
+                  size="sm"
+                />
+                <AppSelect
+                  value={filters.category === "all" ? "" : filters.category}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, category: v ?? "all" }))}
+                  options={[
+                    { value: "RENT_CHARGE", label: "Rent only" },
+                    { value: "UTILITY_CHARGE", label: "Utility only" },
+                    { value: "LATE_PENALTY_CHARGE", label: "Late penalties only" },
+                  ]}
+                  placeholder="All charges"
+                  clearable
+                  size="sm"
+                />
                 <span className="shrink-0 inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-700"><FaClock className="text-amber-600" /> {totals.count} rows</span>
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 <button onClick={exportCsv} disabled={!canExportReports} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-orange-50 hover:text-orange-700 disabled:opacity-50"><FaFileDownload size={9} /> CSV</button>

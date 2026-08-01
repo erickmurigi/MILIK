@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { essRequests } from '../../utils/essRequests';
 import { useTabState } from '../../hooks/useTabState';
+import AppSelect from '../../components/common/AppSelect';
 import './ESS.css';
 
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
@@ -236,13 +237,7 @@ export default function ESSLeave() {
 
                 <div className="ess-form">
                   <div className="ess-form-group">
-                    <label>Leave Type</label>
-                    <select value={form.leaveType} onChange={set('leaveType')}>
-                      <option value="">Select leave type</option>
-                      {leaveTypes.map((lt) => (
-                        <option key={lt._id} value={lt._id}>{lt.name}</option>
-                      ))}
-                    </select>
+                    <AppSelect label="Leave Type" value={form.leaveType} onChange={(v) => setForm((p) => ({ ...p, leaveType: v ?? '' }))} options={leaveTypes.map((lt) => ({ value: lt._id, label: lt.name }))} placeholder="Select leave type" size="md" />
                   </div>
 
                   {selectedBalance && (

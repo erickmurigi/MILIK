@@ -3,6 +3,7 @@ import { useTabState } from '../../hooks/useTabState';
 import { useSelector } from 'react-redux';
 import { useQuery } from '@tanstack/react-query';
 import { FaSearch, FaRedoAlt, FaPrint, FaChartBar } from 'react-icons/fa';
+import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { selectCurrentCompany } from '../../redux/selectors';
 import { adminRequests } from '../../utils/requestMethods';
@@ -164,12 +165,18 @@ export default function HRReportAttendance() {
 
         {/* Filters */}
         <div className="flex flex-none flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2">
-          <select className={`${F} w-32 appearance-none`} value={month} onChange={(e) => setMonth(e.target.value)}>
-            {MONTHS.slice(1).map((m, i) => <option key={i} value={String(i + 1)}>{m}</option>)}
-          </select>
-          <select className={`${F} w-24 appearance-none`} value={year} onChange={(e) => setYear(e.target.value)}>
-            {yearOpts.map((y) => <option key={y} value={String(y)}>{y}</option>)}
-          </select>
+          <AppSelect
+            value={month}
+            onChange={(v) => setMonth(v ?? String(thisMonth))}
+            options={MONTHS.slice(1).map((m, i) => ({ value: String(i + 1), label: m }))}
+            size="md"
+          />
+          <AppSelect
+            value={year}
+            onChange={(v) => setYear(v ?? String(thisYear))}
+            options={yearOpts.map((y) => ({ value: String(y), label: String(y) }))}
+            size="md"
+          />
           <button
             onClick={() => setCommitted({ month, year })}
             className="flex h-7 items-center gap-1 rounded bg-[#0B3B2E] px-3 text-[11px] font-bold text-white hover:bg-[#0a2e23]"

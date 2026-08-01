@@ -7,6 +7,7 @@ import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload } from "../../services/carWashApi";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import CarWashShell from "./CarWashShell";
+import AppSelect from "../../components/common/AppSelect";
 
 const fmtSvc = (svc, fallback = "—") => svc ? (svc.category ? `${svc.category} — ${svc.name}` : svc.name) : fallback;
 const statuses     = ["earned", "payable", "paid", "cancelled"];
@@ -125,17 +126,26 @@ const CarWashCommissions = () => {
       <form onSubmit={applyFilters} className="mt-1 flex flex-wrap items-end gap-1.5 border border-slate-200 bg-white px-3 py-2 shadow-sm">
         <div className="flex flex-col gap-0.5">
           <label className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Status</label>
-          <select className={`${inp} min-w-[110px]`} value={filters.status} onChange={(e) => setFilters((p) => ({ ...p, status: e.target.value }))}>
-            <option value="">All statuses</option>
-            {statuses.map((s) => <option key={s} value={s}>{statusLabels[s]}</option>)}
-          </select>
+          <AppSelect
+            value={filters.status}
+            onChange={(v) => setFilters((p) => ({ ...p, status: v ?? "" }))}
+            options={statuses.map((s) => ({ value: s, label: statusLabels[s] }))}
+            placeholder="All statuses"
+            clearable
+            size="sm"
+          />
         </div>
         <div className="flex flex-col gap-0.5">
           <label className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Staff</label>
-          <select className={`${inp} min-w-[130px]`} value={filters.staff} onChange={(e) => setFilters((p) => ({ ...p, staff: e.target.value }))}>
-            <option value="">All staff</option>
-            {staff.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
-          </select>
+          <AppSelect
+            value={filters.staff}
+            onChange={(v) => setFilters((p) => ({ ...p, staff: v ?? "" }))}
+            options={staff.map((s) => ({ value: s._id, label: s.name }))}
+            placeholder="All staff"
+            clearable
+            searchable
+            size="sm"
+          />
         </div>
         <div className="flex flex-col gap-0.5">
           <label className="text-[9px] font-bold uppercase tracking-wide text-slate-400">From</label>

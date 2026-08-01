@@ -120,7 +120,9 @@
       "PowerShell(Select-String -Pattern \"sale\" -SimpleMatch -CaseSensitive:$false)",
       "Bash(grep -n \"useTabState\\\\|tabState\\\\|\\\\\\\\\\\\\\\\\" \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikClient\\\\src\\\\pages\\\\PropertySale\\\\SaleDeals.jsx\")",
       "Bash(grep -i \"tab\\\\|state\\\\|\\\\\\\\\\\\\\\\\")",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(xargs grep -c \"<select\")",
+      "Bash(awk -F: '{sum+=$2} END {print sum \" total selects remaining\"}')"
     ]
   }
 }

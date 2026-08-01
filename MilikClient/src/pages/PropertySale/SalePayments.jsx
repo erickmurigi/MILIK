@@ -4,12 +4,13 @@ import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { FaBan, FaEdit, FaPlus, FaPrint, FaRedoAlt, FaTimes } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
-import SaleFilterBar, { FilterSearch, FilterSelect, FilterDateRange } from "./SaleFilterBar";
+import SaleFilterBar, { FilterSearch, FilterDateRange } from "./SaleFilterBar";
 import PaginationBar from "../../components/PaginationBar";
 import { fmtKES, saleApi, todayISO } from "../../services/propertySaleApi";
 import AmountInput from "./AmountInput";
 import { useConfirm } from "../../context/ConfirmContext";
 import { useTabState } from "../../hooks/useTabState";
+import AppSelect from "../../components/common/AppSelect";
 
 const STATUS_BADGE = {
   paid:      "border-emerald-200 bg-emerald-50 text-emerald-700",
@@ -250,24 +251,10 @@ const SalePayments = () => {
           placeholder="Receipt no. / buyer…"
           minWidth="130px"
         />
-        <FilterSelect value={dealFilter} onChange={(e) => { setDealFilter(e.target.value); setPage(1); }} className="max-w-[200px]">
-          <option value="">All Deals</option>
-          {deals.map((d) => (
-            <option key={d._id} value={d._id}>{d.dealNumber} — {d.listing?.title || d.listing?.listingNumber || ""}</option>
-          ))}
-        </FilterSelect>
-        <FilterSelect value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}>
-          <option value="">All Types</option>
-          {PAYMENT_TYPES.map((t) => <option key={t} value={t}>{fmtLabel(t)}</option>)}
-        </FilterSelect>
-        <FilterSelect value={methodFilter} onChange={(e) => { setMethodFilter(e.target.value); setPage(1); }}>
-          <option value="">All Methods</option>
-          {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{fmtLabel(m)}</option>)}
-        </FilterSelect>
-        <FilterSelect value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
-          <option value="">All Statuses</option>
-          {["paid", "pending", "cancelled"].map((s) => <option key={s} value={s}>{fmtLabel(s)}</option>)}
-        </FilterSelect>
+        <AppSelect value={dealFilter} onChange={(v) => { setDealFilter(v ?? ""); setPage(1); }} options={deals.map((d) => ({ value: d._id, label: `${d.dealNumber} — ${d.listing?.title || d.listing?.listingNumber || ""}` }))} placeholder="All Deals" clearable size="sm" searchable />
+        <AppSelect value={typeFilter} onChange={(v) => { setTypeFilter(v ?? ""); setPage(1); }} options={PAYMENT_TYPES.map((t) => ({ value: t, label: fmtLabel(t) }))} placeholder="All Types" clearable size="sm" />
+        <AppSelect value={methodFilter} onChange={(v) => { setMethodFilter(v ?? ""); setPage(1); }} options={PAYMENT_METHODS.map((m) => ({ value: m, label: fmtLabel(m) }))} placeholder="All Methods" clearable size="sm" />
+        <AppSelect value={statusFilter} onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }} options={["paid", "pending", "cancelled"].map((s) => ({ value: s, label: fmtLabel(s) }))} placeholder="All Statuses" clearable size="sm" />
         <FilterDateRange
           from={dateFrom} to={dateTo}
           onFromChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
@@ -381,29 +368,15 @@ const SalePayments = () => {
           <div className="flex flex-col gap-3">
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Type</label>
-                <select value={editForm.paymentType} onChange={(e) => setEditForm((f) => ({ ...f, paymentType: e.target.value }))} className="h-8 w-full border border-slate-200 bg-white px-2 text-xs focus:border-[#0B3B2E] focus:outline-none">
-                  {PAYMENT_TYPES.map((t) => <option key={t} value={t}>{fmtLabel(t)}</option>)}
-                </select>
+                <AppSelect label="Type" value={editForm.paymentType} onChange={(v) => setEditForm((f) => ({ ...f, paymentType: v ?? "" }))} options={PAYMENT_TYPES.map((t) => ({ value: t, label: fmtLabel(t) }))} size="md" />
               </div>
               <div>
-                <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Method</label>
-                <select value={editForm.paymentMethod} onChange={(e) => setEditForm((f) => ({ ...f, paymentMethod: e.target.value }))} className="h-8 w-full border border-slate-200 bg-white px-2 text-xs focus:border-[#0B3B2E] focus:outline-none">
-                  {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{fmtLabel(m)}</option>)}
-                </select>
+                <AppSelect label="Method" value={editForm.paymentMethod} onChange={(v) => setEditForm((f) => ({ ...f, paymentMethod: v ?? "" }))} options={PAYMENT_METHODS.map((m) => ({ value: m, label: fmtLabel(m) }))} size="md" />
               </div>
             </div>
             {/* Cashbook — determines which bank/cash GL account is debited */}
             <div>
-              <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Receiving Cashbook *</label>
-              <select
-                value={editForm.cashbook}
-                onChange={(e) => setEditForm((f) => ({ ...f, cashbook: e.target.value }))}
-                className="h-8 w-full border border-slate-200 bg-white px-2 text-xs focus:border-[#0B3B2E] focus:outline-none"
-              >
-                <option value="">— Select cashbook —</option>
-                {cashbookAccounts.map((a) => <option key={a._id} value={a._id}>{a.name}</option>)}
-              </select>
+              <AppSelect label="Receiving Cashbook *" value={editForm.cashbook} onChange={(v) => setEditForm((f) => ({ ...f, cashbook: v ?? "" }))} options={cashbookAccounts.map((a) => ({ value: a._id, label: a.name }))} placeholder="— Select cashbook —" size="md" searchable />
               {cashbookAccounts.length === 0 && (
                 <p className="mt-1 text-[10px] text-amber-600">No cashbook accounts found — set up bank/cash accounts in Chart of Accounts first.</p>
               )}
@@ -448,20 +421,7 @@ const SalePayments = () => {
           <div className="flex flex-col gap-3">
             {/* Deal selector */}
             <div>
-              <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Deal *</label>
-              <select
-                value={form.deal}
-                onChange={(e) => handleDealSelect(e.target.value)}
-                className="h-8 w-full border border-slate-200 bg-white px-2 text-xs focus:border-[#0B3B2E] focus:outline-none"
-                required
-              >
-                <option value="">Select active deal…</option>
-                {deals.filter((d) => d.status === "active").map((d) => (
-                  <option key={d._id} value={d._id}>
-                    {d.dealNumber} — {d.listing?.title || d.listing?.listingNumber || ""} ({d.buyer?.fullName || ""})
-                  </option>
-                ))}
-              </select>
+              <AppSelect label="Deal *" value={form.deal} onChange={(v) => handleDealSelect(v ?? "")} options={deals.filter((d) => d.status === "active").map((d) => ({ value: d._id, label: `${d.dealNumber} — ${d.listing?.title || d.listing?.listingNumber || ""} (${d.buyer?.fullName || ""})` }))} placeholder="Select active deal…" size="md" searchable />
             </div>
 
             {/* Deal balance summary */}
@@ -502,31 +462,16 @@ const SalePayments = () => {
             {/* Type + Method */}
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Type *</label>
-                <select value={form.paymentType} onChange={(e) => setForm((f) => ({ ...f, paymentType: e.target.value }))} className="h-8 w-full border border-slate-200 bg-white px-2 text-xs focus:border-[#0B3B2E] focus:outline-none">
-                  {PAYMENT_TYPES.map((t) => <option key={t} value={t}>{fmtLabel(t)}</option>)}
-                </select>
+                <AppSelect label="Type *" value={form.paymentType} onChange={(v) => setForm((f) => ({ ...f, paymentType: v ?? "" }))} options={PAYMENT_TYPES.map((t) => ({ value: t, label: fmtLabel(t) }))} size="md" />
               </div>
               <div>
-                <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Method *</label>
-                <select value={form.paymentMethod} onChange={(e) => setForm((f) => ({ ...f, paymentMethod: e.target.value }))} className="h-8 w-full border border-slate-200 bg-white px-2 text-xs focus:border-[#0B3B2E] focus:outline-none">
-                  {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{fmtLabel(m)}</option>)}
-                </select>
+                <AppSelect label="Method *" value={form.paymentMethod} onChange={(v) => setForm((f) => ({ ...f, paymentMethod: v ?? "" }))} options={PAYMENT_METHODS.map((m) => ({ value: m, label: fmtLabel(m) }))} size="md" />
               </div>
             </div>
 
             {/* Cashbook — determines which bank/cash GL account is debited */}
             <div>
-              <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Receiving Cashbook *</label>
-              <select
-                value={form.cashbook}
-                onChange={(e) => setForm((f) => ({ ...f, cashbook: e.target.value }))}
-                className="h-8 w-full border border-slate-200 bg-white px-2 text-xs focus:border-[#0B3B2E] focus:outline-none"
-                required
-              >
-                <option value="">— Select cashbook —</option>
-                {cashbookAccounts.map((a) => <option key={a._id} value={a._id}>{a.name}</option>)}
-              </select>
+              <AppSelect label="Receiving Cashbook *" value={form.cashbook} onChange={(v) => setForm((f) => ({ ...f, cashbook: v ?? "" }))} options={cashbookAccounts.map((a) => ({ value: a._id, label: a.name }))} placeholder="— Select cashbook —" size="md" searchable />
               {cashbookAccounts.length === 0 && (
                 <p className="mt-1 text-[10px] text-amber-600">No cashbook accounts found — set up bank/cash accounts in Chart of Accounts first.</p>
               )}

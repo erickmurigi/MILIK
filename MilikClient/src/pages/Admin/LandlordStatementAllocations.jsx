@@ -5,6 +5,7 @@ import { selectCurrentUser, selectCurrentCompany, selectAllProperties } from "..
 import { adminRequests } from "../../utils/requestMethods";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import AppSelect from "../../components/common/AppSelect";
 import {
   FaSearch, FaCalendarAlt, FaExchangeAlt, FaHistory, FaShieldAlt,
   FaTimes, FaCheck, FaInfoCircle, FaMoneyBillWave, FaFileInvoice,
@@ -637,11 +638,14 @@ export default function LandlordStatementAllocations() {
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
 
                 {/* Property */}
-                <select value={property} onChange={(e) => setProperty(e.target.value)}
-                  className="h-7 shrink-0 max-w-[140px] rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 appearance-none outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
-                  <option value="">All properties</option>
-                  {properties.map((p) => <option key={p._id} value={p._id}>{p.propertyName}</option>)}
-                </select>
+                <AppSelect
+                  size="sm"
+                  clearable
+                  placeholder="All properties"
+                  value={property}
+                  onChange={(v) => setProperty(v ?? "")}
+                  options={properties.map((p) => ({ value: p._id, label: p.propertyName }))}
+                />
 
                 {/* Tenant searchable dropdown */}
                 <div className="shrink-0" ref={tenantRef}>
@@ -1108,12 +1112,12 @@ export default function LandlordStatementAllocations() {
                     <div className="flex items-center gap-1.5">
                       <div className="flex items-center gap-1">
                         <span className="font-semibold text-slate-500">Per page:</span>
-                        <select
-                          value={groupsPerPage}
-                          onChange={(e) => { setGroupsPerPage(Number(e.target.value)); setCurrentPage(1); }}
-                          className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition">
-                          {[10, 20, 50, 100, 200, 500].map((n) => <option key={n} value={n}>{n}</option>)}
-                        </select>
+                        <AppSelect
+                          size="sm"
+                          value={String(groupsPerPage)}
+                          onChange={(v) => { setGroupsPerPage(Number(v ?? 20)); setCurrentPage(1); }}
+                          options={[10, 20, 50, 100, 200, 500].map((n) => ({ value: String(n), label: String(n) }))}
+                        />
                       </div>
                       <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={safePage === 1}
                         className="p-1 rounded hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition text-slate-700">

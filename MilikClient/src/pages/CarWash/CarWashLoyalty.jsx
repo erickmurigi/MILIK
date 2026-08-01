@@ -11,6 +11,7 @@ import CarWashShell from "./CarWashShell";
 import CwSmsModal from "./CwSmsModal";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { useTabState } from "../../hooks/useTabState";
+import AppSelect from "../../components/common/AppSelect";
 
 const inputCls = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelCls = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
@@ -419,21 +420,30 @@ const ProgramPanel = React.memo(({ program, onSaved, canManage }) => {
           <input className={inputCls} type="number" min={2} value={form.stampsRequired} onChange={e => set("stampsRequired", Number(e.target.value))} />
         </div>
         <div>
-          <label className={labelCls}>Reward type</label>
-          <select className={inputCls} value={form.rewardType} onChange={e => set("rewardType", e.target.value)}>
-            <option value="free_service">Free specific service</option>
-            <option value="free_wash">Free wash (entire job)</option>
-            <option value="discount_percent">Discount (%)</option>
-            <option value="discount_fixed">Discount (fixed KES)</option>
-          </select>
+          <AppSelect
+            label="Reward type"
+            value={form.rewardType}
+            onChange={(v) => set("rewardType", v ?? "free_wash")}
+            options={[
+              { value: "free_service", label: "Free specific service" },
+              { value: "free_wash", label: "Free wash (entire job)" },
+              { value: "discount_percent", label: "Discount (%)" },
+              { value: "discount_fixed", label: "Discount (fixed KES)" },
+            ]}
+            size="md"
+          />
         </div>
         {form.rewardType === "free_service" && (
           <div>
-            <label className={labelCls}>Free reward service</label>
-            <select className={inputCls} value={form.rewardServiceId} onChange={e => set("rewardServiceId", e.target.value)}>
-              <option value="">— Select service —</option>
-              {services.map(s => <option key={s._id} value={s._id}>{s.category ? `${s.category} — ${s.name}` : s.name}</option>)}
-            </select>
+            <AppSelect
+              label="Free reward service"
+              value={form.rewardServiceId}
+              onChange={(v) => set("rewardServiceId", v ?? "")}
+              options={services.map(s => ({ value: s._id, label: s.category ? `${s.category} — ${s.name}` : s.name }))}
+              placeholder="— Select service —"
+              size="md"
+              searchable
+            />
           </div>
         )}
         {(form.rewardType === "discount_percent" || form.rewardType === "discount_fixed") && (
@@ -790,16 +800,18 @@ const CarWashLoyalty = () => {
                 </div>
 
                 {/* Dormancy filter */}
-                <select
-                  value={dormantDays}
-                  onChange={e => { setDormantDays(Number(e.target.value)); setPage(1); }}
-                  className="h-9 border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 focus:outline-none"
-                >
-                  <option value={0}>All customers</option>
-                  <option value={30}>Dormant 30+ days</option>
-                  <option value={60}>Dormant 60+ days</option>
-                  <option value={90}>Dormant 90+ days</option>
-                </select>
+                <AppSelect
+                  value={dormantDays || ""}
+                  onChange={(v) => { setDormantDays(Number(v ?? 0)); setPage(1); }}
+                  options={[
+                    { value: 30, label: "Dormant 30+ days" },
+                    { value: 60, label: "Dormant 60+ days" },
+                    { value: 90, label: "Dormant 90+ days" },
+                  ]}
+                  placeholder="All customers"
+                  size="sm"
+                  clearable
+                />
 
                 <button onClick={refetch} className="h-9 border border-slate-300 bg-white px-2.5 text-slate-500 hover:bg-slate-50" title="Refresh">
                   <FaRedoAlt className="text-[11px]" />
@@ -888,13 +900,12 @@ const CarWashLoyalty = () => {
           <div className="flex-shrink-0 flex min-h-9 items-center justify-between border-t border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
             <div className="flex items-center gap-1.5">
               <span className="font-semibold text-slate-500 normal-case">Per page:</span>
-              <select
+              <AppSelect
                 value={pageSize}
-                onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}
-                className="h-7 border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-emerald-400 focus:outline-none normal-case"
-              >
-                {[25, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
-              </select>
+                onChange={(v) => { setPageSize(Number(v ?? 25)); setPage(1); }}
+                options={[25, 50, 100].map(n => ({ value: n, label: String(n) }))}
+                size="sm"
+              />
             </div>
             <div className="flex items-center gap-2">
               <button

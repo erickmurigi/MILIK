@@ -5,6 +5,7 @@ import {
   FaRedoAlt, FaChevronRight, FaTimes, FaCheck,
   FaClipboardCheck, FaUser, FaBuilding, FaUserTie,
 } from 'react-icons/fa';
+import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import MilikConfirmDialog from '../../components/Modals/MilikConfirmDialog';
 import { adminRequests } from '../../utils/requestMethods';
@@ -153,16 +154,27 @@ export default function Appraisals() {
               <div className="h-4 w-px bg-slate-300 mx-0.5" />
             </>
           )}
-          <select className={`${F} w-52 appearance-none`} value={cycleId} onChange={(e) => setCycleId(e.target.value)}>
-            <option value="">Select a cycle…</option>
-            {cycles.map((c) => <option key={c._id} value={c._id}>{c.name} ({c.year})</option>)}
-          </select>
-          <select className={`${F} w-30 appearance-none`} value={statusFilter} onChange={(e) => setStatus(e.target.value)}>
-            <option value="">All statuses</option>
-            <option value="Pending">Pending</option>
-            <option value="InProgress">In Progress</option>
-            <option value="Submitted">Submitted</option>
-          </select>
+          <AppSelect
+            value={cycleId}
+            onChange={(v) => setCycleId(v ?? '')}
+            options={cycles.map((c) => ({ value: c._id, label: `${c.name} (${c.year})` }))}
+            placeholder="Select a cycle…"
+            searchable
+            clearable
+            size="sm"
+          />
+          <AppSelect
+            value={statusFilter}
+            onChange={(v) => setStatus(v ?? '')}
+            options={[
+              { value: 'Pending', label: 'Pending' },
+              { value: 'InProgress', label: 'In Progress' },
+              { value: 'Submitted', label: 'Submitted' },
+            ]}
+            placeholder="All statuses"
+            clearable
+            size="sm"
+          />
           <input className={`${F} w-40`} placeholder="Search employee…" value={search} onChange={(e) => setSearch(e.target.value)} />
           {(cycleId || statusFilter || search) && (
             <button onClick={() => { setCycleId(''); setStatus(''); setSearch(''); }} className="flex h-7 items-center gap-0.5 rounded border border-slate-200 bg-white px-2 text-[10px] text-slate-400 hover:text-slate-600">

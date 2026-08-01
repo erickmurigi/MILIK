@@ -900,22 +900,23 @@ const AddReceipt = () => {
 
                   {/* Payment Method */}
                   <div>
-                    <label className={labelClass}>Payment Method *</label>
-                    <select
+                    <AppSelect
+                      label="Payment Method *"
                       value={formData.paymentMethod}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, paymentMethod: e.target.value }))}
-                      className={inputClass}
-                    >
-                      <option value="mobile_money">Mobile Money (M-Pesa / Airtel)</option>
-                      <option value="bank_transfer">Bank Transfer (EFT)</option>
-                      <option value="pesalink">PesaLink</option>
-                      <option value="rtgs">RTGS / Wire Transfer</option>
-                      <option value="standing_order">Standing Order</option>
-                      <option value="direct_debit">Direct Debit</option>
-                      <option value="cash">Cash</option>
-                      <option value="check">Cheque</option>
-                      <option value="credit_card">Card (Debit / Credit)</option>
-                    </select>
+                      onChange={(v) => setFormData((prev) => ({ ...prev, paymentMethod: v ?? "mobile_money" }))}
+                      options={[
+                        { value: "mobile_money", label: "Mobile Money (M-Pesa / Airtel)" },
+                        { value: "bank_transfer", label: "Bank Transfer (EFT)" },
+                        { value: "pesalink", label: "PesaLink" },
+                        { value: "rtgs", label: "RTGS / Wire Transfer" },
+                        { value: "standing_order", label: "Standing Order" },
+                        { value: "direct_debit", label: "Direct Debit" },
+                        { value: "cash", label: "Cash" },
+                        { value: "check", label: "Cheque" },
+                        { value: "credit_card", label: "Card (Debit / Credit)" },
+                      ]}
+                      size="md"
+                    />
                   </div>
 
                   {/* Reference Number — label changes with payment method */}
@@ -951,17 +952,15 @@ const AddReceipt = () => {
                         {cashbookOptions[0].code ? `${cashbookOptions[0].code} · ${cashbookOptions[0].name}` : cashbookOptions[0].name}
                       </div>
                     ) : (
-                      <select
+                      <AppSelect
                         value={formData.cashbook}
-                        onChange={(e) => setFormData((prev) => ({ ...prev, cashbook: e.target.value }))}
-                        className={inputClass}
-                      >
-                        {cashbookOptions.map((option) => (
-                          <option key={option._id || option.name} value={option.name}>
-                            {option.code ? `${option.code} · ${option.name}` : option.name}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={(v) => setFormData((prev) => ({ ...prev, cashbook: v ?? "" }))}
+                        options={cashbookOptions.map((option) => ({
+                          value: option.name,
+                          label: option.code ? `${option.code} · ${option.name}` : option.name,
+                        }))}
+                        size="md"
+                      />
                     )}
                   </div>
 
@@ -1325,22 +1324,19 @@ const AddReceipt = () => {
                             return (
                               <div key={idx} className="flex items-center gap-2">
                                 <div className="flex-1">
-                                  <select
+                                  <AppSelect
                                     value={line.billItemKey}
-                                    onChange={(e) => {
-                                      const opt = prepaymentTypeOptions.find((o) => o.billItemKey === e.target.value);
+                                    onChange={(v) => {
+                                      const opt = prepaymentTypeOptions.find((o) => o.billItemKey === v);
                                       setPrepaymentLines((prev) => {
                                         const updated = [...prev];
-                                        updated[idx] = { ...updated[idx], billItemKey: e.target.value, label: opt?.label || e.target.value };
+                                        updated[idx] = { ...updated[idx], billItemKey: v ?? "", label: opt?.label || v ?? "" };
                                         return updated;
                                       });
                                     }}
-                                    className={inputClass}
-                                  >
-                                    {availableOptions.map((opt) => (
-                                      <option key={opt.billItemKey} value={opt.billItemKey}>{opt.label}</option>
-                                    ))}
-                                  </select>
+                                    options={availableOptions.map((opt) => ({ value: opt.billItemKey, label: opt.label }))}
+                                    size="md"
+                                  />
                                 </div>
                                 <div className="w-36">
                                   <input

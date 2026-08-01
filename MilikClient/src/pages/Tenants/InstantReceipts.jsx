@@ -5,6 +5,7 @@ import {
   selectAllTenants,
 } from "../../redux/selectors";
 import { useNavigate } from "react-router-dom";
+import AppSelect from "../../components/common/AppSelect";
 import {
   FaArrowLeft,
   FaCheck,
@@ -352,22 +353,41 @@ const InstantReceipts = () => {
               <span className="shrink-0 rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">{stats.unmatched} Pending</span>
               <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search code, tenant, TNT…" className="h-7 w-44 shrink-0 rounded border border-slate-200 px-2 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-              <select value={selectedShortCode} onChange={(e) => setSelectedShortCode(e.target.value)} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-[11px] appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                <option value="">Paybill</option>
-                {mpesaConfigs.map((config, index) => (<option key={config?._id || `${config?.shortCode || "mpesa"}-${index}`} value={config?.shortCode || ""}>{config?.name || `Paybill ${config?.shortCode || index + 1}`}{config?.shortCode ? ` · ${config.shortCode}` : ""}</option>))}
-              </select>
-              <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-[11px] appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                <option value="callback_confirmation">Confirmations</option>
-                <option value="callback_validation">Validations</option>
-                <option value="manual_batch">Manual Batch</option>
-                <option value="all">All Sources</option>
-              </select>
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-[11px] appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                <option value="all">All</option>
-                <option value="captured">Captured</option>
-                <option value="matched_tenant">Matched Tenant</option>
-                <option value="unmatched">Unmatched</option>
-              </select>
+              <AppSelect
+                value={selectedShortCode}
+                onChange={(v) => setSelectedShortCode(v ?? "")}
+                options={mpesaConfigs.map((config, index) => ({
+                  value: config?.shortCode || "",
+                  label: `${config?.name || `Paybill ${config?.shortCode || index + 1}`}${config?.shortCode ? ` · ${config.shortCode}` : ""}`,
+                }))}
+                placeholder="Paybill"
+                clearable
+                size="sm"
+              />
+              <AppSelect
+                value={sourceFilter}
+                onChange={(v) => setSourceFilter(v ?? "callback_confirmation")}
+                options={[
+                  { value: "callback_confirmation", label: "Confirmations" },
+                  { value: "callback_validation", label: "Validations" },
+                  { value: "manual_batch", label: "Manual Batch" },
+                  { value: "all", label: "All Sources" },
+                ]}
+                clearable
+                size="sm"
+              />
+              <AppSelect
+                value={statusFilter}
+                onChange={(v) => setStatusFilter(v ?? "all")}
+                options={[
+                  { value: "captured", label: "Captured" },
+                  { value: "matched_tenant", label: "Matched Tenant" },
+                  { value: "unmatched", label: "Unmatched" },
+                ]}
+                placeholder="All"
+                clearable
+                size="sm"
+              />
               <button onClick={loadRows} disabled={loading} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-[11px] font-semibold hover:bg-slate-50 disabled:opacity-60"><FaRedoAlt size={10} className={loading ? "animate-spin" : ""} /></button>
             </div>
           </div>

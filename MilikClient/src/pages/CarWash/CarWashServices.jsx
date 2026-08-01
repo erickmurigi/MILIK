@@ -7,6 +7,7 @@ import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, VEHICLE_TYPES } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
+import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from "../../components/PaginationBar";
 
 const emptyForm = { name: "", category: "", jobType: "both", pricingType: "flat", defaultPrice: "", pricingTiers: [], active: true, isTaxable: false, taxRate: "", isCombo: false, comboDescription: "" };
@@ -237,15 +238,17 @@ const CarWashServices = () => {
           value={filters.search}
           onChange={(e) => setFilters((p) => ({ ...p, search: e.target.value }))}
         />
-        <select
-          className="h-8 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
+        <AppSelect
+          size="sm"
+          clearable
+          placeholder="All status"
           value={filters.status}
-          onChange={(e) => setFilters((p) => ({ ...p, status: e.target.value }))}
-        >
-          <option value="">All status</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-        </select>
+          onChange={(v) => setFilters((p) => ({ ...p, status: v ?? "" }))}
+          options={[
+            { value: "active", label: "Active" },
+            { value: "inactive", label: "Inactive" },
+          ]}
+        />
         <button type="submit" className="inline-flex h-8 items-center justify-center gap-1.5 bg-[#FF8C00] px-4 text-xs font-bold text-white hover:bg-[#E67E00]">
           <FaSearch /> Search
         </button>
@@ -505,32 +508,34 @@ const CarWashServices = () => {
                     <button type="button" title="Pick from existing" onClick={() => { setCategoryMode("select"); setForm((p) => ({ ...p, category: "" })); }} className="border border-slate-300 bg-slate-50 px-2 text-xs font-bold text-slate-600 hover:bg-slate-100">↩</button>
                   </div>
                 ) : (
-                  <select
-                    className={inputClass}
+                  <AppSelect
+                    size="md"
+                    placeholder="— No category —"
                     value={categories.includes(form.category) ? form.category : form.category ? NEW_CATEGORY_SENTINEL : ""}
-                    onChange={(e) => {
-                      if (e.target.value === NEW_CATEGORY_SENTINEL) { setCategoryMode("new"); setForm((p) => ({ ...p, category: "" })); }
-                      else setForm((p) => ({ ...p, category: e.target.value }));
+                    onChange={(v) => {
+                      if (v === NEW_CATEGORY_SENTINEL) { setCategoryMode("new"); setForm((p) => ({ ...p, category: "" })); }
+                      else setForm((p) => ({ ...p, category: v ?? "" }));
                     }}
-                  >
-                    <option value="">— No category —</option>
-                    {categories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
-                    <option value={NEW_CATEGORY_SENTINEL}>+ Add new category…</option>
-                  </select>
+                    options={[
+                      ...categories.map((cat) => ({ value: cat, label: cat })),
+                      { value: NEW_CATEGORY_SENTINEL, label: "+ Add new category…" },
+                    ]}
+                  />
                 )}
               </div>
 
               <div>
-                <label className={labelClass}>Applies To</label>
-                <select
-                  className={inputClass}
+                <AppSelect
+                  size="md"
+                  label="Applies To"
                   value={form.jobType}
-                  onChange={(e) => setForm((p) => ({ ...p, jobType: e.target.value }))}
-                >
-                  <option value="both">Both (Vehicle &amp; Carpet)</option>
-                  <option value="vehicle">Vehicle Wash only</option>
-                  <option value="carpet">Carpet / Textile only</option>
-                </select>
+                  onChange={(v) => setForm((p) => ({ ...p, jobType: v ?? "both" }))}
+                  options={[
+                    { value: "both", label: "Both (Vehicle & Carpet)" },
+                    { value: "vehicle", label: "Vehicle Wash only" },
+                    { value: "carpet", label: "Carpet / Textile only" },
+                  ]}
+                />
               </div>
 
               {/* Combo toggle */}
@@ -683,19 +688,18 @@ const CarWashServices = () => {
                     {form.pricingTiers.map((tier, i) => (
                       <tr key={i} className="border-b border-slate-100">
                         <td className="px-3 py-1.5">
-                          <select
-                            className={selectClass}
+                          <AppSelect
                             value={tier.vehicleType}
-                            onChange={(e) => updateTier(i, "vehicleType", e.target.value)}
-                            required
-                          >
-                            <option value="">— Select vehicle type —</option>
-                            {VEHICLE_TYPES.map((vt) => (
-                              <option key={vt} value={vt} disabled={usedVehicleTypes.has(vt) && vt !== tier.vehicleType}>
-                                {vt}{usedVehicleTypes.has(vt) && vt !== tier.vehicleType ? " (already added)" : ""}
-                              </option>
-                            ))}
-                          </select>
+                            onChange={(v) => updateTier(i, "vehicleType", v ?? "")}
+                            options={VEHICLE_TYPES.map((vt) => ({
+                              value: vt,
+                              label: usedVehicleTypes.has(vt) && vt !== tier.vehicleType ? `${vt} (already added)` : vt,
+                              disabled: usedVehicleTypes.has(vt) && vt !== tier.vehicleType,
+                            }))}
+                            placeholder="— Select vehicle type —"
+                            searchable
+                            size="md"
+                          />
                         </td>
                         <td className="px-3 py-1.5">
                           <input

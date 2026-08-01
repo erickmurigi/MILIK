@@ -21,6 +21,7 @@ import { carWashApi, formatMoney, normalizeListPayload } from "../../services/ca
 import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { useTabState } from "../../hooks/useTabState";
+import AppSelect from "../../components/common/AppSelect";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const ic  = "h-7 border border-slate-300 bg-white px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
@@ -770,13 +771,15 @@ const CarWashStaffSavings = () => {
                 />
               </div>
               <div>
-                <label className={lc}>Cashbook / Account *</label>
-                <select required className={icc} value={dForm.cashbookAccount} onChange={(e) => setDForm((p) => ({ ...p, cashbookAccount: e.target.value }))}>
-                  <option value="">Select cashbook…</option>
-                  {cashbooks.map((cb) => (
-                    <option key={cb._id} value={cb._id}>{cb.name}{cb.code ? ` — ${cb.code}` : ""}</option>
-                  ))}
-                </select>
+                <AppSelect
+                  label="Cashbook / Account *"
+                  value={dForm.cashbookAccount}
+                  onChange={(v) => setDForm((p) => ({ ...p, cashbookAccount: v ?? "" }))}
+                  options={cashbooks.map((cb) => ({ value: cb._id, label: `${cb.name}${cb.code ? ` — ${cb.code}` : ""}` }))}
+                  placeholder="Select cashbook…"
+                  searchable
+                  size="md"
+                />
               </div>
               <div>
                 <label className={lc}>Notes (optional)</label>

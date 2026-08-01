@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { essRequests } from '../../utils/essRequests';
 import { useTabState } from '../../hooks/useTabState';
+import AppSelect from '../../components/common/AppSelect';
 import './ESS.css';
 
 const fmtTime  = (d) => d ? new Date(d).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' }) : '—';
@@ -141,20 +142,8 @@ export default function ESSAttendance() {
         <div className="ess-card-header">
           <h2>Attendance History</h2>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <select
-              value={month}
-              onChange={(e) => setMonth(Number(e.target.value))}
-              style={{ padding: '0.3rem 0.5rem', border: '1.5px solid #d1d5db', borderRadius: 6, fontSize: '0.8rem' }}
-            >
-              {months.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-            </select>
-            <select
-              value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
-              style={{ padding: '0.3rem 0.5rem', border: '1.5px solid #d1d5db', borderRadius: 6, fontSize: '0.8rem' }}
-            >
-              {[year - 1, year, year + 1].map((y) => <option key={y} value={y}>{y}</option>)}
-            </select>
+            <AppSelect value={month} onChange={(v) => setMonth(Number(v ?? month))} options={months.map((m, i) => ({ value: i + 1, label: m }))} size="sm" />
+            <AppSelect value={year} onChange={(v) => setYear(Number(v ?? year))} options={[year - 1, year, year + 1].map((y) => ({ value: y, label: String(y) }))} size="sm" />
           </div>
         </div>
 

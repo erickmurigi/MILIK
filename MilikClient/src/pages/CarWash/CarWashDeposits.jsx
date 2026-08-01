@@ -10,6 +10,7 @@ import { toast } from "react-toastify";
 import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import PaginationBar from "../../components/PaginationBar";
+import AppSelect from "../../components/common/AppSelect";
 
 const DEFAULT_PAGE_SIZE = 25;
 const destinations = ["bank", "mpesa", "safe", "other"];
@@ -192,18 +193,31 @@ const CarWashDeposits = () => {
     >
       <form onSubmit={applyFilters} className="mb-2 flex-shrink-0 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm grid-cols-1 sm:grid-cols-2 xl:grid-cols-[160px_160px_190px_220px_1fr_auto_auto]">
         <input type="date" className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none" value={filters.date} onChange={(event) => setFilters((prev) => ({ ...prev, date: event.target.value }))} />
-        <select className="h-8 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none" value={filters.status} onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value }))}>
-          <option value="">All status</option>
-          {statuses.map((status) => <option key={status} value={status}>{status.toUpperCase()}</option>)}
-        </select>
-        <select className="h-8 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none" value={filters.destination} onChange={(event) => setFilters((prev) => ({ ...prev, destination: event.target.value }))}>
-          <option value="">All destinations</option>
-          {destinations.map((destination) => <option key={destination} value={destination}>{destination.toUpperCase()}</option>)}
-        </select>
-        <select className="h-8 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none" value={filters.cashbookAccount} onChange={(event) => setFilters((prev) => ({ ...prev, cashbookAccount: event.target.value }))}>
-          <option value="">All cashbooks</option>
-          {cashbooks.map((account) => <option key={account._id} value={account._id}>{account.code} - {account.name}</option>)}
-        </select>
+        <AppSelect
+          size="sm"
+          clearable
+          placeholder="All status"
+          value={filters.status}
+          onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "" }))}
+          options={statuses.map((status) => ({ value: status, label: status.toUpperCase() }))}
+        />
+        <AppSelect
+          size="sm"
+          clearable
+          placeholder="All destinations"
+          value={filters.destination}
+          onChange={(v) => setFilters((prev) => ({ ...prev, destination: v ?? "" }))}
+          options={destinations.map((destination) => ({ value: destination, label: destination.toUpperCase() }))}
+        />
+        <AppSelect
+          size="sm"
+          clearable
+          searchable
+          placeholder="All cashbooks"
+          value={filters.cashbookAccount}
+          onChange={(v) => setFilters((prev) => ({ ...prev, cashbookAccount: v ?? "" }))}
+          options={cashbooks.map((account) => ({ value: account._id, label: `${account.code} - ${account.name}` }))}
+        />
         <input className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none" placeholder="Reference" value={filters.reference} onChange={(event) => setFilters((prev) => ({ ...prev, reference: event.target.value }))} />
         <button type="submit" className="inline-flex h-8 items-center justify-center gap-1.5 bg-[#FF8C00] px-4 text-xs font-bold text-white hover:bg-[#E67E00]"><FaSearch />Search</button>
         <button type="button" onClick={resetFilters} className="inline-flex h-8 items-center justify-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0A3127]"><FaRedoAlt />Reset</button>
@@ -237,9 +251,13 @@ const CarWashDeposits = () => {
                     <div className="flex-shrink-0 text-right">
                       <div className="font-extrabold text-slate-900">{formatMoney(row.amount)}</div>
                       {canUpdate ? (
-                        <select className={`mt-1 h-6 border px-1.5 text-[10px] font-bold uppercase ${statusBadgeClass[row.status || "pending"] || statusBadgeClass.pending}`} value={row.status || "pending"} onChange={(e) => updateStatus(row, e.target.value)}>
-                          {(nextStatuses[row.status || "pending"] || ["pending"]).map((s) => <option key={s} value={s}>{s.toUpperCase()}</option>)}
-                        </select>
+                        <AppSelect
+                          size="sm"
+                          value={row.status || "pending"}
+                          onChange={(v) => updateStatus(row, v ?? "pending")}
+                          className={`mt-1 ${statusBadgeClass[row.status || "pending"] || statusBadgeClass.pending}`}
+                          options={(nextStatuses[row.status || "pending"] || ["pending"]).map((s) => ({ value: s, label: s.toUpperCase() }))}
+                        />
                       ) : (
                         <span className={`mt-1 inline-flex border px-1.5 py-0.5 text-[10px] font-bold uppercase ${statusBadgeClass[row.status || "pending"] || statusBadgeClass.pending}`}>{(row.status || "pending").toUpperCase()}</span>
                       )}
@@ -296,9 +314,13 @@ const CarWashDeposits = () => {
                     {isConsolidated && <td className="px-2 py-1 text-slate-600">{row.branch?.name || <span className="text-slate-400">—</span>}</td>}
                     <td className="px-2 py-1">
                       {canUpdate ? (
-                        <select className={`h-6 border px-2 text-[11px] font-bold uppercase ${statusBadgeClass[row.status || "pending"] || statusBadgeClass.pending}`} value={row.status || "pending"} onChange={(event) => updateStatus(row, event.target.value)}>
-                          {statuses.map((status) => <option key={status} value={status}>{status.toUpperCase()}</option>)}
-                        </select>
+                        <AppSelect
+                          size="sm"
+                          value={row.status || "pending"}
+                          onChange={(v) => updateStatus(row, v ?? "pending")}
+                          className={statusBadgeClass[row.status || "pending"] || statusBadgeClass.pending}
+                          options={statuses.map((status) => ({ value: status, label: status.toUpperCase() }))}
+                        />
                       ) : (
                         <span className={`inline-flex border px-2 py-0.5 text-[11px] font-bold uppercase ${statusBadgeClass[row.status || "pending"] || statusBadgeClass.pending}`}>{(row.status || "pending").toUpperCase()}</span>
                       )}
@@ -351,22 +373,41 @@ const CarWashDeposits = () => {
           <form id="carwash-deposit-form" onSubmit={createDeposit} className="grid gap-3 md:grid-cols-2">
             {isConsolidated && (
               <div className="md:col-span-2">
-                <label className={labelClass}>Branch <span className="text-red-500">*</span></label>
-                <select
-                  className={`${inputClass} ${!form.branch ? "border-amber-400 bg-amber-50" : ""}`}
-                  value={form.branch}
-                  onChange={(e) => setForm((prev) => ({ ...prev, branch: e.target.value }))}
+                <AppSelect
+                  size="md"
+                  label="Branch"
                   required
-                >
-                  <option value="">— Select branch —</option>
-                  {branches.map((b) => <option key={b._id} value={b._id}>{b.name}</option>)}
-                </select>
+                  searchable
+                  placeholder="— Select branch —"
+                  value={form.branch}
+                  onChange={(v) => setForm((prev) => ({ ...prev, branch: v ?? "" }))}
+                  options={branches.map((b) => ({ value: b._id, label: b.name }))}
+                />
               </div>
             )}
             <div><label className={labelClass}>Deposit Date *</label><input type="date" className={inputClass} value={form.depositDate} onChange={(event) => setForm((prev) => ({ ...prev, depositDate: event.target.value }))} required /></div>
             <div><label className={labelClass}>Amount *</label><input type="number" min="1" className={inputClass} value={form.amount} onChange={(event) => setForm((prev) => ({ ...prev, amount: event.target.value }))} required autoFocus /></div>
-            <div><label className={labelClass}>Destination</label><select className={inputClass} value={form.destination} onChange={(event) => setForm((prev) => ({ ...prev, destination: event.target.value }))}>{destinations.map((destination) => <option key={destination} value={destination}>{destination.toUpperCase()}</option>)}</select></div>
-            <div><label className={labelClass}>Cashbook Account *</label><select className={inputClass} value={form.cashbookAccount} onChange={(event) => setForm((prev) => ({ ...prev, cashbookAccount: event.target.value }))} required><option value="">Select cashbook</option>{cashbooks.map((account) => <option key={account._id} value={account._id}>{account.code} - {account.name}</option>)}</select></div>
+            <div>
+              <AppSelect
+                size="md"
+                label="Destination"
+                value={form.destination}
+                onChange={(v) => setForm((prev) => ({ ...prev, destination: v ?? "bank" }))}
+                options={destinations.map((destination) => ({ value: destination, label: destination.toUpperCase() }))}
+              />
+            </div>
+            <div>
+              <AppSelect
+                size="md"
+                label="Cashbook Account"
+                required
+                searchable
+                placeholder="Select cashbook"
+                value={form.cashbookAccount}
+                onChange={(v) => setForm((prev) => ({ ...prev, cashbookAccount: v ?? "" }))}
+                options={cashbooks.map((account) => ({ value: account._id, label: `${account.code} - ${account.name}` }))}
+              />
+            </div>
             <div className="md:col-span-2"><label className={labelClass}>Reference</label><input className={inputClass} value={form.reference} onChange={(event) => setForm((prev) => ({ ...prev, reference: event.target.value }))} placeholder="Bank slip, M-Pesa ref..." /></div>
             <div className="md:col-span-2"><label className={labelClass}>Notes</label><textarea className="min-h-20 w-full border border-slate-300 px-2 py-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none" value={form.notes} onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))} /></div>
           </form>

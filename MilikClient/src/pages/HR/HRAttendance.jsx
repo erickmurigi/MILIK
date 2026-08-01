@@ -216,19 +216,9 @@ export default function HRAttendance() {
 
         {/* Filters */}
         <div className="flex flex-none flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2">
-          <select className={`${F} w-52 appearance-none`} value={empFilter} onChange={(e) => { setEmpFilter(e.target.value); setPage(1); }}>
-            <option value="">All employees</option>
-            {employees.map((e) => (
-              <option key={e._id} value={e._id}>{e.surname} {e.otherNames}</option>
-            ))}
-          </select>
-          <select className={`${F} w-28 appearance-none`} value={monthFilter} onChange={(e) => { setMonthFilter(e.target.value); setPage(1); }}>
-            <option value="">All months</option>
-            {monthOpts.map((m, i) => <option key={i} value={String(i + 1)}>{m}</option>)}
-          </select>
-          <select className={`${F} w-24 appearance-none`} value={yearFilter} onChange={(e) => { setYearFilter(e.target.value); setPage(1); }}>
-            {yearOpts.map((y) => <option key={y} value={String(y)}>{y}</option>)}
-          </select>
+          <AppSelect value={empFilter} onChange={(v) => { setEmpFilter(v ?? ""); setPage(1); }} options={employees.map((e) => ({ value: e._id, label: `${e.surname} ${e.otherNames}` }))} placeholder="All employees" clearable searchable size="sm" />
+          <AppSelect value={monthFilter} onChange={(v) => { setMonthFilter(v ?? ""); setPage(1); }} options={monthOpts.map((m, i) => ({ value: String(i + 1), label: m }))} placeholder="All months" clearable size="sm" />
+          <AppSelect value={yearFilter} onChange={(v) => { setYearFilter(v ?? String(thisYear)); setPage(1); }} options={yearOpts.map((y) => ({ value: String(y), label: String(y) }))} size="sm" />
           <div className="relative">
             <FaSearch size={10} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name…"

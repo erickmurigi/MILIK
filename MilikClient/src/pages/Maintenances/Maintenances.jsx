@@ -424,12 +424,8 @@ const Maintenances = () => {
         {/* Filter bar */}
         <div className="shrink-0 flex flex-wrap items-center gap-1.5 border-b border-slate-200 bg-white px-3 py-2">
           <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search requests…" className="h-7 w-48 shrink-0 border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:border-[#0B3B2E]" />
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 appearance-none outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
-            {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-          <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 appearance-none outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
-            {PRIORITY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
+          <AppSelect value={statusFilter} onChange={(v) => setStatusFilter(v ?? "all")} options={STATUS_OPTIONS.filter((o) => o.value !== "all")} placeholder="All statuses" clearable size="sm" />
+          <AppSelect value={priorityFilter} onChange={(v) => setPriorityFilter(v ?? "all")} options={PRIORITY_OPTIONS.filter((o) => o.value !== "all")} placeholder="All priorities" clearable size="sm" />
           <button onClick={() => { setSearchTerm(""); setStatusFilter("all"); setPriorityFilter("all"); }} className="inline-flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"><FaFilter size={9} /> Reset</button>
           <button onClick={loadRequests} className="inline-flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50"><FaRedoAlt size={9} /></button>
           <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
@@ -565,13 +561,7 @@ const Maintenances = () => {
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
                   <span className="font-semibold text-slate-500">Per page:</span>
-                  <select
-                    value={pageSize}
-                    onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                    className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition"
-                  >
-                    {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
-                  </select>
+                  <AppSelect value={pageSize} onChange={(v) => { setPageSize(Number(v ?? DEFAULT_PAGE_SIZE)); setCurrentPage(1); }} options={[25, 50, 100, 200].map((n) => ({ value: n, label: String(n) }))} size="sm" />
                 </div>
                 <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} className="rounded border border-slate-300 px-2.5 py-0.5 font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
                 <span className="font-semibold text-slate-700">Page {safePage} of {totalPages}</span>
@@ -650,26 +640,20 @@ const Maintenances = () => {
                     className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </label>
-                <label className="block">
-                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Priority</span>
-                  <select
-                    value={form.priority}
-                    onChange={(e) => setForm((prev) => ({ ...prev, priority: e.target.value }))}
-                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  >
-                    {PRIORITY_OPTIONS.filter((o) => o.value !== "all").map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                </label>
-                <label className="block">
-                  <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Status</span>
-                  <select
-                    value={form.status}
-                    onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}
-                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  >
-                    {STATUS_OPTIONS.filter((o) => o.value !== "all").map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                </label>
+                <AppSelect
+                  label="Priority"
+                  value={form.priority}
+                  onChange={(v) => setForm((prev) => ({ ...prev, priority: v ?? "" }))}
+                  options={PRIORITY_OPTIONS.filter((o) => o.value !== "all")}
+                  size="md"
+                />
+                <AppSelect
+                  label="Status"
+                  value={form.status}
+                  onChange={(v) => setForm((prev) => ({ ...prev, status: v ?? "" }))}
+                  options={STATUS_OPTIONS.filter((o) => o.value !== "all")}
+                  size="md"
+                />
               </div>
 
               <label className="block">

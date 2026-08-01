@@ -5,6 +5,7 @@ import { FaCashRegister, FaRedoAlt, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import InventoryShell from "./InventoryShell";
 import { inventoryApi, formatMoney } from "../../services/inventoryApi";
+import AppSelect from "../../components/common/AppSelect";
 
 const STATUS_BADGE = {
   open:   "border-emerald-200 bg-emerald-50 text-emerald-700",
@@ -90,23 +91,8 @@ const POSSessions = () => {
             {closedCount > 0 && <span>Closed: <strong className="text-slate-500">{closedCount}</strong></span>}
           </div>
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            <select
-              value={locationFilter}
-              onChange={(e) => { setLocationFilter(e.target.value); setPage(1); }}
-              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#0B3B2E]"
-            >
-              <option value="">All Locations</option>
-              {locations.map((l) => <option key={l._id} value={l._id}>{l.name}</option>)}
-            </select>
-            <select
-              value={statusFilter}
-              onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#0B3B2E]"
-            >
-              <option value="">All Statuses</option>
-              <option value="open">Open</option>
-              <option value="closed">Closed</option>
-            </select>
+            <AppSelect value={locationFilter} onChange={(v) => { setLocationFilter(v ?? ""); setPage(1); }} options={locations.map((l) => ({ value: l._id, label: l.name }))} placeholder="All Locations" clearable size="sm" />
+            <AppSelect value={statusFilter} onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }} options={[{ value: "open", label: "Open" }, { value: "closed", label: "Closed" }]} placeholder="All Statuses" clearable size="sm" />
           </div>
         </div>
 

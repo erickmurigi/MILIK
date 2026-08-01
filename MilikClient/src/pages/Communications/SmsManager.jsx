@@ -15,6 +15,7 @@ import { hasCompanyModule } from "../../utils/companyModules";
 import { carWashApi } from "../../services/carWashApi";
 import { saleApi } from "../../services/propertySaleApi";
 import { inventoryApi } from "../../services/inventoryApi";
+import AppSelect from "../../components/common/AppSelect";
 
 const PAGE_SIZE = 50;
 
@@ -280,20 +281,13 @@ const ComposePanel = ({ open, onClose, businessId, hasPM, hasCarWash, hasHR, has
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
 
           {/* Send To dropdown — scales to any number of modules */}
-          <div>
-            <label className={lc}>Send To</label>
-            <div className="relative">
-              <select
-                value={selectedType}
-                onChange={e => setSelectedType(e.target.value)}
-                className="h-9 w-full appearance-none border border-slate-300 bg-white pl-3 pr-8 text-xs font-bold text-slate-800 focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20 transition"
-              >
-                {contactTypes.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
-                <option value="manual">Manual Phone Number</option>
-              </select>
-              <FaChevronDown size={9} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            </div>
-          </div>
+          <AppSelect
+            label="Send To"
+            value={selectedType}
+            onChange={(v) => setSelectedType(v ?? "manual")}
+            options={[...contactTypes.map((t) => ({ value: t.key, label: t.label })), { value: "manual", label: "Manual Phone Number" }]}
+            size="md"
+          />
 
           {selectedType === "manual" ? (
             <div>

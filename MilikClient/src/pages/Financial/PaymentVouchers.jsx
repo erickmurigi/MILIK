@@ -789,28 +789,23 @@ const PaymentVouchers = () => {
                 </div>
                 <div className="space-y-3">
                   {serviceProvidersList.length > 0 && (
-                    <label className="block">
-                      <span className="text-xs font-bold text-slate-600">Service Provider (optional)</span>
-                      <select
-                        value={form.serviceProviderId}
-                        onChange={(e) => {
-                          const spId = e.target.value;
-                          const sp = serviceProvidersList.find((s) => String(s._id) === spId);
-                          const newWht = sp?.subjectToWht && sp?.whtRate && Number(form.amount || 0) > 0
-                            ? String(Math.round(Number(form.amount) * sp.whtRate / 100 * 100) / 100)
-                            : "";
-                          setForm((prev) => ({ ...prev, serviceProviderId: spId, whtAmount: newWht }));
-                        }}
-                        className="mt-1 w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none focus:border-[#0B3B2E]"
-                      >
-                        <option value="">— None —</option>
-                        {serviceProvidersList.map((sp) => (
-                          <option key={sp._id} value={sp._id}>
-                            {sp.name}{sp.subjectToWht ? ` (WHT ${sp.whtRate}%)` : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    <AppSelect
+                      label="Service Provider (optional)"
+                      value={form.serviceProviderId}
+                      onChange={(v) => {
+                        const spId = v ?? "";
+                        const sp = serviceProvidersList.find((s) => String(s._id) === spId);
+                        const newWht = sp?.subjectToWht && sp?.whtRate && Number(form.amount || 0) > 0
+                          ? String(Math.round(Number(form.amount) * sp.whtRate / 100 * 100) / 100)
+                          : "";
+                        setForm((prev) => ({ ...prev, serviceProviderId: spId, whtAmount: newWht }));
+                      }}
+                      options={serviceProvidersList.map((sp) => ({ value: sp._id, label: `${sp.name}${sp.subjectToWht ? ` (WHT ${sp.whtRate}%)` : ""}` }))}
+                      placeholder="— None —"
+                      size="md"
+                      searchable
+                      clearable
+                    />
                   )}
                   <label className="block">
                     <span className="text-xs font-bold text-slate-600">Amount (KES) *</span>
@@ -995,22 +990,36 @@ const PaymentVouchers = () => {
                     className="h-7 w-48 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
-                <select value={filters.category} onChange={setFilter("category")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
-                  <option value="all">All categories</option>
-                  {categories.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-                </select>
-                <select value={filters.status} onChange={setFilter("status")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
-                  <option value="all">All statuses</option>
-                  <option value="draft">Draft</option>
-                  <option value="approved">Approved</option>
-                  <option value="paid">Paid</option>
-                  <option value="reversed">Reversed</option>
-                </select>
+                <AppSelect
+                  value={filters.category !== "all" ? filters.category : ""}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, category: v ?? "all" }))}
+                  options={categories.map((item) => ({ value: item.value, label: item.label }))}
+                  placeholder="All categories"
+                  size="sm"
+                  clearable
+                />
+                <AppSelect
+                  value={filters.status !== "all" ? filters.status : ""}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))}
+                  options={[
+                    { value: "draft", label: "Draft" },
+                    { value: "approved", label: "Approved" },
+                    { value: "paid", label: "Paid" },
+                    { value: "reversed", label: "Reversed" },
+                  ]}
+                  placeholder="All statuses"
+                  size="sm"
+                  clearable
+                />
                 {hasPMS && (
-                  <select value={filters.propertyId} onChange={setFilter("propertyId")} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20">
-                    <option value="all">All properties</option>
-                    {properties.map((p) => <option key={p._id} value={p._id}>{p.propertyName || p.name}</option>)}
-                  </select>
+                  <AppSelect
+                    value={filters.propertyId !== "all" ? filters.propertyId : ""}
+                    onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "all" }))}
+                    options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))}
+                    placeholder="All properties"
+                    size="sm"
+                    clearable
+                  />
                 )}
                 <button onClick={() => setFilters({ search: "", category: "all", status: "all", propertyId: "all" })} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
                   <FaFilter size={9} /> Reset
@@ -1084,13 +1093,12 @@ const PaymentVouchers = () => {
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
                   <span className="font-semibold text-slate-500">Per page:</span>
-                  <select
+                  <AppSelect
                     value={pageSize}
-                    onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                    className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition"
-                  >
-                    {[25, 50, 100, 200].map((n) => <option key={n} value={n}>{n}</option>)}
-                  </select>
+                    onChange={(v) => { setPageSize(Number(v ?? 25)); setCurrentPage(1); }}
+                    options={[25, 50, 100, 200].map((n) => ({ value: n, label: String(n) }))}
+                    size="sm"
+                  />
                 </div>
                 <button onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))} disabled={safeCurrentPage === 1} className="rounded-lg border border-slate-300 px-3 py-1 font-semibold transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
                 <span className="font-semibold text-slate-700">Page {safeCurrentPage} of {totalPages}</span>

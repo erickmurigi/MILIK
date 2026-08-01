@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import { carWashApi, normalizeListPayload } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
+import AppSelect from "../../components/common/AppSelect";
 
 const METHODS = ["cash", "mpesa", "bank", "card", "other"];
 const METHOD_LABELS = { cash: "Cash", mpesa: "M-Pesa", bank: "Bank Transfer", card: "Card / POS", other: "Other" };
@@ -234,12 +235,17 @@ const CarWashBranches = () => {
                 <input className={inputClass} value={form.mpesaShortCode} onChange={(e) => setField("mpesaShortCode", e.target.value)} placeholder="e.g. 522522" />
               </div>
               <div>
-                <label className={labelClass}>Branch Type</label>
-                <select className={selectClass} value={form.branchType} onChange={(e) => setField("branchType", e.target.value)}>
-                  <option value="both">Both (Vehicle + Carpet)</option>
-                  <option value="vehicle">Vehicle Wash only</option>
-                  <option value="carpet">Carpet / Textile only</option>
-                </select>
+                <AppSelect
+                  label="Branch Type"
+                  value={form.branchType}
+                  onChange={(v) => setField("branchType", v ?? "both")}
+                  options={[
+                    { value: "both", label: "Both (Vehicle + Carpet)" },
+                    { value: "vehicle", label: "Vehicle Wash only" },
+                    { value: "carpet", label: "Carpet / Textile only" },
+                  ]}
+                  size="md"
+                />
                 <p className="mt-1 text-[10px] text-slate-400">Controls which job types staff at this branch can create.</p>
               </div>
               <div className="flex flex-col justify-end gap-3">
@@ -265,17 +271,16 @@ const CarWashBranches = () => {
               <div className="grid gap-3 p-3 sm:grid-cols-2">
                 {METHODS.map((method) => (
                   <div key={method}>
-                    <label className={labelClass}>{METHOD_LABELS[method]}</label>
-                    <select
-                      className={selectClass}
+                    <AppSelect
+                      label={METHOD_LABELS[method]}
                       value={form.defaultCashbooks[method]}
-                      onChange={(e) => setCashbook(method, e.target.value)}
-                    >
-                      <option value="">— Use company default —</option>
-                      {cashbooks.map((cb) => (
-                        <option key={cb._id} value={cb._id}>{cb.code} – {cb.name}</option>
-                      ))}
-                    </select>
+                      onChange={(v) => setCashbook(method, v ?? "")}
+                      options={cashbooks.map((cb) => ({ value: cb._id, label: `${cb.code} – ${cb.name}` }))}
+                      placeholder="— Use company default —"
+                      clearable
+                      searchable
+                      size="md"
+                    />
                   </div>
                 ))}
               </div>

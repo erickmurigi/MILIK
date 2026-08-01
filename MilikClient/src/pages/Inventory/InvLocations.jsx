@@ -5,6 +5,7 @@ import { FaEdit, FaMapMarkerAlt, FaPlus, FaRedoAlt, FaSearch, FaTimes, FaWarehou
 import { toast } from "react-toastify";
 import InventoryShell from "./InventoryShell";
 import { inventoryApi } from "../../services/inventoryApi";
+import AppSelect from "../../components/common/AppSelect";
 
 const TYPES = ["warehouse", "retail", "counter"];
 
@@ -226,10 +227,7 @@ const InvLocations = () => {
               <input className={`${inputClass} uppercase`} value={form.code} onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))} placeholder="e.g. WH-01" />
             </div>
             <div>
-              <label className={labelClass}>Type *</label>
-              <select required className={inputClass} value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}>
-                {TYPES.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
-              </select>
+              <AppSelect label="Type" required value={form.type} onChange={(v) => setForm((f) => ({ ...f, type: v ?? "" }))} options={TYPES.map((t) => ({ value: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))} size="md" />
             </div>
             <div className="md:col-span-2">
               <label className={labelClass}>Address</label>

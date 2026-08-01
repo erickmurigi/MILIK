@@ -11,6 +11,7 @@ import {
   getBudgets, getBudget, createBudget, updateBudget,
   deleteBudget, getChartOfAccounts,
 } from "../../redux/apiCalls";
+import AppSelect from "../../components/common/AppSelect";
 
 const GRN = "#0B3B2E";
 const fmt  = (n) => Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -419,13 +420,14 @@ const BudgetVsActual = () => {
             <div className="mb-3 flex flex-wrap items-end gap-2">
               <div className="flex flex-col gap-0.5">
                 <label className="text-[9px] font-semibold uppercase text-slate-400">Account</label>
-                <select value={addAccount} onChange={(e) => setAddAccount(e.target.value)}
-                  className="h-7 min-w-[260px] rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                  <option value="">Select account…</option>
-                  {availableAccounts.map((a) => (
-                    <option key={a._id} value={a._id}>{a.code ? `${a.code} — ` : ""}{a.name} ({a.type})</option>
-                  ))}
-                </select>
+                <AppSelect
+                  value={addAccount}
+                  onChange={(v) => setAddAccount(v ?? "")}
+                  options={availableAccounts.map((a) => ({ value: a._id, label: `${a.code ? `${a.code} — ` : ""}${a.name} (${a.type})` }))}
+                  placeholder="Select account…"
+                  searchable
+                  size="sm"
+                />
               </div>
               <div className="flex flex-col gap-0.5">
                 <label className="text-[9px] font-semibold uppercase text-slate-400">Budgeted Amount (KES)</label>

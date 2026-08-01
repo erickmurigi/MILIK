@@ -22,6 +22,7 @@ import {
   runGLIntegrityReport,
 } from "../../redux/apiCalls";
 import { useConfirm } from "../../context/ConfirmContext";
+import AppSelect from "../../components/common/AppSelect";
 
 const GRN = "#0B3B2E";
 
@@ -258,18 +259,14 @@ function BalanceGroupModal({ group, accounts, businessId, healthRunId, onClose, 
             <label className="block text-[10px] font-bold text-slate-600 mb-1">
               Correcting Account <span className="text-red-500">*</span>
             </label>
-            <select
+            <AppSelect
               value={accountId}
-              onChange={(e) => setAccountId(e.target.value)}
-              className="w-full border border-slate-200 px-2.5 py-1.5 text-[11px] focus:outline-none focus:border-slate-400"
-            >
-              <option value="">— select account —</option>
-              {postingAccounts.map((a) => (
-                <option key={a._id} value={a._id}>
-                  {a.code} – {a.name}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => setAccountId(v ?? "")}
+              options={postingAccounts.map((a) => ({ value: a._id, label: `${a.code} – ${a.name}` }))}
+              placeholder="— select account —"
+              searchable
+              size="md"
+            />
             <p className="mt-1 text-[9px] text-slate-400">
               If unsure, use a suspense/clearing account and investigate before period close.
             </p>

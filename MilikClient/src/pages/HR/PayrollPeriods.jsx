@@ -10,6 +10,7 @@ import DashboardLayout from '../../components/Layout/DashboardLayout';
 import MilikConfirmDialog from '../../components/Modals/MilikConfirmDialog';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
+import AppSelect from "../../components/common/AppSelect";
 
 const MONTHS = [
   '', 'January', 'February', 'March', 'April', 'May', 'June',
@@ -46,16 +47,10 @@ function NewPeriodForm({ onSave, onCancel, saving }) {
       <div className="text-xs font-black text-slate-700 uppercase tracking-widest">New Payroll Period</div>
       <div className="grid grid-cols-3 gap-3">
         <div>
-          <label className="mb-0.5 block text-xs font-semibold text-slate-700">Month *</label>
-          <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className={inputCls}>
-            {MONTHS.slice(1).map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
-          </select>
+          <AppSelect label="Month" required value={month} onChange={(v) => setMonth(Number(v ?? month))} options={MONTHS.slice(1).map((m, i) => ({ value: i + 1, label: m }))} size="md" />
         </div>
         <div>
-          <label className="mb-0.5 block text-xs font-semibold text-slate-700">Year *</label>
-          <select value={year} onChange={(e) => setYear(Number(e.target.value))} className={inputCls}>
-            {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
-          </select>
+          <AppSelect label="Year" required value={year} onChange={(v) => setYear(Number(v ?? year))} options={YEARS.map((y) => ({ value: y, label: String(y) }))} size="md" />
         </div>
         <div>
           <label className="mb-0.5 block text-xs font-semibold text-slate-700">Notes</label>
@@ -195,27 +190,8 @@ export default function PayrollPeriods() {
         <div className="flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-4 py-2">
           <div className="flex flex-wrap items-center gap-2">
             <FaFilter size={9} className="text-slate-400" />
-            <select
-              value={yearFilter}
-              onChange={(e) => setYearFilter(e.target.value)}
-              className="h-8 rounded-lg border border-orange-200 bg-orange-50 px-3 text-xs font-semibold text-slate-700 focus:outline-none"
-            >
-              <option value="">All years</option>
-              {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
-            </select>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="h-8 rounded-lg border border-orange-200 bg-orange-50 px-3 text-xs font-semibold text-slate-700 focus:outline-none"
-            >
-              <option value="">All statuses</option>
-              <option>Draft</option>
-              <option>Processing</option>
-              <option>Approved</option>
-              <option>Paid</option>
-              <option>Closed</option>
-              <option>Reversed</option>
-            </select>
+            <AppSelect value={yearFilter} onChange={(v) => setYearFilter(v ?? "")} options={YEARS.map((y) => ({ value: y, label: String(y) }))} placeholder="All years" clearable size="sm" />
+            <AppSelect value={statusFilter} onChange={(v) => setStatusFilter(v ?? "")} options={["Draft","Processing","Approved","Paid","Closed","Reversed"].map((s) => ({ value: s, label: s }))} placeholder="All statuses" clearable size="sm" />
             {hasFilters && (
               <button
                 onClick={() => { setYearFilter(''); setStatusFilter(''); }}

@@ -15,6 +15,7 @@ import {
   FaUserPlus,
 } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
+import AppSelect from '../../components/common/AppSelect';
 import { useDispatch, useSelector } from 'react-redux';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { selectCurrentUser, selectCurrentCompany } from '../../redux/selectors';
@@ -448,31 +449,25 @@ export default function AddUserPage() {
                           />
                         </label>
                       ))}
-                      <label className="text-xs font-semibold text-slate-700">
-                        <span className="mb-0.5 block">Gender</span>
-                        <select
-                          value={form.gender}
-                          onChange={(e) => updateForm('gender', e.target.value)}
-                          className="h-8 w-full rounded-lg border border-slate-200 px-3 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                        >
-                          <option value="">Select gender</option>
-                          <option>Male</option>
-                          <option>Female</option>
-                          <option>Other</option>
-                        </select>
-                      </label>
-                      <label className="text-xs font-semibold text-slate-700">
-                        <span className="mb-0.5 block">Profile *</span>
-                        <select
-                          value={form.profile}
-                          onChange={(e) => updateForm('profile', e.target.value)}
-                          className="h-8 w-full rounded-lg border border-slate-200 px-3 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                        >
-                          {PROFILE_OPTIONS.map((item) => (
-                            <option key={item} value={item}>{item}</option>
-                          ))}
-                        </select>
-                      </label>
+                      <AppSelect
+                        label="Gender"
+                        value={form.gender}
+                        onChange={(v) => updateForm('gender', v ?? '')}
+                        options={[
+                          { value: 'Male', label: 'Male' },
+                          { value: 'Female', label: 'Female' },
+                          { value: 'Other', label: 'Other' },
+                        ]}
+                        placeholder="Select gender"
+                        size="md"
+                      />
+                      <AppSelect
+                        label="Profile *"
+                        value={form.profile}
+                        onChange={(v) => updateForm('profile', v ?? 'Agent')}
+                        options={PROFILE_OPTIONS.map((item) => ({ value: item, label: item }))}
+                        size="md"
+                      />
                       {(isEditing || !form.autoGeneratePassword) && (
                         <>
                           <div className="text-xs font-semibold text-slate-700">
@@ -606,24 +601,19 @@ export default function AddUserPage() {
                       })}
                     </div>
 
-                    <label className="mt-2 block text-xs font-semibold text-slate-700">
-                      <span className="mb-0.5 block">Primary company *</span>
-                      <select
-                        value={form.primaryCompany}
-                        onChange={(e) => updateForm('primaryCompany', e.target.value)}
-                        className="h-8 w-full rounded-lg border border-slate-200 px-3 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                      >
-                        <option value="">Select primary company</option>
-                        {form.accessibleCompanies.map((companyId) => {
-                          const company = availableCompanies.find((item) => item._id === companyId);
-                          return (
-                            <option key={companyId} value={companyId}>
-                              {company?.companyName || companyId}
-                            </option>
-                          );
-                        })}
-                      </select>
-                    </label>
+                    <AppSelect
+                      label="Primary company *"
+                      value={form.primaryCompany}
+                      onChange={(v) => updateForm('primaryCompany', v ?? '')}
+                      options={form.accessibleCompanies.map((companyId) => {
+                        const company = availableCompanies.find((item) => item._id === companyId);
+                        return { value: companyId, label: company?.companyName || companyId };
+                      })}
+                      placeholder="Select primary company"
+                      searchable
+                      size="md"
+                      className="mt-2"
+                    />
 
                     <div className="mt-2 flex items-center gap-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
                       <span>
@@ -770,21 +760,22 @@ export default function AddUserPage() {
                               <div className="mb-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-amber-700">
                                 Car Wash Branch Restriction
                               </div>
-                              <select
+                              <AppSelect
                                 value={assignment.carwashBranch || ''}
-                                onChange={(e) =>
+                                onChange={(v) =>
                                   updateAssignment(assignment.company, (current) => ({
                                     ...current,
-                                    carwashBranch: e.target.value || null,
+                                    carwashBranch: v || null,
                                   }))
                                 }
-                                className="h-7 w-full rounded border border-amber-200 bg-white px-2 text-[11px] outline-none focus:border-[#0B3B2E]"
-                              >
-                                <option value="">All branches (admin — no restriction)</option>
-                                {(branchesByCompany[assignment.company] || []).map((b) => (
-                                  <option key={b._id} value={b._id}>{b.name}</option>
-                                ))}
-                              </select>
+                                options={(branchesByCompany[assignment.company] || []).map((b) => ({
+                                  value: b._id,
+                                  label: b.name,
+                                }))}
+                                placeholder="All branches (admin — no restriction)"
+                                clearable
+                                size="sm"
+                              />
                               <p className="mt-1 text-[10px] text-amber-700/70">
                                 Blank = full multi-branch access. Select a branch to lock this user to it only.
                               </p>

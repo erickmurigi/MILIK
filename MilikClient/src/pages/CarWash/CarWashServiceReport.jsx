@@ -5,6 +5,7 @@ import { FaPrint, FaRedoAlt, FaSearch } from "react-icons/fa";
 import { carWashApi, formatMoney, getActiveBranchId, todayISO } from "../../services/carWashApi";
 import { selectCurrentCompany } from "../../redux/selectors";
 import CarWashShell from "./CarWashShell";
+import AppSelect from "../../components/common/AppSelect";
 
 const startOfMonthISO = () => {
   const now = new Date();
@@ -151,16 +152,15 @@ const CarWashServiceReport = () => {
           value={to}
           onChange={(e) => setTo(e.target.value)}
         />
-        <select
-          className="h-8 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
+        <AppSelect
+          size="sm"
+          clearable
+          searchable
+          placeholder="All categories"
           value={category}
-          onChange={(e) => setCategory(e.target.value)}
-        >
-          <option value="">All categories</option>
-          {categories.map((cat) => (
-            <option key={cat} value={cat}>{cat}</option>
-          ))}
-        </select>
+          onChange={(v) => setCategory(v ?? "")}
+          options={categories.map((cat) => ({ value: cat, label: cat }))}
+        />
         <input
           className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
           placeholder="Filter by service name…"

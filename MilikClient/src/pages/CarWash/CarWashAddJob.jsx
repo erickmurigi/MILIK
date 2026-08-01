@@ -11,6 +11,7 @@ import { useFormDraft } from "../../hooks/useFormDraft";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import CarWashShell from "./CarWashShell";
 import CarpetCameraModal from "../../components/common/CarpetCameraModal";
+import AppSelect from "../../components/common/AppSelect";
 
 const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
@@ -890,17 +891,14 @@ const CarWashAddJob = () => {
                 <label className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-amber-800">
                   Branch <span className="text-red-500">*</span> — you are in All Branches view
                 </label>
-                <select
-                  className="h-9 w-full border border-amber-300 bg-white px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
+                <AppSelect
                   value={selectedBranchId}
-                  onChange={(e) => setSelectedBranchId(e.target.value)}
-                  required
-                >
-                  <option value="">— Select branch for this job —</option>
-                  {branches.map((b) => (
-                    <option key={b._id} value={b._id}>{b.name}</option>
-                  ))}
-                </select>
+                  onChange={(v) => setSelectedBranchId(v ?? "")}
+                  options={branches.map((b) => ({ value: b._id, label: b.name }))}
+                  placeholder="— Select branch for this job —"
+                  size="md"
+                  searchable
+                />
                 {!selectedBranchId && (
                   <p className="mt-1 text-[10px] text-amber-700">This job will not be branch-stamped until you select one.</p>
                 )}
@@ -973,22 +971,17 @@ const CarWashAddJob = () => {
                               No active voucher companies found — add one in Credit Accounts first.
                             </p>
                           ) : (
-                            <select
-                              className={`${inputClass} border-violet-300 focus:border-violet-600`}
+                            <AppSelect
                               value={voucherAccount?._id || ""}
-                              onChange={(e) => {
-                                const acc = voucherCompanies.find((a) => a._id === e.target.value) || null;
+                              onChange={(v) => {
+                                const acc = voucherCompanies.find((a) => a._id === (v ?? "")) || null;
                                 setVoucherAccount(acc);
                               }}
-                              required={isVoucherJob}
-                            >
-                              <option value="">— Select voucher company —</option>
-                              {voucherCompanies.map((a) => (
-                                <option key={a._id} value={a._id}>
-                                  {a.contactPerson || a.accountNumber} ({a.accountNumber})
-                                </option>
-                              ))}
-                            </select>
+                              options={voucherCompanies.map((a) => ({ value: a._id, label: `${a.contactPerson || a.accountNumber} (${a.accountNumber})` }))}
+                              placeholder="— Select voucher company —"
+                              size="md"
+                              searchable
+                            />
                           )}
                           {voucherAccount && (
                             <div className="mt-1.5 flex items-center gap-2 border border-violet-300 bg-violet-50 px-3 py-2 text-xs">
@@ -1183,15 +1176,18 @@ const CarWashAddJob = () => {
                           const combos   = filtered.filter((s2) => s2.isCombo);
                           return (
                             <>
-                              <select disabled={isReward} className={`h-9 w-full border px-2 text-xs focus:outline-none ${isReward ? "border-amber-200 bg-amber-50 text-amber-800" : "border-slate-300 text-slate-800 focus:border-[#0B3B2E]"}`} value={line.service} onChange={(e) => handleLineServiceChange(index, e.target.value)}>
-                                <option value="">— Select service —</option>
-                                {regular.map((s2) => <option key={s2._id} value={s2._id}>{s2.name}</option>)}
-                                {combos.length > 0 && (
-                                  <optgroup label="── COMBOS ──">
-                                    {combos.map((s2) => <option key={s2._id} value={s2._id}>★ {s2.name}</option>)}
-                                  </optgroup>
-                                )}
-                              </select>
+                              <AppSelect
+                                disabled={isReward}
+                                value={line.service}
+                                onChange={(v) => handleLineServiceChange(index, v ?? "")}
+                                options={[
+                                  ...regular.map((s2) => ({ value: s2._id, label: s2.name })),
+                                  ...(combos.length > 0 ? [{ value: "__combo_sep__", label: "── COMBOS ──", disabled: true }, ...combos.map((s2) => ({ value: s2._id, label: `★ ${s2.name}` }))] : []),
+                                ]}
+                                placeholder="— Select service —"
+                                size="md"
+                                searchable
+                              />
                               {svc?.isCombo && svc?.comboDescription && (
                                 <div className="mt-1 border border-purple-200 bg-purple-50 px-2 py-1.5">
                                   <p className="text-[9px] font-black uppercase tracking-wide text-purple-500">Includes</p>
@@ -1210,15 +1206,21 @@ const CarWashAddJob = () => {
                         <div>
                           <label className={labelClass}>Vehicle Type</label>
                           {hasTiers ? (
-                            <select className={`h-9 w-full border px-2 text-xs focus:outline-none ${!line.vehicleType ? "border-amber-400 bg-amber-50 text-amber-700" : "border-slate-300 text-slate-800 focus:border-[#0B3B2E]"}`} value={line.vehicleType} onChange={(e) => handleLineVehicleTypeChange(index, e.target.value)} required>
-                              <option value="">— Select vehicle type —</option>
-                              {svc.pricingTiers.map((t) => <option key={t.vehicleType} value={t.vehicleType}>{t.vehicleType}</option>)}
-                            </select>
+                            <AppSelect
+                              value={line.vehicleType}
+                              onChange={(v) => handleLineVehicleTypeChange(index, v ?? "")}
+                              options={svc.pricingTiers.map((t) => ({ value: t.vehicleType, label: t.vehicleType }))}
+                              placeholder="— Select vehicle type —"
+                              size="md"
+                            />
                           ) : (
-                            <select className="h-9 w-full border border-slate-300 bg-white px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none" value={line.vehicleType} onChange={(e) => updateLine(index, "vehicleType", e.target.value)}>
-                              <option value="">— Vehicle type (optional) —</option>
-                              {VEHICLE_TYPES.map((vt) => <option key={vt} value={vt}>{vt}</option>)}
-                            </select>
+                            <AppSelect
+                              value={line.vehicleType}
+                              onChange={(v) => updateLine(index, "vehicleType", v ?? "")}
+                              options={VEHICLE_TYPES.map((vt) => ({ value: vt, label: vt }))}
+                              placeholder="— Vehicle type (optional) —"
+                              size="md"
+                            />
                           )}
                         </div>
                       )}
@@ -1325,19 +1327,17 @@ const CarWashAddJob = () => {
                               const selSvc   = servicesById.get(line.service);
                               return (
                                 <>
-                                  <select
-                                    className="h-8 w-full border border-slate-300 px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
+                                  <AppSelect
                                     value={line.service}
-                                    onChange={(e) => handleLineServiceChange(index, e.target.value)}
-                                  >
-                                    <option value="">— Select service —</option>
-                                    {regular.map((s2) => <option key={s2._id} value={s2._id}>{s2.category ? `${s2.category} — ${s2.name}` : s2.name}</option>)}
-                                    {combos.length > 0 && (
-                                      <optgroup label="── COMBOS ──">
-                                        {combos.map((s2) => <option key={s2._id} value={s2._id}>★ {s2.name}</option>)}
-                                      </optgroup>
-                                    )}
-                                  </select>
+                                    onChange={(v) => handleLineServiceChange(index, v ?? "")}
+                                    options={[
+                                      ...regular.map((s2) => ({ value: s2._id, label: s2.category ? `${s2.category} — ${s2.name}` : s2.name })),
+                                      ...(combos.length > 0 ? [{ value: "__combo_sep__", label: "── COMBOS ──", disabled: true }, ...combos.map((s2) => ({ value: s2._id, label: `★ ${s2.name}` }))] : []),
+                                    ]}
+                                    placeholder="— Select service —"
+                                    size="md"
+                                    searchable
+                                  />
                                   {selSvc?.isCombo && selSvc?.comboDescription && (
                                     <div className="mt-1 border border-purple-200 bg-purple-50 px-2 py-1">
                                       <p className="text-[9px] font-black uppercase tracking-wide text-purple-500">Includes</p>
@@ -1364,30 +1364,21 @@ const CarWashAddJob = () => {
                               const svc = servicesById.get(line.service);
                               const hasTiers = svc?.pricingTiers?.length > 0;
                               return hasTiers ? (
-                                <select
-                                  className={`h-8 w-full border px-2 text-xs focus:outline-none ${!line.vehicleType ? "border-amber-400 bg-amber-50 text-amber-700" : "border-slate-300 text-slate-800 focus:border-[#0B3B2E]"}`}
+                                <AppSelect
                                   value={line.vehicleType}
-                                  onChange={(e) => handleLineVehicleTypeChange(index, e.target.value)}
-                                  required
-                                >
-                                  <option value="">— Select vehicle type —</option>
-                                  {svc.pricingTiers.map((t) => (
-                                    <option key={t.vehicleType} value={t.vehicleType}>
-                                      {t.vehicleType}
-                                    </option>
-                                  ))}
-                                </select>
+                                  onChange={(v) => handleLineVehicleTypeChange(index, v ?? "")}
+                                  options={svc.pricingTiers.map((t) => ({ value: t.vehicleType, label: t.vehicleType }))}
+                                  placeholder="— Select vehicle type —"
+                                  size="md"
+                                />
                               ) : (
-                                <select
-                                  className="h-8 w-full border border-slate-300 bg-white px-2 text-xs text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
+                                <AppSelect
                                   value={line.vehicleType}
-                                  onChange={(e) => updateLine(index, "vehicleType", e.target.value)}
-                                >
-                                  <option value="">— Vehicle type (optional) —</option>
-                                  {VEHICLE_TYPES.map((vt) => (
-                                    <option key={vt} value={vt}>{vt}</option>
-                                  ))}
-                                </select>
+                                  onChange={(v) => updateLine(index, "vehicleType", v ?? "")}
+                                  options={VEHICLE_TYPES.map((vt) => ({ value: vt, label: vt }))}
+                                  placeholder="— Vehicle type (optional) —"
+                                  size="md"
+                                />
                               );
                             })()}
                           </td>

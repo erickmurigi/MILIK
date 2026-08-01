@@ -4,13 +4,14 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-toastify";
 import { FaCheck, FaEdit, FaHandshake, FaPlus, FaPrint, FaRedoAlt, FaTimes } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
-import SaleFilterBar, { FilterSearch, FilterSelect } from "./SaleFilterBar";
+import SaleFilterBar, { FilterSearch } from "./SaleFilterBar";
 import PaginationBar from "../../components/PaginationBar";
 import { fmtKES, saleApi, todayISO } from "../../services/propertySaleApi";
 import AmountInput from "./AmountInput";
 import { useConfirm } from "../../context/ConfirmContext";
 import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
+import AppSelect from "../../components/common/AppSelect";
 
 const STATUS_BADGE = {
   pending: "bg-amber-100 text-amber-700 border-amber-200",
@@ -350,20 +351,9 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             placeholder="Offer no. / listing / buyer…"
           />
-          <FilterSelect value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
-            <option value="">All Statuses</option>
-            {["pending", "negotiating", "accepted", "rejected", "expired", "withdrawn"].map((s) => (
-              <option key={s} value={s}>{s === "negotiating" ? "Counter Active" : s.charAt(0).toUpperCase() + s.slice(1)}</option>
-            ))}
-          </FilterSelect>
-          <FilterSelect value={listingFilt} onChange={(e) => { setListingFilt(e.target.value); setPage(1); }}>
-            <option value="">All Listings</option>
-            {listings.map((l) => <option key={l._id} value={l._id}>{l.listingNumber} — {l.title}</option>)}
-          </FilterSelect>
-          <FilterSelect value={buyerFilt} onChange={(e) => { setBuyerFilt(e.target.value); setPage(1); }}>
-            <option value="">All Buyers</option>
-            {buyers.map((b) => <option key={b._id} value={b._id}>{b.fullName}{b.buyerNumber ? ` (${b.buyerNumber})` : ""}</option>)}
-          </FilterSelect>
+          <AppSelect value={statusFilter} onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }} options={["pending", "negotiating", "accepted", "rejected", "expired", "withdrawn"].map((s) => ({ value: s, label: s === "negotiating" ? "Counter Active" : s.charAt(0).toUpperCase() + s.slice(1) }))} placeholder="All Statuses" clearable size="sm" />
+          <AppSelect value={listingFilt} onChange={(v) => { setListingFilt(v ?? ""); setPage(1); }} options={listings.map((l) => ({ value: l._id, label: `${l.listingNumber} — ${l.title}` }))} placeholder="All Listings" clearable size="sm" searchable />
+          <AppSelect value={buyerFilt} onChange={(v) => { setBuyerFilt(v ?? ""); setPage(1); }} options={buyers.map((b) => ({ value: b._id, label: `${b.fullName}${b.buyerNumber ? ` (${b.buyerNumber})` : ""}` }))} placeholder="All Buyers" clearable size="sm" searchable />
         </SaleFilterBar>
 
         {/* Table */}
@@ -536,32 +526,13 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
             </div>
             <div className="grid gap-4 overflow-y-auto p-5 md:grid-cols-2">
               <div className="md:col-span-2">
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Listing *</label>
-                <select value={form.listing} onChange={(e) => setForm((f) => ({ ...f, listing: e.target.value }))}
-                  className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none" required>
-                  <option value="">Select listing</option>
-                  {listings.filter((l) => ["available", "reserved", "under_contract"].includes(l.status)).map((l) => (
-                    <option key={l._id} value={l._id}>{l.listingNumber} — {l.title}</option>
-                  ))}
-                </select>
+                <AppSelect label="Listing *" value={form.listing} onChange={(v) => setForm((f) => ({ ...f, listing: v ?? "" }))} options={listings.filter((l) => ["available", "reserved", "under_contract"].includes(l.status)).map((l) => ({ value: l._id, label: `${l.listingNumber} — ${l.title}` }))} placeholder="Select listing" size="md" searchable />
               </div>
               <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Buyer *</label>
-                <select value={form.buyer} onChange={(e) => setForm((f) => ({ ...f, buyer: e.target.value }))}
-                  className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none" required>
-                  <option value="">Select buyer</option>
-                  {buyers.map((b) => <option key={b._id} value={b._id}>{b.buyerNumber} — {b.fullName}</option>)}
-                </select>
+                <AppSelect label="Buyer *" value={form.buyer} onChange={(v) => setForm((f) => ({ ...f, buyer: v ?? "" }))} options={buyers.map((b) => ({ value: b._id, label: `${b.buyerNumber} — ${b.fullName}` }))} placeholder="Select buyer" size="md" searchable />
               </div>
               <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Sales Agent</label>
-                <select value={form.agent} onChange={(e) => setForm((f) => ({ ...f, agent: e.target.value }))}
-                  className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none">
-                  <option value="">Unassigned</option>
-                  {agents.filter((a) => a.status === "active").map((a) => (
-                    <option key={a._id} value={a._id}>{a.agentNumber} — {a.fullName}</option>
-                  ))}
-                </select>
+                <AppSelect label="Sales Agent" value={form.agent} onChange={(v) => setForm((f) => ({ ...f, agent: v ?? "" }))} options={agents.filter((a) => a.status === "active").map((a) => ({ value: a._id, label: `${a.agentNumber} — ${a.fullName}` }))} placeholder="Unassigned" size="md" searchable clearable />
               </div>
               <div>
                 <label className="mb-0.5 block text-xs font-semibold text-slate-700">Offer Amount (KES) *</label>
@@ -626,16 +597,7 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
               </div>
 
               <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">New Status *</label>
-                <select value={statusForm.status} onChange={(e) => setStatusForm((f) => ({ ...f, status: e.target.value }))}
-                  className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none" required>
-                  <option value="">Select status</option>
-                  <option value="negotiating">Send Counter Offer</option>
-                  <option value="accepted">Accept Offer / Counter</option>
-                  <option value="rejected">Reject</option>
-                  <option value="expired">Mark as Expired</option>
-                  <option value="withdrawn">Withdrawn by Buyer</option>
-                </select>
+                <AppSelect label="New Status *" value={statusForm.status} onChange={(v) => setStatusForm((f) => ({ ...f, status: v ?? "" }))} options={[{ value: "negotiating", label: "Send Counter Offer" }, { value: "accepted", label: "Accept Offer / Counter" }, { value: "rejected", label: "Reject" }, { value: "expired", label: "Mark as Expired" }, { value: "withdrawn", label: "Withdrawn by Buyer" }]} placeholder="Select status" size="md" />
               </div>
 
               {statusForm.status === "negotiating" && (
@@ -734,14 +696,7 @@ ${offer.notes ? `<div class="sec">Additional Notes</div><div class="notes">${off
                   className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none" required />
               </div>
               <div>
-                <label className="mb-0.5 block text-xs font-semibold text-slate-700">Assign Agent</label>
-                <select value={dealForm.agent} onChange={(e) => setDealForm((f) => ({ ...f, agent: e.target.value }))}
-                  className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none">
-                  <option value="">Unassigned</option>
-                  {agents.filter((a) => a.status === "active").map((a) => (
-                    <option key={a._id} value={a._id}>{a.agentNumber} — {a.fullName}</option>
-                  ))}
-                </select>
+                <AppSelect label="Assign Agent" value={dealForm.agent} onChange={(v) => setDealForm((f) => ({ ...f, agent: v ?? "" }))} options={agents.filter((a) => a.status === "active").map((a) => ({ value: a._id, label: `${a.agentNumber} — ${a.fullName}` }))} placeholder="Unassigned" size="md" searchable clearable />
               </div>
               <div className="md:col-span-2">
                 <label className="mb-0.5 block text-xs font-semibold text-slate-700">Deal Notes</label>

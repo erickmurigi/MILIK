@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useTabState } from '../../hooks/useTabState';
 import { useSelector } from 'react-redux';
 import { FaCalendarAlt, FaRedoAlt, FaPrint, FaFilter, FaTag, FaUsers } from 'react-icons/fa';
+import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import PrintLetterhead from '../../components/HR/PrintLetterhead';
 import { selectCurrentCompany } from '../../redux/selectors';
@@ -162,10 +163,15 @@ export default function HRReportLeave() {
               <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">To</label>
               <input type="date" value={filters.endDate} onChange={set('endDate')} className={inputCls} />
             </div>
-            <select value={filters.leaveTypeId} onChange={set('leaveTypeId')} className={inputCls}>
-              <option value="">All leave types</option>
-              {leaveTypes.map((l) => <option key={l._id} value={l._id}>{l.name}</option>)}
-            </select>
+            <AppSelect
+              value={filters.leaveTypeId}
+              onChange={(v) => setFilters((p) => ({ ...p, leaveTypeId: v ?? '' }))}
+              options={leaveTypes.map((l) => ({ value: l._id, label: l.name }))}
+              placeholder="All leave types"
+              searchable
+              clearable
+              size="sm"
+            />
             {data && (
               <span className="ml-auto text-[11px] font-semibold text-slate-500">
                 {data.totals.count} application{data.totals.count !== 1 ? 's' : ''} · {data.totals.totalDays} day{data.totals.totalDays !== 1 ? 's' : ''}

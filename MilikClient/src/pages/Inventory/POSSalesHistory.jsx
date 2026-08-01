@@ -5,6 +5,7 @@ import { FaReceipt, FaRedoAlt, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import InventoryShell from "./InventoryShell";
 import { inventoryApi, formatMoney, todayISO } from "../../services/inventoryApi";
+import AppSelect from "../../components/common/AppSelect";
 
 const STATUS_BADGE = {
   completed: "border-emerald-200 bg-emerald-50 text-emerald-700",
@@ -131,23 +132,8 @@ const POSSalesHistory = () => {
               onChange={(e) => { setDate(e.target.value); setPage(1); }}
               className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#0B3B2E]"
             />
-            <select
-              value={locationFilter}
-              onChange={(e) => { setLocationFilter(e.target.value); setPage(1); }}
-              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#0B3B2E]"
-            >
-              <option value="">All Locations</option>
-              {locations.map((l) => <option key={l._id} value={l._id}>{l.name}</option>)}
-            </select>
-            <select
-              value={statusFilter}
-              onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#0B3B2E]"
-            >
-              <option value="">All Statuses</option>
-              <option value="completed">Completed</option>
-              <option value="voided">Voided</option>
-            </select>
+            <AppSelect value={locationFilter} onChange={(v) => { setLocationFilter(v ?? ""); setPage(1); }} options={locations.map((l) => ({ value: l._id, label: l.name }))} placeholder="All Locations" clearable size="sm" />
+            <AppSelect value={statusFilter} onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }} options={[{ value: "completed", label: "Completed" }, { value: "voided", label: "Voided" }]} placeholder="All Statuses" clearable size="sm" />
             <input
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}

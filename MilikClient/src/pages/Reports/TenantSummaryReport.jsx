@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { FaFileDownload, FaFilter, FaPrint, FaSyncAlt, FaUsers } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
+import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getTenantInvoices, getTenants } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
@@ -295,25 +296,26 @@ const TenantSummaryReport = () => {
                     className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </div>
-                <select
-                  value={filters.propertyId}
-                  onChange={setFilter("propertyId")}
-                  className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-                >
-                  <option value="all">All properties</option>
-                  {properties.map((p) => (
-                    <option key={p._id} value={p._id}>{p.propertyName || p.name}</option>
-                  ))}
-                </select>
-                <select
-                  value={filters.status}
-                  onChange={setFilter("status")}
-                  className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-                >
-                  <option value="all">All tenants</option>
-                  <option value="active">Active only</option>
-                  <option value="inactive">Inactive only</option>
-                </select>
+                <AppSelect
+                  value={filters.propertyId === "all" ? "" : filters.propertyId}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "all" }))}
+                  options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))}
+                  placeholder="All properties"
+                  searchable
+                  clearable
+                  size="sm"
+                />
+                <AppSelect
+                  value={filters.status === "all" ? "" : filters.status}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))}
+                  options={[
+                    { value: "active", label: "Active only" },
+                    { value: "inactive", label: "Inactive only" },
+                  ]}
+                  placeholder="All tenants"
+                  clearable
+                  size="sm"
+                />
                 <span className="shrink-0 rounded border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700">
                   <FaUsers className="inline mr-1" />{filteredRows.length} tenants
                 </span>

@@ -6,6 +6,7 @@ import {
   FaUserTie, FaFileAlt, FaMoneyBillWave, FaPercent,
   FaStar, FaUndo, FaInfoCircle, FaEye, FaCode,
 } from 'react-icons/fa';
+import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import MilikConfirmDialog from '../../components/Modals/MilikConfirmDialog';
 import { adminRequests } from '../../utils/requestMethods';
@@ -771,10 +772,15 @@ export default function HRSetup() {
                           {/* Signatory selector */}
                           <div className="mb-2">
                             <Label>Signatory for this letter type</Label>
-                            <select value={tplSignatory} onChange={(e) => setTplSignatory(e.target.value)} className="h-7 w-full rounded border border-slate-200 bg-white px-2 text-[11px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-                              <option value="">— Use type-assigned or default signatory —</option>
-                              {signatories.map((s) => <option key={s._id} value={s._id}>{s.name} — {s.title}</option>)}
-                            </select>
+                            <AppSelect
+                              value={tplSignatory}
+                              onChange={(v) => setTplSignatory(v ?? '')}
+                              options={signatories.map((s) => ({ value: s._id, label: `${s.name} — ${s.title}` }))}
+                              placeholder="— Use type-assigned or default signatory —"
+                              searchable
+                              clearable
+                              size="md"
+                            />
                           </div>
                           {tplPreview ? (
                             <iframe

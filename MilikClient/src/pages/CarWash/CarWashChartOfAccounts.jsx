@@ -8,6 +8,7 @@ import { carWashApi, formatMoney } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { useConfirm } from "../../context/ConfirmContext";
+import AppSelect from "../../components/common/AppSelect";
 
 const PAGE_SIZE = 30;
 const defaultFilters = { search: "", type: "" };
@@ -275,14 +276,21 @@ const CarWashChartOfAccounts = () => {
     >
       <form onSubmit={applyFilters} className="mb-2 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm grid-cols-1 md:grid-cols-[1fr_220px_auto_auto]">
         <input className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none" placeholder="Search by code, account name, type, class, or subgroup" value={filters.search} onChange={(event) => setFilters((prev) => ({ ...prev, search: event.target.value }))} />
-        <select className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none" value={filters.type} onChange={(event) => setFilters((prev) => ({ ...prev, type: event.target.value }))}>
-          <option value="">All account types</option>
-          <option value="asset">Assets</option>
-          <option value="income">Income</option>
-          <option value="expense">Expenses</option>
-          <option value="liability">Liabilities</option>
-          <option value="equity">Equity</option>
-        </select>
+        <AppSelect
+          value={filters.type}
+          onChange={(v) => setFilters((prev) => ({ ...prev, type: v ?? "" }))}
+          options={[
+            { value: "asset", label: "Assets" },
+            { value: "income", label: "Income" },
+            { value: "expense", label: "Expenses" },
+            { value: "liability", label: "Liabilities" },
+            { value: "equity", label: "Equity" },
+          ]}
+          placeholder="All account types"
+          clearable
+          searchable
+          size="sm"
+        />
         <button type="submit" className="inline-flex h-8 items-center justify-center gap-1.5 bg-[#FF8C00] px-4 text-xs font-bold text-white hover:bg-[#E67E00]"><FaSearch />Search</button>
         <button type="button" onClick={resetFilters} className="inline-flex h-8 items-center justify-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0A3127]"><FaRedoAlt />Reset</button>
       </form>
@@ -359,7 +367,7 @@ const CarWashChartOfAccounts = () => {
             <form onSubmit={saveAccount} className="grid gap-3 p-4 md:grid-cols-2">
               <div><label className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Code</label><input className="h-9 w-full border border-slate-300 px-2 text-sm focus:border-[#0B3B2E] focus:outline-none" value={form.code} onChange={(event) => setForm((prev) => ({ ...prev, code: event.target.value }))} required autoFocus /></div>
               <div><label className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Account Name</label><input className="h-9 w-full border border-slate-300 px-2 text-sm focus:border-[#0B3B2E] focus:outline-none" value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} required /></div>
-              <div><label className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Type</label><select className="h-9 w-full border border-slate-300 px-2 text-sm focus:border-[#0B3B2E] focus:outline-none" value={form.type} onChange={(event) => setForm((prev) => ({ ...prev, type: event.target.value, subGroup: subGroupForType(event.target.value) }))}><option value="asset">Asset</option><option value="income">Income</option><option value="expense">Expense</option></select></div>
+              <div><AppSelect label="Type" value={form.type} onChange={(v) => setForm((prev) => ({ ...prev, type: v ?? "income", subGroup: subGroupForType(v ?? "income") }))} options={[{ value: "asset", label: "Asset" }, { value: "income", label: "Income" }, { value: "expense", label: "Expense" }]} searchable size="md" /></div>
               <div><label className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Class</label><input className="h-9 w-full border border-slate-300 px-2 text-sm focus:border-[#0B3B2E] focus:outline-none" value={form.subGroup} onChange={(event) => setForm((prev) => ({ ...prev, subGroup: event.target.value }))} required /></div>
               <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-600 md:col-span-2"><input type="checkbox" checked={form.isPosting} onChange={(event) => setForm((prev) => ({ ...prev, isPosting: event.target.checked }))} /> Posting account</label>
               <div className="flex justify-end gap-2 border-t border-slate-200 pt-3 md:col-span-2">

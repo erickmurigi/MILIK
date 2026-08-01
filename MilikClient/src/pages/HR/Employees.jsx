@@ -12,6 +12,7 @@ import MilikConfirmDialog from '../../components/Modals/MilikConfirmDialog';
 import { selectCurrentCompany } from '../../redux/selectors';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
+import AppSelect from "../../components/common/AppSelect";
 
 const STATUS_BADGE = {
   Active:     'border-emerald-200 bg-emerald-50 text-emerald-700',
@@ -284,20 +285,9 @@ export default function Employees() {
                 className="h-8 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
             </div>
-            <select value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)} className="h-8 rounded-lg border border-orange-200 bg-orange-50 px-3 text-xs font-semibold text-slate-700 focus:outline-none">
-              <option value="all">All departments</option>
-              {departments.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
-            </select>
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-8 rounded-lg border border-orange-200 bg-orange-50 px-3 text-xs font-semibold text-slate-700 focus:outline-none">
-              <option value="all">All statuses</option>
-              <option>Active</option><option>Probation</option>
-              <option>Suspended</option><option>Terminated</option>
-            </select>
-            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="h-8 rounded-lg border border-orange-200 bg-orange-50 px-3 text-xs font-semibold text-slate-700 focus:outline-none">
-              <option value="all">All types</option>
-              <option>Permanent</option><option>Contract</option>
-              <option>Casual</option><option>Intern</option>
-            </select>
+            <AppSelect value={deptFilter === 'all' ? '' : deptFilter} onChange={(v) => setDeptFilter(v ?? 'all')} options={departments.map((d) => ({ value: d._id, label: d.name }))} placeholder="All departments" clearable searchable size="sm" />
+            <AppSelect value={statusFilter === 'all' ? '' : statusFilter} onChange={(v) => setStatusFilter(v ?? 'all')} options={["Active","Probation","Suspended","Terminated"].map((s) => ({ value: s, label: s }))} placeholder="All statuses" clearable size="sm" />
+            <AppSelect value={typeFilter === 'all' ? '' : typeFilter} onChange={(v) => setTypeFilter(v ?? 'all')} options={["Permanent","Contract","Casual","Intern"].map((t) => ({ value: t, label: t }))} placeholder="All types" clearable size="sm" />
             <span className="ml-auto text-[11px] font-semibold text-slate-500">{total} result{total !== 1 ? 's' : ''}</span>
           </div>
         </div>

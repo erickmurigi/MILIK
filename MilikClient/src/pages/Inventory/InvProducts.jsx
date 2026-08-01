@@ -5,6 +5,7 @@ import { FaArrowDown, FaArrowUp, FaBarcode, FaBoxOpen, FaChartLine, FaEdit, FaPl
 import { toast } from "react-toastify";
 import InventoryShell from "./InventoryShell";
 import { inventoryApi, formatMoney } from "../../services/inventoryApi";
+import AppSelect from "../../components/common/AppSelect";
 
 const UOM_OPTIONS = ["pcs", "units", "kg", "g", "ltr", "ml", "m", "cm", "box", "pack", "dozen", "bag", "roll", "sheet", "pair", "set"];
 const VAT_OPTIONS = [{ label: "0% (Exempt)", value: "0" }, { label: "8% (Reduced)", value: "8" }, { label: "16% (Standard)", value: "16" }];
@@ -275,14 +276,7 @@ const InvProducts = () => {
             Tracked: <strong className="text-[#0B3B2E]">{trackedCount}</strong>
           </span>
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            <select
-              value={categoryFilter}
-              onChange={(e) => { setCategoryFilter(e.target.value); setPage(1); }}
-              className="border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-[#0B3B2E]"
-            >
-              <option value="">All Categories</option>
-              {categories.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
-            </select>
+            <AppSelect value={categoryFilter} onChange={(v) => { setCategoryFilter(v ?? ""); setPage(1); }} options={categories.map((c) => ({ value: c._id, label: c.name }))} placeholder="All Categories" clearable size="sm" searchable />
             <div className="flex items-center gap-1.5 border border-slate-300 bg-white px-2 py-1 text-xs">
               <FaSearch className="text-slate-400 text-[10px]" />
               <input
@@ -414,21 +408,10 @@ const InvProducts = () => {
               <input className={inputClass} value={form.barcode} onChange={set("barcode")} placeholder="Scan or type" />
             </div>
             <div>
-              <label className={labelClass}>Category</label>
-              <select className={inputClass} value={form.category} onChange={set("category")}>
-                <option value="">— None —</option>
-                {categories.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
-              </select>
+              <AppSelect label="Category" value={form.category} onChange={(v) => setForm((f) => ({ ...f, category: v ?? "" }))} options={[{ value: "", label: "— None —" }, ...categories.map((c) => ({ value: c._id, label: c.name }))]} placeholder="— None —" size="md" searchable />
             </div>
             <div>
-              <label className={labelClass}>Unit of Measure</label>
-              <select className={inputClass} value={UOM_OPTIONS.includes(form.unitOfMeasure) ? form.unitOfMeasure : "__custom"} onChange={(e) => {
-                if (e.target.value !== "__custom") setForm((f) => ({ ...f, unitOfMeasure: e.target.value }));
-              }}>
-                {UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}
-                {!UOM_OPTIONS.includes(form.unitOfMeasure) && <option value="__custom">{form.unitOfMeasure}</option>}
-                <option value="__custom">Other (custom)…</option>
-              </select>
+              <AppSelect label="Unit of Measure" value={UOM_OPTIONS.includes(form.unitOfMeasure) ? form.unitOfMeasure : "__custom"} onChange={(v) => { if (v && v !== "__custom") setForm((f) => ({ ...f, unitOfMeasure: v ?? "" })); }} options={[...UOM_OPTIONS.map((u) => ({ value: u, label: u })), ...(!UOM_OPTIONS.includes(form.unitOfMeasure) ? [{ value: "__custom", label: form.unitOfMeasure }] : []), { value: "__custom", label: "Other (custom)…" }]} size="md" />
               {!UOM_OPTIONS.includes(form.unitOfMeasure) && (
                 <input className={`${inputClass} mt-1`} value={form.unitOfMeasure} onChange={set("unitOfMeasure")} placeholder="Enter custom unit" />
               )}
@@ -446,10 +429,7 @@ const InvProducts = () => {
               <input required type="number" step="0.01" min="0" className={inputClass} value={form.sellingPrice} onChange={set("sellingPrice")} placeholder="0.00" />
             </div>
             <div>
-              <label className={labelClass}>VAT Rate</label>
-              <select className={inputClass} value={form.vatRate} onChange={set("vatRate")}>
-                {VAT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
+              <AppSelect label="VAT Rate" value={form.vatRate} onChange={(v) => setForm((f) => ({ ...f, vatRate: v ?? "" }))} options={VAT_OPTIONS.map((o) => ({ value: o.value, label: o.label }))} size="md" />
             </div>
             <div>
               <label className={labelClass}>Description</label>

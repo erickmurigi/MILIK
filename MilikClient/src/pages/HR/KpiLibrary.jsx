@@ -8,6 +8,7 @@ import {
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { adminRequests } from '../../utils/requestMethods';
 import { toast } from 'react-toastify';
+import AppSelect from "../../components/common/AppSelect";
 
 const CATEGORIES = ['Performance', 'Attendance', 'Skills', 'Leadership', 'Financial', 'Customer', 'Other'];
 const UNITS      = ['Percentage', 'Score', 'Count', 'KES', 'Custom'];
@@ -135,10 +136,7 @@ export default function KpiLibrary() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <select className={`${F} w-36 appearance-none`} value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
-            <option value="">All categories</option>
-            {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
+          <AppSelect value={catFilter} onChange={(v) => setCatFilter(v ?? "")} options={CATEGORIES.map((c) => ({ value: c, label: c }))} placeholder="All categories" clearable size="sm" />
           <button
             onClick={() => setActiveOnly((v) => !v)}
             className={`flex h-7 items-center gap-1 whitespace-nowrap rounded border px-2.5 text-[11px] font-semibold transition-colors ${
@@ -265,16 +263,10 @@ export default function KpiLibrary() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Category</label>
-                  <select className={`${FW} appearance-none`} value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}>
-                    {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                  <AppSelect label="Category" value={form.category} onChange={(v) => setForm((f) => ({ ...f, category: v ?? f.category }))} options={CATEGORIES.map((c) => ({ value: c, label: c }))} size="md" />
                 </div>
                 <div>
-                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Unit</label>
-                  <select className={`${FW} appearance-none`} value={form.unit} onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}>
-                    {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-                  </select>
+                  <AppSelect label="Unit" value={form.unit} onChange={(v) => setForm((f) => ({ ...f, unit: v ?? f.unit }))} options={UNITS.map((u) => ({ value: u, label: u }))} size="md" />
                 </div>
               </div>
               <div className="grid grid-cols-2 items-end gap-3">

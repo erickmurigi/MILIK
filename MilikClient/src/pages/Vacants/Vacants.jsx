@@ -33,6 +33,7 @@ import { getMaintenances } from "../../redux/apiCalls";
 import { selectCurrentCompany, selectCurrentUser, selectAllProperties, selectAllTenants, selectAllMaintenances } from "../../redux/selectors";
 import { hasCompanyPermission } from "../../utils/permissions";
 import MilikConfirmDialog from "../../components/Modals/MilikConfirmDialog";
+import AppSelect from "../../components/common/AppSelect";
 import { printTabularList } from "../../utils/printList";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
@@ -829,29 +830,10 @@ const Vacants = () => {
             <button onClick={handlePrint} className="h-7 shrink-0 flex items-center gap-1 rounded-md bg-slate-700 px-2 text-[10px] font-bold text-white shadow-sm hover:bg-slate-800"><FaPrint size={9} /></button>
             <button onClick={handleExport} className="h-7 shrink-0 flex items-center gap-1 rounded-md border border-gray-300 px-2 text-[10px] font-bold shadow-sm hover:bg-gray-50"><FaFileExport size={9} /></button>
             <div className="mx-1 h-4 w-px shrink-0 bg-gray-300" />
-            <select value={draftFilters.property} onChange={(event) => setDraftFilters((prev) => ({ ...prev, property: event.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-[11px] text-gray-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-              {uniqueProperties.map((property) => (<option key={property.value} value={property.value}>{property.label}</option>))}
-            </select>
-            <select value={draftFilters.status} onChange={(event) => setDraftFilters((prev) => ({ ...prev, status: event.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-[11px] text-gray-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-              <option value="any">Status</option>
-              <option value="occupied">Occupied</option>
-              <option value="vacant">Vacant</option>
-              <option value="notice_given">Notice Given</option>
-              <option value="reserved">Reserved</option>
-              <option value="under_maintenance">Under Maintenance</option>
-              <option value="off_market">Off Market</option>
-              <option value="owner_occupied">Owner Occupied</option>
-            </select>
-            <select value={draftFilters.unitType} onChange={(event) => setDraftFilters((prev) => ({ ...prev, unitType: event.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-[11px] text-gray-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-              <option value="any">Unit Type</option>
-              {unitTypeOptions.map((type) => (<option key={type} value={type}>{formatUnitTypeLabel(type)}</option>))}
-            </select>
-            <select value={draftFilters.window} onChange={(event) => setDraftFilters((prev) => ({ ...prev, window: event.target.value }))} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-[11px] text-gray-800 appearance-none focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]">
-              <option value="all">Availability</option>
-              <option value="now">Available Now</option>
-              <option value="next7">In 7 Days</option>
-              <option value="next30">In 30 Days</option>
-            </select>
+            <AppSelect value={draftFilters.property} onChange={(v) => setDraftFilters((prev) => ({ ...prev, property: v ?? "any" }))} options={uniqueProperties.filter((o) => o.value !== "any")} placeholder="Property" clearable searchable size="sm" />
+            <AppSelect value={draftFilters.status} onChange={(v) => setDraftFilters((prev) => ({ ...prev, status: v ?? "any" }))} options={[{value:"occupied",label:"Occupied"},{value:"vacant",label:"Vacant"},{value:"notice_given",label:"Notice Given"},{value:"reserved",label:"Reserved"},{value:"under_maintenance",label:"Under Maintenance"},{value:"off_market",label:"Off Market"},{value:"owner_occupied",label:"Owner Occupied"}]} placeholder="Status" clearable size="sm" />
+            <AppSelect value={draftFilters.unitType} onChange={(v) => setDraftFilters((prev) => ({ ...prev, unitType: v ?? "any" }))} options={unitTypeOptions.map((type) => ({ value: type, label: formatUnitTypeLabel(type) }))} placeholder="Unit Type" clearable size="sm" />
+            <AppSelect value={draftFilters.window} onChange={(v) => setDraftFilters((prev) => ({ ...prev, window: v ?? "all" }))} options={[{value:"now",label:"Available Now"},{value:"next7",label:"In 7 Days"},{value:"next30",label:"In 30 Days"}]} placeholder="Availability" clearable size="sm" />
             <div className="mx-1 h-4 w-px shrink-0 bg-gray-300" />
             <input value={draftFilters.search} onChange={(event) => setDraftFilters((prev) => ({ ...prev, search: event.target.value }))} onKeyDown={handleFilterEnter} placeholder="Search…" className="h-7 w-36 shrink-0 rounded border border-gray-300 bg-white px-2 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
             <input value={draftFilters.tenant} onChange={(event) => setDraftFilters((prev) => ({ ...prev, tenant: event.target.value }))} onKeyDown={handleFilterEnter} placeholder="Tenant" className="h-7 w-24 shrink-0 rounded border border-gray-300 bg-white px-2 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />

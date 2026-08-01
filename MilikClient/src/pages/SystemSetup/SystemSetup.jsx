@@ -49,6 +49,7 @@ import {
   getEnabledCompanyModuleKeys,
 } from "../../utils/companyModules";
 import { selectCurrentUser } from "../../redux/selectors";
+import AppSelect from "../../components/common/AppSelect";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const DEFAULT_PAGE_SIZE = 25;
@@ -256,13 +257,12 @@ const Pagination = ({ page, totalPages, total, pageSize, onPage, onPageSize }) =
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-1.5">
           <span className="font-semibold text-slate-500">Per page:</span>
-          <select
+          <AppSelect
             value={pageSize}
-            onChange={(e) => onPageSize(Number(e.target.value))}
-            className="h-7 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition"
-          >
-            {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
+            onChange={(v) => onPageSize(Number(v ?? DEFAULT_PAGE_SIZE))}
+            options={PAGE_SIZE_OPTIONS.map((n) => ({ value: n, label: String(n) }))}
+            size="sm"
+          />
         </div>
         {totalPages > 1 && (
           <div className="flex items-center gap-1.5">
@@ -500,20 +500,32 @@ const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, pendin
             <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-slate-400" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search company, code, email, town..." className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-3 text-xs text-slate-800 focus:border-[#0B3B2E] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20 transition" />
           </div>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition">
-            <option value="all">All statuses</option>
-            <option value="Active">Active</option>
-            <option value="Inactive">Inactive</option>
-            <option value="Locked">Locked</option>
-            <option value="Demo">Demo</option>
-            <option value="attention">Needs attention</option>
-          </select>
-          <select value={modeFilter} onChange={(e) => setModeFilter(e.target.value)} className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition">
-            <option value="all">All operating models</option>
-            <option value="property manager">Property Manager</option>
-            <option value="self-managing landlord">Self-Managing Landlord</option>
-            <option value="other">Other</option>
-          </select>
+          <AppSelect
+            value={statusFilter}
+            onChange={(v) => setStatusFilter(v ?? "all")}
+            options={[
+              { value: "Active", label: "Active" },
+              { value: "Inactive", label: "Inactive" },
+              { value: "Locked", label: "Locked" },
+              { value: "Demo", label: "Demo" },
+              { value: "attention", label: "Needs attention" },
+            ]}
+            placeholder="All statuses"
+            clearable
+            size="sm"
+          />
+          <AppSelect
+            value={modeFilter}
+            onChange={(v) => setModeFilter(v ?? "all")}
+            options={[
+              { value: "property manager", label: "Property Manager" },
+              { value: "self-managing landlord", label: "Self-Managing Landlord" },
+              { value: "other", label: "Other" },
+            ]}
+            placeholder="All operating models"
+            clearable
+            size="sm"
+          />
           <div className="ml-auto flex items-center gap-2">
             <span className="text-[11px] font-semibold text-slate-400">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
             <button onClick={onAddCompany} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#E67E00] transition">
@@ -649,16 +661,27 @@ const UsersPanel = ({ users, companies, companyMap, selectedCompanyId, onSelecte
             <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-slate-400" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search user, email, phone, role..." className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-3 text-xs text-slate-800 focus:border-[#0B3B2E] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20 transition" />
           </div>
-          <select value={selectedCompanyId} onChange={(e) => onSelectedCompanyIdChange(e.target.value)} className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition">
-            <option value="">All companies</option>
-            {companies.map((c) => <option key={c._id} value={c._id}>{c.companyName}</option>)}
-          </select>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition">
-            <option value="all">All statuses</option>
-            <option value="active">Active</option>
-            <option value="locked">Locked</option>
-            <option value="inactive">Inactive</option>
-          </select>
+          <AppSelect
+            value={selectedCompanyId}
+            onChange={(v) => onSelectedCompanyIdChange(v ?? "")}
+            options={companies.map((c) => ({ value: c._id, label: c.companyName }))}
+            placeholder="All companies"
+            clearable
+            searchable
+            size="sm"
+          />
+          <AppSelect
+            value={statusFilter}
+            onChange={(v) => setStatusFilter(v ?? "all")}
+            options={[
+              { value: "active", label: "Active" },
+              { value: "locked", label: "Locked" },
+              { value: "inactive", label: "Inactive" },
+            ]}
+            placeholder="All statuses"
+            clearable
+            size="sm"
+          />
           <div className="ml-auto flex items-center gap-2">
             <span className="text-[11px] font-semibold text-slate-400">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
             <button onClick={onAddUser} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#FF8C00] px-3 text-[11px] font-bold text-white hover:bg-[#E67E00] transition">
@@ -873,11 +896,17 @@ const AuditPanel = ({ companies, users, companyMap }) => {
             <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-slate-400" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search events..." className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-3 text-xs text-slate-800 focus:border-[#0B3B2E] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20 transition" />
           </div>
-          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none transition">
-            <option value="all">All types</option>
-            <option value="Company">Company</option>
-            <option value="User">User</option>
-          </select>
+          <AppSelect
+            value={typeFilter}
+            onChange={(v) => setTypeFilter(v ?? "all")}
+            options={[
+              { value: "Company", label: "Company" },
+              { value: "User", label: "User" },
+            ]}
+            placeholder="All types"
+            clearable
+            size="sm"
+          />
           <span className="ml-auto text-[11px] font-semibold text-slate-400">{filtered.length} event{filtered.length !== 1 ? "s" : ""}</span>
         </div>
       </div>

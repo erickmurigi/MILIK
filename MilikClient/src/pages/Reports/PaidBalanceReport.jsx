@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTabState } from '../../hooks/useTabState';
 import { useDispatch, useSelector } from 'react-redux';
+import AppSelect from '../../components/common/AppSelect';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { selectCurrentUser, selectCurrentCompany, selectAllProperties } from '../../redux/selectors';
 import { getTenantPaidBalanceReport } from '../../redux/apiCalls';
@@ -379,16 +380,27 @@ const PaidBalanceReport = () => {
             <div className="sticky top-0 z-30 flex-shrink-0 border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
               <div className="grid gap-1.5 md:grid-cols-2 xl:grid-cols-4">
                 <input type="date" value={filters.asOfDate} onChange={setFilter("asOfDate")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                <select value={filters.propertyId} onChange={setFilter("propertyId")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
-                  <option value="">All properties</option>
-                  {properties.map((property) => <option key={property._id} value={property._id}>{property.propertyName || property.name}</option>)}
-                </select>
-                <select value={filters.status} onChange={setFilter("status")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20">
-                  <option value="all">All tenant positions</option>
-                  <option value="owing">Owing</option>
-                  <option value="credit">Credit</option>
-                  <option value="settled">Settled</option>
-                </select>
+                <AppSelect
+                  value={filters.propertyId}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? '' }))}
+                  options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))}
+                  placeholder="All properties"
+                  searchable
+                  clearable
+                  size="sm"
+                />
+                <AppSelect
+                  value={filters.status === "all" ? "" : filters.status}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))}
+                  options={[
+                    { value: "owing", label: "Owing" },
+                    { value: "credit", label: "Credit" },
+                    { value: "settled", label: "Settled" },
+                  ]}
+                  placeholder="All tenant positions"
+                  clearable
+                  size="sm"
+                />
                 <input value={filters.search} onChange={setFilter("search")} placeholder="Search tenant, property, unit" className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </div>
               <div className="mt-1.5 flex flex-wrap justify-end gap-1.5">

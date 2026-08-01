@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import AppSelect from '../../components/common/AppSelect';
 import {
   FaBuilding,
   FaCalendar,
@@ -250,10 +251,14 @@ const ProfileTab = ({ client, summary, onRefresh }) => {
     <div>
       <label className={labelCls}>{label}</label>
       {options ? (
-        <select className={inputCls} value={form[field] || ''} onChange={(e) => set(field, e.target.value)}>
-          <option value="">Select…</option>
-          {options.map((o) => <option key={o}>{o}</option>)}
-        </select>
+        <AppSelect
+          size="md"
+          clearable
+          placeholder="Select…"
+          value={form[field] || ''}
+          onChange={(v) => set(field, v ?? '')}
+          options={options.map((o) => ({ value: o, label: o }))}
+        />
       ) : type === 'textarea' ? (
         <textarea
           className={`${inputCls} resize-none`}
@@ -567,9 +572,12 @@ const AddContractModal = ({ clientId, onClose, onCreated }) => {
         </div>
         <div>
           <label className={labelCls}>Billing Cycle</label>
-          <select className={inputCls} value={form.billingCycle} onChange={(e) => set('billingCycle', e.target.value)}>
-            {BILLING_CYCLES.map((c) => <option key={c}>{c}</option>)}
-          </select>
+          <AppSelect
+            size="md"
+            value={form.billingCycle}
+            onChange={(v) => set('billingCycle', v ?? 'monthly')}
+            options={BILLING_CYCLES.map((c) => ({ value: c, label: c }))}
+          />
         </div>
         <div>
           <label className={labelCls}>Escalation % (default 10)</label>
@@ -854,16 +862,13 @@ const ContractsTab = ({ clientId }) => {
                             >
                               Renew
                             </button>
-                            <select
+                            <AppSelect
+                              size="sm"
                               value={c.renewalStage || 'not_started'}
-                              onChange={(e) => handleRenewalStage(c._id, e.target.value)}
+                              onChange={(v) => handleRenewalStage(c._id, v ?? 'not_started')}
                               disabled={stageUpdating[c._id]}
-                              className="h-5 rounded border border-slate-200 bg-white px-1 text-[10px] font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none disabled:opacity-50"
-                            >
-                              {RENEWAL_STAGES.map((s) => (
-                                <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
-                              ))}
-                            </select>
+                              options={RENEWAL_STAGES.map((s) => ({ value: s, label: s.replace(/_/g, ' ') }))}
+                            />
                           </>
                         )}
                         {(c.status === 'active' || c.status === 'draft') && (
@@ -982,14 +987,17 @@ const CreateInvoiceModal = ({ clientId, contracts, onClose, onCreated }) => {
           {contracts.length > 0 && (
             <div className="col-span-2">
               <label className={labelCls}>Contract (optional)</label>
-              <select className={inputCls} value={form.contractId} onChange={(e) => set('contractId', e.target.value)}>
-                <option value="">No specific contract</option>
-                {contracts.map((c) => (
-                  <option key={c._id} value={c._id}>
-                    {c.contractNumber || c._id?.slice(-6).toUpperCase()} — {c.description || ''}
-                  </option>
-                ))}
-              </select>
+              <AppSelect
+                size="md"
+                clearable
+                placeholder="No specific contract"
+                value={form.contractId}
+                onChange={(v) => set('contractId', v ?? '')}
+                options={contracts.map((c) => ({
+                  value: c._id,
+                  label: `${c.contractNumber || c._id?.slice(-6).toUpperCase()} — ${c.description || ''}`,
+                }))}
+              />
             </div>
           )}
           <div>
@@ -1181,9 +1189,12 @@ const MarkPaidModal = ({ invoice, onClose, onPaid }) => {
         </div>
         <div>
           <label className={labelCls}>Payment Method</label>
-          <select className={inputCls} value={form.paymentMethod} onChange={(e) => set('paymentMethod', e.target.value)}>
-            {['Bank Transfer', 'M-Pesa', 'Cash', 'Cheque'].map((m) => <option key={m}>{m}</option>)}
-          </select>
+          <AppSelect
+            size="md"
+            value={form.paymentMethod}
+            onChange={(v) => set('paymentMethod', v ?? 'Bank Transfer')}
+            options={['Bank Transfer', 'M-Pesa', 'Cash', 'Cheque'].map((m) => ({ value: m, label: m }))}
+          />
         </div>
         <div>
           <label className={labelCls}>Payment Reference</label>

@@ -22,6 +22,7 @@ import {
   FaUsers,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import AppSelect from "../../components/common/AppSelect";
 import { createCompany, getCompany, updateCompany } from "../../redux/apiCalls";
 import {
   applyCompanyModeBaseModules,
@@ -442,24 +443,32 @@ const AddCompanyWizard = () => {
                     <Field label="Road / Street">
                       <input value={formData.roadStreet} onChange={(e) => setField("roadStreet", e.target.value)} className={inputCls} placeholder="Westlands Road" maxLength={80} />
                     </Field>
-                    <Field label="Base currency">
-                      <select value={formData.baseCurrency} onChange={(e) => setField("baseCurrency", e.target.value)} className={selectCls}>
-                        <option value="KES">KES — Kenyan Shilling</option>
-                        <option value="UGX">UGX — Ugandan Shilling</option>
-                        <option value="TZS">TZS — Tanzanian Shilling</option>
-                        <option value="USD">USD — US Dollar</option>
-                        <option value="EUR">EUR — Euro</option>
-                        <option value="GBP">GBP — British Pound</option>
-                      </select>
-                    </Field>
-                    <Field label="Tax regime">
-                      <select value={formData.taxRegime} onChange={(e) => setField("taxRegime", e.target.value)} className={selectCls}>
-                        <option value="VAT">VAT</option>
-                        <option value="GST">GST</option>
-                        <option value="Sales Tax">Sales Tax</option>
-                        <option value="No Tax">No Tax</option>
-                      </select>
-                    </Field>
+                    <AppSelect
+                      label="Base currency"
+                      value={formData.baseCurrency}
+                      onChange={(v) => setField("baseCurrency", v ?? "KES")}
+                      options={[
+                        { value: "KES", label: "KES — Kenyan Shilling" },
+                        { value: "UGX", label: "UGX — Ugandan Shilling" },
+                        { value: "TZS", label: "TZS — Tanzanian Shilling" },
+                        { value: "USD", label: "USD — US Dollar" },
+                        { value: "EUR", label: "EUR — Euro" },
+                        { value: "GBP", label: "GBP — British Pound" },
+                      ]}
+                      size="md"
+                    />
+                    <AppSelect
+                      label="Tax regime"
+                      value={formData.taxRegime}
+                      onChange={(v) => setField("taxRegime", v ?? "VAT")}
+                      options={[
+                        { value: "VAT", label: "VAT" },
+                        { value: "GST", label: "GST" },
+                        { value: "Sales Tax", label: "Sales Tax" },
+                        { value: "No Tax", label: "No Tax" },
+                      ]}
+                      size="md"
+                    />
                   </div>
                 </div>
 
@@ -469,25 +478,36 @@ const AddCompanyWizard = () => {
                   <div className="border border-slate-200 bg-white shadow-sm overflow-hidden">
                     <CardHeader icon={FaCalendarAlt} title="Fiscal Calendar" />
                     <div className="p-4 grid gap-3">
-                      <Field label="Fiscal start month" required>
-                        <select value={formData.fiscalStartMonth} onChange={(e) => setField("fiscalStartMonth", e.target.value)} className={selectCls}>
-                          {MONTHS.map((m) => <option key={m} value={m}>{m}</option>)}
-                        </select>
-                      </Field>
-                      <Field label="Fiscal start year" required>
-                        <select value={formData.fiscalStartYear} onChange={(e) => setField("fiscalStartYear", Number(e.target.value))} className={`${selectCls} ${errors.fiscalStartYear ? "border-red-400" : ""}`}>
-                          {FISCAL_YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
-                        </select>
-                        {errors.fiscalStartYear && <p className="mt-1 text-[11px] text-red-500">{errors.fiscalStartYear}</p>}
-                      </Field>
-                      <Field label="Billing cycle" required>
-                        <select value={formData.operationPeriodType} onChange={(e) => setField("operationPeriodType", e.target.value)} className={selectCls}>
-                          <option value="Monthly">Monthly</option>
-                          <option value="Quarterly">Quarterly</option>
-                          <option value="Annual">Annual</option>
-                          <option value="Weekly">Weekly</option>
-                        </select>
-                      </Field>
+                      <AppSelect
+                        label="Fiscal start month"
+                        required
+                        value={formData.fiscalStartMonth}
+                        onChange={(v) => setField("fiscalStartMonth", v ?? "January")}
+                        options={MONTHS.map((m) => ({ value: m, label: m }))}
+                        size="md"
+                      />
+                      <AppSelect
+                        label="Fiscal start year"
+                        required
+                        value={formData.fiscalStartYear}
+                        onChange={(v) => setField("fiscalStartYear", Number(v ?? CURRENT_YEAR))}
+                        options={FISCAL_YEARS.map((y) => ({ value: y, label: String(y) }))}
+                        size="md"
+                        error={errors.fiscalStartYear || ""}
+                      />
+                      <AppSelect
+                        label="Billing cycle"
+                        required
+                        value={formData.operationPeriodType}
+                        onChange={(v) => setField("operationPeriodType", v ?? "Monthly")}
+                        options={[
+                          { value: "Monthly", label: "Monthly" },
+                          { value: "Quarterly", label: "Quarterly" },
+                          { value: "Annual", label: "Annual" },
+                          { value: "Weekly", label: "Weekly" },
+                        ]}
+                        size="md"
+                      />
                     </div>
                   </div>
 

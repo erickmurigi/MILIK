@@ -3,6 +3,7 @@ import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { FaArchive, FaCheckCircle, FaExclamationTriangle, FaLock } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import AppSelect from "../../components/common/AppSelect";
 import { selectCurrentCompany } from "../../redux/selectors";
 import { getAccountingPeriods, performYearEndClose } from "../../redux/apiCalls";
 import { useConfirm } from "../../context/ConfirmContext";
@@ -96,32 +97,27 @@ export default function YearEndClose() {
             <form onSubmit={handleSubmit} className="space-y-4 p-4">
               <div>
                 <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Fiscal Year *</label>
-                <select
+                <AppSelect
                   value={form.fiscalYear}
-                  onChange={(e) => setForm((p) => ({ ...p, fiscalYear: e.target.value }))}
-                  className="h-8 w-full border border-slate-200 px-2.5 text-[11px] focus:border-[#0B3B2E] focus:outline-none"
+                  onChange={(v) => setForm((p) => ({ ...p, fiscalYear: v ?? String(CURRENT_YEAR - 1) }))}
+                  options={Array.from({ length: 6 }, (_, i) => CURRENT_YEAR - i).map((yr) => ({ value: String(yr), label: String(yr) }))}
+                  size="md"
                   required
-                >
-                  {Array.from({ length: 6 }, (_, i) => CURRENT_YEAR - i).map((yr) => (
-                    <option key={yr} value={String(yr)}>{yr}</option>
-                  ))}
-                </select>
+                />
               </div>
 
               <div>
                 <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">
                   Accounting Period <span className="normal-case font-normal text-slate-400">(optional)</span>
                 </label>
-                <select
+                <AppSelect
                   value={form.periodId}
-                  onChange={(e) => setForm((p) => ({ ...p, periodId: e.target.value }))}
-                  className="h-8 w-full border border-slate-200 px-2.5 text-[11px] focus:border-[#0B3B2E] focus:outline-none"
-                >
-                  <option value="">— Select a closed period to lock —</option>
-                  {periods.map((p) => (
-                    <option key={p._id} value={p._id}>{p.name}</option>
-                  ))}
-                </select>
+                  onChange={(v) => setForm((p) => ({ ...p, periodId: v ?? "" }))}
+                  options={periods.map((p) => ({ value: p._id, label: p.name }))}
+                  placeholder="— Select a closed period to lock —"
+                  clearable
+                  size="md"
+                />
                 <p className="mt-1 text-[9px] text-slate-400">
                   Only closed periods not yet year-end closed are listed. Selecting one will lock it permanently.
                 </p>

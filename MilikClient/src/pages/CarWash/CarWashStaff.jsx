@@ -11,6 +11,7 @@ import CarWashShell from "./CarWashShell";
 import PaginationBar from "../../components/PaginationBar";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { useTabState } from "../../hooks/useTabState";
+import AppSelect from "../../components/common/AppSelect";
 
 const GRN = "#0B3B2E";
 const emptyForm = { name: "", phone: "", role: "", active: true, branch: "" };
@@ -108,11 +109,16 @@ const SavingsPayoutModal = ({ staff, balance, cashbooks, onClose, onSuccess }) =
             />
           </div>
           <div>
-            <label className={labelClass}>Cashbook Account *</label>
-            <select required className={inputClass} value={cashbook} onChange={(e) => setCashbook(e.target.value)}>
-              <option value="">— Select —</option>
-              {cashbooks.map((cb) => <option key={cb._id} value={cb._id}>{cb.code} – {cb.name}</option>)}
-            </select>
+            <AppSelect
+              label="Cashbook Account"
+              required
+              value={cashbook}
+              onChange={(v) => setCashbook(v ?? "")}
+              options={cashbooks.map((cb) => ({ value: cb._id, label: `${cb.code} – ${cb.name}` }))}
+              placeholder="— Select —"
+              size="md"
+              searchable
+            />
           </div>
         </div>
         <div>
@@ -356,15 +362,17 @@ const CarWashStaff = () => {
           value={filters.search}
           onChange={setFilter("search")}
         />
-        <select
-          className="h-8 border border-[#B7C9C0] bg-[#F1F6F3] px-2 text-xs font-bold text-[#0B3B2E] focus:border-[#0B3B2E] focus:outline-none"
+        <AppSelect
           value={filters.status}
-          onChange={setFilter("status")}
-        >
-          <option value="">All status</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-        </select>
+          onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "" }))}
+          options={[
+            { value: "active", label: "Active" },
+            { value: "inactive", label: "Inactive" },
+          ]}
+          placeholder="All status"
+          size="sm"
+          clearable
+        />
         <button type="submit" className="inline-flex h-8 items-center justify-center gap-1.5 bg-[#FF8C00] px-4 text-xs font-bold text-white hover:bg-[#E67E00]">
           <FaSearch /> Search
         </button>
@@ -511,17 +519,15 @@ const CarWashStaff = () => {
               <input className={inputClass} value={form.role} onChange={(e) => setForm((p) => ({ ...p, role: e.target.value }))} />
             </div>
             <div>
-              <label className={labelClass}>Branch</label>
-              <select
-                className={inputClass}
+              <AppSelect
+                label="Branch"
                 value={form.branch}
-                onChange={(e) => setForm((p) => ({ ...p, branch: e.target.value }))}
-              >
-                <option value="">— No branch assigned —</option>
-                {branches.map((b) => (
-                  <option key={b._id} value={b._id}>{b.name}</option>
-                ))}
-              </select>
+                onChange={(v) => setForm((p) => ({ ...p, branch: v ?? "" }))}
+                options={branches.map((b) => ({ value: b._id, label: b.name }))}
+                placeholder="— No branch assigned —"
+                size="md"
+                searchable
+              />
             </div>
             <label className="flex items-center gap-2 text-sm font-bold text-slate-700">
               <input type="checkbox" checked={form.active} onChange={(e) => setForm((p) => ({ ...p, active: e.target.checked }))} />

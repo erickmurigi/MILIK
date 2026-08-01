@@ -8,6 +8,7 @@ import PaginationBar from "../../components/PaginationBar";
 import { saleApi } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
 import { useTabState } from "../../hooks/useTabState";
+import AppSelect from "../../components/common/AppSelect";
 
 const ACTIVITY_TYPES = ["call", "email", "meeting", "site_visit", "whatsapp", "note", "follow_up"];
 const OUTCOMES       = ["positive", "neutral", "negative", "no_answer", "not_applicable"];
@@ -157,14 +158,8 @@ export default function SaleActivities() {
 
         {/* Filter bar */}
         <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 bg-white px-3 py-1.5 flex-shrink-0">
-          <select value={typeFilter} onChange={(e) => setType(e.target.value)} className={`${selectCls} w-[120px]`}>
-            <option value="">All Types</option>
-            {ACTIVITY_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, " ")}</option>)}
-          </select>
-          <select value={outcomeFilter} onChange={(e) => setOutcome(e.target.value)} className={`${selectCls} w-[130px]`}>
-            <option value="">All Outcomes</option>
-            {OUTCOMES.map((o) => <option key={o} value={o}>{o.replace(/_/g, " ")}</option>)}
-          </select>
+          <AppSelect value={typeFilter} onChange={(v) => setType(v ?? "")} options={ACTIVITY_TYPES.map((t) => ({ value: t, label: t.replace(/_/g, " ") }))} placeholder="All Types" size="sm" clearable />
+          <AppSelect value={outcomeFilter} onChange={(v) => setOutcome(v ?? "")} options={OUTCOMES.map((o) => ({ value: o, label: o.replace(/_/g, " ") }))} placeholder="All Outcomes" size="sm" clearable />
           <div className="flex items-center gap-1">
             <span className="text-[10px] font-semibold text-slate-500">From</span>
             <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={`${inputCls} w-[130px]`} />
@@ -264,10 +259,7 @@ export default function SaleActivities() {
 
             <div className="flex-1 overflow-y-auto bg-white px-5 py-4 grid grid-cols-2 gap-3">
               <div>
-                <label className={labelCls}>Type *</label>
-                <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))} className={`${modalInputCls} h-8`}>
-                  {ACTIVITY_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, " ")}</option>)}
-                </select>
+                <AppSelect label="Type *" value={form.type} onChange={(v) => setForm((f) => ({ ...f, type: v ?? "" }))} options={ACTIVITY_TYPES.map((t) => ({ value: t, label: t.replace(/_/g, " ") }))} size="md" />
               </div>
               <div>
                 <label className={labelCls}>Date & Time *</label>
@@ -278,10 +270,7 @@ export default function SaleActivities() {
                 <input value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} className={`${modalInputCls} h-8`} />
               </div>
               <div>
-                <label className={labelCls}>Outcome</label>
-                <select value={form.outcome} onChange={(e) => setForm((f) => ({ ...f, outcome: e.target.value }))} className={`${modalInputCls} h-8`}>
-                  {OUTCOMES.map((o) => <option key={o} value={o}>{o.replace(/_/g, " ")}</option>)}
-                </select>
+                <AppSelect label="Outcome" value={form.outcome} onChange={(v) => setForm((f) => ({ ...f, outcome: v ?? "" }))} options={OUTCOMES.map((o) => ({ value: o, label: o.replace(/_/g, " ") }))} size="md" />
               </div>
               <div>
                 <label className={labelCls}>Duration (min)</label>
@@ -289,25 +278,13 @@ export default function SaleActivities() {
               </div>
 
               <div>
-                <label className={labelCls}>Link to Lead</label>
-                <select value={form.relatedLead} onChange={(e) => setForm((f) => ({ ...f, relatedLead: e.target.value, relatedBuyer: "", relatedDeal: "" }))} className={`${modalInputCls} h-8`}>
-                  <option value="">— None —</option>
-                  {leads.map((l) => <option key={l._id} value={l._id}>{l.fullName} ({l.leadNumber})</option>)}
-                </select>
+                <AppSelect label="Link to Lead" value={form.relatedLead} onChange={(v) => setForm((f) => ({ ...f, relatedLead: v ?? "", relatedBuyer: "", relatedDeal: "" }))} options={leads.map((l) => ({ value: l._id, label: `${l.fullName} (${l.leadNumber})` }))} placeholder="— None —" size="md" searchable clearable />
               </div>
               <div>
-                <label className={labelCls}>Link to Buyer</label>
-                <select value={form.relatedBuyer} onChange={(e) => setForm((f) => ({ ...f, relatedBuyer: e.target.value, relatedLead: "", relatedDeal: "" }))} className={`${modalInputCls} h-8`} disabled={!!form.relatedLead}>
-                  <option value="">— None —</option>
-                  {buyers.map((b) => <option key={b._id} value={b._id}>{b.fullName} ({b.buyerNumber})</option>)}
-                </select>
+                <AppSelect label="Link to Buyer" value={form.relatedBuyer} onChange={(v) => setForm((f) => ({ ...f, relatedBuyer: v ?? "", relatedLead: "", relatedDeal: "" }))} options={buyers.map((b) => ({ value: b._id, label: `${b.fullName} (${b.buyerNumber})` }))} placeholder="— None —" size="md" searchable clearable disabled={!!form.relatedLead} />
               </div>
               <div className="col-span-2">
-                <label className={labelCls}>Link to Deal</label>
-                <select value={form.relatedDeal} onChange={(e) => setForm((f) => ({ ...f, relatedDeal: e.target.value, relatedLead: "", relatedBuyer: "" }))} className={`${modalInputCls} h-8`} disabled={!!(form.relatedLead || form.relatedBuyer)}>
-                  <option value="">— None —</option>
-                  {deals.map((d) => <option key={d._id} value={d._id}>{d.dealNumber}{d.buyer?.fullName ? ` — ${d.buyer.fullName}` : ""}</option>)}
-                </select>
+                <AppSelect label="Link to Deal" value={form.relatedDeal} onChange={(v) => setForm((f) => ({ ...f, relatedDeal: v ?? "", relatedLead: "", relatedBuyer: "" }))} options={deals.map((d) => ({ value: d._id, label: `${d.dealNumber}${d.buyer?.fullName ? ` — ${d.buyer.fullName}` : ""}` }))} placeholder="— None —" size="md" searchable clearable disabled={!!(form.relatedLead || form.relatedBuyer)} />
               </div>
 
               <div className="col-span-2">

@@ -15,6 +15,7 @@ import {
   FaTimes,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
+import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { getChartOfAccounts, getJournalEntries } from "../../redux/apiCalls";
 import { hasCompanyPermission } from "../../utils/permissions";
@@ -316,16 +317,18 @@ export default function HRFinancials() {
                     </button>
                   )}
                 </div>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20/20"
-                >
-                  <option value="all">All Status</option>
-                  <option value="draft">Draft</option>
-                  <option value="posted">Posted</option>
-                  <option value="reversed">Reversed</option>
-                </select>
+                <AppSelect
+                  value={statusFilter === "all" ? "" : statusFilter}
+                  onChange={(v) => setStatusFilter(v ?? "all")}
+                  options={[
+                    { value: "draft", label: "Draft" },
+                    { value: "posted", label: "Posted" },
+                    { value: "reversed", label: "Reversed" },
+                  ]}
+                  placeholder="All Status"
+                  clearable
+                  size="sm"
+                />
                 {(search || statusFilter !== "all") && (
                   <button
                     onClick={() => { setSearch(""); setStatusFilter("all"); }}

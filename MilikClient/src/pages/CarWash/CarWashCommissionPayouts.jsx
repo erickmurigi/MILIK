@@ -8,6 +8,7 @@ import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../s
 import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { useTabState } from "../../hooks/useTabState";
+import AppSelect from "../../components/common/AppSelect";
 
 const inputClass = "h-9 w-full border border-slate-300 px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const labelClass = "mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-slate-500";
@@ -267,10 +268,15 @@ const CarWashCommissionPayouts = () => {
       <form onSubmit={applyFilters} className="mt-1 flex flex-wrap items-end gap-1.5 border border-slate-200 bg-white px-3 py-2 shadow-sm">
         <div className="flex flex-col gap-0.5">
           <label className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Staff</label>
-          <select className={`${ic} min-w-[130px]`} value={filters.staff} onChange={(e) => setFilters((p) => ({ ...p, staff: e.target.value }))}>
-            <option value="">All staff</option>
-            {staff.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
-          </select>
+          <AppSelect
+            value={filters.staff}
+            onChange={(v) => setFilters((p) => ({ ...p, staff: v ?? "" }))}
+            options={staff.map((s) => ({ value: s._id, label: s.name }))}
+            placeholder="All staff"
+            size="sm"
+            clearable
+            searchable
+          />
         </div>
         <div className="flex flex-col gap-0.5">
           <label className="text-[9px] font-bold uppercase tracking-wide text-slate-400">From</label>
@@ -460,24 +466,37 @@ const CarWashCommissionPayouts = () => {
         >
           <form id="cw-payout-form" onSubmit={savePayout} className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className={labelClass}>Staff *</label>
-              <select className={inputClass} value={form.staff} onChange={(e) => setPayoutStaff(e.target.value)} required>
-                <option value="">Select staff</option>
-                {staff.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
-              </select>
+              <AppSelect
+                label="Staff"
+                required
+                value={form.staff}
+                onChange={(v) => setPayoutStaff(v ?? "")}
+                options={staff.map((s) => ({ value: s._id, label: s.name }))}
+                placeholder="Select staff"
+                size="md"
+                searchable
+              />
             </div>
             <div>
-              <label className={labelClass}>Method</label>
-              <select className={inputClass} value={form.method} onChange={(e) => { setForm((p) => ({ ...p, method: e.target.value, cashbookAccount: preferredCashbook(cashbooks, e.target.value) })); setRefError(false); }}>
-                {methods.map((m) => <option key={m} value={m}>{m.toUpperCase()}</option>)}
-              </select>
+              <AppSelect
+                label="Method"
+                value={form.method}
+                onChange={(v) => { setForm((p) => ({ ...p, method: v ?? "cash", cashbookAccount: preferredCashbook(cashbooks, v ?? "cash") })); setRefError(false); }}
+                options={methods.map((m) => ({ value: m, label: m.toUpperCase() }))}
+                size="md"
+              />
             </div>
             <div>
-              <label className={labelClass}>Cashbook *</label>
-              <select className={inputClass} value={form.cashbookAccount} onChange={(e) => setForm((p) => ({ ...p, cashbookAccount: e.target.value }))} required>
-                <option value="">Select cashbook</option>
-                {cashbooks.map((cb) => <option key={cb._id} value={cb._id}>{cb.code} {cb.name}</option>)}
-              </select>
+              <AppSelect
+                label="Cashbook"
+                required
+                value={form.cashbookAccount}
+                onChange={(v) => setForm((p) => ({ ...p, cashbookAccount: v ?? "" }))}
+                options={cashbooks.map((cb) => ({ value: cb._id, label: `${cb.code} ${cb.name}` }))}
+                placeholder="Select cashbook"
+                size="md"
+                searchable
+              />
             </div>
             <div>
               <label className={labelClass}>Payout Date</label>

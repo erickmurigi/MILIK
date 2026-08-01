@@ -6,12 +6,13 @@ import CwSmsModal from "../CarWash/CwSmsModal";
 import SaleEmailModal from "./SaleEmailModal";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
-import SaleFilterBar, { FilterSearch, FilterSelect } from "./SaleFilterBar";
+import SaleFilterBar, { FilterSearch } from "./SaleFilterBar";
 import PaginationBar from "../../components/PaginationBar";
 import { saleApi } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
 import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
+import AppSelect from "../../components/common/AppSelect";
 
 const SOURCES      = ["walk_in", "referral", "online", "agent", "other"];
 const KYC_STATUSES = ["pending", "verified", "rejected"];
@@ -342,14 +343,8 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Name, phone, ID…"
         />
-        <FilterSelect value={kycFilter} onChange={(e) => setKycFilter(e.target.value)}>
-          <option value="">All KYC Statuses</option>
-          {KYC_STATUSES.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-        </FilterSelect>
-        <FilterSelect value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)}>
-          <option value="">All Sources</option>
-          {SOURCES.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</option>)}
-        </FilterSelect>
+        <AppSelect value={kycFilter} onChange={(v) => setKycFilter(v ?? "")} options={KYC_STATUSES.map((s) => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))} placeholder="All KYC Statuses" clearable size="sm" />
+        <AppSelect value={sourceFilter} onChange={(v) => setSourceFilter(v ?? "")} options={SOURCES.map((s) => ({ value: s, label: s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) }))} placeholder="All Sources" clearable size="sm" />
       </SaleFilterBar>
 
       {/* Table + KYC detail panel */}
@@ -777,16 +772,10 @@ ${row.notes ? `<div style="border:1px solid #e2e8f0;padding:10px 14px;font-size:
               <input value={form.nationality} onChange={f("nationality")} className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Source</label>
-              <select value={form.source} onChange={f("source")} className={inputCls}>
-                {SOURCES.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
-              </select>
+              <AppSelect label="Source" value={form.source} onChange={(v) => setForm((p) => ({ ...p, source: v ?? "" }))} options={SOURCES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }))} size="md" />
             </div>
             <div>
-              <label className={labelCls}>KYC Status</label>
-              <select value={form.kycStatus} onChange={f("kycStatus")} className={inputCls}>
-                {KYC_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
+              <AppSelect label="KYC Status" value={form.kycStatus} onChange={(v) => setForm((p) => ({ ...p, kycStatus: v ?? "" }))} options={KYC_STATUSES.map((s) => ({ value: s, label: s }))} size="md" />
             </div>
             <div className="md:col-span-2">
               <label className={labelCls}>Address</label>
