@@ -1318,7 +1318,7 @@ const AddReceipt = () => {
                                       const opt = prepaymentTypeOptions.find((o) => o.billItemKey === v);
                                       setPrepaymentLines((prev) => {
                                         const updated = [...prev];
-                                        updated[idx] = { ...updated[idx], billItemKey: v ?? "", label: opt?.label || v ?? "" };
+                                        updated[idx] = { ...updated[idx], billItemKey: v ?? "", label: opt?.label || (v ?? "") };
                                         return updated;
                                       });
                                     }}
