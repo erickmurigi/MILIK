@@ -4,7 +4,8 @@ import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { FaPrint } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
-import SaleFilterBar, { FilterSelect } from "./SaleFilterBar";
+import SaleFilterBar from "./SaleFilterBar";
+import AppSelect from "../../components/common/AppSelect";
 import { fmtKES, saleApi } from "../../services/propertySaleApi";
 
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -113,14 +114,12 @@ tfoot tr{background:#0B3B2E;color:#fff}tfoot td{padding:9px 10px;font-size:10px;
         {/* Year Selector */}
         <SaleFilterBar>
           <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">Financial Year</label>
-          <FilterSelect
-            value={year}
-            onChange={(e) => setYear(e.target.value)}
-          >
-            {Array.from({ length: 6 }, (_, i) => currentYear - i + 1).map((y) => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </FilterSelect>
+          <AppSelect
+            value={String(year)}
+            onChange={(v) => setYear(v ?? String(currentYear))}
+            options={Array.from({ length: 6 }, (_, i) => currentYear - i + 1).map((y) => ({ value: String(y), label: String(y) }))}
+            size="sm"
+          />
           <span className="ml-auto text-[10px] text-slate-400">
             Double-click any month row or bar to open detailed breakdown in a new tab
           </span>
