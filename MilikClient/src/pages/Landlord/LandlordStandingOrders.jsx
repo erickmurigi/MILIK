@@ -38,18 +38,11 @@ import { getProperties } from "../../redux/propertyRedux";
 import { propertyBelongsToLandlord } from "./propertyUtils";
 import { selectCurrentCompany, selectCurrentUser, selectAllLandlords, selectAllProperties } from "../../redux/selectors";
 import { hasCompanyPermission } from "../../utils/permissions";
+import { isCashbookAccount } from "../../utils/cashbookUtils";
 import AppSelect from "../../components/common/AppSelect";
 
 const ITEMS_PER_PAGE = 50;
 const todayIso = () => new Date().toISOString().split("T")[0];
-
-const CASHBOOK_PATTERN = /cash|bank|m-?pesa|mobile money|wallet|petty|till|collection/i;
-const isCashbookAccount = (a) =>
-  String(a?.type || "").toLowerCase() === "asset" &&
-  !a.isHeader &&
-  a.isPosting !== false &&
-  !a.isControl &&
-  CASHBOOK_PATTERN.test(`${a?.name || ""} ${a?.group || ""} ${a?.subGroup || ""}`);
 
 const blankForm = {
   landlord: "",
@@ -605,7 +598,7 @@ const LandlordStandingOrders = () => {
                   <input value={filters.search} onChange={setFilter("search")} placeholder="Search order, title…" className="h-7 w-40 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </div>
                 <AppSelect
-                  value={filters.landlordId === "all" ? null : filters.landlordId}
+                  value={filters.landlordId}
                   onChange={(v) => setFilters((prev) => ({ ...prev, landlordId: v ?? "all" }))}
                   options={activeLandlords.map((l) => ({ value: l._id, label: getLandlordLabel(l) }))}
                   placeholder="All Landlords"
@@ -614,7 +607,7 @@ const LandlordStandingOrders = () => {
                   size="sm"
                 />
                 <AppSelect
-                  value={filters.propertyId === "all" ? null : filters.propertyId}
+                  value={filters.propertyId}
                   onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "all" }))}
                   options={activeProperties.map((p) => ({ value: p._id, label: `${p.propertyCode ? `[${p.propertyCode}] ` : ""}${p.propertyName || p.name}` }))}
                   placeholder="All Properties"
@@ -623,7 +616,7 @@ const LandlordStandingOrders = () => {
                   size="sm"
                 />
                 <AppSelect
-                  value={filters.status === "all" ? null : filters.status}
+                  value={filters.status}
                   onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))}
                   options={[
                     { value: "draft", label: "Draft" },

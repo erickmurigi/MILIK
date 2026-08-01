@@ -24,12 +24,12 @@ import DashboardLayout from "../../components/Layout/DashboardLayout";
 import AppSelect from "../../components/common/AppSelect";
 import { adminRequests } from "../../utils/requestMethods";
 import { hasCompanyPermission } from "../../utils/permissions";
+import { buildTenantOptions } from "../../utils/tenantUtils";
 import { useConfirm } from "../../context/ConfirmContext";
 
 const DEFAULT_PAGE_SIZE = 25;
 
 const STATUS_OPTIONS = [
-  { value: "all", label: "All statuses" },
   { value: "scheduled", label: "Scheduled" },
   { value: "in_progress", label: "In Progress" },
   { value: "completed", label: "Completed" },
@@ -37,7 +37,6 @@ const STATUS_OPTIONS = [
 ];
 
 const TYPE_OPTIONS = [
-  { value: "all", label: "All types" },
   { value: "routine", label: "Routine" },
   { value: "move_in", label: "Move In" },
   { value: "move_out", label: "Move Out" },
@@ -143,8 +142,8 @@ const Inspections = () => {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useTabState("/inspections:searchTerm", "");
-  const [statusFilter, setStatusFilter] = useTabState("/inspections:statusFilter", "all");
-  const [typeFilter, setTypeFilter] = useTabState("/inspections:typeFilter", "all");
+  const [statusFilter, setStatusFilter] = useTabState("/inspections:statusFilter", "");
+  const [typeFilter, setTypeFilter] = useTabState("/inspections:typeFilter", "");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingInspection, setEditingInspection] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -187,8 +186,8 @@ const Inspections = () => {
         page: currentPage,
         limit: pageSize,
       });
-      if (statusFilter !== "all") params.set("status", statusFilter);
-      if (typeFilter !== "all") params.set("type", typeFilter);
+      if (statusFilter) params.set("status", statusFilter);
+      if (typeFilter) params.set("type", typeFilter);
       if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
 
       const res = await adminRequests.get(`/inspections?${params}`);
@@ -421,9 +420,9 @@ const Inspections = () => {
         {/* Filter bar */}
         <div className="shrink-0 flex flex-wrap items-center gap-1.5 border-b border-slate-200 bg-white px-3 py-2">
           <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search inspections…" className="h-7 w-48 shrink-0 border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:border-[#0B3B2E]" />
-          <AppSelect value={statusFilter} onChange={(v) => setStatusFilter(v ?? "all")} options={STATUS_OPTIONS.filter((o) => o.value !== "all")} placeholder="All statuses" clearable size="sm" />
-          <AppSelect value={typeFilter} onChange={(v) => setTypeFilter(v ?? "all")} options={TYPE_OPTIONS.filter((o) => o.value !== "all")} placeholder="All types" clearable size="sm" />
-          <button onClick={() => { setSearchTerm(""); setStatusFilter("all"); setTypeFilter("all"); }} className="inline-flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"><FaFilter size={9} /> Reset</button>
+          <AppSelect value={statusFilter} onChange={(v) => setStatusFilter(v ?? "")} options={STATUS_OPTIONS} placeholder="All statuses" clearable size="sm" />
+          <AppSelect value={typeFilter} onChange={(v) => setTypeFilter(v ?? "")} options={TYPE_OPTIONS} placeholder="All types" clearable size="sm" />
+          <button onClick={() => { setSearchTerm(""); setStatusFilter(""); setTypeFilter(""); }} className="inline-flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"><FaFilter size={9} /> Reset</button>
           <button onClick={loadInspections} className="inline-flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50"><FaRedoAlt size={9} /></button>
           <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
           <button onClick={exportCsv} className="inline-flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaDownload size={9} /> CSV</button>
@@ -573,7 +572,7 @@ const Inspections = () => {
                     options={properties.map((p) => ({ value: p._id, label: getPropertyName(p) }))}
                     placeholder="Select property…"
                     searchable
-                    size="sm"
+                    size="md"
                   />
                 </div>
                 <div>
@@ -585,7 +584,7 @@ const Inspections = () => {
                     placeholder="Property-level / common area"
                     searchable
                     clearable
-                    size="sm"
+                    size="md"
                   />
                 </div>
                 <div>
@@ -593,12 +592,12 @@ const Inspections = () => {
                   <AppSelect
                     value={form.tenant}
                     onChange={(v) => setForm((prev) => ({ ...prev, tenant: v ?? "" }))}
-                    options={availableTenants.map((t) => ({ value: t._id, label: t?.name || "Unnamed" }))}
+                    options={buildTenantOptions(availableTenants)}
                     placeholder="No linked tenant"
                     searchable
                     clearable
                     disabled={!form.unit}
-                    size="sm"
+                    size="md"
                   />
                 </div>
               </div>
@@ -608,14 +607,14 @@ const Inspections = () => {
                   label="Type"
                   value={form.type}
                   onChange={(v) => setForm((prev) => ({ ...prev, type: v ?? "" }))}
-                  options={TYPE_OPTIONS.filter((o) => o.value !== "all")}
+                  options={TYPE_OPTIONS}
                   size="md"
                 />
                 <AppSelect
                   label="Status"
                   value={form.status}
                   onChange={(v) => setForm((prev) => ({ ...prev, status: v ?? "" }))}
-                  options={STATUS_OPTIONS.filter((o) => o.value !== "all")}
+                  options={STATUS_OPTIONS}
                   size="md"
                 />
                 <label className="block md:col-span-2">

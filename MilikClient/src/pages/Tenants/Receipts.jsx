@@ -61,6 +61,7 @@ import {
 import { getProperties } from "../../redux/propertyRedux";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { printTabularList } from "../../utils/printList";
+import { isCashbookAccount } from "../../utils/cashbookUtils";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 
@@ -82,18 +83,6 @@ const ensureArray = (value) => {
   return [];
 };
 
-const isCashbookAccount = (account) => {
-  if (!account) return false;
-  const name = String(account?.name || "").toLowerCase();
-  const group = String(account?.group || "").toLowerCase();
-  const subGroup = String(account?.subGroup || "").toLowerCase();
-  return (
-    String(account?.type || "").toLowerCase() === "asset" &&
-    account?.isHeader !== true &&
-    account?.isPosting !== false &&
-    /cash|bank|m-?pesa|mobile money|wallet|petty|till|collection/.test(`${name} ${group} ${subGroup}`)
-  );
-};
 
 const CASHBOOK_ACCOUNT_MAP = {
   "Main Cashbook": { code: "1100", name: "Cash on Hand - Main" },

@@ -641,6 +641,7 @@ export default function LandlordStatementAllocations() {
                 <AppSelect
                   size="sm"
                   clearable
+                  searchable
                   placeholder="All properties"
                   value={property}
                   onChange={(v) => setProperty(v ?? "")}

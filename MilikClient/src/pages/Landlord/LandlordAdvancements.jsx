@@ -43,6 +43,7 @@ import { getProperties } from "../../redux/propertyRedux";
 import { propertyBelongsToLandlord } from "./propertyUtils";
 import { selectCurrentCompany, selectCurrentUser, selectAllLandlords, selectAllProperties } from "../../redux/selectors";
 import { hasCompanyPermission } from "../../utils/permissions";
+import { isCashbookAccount } from "../../utils/cashbookUtils";
 
 const todayIso = () => new Date().toISOString().split("T")[0];
 const money = (value) =>
@@ -116,13 +117,6 @@ const STATUS_STYLES = {
 
 const ITEMS_PER_PAGE = 50;
 
-const CASHBOOK_PATTERN = /cash|bank|m-?pesa|mobile money|wallet|petty|till|collection/i;
-const isCashbookAccount = (a) =>
-  String(a?.type || "").toLowerCase() === "asset" &&
-  !a.isHeader &&
-  a.isPosting !== false &&
-  !a.isControl &&
-  CASHBOOK_PATTERN.test(`${a?.name || ""} ${a?.group || ""} ${a?.subGroup || ""}`);
 
 const TYPE_OPTIONS = [
   {
@@ -669,7 +663,7 @@ const LandlordAdvancements = () => {
               <input value={filters.search} onChange={setFilter("search")} placeholder="Reference, title…" className="h-7 w-40 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs outline-none focus:border-[#0B3B2E]" />
             </div>
             <AppSelect
-              value={filters.status === "all" ? null : filters.status}
+              value={filters.status}
               onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))}
               options={["draft", "submitted", "approved", "disbursed", "recovering", "paused", "cleared", "cancelled", "rejected", "reversed"].map((s) => ({ value: s, label: statusLabel(s) }))}
               placeholder="All statuses"
@@ -678,7 +672,7 @@ const LandlordAdvancements = () => {
               size="sm"
             />
             <AppSelect
-              value={filters.landlordId === "all" ? null : filters.landlordId}
+              value={filters.landlordId}
               onChange={(v) => setFilters((prev) => ({ ...prev, landlordId: v ?? "all" }))}
               options={activeLandlords.map((l) => ({ value: l._id, label: l.landlordName || l.firstName || l.email || "Landlord" }))}
               placeholder="All landlords"
@@ -687,7 +681,7 @@ const LandlordAdvancements = () => {
               size="sm"
             />
             <AppSelect
-              value={filters.advanceType === "all" ? null : filters.advanceType}
+              value={filters.advanceType}
               onChange={(v) => setFilters((prev) => ({ ...prev, advanceType: v ?? "all" }))}
               options={TYPE_OPTIONS.map((item) => ({ value: item.value, label: item.label }))}
               placeholder="All types"
@@ -836,7 +830,7 @@ const LandlordAdvancements = () => {
                     placeholder="Select landlord…"
                     searchable
                     clearable
-                    size="sm"
+                    size="md"
                   />
                 </div>
 
@@ -849,7 +843,7 @@ const LandlordAdvancements = () => {
                     placeholder="Select property…"
                     searchable
                     clearable
-                    size="sm"
+                    size="md"
                   />
                 </div>
 
@@ -859,7 +853,7 @@ const LandlordAdvancements = () => {
                     value={form.status || null}
                     onChange={(v) => setForm((prev) => ({ ...prev, status: v ?? "draft" }))}
                     options={INITIAL_STATUS_OPTIONS}
-                    size="sm"
+                    size="md"
                   />
                 </label>
 
@@ -905,7 +899,7 @@ const LandlordAdvancements = () => {
                       { value: "cash", label: "Cash" },
                       { value: "other", label: "Other" },
                     ]}
-                    size="sm"
+                    size="md"
                   />
                 </label>
 
@@ -918,7 +912,7 @@ const LandlordAdvancements = () => {
                     placeholder="Use system default"
                     searchable
                     clearable
-                    size="sm"
+                    size="md"
                   />
                 </label>
 

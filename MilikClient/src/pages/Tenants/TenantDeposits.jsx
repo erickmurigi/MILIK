@@ -766,6 +766,7 @@ const TenantDeposits = () => {
                 <AppSelect
                   size="sm"
                   clearable
+                  searchable
                   placeholder="Property"
                   value={draftFilters.propertyId}
                   onChange={(v) => setDraftFilters((prev) => ({ ...prev, propertyId: v ?? "any", unitId: "any" }))}

@@ -11,6 +11,7 @@ import {
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { selectCurrentUser, selectCurrentCompany, selectAllProperties, selectAllUnits, selectAllExpenseProperties } from '../../redux/selectors';
 import { hasCompanyPermission } from '../../utils/permissions';
+import { isCashbookAccount } from '../../utils/cashbookUtils';
 import { getProperties } from '../../redux/propertyRedux';
 import { getUnits } from '../../redux/unitRedux';
 import {
@@ -37,6 +38,8 @@ const CATEGORY_COLORS = {
 };
 
 const humanize = (s) => String(s || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+const CATEGORY_OPTIONS = CATEGORIES.map((c) => ({ value: c, label: humanize(c) }));
+const PAYMENT_METHOD_OPTIONS = PAYMENT_METHODS.map((m) => ({ value: m, label: humanize(m) }));
 const formatMoney = (v, currency = 'KES') => `${currency} ${Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const toInput = (d) => { try { return new Date(d).toISOString().split('T')[0]; } catch { return ''; } };
 const today = () => toInput(new Date());
@@ -44,18 +47,6 @@ const normalizeId = (v) => (typeof v === 'string' ? v : v?._id || v?.id || '');
 
 const defaultStart = toInput(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
 
-const isCashbookAccount = (account) => {
-  if (!account) return false;
-  const name = String(account?.name || '').toLowerCase();
-  const group = String(account?.group || '').toLowerCase();
-  const subGroup = String(account?.subGroup || '').toLowerCase();
-  return (
-    String(account?.type || '').toLowerCase() === 'asset' &&
-    account?.isHeader !== true &&
-    account?.isPosting !== false &&
-    /cash|bank|m-?pesa|mobile money|wallet|petty|till|collection/.test(`${name} ${group} ${subGroup}`)
-  );
-};
 
 const EMPTY_FORM = {
   property: '', unit: '', category: 'maintenance', amount: '',
@@ -103,6 +94,11 @@ const ExpenseModal = ({ open, editing, properties, units, businessId, onClose, o
   }, [open, editing]);
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+
+  const propertyOptions = useMemo(
+    () => properties.map((p) => ({ value: p._id, label: p.propertyName || p.name })),
+    [properties]
+  );
 
   const filteredUnits = useMemo(
     () => form.property ? units.filter((u) => normalizeId(u.property) === form.property) : units,
@@ -154,7 +150,7 @@ const ExpenseModal = ({ open, editing, properties, units, businessId, onClose, o
               <AppSelect
                 value={form.property || null}
                 onChange={(v) => setForm((f) => ({ ...f, property: v ?? '', unit: '' }))}
-                options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))}
+                options={propertyOptions}
                 placeholder="— All properties —"
                 searchable
                 clearable
@@ -180,7 +176,7 @@ const ExpenseModal = ({ open, editing, properties, units, businessId, onClose, o
               <AppSelect
                 value={form.category || null}
                 onChange={(v) => setForm((f) => ({ ...f, category: v ?? '' }))}
-                options={CATEGORIES.map((c) => ({ value: c, label: humanize(c) }))}
+                options={CATEGORY_OPTIONS}
                 size="md"
               />
             </div>
@@ -208,7 +204,7 @@ const ExpenseModal = ({ open, editing, properties, units, businessId, onClose, o
               <AppSelect
                 value={form.paymentMethod || null}
                 onChange={(v) => setForm((f) => ({ ...f, paymentMethod: v ?? '' }))}
-                options={PAYMENT_METHODS.map((m) => ({ value: m, label: humanize(m) }))}
+                options={PAYMENT_METHOD_OPTIONS}
                 size="md"
               />
             </div>
@@ -477,9 +473,9 @@ const PropertyExpenses = () => {
             <div className="flex flex-col gap-1">
               <label className="text-[9px] font-extrabold uppercase tracking-widest text-gray-400">Property</label>
               <AppSelect
-                value={filters.propertyId || null}
+                value={filters.propertyId}
                 onChange={(v) => { setFilters((f) => ({ ...f, propertyId: v ?? '' })); setPage(1); }}
-                options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))}
+                options={propertyOptions}
                 placeholder="All properties"
                 searchable
                 clearable
@@ -490,9 +486,9 @@ const PropertyExpenses = () => {
             <div className="flex flex-col gap-1">
               <label className="text-[9px] font-extrabold uppercase tracking-widest text-gray-400">Category</label>
               <AppSelect
-                value={filters.category || null}
+                value={filters.category}
                 onChange={(v) => { setFilters((f) => ({ ...f, category: v ?? '' })); setPage(1); }}
-                options={[{ value: '', label: 'All categories' }, ...CATEGORIES.map((c) => ({ value: c, label: humanize(c) }))]}
+                options={CATEGORY_OPTIONS}
                 placeholder="All categories"
                 clearable
                 size="sm"

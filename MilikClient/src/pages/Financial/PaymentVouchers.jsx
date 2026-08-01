@@ -1019,6 +1019,7 @@ const PaymentVouchers = () => {
                     placeholder="All properties"
                     size="sm"
                     clearable
+                    searchable
                   />
                 )}
                 <button onClick={() => setFilters({ search: "", category: "all", status: "all", propertyId: "all" })} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">

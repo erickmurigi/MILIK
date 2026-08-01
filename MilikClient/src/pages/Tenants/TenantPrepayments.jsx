@@ -262,6 +262,7 @@ const TenantPrepayments = () => {
                   options={propertyOptions.map((property) => ({ value: property._id, label: property.propertyName }))}
                   placeholder="Property"
                   clearable
+                  searchable
                   size="sm"
                 />
                 <AppSelect

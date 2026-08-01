@@ -36,6 +36,7 @@ import { getChartOfAccounts, getCompany, getSmsLogs, updateCompany } from "../..
 import { adminRequests } from "../../utils/requestMethods";
 import { carWashApi } from "../../services/carWashApi";
 import { COMPANY_OPERATING_MODES, MODULE_LABELS, hasCompanyModule, normalizeCompanyModules, normalizeCompanyOperatingMode } from "../../utils/companyModules";
+import { isCashbookAccount } from "../../utils/cashbookUtils";
 import { useConfirm } from "../../context/ConfirmContext";
 
 const PAYMENT_DRAFT_ID = "__new_mpesa_paybill__";
@@ -167,12 +168,6 @@ const months = [
   "December",
 ];
 
-const isCashbookAccount = (account = {}) => {
-  const code = String(account?.code || "").trim();
-  const name = String(account?.name || "").trim();
-  const type = String(account?.type || "").trim().toLowerCase();
-  return type === "asset" && (/^11/.test(code) || /(cash|bank|mpesa|m-pesa|mobile money|wallet|collection)/i.test(name));
-};
 
 const buildPaymentStatus = (config = {}) => {
   const shortCode = String(config.shortCode || "").trim();

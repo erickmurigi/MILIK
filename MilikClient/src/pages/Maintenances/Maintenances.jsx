@@ -29,12 +29,12 @@ import DashboardLayout from "../../components/Layout/DashboardLayout";
 import AppSelect from "../../components/common/AppSelect";
 import { adminRequests } from "../../utils/requestMethods";
 import { hasCompanyPermission } from "../../utils/permissions";
+import { buildTenantOptions } from "../../utils/tenantUtils";
 import { useConfirm } from "../../context/ConfirmContext";
 
 const DEFAULT_PAGE_SIZE = 25;
 
 const STATUS_OPTIONS = [
-  { value: "all", label: "All statuses" },
   { value: "pending", label: "Pending" },
   { value: "in_progress", label: "In Progress" },
   { value: "completed", label: "Completed" },
@@ -42,7 +42,6 @@ const STATUS_OPTIONS = [
 ];
 
 const PRIORITY_OPTIONS = [
-  { value: "all", label: "All priorities" },
   { value: "low", label: "Low" },
   { value: "medium", label: "Medium" },
   { value: "high", label: "High" },
@@ -138,8 +137,8 @@ const Maintenances = () => {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useTabState("/maintenances:searchTerm", "");
-  const [statusFilter, setStatusFilter] = useTabState("/maintenances:statusFilter", "all");
-  const [priorityFilter, setPriorityFilter] = useTabState("/maintenances:priorityFilter", "all");
+  const [statusFilter, setStatusFilter] = useTabState("/maintenances:statusFilter", "");
+  const [priorityFilter, setPriorityFilter] = useTabState("/maintenances:priorityFilter", "");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRequest, setEditingRequest] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -183,8 +182,8 @@ const Maintenances = () => {
         page: currentPage,
         limit: pageSize,
       });
-      if (statusFilter !== "all") params.set("status", statusFilter);
-      if (priorityFilter !== "all") params.set("priority", priorityFilter);
+      if (statusFilter) params.set("status", statusFilter);
+      if (priorityFilter) params.set("priority", priorityFilter);
       if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
 
       const res = await adminRequests.get(`/maintenances?${params}`);
@@ -424,9 +423,9 @@ const Maintenances = () => {
         {/* Filter bar */}
         <div className="shrink-0 flex flex-wrap items-center gap-1.5 border-b border-slate-200 bg-white px-3 py-2">
           <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search requests…" className="h-7 w-48 shrink-0 border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:border-[#0B3B2E]" />
-          <AppSelect value={statusFilter} onChange={(v) => setStatusFilter(v ?? "all")} options={STATUS_OPTIONS.filter((o) => o.value !== "all")} placeholder="All statuses" clearable size="sm" />
-          <AppSelect value={priorityFilter} onChange={(v) => setPriorityFilter(v ?? "all")} options={PRIORITY_OPTIONS.filter((o) => o.value !== "all")} placeholder="All priorities" clearable size="sm" />
-          <button onClick={() => { setSearchTerm(""); setStatusFilter("all"); setPriorityFilter("all"); }} className="inline-flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"><FaFilter size={9} /> Reset</button>
+          <AppSelect value={statusFilter} onChange={(v) => setStatusFilter(v ?? "")} options={STATUS_OPTIONS} placeholder="All statuses" clearable size="sm" />
+          <AppSelect value={priorityFilter} onChange={(v) => setPriorityFilter(v ?? "")} options={PRIORITY_OPTIONS} placeholder="All priorities" clearable size="sm" />
+          <button onClick={() => { setSearchTerm(""); setStatusFilter(""); setPriorityFilter(""); }} className="inline-flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"><FaFilter size={9} /> Reset</button>
           <button onClick={loadRequests} className="inline-flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50"><FaRedoAlt size={9} /></button>
           <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
           <button onClick={exportCsv} className="inline-flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaDownload size={9} /> CSV</button>
@@ -590,7 +589,7 @@ const Maintenances = () => {
                     options={properties.map((p) => ({ value: p._id, label: getPropertyName(p) }))}
                     placeholder="Select property…"
                     searchable
-                    size="sm"
+                    size="md"
                   />
                 </div>
                 <div>
@@ -601,7 +600,7 @@ const Maintenances = () => {
                     options={availableUnits.map((u) => ({ value: u._id, label: `${getPropertyName(u?.property)} · Unit ${u?.unitNumber || "—"}` }))}
                     placeholder="Select unit…"
                     searchable
-                    size="sm"
+                    size="md"
                   />
                 </div>
               </div>
@@ -612,11 +611,11 @@ const Maintenances = () => {
                   <AppSelect
                     value={form.tenant}
                     onChange={(v) => setForm((prev) => ({ ...prev, tenant: v ?? "" }))}
-                    options={availableTenants.map((t) => ({ value: t._id, label: t?.name || "Unnamed" }))}
+                    options={buildTenantOptions(availableTenants)}
                     placeholder="No linked tenant"
                     searchable
                     clearable
-                    size="sm"
+                    size="md"
                   />
                 </div>
                 <label className="block">
@@ -644,14 +643,14 @@ const Maintenances = () => {
                   label="Priority"
                   value={form.priority}
                   onChange={(v) => setForm((prev) => ({ ...prev, priority: v ?? "" }))}
-                  options={PRIORITY_OPTIONS.filter((o) => o.value !== "all")}
+                  options={PRIORITY_OPTIONS}
                   size="md"
                 />
                 <AppSelect
                   label="Status"
                   value={form.status}
                   onChange={(v) => setForm((prev) => ({ ...prev, status: v ?? "" }))}
-                  options={STATUS_OPTIONS.filter((o) => o.value !== "all")}
+                  options={STATUS_OPTIONS}
                   size="md"
                 />
               </div>

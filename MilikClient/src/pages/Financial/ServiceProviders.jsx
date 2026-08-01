@@ -36,7 +36,6 @@ const blankForm = {
 const DEFAULT_PAGE_SIZE = 50;
 
 const CATEGORY_OPTIONS = [
-  { value: "all", label: "All categories" },
   { value: "general", label: "General" },
   { value: "maintenance", label: "Maintenance" },
   { value: "utilities", label: "Utilities" },
@@ -55,7 +54,7 @@ const ServiceProviders = () => {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useTabState("/accounts/service-providers:search", "");
   const [nameFilter, setNameFilter] = useTabState("/accounts/service-providers:nameFilter", "");
-  const [categoryFilter, setCategoryFilter] = useTabState("/accounts/service-providers:categoryFilter", "all");
+  const [categoryFilter, setCategoryFilter] = useTabState("/accounts/service-providers:categoryFilter", "");
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState("");
@@ -126,7 +125,7 @@ const ServiceProviders = () => {
         if (!providerName.includes(nameFilter.trim().toLowerCase())) return false;
       }
 
-      if (categoryFilter !== "all") {
+      if (categoryFilter) {
         if (String(row?.category || "").toLowerCase() !== categoryFilter.toLowerCase()) {
           return false;
         }
@@ -245,9 +244,9 @@ const ServiceProviders = () => {
               </div>
               <input value={nameFilter} onChange={(e) => setNameFilter(e.target.value)} placeholder="Provider name" className="h-7 w-36 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
               <AppSelect
-                value={categoryFilter !== "all" ? categoryFilter : ""}
-                onChange={(v) => setCategoryFilter(v ?? "all")}
-                options={CATEGORY_OPTIONS.filter((o) => o.value !== "all")}
+                value={categoryFilter}
+                onChange={(v) => setCategoryFilter(v ?? "")}
+                options={CATEGORY_OPTIONS}
                 placeholder="All categories"
                 size="sm"
                 clearable

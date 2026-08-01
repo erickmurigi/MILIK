@@ -24,6 +24,7 @@ import { getLandlords, getChartOfAccounts, getLandlordReceipts, getLandlordAdvan
 import { selectCurrentCompany, selectCurrentUser, selectAllLandlords, selectAllProperties } from "../../redux/selectors";
 import { getProperties } from "../../redux/propertyRedux";
 import { hasCompanyPermission } from "../../utils/permissions";
+import { isCashbookAccount } from "../../utils/cashbookUtils";
 import { useConfirm } from "../../context/ConfirmContext";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
@@ -63,19 +64,6 @@ const ensureArray = (value) => {
   if (Array.isArray(value?.items)) return value.items;
   if (Array.isArray(value?.rows)) return value.rows;
   return [];
-};
-
-const isCashbookAccount = (account) => {
-  if (!account) return false;
-  const name = String(account?.name || "").toLowerCase();
-  const group = String(account?.group || "").toLowerCase();
-  const subGroup = String(account?.subGroup || "").toLowerCase();
-  return (
-    String(account?.type || "").toLowerCase() === "asset" &&
-    account?.isHeader !== true &&
-    account?.isPosting !== false &&
-    /cash|bank|m-?pesa|mobile money|wallet|petty|till|collection/.test(`${name} ${group} ${subGroup}`)
-  );
 };
 
 const todayInput = () => new Date().toISOString().split("T")[0];
@@ -152,7 +140,7 @@ const LandlordReceipts = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [advancements, setAdvancements] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [filters, setFilters] = useTabState("/receipts/landlord:filters", { search: "", status: "all", category: "all", landlord: "all", property: "all" });
+  const [filters, setFilters] = useTabState("/receipts/landlord:filters", { search: "", status: "", category: "", landlord: "", property: "" });
   const [currentPage, setCurrentPage] = useTabState("/receipts/landlord:currentPage", 1);
   const debouncedSearch = useDebounce(filters.search, 400);
   const [showFormModal, setShowFormModal] = useState(false);
@@ -173,10 +161,10 @@ const LandlordReceipts = () => {
           business: currentCompany._id,
           page: currentPage,
           limit: ITEMS_PER_PAGE,
-          ...(filters.status !== "all" ? { status: filters.status } : {}),
-          ...(filters.category !== "all" ? { category: filters.category } : {}),
-          ...(filters.landlord !== "all" ? { landlord: filters.landlord } : {}),
-          ...(filters.property !== "all" ? { property: filters.property } : {}),
+          ...(filters.status ? { status: filters.status } : {}),
+          ...(filters.category ? { category: filters.category } : {}),
+          ...(filters.landlord ? { landlord: filters.landlord } : {}),
+          ...(filters.property ? { property: filters.property } : {}),
           ...(debouncedSearch ? { search: debouncedSearch } : {}),
         }),
         dispatch(getLandlords({ company: currentCompany._id })),
@@ -536,8 +524,8 @@ const LandlordReceipts = () => {
                 <input value={filters.search} onChange={(e) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, search: e.target.value })); }} placeholder="Search receipt, landlord…" className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </label>
               <AppSelect
-                value={filters.status === "all" ? null : filters.status}
-                onChange={(v) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, status: v ?? "all" })); }}
+                value={filters.status}
+                onChange={(v) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, status: v ?? "" })); }}
                 options={[
                   { value: "draft", label: "Draft" },
                   { value: "posted", label: "Posted" },
@@ -548,16 +536,16 @@ const LandlordReceipts = () => {
                 size="sm"
               />
               <AppSelect
-                value={filters.category === "all" ? null : filters.category}
-                onChange={(v) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, category: v ?? "all" })); }}
-                options={CATEGORY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                value={filters.category}
+                onChange={(v) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, category: v ?? "" })); }}
+                options={CATEGORY_OPTIONS}
                 placeholder="All Categories"
                 clearable
                 size="sm"
               />
               <AppSelect
-                value={filters.landlord === "all" ? null : filters.landlord}
-                onChange={(v) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, landlord: v ?? "all" })); }}
+                value={filters.landlord}
+                onChange={(v) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, landlord: v ?? "" })); }}
                 options={activeLandlords.map((l) => ({ value: l._id, label: l.landlordName }))}
                 placeholder="All Landlords"
                 searchable
@@ -692,7 +680,7 @@ const LandlordReceipts = () => {
                 <AppSelect
                   value={formData.category || null}
                   onChange={(v) => setFormData((prev) => ({ ...prev, category: v ?? "owner_float", linkedDocumentType: "", linkedDocumentId: "", linkedDocumentRef: "" }))}
-                  options={CATEGORY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                  options={CATEGORY_OPTIONS}
                   size="sm"
                 />
                 <p className="mt-0.5 text-[10px] text-slate-500">Posting rule: Dr selected cashbook, {CATEGORY_OPTIONS.find((item) => item.value === formData.category)?.accountHint || "controlled category account"}.</p>

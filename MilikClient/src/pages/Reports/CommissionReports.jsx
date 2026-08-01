@@ -428,12 +428,13 @@ const CommissionReports = () => {
               <input type="month" value={draftFilters.monthTo} onChange={setFilter("monthTo")} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 outline-none" />
               <AppSelect
                 value={draftFilters.status}
-                onChange={(v) => setDraftFilters((prev) => ({ ...prev, status: v ?? "recognized" }))}
+                onChange={(v) => setDraftFilters((prev) => ({ ...prev, status: v ?? "" }))}
                 options={[
                   { value: "recognized", label: "Recognized only" },
                   { value: "reversed", label: "Reversed only" },
-                  { value: "all", label: "All statuses" },
                 ]}
+                placeholder="All statuses"
+                clearable
                 size="sm"
               />
               <div className="relative flex min-w-[200px] flex-1">

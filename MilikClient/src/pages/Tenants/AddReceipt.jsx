@@ -18,6 +18,7 @@ import { getProperties } from "../../redux/propertyRedux";
 import { getTenants } from "../../redux/tenantsRedux";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
+import { isCashbookAccount } from "../../utils/cashbookUtils";
 import useScopedSessionDraft, { buildScopedDraftKey } from "../../hooks/useScopedSessionDraft";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
@@ -107,19 +108,6 @@ const mapOutstandingInvoiceStatus = ({ rawStatus = "", outstanding = 0, paid = 0
   return paid > 0 ? "Partially Paid" : "Open";
 };
 
-
-const isCashbookAccount = (account) => {
-  if (!account) return false;
-  const name = String(account?.name || "").toLowerCase();
-  const group = String(account?.group || "").toLowerCase();
-  const subGroup = String(account?.subGroup || "").toLowerCase();
-  return (
-    String(account?.type || "").toLowerCase() === "asset" &&
-    account?.isHeader !== true &&
-    account?.isPosting !== false &&
-    /cash|bank|m-?pesa|mobile money|wallet|petty|till|collection/.test(`${name} ${group} ${subGroup}`)
-  );
-};
 
 const AddReceipt = () => {
   const dispatch = useDispatch();

@@ -48,7 +48,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
   );
 
   // Local state
-  const [filters, setFilters] = useTabState("/landlord-payments:filters", { search: "", status: "all", paymentStatus: "all" });
+  const [filters, setFilters] = useTabState("/landlord-payments:filters", { search: "", status: "", paymentStatus: "" });
   const [currentPage, setCurrentPage] = useTabState("/landlord-payments:currentPage", 1);
   const [selectedLandlords, setSelectedLandlords] = useState([]);
   const [showSmsModal, setShowSmsModal] = useState(false);
@@ -160,7 +160,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
       }
 
       // Status filter
-      if (filters.status !== "all" && landlord.status !== filters.status) {
+      if (filters.status && landlord.status !== filters.status) {
         return false;
       }
 
@@ -588,16 +588,18 @@ const LandlordPayments = ({ mode = "payments" }) => {
                 <input value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder="Search name, code, email…" className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </div>
               <AppSelect
-                value={filters.status || null}
-                onChange={(v) => setFilters({ ...filters, status: v ?? 'all' })}
-                options={[{ value: 'all', label: 'All Status' }, { value: 'Active', label: 'Active' }, { value: 'Archived', label: 'Archived' }]}
+                value={filters.status}
+                onChange={(v) => setFilters({ ...filters, status: v ?? '' })}
+                options={[{ value: 'Active', label: 'Active' }, { value: 'Archived', label: 'Archived' }]}
+                placeholder="All Status"
                 size="sm"
                 clearable
               />
               <AppSelect
-                value={filters.paymentStatus || null}
-                onChange={(v) => setFilters({ ...filters, paymentStatus: v ?? 'all' })}
-                options={[{ value: 'all', label: 'All Payment Status' }, { value: 'owed', label: 'Balance Owed' }, { value: 'clear', label: 'Fully Paid' }]}
+                value={filters.paymentStatus}
+                onChange={(v) => setFilters({ ...filters, paymentStatus: v ?? '' })}
+                options={[{ value: 'owed', label: 'Balance Owed' }, { value: 'clear', label: 'Fully Paid' }]}
+                placeholder="All Payment Status"
                 size="sm"
                 clearable
               />
