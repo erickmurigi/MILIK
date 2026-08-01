@@ -36,6 +36,9 @@ const YEAR_OPTIONS = [
   ...Array.from({ length: 5 }, (_, i) => ({ v: String(thisYear - i), l: String(thisYear - i) })),
 ];
 
+const MONTH_SELECT_OPTIONS = MONTH_OPTIONS.map((o) => ({ value: o.v, label: o.l }));
+const YEAR_SELECT_OPTIONS = YEAR_OPTIONS.map((o) => ({ value: o.v, label: o.l }));
+
 const emptyFilters = { search: "", propertyId: "", month: "", year: String(thisYear) };
 
 const ManagementFeeInvoices = () => {
@@ -72,11 +75,11 @@ const ManagementFeeInvoices = () => {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const propertyOptions = useMemo(() => {
-    const opts = [{ v: "", l: "All Properties" }];
+    const opts = [{ value: "", label: "All Properties" }];
     (Array.isArray(propertiesFromStore) ? propertiesFromStore : [])
       .slice()
       .sort((a, b) => String(a.propertyName || "").localeCompare(String(b.propertyName || "")))
-      .forEach((p) => opts.push({ v: String(p._id), l: p.propertyName || p.name || "" }));
+      .forEach((p) => opts.push({ value: String(p._id), label: p.propertyName || p.name || "" }));
     return opts;
   }, [propertiesFromStore]);
 
@@ -204,7 +207,7 @@ const ManagementFeeInvoices = () => {
               <AppSelect
                 value={draftFilters.propertyId || null}
                 onChange={(v) => setDraftFilters((prev) => ({ ...prev, propertyId: v ?? "" }))}
-                options={propertyOptions.map((o) => ({ value: o.v, label: o.l }))}
+                options={propertyOptions}
                 placeholder="All Properties"
                 searchable
                 clearable
@@ -213,7 +216,7 @@ const ManagementFeeInvoices = () => {
               <AppSelect
                 value={draftFilters.month || null}
                 onChange={(v) => setDraftFilters((prev) => ({ ...prev, month: v ?? "" }))}
-                options={MONTH_OPTIONS.map((o) => ({ value: o.v, label: o.l }))}
+                options={MONTH_SELECT_OPTIONS}
                 placeholder="All Months"
                 clearable
                 size="sm"
@@ -221,7 +224,7 @@ const ManagementFeeInvoices = () => {
               <AppSelect
                 value={draftFilters.year || null}
                 onChange={(v) => setDraftFilters((prev) => ({ ...prev, year: v ?? "" }))}
-                options={YEAR_OPTIONS.map((o) => ({ value: o.v, label: o.l }))}
+                options={YEAR_SELECT_OPTIONS}
                 placeholder="All Years"
                 clearable
                 size="sm"

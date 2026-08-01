@@ -171,6 +171,10 @@ const LandlordStandingOrders = () => {
     () => properties.filter((item) => String(item?.status || "active").toLowerCase() !== "archived"),
     [properties]
   );
+  const landlordOptions = useMemo(
+    () => activeLandlords.map((l) => ({ value: l._id, label: getLandlordLabel(l) })),
+    [activeLandlords]
+  );
 
   const [rows, setRows] = useState([]);
   const [serverTotal, setServerTotal] = useState(0);
@@ -600,7 +604,7 @@ const LandlordStandingOrders = () => {
                 <AppSelect
                   value={filters.landlordId}
                   onChange={(v) => setFilters((prev) => ({ ...prev, landlordId: v ?? "all" }))}
-                  options={activeLandlords.map((l) => ({ value: l._id, label: getLandlordLabel(l) }))}
+                  options={landlordOptions}
                   placeholder="All Landlords"
                   searchable
                   clearable
@@ -961,7 +965,7 @@ const LandlordStandingOrders = () => {
                 <AppSelect
                   value={form.landlord}
                   onChange={(v) => setForm((prev) => ({ ...prev, landlord: v ?? "", property: "" }))}
-                  options={activeLandlords.map((l) => ({ value: l._id, label: getLandlordLabel(l) }))}
+                  options={landlordOptions}
                   placeholder="Select landlord…"
                   searchable
                   clearable

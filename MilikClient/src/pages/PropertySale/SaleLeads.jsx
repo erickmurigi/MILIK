@@ -19,6 +19,12 @@ const LEAD_SOURCES   = ["walk_in", "referral", "online", "social_media", "agent"
 const ACTIVITY_TYPES = ["call", "email", "meeting", "site_visit", "whatsapp", "note", "follow_up"];
 const OUTCOMES       = ["positive", "neutral", "negative", "no_answer", "not_applicable"];
 
+const LEAD_STATUS_OPTIONS      = LEAD_STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }));
+const LEAD_STATUS_FORM_OPTIONS = LEAD_STATUSES.filter((s) => s !== "converted").map((s) => ({ value: s, label: s.replace(/_/g, " ") }));
+const LEAD_SOURCE_OPTIONS      = LEAD_SOURCES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }));
+const ACTIVITY_TYPE_OPTIONS    = ACTIVITY_TYPES.map((t) => ({ value: t, label: t.replace(/_/g, " ") }));
+const OUTCOME_OPTIONS          = OUTCOMES.map((o) => ({ value: o, label: o.replace(/_/g, " ") }));
+
 const STATUS_COLORS = {
   new:           "border-blue-200 bg-blue-50 text-blue-700",
   contacted:     "border-sky-200 bg-sky-50 text-sky-700",
@@ -306,7 +312,7 @@ export default function SaleLeads() {
             <AppSelect
               value={statusFilter}
               onChange={(v) => setStatus(v ?? "")}
-              options={LEAD_STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }))}
+              options={LEAD_STATUS_OPTIONS}
               placeholder="All Statuses"
               clearable
               size="sm"
@@ -314,7 +320,7 @@ export default function SaleLeads() {
             <AppSelect
               value={sourceFilter}
               onChange={(v) => setSource(v ?? "")}
-              options={LEAD_SOURCES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }))}
+              options={LEAD_SOURCE_OPTIONS}
               placeholder="All Sources"
               clearable
               size="sm"
@@ -579,7 +585,7 @@ export default function SaleLeads() {
                 <AppSelect
                   value={form.source}
                   onChange={(v) => setForm((f) => ({ ...f, source: v ?? "" }))}
-                  options={LEAD_SOURCES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }))}
+                  options={LEAD_SOURCE_OPTIONS}
                   size="md"
                 />
               </div>
@@ -588,7 +594,7 @@ export default function SaleLeads() {
                 <AppSelect
                   value={form.status}
                   onChange={(v) => setForm((f) => ({ ...f, status: v ?? "" }))}
-                  options={LEAD_STATUSES.filter((s) => s !== "converted").map((s) => ({ value: s, label: s.replace(/_/g, " ") }))}
+                  options={LEAD_STATUS_FORM_OPTIONS}
                   size="md"
                 />
               </div>
@@ -656,7 +662,7 @@ export default function SaleLeads() {
                 <AppSelect
                   value={actForm.type}
                   onChange={(v) => setActForm((f) => ({ ...f, type: v ?? "" }))}
-                  options={ACTIVITY_TYPES.map((t) => ({ value: t, label: t.replace(/_/g, " ") }))}
+                  options={ACTIVITY_TYPE_OPTIONS}
                   size="md"
                 />
               </div>
@@ -677,7 +683,7 @@ export default function SaleLeads() {
                 <AppSelect
                   value={actForm.outcome}
                   onChange={(v) => setActForm((f) => ({ ...f, outcome: v ?? "" }))}
-                  options={OUTCOMES.map((o) => ({ value: o, label: o.replace(/_/g, " ") }))}
+                  options={OUTCOME_OPTIONS}
                   size="md"
                 />
               </div>

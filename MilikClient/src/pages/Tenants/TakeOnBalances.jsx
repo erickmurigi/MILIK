@@ -198,6 +198,21 @@ function TakeOnBalanceModal({
     });
   }, [tenants, selectedPropertyId, form.tenantSearch, mode]);
 
+  const propertySelectOptions = useMemo(
+    () => propertyOptions.map((property) => ({ value: normalizeId(property?._id || property?.id), label: getPropertyDisplay(property) })),
+    [propertyOptions]
+  );
+
+  const filteredTenantOptions = useMemo(
+    () => filteredTenants.map((tenant) => buildTenantOption(tenant)),
+    [filteredTenants]
+  );
+
+  const chartAccountOptions = useMemo(
+    () => chartAccounts.map((account) => ({ value: account._id, label: `[${account.code || "---"}] ${account.name}` })),
+    [chartAccounts]
+  );
+
   useEffect(() => {
     if (!open) return;
     if (form.billItem !== "utility" && form.utilityLabel) {
@@ -242,7 +257,7 @@ function TakeOnBalanceModal({
                 <AppSelect
                   value={form.propertyId}
                   onChange={(v) => setForm((prev) => ({ ...prev, propertyId: v ?? "", tenantId: "" }))}
-                  options={propertyOptions.map((property) => ({ value: normalizeId(property?._id || property?.id), label: getPropertyDisplay(property) }))}
+                  options={propertySelectOptions}
                   placeholder="Select property"
                   searchable
                   disabled={mode === "edit"}
@@ -268,7 +283,7 @@ function TakeOnBalanceModal({
                 <AppSelect
                   value={form.tenantId}
                   onChange={(v) => setForm((prev) => ({ ...prev, tenantId: v ?? "" }))}
-                  options={filteredTenants.map((tenant) => buildTenantOption(tenant))}
+                  options={filteredTenantOptions}
                   placeholder={form.propertyId ? "Select tenant" : "Select property first"}
                   searchable
                   disabled={mode === "edit" || (!form.propertyId && mode !== "edit")}
@@ -285,7 +300,7 @@ function TakeOnBalanceModal({
                   <AppSelect
                     value={form.billItem}
                     onChange={(v) => setForm((prev) => ({ ...prev, billItem: v ?? "rent" }))}
-                    options={(Array.isArray(filterBillItemOptions) ? filterBillItemOptions : []).map((option) => ({ value: option.value, label: option.label }))}
+                    options={Array.isArray(filterBillItemOptions) ? filterBillItemOptions : []}
                     size="md"
                   />
                 </div>
@@ -351,7 +366,7 @@ function TakeOnBalanceModal({
                   <AppSelect
                     value={form.openingBalanceAccountId}
                     onChange={(v) => setForm((prev) => ({ ...prev, openingBalanceAccountId: v ?? "" }))}
-                    options={chartAccounts.map((account) => ({ value: account._id, label: `[${account.code || "---"}] ${account.name}` }))}
+                    options={chartAccountOptions}
                     placeholder="Select account"
                     searchable
                     size="md"
@@ -633,6 +648,18 @@ const TakeOnBalances = () => {
       return true;
     });
   }, [rows, appliedFilters]);
+
+  const propertyFilterOptions = useMemo(
+    () => propertyOptions.map((property) => ({ value: normalizeId(property._id || property.id), label: getPropertyDisplay(property) })),
+    [propertyOptions]
+  );
+
+  const tenantFilterOptions = useMemo(
+    () => tenants
+      .filter((t) => !draftFilters.propertyId || getTenantPropertyId(t) === draftFilters.propertyId)
+      .map((t) => buildTenantOption(t)),
+    [tenants, draftFilters.propertyId]
+  );
 
   const filterBillItemOptions = useMemo(() => {
     const base = billItemOptions.map((option) => ({
@@ -943,7 +970,7 @@ const TakeOnBalances = () => {
                 <AppSelect
                   value={draftFilters.propertyId}
                   onChange={(v) => setDraftFilters((prev) => ({ ...prev, propertyId: v ?? "", tenant: "" }))}
-                  options={propertyOptions.map((property) => ({ value: normalizeId(property._id || property.id), label: getPropertyDisplay(property) }))}
+                  options={propertyFilterOptions}
                   placeholder="Property"
                   searchable
                   clearable
@@ -952,7 +979,7 @@ const TakeOnBalances = () => {
                 <AppSelect
                   value={draftFilters.tenant}
                   onChange={(v) => setDraftFilters((prev) => ({ ...prev, tenant: v ?? "" }))}
-                  options={tenants.filter((t) => !draftFilters.propertyId || getTenantPropertyId(t) === draftFilters.propertyId).map((t) => buildTenantOption(t))}
+                  options={tenantFilterOptions}
                   placeholder="Tenant"
                   searchable
                   clearable
@@ -961,7 +988,7 @@ const TakeOnBalances = () => {
                 <AppSelect
                   value={draftFilters.billItem}
                   onChange={(v) => setDraftFilters((prev) => ({ ...prev, billItem: v ?? "" }))}
-                  options={filterBillItemOptions.map((option) => ({ value: option.value, label: option.label }))}
+                  options={filterBillItemOptions}
                   placeholder="Bill Item"
                   clearable
                   size="sm"

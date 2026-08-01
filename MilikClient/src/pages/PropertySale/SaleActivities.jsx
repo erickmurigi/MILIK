@@ -12,6 +12,9 @@ import AppSelect from "../../components/common/AppSelect";
 
 const ACTIVITY_TYPES = ["call", "email", "meeting", "site_visit", "whatsapp", "note", "follow_up"];
 const OUTCOMES       = ["positive", "neutral", "negative", "no_answer", "not_applicable"];
+
+const ACTIVITY_TYPE_OPTIONS = ACTIVITY_TYPES.map((t) => ({ value: t, label: t.replace(/_/g, " ") }));
+const OUTCOME_OPTIONS       = OUTCOMES.map((o) => ({ value: o, label: o.replace(/_/g, " ") }));
 const ACT_ICONS      = { call: "📞", email: "✉️", meeting: "🤝", site_visit: "🏠", whatsapp: "💬", note: "📝", follow_up: "🔔" };
 const OUTCOME_COLORS = { positive: "text-emerald-600", neutral: "text-slate-500", negative: "text-rose-600", no_answer: "text-amber-600", not_applicable: "text-slate-400" };
 const G = "bg-[#F1F6F3] border-[#B7C9C0] text-[#0B3B2E]";
@@ -158,8 +161,8 @@ export default function SaleActivities() {
 
         {/* Filter bar */}
         <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 bg-white px-3 py-1.5 flex-shrink-0">
-          <AppSelect value={typeFilter} onChange={(v) => setType(v ?? "")} options={ACTIVITY_TYPES.map((t) => ({ value: t, label: t.replace(/_/g, " ") }))} placeholder="All Types" size="sm" clearable />
-          <AppSelect value={outcomeFilter} onChange={(v) => setOutcome(v ?? "")} options={OUTCOMES.map((o) => ({ value: o, label: o.replace(/_/g, " ") }))} placeholder="All Outcomes" size="sm" clearable />
+          <AppSelect value={typeFilter} onChange={(v) => setType(v ?? "")} options={ACTIVITY_TYPE_OPTIONS} placeholder="All Types" size="sm" clearable />
+          <AppSelect value={outcomeFilter} onChange={(v) => setOutcome(v ?? "")} options={OUTCOME_OPTIONS} placeholder="All Outcomes" size="sm" clearable />
           <div className="flex items-center gap-1">
             <span className="text-[10px] font-semibold text-slate-500">From</span>
             <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={`${inputCls} w-[130px]`} />
@@ -259,7 +262,7 @@ export default function SaleActivities() {
 
             <div className="flex-1 overflow-y-auto bg-white px-5 py-4 grid grid-cols-2 gap-3">
               <div>
-                <AppSelect label="Type *" value={form.type} onChange={(v) => setForm((f) => ({ ...f, type: v ?? "" }))} options={ACTIVITY_TYPES.map((t) => ({ value: t, label: t.replace(/_/g, " ") }))} size="md" />
+                <AppSelect label="Type *" value={form.type} onChange={(v) => setForm((f) => ({ ...f, type: v ?? "" }))} options={ACTIVITY_TYPE_OPTIONS} size="md" />
               </div>
               <div>
                 <label className={labelCls}>Date & Time *</label>
@@ -270,7 +273,7 @@ export default function SaleActivities() {
                 <input value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} className={`${modalInputCls} h-8`} />
               </div>
               <div>
-                <AppSelect label="Outcome" value={form.outcome} onChange={(v) => setForm((f) => ({ ...f, outcome: v ?? "" }))} options={OUTCOMES.map((o) => ({ value: o, label: o.replace(/_/g, " ") }))} size="md" />
+                <AppSelect label="Outcome" value={form.outcome} onChange={(v) => setForm((f) => ({ ...f, outcome: v ?? "" }))} options={OUTCOME_OPTIONS} size="md" />
               </div>
               <div>
                 <label className={labelCls}>Duration (min)</label>

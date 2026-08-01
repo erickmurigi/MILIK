@@ -351,7 +351,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
     paymentType: "all",
     tenant: tenantId || "all",
     property: fromLedger ? (location.state?.propertyName || "all") : "all",
-    unit: "all",
+    unit: "",
     ledger: "all",
     from: "",
     to: "",
@@ -443,7 +443,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
     if (filters.paymentType && filters.paymentType !== "all") params.paymentType = filters.paymentType;
     if (filters.tenant && filters.tenant !== "all") params.tenant = filters.tenant;
     if (filters.property && filters.property !== "all") params.property = filters.property;
-    if (filters.unit && filters.unit !== "all") params.unit = filters.unit;
+    if (filters.unit) params.unit = filters.unit;
     if (filters.search) params.search = filters.search;
     if (filters.tenantSearch) params.tenantSearch = filters.tenantSearch;
     if (filters.from) params.from = filters.from;
@@ -1765,8 +1765,8 @@ const Receipts = ({ viewMode = "tenant" }) => {
               <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
               <input value={draftFilters.tenantSearch} onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenantSearch: normalizeUppercaseInput(e.target.value) }))} placeholder="Tenant" className="h-7 w-20 shrink-0 rounded border border-slate-200 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
               <AppSelect
-                value={draftFilters.property === "all" ? "" : draftFilters.property}
-                onChange={(v) => setDraftFilters((prev) => ({ ...prev, property: v ?? "all", unit: "all" }))}
+                value={draftFilters.property}
+                onChange={(v) => setDraftFilters((prev) => ({ ...prev, property: v ?? "all", unit: "" }))}
                 options={propertyOptions.filter((p) => p !== "all").map((p) => ({ value: p, label: p }))}
                 placeholder="Property"
                 searchable
@@ -1774,13 +1774,13 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 size="sm"
               />
               <input
-                value={draftFilters.unit === "all" ? "" : draftFilters.unit}
-                onChange={(e) => setDraftFilters((prev) => ({ ...prev, unit: e.target.value || "all" }))}
+                value={draftFilters.unit}
+                onChange={(e) => setDraftFilters((prev) => ({ ...prev, unit: e.target.value || "" }))}
                 placeholder="Unit"
                 className="h-7 w-16 shrink-0 rounded border border-slate-200 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
               <AppSelect
-                value={draftFilters.ledger === "all" ? "" : draftFilters.ledger}
+                value={draftFilters.ledger}
                 onChange={(v) => setDraftFilters((prev) => ({ ...prev, ledger: v ?? "all" }))}
                 options={[{ value: "receipts", label: "Receipts" }, { value: "cashbook", label: "Cashbook" }]}
                 placeholder="Ledger"
@@ -1800,7 +1800,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 size="sm"
               />
               <AppSelect
-                value={draftFilters.paymentType === "all" ? "" : draftFilters.paymentType}
+                value={draftFilters.paymentType}
                 onChange={(v) => setDraftFilters((prev) => ({ ...prev, paymentType: v ?? "all" }))}
                 options={[
                   { value: "rent", label: "Rent" },

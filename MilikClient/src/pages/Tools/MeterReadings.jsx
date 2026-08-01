@@ -319,6 +319,11 @@ const MeterReadings = () => {
   useEffect(() => { if (reduxTenants.length) setTenants(reduxTenants); }, [reduxTenants]);
 
   // Derive utility options from Redux data and the raw /utilities response
+  const propertyOptions = useMemo(
+    () => properties.map((property) => ({ value: property._id, label: property.propertyName || property.name || property.propertyCode })),
+    [properties]
+  );
+
   const utilityOptions = useMemo(() => {
     const names = new Set();
     utilityList.forEach((item) => { if (item?.name) names.add(String(item.name)); });
@@ -1015,7 +1020,7 @@ const MeterReadings = () => {
                         required
                         value={form.property}
                         onChange={(v) => handleFormChange("property", v ?? "")}
-                        options={properties.map((property) => ({ value: property._id, label: property.propertyName || property.name || property.propertyCode }))}
+                        options={propertyOptions}
                         placeholder="Select property"
                         searchable
                         size="md"
@@ -1220,7 +1225,7 @@ const MeterReadings = () => {
                 ))}
                 <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
                 <input type="text" value={draftFilters.search} onChange={setFilter("search")} placeholder="Search…" className="h-7 w-44 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <AppSelect value={draftFilters.property} onChange={(v) => setDraftFilters((prev) => ({ ...prev, property: v ?? "any", unit: "any" }))} options={properties.map((property) => ({ value: property._id, label: property.propertyName || property.name || property.propertyCode }))} placeholder="Property" clearable searchable size="sm" />
+                <AppSelect value={draftFilters.property} onChange={(v) => setDraftFilters((prev) => ({ ...prev, property: v ?? "any", unit: "any" }))} options={propertyOptions} placeholder="Property" clearable searchable size="sm" />
                 <AppSelect value={draftFilters.unit} onChange={(v) => setDraftFilters((prev) => ({ ...prev, unit: v ?? "any" }))} options={unitsForSelectedProperty.map((unit) => ({ value: unit._id, label: unit.unitNumber }))} placeholder="Unit" clearable size="sm" />
                 <AppSelect value={draftFilters.utilityType} onChange={(v) => setDraftFilters((prev) => ({ ...prev, utilityType: v ?? "any" }))} options={utilityOptions.map((utility) => ({ value: utility, label: utility }))} placeholder="Utility" clearable size="sm" />
                 <input type="month" value={draftFilters.billingPeriod} onChange={setFilter("billingPeriod")} className="h-7 w-28 shrink-0 rounded border border-gray-300 px-2 text-xs" />

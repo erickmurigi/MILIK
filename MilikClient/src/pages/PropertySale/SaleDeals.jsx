@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import {
@@ -34,6 +34,10 @@ const blankDealForm = {
 const PAYMENT_TYPES   = ["deposit", "installment", "final_payment", "other"];
 const PAYMENT_METHODS = ["cash", "mpesa", "bank_transfer", "cheque", "other"];
 const fmtLabel        = (s) => (s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+const PAYMENT_TYPE_OPTIONS   = PAYMENT_TYPES.map((t) => ({ value: t, label: fmtLabel(t) }));
+const PAYMENT_METHOD_OPTIONS = PAYMENT_METHODS.map((m) => ({ value: m, label: fmtLabel(m) }));
+const DEAL_STATUS_OPTIONS    = [{ value: "active", label: "Active" }, { value: "closed", label: "Closed" }, { value: "cancelled", label: "Cancelled" }];
 const blankPayForm    = { amount: "", paymentType: "installment", paymentMethod: "bank_transfer", reference: "", paymentDate: todayISO(), notes: "" };
 
 const Modal = ({ title, subtitle, headerCls = "bg-[#0B3B2E]", children, footer, onClose }) => (
@@ -154,6 +158,12 @@ const SaleDeals = () => {
   const listings   = listingsData?.data ?? [];
   const buyers     = buyersData?.data   ?? [];
   const agents     = agentsData?.data   ?? [];
+
+  const buyerOptions        = useMemo(() => buyers.map((b)  => ({ value: b._id, label: `${b.fullName} (${b.buyerNumber})` })), [buyers]);
+  const agentFilterOptions  = useMemo(() => agents.map((a)  => ({ value: a._id, label: `${a.fullName}${a.agentNumber ? ` (${a.agentNumber})` : ""}` })), [agents]);
+  const agentFormOptions    = useMemo(() => agents.map((a)  => ({ value: a._id, label: `${a.fullName} (${a.agentNumber})` })), [agents]);
+  const listingFilterOptions= useMemo(() => listings.map((l) => ({ value: l._id, label: `${l.listingNumber} — ${l.title}` })), [listings]);
+  const listingFormOptions  = useMemo(() => listings.filter((l) => ["available", "reserved", "under_contract"].includes(l.status)).map((l) => ({ value: l._id, label: `${l.listingNumber} — ${l.title}` })), [listings]);
 
   const dealPmts    = (dealPmtsData?.data ?? []).filter((p) => p.status === "paid");
   const dealComm    = (dealCommData?.data ?? [])[0] ?? null;
@@ -387,10 +397,10 @@ const SaleDeals = () => {
         <button type="submit" className="inline-flex h-8 shrink-0 items-center gap-1.5 border border-[#C8511A] bg-[#C8511A] px-3 text-xs font-bold text-white hover:bg-[#a84115]">
           <FaSearch size={9} /> Search
         </button>
-        <AppSelect value={statusFilter} onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }} options={[{ value: "active", label: "Active" }, { value: "closed", label: "Closed" }, { value: "cancelled", label: "Cancelled" }]} placeholder="All Statuses" clearable size="sm" />
-        <AppSelect value={agentFilt} onChange={(v) => { setAgentFilt(v ?? ""); setPage(1); }} options={agents.map((a) => ({ value: a._id, label: `${a.fullName}${a.agentNumber ? ` (${a.agentNumber})` : ""}` }))} placeholder="All Agents" clearable size="sm" searchable />
-        <AppSelect value={buyerFilt} onChange={(v) => { setBuyerFilt(v ?? ""); setPage(1); }} options={buyers.map((b) => ({ value: b._id, label: `${b.fullName}${b.buyerNumber ? ` (${b.buyerNumber})` : ""}` }))} placeholder="All Buyers" clearable size="sm" searchable />
-        <AppSelect value={listingFilt} onChange={(v) => { setListingFilt(v ?? ""); setPage(1); }} options={listings.map((l) => ({ value: l._id, label: `${l.listingNumber} — ${l.title}` }))} placeholder="All Listings" clearable size="sm" searchable />
+        <AppSelect value={statusFilter} onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }} options={DEAL_STATUS_OPTIONS} placeholder="All Statuses" clearable size="sm" />
+        <AppSelect value={agentFilt} onChange={(v) => { setAgentFilt(v ?? ""); setPage(1); }} options={agentFilterOptions} placeholder="All Agents" clearable size="sm" searchable />
+        <AppSelect value={buyerFilt} onChange={(v) => { setBuyerFilt(v ?? ""); setPage(1); }} options={buyerOptions} placeholder="All Buyers" clearable size="sm" searchable />
+        <AppSelect value={listingFilt} onChange={(v) => { setListingFilt(v ?? ""); setPage(1); }} options={listingFilterOptions} placeholder="All Listings" clearable size="sm" searchable />
         <FilterDateRange
           from={dateFrom} to={dateTo}
           onFromChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
@@ -757,13 +767,13 @@ const SaleDeals = () => {
         >
           <div className="grid gap-3 md:grid-cols-2">
             <div>
-              <AppSelect label="Listing / Property" value={form.listing} onChange={(v) => setForm((p) => ({ ...p, listing: v ?? "" }))} options={listings.filter((l) => ["available", "reserved", "under_contract"].includes(l.status)).map((l) => ({ value: l._id, label: `${l.listingNumber} — ${l.title}` }))} placeholder="Select listing…" size="md" searchable />
+              <AppSelect label="Listing / Property" value={form.listing} onChange={(v) => setForm((p) => ({ ...p, listing: v ?? "" }))} options={listingFormOptions} placeholder="Select listing…" size="md" searchable />
             </div>
             <div>
-              <AppSelect label="Buyer" value={form.buyer} onChange={(v) => setForm((p) => ({ ...p, buyer: v ?? "" }))} options={buyers.map((b) => ({ value: b._id, label: `${b.fullName} (${b.buyerNumber})` }))} placeholder="Select buyer…" size="md" searchable />
+              <AppSelect label="Buyer" value={form.buyer} onChange={(v) => setForm((p) => ({ ...p, buyer: v ?? "" }))} options={buyerOptions} placeholder="Select buyer…" size="md" searchable />
             </div>
             <div>
-              <AppSelect label="Sales Agent (Optional)" value={form.agent} onChange={(v) => setForm((p) => ({ ...p, agent: v ?? "", commOverrideEnabled: false, commissionRateOverride: "", commissionTypeOverride: "", commissionAmountOverride: "" }))} options={agents.map((a) => ({ value: a._id, label: `${a.fullName} (${a.agentNumber})` }))} placeholder="No agent" size="md" searchable clearable />
+              <AppSelect label="Sales Agent (Optional)" value={form.agent} onChange={(v) => setForm((p) => ({ ...p, agent: v ?? "", commOverrideEnabled: false, commissionRateOverride: "", commissionTypeOverride: "", commissionAmountOverride: "" }))} options={agentFormOptions} placeholder="No agent" size="md" searchable clearable />
             </div>
             {!editingId && form.agent && (() => {
               const selAgent = agents.find((a) => a._id === form.agent);
@@ -946,10 +956,10 @@ const SaleDeals = () => {
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             <div>
-              <AppSelect label="Payment Type" value={payForm.paymentType} onChange={(v) => setPayForm((f) => ({ ...f, paymentType: v ?? "" }))} options={PAYMENT_TYPES.map((t) => ({ value: t, label: fmtLabel(t) }))} size="md" />
+              <AppSelect label="Payment Type" value={payForm.paymentType} onChange={(v) => setPayForm((f) => ({ ...f, paymentType: v ?? "" }))} options={PAYMENT_TYPE_OPTIONS} size="md" />
             </div>
             <div>
-              <AppSelect label="Method" value={payForm.paymentMethod} onChange={(v) => setPayForm((f) => ({ ...f, paymentMethod: v ?? "" }))} options={PAYMENT_METHODS.map((m) => ({ value: m, label: fmtLabel(m) }))} size="md" />
+              <AppSelect label="Method" value={payForm.paymentMethod} onChange={(v) => setPayForm((f) => ({ ...f, paymentMethod: v ?? "" }))} options={PAYMENT_METHOD_OPTIONS} size="md" />
             </div>
             <div>
               <label className={labelCls}>Amount (KES)</label>

@@ -663,6 +663,48 @@ const InvoiceNotes = () => {
     };
   }, [filteredNotes]);
 
+  // ── Memoised option arrays (prevent re-allocation on every render) ──────────
+  const propertySelectOptions = useMemo(
+    () => properties.map((p) => ({ value: p._id, label: p.propertyName || p.propertyCode || "Unnamed Property" })),
+    [properties]
+  );
+
+  const filterTenantOptions = useMemo(
+    () => filterScopedTenants.map((t) => buildTenantOption(t)),
+    [filterScopedTenants]
+  );
+
+  const modalTenantOptions = useMemo(
+    () => propertyScopedTenants.map((tenant) => buildTenantOption(tenant)),
+    [propertyScopedTenants]
+  );
+
+  const sourceInvoiceSelectOptions = useMemo(
+    () => sourceInvoiceOptions.map((invoice) => ({
+      value: String(invoice._id),
+      label: `${invoice.invoiceNumber || "-"} | ${invoice.category || "-"} | ${formatCurrency(invoice.remainingCreditableAmount ?? 0)}`,
+    })),
+    [sourceInvoiceOptions]
+  );
+
+  const debitItemSelectOptions = useMemo(
+    () => filteredDebitInvoiceItemOptions.map((item) => ({
+      value: item.key,
+      label: `${item.label} | ${humanizeCategory(item.category)} | ${item.anchorInvoice?.invoiceNumber || "Standalone"}`,
+    })),
+    [filteredDebitInvoiceItemOptions]
+  );
+
+  const chargeTypeOptions = useMemo(
+    () => chargeTypes.map((item) => ({ value: item.value, label: item.label })),
+    [chargeTypes]
+  );
+
+  const postingAccountOptions = useMemo(
+    () => postingAccounts.map((account) => ({ value: account._id, label: `${account.code} - ${account.name}` })),
+    [postingAccounts]
+  );
+
   const resetModalForm = () => {
     setPropertyId("");
     setTenantScope("active");
@@ -839,7 +881,7 @@ const InvoiceNotes = () => {
                 <AppSelect
                   value={filters.propertyId}
                   onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "", tenantId: "" }))}
-                  options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.propertyCode || "Unnamed Property" }))}
+                  options={propertySelectOptions}
                   placeholder="Property"
                   searchable
                   clearable
@@ -858,7 +900,7 @@ const InvoiceNotes = () => {
                 <AppSelect
                   value={filters.tenantId}
                   onChange={(v) => setFilters((prev) => ({ ...prev, tenantId: v ?? "" }))}
-                  options={filterScopedTenants.map((t) => buildTenantOption(t))}
+                  options={filterTenantOptions}
                   placeholder="Tenant"
                   searchable
                   clearable
@@ -1149,7 +1191,7 @@ const InvoiceNotes = () => {
                     <AppSelect
                       value={propertyId}
                       onChange={(v) => setPropertyId(v ?? "")}
-                      options={properties.map((property) => ({ value: property._id, label: property.propertyName || property.propertyCode || "Unnamed Property" }))}
+                      options={propertySelectOptions}
                       placeholder="Select property"
                       searchable
                       size="md"
@@ -1177,7 +1219,7 @@ const InvoiceNotes = () => {
                     <AppSelect
                       value={tenantId}
                       onChange={(v) => setTenantId(v ?? "")}
-                      options={propertyScopedTenants.map((tenant) => buildTenantOption(tenant))}
+                      options={modalTenantOptions}
                       placeholder={propertyId ? "Select tenant" : "Select property first"}
                       searchable
                       disabled={!propertyId}
@@ -1194,7 +1236,7 @@ const InvoiceNotes = () => {
                       <AppSelect
                         value={sourceInvoiceId}
                         onChange={(v) => setSourceInvoiceId(v ?? "")}
-                        options={sourceInvoiceOptions.map((invoice) => ({ value: String(invoice._id), label: `${invoice.invoiceNumber || "-"} | ${invoice.category || "-"} | ${formatCurrency(invoice.remainingCreditableAmount ?? 0)}` }))}
+                        options={sourceInvoiceSelectOptions}
                         placeholder={tenantId ? (sourceInvoiceOptions.length ? "Select source invoice" : "No matching open posted invoices") : "Select tenant first"}
                         searchable
                         disabled={!tenantId}
@@ -1215,10 +1257,7 @@ const InvoiceNotes = () => {
                       <AppSelect
                         value={invoiceItemSelection}
                         onChange={(v) => setInvoiceItemSelection(v ?? "")}
-                        options={filteredDebitInvoiceItemOptions.map((item) => ({
-                          value: item.key,
-                          label: `${item.label} | ${humanizeCategory(item.category)} | ${item.anchorInvoice?.invoiceNumber || "Standalone"}`,
-                        }))}
+                        options={debitItemSelectOptions}
                         placeholder={tenantId ? (debitInvoiceItemOptions.length ? "Select charge item" : "No charge items available") : "Select tenant first"}
                         disabled={!tenantId}
                         searchable
@@ -1233,7 +1272,7 @@ const InvoiceNotes = () => {
                       <AppSelect
                         value={category}
                         onChange={(v) => setCategory(v ?? "")}
-                        options={chargeTypes.map((item) => ({ value: item.value, label: item.label }))}
+                        options={chargeTypeOptions}
                         placeholder="Select charge type"
                         searchable
                         size="md"
@@ -1261,7 +1300,7 @@ const InvoiceNotes = () => {
                     <AppSelect
                       value={chartAccountId}
                       onChange={(v) => setChartAccountId(v ?? "")}
-                      options={postingAccounts.map((account) => ({ value: account._id, label: `${account.code} - ${account.name}` }))}
+                      options={postingAccountOptions}
                       placeholder="Use existing charge mapping"
                       searchable
                       size="md"

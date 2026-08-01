@@ -35,6 +35,10 @@ const YEARS = Array.from({ length: 7 }, (_, i) => currentYear - 3 + i);
 
 const LIMIT = 20;
 
+const MONTH_OPTIONS          = MONTHS.slice(1).map((m, i) => ({ value: i + 1, label: m }));
+const YEAR_OPTIONS           = YEARS.map((y) => ({ value: y, label: String(y) }));
+const PAYROLL_STATUS_OPTIONS = ["Draft", "Processing", "Approved", "Paid", "Closed", "Reversed"].map((s) => ({ value: s, label: s }));
+
 function NewPeriodForm({ onSave, onCancel, saving }) {
   const [month, setMonth] = useState(currentMonth);
   const [year, setYear]   = useState(currentYear);
@@ -47,10 +51,10 @@ function NewPeriodForm({ onSave, onCancel, saving }) {
       <div className="text-xs font-black text-slate-700 uppercase tracking-widest">New Payroll Period</div>
       <div className="grid grid-cols-3 gap-3">
         <div>
-          <AppSelect label="Month" required value={month} onChange={(v) => setMonth(Number(v ?? month))} options={MONTHS.slice(1).map((m, i) => ({ value: i + 1, label: m }))} size="md" />
+          <AppSelect label="Month" required value={month} onChange={(v) => setMonth(Number(v ?? month))} options={MONTH_OPTIONS} size="md" />
         </div>
         <div>
-          <AppSelect label="Year" required value={year} onChange={(v) => setYear(Number(v ?? year))} options={YEARS.map((y) => ({ value: y, label: String(y) }))} size="md" />
+          <AppSelect label="Year" required value={year} onChange={(v) => setYear(Number(v ?? year))} options={YEAR_OPTIONS} size="md" />
         </div>
         <div>
           <label className="mb-0.5 block text-xs font-semibold text-slate-700">Notes</label>
@@ -190,8 +194,8 @@ export default function PayrollPeriods() {
         <div className="flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-4 py-2">
           <div className="flex flex-wrap items-center gap-2">
             <FaFilter size={9} className="text-slate-400" />
-            <AppSelect value={yearFilter} onChange={(v) => setYearFilter(v ?? "")} options={YEARS.map((y) => ({ value: y, label: String(y) }))} placeholder="All years" clearable size="sm" />
-            <AppSelect value={statusFilter} onChange={(v) => setStatusFilter(v ?? "")} options={["Draft","Processing","Approved","Paid","Closed","Reversed"].map((s) => ({ value: s, label: s }))} placeholder="All statuses" clearable size="sm" />
+            <AppSelect value={yearFilter} onChange={(v) => setYearFilter(v ?? "")} options={YEAR_OPTIONS} placeholder="All years" clearable size="sm" />
+            <AppSelect value={statusFilter} onChange={(v) => setStatusFilter(v ?? "")} options={PAYROLL_STATUS_OPTIONS} placeholder="All statuses" clearable size="sm" />
             {hasFilters && (
               <button
                 onClick={() => { setYearFilter(''); setStatusFilter(''); }}

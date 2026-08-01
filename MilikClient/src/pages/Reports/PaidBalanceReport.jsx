@@ -390,7 +390,7 @@ const PaidBalanceReport = () => {
                   size="sm"
                 />
                 <AppSelect
-                  value={filters.status === "all" ? "" : filters.status}
+                  value={filters.status}
                   onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))}
                   options={[
                     { value: "owing", label: "Owing" },

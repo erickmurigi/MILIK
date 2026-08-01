@@ -107,7 +107,7 @@ export default function HRFinancials() {
   const [acctLoaded, setAcctLoaded]           = useState(false);
 
   const [search, setSearch]           = useTabState("/hr/financials:search", "");
-  const [statusFilter, setStatusFilter] = useTabState("/hr/financials:statusFilter", "all");
+  const [statusFilter, setStatusFilter] = useTabState("/hr/financials:statusFilter", "");
   const [startDate, setStartDate]     = useTabState("/hr/financials:startDate", () => firstOfMonthISO());
   const [endDate, setEndDate]         = useTabState("/hr/financials:endDate", () => todayISO());
 
@@ -121,7 +121,7 @@ export default function HRFinancials() {
       const { data: rows } = await getJournalEntries({
         business:     currentCompany._id,
         sourceModule: "hr",
-        status:       statusFilter !== "all" ? statusFilter : undefined,
+        status:       statusFilter || undefined,
         startDate:    startDate || undefined,
         endDate:      endDate   || undefined,
         search:       debouncedSearch || undefined,
@@ -318,8 +318,8 @@ export default function HRFinancials() {
                   )}
                 </div>
                 <AppSelect
-                  value={statusFilter === "all" ? "" : statusFilter}
-                  onChange={(v) => setStatusFilter(v ?? "all")}
+                  value={statusFilter}
+                  onChange={(v) => setStatusFilter(v ?? "")}
                   options={[
                     { value: "draft", label: "Draft" },
                     { value: "posted", label: "Posted" },
@@ -329,9 +329,9 @@ export default function HRFinancials() {
                   clearable
                   size="sm"
                 />
-                {(search || statusFilter !== "all") && (
+                {(search || statusFilter) && (
                   <button
-                    onClick={() => { setSearch(""); setStatusFilter("all"); }}
+                    onClick={() => { setSearch(""); setStatusFilter(""); }}
                     className="text-[10px] font-bold text-slate-500 hover:text-rose-600 transition-colors"
                   >
                     Clear filters

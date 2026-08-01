@@ -12,6 +12,8 @@ import AppSelect from "../../components/common/AppSelect";
 
 const CATEGORIES = ['Performance', 'Attendance', 'Skills', 'Leadership', 'Financial', 'Customer', 'Other'];
 const UNITS      = ['Percentage', 'Score', 'Count', 'KES', 'Custom'];
+const CATEGORY_OPTIONS = CATEGORIES.map((c) => ({ value: c, label: c }));
+const UNIT_OPTIONS     = UNITS.map((u) => ({ value: u, label: u }));
 const CAT_COLORS = {
   Performance: 'bg-blue-50 text-blue-700 border-blue-200',
   Attendance:  'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -136,7 +138,7 @@ export default function KpiLibrary() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <AppSelect value={catFilter} onChange={(v) => setCatFilter(v ?? "")} options={CATEGORIES.map((c) => ({ value: c, label: c }))} placeholder="All categories" clearable size="sm" />
+          <AppSelect value={catFilter} onChange={(v) => setCatFilter(v ?? "")} options={CATEGORY_OPTIONS} placeholder="All categories" clearable size="sm" />
           <button
             onClick={() => setActiveOnly((v) => !v)}
             className={`flex h-7 items-center gap-1 whitespace-nowrap rounded border px-2.5 text-[11px] font-semibold transition-colors ${
@@ -263,10 +265,10 @@ export default function KpiLibrary() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <AppSelect label="Category" value={form.category} onChange={(v) => setForm((f) => ({ ...f, category: v ?? f.category }))} options={CATEGORIES.map((c) => ({ value: c, label: c }))} size="md" />
+                  <AppSelect label="Category" value={form.category} onChange={(v) => setForm((f) => ({ ...f, category: v ?? f.category }))} options={CATEGORY_OPTIONS} size="md" />
                 </div>
                 <div>
-                  <AppSelect label="Unit" value={form.unit} onChange={(v) => setForm((f) => ({ ...f, unit: v ?? f.unit }))} options={UNITS.map((u) => ({ value: u, label: u }))} size="md" />
+                  <AppSelect label="Unit" value={form.unit} onChange={(v) => setForm((f) => ({ ...f, unit: v ?? f.unit }))} options={UNIT_OPTIONS} size="md" />
                 </div>
               </div>
               <div className="grid grid-cols-2 items-end gap-3">

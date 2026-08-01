@@ -242,6 +242,10 @@ const TenantDeposits = () => {
     () => properties.filter((property) => normalizeStatus(property?.status || "active") !== "archived"),
     [properties]
   );
+  const activePropertyOptions = useMemo(
+    () => activeProperties.map((property) => ({ value: property._id, label: formatPropertyName(property) })),
+    [activeProperties]
+  );
 
   const activeDepositTypes = useMemo(() => {
     const rows = Array.isArray(depositTypes) ? depositTypes : [];
@@ -770,7 +774,7 @@ const TenantDeposits = () => {
                   placeholder="Property"
                   value={draftFilters.propertyId}
                   onChange={(v) => setDraftFilters((prev) => ({ ...prev, propertyId: v ?? "any", unitId: "any" }))}
-                  options={activeProperties.map((property) => ({ value: property._id, label: formatPropertyName(property) }))}
+                  options={activePropertyOptions}
                 />
                 <AppSelect
                   size="sm"
@@ -1031,7 +1035,7 @@ const TenantDeposits = () => {
                       setTenantPropertyFilter(v ?? "any");
                       setDepositForm((prev) => ({ ...prev, tenantId: "" }));
                     }}
-                    options={activeProperties.map((property) => ({ value: property._id, label: formatPropertyName(property) }))}
+                    options={activePropertyOptions}
                   />
                 </div>
                 <div>

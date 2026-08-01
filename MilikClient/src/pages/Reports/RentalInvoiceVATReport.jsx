@@ -28,7 +28,7 @@ const RentalInvoiceVATReport = () => {
   const [loading, setLoading] = useState(false);
   const [properties, setProperties] = useState([]);
   const [rows, setRows] = useState([]);
-  const [filters, setFilters] = useTabState("/invoices/vat:filters", { propertyId: "all", category: "all", search: "" });
+  const [filters, setFilters] = useTabState("/invoices/vat:filters", { propertyId: "", category: "", search: "" });
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [currentPage, setCurrentPage] = useTabState("/invoices/vat:currentPage", 1);
 
@@ -67,8 +67,8 @@ const RentalInvoiceVATReport = () => {
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
       const propertyId = row?.property?._id || row?.property || "";
-      if (filters.propertyId !== "all" && String(propertyId) !== String(filters.propertyId)) return false;
-      if (filters.category !== "all" && String(row?.category || "") !== filters.category) return false;
+      if (filters.propertyId && String(propertyId) !== String(filters.propertyId)) return false;
+      if (filters.category && String(row?.category || "") !== filters.category) return false;
       const haystack = [
         row?.invoiceNumber,
         row?.tenant?.tenantName,
@@ -219,8 +219,8 @@ const RentalInvoiceVATReport = () => {
               <p className="vat-print-subtitle">Taxable rental invoices for the selected filters.</p>
             </div>
             <div className="vat-print-meta">
-              <div><strong>Property:</strong> {filters.propertyId === "all" ? "All properties" : (properties.find((p) => String(p._id) === filters.propertyId)?.propertyName || "Selected")}</div>
-              <div><strong>Category:</strong> {filters.category === "all" ? "All charge types" : filters.category.replace(/_/g, " ")}</div>
+              <div><strong>Property:</strong> {filters.propertyId ? (properties.find((p) => String(p._id) === filters.propertyId)?.propertyName || "Selected") : "All properties"}</div>
+              <div><strong>Category:</strong> {filters.category ? filters.category.replace(/_/g, " ") : "All charge types"}</div>
               <div><strong>Generated:</strong> {new Date().toLocaleString()}</div>
               <div><strong>Prepared by:</strong> {preparedBy}</div>
             </div>
@@ -283,8 +283,8 @@ const RentalInvoiceVATReport = () => {
                   />
                 </div>
                 <AppSelect
-                  value={filters.propertyId === "all" ? "" : filters.propertyId}
-                  onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "all" }))}
+                  value={filters.propertyId}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "" }))}
                   options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))}
                   placeholder="All properties"
                   searchable
@@ -292,8 +292,8 @@ const RentalInvoiceVATReport = () => {
                   size="sm"
                 />
                 <AppSelect
-                  value={filters.category === "all" ? "" : filters.category}
-                  onChange={(v) => setFilters((prev) => ({ ...prev, category: v ?? "all" }))}
+                  value={filters.category}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, category: v ?? "" }))}
                   options={[
                     { value: "RENT_CHARGE", label: "Rent" },
                     { value: "UTILITY_CHARGE", label: "Utility" },

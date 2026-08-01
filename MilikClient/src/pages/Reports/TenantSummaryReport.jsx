@@ -27,7 +27,7 @@ const TenantSummaryReport = () => {
   const [tenants, setTenants] = useState([]);
   const [properties, setProperties] = useState([]);
   const [invoices, setInvoices] = useState([]);
-  const [filters, setFilters] = useState({ propertyId: "all", status: "all", search: "" });
+  const [filters, setFilters] = useState({ propertyId: "", status: "", search: "" });
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -107,8 +107,8 @@ const TenantSummaryReport = () => {
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
-      if (filters.propertyId !== "all" && String(row.propertyId) !== String(filters.propertyId)) return false;
-      if (filters.status !== "all" && row.status !== filters.status) return false;
+      if (filters.propertyId && String(row.propertyId) !== String(filters.propertyId)) return false;
+      if (filters.status && row.status !== filters.status) return false;
       const hay = [row.tenantName, row.email, row.phone, row.property, row.unitNumber].filter(Boolean).join(" ").toLowerCase();
       return !filters.search.trim() || hay.includes(filters.search.trim().toLowerCase());
     });
@@ -237,8 +237,8 @@ const TenantSummaryReport = () => {
               <h1 className="ts-print-title">Tenant Summary Report</h1>
             </div>
             <div className="ts-print-meta">
-              <div><strong>Property:</strong> {filters.propertyId === "all" ? "All properties" : (propertyById.get(filters.propertyId)?.propertyName || "Selected")}</div>
-              <div><strong>Status:</strong> {filters.status === "all" ? "All tenants" : filters.status}</div>
+              <div><strong>Property:</strong> {filters.propertyId ? (propertyById.get(filters.propertyId)?.propertyName || "Selected") : "All properties"}</div>
+              <div><strong>Status:</strong> {filters.status || "All tenants"}</div>
               <div><strong>Generated:</strong> {new Date().toLocaleString()}</div>
               <div><strong>Prepared by:</strong> {preparedBy}</div>
             </div>
@@ -297,8 +297,8 @@ const TenantSummaryReport = () => {
                   />
                 </div>
                 <AppSelect
-                  value={filters.propertyId === "all" ? "" : filters.propertyId}
-                  onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "all" }))}
+                  value={filters.propertyId}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "" }))}
                   options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))}
                   placeholder="All properties"
                   searchable
@@ -306,8 +306,8 @@ const TenantSummaryReport = () => {
                   size="sm"
                 />
                 <AppSelect
-                  value={filters.status === "all" ? "" : filters.status}
-                  onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))}
+                  value={filters.status}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "" }))}
                   options={[
                     { value: "active", label: "Active only" },
                     { value: "inactive", label: "Inactive only" },

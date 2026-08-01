@@ -29,6 +29,9 @@ const TYPE_BADGE = {
 };
 
 const initials = (s = '', o = '') => `${s.charAt(0)}${o.charAt(0)}`.toUpperCase() || 'EM';
+
+const STATUS_OPTIONS = ["Active", "Probation", "Suspended", "Terminated"].map((s) => ({ value: s, label: s }));
+const TYPE_OPTIONS   = ["Permanent", "Contract", "Casual", "Intern"].map((t) => ({ value: t, label: t }));
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 
 const Pagination = ({ page, totalPages, total, onPage }) => (
@@ -46,9 +49,9 @@ export default function Employees() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [search, setSearch] = useTabState('/hr/employees:search', '');
-  const [deptFilter, setDeptFilter] = useTabState('/hr/employees:deptFilter', 'all');
-  const [statusFilter, setStatusFilter] = useTabState('/hr/employees:statusFilter', 'all');
-  const [typeFilter, setTypeFilter] = useTabState('/hr/employees:typeFilter', 'all');
+  const [deptFilter, setDeptFilter] = useTabState('/hr/employees:deptFilter', '');
+  const [statusFilter, setStatusFilter] = useTabState('/hr/employees:statusFilter', '');
+  const [typeFilter, setTypeFilter] = useTabState('/hr/employees:typeFilter', '');
   const [page, setPage] = useTabState('/hr/employees:page', 1);
   const [confirm, setConfirm] = useState({ isOpen: false });
 
@@ -57,9 +60,9 @@ export default function Employees() {
     queryFn: async () => {
       const params = { page, limit: 25 };
       if (search) params.search = search;
-      if (deptFilter !== 'all') params.department = deptFilter;
-      if (statusFilter !== 'all') params.status = statusFilter;
-      if (typeFilter !== 'all') params.employmentType = typeFilter;
+      if (deptFilter) params.department = deptFilter;
+      if (statusFilter) params.status = statusFilter;
+      if (typeFilter) params.employmentType = typeFilter;
       const res = await adminRequests.get('/hr/employees', { params });
       return res.data;
     },
@@ -285,9 +288,9 @@ export default function Employees() {
                 className="h-8 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
             </div>
-            <AppSelect value={deptFilter === 'all' ? '' : deptFilter} onChange={(v) => setDeptFilter(v ?? 'all')} options={departments.map((d) => ({ value: d._id, label: d.name }))} placeholder="All departments" clearable searchable size="sm" />
-            <AppSelect value={statusFilter === 'all' ? '' : statusFilter} onChange={(v) => setStatusFilter(v ?? 'all')} options={["Active","Probation","Suspended","Terminated"].map((s) => ({ value: s, label: s }))} placeholder="All statuses" clearable size="sm" />
-            <AppSelect value={typeFilter === 'all' ? '' : typeFilter} onChange={(v) => setTypeFilter(v ?? 'all')} options={["Permanent","Contract","Casual","Intern"].map((t) => ({ value: t, label: t }))} placeholder="All types" clearable size="sm" />
+            <AppSelect value={deptFilter} onChange={(v) => setDeptFilter(v ?? '')} options={departments.map((d) => ({ value: d._id, label: d.name }))} placeholder="All departments" clearable searchable size="sm" />
+            <AppSelect value={statusFilter} onChange={(v) => setStatusFilter(v ?? '')} options={STATUS_OPTIONS} placeholder="All statuses" clearable size="sm" />
+            <AppSelect value={typeFilter} onChange={(v) => setTypeFilter(v ?? '')} options={TYPE_OPTIONS} placeholder="All types" clearable size="sm" />
             <span className="ml-auto text-[11px] font-semibold text-slate-500">{total} result{total !== 1 ? 's' : ''}</span>
           </div>
         </div>

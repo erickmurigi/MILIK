@@ -1075,6 +1075,10 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
     () => getActiveTaxCodes(normalizedTaxConfig),
     [normalizedTaxConfig]
   );
+  const taxCodeOptions = useMemo(
+    () => activeTaxCodes.map((code) => ({ value: code.key, label: `${code.name} (${Number(code.rate || 0)}%)` })),
+    [activeTaxCodes]
+  );
   const companyTaxEnabled = Boolean(normalizedTaxConfig?.taxSettings?.enabled);
   const normalizedBillingPeriods = useMemo(() => {
     const source = Array.isArray(companyBillingPeriods) && companyBillingPeriods.length > 0
@@ -1594,6 +1598,10 @@ const getTenantPropertyId = useCallback((tenant) => {
       return propertyStatus === "active";
     });
   }, [propertiesFromStore]);
+  const activePropertyOptions = useMemo(
+    () => [{ value: "all", label: "All active properties" }, ...activeProperties.map((property) => ({ value: property._id, label: property.propertyName || property.name }))],
+    [activeProperties]
+  );
 
   const singleBookingTenantOptions = useMemo(() => {
     const normalizedSearch = String(singleBookingTenantSearch || "").trim().toLowerCase();
@@ -3479,7 +3487,7 @@ const createInvoiceForTenant = async (
                       setSingleBookingTenantDropdownOpen(false);
                       setSingleBookingForm((prev) => ({ ...prev, tenantId: "" }));
                     }}
-                    options={[{ value: "all", label: "All active properties" }, ...activeProperties.map((property) => ({ value: property._id, label: property.propertyName || property.name }))]}
+                    options={activePropertyOptions}
                     searchable
                     size="md"
                   />
@@ -3663,7 +3671,7 @@ const createInvoiceForTenant = async (
                   <AppSelect
                     value={singleBookingForm.taxCodeKey}
                     onChange={(v) => setSingleBookingForm((prev) => ({ ...prev, taxCodeKey: v ?? "vat_standard" }))}
-                    options={activeTaxCodes.map((code) => ({ value: code.key, label: `${code.name} (${Number(code.rate || 0)}%)` }))}
+                    options={taxCodeOptions}
                     disabled={singleBookingForm.taxHandling === "non_taxable"}
                     size="md"
                   />
@@ -3797,7 +3805,7 @@ const createInvoiceForTenant = async (
                     onChange={(v) => {
                       setBatchBookingForm((prev) => ({ ...prev, propertyId: v ?? "all" }));
                     }}
-                    options={[{ value: "all", label: "All active properties" }, ...activeProperties.map((property) => ({ value: property._id, label: property.propertyName || property.name }))]}
+                    options={activePropertyOptions}
                     searchable
                     size="md"
                   />
@@ -3927,7 +3935,7 @@ const createInvoiceForTenant = async (
                   <AppSelect
                     value={batchBookingForm.taxCodeKey}
                     onChange={(v) => setBatchBookingForm((prev) => ({ ...prev, taxCodeKey: v ?? "vat_standard" }))}
-                    options={activeTaxCodes.map((code) => ({ value: code.key, label: `${code.name} (${Number(code.rate || 0)}%)` }))}
+                    options={taxCodeOptions}
                     disabled={batchBookingForm.taxHandling === "non_taxable"}
                     size="md"
                   />

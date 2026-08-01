@@ -149,8 +149,8 @@ export default function LeaveApplications() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [page, setPage]         = useTabState('/hr/leave:page', 1);
-  const [statusFilter, setStatusFilter] = useTabState('/hr/leave:statusFilter', 'all');
-  const [typeFilter, setTypeFilter]     = useTabState('/hr/leave:typeFilter', 'all');
+  const [statusFilter, setStatusFilter] = useTabState('/hr/leave:statusFilter', '');
+  const [typeFilter, setTypeFilter]     = useTabState('/hr/leave:typeFilter', '');
   const [showApply, setShowApply] = useState(false);
   const [confirm, setConfirm]   = useState({ isOpen: false });
 
@@ -158,8 +158,8 @@ export default function LeaveApplications() {
     queryKey: ['hr-leave-applications', page, statusFilter, typeFilter],
     queryFn: async () => {
       const params = { page, limit: 25 };
-      if (statusFilter !== 'all') params.status = statusFilter;
-      if (typeFilter   !== 'all') params.leaveType = typeFilter;
+      if (statusFilter) params.status = statusFilter;
+      if (typeFilter)   params.leaveType = typeFilter;
       const res = await adminRequests.get('/hr/leave-applications', { params });
       return res.data;
     },
@@ -259,8 +259,8 @@ export default function LeaveApplications() {
         <div className="flex-shrink-0 border-b border-slate-200 bg-slate-50/95 px-4 py-2">
           <div className="flex flex-wrap items-center gap-2">
             <AppSelect
-              value={statusFilter === 'all' ? '' : statusFilter}
-              onChange={(v) => setStatusFilter(v ?? 'all')}
+              value={statusFilter}
+              onChange={(v) => setStatusFilter(v ?? '')}
               options={[
                 { value: 'Pending', label: 'Pending' },
                 { value: 'Approved', label: 'Approved' },
@@ -272,8 +272,8 @@ export default function LeaveApplications() {
               size="sm"
             />
             <AppSelect
-              value={typeFilter === 'all' ? '' : typeFilter}
-              onChange={(v) => setTypeFilter(v ?? 'all')}
+              value={typeFilter}
+              onChange={(v) => setTypeFilter(v ?? '')}
               options={leaveTypes.map((l) => ({ value: l._id, label: l.name }))}
               placeholder="All leave types"
               clearable

@@ -37,6 +37,10 @@ const PAGE_SIZE       = 50;
 
 const fmtLabel = (s) => (s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
+const PAYMENT_TYPE_OPTIONS   = PAYMENT_TYPES.map((t) => ({ value: t, label: fmtLabel(t) }));
+const PAYMENT_METHOD_OPTIONS = PAYMENT_METHODS.map((m) => ({ value: m, label: fmtLabel(m) }));
+const STATUS_OPTIONS         = ["paid", "pending", "cancelled"].map((s) => ({ value: s, label: fmtLabel(s) }));
+
 const EMPTY_FORM = {
   deal: "", amount: "", paymentType: "installment",
   paymentMethod: "bank_transfer", cashbook: "",
@@ -252,9 +256,9 @@ const SalePayments = () => {
           minWidth="130px"
         />
         <AppSelect value={dealFilter} onChange={(v) => { setDealFilter(v ?? ""); setPage(1); }} options={deals.map((d) => ({ value: d._id, label: `${d.dealNumber} — ${d.listing?.title || d.listing?.listingNumber || ""}` }))} placeholder="All Deals" clearable size="sm" searchable />
-        <AppSelect value={typeFilter} onChange={(v) => { setTypeFilter(v ?? ""); setPage(1); }} options={PAYMENT_TYPES.map((t) => ({ value: t, label: fmtLabel(t) }))} placeholder="All Types" clearable size="sm" />
-        <AppSelect value={methodFilter} onChange={(v) => { setMethodFilter(v ?? ""); setPage(1); }} options={PAYMENT_METHODS.map((m) => ({ value: m, label: fmtLabel(m) }))} placeholder="All Methods" clearable size="sm" />
-        <AppSelect value={statusFilter} onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }} options={["paid", "pending", "cancelled"].map((s) => ({ value: s, label: fmtLabel(s) }))} placeholder="All Statuses" clearable size="sm" />
+        <AppSelect value={typeFilter} onChange={(v) => { setTypeFilter(v ?? ""); setPage(1); }} options={PAYMENT_TYPE_OPTIONS} placeholder="All Types" clearable size="sm" />
+        <AppSelect value={methodFilter} onChange={(v) => { setMethodFilter(v ?? ""); setPage(1); }} options={PAYMENT_METHOD_OPTIONS} placeholder="All Methods" clearable size="sm" />
+        <AppSelect value={statusFilter} onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }} options={STATUS_OPTIONS} placeholder="All Statuses" clearable size="sm" />
         <FilterDateRange
           from={dateFrom} to={dateTo}
           onFromChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
@@ -368,10 +372,10 @@ const SalePayments = () => {
           <div className="flex flex-col gap-3">
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <AppSelect label="Type" value={editForm.paymentType} onChange={(v) => setEditForm((f) => ({ ...f, paymentType: v ?? "" }))} options={PAYMENT_TYPES.map((t) => ({ value: t, label: fmtLabel(t) }))} size="md" />
+                <AppSelect label="Type" value={editForm.paymentType} onChange={(v) => setEditForm((f) => ({ ...f, paymentType: v ?? "" }))} options={PAYMENT_TYPE_OPTIONS} size="md" />
               </div>
               <div>
-                <AppSelect label="Method" value={editForm.paymentMethod} onChange={(v) => setEditForm((f) => ({ ...f, paymentMethod: v ?? "" }))} options={PAYMENT_METHODS.map((m) => ({ value: m, label: fmtLabel(m) }))} size="md" />
+                <AppSelect label="Method" value={editForm.paymentMethod} onChange={(v) => setEditForm((f) => ({ ...f, paymentMethod: v ?? "" }))} options={PAYMENT_METHOD_OPTIONS} size="md" />
               </div>
             </div>
             {/* Cashbook — determines which bank/cash GL account is debited */}
@@ -462,10 +466,10 @@ const SalePayments = () => {
             {/* Type + Method */}
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <AppSelect label="Type *" value={form.paymentType} onChange={(v) => setForm((f) => ({ ...f, paymentType: v ?? "" }))} options={PAYMENT_TYPES.map((t) => ({ value: t, label: fmtLabel(t) }))} size="md" />
+                <AppSelect label="Type *" value={form.paymentType} onChange={(v) => setForm((f) => ({ ...f, paymentType: v ?? "" }))} options={PAYMENT_TYPE_OPTIONS} size="md" />
               </div>
               <div>
-                <AppSelect label="Method *" value={form.paymentMethod} onChange={(v) => setForm((f) => ({ ...f, paymentMethod: v ?? "" }))} options={PAYMENT_METHODS.map((m) => ({ value: m, label: fmtLabel(m) }))} size="md" />
+                <AppSelect label="Method *" value={form.paymentMethod} onChange={(v) => setForm((f) => ({ ...f, paymentMethod: v ?? "" }))} options={PAYMENT_METHOD_OPTIONS} size="md" />
               </div>
             </div>
 

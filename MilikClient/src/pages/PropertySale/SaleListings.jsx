@@ -29,6 +29,10 @@ const SIZE_UNITS     = ["sqm", "sqft", "acres", "hectares"];
 const STATUSES       = ["available", "reserved", "under_contract", "sold", "withdrawn"];
 const PAGE_SIZE      = 50;
 
+const PROPERTY_TYPE_OPTIONS = PROPERTY_TYPES.map((t) => ({ value: t, label: t }));
+const SIZE_UNIT_OPTIONS     = SIZE_UNITS.map((u) => ({ value: u, label: u }));
+const STATUS_OPTIONS        = STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }));
+
 const statusBadge = (status) => ({
   available:      "border-emerald-200 bg-emerald-50 text-emerald-700",
   reserved:       "border-amber-200 bg-amber-50 text-amber-700",
@@ -326,8 +330,8 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           placeholder="Search listings..."
         />
-        <AppSelect value={statusFilt} onChange={(v) => { setStatusFilt(v ?? ""); setPage(1); }} options={STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }))} placeholder="All Statuses" clearable size="sm" />
-        <AppSelect value={typeFilt} onChange={(v) => { setTypeFilt(v ?? ""); setPage(1); }} options={PROPERTY_TYPES.map((t) => ({ value: t, label: t }))} placeholder="All Types" clearable size="sm" />
+        <AppSelect value={statusFilt} onChange={(v) => { setStatusFilt(v ?? ""); setPage(1); }} options={STATUS_OPTIONS} placeholder="All Statuses" clearable size="sm" />
+        <AppSelect value={typeFilt} onChange={(v) => { setTypeFilt(v ?? ""); setPage(1); }} options={PROPERTY_TYPE_OPTIONS} placeholder="All Types" clearable size="sm" />
         <AppSelect value={agentFilt} onChange={(v) => { setAgentFilt(v ?? ""); setPage(1); }} options={agents.map((a) => ({ value: a._id, label: a.fullName }))} placeholder="All Agents" clearable size="sm" searchable />
       </SaleFilterBar>
 
@@ -650,7 +654,7 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
               <input value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} className={inputCls} />
             </div>
             <div>
-              <AppSelect label="Property Type" value={form.propertyType} onChange={(v) => setForm((p) => ({ ...p, propertyType: v ?? "" }))} options={PROPERTY_TYPES.map((t) => ({ value: t, label: t }))} size="md" />
+              <AppSelect label="Property Type" value={form.propertyType} onChange={(v) => setForm((p) => ({ ...p, propertyType: v ?? "" }))} options={PROPERTY_TYPE_OPTIONS} size="md" />
             </div>
             <div>
               <label className={labelCls}>Asking Price (KES)</label>
@@ -660,7 +664,7 @@ ${row.amenities?.length ? `<div class="section-title">Amenities</div><div class=
               <label className={labelCls}>Size</label>
               <div className="flex gap-1.5">
                 <input type="number" value={form.size} onChange={(e) => setForm((p) => ({ ...p, size: e.target.value }))} className="h-8 flex-1 border border-slate-200 bg-white px-3 text-xs focus:border-[#0B3B2E] focus:outline-none" placeholder="e.g. 50" />
-                <AppSelect value={form.sizeUnit} onChange={(v) => setForm((p) => ({ ...p, sizeUnit: v ?? "" }))} options={SIZE_UNITS.map((u) => ({ value: u, label: u }))} size="md" />
+                <AppSelect value={form.sizeUnit} onChange={(v) => setForm((p) => ({ ...p, sizeUnit: v ?? "" }))} options={SIZE_UNIT_OPTIONS} size="md" />
               </div>
             </div>
             <div>

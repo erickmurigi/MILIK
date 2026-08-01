@@ -48,7 +48,7 @@ const RentalAgedAnalysisReport = () => {
   const [loading, setLoading] = useState(false);
   const [properties, setProperties] = useState([]);
   const [rows, setRows] = useState([]);
-  const [filters, setFilters] = useTabState("/reports/rental-aged-analysis:filters", { propertyId: "all", category: "all", search: "" });
+  const [filters, setFilters] = useTabState("/reports/rental-aged-analysis:filters", { propertyId: "", category: "", search: "" });
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [currentPage, setCurrentPage] = useTabState("/reports/rental-aged-analysis:currentPage", 1);
 
@@ -130,8 +130,8 @@ const RentalAgedAnalysisReport = () => {
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
-      if (filters.propertyId !== "all" && String(row.propertyId) !== String(filters.propertyId)) return false;
-      if (filters.category !== "all" && Number(row.categoryBreakdown?.[filters.category] || 0) <= 0) return false;
+      if (filters.propertyId && String(row.propertyId) !== String(filters.propertyId)) return false;
+      if (filters.category && Number(row.categoryBreakdown?.[filters.category] || 0) <= 0) return false;
       const haystack = `${row.tenantName} ${row.propertyName} ${row.unitNumber}`.toLowerCase();
       return !filters.search.trim() || haystack.includes(filters.search.trim().toLowerCase());
     });
@@ -276,8 +276,8 @@ const RentalAgedAnalysisReport = () => {
               <p className="report-print-subtitle">Aged tenant receivables view grouped by current, 1-30, 31-60, 61-90 and 90+ day buckets for the selected filters.</p>
             </div>
             <div className="report-print-meta">
-              <div><strong>Property:</strong> {filters.propertyId === "all" ? "All properties" : properties.find((property) => String(property._id) === String(filters.propertyId))?.propertyName || "Selected property"}</div>
-              <div><strong>Category:</strong> {filters.category === "all" ? "All charges" : filters.category}</div>
+              <div><strong>Property:</strong> {filters.propertyId ? properties.find((property) => String(property._id) === String(filters.propertyId))?.propertyName || "Selected property" : "All properties"}</div>
+              <div><strong>Category:</strong> {filters.category || "All charges"}</div>
               <div><strong>Generated:</strong> {printGeneratedAt}</div>
               <div><strong>Prepared by:</strong> {[currentUser?.otherNames, currentUser?.surname].filter(Boolean).join(' ') || currentUser?.email || 'Milik Admin'}</div>
             </div>
@@ -342,8 +342,8 @@ const RentalAgedAnalysisReport = () => {
                   <input value={filters.search} onChange={setFilter("search")} placeholder="Tenant, property, unit" className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </div>
                 <AppSelect
-                  value={filters.propertyId === "all" ? "" : filters.propertyId}
-                  onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "all" }))}
+                  value={filters.propertyId}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "" }))}
                   options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))}
                   placeholder="All properties"
                   searchable
@@ -351,8 +351,8 @@ const RentalAgedAnalysisReport = () => {
                   size="sm"
                 />
                 <AppSelect
-                  value={filters.category === "all" ? "" : filters.category}
-                  onChange={(v) => setFilters((prev) => ({ ...prev, category: v ?? "all" }))}
+                  value={filters.category}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, category: v ?? "" }))}
                   options={[
                     { value: "RENT_CHARGE", label: "Rent only" },
                     { value: "UTILITY_CHARGE", label: "Utility only" },
