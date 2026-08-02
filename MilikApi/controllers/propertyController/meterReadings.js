@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { escapeRegex } from "../../utils/escapeRegex.js";
+import { getFieldOfficerPropertyIds } from "../../utils/fieldOfficerScope.js";
 import MeterReading from "../../models/MeterReading.js";
 import Property from "../../models/Property.js";
 import Unit from "../../models/Unit.js";
@@ -458,6 +459,18 @@ export const getMeterReadings = async (req, res, next) => {
     if (req.query.billingPeriod) query.billingPeriod = toPeriodKey(req.query.billingPeriod);
     if (req.query.utilityType) {
       query.utilityType = { $regex: `^${escapeRegex(String(req.query.utilityType).trim())}$`, $options: "i" };
+    }
+
+    const foPropertyIds = await getFieldOfficerPropertyIds(req);
+    if (foPropertyIds !== null) {
+      if (query.property) {
+        const foSet = new Set(foPropertyIds.map(String));
+        if (!foSet.has(String(query.property))) {
+          return res.status(200).json({ success: true, data: [], total: 0, page: 1, pages: 1 });
+        }
+      } else {
+        query.property = { $in: foPropertyIds };
+      }
     }
 
     const pageNum = Math.max(parseInt(req.query.page, 10) || 1, 1);

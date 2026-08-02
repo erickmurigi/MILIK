@@ -36,6 +36,7 @@ import latePenaltyRoutes from "./routes/propertyRoutes/latePenalties.js";
 import communicationRoutes from "./routes/propertyRoutes/communications.js";
 import DashboardRoutes from "./controllers/propertyController/dashboard.js";
 import propertyRoutes from "./routes/propertyRoutes/properties.js";
+import zoneRoutes from "./routes/propertyRoutes/zones.js";
 import tenantInvoicesRoutes from "./routes/propertyRoutes/tenantInvoices.js";
 import paymentVoucherRoutes from "./routes/propertyRoutes/paymentVouchers.js";
 import http from "http";
@@ -133,7 +134,6 @@ import publicListingsRoute  from "./routes/publicListings.js";
 import cookieParser from "cookie-parser";
 import mongoSanitize from "mongo-sanitize";
 import hpp from "hpp";
-import { blockDemoWrites } from "./utils/demoAccess.js";
 import {
   canAccessCompanyId,
   enforceRequestedCompanyScope,
@@ -318,8 +318,6 @@ app.use((req, _res, next) => {
   req.query = mongoSanitize(req.query);
   next();
 });
-app.use(blockDemoWrites);
-
 app.use(
   cors({
     origin(origin, callback) {
@@ -447,7 +445,7 @@ const trialLimiter = rateLimit({
   max: 10,
   message: {
     success: false,
-    message: "Too many demo requests, please try again later",
+    message: "Too many requests, please try again later",
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -574,6 +572,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/printers", printerRoute);
 app.use("/api/landlords", cacheShortLived, landlordRoutes);
 app.use("/api/properties", cacheShortLived, propertyRoutes);
+app.use("/api/zones",      cacheShortLived, zoneRoutes);
 app.use("/api/utilities", utilityRoutes);
 app.use("/api/meter-readings", meterReadingRoutes);
 app.use("/api/late-penalties", latePenaltyRoutes);

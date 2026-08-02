@@ -207,7 +207,7 @@ const FreeTrialModal = ({ isOpen, onClose }) => {
             <div className="relative">
               <div className="inline-flex items-center gap-3 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold backdrop-blur">
                 <img src="/logo.png" alt="Milik" className="h-8 w-8 object-contain" />
-                <span>Milik Demo Access</span>
+                <span>Request a Free Demo</span>
               </div>
 
               {step === 1 ? (
@@ -223,14 +223,14 @@ const FreeTrialModal = ({ isOpen, onClose }) => {
                       <FaClock className="flex-shrink-0 text-[#F8C471]" />
                       <div>
                         <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/60">Access window</p>
-                        <p className="mt-0.5 text-sm font-bold">14-day guided workspace</p>
+                        <p className="mt-0.5 text-sm font-bold">We'll get you started within 24 hours</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-3.5 backdrop-blur">
                       <FaLock className="flex-shrink-0 text-[#F8C471]" />
                       <div>
                         <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/60">Environment</p>
-                        <p className="mt-0.5 text-sm font-bold">Dedicated demo company, not production</p>
+                        <p className="mt-0.5 text-sm font-bold">We'll set up your workspace personally</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-3.5 backdrop-blur">
@@ -246,7 +246,7 @@ const FreeTrialModal = ({ isOpen, onClose }) => {
                 <>
                   <h2 className="mt-6 text-3xl font-extrabold leading-tight md:text-[2rem]">
                     {selectedList.length === 1
-                      ? `${selectedList[0].label} demo`
+                      ? `${selectedList[0].label} trial`
                       : `${selectedList.length} modules selected`}
                   </h2>
                   <p className="mt-4 text-sm leading-7 text-white/85">
@@ -265,14 +265,14 @@ const FreeTrialModal = ({ isOpen, onClose }) => {
                       <FaClock className="flex-shrink-0 text-[#F8C471]" />
                       <div>
                         <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/60">Access window</p>
-                        <p className="mt-0.5 text-sm font-bold">14-day guided workspace</p>
+                        <p className="mt-0.5 text-sm font-bold">We'll get you started within 24 hours</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-3.5 backdrop-blur">
                       <FaLock className="flex-shrink-0 text-[#F8C471]" />
                       <div>
                         <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/60">Environment</p>
-                        <p className="mt-0.5 text-sm font-bold">Dedicated demo company, not production</p>
+                        <p className="mt-0.5 text-sm font-bold">We'll set up your workspace personally</p>
                       </div>
                     </div>
                   </div>

@@ -130,7 +130,6 @@ const Inspections = () => {
   const reduxProperties = useSelector((s) => s.property?.properties || []);
   const reduxUnits = useSelector((s) => s.unit?.units || []);
   const reduxTenants = useSelector((s) => s.tenant?.tenants || []);
-  const isDemoUser = Boolean(currentUser?.isDemoUser);
   const canCreate = hasCompanyPermission(currentUser, currentCompany, "inspections", "create", "propertyManagement");
   const canUpdate = hasCompanyPermission(currentUser, currentCompany, "inspections", "update", "propertyManagement");
   const canDelete = hasCompanyPermission(currentUser, currentCompany, "inspections", "delete", "propertyManagement");
@@ -268,7 +267,6 @@ const Inspections = () => {
   const pageRows = inspections; // server returns the correct slice already
 
   const openCreateModal = () => {
-    if (isDemoUser) { toast.info("Demo mode is read-only."); return; }
     if (!canCreate) { toast.warning("You do not have permission to create inspections."); return; }
     setEditingInspection(null);
     setForm(EMPTY_FORM);
@@ -276,7 +274,6 @@ const Inspections = () => {
   };
 
   const openEditModal = (item) => {
-    if (isDemoUser) { toast.info("Demo mode is read-only."); return; }
     if (!canUpdate) { toast.warning("You do not have permission to edit inspections."); return; }
     if (_iDraftKey) { try { window.sessionStorage.removeItem(_iDraftKey); } catch {} }
     setEditingInspection(item);
@@ -352,7 +349,6 @@ const Inspections = () => {
   };
 
   const handleDelete = async (item) => {
-    if (isDemoUser) { toast.info("Demo mode is read-only."); return; }
     if (!canDelete) { toast.warning("You do not have permission to delete inspections."); return; }
     if (!await confirm({ title: "Delete Inspection", message: `Delete inspection "${item?.inspectionNumber || "this inspection"}"?`, confirmText: "Delete", isDangerous: true })) return;
     try {
@@ -426,7 +422,7 @@ const Inspections = () => {
           <button onClick={loadInspections} className="inline-flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50"><FaRedoAlt size={9} /></button>
           <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
           <button onClick={exportCsv} className="inline-flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaDownload size={9} /> CSV</button>
-          {canCreate && !isDemoUser && (
+          {canCreate && (
             <button onClick={openCreateModal} className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-2 text-xs font-black text-white hover:bg-[#0A3127]"><FaPlus size={9} /> Schedule Inspection</button>
           )}
         </div>
@@ -509,7 +505,7 @@ const Inspections = () => {
                           </td>
                           <td className="px-3 py-1 border-r border-gray-100 text-right">
                             <div className="inline-flex flex-wrap justify-end gap-1.5">
-                              {canUpdate && !isDemoUser && (
+                              {canUpdate && (
                                 <button
                                   onClick={() => openEditModal(item)}
                                   className="rounded border border-slate-300 bg-white px-2 py-1 text-[10px] font-black text-slate-700 hover:bg-slate-50"
@@ -517,7 +513,7 @@ const Inspections = () => {
                                   <FaEdit />
                                 </button>
                               )}
-                              {canDelete && !isDemoUser && (
+                              {canDelete && (
                                 <button
                                   onClick={() => handleDelete(item)}
                                   className="rounded border border-rose-300 bg-white px-2 py-1 text-[10px] font-black text-rose-600 hover:bg-rose-50"

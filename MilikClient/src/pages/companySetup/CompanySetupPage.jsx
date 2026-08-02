@@ -68,9 +68,21 @@ const TEMPLATE_MODULE_MAP = {
 };
 
 const companyOperatingModeOptions = [
-  { value: COMPANY_OPERATING_MODES.PROPERTY_MANAGER, label: "Property Manager", description: "Use property-manager wording, landlord workflows, and multi-landlord operations across the workspace." },
-  { value: COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD, label: "Self-Managing Landlord", description: "Use owner-managed wording and defaults while preserving the same accounting-safe transaction engine." },
-  { value: COMPANY_OPERATING_MODES.OTHER, label: "Other", description: "Use neutral company wording for businesses that do not run property-management or landlord workflows." },
+  { value: COMPANY_OPERATING_MODES.PROPERTY_MANAGER,      label: "Property Manager",       description: "Manages properties on behalf of landlords. Full landlord statement and commission flows enabled." },
+  { value: COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD,label: "Self-Managing Landlord", description: "Landlord manages their own properties directly. Simplified workflow without commission structures." },
+  { value: COMPANY_OPERATING_MODES.REAL_ESTATE_AGENCY,    label: "Real Estate Agency",     description: "Property sales focus — listings, buyers, offers, deals and commissions." },
+  { value: COMPANY_OPERATING_MODES.HOSPITALITY,           label: "Hospitality / Hotel",    description: "Short-stay lodging, hotel rooms, front-office check-in/out and occupancy management." },
+  { value: COMPANY_OPERATING_MODES.CARWASH,               label: "Car Wash Business",      description: "Service bays, wash packages, branch management and M-Pesa C2B payments." },
+  { value: COMPANY_OPERATING_MODES.SACCO,                 label: "SACCO / Cooperative",   description: "Member shares, savings, loans and cooperative governance workflows." },
+  { value: COMPANY_OPERATING_MODES.RETAIL,                label: "Retail / POS",           description: "Point-of-sale, stock management, inventory tracking and sales reporting." },
+  { value: COMPANY_OPERATING_MODES.SECURITY_SERVICES,     label: "Security Services",      description: "Guard deployment, client contracts, incident reporting and patrol management." },
+  { value: COMPANY_OPERATING_MODES.ACADEMIC,              label: "Academic Institution",   description: "Schools, colleges and universities — student records, fees and academic workflows." },
+  { value: COMPANY_OPERATING_MODES.FACILITY_MANAGEMENT,   label: "Facility Management",    description: "Maintenance scheduling, asset tracking and facility service-level management." },
+  { value: COMPANY_OPERATING_MODES.TELCO_DEALERSHIP,      label: "Telco Dealership",       description: "Telecom product sales, airtime, SIM activations and dealer commission tracking." },
+  { value: COMPANY_OPERATING_MODES.HR_SERVICES,           label: "HR / Payroll Services",  description: "Employee records, leave management, payroll processing and HR reporting." },
+  { value: COMPANY_OPERATING_MODES.PROJECT_MANAGEMENT,    label: "Project Management",     description: "Project planning, task tracking, milestones and resource allocation." },
+  { value: COMPANY_OPERATING_MODES.ASSET_VALUATION,       label: "Asset Valuation",        description: "Property and asset valuations, valuation reports and client management." },
+  { value: COMPANY_OPERATING_MODES.OTHER,                 label: "Other",                  description: "General business workspace for companies that do not fit a specific category above." },
 ];
 
 const Card = ({ title, subtitle, children, action = null }) => (
@@ -2363,40 +2375,19 @@ export default function CompanySetupPage() {
           title="Operating Mode"
           subtitle="Choose how the active company should be treated across MILIK. This changes workspace wording and defaults, but it must not rewrite posted history."
         >
-          <div className="space-y-3">
-            {companyOperatingModeOptions.map((option) => {
-              const isActive = selectedMode === option.value;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => handleCompanyModeChange(option.value)}
-                  className={[
-                    "w-full border px-4 py-4 text-left transition",
-                    isActive
-                      ? "border-emerald-300 bg-emerald-50 shadow-sm"
-                      : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50",
-                  ].join(" ")}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-extrabold text-slate-900">{option.label}</div>
-                      <div className="mt-1 text-xs leading-5 text-slate-600">{option.description}</div>
-                    </div>
-                    <span
-                      className={[
-                        "inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold",
-                        isActive
-                          ? "border-emerald-200 bg-emerald-100 text-emerald-700"
-                          : "border-slate-200 bg-slate-100 text-slate-600",
-                      ].join(" ")}
-                    >
-                      {isActive ? "Active" : "Available"}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
+          <div>
+            <AppSelect
+              value={selectedMode}
+              onChange={(v) => v && handleCompanyModeChange(v)}
+              options={companyOperatingModeOptions.map(({ value, label }) => ({ value, label }))}
+              searchable
+              size="md"
+            />
+            {selectedMode && (
+              <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">
+                {companyOperatingModeOptions.find((o) => o.value === selectedMode)?.description}
+              </p>
+            )}
           </div>
 
           <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">

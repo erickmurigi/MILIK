@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { getFieldOfficerPropertyIds } from "../../utils/fieldOfficerScope.js";
 import Tenant from "../../models/Tenant.js";
 import Unit from "../../models/Unit.js";
 import Property from "../../models/Property.js";
@@ -1083,6 +1084,24 @@ export const getTenants = async (req, res, next) => {
       filter.unit = { $in: propertyUnits.map((u) => u._id) };
     }
 
+    const foPropertyIds = await getFieldOfficerPropertyIds(req);
+    if (foPropertyIds !== null) {
+      const foUnits = foPropertyIds.length > 0
+        ? await Unit.find({ property: { $in: foPropertyIds }, business: businessId }, { _id: 1 }).lean()
+        : [];
+      const foUnitSet = new Set(foUnits.map((u) => String(u._id)));
+
+      if (filter.unit) {
+        if (typeof filter.unit === 'string') {
+          if (!foUnitSet.has(filter.unit)) filter.unit = { $in: [] };
+        } else if (filter.unit.$in) {
+          filter.unit = { $in: filter.unit.$in.filter((id) => foUnitSet.has(String(id))) };
+        }
+      } else {
+        filter.unit = { $in: [...foUnitSet] };
+      }
+    }
+
     const search = rawSearch ? rawSearch.trim() : "";
     const tenantName = rawTenantName ? rawTenantName.trim() : "";
     const tenantCode = rawTenantCode ? rawTenantCode.trim() : "";
@@ -1192,6 +1211,16 @@ export const getTenant = async (req, res, next) => {
 
     if (!tenant) {
       return res.status(404).json({ success: false, message: "Tenant not found" });
+    }
+
+    const foPropertyIds = await getFieldOfficerPropertyIds(req);
+    if (foPropertyIds !== null) {
+      const foSet = new Set(foPropertyIds.map(String));
+      const unitId = tenant.unit?._id || tenant.unit;
+      const unitDoc = unitId ? await Unit.findById(unitId, { property: 1 }).lean() : null;
+      if (!unitDoc || !foSet.has(String(unitDoc.property))) {
+        return res.status(403).json({ success: false, message: "Not authorized to access this tenant" });
+      }
     }
 
     return res.status(200).json({ success: true, data: tenant });
@@ -1743,6 +1772,15 @@ export const getTenantPayments = async (req, res, next) => {
       });
     }
 
+    const foPropertyIds = await getFieldOfficerPropertyIds(req);
+    if (foPropertyIds !== null) {
+      const foSet = new Set(foPropertyIds.map(String));
+      const unitDoc = tenant.unit ? await Unit.findById(tenant.unit, { property: 1 }).lean() : null;
+      if (!unitDoc || !foSet.has(String(unitDoc.property))) {
+        return res.status(403).json({ success: false, message: "Not authorized to access this tenant" });
+      }
+    }
+
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
     const skip = (page - 1) * limit;
@@ -1779,6 +1817,15 @@ export const getTenantBalance = async (req, res, next) => {
         success: false,
         message: access.message,
       });
+    }
+
+    const foPropertyIds = await getFieldOfficerPropertyIds(req);
+    if (foPropertyIds !== null) {
+      const foSet = new Set(foPropertyIds.map(String));
+      const unitDoc = tenant.unit ? await Unit.findById(tenant.unit, { property: 1 }).lean() : null;
+      if (!unitDoc || !foSet.has(String(unitDoc.property))) {
+        return res.status(403).json({ success: false, message: "Not authorized to access this tenant" });
+      }
     }
 
     const payments = await RentPayment.find({

@@ -13,6 +13,7 @@ import { hasCompanyPermission } from '../../utils/permissions';
 import { buildTenantOption } from '../../utils/tenantUtils';
 import { isSelfManagingLandlordCompany } from '../../utils/companyModules';
 import AppSelect from '../../components/common/AppSelect';
+import { adminRequests } from '../../utils/requestMethods';
 
 const MILIK_GREEN = '#0B3B2E';
 const formatMoney = (value) => `KES ${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
@@ -44,6 +45,7 @@ const RentalCollectionReport = () => {
   const [loading, setLoading] = useState(false);
   const [filtersChanged, setFiltersChanged] = useState(false);
   const filtersInitialized = useRef(false);
+  const [zoneOptions, setZoneOptions] = useState([]);
   const [filters, setFilters] = useTabState("/reports/rental-collection:filters", () => ({
     startDate: toDateInputValue(new Date(new Date().getFullYear(), new Date().getMonth(), 1)),
     endDate: toDateInputValue(new Date()),
@@ -53,6 +55,7 @@ const RentalCollectionReport = () => {
     landlordId: '',
     paymentMethod: '',
     cashbook: '',
+    zone: '',
   }));
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [report, setReport] = useState({ summary: {}, byProperty: [], rows: [] });
@@ -64,6 +67,12 @@ const RentalCollectionReport = () => {
     if (!tenantsLoaded) dispatch(getTenants({ business: businessId }));
     if (!isLandlordMode) dispatch(getLandlords({ company: businessId }));
   }, [businessId, isLandlordMode]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    adminRequests.get('/zones', { params: { limit: 500, isActive: 'true' } })
+      .then((res) => setZoneOptions((res.data?.zones || []).map((z) => ({ value: z.name, label: z.name }))))
+      .catch(() => {});
+  }, []);
 
   const loadReport = async (signal) => {
     if (!businessId) return;
@@ -97,7 +106,7 @@ const RentalCollectionReport = () => {
   useEffect(() => {
     if (!filtersInitialized.current) { filtersInitialized.current = true; return; }
     setFiltersChanged(true);
-  }, [filters.startDate, filters.endDate, filters.propertyId, filters.tenantId, filters.unitId, filters.landlordId, filters.paymentMethod, filters.cashbook]);
+  }, [filters.startDate, filters.endDate, filters.propertyId, filters.tenantId, filters.unitId, filters.landlordId, filters.paymentMethod, filters.cashbook, filters.zone]);
 
   const units = useMemo(() => {
     return tenants
@@ -121,6 +130,7 @@ const RentalCollectionReport = () => {
   const filterSummary = useMemo(() => {
     const base = [
       { label: 'Period', value: `${formatDate(filters.startDate)} to ${formatDate(filters.endDate)}` },
+      { label: 'Zone', value: filters.zone || 'All zones' },
       { label: 'Property', value: filters.propertyId ? propertyNameMap.get(String(filters.propertyId)) || 'Selected property' : 'All properties' },
       { label: 'Tenant', value: filters.tenantId ? tenantNameMap.get(String(filters.tenantId)) || 'Selected tenant' : 'All tenants' },
       { label: 'Unit', value: filters.unitId ? unitNameMap.get(String(filters.unitId)) || 'Selected unit' : 'All units' },
@@ -128,7 +138,7 @@ const RentalCollectionReport = () => {
       { label: 'Cashbook', value: filters.cashbook || 'All cashbooks' },
     ];
     if (!isLandlordMode) {
-      base.splice(4, 0, { label: 'Landlord', value: filters.landlordId ? landlordNameMap.get(String(filters.landlordId)) || 'Selected landlord' : 'All landlords' });
+      base.splice(5, 0, { label: 'Landlord', value: filters.landlordId ? landlordNameMap.get(String(filters.landlordId)) || 'Selected landlord' : 'All landlords' });
     }
     return base;
   }, [filters, isLandlordMode, propertyNameMap, tenantNameMap, unitNameMap, landlordNameMap]);
@@ -146,7 +156,7 @@ const RentalCollectionReport = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filters.startDate, filters.endDate, filters.propertyId, filters.tenantId, filters.unitId, filters.landlordId, filters.paymentMethod, filters.cashbook]);
+  }, [filters.startDate, filters.endDate, filters.propertyId, filters.tenantId, filters.unitId, filters.landlordId, filters.paymentMethod, filters.cashbook, filters.zone]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -430,12 +440,24 @@ const RentalCollectionReport = () => {
                   </div>
                 </div>
 
+                {/* Zone */}
+                <div className="w-[140px]">
+                  <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">Zone</p>
+                  <AppSelect
+                    value={filters.zone || null}
+                    onChange={(v) => setFilters((prev) => ({ ...prev, zone: v ?? "", propertyId: "" }))}
+                    options={zoneOptions}
+                    placeholder="All zones"
+                    searchable clearable size="sm"
+                  />
+                </div>
+
                 {/* Property */}
                 <div className="w-[165px]">
                   <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">Property</p>
                   <AppSelect
                     value={filters.propertyId || null}
-                    onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "" }))}
+                    onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "", zone: "" }))}
                     options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))}
                     placeholder="All properties"
                     searchable clearable size="sm"

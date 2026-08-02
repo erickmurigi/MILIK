@@ -4,7 +4,6 @@ import {
   resolveMailSender,
   resolvePrimaryNotificationRecipient,
 } from "./smtpMailer.js";
-import { buildPublicDemoAccessUrl } from "./onboardingAccess.js";
 
 function buildMailUnavailableResponse(error) {
   return {
@@ -103,106 +102,6 @@ export async function sendTrialRequestNotification(trialRequest) {
   }
 
   return { attempted: true, sent: true, skipped: false, error: null, recipient: to };
-}
-
-export async function sendTrialAccessEmail({ trialRequest, accessToken, demoExpiresAt, resumedDemo = false }) {
-  if (!hasSmtpConfig()) {
-    return buildMailUnavailableResponse("SMTP environment variables are incomplete");
-  }
-
-  const to = String(trialRequest?.email || "").trim();
-  if (!to) {
-    return buildMailUnavailableResponse("No recipient email was supplied for demo access");
-  }
-
-  const transporter = buildSmtpTransporter();
-  const from = resolveMailSender("TRIAL_FROM_EMAIL");
-  const replyTo = resolvePrimaryNotificationRecipient() || undefined;
-  const accessLink = buildPublicDemoAccessUrl(accessToken);
-  const expiresLabel = demoExpiresAt
-    ? new Date(demoExpiresAt).toLocaleString("en-KE", {
-        dateStyle: "medium",
-        timeStyle: "short",
-      })
-    : "within the demo period";
-
-  const subject = resumedDemo
-    ? "Resume your MILIK workspace"
-    : "Your MILIK demo workspace is ready";
-
-  const text = [
-    resumedDemo
-      ? "Your MILIK demo workspace is still active. Use the secure link below to resume your remaining demo time."
-      : "Your MILIK demo workspace is ready. Use the secure link below to open the guided read-only workspace.",
-    "",
-    `Open workspace: ${accessLink}`,
-    `Access expires: ${expiresLabel}`,
-    "",
-    "This workspace is read-only and kept separate from live company data.",
-    "If the button does not open directly, copy and paste the full link into your browser.",
-  ].join("\n");
-
-  const html = `
-    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111827; max-width: 720px; margin: 0 auto;">
-      <div style="border: 1px solid #dbe6df; border-radius: 18px; overflow: hidden; background: #ffffff;">
-        <div style="padding: 22px 28px; background: linear-gradient(135deg, #0B3B2E 0%, #0E4C3D 100%); color: #ffffff;">
-          <div style="font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; font-weight: 700; opacity: 0.88;">MILIK</div>
-          <h2 style="margin: 10px 0 0; font-size: 24px; line-height: 1.25; color: #ffffff;">${resumedDemo ? "Resume your demo workspace" : "Your demo workspace is ready"}</h2>
-          <p style="margin: 12px 0 0; color: rgba(255,255,255,0.88); font-size: 14px;">
-            ${resumedDemo
-              ? "Your demo window is still active. Use the secure link below to return directly to the MILIK dashboard."
-              : "Enter the guided MILIK dashboard preview using the secure access link below. The environment remains read-only and separated from live company data."}
-          </p>
-        </div>
-        <div style="padding: 24px 28px 28px; background: #ffffff;">
-          <div style="margin: 0 0 18px; padding: 14px 16px; border-radius: 14px; background: #f6faf8; border: 1px solid #dbe9e2;">
-            <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 700; color: #4a6b5e;">Access window</div>
-            <div style="margin-top: 6px; font-size: 15px; font-weight: 700; color: #0B3B2E;">Available until ${escHtml(expiresLabel)}</div>
-          </div>
-
-          <p style="margin: 0 0 18px;">
-            <a href="${escHtml(accessLink)}" style="display: inline-block; background: #0B3B2E; color: #ffffff !important; text-decoration: none; padding: 13px 22px; border-radius: 999px; font-weight: 700;">${resumedDemo ? "Resume Demo" : "Open Demo Workspace"}</a>
-          </p>
-
-          <p style="margin: 0 0 10px; color: #334155; font-size: 14px;">If the button does not open directly, use this secure link:</p>
-          <p style="margin: 0 0 18px; word-break: break-word; font-size: 13px; color: #0B3B2E;">${escHtml(accessLink)}</p>
-
-          <div style="padding: 14px 16px; border-radius: 14px; background: #fff8f1; border: 1px solid #f6d2bb;">
-            <div style="font-size: 12px; font-weight: 700; color: #c2410c; text-transform: uppercase; letter-spacing: 0.12em;">Important</div>
-            <p style="margin: 8px 0 0; font-size: 13px; color: #7c2d12;">
-              This demo workspace is read-only. It is designed for guided evaluation and does not mix with live company transactions or production records.
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-
-  try {
-    await transporter.sendMail({
-      from,
-      to,
-      subject,
-      text,
-      html,
-      replyTo,
-      headers: {
-        "X-Auto-Response-Suppress": "OOF, AutoReply",
-        "Auto-Submitted": "auto-generated",
-      },
-    });
-  } catch (mailErr) {
-    return { attempted: true, sent: false, skipped: false, error: mailErr.message, recipient: to };
-  }
-
-  return {
-    attempted: true,
-    sent: true,
-    skipped: false,
-    error: null,
-    recipient: to,
-    accessLink,
-  };
 }
 
 export default sendTrialRequestNotification;

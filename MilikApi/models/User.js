@@ -12,10 +12,13 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, lowercase: true, trim: true },
 
   // User Details
-  profile: { 
-    type: String, 
-    required: true, 
-    enum: ['Administrator', 'Manager', 'Accountant', 'Agent', 'Viewer'] 
+  profile: {
+    type: String,
+    required: true,
+    enum: [
+      'Administrator', 'Manager', 'Accountant', 'Agent', 'Viewer',
+      'Property Agent', 'Field Officer', 'Sales Agent', 'HR Officer',
+    ],
   },
   userControl: { type: Boolean, default: true },
   superAdminAccess: { type: Boolean, default: false },

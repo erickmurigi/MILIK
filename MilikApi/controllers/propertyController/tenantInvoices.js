@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { getFieldOfficerPropertyIds } from "../../utils/fieldOfficerScope.js";
 import TenantInvoice, { TENANT_INVOICE_CATEGORIES } from "../../models/TenantInvoice.js";
 import TenantInvoiceNote, { TENANT_NOTE_TYPES } from "../../models/TenantInvoiceNote.js";
 import Tenant from "../../models/Tenant.js";
@@ -2455,6 +2456,21 @@ export const getTenantInvoicesList = async (req, res, next) => {
       businessId,
       requestQuery: req.query || {},
     });
+
+    const foPropertyIds = await getFieldOfficerPropertyIds(req);
+    if (!empty && query && foPropertyIds !== null) {
+      if (query.property) {
+        const foSet = new Set(foPropertyIds.map(String));
+        if (!foSet.has(String(query.property))) {
+          return res.status(200).json(buildTenantInvoiceListPayload({
+            items: [], paginate, page, limit, totalItems: 0,
+            summary: { pageItemCount: 0, pageTotalAmount: 0, pagePendingAmount: 0 },
+          }));
+        }
+      } else {
+        query.property = { $in: foPropertyIds };
+      }
+    }
 
     if (empty || !query) {
       return res.status(200).json(

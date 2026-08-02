@@ -3,9 +3,7 @@ import { clearClientSessionStorage } from "./sessionCleanup";
 import { markSessionActivity } from "./sessionTimeout";
 
 const STORAGE_KEY = import.meta.env.VITE_STORAGE_KEY || "MilikPropertyManagement2026";
-const DEMO_EXPIRED_NOTICE_KEY = "milik_demo_expired_notice";
-const DEMO_EXPIRED_MESSAGE = "Your demo period has ended. Contact MILIK for activation.";
-const EXTRA_SESSION_KEYS = ["milik_active_company_id", "milik_demo_mode", "milik_demo_company_id"];
+const EXTRA_SESSION_KEYS = ["milik_active_company_id"];
 
 // Use environment variable for API URL
 const rawApiBaseUrl = String(import.meta.env.VITE_API_URL || "/api").trim();
@@ -14,15 +12,6 @@ const BASE_URL = rawApiBaseUrl.endsWith("/") ? rawApiBaseUrl : `${rawApiBaseUrl}
 const shouldSkipAuthHeader = (url = "") => {
   const requestUrl = String(url || "");
   return /(^|\/)auth\/login(?:\?|$)/.test(requestUrl);
-};
-
-const getStoredUser = () => {
-  try {
-    const raw = localStorage.getItem("milik_user");
-    return raw ? JSON.parse(raw) : null;
-  } catch (_error) {
-    return null;
-  }
 };
 
 const clearAuthArtifacts = () => {
@@ -35,16 +24,6 @@ const clearAuthArtifacts = () => {
       console.warn(`Failed to remove storage key: ${key}`, error);
     }
   });
-};
-
-const redirectToDemoExpiredHome = () => {
-  try {
-    sessionStorage.setItem(DEMO_EXPIRED_NOTICE_KEY, DEMO_EXPIRED_MESSAGE);
-  } catch (_error) {
-    // Ignore storage write failures and still redirect.
-  }
-
-  window.location.href = "/home?demoExpired=1";
 };
 
 /**
@@ -115,14 +94,8 @@ adminRequests.interceptors.response.use(
             /token is not valid|not authenticated/i.test(responseMessage);
 
           if (isAuthFailure && error.config?.url && !error.config.url.includes("/auth/login")) {
-            const storedUser = getStoredUser();
             clearAuthArtifacts();
-
-            if (storedUser?.isDemoUser) {
-              redirectToDemoExpiredHome();
-            } else {
-              window.location.href = "/login";
-            }
+            window.location.href = "/login";
           } else if (error.response.status === 403) {
             console.error(
               "Access forbidden:",

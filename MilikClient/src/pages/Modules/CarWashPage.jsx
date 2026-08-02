@@ -185,7 +185,7 @@ export default function CarWashPage() {
                       onClick={() => openTrialModal("property_manager")}
                       className="inline-flex items-center gap-2 rounded-full bg-sky-700 px-5 py-2 text-xs font-bold text-white shadow-lg shadow-sky-700/20 transition hover:bg-sky-800"
                     >
-                      Get Free Trial <FaArrowRight />
+                      Request a Free Demo <FaArrowRight />
                     </button>
                     <Link
                       to="/#pricing"
@@ -297,7 +297,7 @@ export default function CarWashPage() {
                     onClick={() => openTrialModal("property_manager")}
                     className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-sky-800 transition hover:bg-sky-50"
                   >
-                    Get Free Trial <FaArrowRight />
+                    Request a Free Demo <FaArrowRight />
                   </button>
                   <Link
                     to="/login"

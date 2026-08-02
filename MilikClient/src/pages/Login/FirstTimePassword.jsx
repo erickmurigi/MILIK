@@ -58,7 +58,7 @@ function FirstTimePassword() {
         localStorage.setItem('milik_active_company_id', user.company._id);
       }
       toast.success('Password updated successfully.');
-      navigate(user?.isDemoUser ? '/dashboard' : '/moduleDashboard', { replace: true });
+      navigate('/moduleDashboard', { replace: true });
     } catch (err) {
       const message = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to update password';
       setError(message);

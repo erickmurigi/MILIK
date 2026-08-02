@@ -137,9 +137,21 @@ const MODULE_REGISTRY = {
 const ACCESS_VALUES = ['Not allowed', 'View only', 'Full access'];
 
 export const COMPANY_OPERATING_MODES = {
-  PROPERTY_MANAGER: 'property_manager',
+  PROPERTY_MANAGER:       'property_manager',
   SELF_MANAGING_LANDLORD: 'self_managing_landlord',
-  OTHER: 'other',
+  REAL_ESTATE_AGENCY:     'real_estate_agency',
+  HOSPITALITY:            'hospitality',
+  CARWASH:                'carwash',
+  SACCO:                  'sacco',
+  RETAIL:                 'retail',
+  SECURITY_SERVICES:      'security_services',
+  ACADEMIC:               'academic',
+  FACILITY_MANAGEMENT:    'facility_management',
+  TELCO_DEALERSHIP:       'telco_dealership',
+  HR_SERVICES:            'hr_services',
+  PROJECT_MANAGEMENT:     'project_management',
+  ASSET_VALUATION:        'asset_valuation',
+  OTHER:                  'other',
 };
 
 export const normalizeCompanyOperatingMode = (value = '') => {
@@ -189,6 +201,42 @@ export const normalizeCompanyOperatingMode = (value = '') => {
     return COMPANY_OPERATING_MODES.PROPERTY_MANAGER;
   }
 
+  if (['real_estate_agency', 'real_estate', 'property_sales', 'estate_agency'].includes(normalized))
+    return COMPANY_OPERATING_MODES.REAL_ESTATE_AGENCY;
+
+  if (['hospitality', 'hotel', 'hotel_management', 'lodging', 'resort'].includes(normalized))
+    return COMPANY_OPERATING_MODES.HOSPITALITY;
+
+  if (['carwash', 'car_wash', 'car_wash_business', 'autowash'].includes(normalized))
+    return COMPANY_OPERATING_MODES.CARWASH;
+
+  if (['sacco', 'cooperative', 'sacco_cooperative', 'savings_cooperative'].includes(normalized))
+    return COMPANY_OPERATING_MODES.SACCO;
+
+  if (['retail', 'pos', 'retail_pos', 'shop', 'store', 'supermarket'].includes(normalized))
+    return COMPANY_OPERATING_MODES.RETAIL;
+
+  if (['security_services', 'security', 'security_company', 'guard_services'].includes(normalized))
+    return COMPANY_OPERATING_MODES.SECURITY_SERVICES;
+
+  if (['academic', 'school', 'college', 'university', 'education', 'academics'].includes(normalized))
+    return COMPANY_OPERATING_MODES.ACADEMIC;
+
+  if (['facility_management', 'facilities', 'facilities_management', 'facilities_mgmt'].includes(normalized))
+    return COMPANY_OPERATING_MODES.FACILITY_MANAGEMENT;
+
+  if (['telco_dealership', 'telco', 'telecom', 'telco_dealer', 'telecommunications'].includes(normalized))
+    return COMPANY_OPERATING_MODES.TELCO_DEALERSHIP;
+
+  if (['hr_services', 'hr', 'human_resource', 'payroll_services', 'staffing'].includes(normalized))
+    return COMPANY_OPERATING_MODES.HR_SERVICES;
+
+  if (['project_management', 'projects', 'project_firm', 'consulting'].includes(normalized))
+    return COMPANY_OPERATING_MODES.PROJECT_MANAGEMENT;
+
+  if (['asset_valuation', 'valuation', 'valuers', 'asset_valuers'].includes(normalized))
+    return COMPANY_OPERATING_MODES.ASSET_VALUATION;
+
   return COMPANY_OPERATING_MODES.OTHER;
 };
 
@@ -202,9 +250,24 @@ export const isPropertyManagerCompany = (company = {}) =>
 
 export const getCompanyOperatingModeLabel = (value = '') => {
   const mode = normalizeCompanyOperatingMode(value);
-  if (mode === COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD) return 'Self-Managing Landlord';
-  if (mode === COMPANY_OPERATING_MODES.PROPERTY_MANAGER) return 'Property Manager';
-  return 'Other';
+  const labels = {
+    [COMPANY_OPERATING_MODES.PROPERTY_MANAGER]:      'Property Manager',
+    [COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD]:'Self-Managing Landlord',
+    [COMPANY_OPERATING_MODES.REAL_ESTATE_AGENCY]:    'Real Estate Agency',
+    [COMPANY_OPERATING_MODES.HOSPITALITY]:           'Hospitality / Hotel',
+    [COMPANY_OPERATING_MODES.CARWASH]:               'Car Wash Business',
+    [COMPANY_OPERATING_MODES.SACCO]:                 'SACCO / Cooperative',
+    [COMPANY_OPERATING_MODES.RETAIL]:                'Retail / POS',
+    [COMPANY_OPERATING_MODES.SECURITY_SERVICES]:     'Security Services',
+    [COMPANY_OPERATING_MODES.ACADEMIC]:              'Academic Institution',
+    [COMPANY_OPERATING_MODES.FACILITY_MANAGEMENT]:   'Facility Management',
+    [COMPANY_OPERATING_MODES.TELCO_DEALERSHIP]:      'Telco Dealership',
+    [COMPANY_OPERATING_MODES.HR_SERVICES]:           'HR / Payroll Services',
+    [COMPANY_OPERATING_MODES.PROJECT_MANAGEMENT]:    'Project Management',
+    [COMPANY_OPERATING_MODES.ASSET_VALUATION]:       'Asset Valuation',
+    [COMPANY_OPERATING_MODES.OTHER]:                 'Other',
+  };
+  return labels[mode] || 'Other';
 };
 
 const normalizeText = (value = '') => String(value || '').trim();
@@ -304,7 +367,7 @@ const EMAIL_PROFILE_USAGE_TAGS = [
   'invoices',
   'landlord_statements',
   'system_alerts',
-  'demo_requests',
+  'trial_requests',
   'onboarding',
 ];
 

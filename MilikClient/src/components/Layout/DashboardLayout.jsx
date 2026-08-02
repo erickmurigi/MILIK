@@ -37,6 +37,7 @@ import { hasCompanyPermission } from "../../utils/permissions";
 const MENU_PERMISSION_MAP = {
   "properties-list": { resource: "properties", action: "view", moduleKey: "propertyManagement" },
   "add-property": { resource: "properties", action: "create", moduleKey: "propertyManagement" },
+  "zones": { resource: "properties", action: "view", moduleKey: "propertyManagement" },
   "property-commission-settings": { resource: "commissions", action: "view", moduleKey: "propertyManagement" },
   "commissions-list": { resource: "commissions", action: "view", moduleKey: "propertyManagement" },
   availability: { resource: "units", action: "view", moduleKey: "propertyManagement" },
@@ -72,6 +73,7 @@ const MENU_PERMISSION_MAP = {
   "rental-collection": { resource: "financialReports", action: "view", moduleKey: ["accounts", "propertyManagement"] },
   "paid-balance": { resource: "financialReports", action: "view", moduleKey: ["accounts", "propertyManagement"] },
   "aged-analysis": { resource: "financialReports", action: "view", moduleKey: ["accounts", "propertyManagement"] },
+  "zone-vacancy": { resource: "financialReports", action: "view", moduleKey: "propertyManagement" },
   "commission-reports": { resource: "commissionReports", action: "view", moduleKey: "propertyManagement" },
   "commission-landlord-statement": { resource: "statements", action: "view", moduleKey: "propertyManagement" },
   "landlord-standing-orders": { resource: "standingOrders", action: "view", moduleKey: "accounts" },
@@ -205,7 +207,6 @@ const DashboardLayout = ({ children, lockContentScroll = false }) => {
     // If already showing the target company (optimistic update applied), stay silent.
     return !targetId || String(currentId) !== String(targetId);
   });
-  const [renderTimestamp] = useState(() => Date.now());
   const currentWorkspace = useMemo(() => getWorkspaceFromRoute(location.pathname), [location.pathname]);
   const workspaceLabel = useMemo(() => getWorkspaceLabel(currentWorkspace), [currentWorkspace]);
   const activeCompanyContext = currentCompany || currentUser?.company || null;
@@ -213,28 +214,6 @@ const DashboardLayout = ({ children, lockContentScroll = false }) => {
     () => isSelfManagingLandlordCompany(activeCompanyContext),
     [activeCompanyContext]
   );
-
-  const demoBanner = useMemo(() => {
-    if (!currentUser?.isDemoUser) return null;
-
-    const expiryDate = currentUser?.demoExpiresAt
-      ? new Date(currentUser.demoExpiresAt)
-      : null;
-    const expiryTimestamp = expiryDate?.getTime?.() || null;
-    const hasExpired = Number.isFinite(expiryTimestamp) ? expiryTimestamp <= renderTimestamp : false;
-    const daysLeft = expiryDate && !hasExpired
-      ? Math.max(
-          1,
-          Math.ceil((expiryDate.getTime() - renderTimestamp) / (24 * 60 * 60 * 1000))
-        )
-      : 0;
-
-    return {
-      expiryDate,
-      daysLeft,
-      hasExpired,
-    };
-  }, [currentUser, renderTimestamp]);
 
   return (
     <div
@@ -303,43 +282,6 @@ const DashboardLayout = ({ children, lockContentScroll = false }) => {
               lockContentScroll ? "h-full min-h-0" : "min-h-[calc(100vh-6rem)]"
             }`}
           >
-            {demoBanner && (
-              <div className="mx-4 mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm shadow-sm">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                  <div>
-                    <p className="font-extrabold uppercase tracking-[0.18em] text-amber-700">
-                      Demo Mode
-                    </p>
-                    <p className="mt-1 font-semibold text-slate-800">
-                      {demoBanner.hasExpired
-                        ? "Your demo period has ended. Contact MILIK for activation."
-                        : "You are exploring Milik with sample data in a read-only workspace."}
-                    </p>
-                    <p className="mt-1 text-slate-600">
-                      {demoBanner.hasExpired
-                        ? "Further demo access now requires activation from the MILIK team."
-                        : `Creating, editing, deleting and posting live transactions is disabled until subscription. Access window remaining: ${demoBanner.daysLeft} day${
-                            demoBanner.daysLeft === 1 ? "" : "s"
-                          }.`}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-3">
-                    <a
-                      href={`mailto:miliksystem@gmail.com?subject=${demoBanner.hasExpired ? "Milik%20Activation%20Request" : "Milik%20Demo%20Upgrade%20Request"}`}
-                      className="inline-flex items-center justify-center rounded-full bg-[#0B3B2E] px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white transition hover:bg-[#0A3127]"
-                    >
-                      {demoBanner.hasExpired ? "Contact MILIK for activation" : "Subscribe / Book setup"}
-                    </a>
-                    {demoBanner.expiryDate && !demoBanner.hasExpired && (
-                      <div className="inline-flex items-center justify-center rounded-full border border-amber-300 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-amber-800">
-                        Ends {demoBanner.expiryDate.toLocaleDateString()}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
             {isCompanySwitching && (
               <div className="mx-4 mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm shadow-sm">
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -898,6 +840,7 @@ const TopToolbar = ({
       "add-landlord": "/landlords/new",
       "properties-list": "/properties",
       "add-property": "/properties/new",
+      "zones": "/properties/zones",
       "property-commission-settings": "/properties/commission-settings",
       "commissions-list": "/properties/commissions-list",
       "units-spaces": "/units",
@@ -940,6 +883,7 @@ const TopToolbar = ({
       "rental-collection": "/reports/rental-collection",
       "paid-balance": "/reports/paid-balance",
       "aged-analysis": "/reports/aged-analysis",
+      "zone-vacancy": "/reports/zone-vacancy",
       "commission-reports": "/reports/commissions",
       "property-income-summary": "/reports/property-income-summary",
       "mri-tax-summary": "/reports/mri-tax-summary",
@@ -969,7 +913,7 @@ const TopToolbar = ({
             { id: "overview", label: "Overview", icon: FaChartBar },
             { id: "companies", label: "Companies", icon: FaBuilding },
             { id: "users", label: "Users & Access", icon: FaUsers },
-            { id: "trials", label: "Trials & Demo", icon: FaDatabase },
+            { id: "trials", label: "Free Trials", icon: FaDatabase },
             { id: "audit", label: "Audit Log", icon: FaClipboard },
           ],
         },
@@ -1465,6 +1409,7 @@ const TopToolbar = ({
         submenu: [
           { id: "properties-list", label: "Properties Listing", icon: FaHome },
           { id: "add-property", label: "Add New Property", icon: FaPlus },
+          { id: "zones", label: "Zones", icon: FaLayerGroup },
           { type: "separator" },
           { id: "property-commission-settings", label: "Commission Settings", icon: FaCog },
           { id: "commissions-list", label: "Commission List", icon: FaList },
@@ -1520,6 +1465,7 @@ const TopToolbar = ({
           { id: "mri-tax-summary", label: "MRI Tax Summary", icon: FaCalculator },
           { id: "paid-balance", label: "Paid & Balance Report", icon: FaChartLine },
           { id: "aged-analysis", label: "Aged Analysis", icon: FaChartPie },
+          { id: "zone-vacancy", label: "Zone Vacancy Report", icon: FaLayerGroup },
           { type: "separator" },
           { id: "commission-reports", label: "Commission Reports", icon: FaMoneyBillWave },
         ],

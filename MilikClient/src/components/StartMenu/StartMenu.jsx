@@ -76,7 +76,6 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
 
   const businessId        = currentCompany?._id || (typeof currentUser?.company === "string" ? currentUser.company : currentUser?.company?._id) || "";
   const isSystemAdmin     = Boolean(currentUser?.isSystemAdmin || currentUser?.superAdminAccess);
-  const isDemoUser        = Boolean(currentUser?.isDemoUser);
   const userName          = [currentUser?.surname, currentUser?.otherNames].filter(Boolean).join(" ") || "Milik User";
   const userRole          = currentUser?.role || "";
   const companyName       = currentCompany?.companyName || currentUser?.company?.companyName || "No active company";
@@ -144,7 +143,7 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
 
   const filteredCompanies = useMemo(() => {
     const activeId = String(currentCompany?._id || currentUser?.company?._id || "");
-    const list = (isDemoUser ? companies : companies.filter((c) => !c?.isDemoWorkspace)).slice();
+    const list = companies.slice();
     list.sort((a, b) => {
       const aA = String(a?._id || "") === activeId ? 1 : 0;
       const bA = String(b?._id || "") === activeId ? 1 : 0;
@@ -157,7 +156,7 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
       [c?.companyName, c?.companyCode, c?.town, c?.country].filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(term))
     );
-  }, [companies, currentCompany?._id, currentUser?.company?._id, isDemoUser, search]);
+  }, [companies, currentCompany?._id, currentUser?.company?._id, search]);
 
   const onSignOut = () => { clearClientSessionStorage(); setOpen(false); window.location.replace("/login"); };
 
@@ -431,7 +430,7 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="rounded-lg bg-white/10 px-2 py-1 text-[10px] font-bold tabular-nums text-white/70">
-                    {filteredCompanies.length} / {companies.filter((c) => isDemoUser || !c?.isDemoWorkspace).length}
+                    {filteredCompanies.length} / {companies.length}
                   </span>
                   <button
                     onClick={() => openSwitchCompany({ forceRefresh: true })}
@@ -541,9 +540,6 @@ const StartMenu = ({ darkMode = false, variant = "floating" }) => {
                                 <span className="inline-flex items-center gap-0.5 rounded-full bg-rose-100 px-1.5 py-0.5 text-[9px] font-black leading-none text-rose-700">
                                   <FaLock className="text-[7px]" /> Locked
                                 </span>
-                              )}
-                              {company?.isDemoWorkspace && (
-                                <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[9px] font-bold leading-none text-violet-700">Demo</span>
                               )}
                             </div>
                             {/* Row 2: meta + mode + modules */}

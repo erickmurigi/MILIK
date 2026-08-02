@@ -1,4 +1,5 @@
 import Unit from "../../models/Unit.js";
+import { getFieldOfficerPropertyIds } from "../../utils/fieldOfficerScope.js";
 import Tenant from "../../models/Tenant.js";
 import Property from "../../models/Property.js";
 import Lease from "../../models/Lease.js";
@@ -566,6 +567,18 @@ export const getUnits = async (req, res, next) => {
       filter._id = { $in: [...unitIds] };
     }
 
+    const foPropertyIds = await getFieldOfficerPropertyIds(req);
+    if (foPropertyIds !== null) {
+      if (property) {
+        const foSet = new Set(foPropertyIds.map(String));
+        if (!foSet.has(String(property))) {
+          return res.status(200).json({ success: true, data: [], total: 0, page: 1, pages: 1 });
+        }
+      } else {
+        filter.property = { $in: foPropertyIds };
+      }
+    }
+
     const pageNum = Math.max(parseInt(page, 10) || 1, 1);
     const limitNum = Math.min(Math.max(parseInt(limit, 10) || 500, 1), 5000);
 
@@ -678,6 +691,15 @@ export const getUnit = async (req, res, next) => {
     if (!req.user?.isSystemAdmin) {
       const businessId = resolveBusinessId(req);
       if (!businessId || String(unit.business) !== String(businessId)) {
+        return res.status(403).json({ success: false, message: "Not authorized to access this unit" });
+      }
+    }
+
+    const foPropertyIds = await getFieldOfficerPropertyIds(req);
+    if (foPropertyIds !== null) {
+      const foSet = new Set(foPropertyIds.map(String));
+      const propId = unit.property?._id || unit.property;
+      if (!propId || !foSet.has(String(propId))) {
         return res.status(403).json({ success: false, message: "Not authorized to access this unit" });
       }
     }

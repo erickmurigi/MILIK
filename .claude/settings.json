@@ -122,7 +122,9 @@
       "Bash(grep -i \"tab\\\\|state\\\\|\\\\\\\\\\\\\\\\\")",
       "Bash(python -c ' *)",
       "Bash(xargs grep -c \"<select\")",
-      "Bash(awk -F: '{sum+=$2} END {print sum \" total selects remaining\"}')"
+      "Bash(awk -F: '{sum+=$2} END {print sum \" total selects remaining\"}')",
+      "Bash(del \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikClient\\\\src\\\\pages\\\\Reports\\\\ZoneCollectionReport.jsx\")",
+      "Bash(del \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikClient\\\\src\\\\pages\\\\Reports\\\\ZoneArrearsReport.jsx\")"
     ]
   }
 }

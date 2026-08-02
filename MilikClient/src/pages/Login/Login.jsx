@@ -59,7 +59,7 @@ const resolvePostLoginRoute = (user) => {
     return `/${String(forcedLanding).replace(/^\/+/, '')}`;
   }
 
-  return user?.isDemoUser ? '/dashboard' : '/moduleDashboard';
+  return '/moduleDashboard';
 };
 
 

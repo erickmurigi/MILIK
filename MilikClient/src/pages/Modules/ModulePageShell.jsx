@@ -28,7 +28,7 @@ export default function ModulePageShell({ children }) {
               onClick={() => openTrialModal()}
               className="rounded-full bg-[#0B3B2E] px-5 py-2 text-sm font-bold text-white transition hover:bg-[#0A3127]"
             >
-              Get Free Trial
+              Request a Free Demo
             </button>
             <Link to="/login" className="rounded-full border border-[#0B3B2E] px-5 py-2 text-sm font-bold text-[#0B3B2E] transition hover:bg-[#0B3B2E] hover:text-white">
               Sign in

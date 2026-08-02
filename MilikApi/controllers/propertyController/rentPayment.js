@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { getFieldOfficerPropertyIds } from "../../utils/fieldOfficerScope.js";
 import RentPayment from "../../models/RentPayment.js";
 import Tenant from "../../models/Tenant.js";
 import TenantInvoice from "../../models/TenantInvoice.js";
@@ -2880,6 +2881,19 @@ export const getPayments = async (req, res, next) => {
       }
       const matchedUnits = await Unit.find(unitQuery).select("_id").lean();
       filter.unit = { $in: matchedUnits.map((row) => row._id) };
+    }
+
+    const foPropertyIds = await getFieldOfficerPropertyIds(req);
+    if (foPropertyIds !== null) {
+      const foUnits = foPropertyIds.length > 0
+        ? await Unit.find({ property: { $in: foPropertyIds }, business }, { _id: 1 }).lean()
+        : [];
+      const foUnitSet = new Set(foUnits.map((u) => String(u._id)));
+      if (filter.unit) {
+        filter.unit = { $in: filter.unit.$in.filter((id) => foUnitSet.has(String(id))) };
+      } else {
+        filter.unit = { $in: [...foUnitSet] };
+      }
     }
 
     if (month) filter.month = parseInt(month, 10);

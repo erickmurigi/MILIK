@@ -182,7 +182,7 @@ export default function InventoryPage() {
                   <div className="mt-4 flex flex-wrap gap-2.5">
                     <button type="button" onClick={() => openTrialModal("property_manager")}
                       className="inline-flex items-center gap-2 rounded-full bg-orange-700 px-5 py-2 text-xs font-bold text-white shadow-lg shadow-orange-700/20 transition hover:bg-orange-800">
-                      Get Free Trial <FaArrowRight />
+                      Request a Free Demo <FaArrowRight />
                     </button>
                     <Link to="/#pricing"
                       className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-5 py-2 text-xs font-bold text-slate-800 transition hover:border-orange-700 hover:text-orange-700">
@@ -292,7 +292,7 @@ export default function InventoryPage() {
                     onClick={() => openTrialModal("property_manager")}
                     className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-orange-800 transition hover:bg-orange-50"
                   >
-                    Get Free Trial <FaArrowRight />
+                    Request a Free Demo <FaArrowRight />
                   </button>
                   <Link
                     to="/login"

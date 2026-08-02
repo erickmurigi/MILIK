@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { escapeRegex } from "../../utils/escapeRegex.js";
+import { getFieldOfficerPropertyIds } from "../../utils/fieldOfficerScope.js";
 import Property from "../../models/Property.js";
 import Unit from "../../models/Unit.js";
 import Tenant from "../../models/Tenant.js";
@@ -841,6 +842,12 @@ export const getProperties = async (req, res, next) => {
     const limitNumber = Math.max(parseInt(limit, 10) || 10, 1);
 
     const query = { business: businessId };
+
+    const foPropertyIds = await getFieldOfficerPropertyIds(req);
+    if (foPropertyIds !== null) {
+      query._id = { $in: foPropertyIds };
+    }
+
     const orConditions = [];
 
     if (search) {
@@ -954,6 +961,14 @@ export const getProperty = async (req, res, next) => {
           success: false,
           message: "Not authorized to access this property",
         });
+      }
+    }
+
+    const foPropertyIds = await getFieldOfficerPropertyIds(req);
+    if (foPropertyIds !== null) {
+      const foSet = new Set(foPropertyIds.map(String));
+      if (!foSet.has(String(property._id))) {
+        return res.status(403).json({ success: false, message: "Not authorized to access this property" });
       }
     }
 

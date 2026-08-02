@@ -48,7 +48,8 @@ const RentalAgedAnalysisReport = () => {
   const [loading, setLoading] = useState(false);
   const [properties, setProperties] = useState([]);
   const [rows, setRows] = useState([]);
-  const [filters, setFilters] = useTabState("/reports/rental-aged-analysis:filters", { propertyId: "", category: "", search: "" });
+  const [zoneOptions, setZoneOptions] = useState([]);
+  const [filters, setFilters] = useTabState("/reports/rental-aged-analysis:filters", { propertyId: "", category: "", search: "", zone: "" });
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const [currentPage, setCurrentPage] = useTabState("/reports/rental-aged-analysis:currentPage", 1);
 
@@ -128,14 +129,27 @@ const RentalAgedAnalysisReport = () => {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  useEffect(() => {
+    adminRequests.get('/zones', { params: { limit: 500, isActive: 'true' } })
+      .then((res) => setZoneOptions((res.data?.zones || []).map((z) => ({ value: z.name, label: z.name }))))
+      .catch(() => {});
+  }, []);
+
+  const zonePropIds = useMemo(() => {
+    if (!filters.zone) return null;
+    const lower = filters.zone.toLowerCase();
+    return new Set(properties.filter((p) => (p.zoneRegion || '').toLowerCase() === lower).map((p) => String(p._id)));
+  }, [filters.zone, properties]);
+
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
+      if (zonePropIds && !zonePropIds.has(String(row.propertyId))) return false;
       if (filters.propertyId && String(row.propertyId) !== String(filters.propertyId)) return false;
       if (filters.category && Number(row.categoryBreakdown?.[filters.category] || 0) <= 0) return false;
       const haystack = `${row.tenantName} ${row.propertyName} ${row.unitNumber}`.toLowerCase();
       return !filters.search.trim() || haystack.includes(filters.search.trim().toLowerCase());
     });
-  }, [rows, filters]);
+  }, [rows, filters, zonePropIds]);
 
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / ITEMS_PER_PAGE));
@@ -276,6 +290,7 @@ const RentalAgedAnalysisReport = () => {
               <p className="report-print-subtitle">Aged tenant receivables view grouped by current, 1-30, 31-60, 61-90 and 90+ day buckets for the selected filters.</p>
             </div>
             <div className="report-print-meta">
+              <div><strong>Zone:</strong> {filters.zone || "All zones"}</div>
               <div><strong>Property:</strong> {filters.propertyId ? properties.find((property) => String(property._id) === String(filters.propertyId))?.propertyName || "Selected property" : "All properties"}</div>
               <div><strong>Category:</strong> {filters.category || "All charges"}</div>
               <div><strong>Generated:</strong> {printGeneratedAt}</div>
@@ -342,8 +357,17 @@ const RentalAgedAnalysisReport = () => {
                   <input value={filters.search} onChange={setFilter("search")} placeholder="Tenant, property, unit" className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </div>
                 <AppSelect
+                  value={filters.zone || null}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, zone: v ?? "", propertyId: "" }))}
+                  options={zoneOptions}
+                  placeholder="All zones"
+                  searchable
+                  clearable
+                  size="sm"
+                />
+                <AppSelect
                   value={filters.propertyId}
-                  onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "" }))}
+                  onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "", zone: "" }))}
                   options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))}
                   placeholder="All properties"
                   searchable

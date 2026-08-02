@@ -124,6 +124,7 @@ const Properties = () => {
   // Selection + table UI
   const [selectedProperties, setSelectedProperties] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
+  const [zoneOptions, setZoneOptions] = useState([]);
   const [expandedRows, setExpandedRows] = useState([]); // Array to track multiple expanded rows
   const [isResizing, setIsResizing] = useState(false);
 
@@ -172,12 +173,20 @@ const Properties = () => {
   });
 
   // Close dropdown on outside click
-  // Load landlords on mount
+  // Load landlords and zones on mount
   useEffect(() => {
     if (currentCompany?._id) {
       dispatch(getLandlords({ company: currentCompany._id }));
     }
   }, [dispatch, currentCompany?._id]);
+
+  useEffect(() => {
+    adminRequests.get('/zones', { params: { limit: 500, isActive: 'true' } })
+      .then((res) => setZoneOptions(
+        (res.data?.zones || []).map((z) => ({ value: z.name, label: z.name }))
+      ))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const onDocClick = (e) => {
@@ -544,6 +553,7 @@ const Properties = () => {
                 { value: "active", label: "Active" },
                 { value: "maintenance", label: "Maintenance" },
                 { value: "closed", label: "Closed" },
+                { value: "archived", label: "Archived" },
               ]}
               placeholder="All Status"
               clearable
@@ -553,15 +563,9 @@ const Properties = () => {
             <AppSelect
               value={draftFilters.zone}
               onChange={(v) => setDraftFilters((p) => ({ ...p, zone: v ?? "" }))}
-              options={[
-                { value: "Nairobi CBD", label: "Nairobi CBD" },
-                { value: "Westlands", label: "Westlands" },
-                { value: "Kilimani", label: "Kilimani" },
-                { value: "Karen", label: "Karen" },
-                { value: "Mombasa Road", label: "Mombasa Road" },
-                { value: "Thika Road", label: "Thika Road" },
-              ]}
+              options={zoneOptions}
               placeholder="All Zones"
+              searchable
               clearable
               size="sm"
             />

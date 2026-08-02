@@ -31,7 +31,29 @@ import {
 } from '../../utils/accessMatrix';
 import { MODULE_ROLE_PRESETS, applyModuleRole, detectModuleRole } from '../../utils/moduleRolePresets';
 
-const PROFILE_OPTIONS = ['Administrator', 'Manager', 'Accountant', 'Agent', 'Viewer'];
+const PROFILE_OPTIONS = [
+  { value: 'Administrator',  label: 'Administrator',  description: 'Full access across all modules — can manage users, settings & all operations' },
+  { value: 'Manager',        label: 'Manager',        description: 'Manage properties, collections, approvals & reports across all enabled modules' },
+  { value: 'Accountant',     label: 'Accountant',     description: 'Accounts: journals, vouchers, reconciliation & financial reports' },
+  { value: 'Property Agent', label: 'Property Agent', description: 'View & manage tenants, leases, receipts & maintenance requests' },
+  { value: 'Field Officer',  label: 'Field Officer',  description: 'On-site: log inspections, close maintenance jobs, submit meter readings & view tenant balances' },
+  { value: 'Sales Agent',    label: 'Sales Agent',    description: 'Property sales: listings, buyers, offers, deals & commissions' },
+  { value: 'HR Officer',     label: 'HR Officer',     description: 'Employee management, leave applications & payroll viewing' },
+  { value: 'Viewer',         label: 'Viewer',         description: 'Read-only access across all assigned modules — no create or edit actions' },
+];
+
+const PROFILE_MODULE_ROLES = {
+  'Administrator':  { propertyManagement: 'admin',           accounts: 'admin',         propertySale: 'admin',        hr: 'admin',      inventory: 'admin',           carwash: 'admin'   },
+  'Manager':        { propertyManagement: 'propertyManager', accounts: 'financeManager', propertySale: 'salesManager', hr: 'hrManager',  inventory: 'inventoryManager', carwash: 'manager' },
+  'Accountant':     { propertyManagement: 'agent',           accounts: 'accountant',    propertySale: null,           hr: null,         inventory: null,              carwash: null      },
+  'Property Agent': { propertyManagement: 'agent',           accounts: 'clerk',         propertySale: null,           hr: null,         inventory: null,              carwash: null      },
+  'Field Officer':  { propertyManagement: 'fieldOfficer',    accounts: null,            propertySale: null,           hr: null,         inventory: null,              carwash: null      },
+  'Sales Agent':    { propertyManagement: null,              accounts: null,            propertySale: 'salesAgent',   hr: null,         inventory: null,              carwash: null      },
+  'HR Officer':     { propertyManagement: null,              accounts: null,            propertySale: null,           hr: 'hrOfficer',  inventory: null,              carwash: null      },
+  'Viewer':         {},
+  // Legacy backward-compat
+  'Agent':          { propertyManagement: 'agent',           accounts: 'clerk',         propertySale: null,           hr: null,         inventory: null,              carwash: null      },
+};
 
 const emptyPermissionMap = () => buildEmptyPermissionMap();
 
@@ -77,6 +99,8 @@ const SECTION_META = {
 
 const DANGER_ACTIONS = new Set(['delete', 'reverse', 'lock', 'approve', 'pay', 'process']);
 
+const PROFILE_SELECT_OPTIONS = PROFILE_OPTIONS.map(({ value, label }) => ({ value, label }));
+
 const makeDefaultAssignment = (company) => {
   const moduleAccess = {};
   getEnabledCompanyModuleKeys(company).forEach((key) => {
@@ -90,6 +114,24 @@ const makeDefaultAssignment = (company) => {
     rights: [],
     carwashBranch: null,
   };
+};
+
+const applyProfileToAssignment = (profile, assignment, company) => {
+  const roleMap = PROFILE_MODULE_ROLES[profile] || {};
+  const enabledModuleKeys = getEnabledCompanyModuleKeys(company);
+  let newPermissions = emptyPermissionMap();
+  const newModuleAccess = {};
+  for (const moduleKey of enabledModuleKeys) {
+    const accessKey = MODULE_KEY_MAP[moduleKey] || moduleKey;
+    const roleKey = roleMap[moduleKey];
+    if (roleKey) {
+      newModuleAccess[accessKey] = 'Full access';
+      newPermissions = applyModuleRole(newPermissions, moduleKey, roleKey);
+    } else {
+      newModuleAccess[accessKey] = 'View only';
+    }
+  }
+  return { ...assignment, permissions: newPermissions, moduleAccess: newModuleAccess };
 };
 
 const normalizeUserToForm = (user, companies) => {
@@ -123,7 +165,7 @@ const normalizeUserToForm = (user, companies) => {
     postalAddress: user?.postalAddress || '',
     phoneNumber: user?.phoneNumber || '',
     email: user?.email || '',
-    profile: user?.profile || 'Agent',
+    profile: user?.profile === 'Agent' ? 'Property Agent' : (user?.profile || 'Property Agent'),
     userControl: user?.userControl ?? true,
     superAdminAccess: user?.superAdminAccess ?? false,
     adminAccess: user?.adminAccess ?? false,
@@ -187,7 +229,7 @@ export default function AddUserPage() {
     postalAddress: '',
     phoneNumber: '',
     email: '',
-    profile: 'Agent',
+    profile: 'Property Agent',
     userControl: true,
     superAdminAccess: false,
     adminAccess: false,
@@ -206,7 +248,10 @@ export default function AddUserPage() {
     const load = async () => {
       setIsLoading(true);
       try {
-        const companyRes = await adminRequests.get('/companies', { params: { limit: 500 } });
+        const [companyRes, userRes] = await Promise.all([
+          adminRequests.get('/companies', { params: { limit: 500 } }),
+          isEditing ? adminRequests.get(`/users/${id}`) : Promise.resolve(null),
+        ]);
         const companyList = Array.isArray(companyRes?.data?.companies)
           ? companyRes.data.companies
           : Array.isArray(companyRes?.data)
@@ -215,7 +260,6 @@ export default function AddUserPage() {
         setCompanies(companyList);
 
         if (isEditing) {
-          const userRes = await adminRequests.get(`/users/${id}`);
           setForm(normalizeUserToForm(userRes.data, companyList));
         } else if (isSystemAdmin) {
           const defaultCompanyId = currentCompany?._id || companyList[0]?._id || '';
@@ -274,6 +318,30 @@ export default function AddUserPage() {
     return companies.filter((company) => company._id === currentCompany?._id);
   }, [companies, isSystemAdmin, currentCompany?._id]);
 
+  const enabledModuleKeysByCompany = useMemo(() => {
+    const m = {};
+    availableCompanies.forEach((c) => { m[c._id] = getEnabledCompanyModuleKeys(c); });
+    return m;
+  }, [availableCompanies]);
+
+  const profileDesc = useMemo(
+    () => PROFILE_OPTIONS.find((p) => p.value === form.profile)?.description,
+    [form.profile]
+  );
+
+  const primaryCompanyOptions = useMemo(
+    () => form.accessibleCompanies.map((id) => {
+      const c = availableCompanies.find((x) => x._id === id);
+      return { value: id, label: c?.companyName || id };
+    }),
+    [form.accessibleCompanies, availableCompanies]
+  );
+
+  const primaryCompanyName = useMemo(
+    () => availableCompanies.find((c) => c._id === form.primaryCompany)?.companyName || '—',
+    [availableCompanies, form.primaryCompany]
+  );
+
   const updateForm = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
 
   const updateAssignment = (companyId, updater) =>
@@ -284,6 +352,19 @@ export default function AddUserPage() {
       ),
     }));
 
+  const handleProfileChange = (profile) => {
+    if (!profile) return;
+    setForm((prev) => ({
+      ...prev,
+      profile,
+      companyAssignments: prev.companyAssignments.map((assignment) => {
+        const company = companies.find((c) => c._id === assignment.company);
+        if (!company) return assignment;
+        return applyProfileToAssignment(profile, assignment, company);
+      }),
+    }));
+  };
+
   const toggleCompany = (company) => {
     setForm((prev) => {
       const exists = prev.accessibleCompanies.includes(company._id);
@@ -292,7 +373,7 @@ export default function AddUserPage() {
         : [...prev.accessibleCompanies, company._id];
       const companyAssignments = exists
         ? prev.companyAssignments.filter((item) => item.company !== company._id)
-        : [...prev.companyAssignments, makeDefaultAssignment(company)];
+        : [...prev.companyAssignments, applyProfileToAssignment(prev.profile, makeDefaultAssignment(company), company)];
       const primaryCompany = accessibleCompanies.includes(prev.primaryCompany)
         ? prev.primaryCompany
         : accessibleCompanies[0] || '';
@@ -461,13 +542,20 @@ export default function AddUserPage() {
                         placeholder="Select gender"
                         size="md"
                       />
-                      <AppSelect
-                        label="Profile *"
-                        value={form.profile}
-                        onChange={(v) => updateForm('profile', v ?? 'Agent')}
-                        options={PROFILE_OPTIONS.map((item) => ({ value: item, label: item }))}
-                        size="md"
-                      />
+                      <div>
+                        <AppSelect
+                          label="Profile *"
+                          value={form.profile}
+                          onChange={(v) => handleProfileChange(v ?? 'Property Agent')}
+                          options={PROFILE_SELECT_OPTIONS}
+                          size="md"
+                        />
+                        {profileDesc && (
+                          <p className="mt-1 text-[10px] text-slate-500 leading-relaxed">
+                            {profileDesc}
+                          </p>
+                        )}
+                      </div>
                       {(isEditing || !form.autoGeneratePassword) && (
                         <>
                           <div className="text-xs font-semibold text-slate-700">
@@ -605,10 +693,7 @@ export default function AddUserPage() {
                       label="Primary company *"
                       value={form.primaryCompany}
                       onChange={(v) => updateForm('primaryCompany', v ?? '')}
-                      options={form.accessibleCompanies.map((companyId) => {
-                        const company = availableCompanies.find((item) => item._id === companyId);
-                        return { value: companyId, label: company?.companyName || companyId };
-                      })}
+                      options={primaryCompanyOptions}
                       placeholder="Select primary company"
                       searchable
                       size="md"
@@ -623,7 +708,7 @@ export default function AddUserPage() {
                       <span>
                         Primary:{' '}
                         <span className="font-bold text-slate-900">
-                          {availableCompanies.find((item) => item._id === form.primaryCompany)?.companyName || '—'}
+                          {primaryCompanyName}
                         </span>
                       </span>
                     </div>
@@ -646,7 +731,7 @@ export default function AddUserPage() {
                 <div className="divide-y divide-slate-100">
                   {form.companyAssignments.map((assignment) => {
                     const company = availableCompanies.find((item) => item._id === assignment.company);
-                    const enabledModuleKeys = getEnabledCompanyModuleKeys(company);
+                    const enabledModuleKeys = enabledModuleKeysByCompany[assignment.company] || [];
 
                     const allEnabledPerms = ACCESS_SECTIONS.flatMap((s) =>
                       s.permissions.filter((p) => !p.moduleKey || enabledModuleKeys.includes(p.moduleKey))
@@ -943,18 +1028,19 @@ export default function AddUserPage() {
                                               type="checkbox"
                                               checked={checked}
                                               onChange={(e) =>
-                                                updateAssignment(assignment.company, (current) => ({
-                                                  ...current,
-                                                  permissions: {
-                                                    ...normalizePermissionMap(current.permissions || {}),
-                                                    [permission.resource]: {
-                                                      ...normalizePermissionMap(current.permissions || {})[
-                                                        permission.resource
-                                                      ],
-                                                      [permission.action]: e.target.checked,
+                                                updateAssignment(assignment.company, (current) => {
+                                                  const perms = normalizePermissionMap(current.permissions || {});
+                                                  return {
+                                                    ...current,
+                                                    permissions: {
+                                                      ...perms,
+                                                      [permission.resource]: {
+                                                        ...perms[permission.resource],
+                                                        [permission.action]: e.target.checked,
+                                                      },
                                                     },
-                                                  },
-                                                }))
+                                                  };
+                                                })
                                               }
                                               className="accent-[#0B3B2E]"
                                             />

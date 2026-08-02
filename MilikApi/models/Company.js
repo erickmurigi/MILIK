@@ -92,7 +92,7 @@ const EMAIL_PROFILE_USAGE_TAGS = [
   'invoices',
   'landlord_statements',
   'system_alerts',
-  'demo_requests',
+  'trial_requests',
   'onboarding',
 ];
 
@@ -635,9 +635,6 @@ const companySchema = new mongoose.Schema(
       default: () => ({}),
     },
 
-    // Demo workspace marker
-    isDemoWorkspace: { type: Boolean, default: false, index: true },
-
     // Access keys for multi-tenant authentication
     // Keep optional so company creation does not fail when keys are not supplied.
     accessKeys: [
@@ -673,7 +670,6 @@ companySchema.pre('validate', function normalizeCompany(next) {
 
   this.unitTypes = normalizeCompanyUnitTypes(this.unitTypes);
   this.registrationNo = optionalIndexedString(this.registrationNo);
-  this.isDemoWorkspace = Boolean(this.isDemoWorkspace);
   this.companyMode = normalizeCompanyOperatingMode(this.companyMode);
 
   if (this.modules) {
@@ -822,8 +818,6 @@ companySchema.pre('validate', function normalizeCompany(next) {
 companySchema.index({ companyCode: 1 }, { sparse: true });
 companySchema.index({ companyName: 1 });
 companySchema.index({ createdAt: -1 });
-companySchema.index({ isDemoWorkspace: 1, companyName: 1 });
-companySchema.index({ isDemoWorkspace: 1, updatedAt: -1 });
 companySchema.index({ 'accessKeys.keyVersion': 1 });
 companySchema.index(
   { registrationNo: 1 },

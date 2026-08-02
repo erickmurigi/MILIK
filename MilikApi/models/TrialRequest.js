@@ -26,15 +26,10 @@ const trialRequestSchema = new mongoose.Schema(
     selectedModules: { type: [String], default: [] },
     status: {
       type: String,
-      enum: ["pending", "contacted", "converted", "demo_started", "demo_expired"],
+      enum: ["pending", "contacted", "converted"],
       default: "pending",
     },
-    demoTokenIssued: { type: Boolean, default: false },
-    demoStartedAt: { type: Date, default: null },
-    demoExpiresAt: { type: Date, default: null },
-    demoCompany: { type: mongoose.Schema.Types.ObjectId, ref: "Company", default: null },
     lastAdminNotificationAt: { type: Date, default: null },
-    lastDemoAccessEmailSentAt: { type: Date, default: null },
     rawPayload: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
   {
@@ -42,7 +37,6 @@ const trialRequestSchema = new mongoose.Schema(
   }
 );
 
-trialRequestSchema.index({ status: 1, demoExpiresAt: 1 });
-trialRequestSchema.index({ demoCompany: 1 });
+trialRequestSchema.index({ status: 1, createdAt: -1 });
 
 export default mongoose.model("TrialRequest", trialRequestSchema);

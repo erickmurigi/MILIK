@@ -369,6 +369,28 @@ export const MODULE_ROLE_PRESETS = {
     hintCls:     'text-emerald-700/70',
     allPermissions: PM,
     roles: {
+      fieldOfficer: {
+        label: 'Field Officer',
+        description: 'On-site: log & close inspections, maintenance jobs & meter readings. View tenant balances.',
+        grants: [
+          { resource: 'properties',    action: 'view'   },
+          { resource: 'units',         action: 'view'   },
+          { resource: 'tenants',       action: 'view'   },
+          { resource: 'tenantInvoices',action: 'view'   },
+          { resource: 'receipts',      action: 'view'   },
+          { resource: 'statements',    action: 'view'   },
+          { resource: 'maintenances',  action: 'view'   },
+          { resource: 'maintenances',  action: 'create' },
+          { resource: 'maintenances',  action: 'update' },
+          { resource: 'maintenances',  action: 'close'  },
+          { resource: 'inspections',   action: 'view'   },
+          { resource: 'inspections',   action: 'create' },
+          { resource: 'inspections',   action: 'update' },
+          { resource: 'inspections',   action: 'close'  },
+          { resource: 'meterReadings', action: 'view'   },
+          { resource: 'meterReadings', action: 'create' },
+        ],
+      },
       agent: {
         label: 'Property Agent',
         description: 'View properties, units, tenants, leases, receipts & invoices. Log maintenance.',

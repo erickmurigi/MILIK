@@ -43,19 +43,7 @@ import {
 } from "../utils/smtpMailer.js";
 
 const companySummarySelect =
-  "companyName companyCode baseCurrency country town email phoneNo slogan logo unitTypes isActive accountStatus locked isDemoWorkspace companyMode modules fiscalStartMonth fiscalStartYear operationPeriodType paymentIntegration.mpesaPaybills paymentIntegration.mpesaPaybill communication.emailEnabled communication.emailProfiles communication.defaultEmailProfileId communication.smsProfiles communication.defaultSmsProfileId communication.smsTemplates";
-
-const DEMO_COMPANY_EMAIL = "demo.workspace@milik.local";
-const DEMO_COMPANY_NAME_REGEX = /^milik\s+demo\s+workspace$/i;
-
-const buildLiveCompanyFilter = () => ({
-  isDemoWorkspace: { $ne: true },
-  companyName: { $not: DEMO_COMPANY_NAME_REGEX },
-  email: { $ne: DEMO_COMPANY_EMAIL },
-});
-
-const shouldIncludeDemoCompanies = (req = {}) =>
-  req?.user?.isDemoUser || String(req?.query?.includeDemo || "").toLowerCase() === "true";
+  "companyName companyCode baseCurrency country town email phoneNo slogan logo unitTypes isActive accountStatus locked companyMode modules fiscalStartMonth fiscalStartYear operationPeriodType paymentIntegration.mpesaPaybills paymentIntegration.mpesaPaybill communication.emailEnabled communication.emailProfiles communication.defaultEmailProfileId communication.smsProfiles communication.defaultSmsProfileId communication.smsTemplates";
 
 const buildCompanyCode = (companyName = "") =>
   String(companyName)
@@ -182,7 +170,7 @@ const EMAIL_USAGE_TAGS = [
   "invoices",
   "landlord_statements",
   "system_alerts",
-  "demo_requests",
+  "trial_requests",
   "onboarding",
 ];
 
@@ -1285,9 +1273,7 @@ export const getAllCompanies = async (req, res, next) => {
     const limit = Math.min(Math.max(rawLimit, 1), 500);
     const page = Math.max(Number(req.query.page) || 1, 1);
     const search = escapeRegex(req.query.search);
-    const includeDemoCompanies = shouldIncludeDemoCompanies(req);
-
-    const query = includeDemoCompanies ? {} : buildLiveCompanyFilter();
+    const query = {};
     if (search) {
       query.$or = [
         { companyName: { $regex: search, $options: "i" } },
@@ -1327,11 +1313,8 @@ export const getAllCompanies = async (req, res, next) => {
 
 export const getAccessibleCompanies = async (req, res, next) => {
   try {
-    const includeDemoCompanies = shouldIncludeDemoCompanies(req);
-    const companyFilter = includeDemoCompanies ? {} : buildLiveCompanyFilter();
-
     if (isSystemAdminUser(req.user)) {
-      const companies = await Company.find(companyFilter)
+      const companies = await Company.find({})
         .select(companySummarySelect)
         .sort({ companyName: 1 })
         .lean();
@@ -1362,7 +1345,7 @@ export const getAccessibleCompanies = async (req, res, next) => {
       return next(createError(403, "No company associated with user"));
     }
 
-    const companies = await Company.find({ _id: { $in: companyIds }, ...companyFilter })
+    const companies = await Company.find({ _id: { $in: companyIds } })
       .select(companySummarySelect)
       .sort({ companyName: 1 })
       .lean();

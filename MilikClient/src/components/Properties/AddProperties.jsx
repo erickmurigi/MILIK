@@ -216,6 +216,7 @@ const AddProperty = () => {
   const landlordsFromStore = useSelector(selectAllLandlords);
   const propertiesFromStore = useSelector(selectAllProperties);
 
+  const [zones, setZones] = useState([]);
   const [activeTab, setActiveTab] = useState("general");
   const draftStorageKey = currentCompany?._id ? `milik:add-property-draft:${currentCompany._id}:${currentUser?._id || currentUser?.id || currentUser?.email || "user"}` : null;
   const draftReadyRef = useRef(false);
@@ -343,20 +344,6 @@ const AddProperty = () => {
     "Special Purpose",
   ];
 
-
-  const zones = [
-    "Nairobi CBD",
-    "Westlands",
-    "Kilimani",
-    "Karen",
-    "Mombasa Road",
-    "Thika Road",
-    "Kiambu",
-    "Mombasa",
-    "Kisumu",
-    "Nakuru",
-    "Eldoret",
-  ];
 
   const labelClass = "mb-0.5 block text-xs font-semibold text-slate-700";
   const helperLabelClass = "block text-xs font-medium text-slate-600 mb-1";
@@ -701,6 +688,12 @@ const AddProperty = () => {
       dispatch(getLandlords({ company: currentCompany._id }));
     }
   }, [currentCompany, dispatch, isSelfManagingLandlordMode]);
+
+  useEffect(() => {
+    adminRequests.get('/zones', { params: { limit: 500, isActive: 'true' } })
+      .then((res) => setZones((res.data?.zones || []).map((z) => z.name).filter(Boolean)))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (activeTab !== "utilityRates" || !currentCompany?._id) return;

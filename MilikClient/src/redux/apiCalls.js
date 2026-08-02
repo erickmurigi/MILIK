@@ -349,8 +349,6 @@ const resetPersistedWorkspaceCache = () => {
   const transientKeys = [
     "app-tabs",
     "active-tab",
-    "milik_demo_mode",
-    "milik_demo_company_id",
   ];
   transientKeys.forEach((key) => {
     try { localStorage.removeItem(key); } catch (_e) {}
@@ -362,8 +360,6 @@ const clearPreLoginSessionArtifacts = () => {
     "milik_token",
     "milik_user",
     "milik_active_company_id",
-    "milik_demo_mode",
-    "milik_demo_company_id",
     "app-tabs",
     "active-tab",
   ].forEach((key) => {
@@ -2508,8 +2504,6 @@ export const loginUser = (email, password) => async (dispatch) => {
     invalidateAccessibleCompaniesCache();
     dispatch(clearCompanyState());
     await resetPersistedWorkspaceCache();
-    localStorage.removeItem('milik_demo_mode');
-    localStorage.removeItem('milik_demo_company_id');
 
     dispatch(loginSuccess({ user, token }));
 
@@ -2517,7 +2511,7 @@ export const loginUser = (email, password) => async (dispatch) => {
       dispatch(setCurrentCompany(resolvedCompany));
       dispatch(getCompanySuccess(resolvedCompany));
       localStorage.setItem('milik_active_company_id', resolvedCompany._id);
-    } else if (!user?.isDemoUser) {
+    } else {
       localStorage.removeItem('milik_active_company_id');
     }
 

@@ -688,6 +688,14 @@ export const getRentalCollectionReport = async (req, res, next) => {
     if (req.query.tenantId) paymentQuery.tenant = toObjectId(req.query.tenantId);
     if (req.query.paymentMethod) paymentQuery.paymentMethod = req.query.paymentMethod;
     if (req.query.cashbook) paymentQuery.cashbook = { $regex: escapeRegex(req.query.cashbook), $options: "i" };
+    // Resolve zone to property IDs so both the payment and invoice queries can filter by zone.
+    let zonePropertyIds = null;
+    if (req.query.zone && !req.query.propertyId && !req.query.unitId) {
+      const zoneLower = req.query.zone.toLowerCase().trim();
+      const zoneProps = await Property.find({ business: businessId }, { _id: 1, zoneRegion: 1 }).lean();
+      zonePropertyIds = zoneProps.filter((p) => (p.zoneRegion || '').toLowerCase() === zoneLower).map((p) => p._id);
+    }
+
     // RentPayment doesn't reliably carry a direct property field — resolve via unit.
     // unitId is more specific and takes precedence; propertyId resolves to its unit IDs.
     if (req.query.unitId) {
@@ -698,6 +706,11 @@ export const getRentalCollectionReport = async (req, res, next) => {
         { _id: 1 }
       ).lean();
       paymentQuery.unit = { $in: propertyUnitIds.map((u) => u._id) };
+    } else if (zonePropertyIds) {
+      const zoneUnitIds = zonePropertyIds.length > 0
+        ? await Unit.find({ property: { $in: zonePropertyIds }, business: businessId }, { _id: 1 }).lean()
+        : [];
+      paymentQuery.unit = { $in: zoneUnitIds.map((u) => u._id) };
     }
 
     const invoiceQuery = {
@@ -713,6 +726,7 @@ export const getRentalCollectionReport = async (req, res, next) => {
       ],
     };
     if (req.query.propertyId) invoiceQuery.property = toObjectId(req.query.propertyId);
+    else if (zonePropertyIds) invoiceQuery.property = { $in: zonePropertyIds };
     if (req.query.tenantId) invoiceQuery.tenant = toObjectId(req.query.tenantId);
     if (req.query.unitId) invoiceQuery.unit = toObjectId(req.query.unitId);
     if (req.query.landlordId) invoiceQuery.landlord = toObjectId(req.query.landlordId);

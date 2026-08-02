@@ -1,7 +1,9 @@
 // controllers/maintenanceController.js
 import mongoose from "mongoose";
 import Maintenance from "../../models/Maintenance.js";
+import Unit from "../../models/Unit.js";
 import { emitToCompany } from "../../utils/socketManager.js";
+import { getFieldOfficerPropertyIds } from "../../utils/fieldOfficerScope.js";
 
 const resolveBusinessId = (req) => {
   const requested = req.query?.business || req.body?.business || null;
@@ -42,7 +44,6 @@ export const getMaintenances = async (req, res, next) => {
     const filter = { business };
     if (status && status !== "all") filter.status = status;
     if (priority && priority !== "all") filter.priority = priority;
-    if (unit) filter.unit = unit;
     if (tenant) filter.tenant = tenant;
     if (search && search.trim()) {
       const term = search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -51,6 +52,24 @@ export const getMaintenances = async (req, res, next) => {
         { description: { $regex: term, $options: "i" } },
         { assignedTo: { $regex: term, $options: "i" } },
       ];
+    }
+
+    const foPropertyIds = await getFieldOfficerPropertyIds(req);
+    if (foPropertyIds !== null) {
+      const foUnits = foPropertyIds.length > 0
+        ? await Unit.find({ property: { $in: foPropertyIds }, business }, { _id: 1 }).lean()
+        : [];
+      const foUnitSet = new Set(foUnits.map((u) => String(u._id)));
+      if (unit) {
+        if (!foUnitSet.has(String(unit))) {
+          return res.status(200).json({ success: true, data: [], total: 0, page: 1, pages: 1 });
+        }
+        filter.unit = unit;
+      } else {
+        filter.unit = { $in: [...foUnitSet] };
+      }
+    } else if (unit) {
+      filter.unit = unit;
     }
 
     const pageNum = Math.max(parseInt(page, 10) || 1, 1);
@@ -86,6 +105,16 @@ export const getMaintenance = async (req, res, next) => {
       .populate({ path: "unit", select: "unitNumber property", populate: { path: "property", select: "propertyName name address" } })
       .populate("tenant", "name phone email");
     if (!maintenance) return res.status(404).json({ message: "Maintenance request not found" });
+
+    const foPropertyIds = await getFieldOfficerPropertyIds(req);
+    if (foPropertyIds !== null) {
+      const foSet = new Set(foPropertyIds.map(String));
+      const propId = maintenance.unit?.property?._id || maintenance.unit?.property;
+      if (!propId || !foSet.has(String(propId))) {
+        return res.status(403).json({ success: false, message: "Not authorized to access this maintenance request" });
+      }
+    }
+
     res.status(200).json(maintenance);
   } catch (err) {
     next(err);

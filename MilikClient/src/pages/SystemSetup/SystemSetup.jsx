@@ -88,7 +88,6 @@ const isCompanyActive = (company = {}) => {
 
 const getCompanyStatusLabel = (company = {}) => {
   if (company?.locked) return "Locked";
-  if (company?.isDemoWorkspace) return "Demo";
   if (!isCompanyActive(company)) return "Inactive";
   return company?.accountStatus || "Active";
 };
@@ -322,17 +321,15 @@ const ActionMenu = ({ items }) => {
 
 // ─── Overview Panel ────────────────────────────────────────────────────────────
 const OverviewPanel = ({ companies, users, companyReadiness, companyUserCounts, onAddCompany, onAddUser, onOpenCompanySetup, onOpenWorkspace }) => {
-  const { activeCount, demoCount, attentionCount, attentionQueue, recentCompanies } = useMemo(() => {
-    let activeCount = 0, demoCount = 0;
+  const { activeCount, attentionCount, attentionQueue, recentCompanies } = useMemo(() => {
+    let activeCount = 0;
     const needsAttention = [];
     for (const c of companies) {
-      if (c?.isDemoWorkspace) demoCount++;
-      else if (isCompanyActive(c)) activeCount++;
+      if (isCompanyActive(c)) activeCount++;
       if ((companyReadiness.get(normalizeId(c))?.score || 0) < 80) needsAttention.push(c);
     }
     return {
       activeCount,
-      demoCount,
       attentionCount: needsAttention.length,
       attentionQueue: needsAttention.slice(0, 6),
       recentCompanies: [...companies]
@@ -351,7 +348,6 @@ const OverviewPanel = ({ companies, users, companyReadiness, companyUserCounts, 
       <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
         <StatCard label="Companies" value={companies.length} icon={FaBuilding} accent="emerald" />
         <StatCard label="Active" value={activeCount} icon={FaCheckCircle} accent="green" />
-        <StatCard label="Demo" value={demoCount} icon={FaStore} accent="violet" />
         <StatCard label="Users" value={users.length} icon={FaUsers} accent="orange" />
         <StatCard label="Needs Attention" value={attentionCount} icon={FaExclamationTriangle} accent="rose" />
       </div>
@@ -634,6 +630,11 @@ const UsersPanel = ({ users, companies, companyMap, selectedCompanyId, onSelecte
   const [page, setPage] = useTabState("/system-setup/users:page", 1);
   const [pageSize, setPageSize] = useTabState("/system-setup/users:pageSize", DEFAULT_PAGE_SIZE);
 
+  const companyOptions = useMemo(
+    () => companies.map((c) => ({ value: c._id, label: c.companyName })),
+    [companies]
+  );
+
   const filtered = useMemo(() => {
     return users.filter((user) => {
       const name = `${user?.surname || ""} ${user?.otherNames || ""}`.trim();
@@ -664,7 +665,7 @@ const UsersPanel = ({ users, companies, companyMap, selectedCompanyId, onSelecte
           <AppSelect
             value={selectedCompanyId}
             onChange={(v) => onSelectedCompanyIdChange(v ?? "")}
-            options={companies.map((c) => ({ value: c._id, label: c.companyName }))}
+            options={companyOptions}
             placeholder="All companies"
             clearable
             searchable
@@ -757,13 +758,11 @@ const TrialsPanel = ({ companies, companyReadiness, companyUserCounts, onOpenWor
   const [page, setPage] = useTabState("/system-setup/trials:page", 1);
   const [pageSize, setPageSize] = useTabState("/system-setup/trials:pageSize", DEFAULT_PAGE_SIZE);
 
-  const { spotlightCompanies, demoCount, inactiveCount, attentionCount } = useMemo(() => {
-    const demoCompanies = companies.filter((c) => c?.isDemoWorkspace);
-    const inactiveCompanies = companies.filter((c) => !c?.isDemoWorkspace && !isCompanyActive(c));
+  const { spotlightCompanies, inactiveCount, attentionCount } = useMemo(() => {
+    const inactiveCompanies = companies.filter((c) => !isCompanyActive(c));
     const attentionCompanies = companies.filter((c) => (companyReadiness.get(normalizeId(c))?.score || 0) < 80);
     return {
-      spotlightCompanies: [...new Map([...demoCompanies, ...inactiveCompanies, ...attentionCompanies].map((c) => [normalizeId(c), c])).values()],
-      demoCount: demoCompanies.length,
+      spotlightCompanies: [...new Map([...inactiveCompanies, ...attentionCompanies].map((c) => [normalizeId(c), c])).values()],
       inactiveCount: inactiveCompanies.length,
       attentionCount: attentionCompanies.length,
     };
@@ -777,9 +776,6 @@ const TrialsPanel = ({ companies, companyReadiness, companyUserCounts, onOpenWor
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex-shrink-0 border-b border-slate-100 bg-white px-4 py-2.5">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-1.5 text-[11px] font-bold text-violet-700">
-            <FaStore className="text-[10px]" /> {demoCount} Demo workspace{demoCount !== 1 ? "s" : ""}
-          </div>
           <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-bold text-slate-600">
             <FaLock className="text-[10px]" /> {inactiveCount} Inactive
           </div>
@@ -811,7 +807,7 @@ const TrialsPanel = ({ companies, companyReadiness, companyUserCounts, onOpenWor
               const companyId = normalizeId(company);
               const readiness = companyReadiness.get(companyId) || evaluateCompanySetup(company, 0);
               const userCount = companyUserCounts.get(companyId) || 0;
-              const spotlightLabel = company?.isDemoWorkspace ? "Demo" : !isCompanyActive(company) ? "Inactive" : "Needs Attention";
+              const spotlightLabel = !isCompanyActive(company) ? "Inactive" : "Needs Attention";
               return (
                 <tr key={companyId} className="group border-b border-slate-100 odd:bg-white even:bg-slate-50/50 hover:bg-[#EDF5F1]/70 transition">
                   <td className="px-3 py-1.5 border-r border-gray-100">

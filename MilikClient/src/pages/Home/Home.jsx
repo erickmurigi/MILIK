@@ -119,16 +119,16 @@ const features = [
 
 const steps = [
   {
-    title: "1. Pick your role and get in",
-    description: "Choose Property Manager or Landlord, fill a short form and the demo workspace opens immediately — no sales call required.",
+    title: "1. Request your free trial",
+    description: "Fill a short form — your name, email, phone and the module you need. No sales call, no commitment required.",
   },
   {
-    title: "2. Walk through the real system",
-    description: "Properties, tenants, rent receipts, landlord statements, car wash jobs, payroll — all loaded with sample data so you can explore properly.",
+    title: "2. We reach out personally",
+    description: "Our team contacts you within 24 hours to walk you through the system and set up your workspace with your actual configuration.",
   },
   {
-    title: "3. Move to your live workspace",
-    description: "When you're ready, we onboard your real data. Your live workspace is separate from the demo — nothing carries over that shouldn't.",
+    title: "3. Start working in your live workspace",
+    description: "Once onboarded, you get your own dedicated workspace. Your data, your settings, your team — ready from day one.",
   },
 ];
 
@@ -168,14 +168,6 @@ const faqs = [
   {
     question: "How many users can access the same Milik workspace?",
     answer: "As many as your plan supports. Each user gets their own login with a role — Administrator, Manager, Accountant, Agent or Viewer. Permissions are set per module, so users only see what their role requires.",
-  },
-  {
-    question: "Can I use Milik during the demo to enter my own records?",
-    answer: "The demo workspace is shared and read-only, so you can explore safely without anyone's data getting mixed in. Once you subscribe, you get your own separate live workspace with full write access from day one.",
-  },
-  {
-    question: "How long does the demo last?",
-    answer: "3 days from when it's activated. If you need more time before deciding, reach out on WhatsApp or email and we can extend it.",
   },
 ];
 
@@ -288,7 +280,7 @@ const pricingTiers = [
     price: "KES 7,500",
     meta: "/ month",
     helper: "Best starting commercial tier for active property managers who want an affordable but serious ERP step-up.",
-    cta: "Request demo",
+    cta: "Request a Free Demo",
     featured: true,
   },
   {
@@ -318,8 +310,6 @@ const statItems = [
   { target: 99, suffix: "%", label: "Platform uptime" },
 ];
 
-const DEMO_EXPIRED_NOTICE_KEY = "milik_demo_expired_notice";
-const DEMO_EXPIRED_MESSAGE = "Your demo period has ended. Contact MILIK for activation.";
 const API_BASE = String(import.meta.env.VITE_API_URL || "/api").replace(/\/$/, "");
 
 const PUBLIC_SITE_URL = "https://milikproperty.com";
@@ -458,19 +448,15 @@ function Home() {
   const [showTrialModal, setShowTrialModal] = React.useState(false);
   const [trialRole, setTrialRole] = React.useState("property_manager");
   const [activeFaq, setActiveFaq] = React.useState(null);
-  const [demoExpiredNotice, setDemoExpiredNotice] = React.useState("");
-  const [restoringDemoAccess, setRestoringDemoAccess] = React.useState(false);
 
   React.useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const hasUtilityQuery = params.has("demoAccess") || params.has("token");
     const canonicalUrl = `${PUBLIC_SITE_URL}/`;
 
     document.title = "Milik | Business Management Software Kenya — Property, Car Wash, HR & Inventory";
     setDocumentDescription(
-      "Milik is Kenya's business management platform — property management, car wash operations, HR, inventory and property sales in one workspace. Start your free demo today."
+      "Milik is Kenya's business management platform — property management, car wash operations, HR, inventory and property sales in one workspace. Request a free trial today."
     );
-    setDocumentRobots(hasUtilityQuery ? "noindex,nofollow" : "index,follow");
+    setDocumentRobots("index,follow");
     setCanonicalHref(canonicalUrl);
     setOpenGraphContent("og:type", "website");
     setOpenGraphContent("og:site_name", "Milik");
@@ -493,98 +479,12 @@ function Home() {
       "Property management, car wash, HR, inventory and property sales in one workspace. Built for Kenya."
     );
     setTwitterContent("twitter:image", `${PUBLIC_SITE_URL}/logo.png`);
-  }, [location.search]);
+  }, []);
 
   const openTrialModal = (role = "property_manager") => {
     setTrialRole(role);
     setShowTrialModal(true);
   };
-
-  React.useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const demoAccessToken = params.get("demoAccess");
-
-    if (!demoAccessToken) return undefined;
-
-    let cancelled = false;
-    setRestoringDemoAccess(true);
-
-    const restoreDemoAccess = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/trial/access`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ accessToken: demoAccessToken }),
-        });
-
-        const data = await response.json().catch(() => ({}));
-
-        if (!response.ok || !data?.success || !data?.demoAvailable || !data?.token || !data?.user) {
-          throw new Error(data?.message || "Failed to restore demo access.");
-        }
-
-        if (cancelled) return;
-
-        dispatch(loginSuccess({ token: data.token, user: data.user }));
-
-        if (data.user?.company?._id) {
-          dispatch(getCompanySuccess(data.user.company));
-          localStorage.setItem("milik_active_company_id", data.user.company._id);
-        }
-
-        toast.success(data?.message || "Welcome back. Resuming your remaining demo time.");
-
-        params.delete("demoAccess");
-        const nextSearch = params.toString();
-        navigate(data.redirectTo || "/dashboard", {
-          replace: true,
-          state: { restoredFromDemoEmail: true, homeSearch: nextSearch ? `?${nextSearch}` : "" },
-        });
-      } catch (error) {
-        if (cancelled) return;
-        const message = error?.message || "Failed to restore demo access.";
-        toast.error(message);
-        params.delete("demoAccess");
-        const nextSearch = params.toString();
-        navigate(
-          { pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : "" },
-          { replace: true }
-        );
-      } finally {
-        if (!cancelled) setRestoringDemoAccess(false);
-      }
-    };
-
-    restoreDemoAccess();
-    return () => { cancelled = true; };
-  }, [dispatch, location.pathname, location.search, navigate]);
-
-  React.useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const queryRequestsExpiredNotice = params.get("demoExpired") === "1";
-
-    let nextNotice = "";
-    try {
-      nextNotice = sessionStorage.getItem(DEMO_EXPIRED_NOTICE_KEY) || "";
-      if (!nextNotice && queryRequestsExpiredNotice) {
-        nextNotice = DEMO_EXPIRED_MESSAGE;
-        sessionStorage.setItem(DEMO_EXPIRED_NOTICE_KEY, nextNotice);
-      }
-    } catch (_error) {
-      nextNotice = queryRequestsExpiredNotice ? DEMO_EXPIRED_MESSAGE : "";
-    }
-
-    setDemoExpiredNotice(nextNotice);
-
-    if (queryRequestsExpiredNotice) {
-      params.delete("demoExpired");
-      const nextSearch = params.toString();
-      navigate(
-        { pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : "" },
-        { replace: true }
-      );
-    }
-  }, [location.pathname, location.search, navigate]);
 
   React.useEffect(() => {
     const ob = new IntersectionObserver(
@@ -597,43 +497,8 @@ function Home() {
     return () => ob.disconnect();
   }, []);
 
-  const dismissDemoExpiredNotice = () => {
-    setDemoExpiredNotice("");
-    try { sessionStorage.removeItem(DEMO_EXPIRED_NOTICE_KEY); } catch (_error) {}
-  };
-
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#f6f8f7] text-slate-900">
-      {restoringDemoAccess ? (
-        <div className="border-b border-[#0B3B2E]/10 bg-[#ECF6F1] px-4 py-3 text-sm text-[#0B3B2E]">
-          <div className="mx-auto max-w-7xl font-semibold sm:px-2">Opening your MILIK demo workspace...</div>
-        </div>
-      ) : null}
-      {demoExpiredNotice ? (
-        <div className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-          <div className="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:px-2">
-            <div>
-              <p className="font-extrabold uppercase tracking-[0.18em] text-amber-700">Demo access ended</p>
-              <p className="mt-1 font-semibold">{demoExpiredNotice}</p>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <a
-                href="mailto:miliksystem@gmail.com?subject=Milik%20Activation%20Request"
-                className="inline-flex items-center rounded-full bg-[#0B3B2E] px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white transition hover:bg-[#0A3127]"
-              >
-                Contact MILIK
-              </a>
-              <button
-                type="button"
-                onClick={dismissDemoExpiredNotice}
-                className="inline-flex items-center rounded-full border border-amber-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-amber-900 transition hover:bg-amber-100"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       {/* Nav */}
       <nav className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/95 backdrop-blur">
@@ -653,7 +518,7 @@ function Home() {
               onClick={() => openTrialModal("property_manager")}
               className="rounded-full bg-[#0B3B2E] px-5 py-2 text-sm font-bold text-white transition hover:bg-[#0A3127]"
             >
-              Get Free Trial
+              Request a Free Demo
             </button>
             <Link to="/login" className="rounded-full border border-[#0B3B2E] px-5 py-2 text-sm font-bold text-[#0B3B2E] transition hover:bg-[#0B3B2E] hover:text-white">Sign in</Link>
           </div>
@@ -693,7 +558,7 @@ function Home() {
                 onClick={() => openTrialModal("property_manager")}
                 className="inline-flex items-center gap-2 rounded-full bg-[#0B3B2E] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-[#0B3B2E]/20 transition hover:bg-[#0A3127]"
               >
-                Get Free Trial
+                Request a Free Demo
                 <FaArrowRight />
               </button>
               <Link
@@ -759,31 +624,31 @@ function Home() {
         </div>
       </section>
 
-      {/* Demo entry cards */}
+      {/* Entry cards */}
       <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="grid gap-4 md:grid-cols-3">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm reveal reveal-d1">
             <FaBuilding className="text-xl text-[#0B3B2E]" />
             <h3 className="mt-3 text-base font-extrabold text-slate-900">Property Manager</h3>
-            <p className="mt-1.5 text-sm leading-6 text-slate-600">Explore the guided demo workspace with properties, tenants, receipts, owner statements and finance reports.</p>
+            <p className="mt-1.5 text-sm leading-6 text-slate-600">Manage properties, tenants, rent receipts, owner statements and finance reports — we set up your workspace and walk you through it.</p>
             <button
               type="button"
               onClick={() => openTrialModal("property_manager")}
               className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#0A3127]"
             >
-              Enter Demo <FaArrowRight />
+              Request a Free Demo <FaArrowRight />
             </button>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm reveal reveal-d2">
             <FaUserFriends className="text-xl text-[#FF8C00]" />
             <h3 className="mt-3 text-base font-extrabold text-slate-900">Landlord</h3>
-            <p className="mt-1.5 text-sm leading-6 text-slate-600">Explore the self-managing landlord demo workspace with statements, remittances, advancements and reporting flows.</p>
+            <p className="mt-1.5 text-sm leading-6 text-slate-600">Self-manage your properties with statements, remittances, advancements and reporting — your own workspace, configured for you.</p>
             <button
               type="button"
               onClick={() => openTrialModal("landlord")}
               className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#0B3B2E] px-4 py-2 text-xs font-bold text-[#0B3B2E] transition hover:bg-[#0B3B2E] hover:text-white"
             >
-              Enter Demo <FaArrowRight />
+              Request a Free Demo <FaArrowRight />
             </button>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm reveal reveal-d3">
@@ -993,8 +858,8 @@ function Home() {
       <section id="how-it-works" className="bg-white py-12">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="max-w-2xl">
-            <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#FF8C00]">How the demo works</p>
-            <h2 className="mt-2 text-2xl font-extrabold text-slate-950 sm:text-3xl">From first look to live workspace — here's how it works.</h2>
+            <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#FF8C00]">How it works</p>
+            <h2 className="mt-2 text-2xl font-extrabold text-slate-950 sm:text-3xl">From your first request to a live workspace — here's how we get you started.</h2>
           </div>
           <div className="mt-7 grid gap-4 lg:grid-cols-3">
             {steps.map((step) => (
@@ -1013,9 +878,9 @@ function Home() {
           <div className="grid gap-6 lg:grid-cols-[1fr_0.8fr] lg:items-center">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#F8C471]">Built to convert</p>
-              <h2 className="mt-2 text-2xl font-extrabold sm:text-3xl">See the real system before you buy — not a slide deck.</h2>
+              <h2 className="mt-2 text-2xl font-extrabold sm:text-3xl">We show you the real system — not a slide deck.</h2>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-white/85">
-                The demo workspace has sample properties, tenants, receipts, landlord statements and finance reports — everything you'd actually use, so you can judge it honestly.
+                Request a free trial and our team will walk you through the system personally — properties, tenants, receipts, landlord statements and finance reports, everything you'd actually use.
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -1069,9 +934,9 @@ function Home() {
           <div className="grid gap-6 lg:grid-cols-[1fr_0.7fr] lg:items-center">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Ready to explore?</p>
-              <h2 className="mt-2 text-2xl font-extrabold text-slate-950 sm:text-3xl">Open the guided demo and show your team what Milik feels like.</h2>
+              <h2 className="mt-2 text-2xl font-extrabold text-slate-950 sm:text-3xl">Ready to see Milik in action? We'll set it up for you.</h2>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                Start with the property manager workspace or the self-managing landlord workspace. Both demo experiences are available now.
+                Request a free trial and our team will reach out to get you started — no automated signup, no waiting around.
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row lg:justify-end">
@@ -1080,7 +945,7 @@ function Home() {
                 onClick={() => openTrialModal("property_manager")}
                 className="inline-flex items-center justify-center gap-2 rounded-full bg-[#0B3B2E] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-[#0B3B2E]/20 transition hover:bg-[#0A3127]"
               >
-                Get Free Trial <FaArrowRight />
+                Request a Free Demo <FaArrowRight />
               </button>
               <Link
                 to="/login"
@@ -1138,7 +1003,7 @@ function Home() {
                   { label: "Pricing", href: "/#pricing" },
                   { label: "How it works", href: "/#how-it-works" },
                   { label: "FAQ", href: "/#faq" },
-                  { label: "Get Free Trial", href: "/#" },
+                  { label: "Request a Free Demo", href: "/#" },
                   { label: "Sign In", href: "/login" },
                 ].map((l) => (
                   <li key={l.label}>

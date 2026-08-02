@@ -53,9 +53,21 @@ const MODULE_OPTIONS = [
 ];
 
 const COMPANY_MODE_OPTIONS = [
-  { key: COMPANY_OPERATING_MODES.PROPERTY_MANAGER, label: "Property Manager", description: "Manages properties on behalf of landlords. Full landlord statement and commission flows enabled." },
+  { key: COMPANY_OPERATING_MODES.PROPERTY_MANAGER,       label: "Property Manager",       description: "Manages properties on behalf of landlords. Full landlord statement and commission flows enabled." },
   { key: COMPANY_OPERATING_MODES.SELF_MANAGING_LANDLORD, label: "Self-Managing Landlord", description: "Landlord manages their own properties directly. Simplified workflow without commission structures." },
-  { key: COMPANY_OPERATING_MODES.OTHER, label: "Other", description: "General business workspace for companies that do not use property management workflows." },
+  { key: COMPANY_OPERATING_MODES.REAL_ESTATE_AGENCY,     label: "Real Estate Agency",     description: "Property sales focus — listings, buyers, offers, deals and commissions." },
+  { key: COMPANY_OPERATING_MODES.HOSPITALITY,            label: "Hospitality / Hotel",    description: "Short-stay lodging, hotel rooms, front-office check-in/out and occupancy management." },
+  { key: COMPANY_OPERATING_MODES.CARWASH,                label: "Car Wash Business",      description: "Service bays, wash packages, branch management and M-Pesa C2B payments." },
+  { key: COMPANY_OPERATING_MODES.SACCO,                  label: "SACCO / Cooperative",   description: "Member shares, savings, loans and cooperative governance workflows." },
+  { key: COMPANY_OPERATING_MODES.RETAIL,                 label: "Retail / POS",           description: "Point-of-sale, stock management, inventory tracking and sales reporting." },
+  { key: COMPANY_OPERATING_MODES.SECURITY_SERVICES,      label: "Security Services",      description: "Guard deployment, client contracts, incident reporting and patrol management." },
+  { key: COMPANY_OPERATING_MODES.ACADEMIC,               label: "Academic Institution",   description: "Schools, colleges and universities — student records, fees and academic workflows." },
+  { key: COMPANY_OPERATING_MODES.FACILITY_MANAGEMENT,    label: "Facility Management",    description: "Maintenance scheduling, asset tracking and facility service-level management." },
+  { key: COMPANY_OPERATING_MODES.TELCO_DEALERSHIP,       label: "Telco Dealership",       description: "Telecom product sales, airtime, SIM activations and dealer commission tracking." },
+  { key: COMPANY_OPERATING_MODES.HR_SERVICES,            label: "HR / Payroll Services",  description: "Employee records, leave management, payroll processing and HR reporting." },
+  { key: COMPANY_OPERATING_MODES.PROJECT_MANAGEMENT,     label: "Project Management",     description: "Project planning, task tracking, milestones and resource allocation." },
+  { key: COMPANY_OPERATING_MODES.ASSET_VALUATION,        label: "Asset Valuation",        description: "Property and asset valuations, valuation reports and client management." },
+  { key: COMPANY_OPERATING_MODES.OTHER,                  label: "Other",                  description: "General business workspace for companies that do not fit a specific category above." },
 ];
 
 const ALL_MODULE_KEYS = [
@@ -400,24 +412,19 @@ const AddCompanyWizard = () => {
                   {/* Operating model */}
                   <div className="flex-1 border border-slate-200 bg-white shadow-sm overflow-hidden">
                     <CardHeader icon={FaUsers} title="Operating Model" />
-                    <div className="p-4 space-y-2">
-                      {COMPANY_MODE_OPTIONS.map((option) => {
-                        const selected = formData.companyMode === option.key;
-                        return (
-                          <button key={option.key} type="button" onClick={() => setCompanyMode(option.key)}
-                            className={`w-full rounded-lg border p-3 text-left transition ${selected ? "border-[#0B3B2E] bg-[#EDF5F1]" : "border-slate-200 bg-white hover:border-slate-300"}`}>
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <div className="text-xs font-bold text-slate-900">{option.label}</div>
-                                <div className="mt-0.5 text-[11px] leading-4 text-slate-500">{option.description}</div>
-                              </div>
-                              <div className={`mt-0.5 flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${selected ? "bg-[#0B3B2E] text-white" : "bg-slate-100 text-slate-500"}`}>
-                                {selected ? "✓" : "·"}
-                              </div>
-                            </div>
-                          </button>
-                        );
-                      })}
+                    <div className="p-4">
+                      <AppSelect
+                        value={formData.companyMode}
+                        onChange={(v) => v && setCompanyMode(v)}
+                        options={COMPANY_MODE_OPTIONS.map(({ key, label }) => ({ value: key, label }))}
+                        searchable
+                        size="md"
+                      />
+                      {formData.companyMode && (
+                        <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">
+                          {COMPANY_MODE_OPTIONS.find((o) => o.key === formData.companyMode)?.description}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>

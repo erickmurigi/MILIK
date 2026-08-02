@@ -144,7 +144,7 @@ const emailProfileSchema = z.object({
   password: z.union([z.string(), z.literal("")]).optional(),
   internalCopyEmail: z.string().email("Invalid internal copy email address").optional().or(z.literal("")),
   internalCopyMode: z.enum(["none", "bcc", "cc"]).optional(),
-  usageTags: z.array(z.enum(["receipts", "invoices", "landlord_statements", "system_alerts", "demo_requests", "onboarding"])).optional(),
+  usageTags: z.array(z.enum(["receipts", "invoices", "landlord_statements", "system_alerts", "trial_requests", "onboarding"])).optional(),
   enabled: z.boolean().optional(),
   isDefault: z.boolean().optional(),
 }).passthrough();

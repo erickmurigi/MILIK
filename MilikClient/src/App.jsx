@@ -39,8 +39,6 @@ const PageLoader = () => (
 const NotFound          = lazy(() => import("./pages/NotFound/NotFound"));
 const Home              = lazy(() => import("./pages/Home/Home"));
 const RentalListings    = lazy(() => import("./pages/Listings/RentalListings"));
-const DemoAccessEntry   = lazy(() => import("./pages/Home/DemoAccessEntry"));
-
 // Module landing pages (public, SEO-indexed)
 const PropertyPage      = lazy(() => import("./pages/Modules/PropertyPage"));
 const CarWashPage       = lazy(() => import("./pages/Modules/CarWashPage"));
@@ -90,6 +88,7 @@ const LandlordStatementAllocations   = lazy(() => import("./pages/Admin/Landlord
 
 // Properties & Units
 const Properties                  = lazy(() => import("./pages/Properties/Properties"));
+const Zones                       = lazy(() => import("./pages/Properties/Zones"));
 const PropertyCommissionSettings  = lazy(() => import("./pages/Properties/PropertyCommissionSettings"));
 const CommissionsList             = lazy(() => import("./pages/Properties/CommissionsList"));
 const PropertyExpenses            = lazy(() => import("./pages/Properties/PropertyExpenses"));
@@ -147,6 +146,7 @@ const RentalAgedAnalysisReport    = lazy(() => import("./pages/Reports/RentalAge
 const PaidBalanceReport           = lazy(() => import("./pages/Reports/PaidBalanceReport"));
 const AgedAnalysisReport          = lazy(() => import("./pages/Reports/AgedAnalysisReport"));
 const CommissionReports           = lazy(() => import("./pages/Reports/CommissionReports"));
+const ZoneVacancyReport           = lazy(() => import("./pages/Reports/ZoneVacancyReport"));
 const TrialBalanceReport          = lazy(() => import("./pages/Reports/TrialBalanceReport"));
 const IncomeStatementReport       = lazy(() => import("./pages/Reports/IncomeStatementReport"));
 const BalanceSheetReport          = lazy(() => import("./pages/Reports/BalanceSheetReport"));
@@ -273,9 +273,7 @@ const ClientsInvoices   = lazy(() => import("./pages/Clients/ClientsInvoices"));
 const InvoicePrintView  = lazy(() => import("./pages/Clients/InvoicePrintView"));
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const DEMO_EXPIRED_NOTICE_KEY = "milik_demo_expired_notice";
-const DEMO_EXPIRED_MESSAGE = "Your demo period has ended. Contact MILIK for activation.";
-const EXTRA_SESSION_KEYS = ["milik_active_company_id", "milik_demo_mode", "milik_demo_company_id"];
+const EXTRA_SESSION_KEYS = ["milik_active_company_id"];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const getStoredUser = () => {
@@ -306,14 +304,11 @@ const isTokenExpired = (token) => {
   return Date.now() >= Number(payload.exp) * 1000;
 };
 
-const clearExpiredStoredSession = (isDemoUser = false) => {
+const clearExpiredStoredSession = () => {
   clearClientSessionStorage();
   EXTRA_SESSION_KEYS.forEach((key) => {
     try { localStorage.removeItem(key); } catch { /* ignore */ }
   });
-  if (isDemoUser) {
-    try { sessionStorage.setItem(DEMO_EXPIRED_NOTICE_KEY, DEMO_EXPIRED_MESSAGE); } catch { /* ignore */ }
-  }
 };
 
 const getStoredAuthSession = () => {
@@ -322,12 +317,11 @@ const getStoredAuthSession = () => {
 
   const user = getStoredUser();
   if (hasSessionTimedOut()) {
-    clearExpiredStoredSession(Boolean(user?.isDemoUser));
+    clearExpiredStoredSession();
     return { token: null, user: null };
   }
   if (isTokenExpired(token)) {
-    const payload = decodeTokenPayload(token);
-    clearExpiredStoredSession(Boolean(user?.isDemoUser || payload?.isDemoUser));
+    clearExpiredStoredSession();
     return { token: null, user: null };
   }
   return { token, user };
@@ -336,12 +330,7 @@ const getStoredAuthSession = () => {
 const getResolvedAuthUser = (currentUser, storedSession = getStoredAuthSession()) =>
   currentUser || storedSession.user;
 
-const hasDemoExpiredNotice = () => {
-  try { return Boolean(sessionStorage.getItem(DEMO_EXPIRED_NOTICE_KEY)); } catch { return false; }
-};
-
-const getSignedOutRedirectPath = () =>
-  hasDemoExpiredNotice() ? "/?demoExpired=1" : "/login";
+const getSignedOutRedirectPath = () => "/login";
 
 // ─── Route guards ─────────────────────────────────────────────────────────────
 // Single unified guard that replaces ProtectedRoute, CompanyModuleRoute,
@@ -458,7 +447,7 @@ function resolveDefaultAuthenticatedRoute(currentUser) {
   if (currentUser?.mustChangePassword && !currentUser?.isSystemAdmin && !currentUser?.superAdminAccess) {
     return "/first-time-password";
   }
-  return currentUser?.isDemoUser ? "/dashboard" : "/moduleDashboard";
+  return "/moduleDashboard";
 }
 
 function PublicOnlyRoute({ children }) {
@@ -527,21 +516,13 @@ function App() {
       const currentCompanyId = String(currentCompany?._id || "");
       const userCompany = resolvedUser?.company?._id ? resolvedUser.company : null;
       const userCompanyId = String(userCompany?._id || "");
-      const preferredCompanyId = String(
-        (resolvedUser?.isDemoUser
-          ? localStorage.getItem("milik_demo_company_id") || localStorage.getItem("milik_active_company_id")
-          : localStorage.getItem("milik_active_company_id")) || ""
-      );
+      const preferredCompanyId = String(localStorage.getItem("milik_active_company_id") || "");
 
       const applyCompany = (company) => {
         if (!company?._id || cancelled) return;
         dispatch(setCurrentCompany(company));
         dispatch(getCompanySuccess(company));
         localStorage.setItem("milik_active_company_id", company._id);
-        if (resolvedUser?.isDemoUser) {
-          localStorage.setItem("milik_demo_mode", "true");
-          localStorage.setItem("milik_demo_company_id", company._id);
-        }
       };
 
       if (!isSystemAdmin && userCompanyId && (!preferredCompanyId || preferredCompanyId === userCompanyId)) {
@@ -591,16 +572,8 @@ function App() {
 
   useEffect(() => {
     if (!currentCompany?._id) return;
-    const resolvedUser = getResolvedAuthUser(currentUser, getStoredAuthSession());
-    if (resolvedUser?.isDemoUser) {
-      localStorage.setItem("milik_demo_mode", "true");
-      localStorage.setItem("milik_demo_company_id", currentCompany._id);
-      return;
-    }
     localStorage.setItem("milik_active_company_id", currentCompany._id);
-    localStorage.removeItem("milik_demo_mode");
-    localStorage.removeItem("milik_demo_company_id");
-  }, [currentCompany, currentUser]);
+  }, [currentCompany]);
 
   return (
     <ESSContextProvider>
@@ -623,7 +596,6 @@ function App() {
             <Route path="/human-resources" element={<HRPage />} />
             <Route path="/inventory-pos" element={<InventoryPage />} />
             <Route path="/property-sales" element={<PropertySalesPage />} />
-            <Route path="/trial-access" element={<PublicOnlyRoute><DemoAccessEntry /></PublicOnlyRoute>} />
             <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
             <Route path="/setup-admin" element={<SetupAdmin />} />
             <Route path="/first-time-password" element={<Guard allowMustChangePassword><FirstTimePassword /></Guard>} />
@@ -813,6 +785,7 @@ function App() {
             {/* ── Properties & Units ────────────────────────────────────── */}
             <Route path="/properties"                     element={<Guard resource="properties" moduleKey="propertyManagement"><Properties /></Guard>} />
             <Route path="/properties/new"                 element={<Guard resource="properties" action="create" moduleKey="propertyManagement"><AddProperty /></Guard>} />
+            <Route path="/properties/zones"               element={<Guard resource="properties" moduleKey="propertyManagement"><Zones /></Guard>} />
             <Route path="/properties/:id"                 element={<Guard resource="properties" moduleKey="propertyManagement"><PropertyDetail /></Guard>} />
             <Route path="/properties/:id/ledger"          element={<Guard resource="properties" moduleKey="propertyManagement"><PropertyLedger /></Guard>} />
             <Route path="/properties/edit/:id"            element={<Guard resource="properties" action="update" moduleKey="propertyManagement"><EditProperty /></Guard>} />
@@ -873,6 +846,7 @@ function App() {
             <Route path="/tools/backup"           element={<Navigate to="/settings" replace />} />
 
             {/* ── Reports ───────────────────────────────────────────────── */}
+            <Route path="/reports/zone-vacancy"            element={<Guard resource="pmReports" moduleKey="propertyManagement"><ZoneVacancyReport /></Guard>} />
             <Route path="/reports/rental-collection"       element={<Guard resource="pmReports" moduleKey="propertyManagement"><RentalCollectionReport /></Guard>} />
             <Route path="/reports/export"                  element={<Guard resource="pmReports" moduleKey="propertyManagement"><RentalCollectionReport /></Guard>} />
             <Route path="/reports/property-income-summary" element={<Guard resource="pmReports" moduleKey="propertyManagement"><PropertyIncomeSummaryReport /></Guard>} />

@@ -216,6 +216,7 @@ const EditProperty = () => {
 
   const activeCompanyContext = currentCompany || currentUser?.company || null;
   const isSelfManagingLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);
+  const [zones, setZones] = useState([]);
   const operatingModeLabel = getCompanyOperatingModeLabel(activeCompanyContext?.companyMode);
   const ownerCompanyName = activeCompanyContext?.companyName || "Current company";
   const ownerPrimaryContact =
@@ -344,20 +345,6 @@ const EditProperty = () => {
     "Estate",
   ];
 
-  const zones = [
-    "Nairobi CBD",
-    "Westlands",
-    "Kilimani",
-    "Karen",
-    "Mombasa Road",
-    "Thika Road",
-    "Kiambu",
-    "Mombasa",
-    "Kisumu",
-    "Nakuru",
-    "Eldoret",
-  ];
-
   const labelClass = "block text-sm font-bold text-slate-800 mb-1 tracking-tight";
   const helperLabelClass = "block text-xs font-medium text-slate-600 mb-1";
 
@@ -374,6 +361,12 @@ const EditProperty = () => {
 
   const sectionCard = "bg-white border border-slate-200 rounded-lg shadow-sm";
   const sectionHeader = "text-sm font-bold text-slate-900 tracking-tight";
+
+  useEffect(() => {
+    adminRequests.get('/zones', { params: { limit: 500, isActive: 'true' } })
+      .then((res) => setZones((res.data?.zones || []).map((z) => z.name).filter(Boolean)))
+      .catch(() => {});
+  }, []);
 
   // Fetch property on mount, clear on unmount
   useEffect(() => {
@@ -446,9 +439,14 @@ const EditProperty = () => {
           if (savedDraft) {
             const parsedDraft = JSON.parse(savedDraft);
             if (parsedDraft?.formData && typeof parsedDraft.formData === "object") {
-              // Only restore draft fields that are non-empty to prevent stale/empty drafts from clearing API data
+              // Only restore draft fields that are non-empty to prevent stale/empty drafts from clearing API data.
+              // Landlords are excluded if the draft has no valid landlordId — always prefer the server's landlord data.
               const safeDraft = Object.fromEntries(
-                Object.entries(parsedDraft.formData).filter(([, v]) => v !== null && v !== undefined && v !== "")
+                Object.entries(parsedDraft.formData).filter(([key, v]) => {
+                  if (v === null || v === undefined || v === "") return false;
+                  if (key === 'landlords' && Array.isArray(v) && !v[0]?.landlordId) return false;
+                  return true;
+                })
               );
               nextFormData = { ...transformedData, ...safeDraft };
             }
@@ -851,11 +849,15 @@ const EditProperty = () => {
       (landlord) => String(landlord?.status || "active").toLowerCase() !== "archived"
     );
 
-    const getLandlordId = (l) => l?._id || l?.id || l?.landlordId?._id || l?.landlordId || "";
+    const getLandlordId = (l) => {
+      const raw = l?._id || l?.id || l?.landlordId?._id || l?.landlordId;
+      return raw ? String(raw) : "";
+    };
     const getLandlordLabel = (l) =>
       l?.fullName || l?.name || l?.landlordName || l?.email || "Unnamed";
 
-    const selectedLandlordId = formData.landlords?.[0]?.landlordId?._id || formData.landlords?.[0]?.landlordId || "";
+    const _rawLandlordId = formData.landlords?.[0]?.landlordId?._id || formData.landlords?.[0]?.landlordId;
+    const selectedLandlordId = _rawLandlordId ? String(_rawLandlordId) : "";
 
     return (
       <div className="space-y-4">

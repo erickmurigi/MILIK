@@ -122,7 +122,6 @@ const Maintenances = () => {
   const dispatch = useDispatch();
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
-  const isDemoUser = Boolean(currentUser?.isDemoUser);
   const canCreate = hasCompanyPermission(currentUser, currentCompany, "maintenances", "create", "propertyManagement");
   const canUpdate = hasCompanyPermission(currentUser, currentCompany, "maintenances", "update", "propertyManagement");
   const canDelete = hasCompanyPermission(currentUser, currentCompany, "maintenances", "delete", "propertyManagement");
@@ -268,7 +267,6 @@ const Maintenances = () => {
   const pageRows = requests; // server already returns the correct page slice
 
   const openCreateModal = () => {
-    if (isDemoUser) { toast.info("Demo mode is read-only."); return; }
     if (!canCreate) { toast.warning("You do not have permission to create maintenance requests."); return; }
     setEditingRequest(null);
     setForm(EMPTY_FORM);
@@ -276,7 +274,6 @@ const Maintenances = () => {
   };
 
   const openEditModal = (item) => {
-    if (isDemoUser) { toast.info("Demo mode is read-only."); return; }
     if (!canUpdate) { toast.warning("You do not have permission to edit maintenance requests."); return; }
     if (_mDraftKey) { try { window.sessionStorage.removeItem(_mDraftKey); } catch {} }
     setEditingRequest(item);
@@ -345,7 +342,6 @@ const Maintenances = () => {
   };
 
   const quickUpdateStatus = async (item, newStatus) => {
-    if (isDemoUser) { toast.info("Demo mode is read-only."); return; }
     if (!canUpdate) { toast.warning("You do not have permission to update maintenance requests."); return; }
     setUpdatingId(`${item._id}:${newStatus}`);
     try {
@@ -364,7 +360,6 @@ const Maintenances = () => {
   };
 
   const handleDelete = async (item) => {
-    if (isDemoUser) { toast.info("Demo mode is read-only."); return; }
     if (!canDelete) { toast.warning("You do not have permission to delete maintenance requests."); return; }
     if (!await confirm({ title: "Delete Maintenance Request", message: `Delete "${item?.title || "this request"}"?`, confirmText: "Delete", isDangerous: true })) return;
     try {
@@ -429,7 +424,7 @@ const Maintenances = () => {
           <button onClick={loadRequests} className="inline-flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50"><FaRedoAlt size={9} /></button>
           <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
           <button onClick={exportCsv} className="inline-flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaDownload size={9} /> CSV</button>
-          {canCreate && !isDemoUser && (
+          {canCreate && (
             <button onClick={openCreateModal} className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-2 text-xs font-black text-white hover:bg-[#0A3127]"><FaPlus size={9} /> New Request</button>
           )}
         </div>
@@ -508,7 +503,7 @@ const Maintenances = () => {
                           </td>
                           <td className="px-3 py-1 border-r border-gray-100 text-right">
                             <div className="inline-flex flex-wrap justify-end gap-1.5">
-                              {canUpdate && !isDemoUser && item?.status === "pending" && (
+                              {canUpdate && item?.status === "pending" && (
                                 <button
                                   onClick={() => quickUpdateStatus(item, "in_progress")}
                                   disabled={busy}
@@ -517,7 +512,7 @@ const Maintenances = () => {
                                   Start
                                 </button>
                               )}
-                              {canUpdate && !isDemoUser && (item?.status === "pending" || item?.status === "in_progress") && (
+                              {canUpdate && (item?.status === "pending" || item?.status === "in_progress") && (
                                 <button
                                   onClick={() => quickUpdateStatus(item, "completed")}
                                   disabled={busy}
@@ -526,7 +521,7 @@ const Maintenances = () => {
                                   Complete
                                 </button>
                               )}
-                              {canUpdate && !isDemoUser && (
+                              {canUpdate && (
                                 <button
                                   onClick={() => openEditModal(item)}
                                   className="rounded border border-slate-300 bg-white px-2 py-1 text-[10px] font-black text-slate-700 hover:bg-slate-50"
@@ -534,7 +529,7 @@ const Maintenances = () => {
                                   <FaEdit />
                                 </button>
                               )}
-                              {canDelete && !isDemoUser && (
+                              {canDelete && (
                                 <button
                                   onClick={() => handleDelete(item)}
                                   className="rounded border border-rose-300 bg-white px-2 py-1 text-[10px] font-black text-rose-600 hover:bg-rose-50"

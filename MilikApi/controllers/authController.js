@@ -33,24 +33,7 @@ const getAdminCredentials = () => ({
 });
 
 const companySummarySelect =
-  "companyName companyCode baseCurrency logo unitTypes country town email phoneNo slogan companyMode modules fiscalStartMonth fiscalStartYear operationPeriodType isActive accountStatus locked isDemoWorkspace";
-
-const DEMO_COMPANY_EMAIL = "demo.workspace@milik.local";
-const DEMO_COMPANY_NAME_REGEX = /^milik\s+demo\s+workspace$/i;
-
-const buildLiveCompanyFilter = () => ({
-  isDemoWorkspace: { $ne: true },
-});
-
-const isLegacyDemoCompany = (company = {}) =>
-  DEMO_COMPANY_NAME_REGEX.test(String(company?.companyName || '')) ||
-  String(company?.email || '').toLowerCase() === DEMO_COMPANY_EMAIL;
-
-const filterLiveCompanies = (companies = []) =>
-  (Array.isArray(companies) ? companies : []).filter((company) => !isLegacyDemoCompany(company));
-
-const shouldIncludeDemoCompanies = (req = {}) =>
-  req?.user?.isDemoUser || String(req?.query?.includeDemo || "").toLowerCase() === "true";
+  "companyName companyCode baseCurrency logo unitTypes country town email phoneNo slogan companyMode modules fiscalStartMonth fiscalStartYear operationPeriodType isActive accountStatus locked";
 
 
 const isSystemAdminUser = (user = {}) =>
@@ -177,7 +160,7 @@ const sanitizeUserForResponse = (userPayload) => {
   return safeUser;
 };
 
-const companyReferenceSelect = "companyName companyCode country town companyMode modules isActive accountStatus locked isDemoWorkspace logo unitTypes";
+const companyReferenceSelect = "companyName companyCode country town companyMode modules isActive accountStatus locked logo unitTypes";
 
 const sanitizeCompanyLogoForList = (logo) => {
   if (typeof logo !== "string") return "";
@@ -203,7 +186,6 @@ const serializeCompanyReferenceForClient = (company = {}) => {
     isActive: Boolean(company.isActive),
     accountStatus: company.accountStatus || "",
     locked: Boolean(company.locked),
-    isDemoWorkspace: Boolean(company.isDemoWorkspace),
     modules,
     enabledModules: Object.keys(modules).filter((key) => modules[key]),
   };
@@ -631,24 +613,16 @@ export const logoutUser = async (req, res) => {
 
 export const getAccessibleCompanies = async (req, res, next) => {
   try {
-    const includeDemoCompanies = shouldIncludeDemoCompanies(req);
-    const companyFilter = includeDemoCompanies ? {} : buildLiveCompanyFilter();
-
-    // Never show archived companies in the switcher regardless of role or demo mode.
     const notArchivedFilter = {
       archived: { $ne: true },
       accountStatus: { $ne: 'Archived' },
     };
 
     if (req.user?.isSystemAdmin || req.user?.superAdminAccess) {
-      let companies = await Company.find({ ...companyFilter, ...notArchivedFilter })
+      const companies = await Company.find(notArchivedFilter)
         .select(companyReferenceSelect)
         .sort({ companyName: 1 })
         .lean();
-
-      if (!includeDemoCompanies) {
-        companies = filterLiveCompanies(companies);
-      }
 
       return res.status(200).json({
         success: true,
@@ -677,18 +651,13 @@ export const getAccessibleCompanies = async (req, res, next) => {
       return res.status(200).json({ success: true, companies: [] });
     }
 
-    let companies = await Company.find({
+    const companies = await Company.find({
       _id: { $in: companyIds },
-      ...companyFilter,
       ...notArchivedFilter,
     })
       .select(companyReferenceSelect)
       .sort({ companyName: 1 })
       .lean();
-
-    if (!includeDemoCompanies) {
-      companies = filterLiveCompanies(companies);
-    }
 
     return res.status(200).json({
       success: true,
@@ -717,15 +686,6 @@ export const switchCompany = async (req, res, next) => {
 
     if (targetCompany.locked && !isSystemAdminUser(req.user)) {
       return next(createError(403, "This company account has been locked. Contact Milik/System Admin."));
-    }
-
-    if (targetCompany.isDemoWorkspace && !req.user?.isDemoUser) {
-      return next(
-        createError(
-          403,
-          "The dedicated demo workspace cannot be selected from live company switching."
-        )
-      );
     }
 
     if (req.user?.isSystemAdmin || req.user?.superAdminAccess) {
