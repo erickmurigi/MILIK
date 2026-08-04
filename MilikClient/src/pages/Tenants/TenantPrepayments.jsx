@@ -11,6 +11,8 @@ import { listRentPaymentsPage } from "../../redux/apiCalls";
 import { useTabState } from "../../hooks/useTabState";
 import { getProperties } from "../../redux/propertyRedux";
 import AppSelect from "../../components/common/AppSelect";
+import { getTenantName } from "../../utils/tenantUtils";
+import { safeId } from "../../utils/idUtils";
 
 const ITEMS_PER_PAGE = 50;
 const MILIK_GREEN = "bg-[#0B3B2E]";
@@ -25,12 +27,7 @@ const ensureArray = (value) => {
   return [];
 };
 
-const safeId = (value) => {
-  if (!value) return "";
-  if (typeof value === "string") return value;
-  if (typeof value === "object" && value._id) return String(value._id);
-  return String(value);
-};
+
 
 const formatMoney = (value) => `KES ${Math.abs(Number(value || 0)).toLocaleString()}`;
 const formatDate = (value) => {
@@ -40,11 +37,6 @@ const formatDate = (value) => {
   return dt.toLocaleDateString();
 };
 
-const getTenantName = (tenant) =>
-  tenant?.name ||
-  tenant?.tenantName ||
-  [tenant?.firstName, tenant?.lastName].filter(Boolean).join(" ") ||
-  "Unnamed Tenant";
 
 const getPropertyName = (payment) =>
   payment?.unit?.property?.propertyName ||

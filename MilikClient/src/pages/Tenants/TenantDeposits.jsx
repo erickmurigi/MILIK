@@ -41,6 +41,7 @@ import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtils";
 import { useTabState } from "../../hooks/useTabState";
+import { safeId } from "../../utils/idUtils";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -76,12 +77,6 @@ const ensureArray = (value) => {
   return [];
 };
 
-const safeId = (value) => {
-  if (!value) return "";
-  if (typeof value === "string") return value;
-  if (typeof value === "object" && value._id) return String(value._id);
-  return String(value);
-};
 
 const normalizeDepositHolder = (value = "") => {
   const normalized = String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");

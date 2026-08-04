@@ -1,5 +1,6 @@
 ﻿import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtils";
 import { buildTenantOption } from "../../utils/tenantUtils";
+import { safeId } from "../../utils/idUtils";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -114,12 +115,6 @@ const formatDate = (value) => {
   return date.toLocaleDateString();
 };
 
-const safeId = (value) => {
-  if (!value) return "";
-  if (typeof value === "string") return value;
-  if (typeof value === "object") return value._id ? String(value._id) : "";
-  return String(value);
-};
 
 const getInvoiceChargeType = (invoice = {}) => {
   const category = String(invoice?.category || "").toUpperCase();

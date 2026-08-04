@@ -12,7 +12,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import AppSelect from "../../components/common/AppSelect";
-import { buildTenantOption } from "../../utils/tenantUtils";
+import { buildTenantOption, getTenantName } from "../../utils/tenantUtils";
 import { createRentPayment, getTenantInvoices, getChartOfAccounts } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 import { getTenants } from "../../redux/tenantsRedux";
@@ -40,15 +40,6 @@ const ensureArray = (value) => {
   return [];
 };
 
-const getTenantName = (tenant) => {
-  if (!tenant) return "";
-  return (
-    tenant.name ||
-    tenant.tenantName ||
-    [tenant.firstName, tenant.lastName].filter(Boolean).join(" ") ||
-    "Unnamed Tenant"
-  );
-};
 
 const getTenantPropertyId = (tenant) => {
   const propertyFromUnit = tenant?.unit?.property?._id || tenant?.unit?.property;

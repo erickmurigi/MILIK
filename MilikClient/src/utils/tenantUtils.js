@@ -5,6 +5,16 @@ export const getTenantName = (tenant) =>
   [tenant?.firstName, tenant?.lastName].filter(Boolean).join(" ") ||
   "Unnamed Tenant";
 
+/** Returns the best available display label for a unit object */
+export const getUnitLabel = (unit) => unit?.unitNumber || unit?.unitName || unit?.name || "";
+
+/** Returns a display name for a landlord object from any shape the API returns */
+export const getLandlordName = (landlord) =>
+  landlord?.landlordName ||
+  [landlord?.firstName, landlord?.lastName].filter(Boolean).join(" ") ||
+  landlord?.name ||
+  "Unnamed Landlord";
+
 /**
  * Builds an AppSelect option for a tenant.
  * label    → tenant name
@@ -14,9 +24,9 @@ export const buildTenantOption = (tenant) => {
   if (!tenant) return null;
   const name = getTenantName(tenant);
   const code = tenant.tenantCode || tenant.code || "";
-  const primaryUnit = tenant.unit?.unitNumber || tenant.unit?.unitName || tenant.unit?.name || tenant.unitNumber || "";
+  const primaryUnit = getUnitLabel(tenant.unit) || tenant.unitNumber || "";
   const additionalUnits = Array.isArray(tenant.additionalUnits)
-    ? tenant.additionalUnits.map((u) => u?.unitNumber || u?.unitName || u?.name || "").filter(Boolean)
+    ? tenant.additionalUnits.map((u) => getUnitLabel(u)).filter(Boolean)
     : [];
   const allUnits = [primaryUnit, ...additionalUnits].filter(Boolean);
   const unitLabel = allUnits.join(", ");
