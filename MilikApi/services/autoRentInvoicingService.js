@@ -1,14 +1,12 @@
-import mongoose from "mongoose";
 import CompanySettings from "../models/CompanySettings.js";
 import Lease from "../models/Lease.js";
 import Tenant from "../models/Tenant.js";
 import Unit from "../models/Unit.js";
+import { toObjectId } from "../utils/db.js";
 import { createTenantInvoiceRecord } from "../controllers/propertyController/tenantInvoices.js";
 import { resolveBillingPeriodFromSettings } from "./billingPeriodService.js";
 import { sendAdHocSms, sendAdHocEmail } from "./communicationService.js";
 
-const toObjectId = (v) =>
-  mongoose.Types.ObjectId.isValid(String(v || "")) ? new mongoose.Types.ObjectId(String(v)) : null;
 
 // Returns true if today is the day invoices should be generated for a given config.
 // effective trigger = billingDay - daysInAdvance (wraps into previous month when needed).

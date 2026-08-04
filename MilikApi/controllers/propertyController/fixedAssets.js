@@ -2,12 +2,7 @@ import mongoose from "mongoose";
 import FixedAsset from "../../models/FixedAsset.js";
 import { postEntry } from "../../services/ledgerPostingService.js";
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
-
-const toObjectId = (v) => {
-  const raw = typeof v === "object" && v?._id ? v._id : v;
-  if (!raw || !mongoose.Types.ObjectId.isValid(String(raw))) return null;
-  return new mongoose.Types.ObjectId(String(raw));
-};
+import { toObjectId } from "../../utils/db.js";
 
 const resolveBusinessId = (req) => {
   const id = req.query?.business || req.query?.company || req.body?.business || req.body?.company;

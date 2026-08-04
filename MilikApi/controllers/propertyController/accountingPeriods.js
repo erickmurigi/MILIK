@@ -1,12 +1,6 @@
-import mongoose from "mongoose";
 import AccountingPeriod from "../../models/AccountingPeriod.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
-
-const toObjectId = (v) => {
-  const raw = typeof v === "object" && v?._id ? v._id : v;
-  if (!raw || !mongoose.Types.ObjectId.isValid(String(raw))) return null;
-  return new mongoose.Types.ObjectId(String(raw));
-};
+import { toObjectId } from "../../utils/db.js";
 
 const resolveBusinessId = (req) => {
   const authenticated = req.user?.company?._id || req.user?.company || null;

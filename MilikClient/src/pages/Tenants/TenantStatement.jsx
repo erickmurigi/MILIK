@@ -5,6 +5,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { getTenantName, getUnitLabel } from "../../utils/tenantUtils";
 import { safeId } from "../../utils/idUtils";
+import { isActiveReceipt } from "../../utils/receiptUtils";
 import {
   selectCurrentCompany,
   selectAllLeases,
@@ -263,17 +264,6 @@ const getInvoiceCategoryLabel = (invoice = {}) => {
   return invoice?.category || "Charge";
 };
 
-const isActiveReceipt = (payment) => {
-  const postingStatus = String(payment?.postingStatus || "").toLowerCase();
-  return (
-    payment?.ledgerType === "receipts" &&
-    payment?.isConfirmed === true &&
-    payment?.isCancelled !== true &&
-    payment?.isReversed !== true &&
-    !payment?.reversalOf &&
-    postingStatus !== "reversed"
-  );
-};
 
 const isReceiptReversed = (payment) => {
   const postingStatus = String(payment?.postingStatus || "").toLowerCase();
