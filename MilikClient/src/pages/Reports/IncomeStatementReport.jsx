@@ -25,9 +25,10 @@ const pctStr = (part, whole) =>
 const pctNum = (part, whole) =>
   whole > 0 ? Math.min((part / whole) * 100, 100) : 0;
 
-const firstDayOfMonth = () =>
-  new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split("T")[0];
-const todayString = () => new Date().toISOString().split("T")[0];
+const toLocalDateString = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const firstDayOfMonth = () => { const d = new Date(); return toLocalDateString(new Date(d.getFullYear(), d.getMonth(), 1)); };
+const todayString = () => toLocalDateString(new Date());
 
 const escapeHtml = (v) =>
   String(v ?? "")
@@ -457,15 +458,6 @@ const IncomeStatementReport = () => {
             <div className="text-lg font-black tabular-nums text-red-700">KES {fmt(totalExpenses)}</div>
             <div className="mt-0.5 text-[10px] font-medium text-red-600/60">
               {report.expenses.count} account{report.expenses.count !== 1 ? "s" : ""}
-            </div>
-          </div>
-
-          {/* Expense ratio */}
-          <div className="flex flex-1 flex-col border-r border-slate-200 bg-amber-50 px-5 py-3">
-            <div className="mb-0.5 text-[9px] font-black uppercase tracking-[0.12em] text-amber-700/70">Expense Ratio</div>
-            <div className="text-lg font-black tabular-nums text-amber-700">{expenseRatio.toFixed(1)}%</div>
-            <div className="mt-1 h-1.5 overflow-hidden bg-amber-200">
-              <div className="h-full bg-amber-500 transition-all duration-700" style={{ width: `${Math.min(expenseRatio, 100)}%` }} />
             </div>
           </div>
 

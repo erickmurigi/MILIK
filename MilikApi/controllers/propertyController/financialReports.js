@@ -2565,6 +2565,8 @@ export const getLiabilitySubledger = async (req, res, next) => {
 
 // Returns monthly income/expense/net totals for the last N months in a single DB query.
 // Used by AccountsDashboard to replace 6 individual income-statement calls.
+// Applies the same account classifiers as getIncomeStatementReport so the chart
+// matches the Income Statement — landlord pass-through accounts are excluded.
 export const getIncomeMonthlySummary = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
@@ -2585,11 +2587,20 @@ export const getIncomeMonthlySummary = async (req, res, next) => {
       };
     });
 
-    // Pre-fetch income/expense account IDs in parallel
-    const [incomeAccounts, expenseAccounts] = await Promise.all([
-      ChartOfAccount.find({ business: businessId, type: "income", isPosting: { $ne: false }, isHeader: { $ne: true } }, { _id: 1 }).lean(),
-      ChartOfAccount.find({ business: businessId, type: "expense", isPosting: { $ne: false }, isHeader: { $ne: true } }, { _id: 1 }).lean(),
+    // Fetch company mode + all income/expense accounts (need code/name/subGroup for classifiers)
+    const [company, allIncomeAccounts, allExpenseAccounts] = await Promise.all([
+      Company.findById(businessId, { companyMode: 1, modules: 1 }).lean(),
+      ChartOfAccount.find({ business: businessId, type: "income",  isPosting: { $ne: false }, isHeader: { $ne: true } }, { _id: 1, code: 1, name: 1, subGroup: 1 }).lean(),
+      ChartOfAccount.find({ business: businessId, type: "expense", isPosting: { $ne: false }, isHeader: { $ne: true } }, { _id: 1, code: 1, name: 1, subGroup: 1 }).lean(),
     ]);
+
+    // Apply the same classifier as the Income Statement so the chart matches it exactly
+    const selfManaging = isSelfManagingLandlordCompany(company);
+    const incomeClassifier  = selfManaging ? isSelfManagingLandlordIncomeAccount  : isOperatingIncomeAccount;
+    const expenseClassifier = selfManaging ? isSelfManagingLandlordExpenseAccount : isOperatingExpenseAccount;
+
+    const incomeAccounts  = allIncomeAccounts.filter(incomeClassifier);
+    const expenseAccounts = allExpenseAccounts.filter(expenseClassifier);
 
     const incomeIdSet = new Set(incomeAccounts.map((a) => String(a._id)));
     const allIds = [
@@ -2616,6 +2627,13 @@ export const getIncomeMonthlySummary = async (req, res, next) => {
       ],
     };
 
+    // Use the same date-range boundaries as buildLedgerMap (explicit $gte/$lte) instead
+    // of $dateToString (UTC) so the monthly buckets match the Income Statement exactly.
+    const monthBranches = ranges.map((r) => ({
+      case: { $and: [{ $gte: ["$transactionDate", r.startDate] }, { $lte: ["$transactionDate", r.endDate] }] },
+      then: r.key,
+    }));
+
     const agg = await FinancialLedgerEntry.aggregate([
       {
         $match: {
@@ -2625,12 +2643,11 @@ export const getIncomeMonthlySummary = async (req, res, next) => {
           transactionDate: { $gte: ranges[0].startDate, $lte: ranges[ranges.length - 1].endDate },
         },
       },
+      { $addFields: { ym: { $switch: { branches: monthBranches, default: null } } } },
+      { $match: { ym: { $ne: null } } },
       {
         $group: {
-          _id: {
-            ym: { $dateToString: { format: "%Y-%m", date: "$transactionDate" } },
-            accountId: "$accountId",
-          },
+          _id: { ym: "$ym", accountId: "$accountId" },
           debit: { $sum: debitExpr },
           credit: { $sum: creditExpr },
         },

@@ -1053,6 +1053,8 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
       const propA = String(a.propertyName || "").toLowerCase();
       const propB = String(b.propertyName || "").toLowerCase();
       if (propA !== propB) return propA.localeCompare(propB);
+      const unitCmp = String(a.unitNumber || "").localeCompare(String(b.unitNumber || ""), undefined, { numeric: true, sensitivity: "base" });
+      if (unitCmp !== 0) return unitCmp;
       return String(a.tenantName || "").localeCompare(String(b.tenantName || ""));
     });
     return sorted;

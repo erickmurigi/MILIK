@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
@@ -177,14 +177,11 @@ const AccountsDashboard = () => {
   const [monthlyData, setMonthlyData]   = useState([]);
   const [chartsLoading, setChartsLoading] = useState(true);
   const [currentPeriod, setCurrentPeriod] = useState(null);
-  const fetchedRef = useRef(false);
-
   const businessId = useMemo(() => currentCompany?._id || "", [currentCompany?._id]);
   const companyName = String(currentCompany?.companyName || currentCompany?.name || "").trim();
 
   useEffect(() => {
-    if (!businessId || fetchedRef.current) return;
-    fetchedRef.current = true;
+    if (!businessId) return;
 
     const now = new Date();
     const startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
