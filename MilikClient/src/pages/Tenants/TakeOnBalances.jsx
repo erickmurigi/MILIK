@@ -773,6 +773,7 @@ const TakeOnBalances = () => {
         business: currentCompany._id,
         tenant: selectedTenant._id,
         unit: tenantUnit._id,
+        property: tenantPropertyId,
         amount: Number(form.amount || 0),
         paymentType,
         paymentDate: form.effectiveDate,

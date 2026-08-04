@@ -1457,6 +1457,7 @@ const buildSortedInvoiceSnapshots = (invoices = []) => {
 const TENANT_SNAPSHOT_INVOICE_FIELDS = [
   "_id",
   "tenant",
+  "unit",
   "amount",
   "invoiceNumber",
   "category",
@@ -2171,7 +2172,7 @@ export const getTakeOnBalances = async (req, res, next) => {
         .sort({ paymentDate: -1, createdAt: -1, _id: -1 })
         .limit(5000)
         .populate("tenant", "name tenantName firstName lastName")
-        .populate("unit", "unitNumber name unitName")
+        .populate({ path: "unit", select: "unitNumber name unitName property", populate: { path: "property", select: "propertyName name" } })
         .lean(),
     ]);
 
@@ -2269,7 +2270,7 @@ export const getTakeOnBalances = async (req, res, next) => {
             invoiceNumber: receipt?.receiptNumber || receipt?.referenceNumber || "",
             tenant: receipt?.tenant || null,
             unit: receipt?.unit || null,
-            property: null,
+            property: receipt?.property || receipt?.unit?.property || null,
             chartAccount: null,
             category: "OPENING_CREDIT",
             type: "Credit",

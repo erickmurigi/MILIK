@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import CompanySettings from "../models/CompanySettings.js";
 import Lease from "../models/Lease.js";
 import Tenant from "../models/Tenant.js";
+import Unit from "../models/Unit.js";
 import { createTenantInvoiceRecord } from "../controllers/propertyController/tenantInvoices.js";
 import { resolveBillingPeriodFromSettings } from "./billingPeriodService.js";
 import { sendAdHocSms, sendAdHocEmail } from "./communicationService.js";
@@ -108,6 +109,16 @@ const processCompany = async (businessId, settings, billingPeriods, today, force
     .select("tenant unit property rentAmount description billingPeriodKey paymentDueDay startDate")
     .lean();
 
+  // Batch-load unit names for description embedding
+  const allUnitIds = activeLeases.map((l) => l.unit).filter(Boolean);
+  let unitMap = new Map();
+  if (allUnitIds.length) {
+    const unitRecords = await Unit.find({ _id: { $in: allUnitIds } })
+      .select("_id unitNumber unitName name")
+      .lean();
+    unitMap = new Map(unitRecords.map((u) => [String(u._id), u.unitNumber || u.unitName || u.name || ""]));
+  }
+
   // Batch-load tenant contact info when notifications are enabled
   let tenantMap = new Map();
   if (notifyTenants && notifyChannel && notifyChannel !== "none") {
@@ -153,6 +164,7 @@ const processCompany = async (businessId, settings, billingPeriods, today, force
       const dueDate = new Date(targetYear, targetMonth, leaseDueDay);
 
       const periodLabel = buildPeriodLabel(targetYear, targetMonth, durationInMonths);
+      const unitNumber = unitMap.get(String(lease.unit)) || "";
 
       // Idempotency key: unique per tenant per billing cycle (target month encodes the cycle)
       const idempotencyKey = `auto_rent_${String(lease.tenant)}_${targetYear}_${String(targetMonth + 1).padStart(2, "0")}`;
@@ -167,7 +179,7 @@ const processCompany = async (businessId, settings, billingPeriods, today, force
             property: String(lease.property),
             category: "RENT_CHARGE",
             amount: Number(lease.rentAmount),
-            description: `Rent — ${periodLabel}`,
+            description: unitNumber ? `Rent — ${periodLabel} · Unit ${unitNumber}` : `Rent — ${periodLabel}`,
             invoiceDate: invoiceDate.toISOString(),
             dueDate: dueDate.toISOString(),
             idempotencyKey,

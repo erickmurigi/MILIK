@@ -3,6 +3,7 @@ import { useTabState } from "../../hooks/useTabState";
 import { useEntityCache } from "../../hooks/useEntityCache";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
+import { getTenantName } from "../../utils/tenantUtils";
 import {
   selectCurrentCompany,
   selectAllLeases,
@@ -311,6 +312,8 @@ const cleanStatementPart = (value = "") =>
     .replace(/\s+/g, " ")
     .trim();
 
+const getUnitLabel = (unit) => unit?.unitNumber || unit?.unitName || unit?.name || "";
+
 const uniqueStatementParts = (values = []) =>
   Array.from(new Set(values.map((item) => cleanStatementPart(item)).filter(Boolean)));
 
@@ -342,7 +345,7 @@ const extractUtilityNamesFromInvoice = (invoice = {}) => {
     .filter((item) => item && !/^combined rent/i.test(item));
 };
 
-const buildTenantStatementInvoiceDescription = (invoice = {}) => {
+const buildTenantStatementInvoiceDescription = (invoice = {}, unitLabel = "") => {
   const categoryLabel = getInvoiceCategoryLabel(invoice);
   const period = formatStatementLongPeriod(invoice?.invoiceDate || invoice?.createdAt);
   const category = String(invoice?.category || "").toUpperCase();
@@ -371,7 +374,8 @@ const buildTenantStatementInvoiceDescription = (invoice = {}) => {
     baseLabel = categoryLabel || cleanStatementPart(invoice?.description) || "Other Charge";
   }
 
-  return cleanStatementPart(period ? `${baseLabel} – ${period}` : baseLabel || invoice?.description || "Charge");
+  const description = cleanStatementPart(period ? `${baseLabel} – ${period}` : baseLabel || invoice?.description || "Charge");
+  return unitLabel ? `${description} · Unit ${unitLabel}` : description;
 };
 
 // Builds a human-readable description for a credit/debit note statement row.
@@ -598,7 +602,7 @@ const TenantStatement = () => {
     const tenantUnitIdStr = tenantUnitId ? String(tenantUnitId) : "";
     const matchedUnit = unitsFromStore.find((unit) => String(unit?._id || "") === tenantUnitIdStr);
 
-    return matchedUnit?.unitNumber || matchedUnit?.unitName || "-";
+    return getUnitLabel(matchedUnit) || "-";
   };
 
   const resolveTenantInvoiceContext = (targetTenant) => {
@@ -1046,11 +1050,20 @@ const TenantStatement = () => {
 
     const invoiceMap = new Map(validTenantInvoices.map((invoice) => [safeId(invoice), invoice]));
 
+    const isMultiUnit = Array.isArray(tenant?.additionalUnits) && tenant.additionalUnits.length > 0;
     validTenantInvoices.forEach((invoice) => {
+      let unitLabel = "";
+      if (isMultiUnit) {
+        const invoiceUnitId = String(invoice?.unit || "");
+        if (invoiceUnitId) {
+          const unitRecord = unitsFromStore.find((u) => String(u?._id || "") === invoiceUnitId);
+          unitLabel = getUnitLabel(unitRecord);
+        }
+      }
       transactions.push({
         id: transactionId++,
         date: invoice.invoiceDate || invoice.createdAt,
-        description: buildTenantStatementInvoiceDescription(invoice),
+        description: buildTenantStatementInvoiceDescription(invoice, unitLabel),
         type: "CHARGE",
         amount: Number(invoice.amount || 0),
         transactionCode: invoice.invoiceNumber || `INV-${transactionId}`,
@@ -1151,7 +1164,7 @@ const TenantStatement = () => {
       operationalOutstanding,
       netPosition,
     };
-  }, [validTenantInvoices, tenantInvoiceNotes, activeTenantReceipts, maintenanceFromStore, tenantId]);
+  }, [validTenantInvoices, tenantInvoiceNotes, activeTenantReceipts, maintenanceFromStore, tenantId, tenant, unitsFromStore]);
 
   const allocationReceiptRows = useMemo(() => {
     return activeTenantReceipts.map((receipt) => {
@@ -1468,12 +1481,8 @@ const TenantStatement = () => {
       tenantUtilities = tenant.utilities;
     } else if (tenant?.unit?.utilities && tenant.unit.utilities.length > 0) {
       tenantUtilities = tenant.unit.utilities;
-    } else if (unitsFromStore && unitsFromStore.length > 0) {
-      const tenantUnitId = tenant?.unit?._id || tenant?.unit;
-      const matchedUnit = unitsFromStore.find((u) => u?._id === tenantUnitId);
-      if (matchedUnit?.utilities && matchedUnit.utilities.length > 0) {
-        tenantUtilities = matchedUnit.utilities;
-      }
+    } else if (tenantUnitRecord?.utilities?.length > 0) {
+      tenantUtilities = tenantUnitRecord.utilities;
     }
 
     if (tenantUtilities.length > 0) {
@@ -1490,10 +1499,7 @@ const TenantStatement = () => {
     }
 
     const scheduleData = [];
-    const tenantName =
-      tenant?.firstName && tenant?.lastName
-        ? `${tenant.firstName} ${tenant.lastName}`
-        : tenant?.name || tenant?.tenantName || "N/A";
+    const tenantName = getTenantName(tenant) || "N/A";
     const propertyName = resolveTenantPropertyName(tenant);
 
     let scheduleStartDate;
@@ -1517,10 +1523,7 @@ const TenantStatement = () => {
       scheduleEndDate = openLeaseEnd;
     }
 
-    const tenantUnitId = tenant?.unit?._id || tenant?.unit;
-    const matchedUnit = Array.isArray(unitsFromStore)
-      ? unitsFromStore.find((unit) => String(unit?._id || "") === String(tenantUnitId || ""))
-      : null;
+    const matchedUnit = tenantUnitRecord;
     const selectedBillingPeriodKey = canonicalBillingPeriodKey(
       tenantLease?.billingPeriodKey ||
         tenant?.billingPeriodKey ||
@@ -1620,7 +1623,7 @@ const TenantStatement = () => {
     }
 
     return scheduleData;
-  }, [tenantLease, tenant, unitsFromStore, tenantInvoices, billingScheduleAdjustmentsByPeriod, companyTaxConfig, scheduleExtensionMonths]);
+  }, [tenantLease, tenant, tenantUnitRecord, tenantInvoices, billingScheduleAdjustmentsByPeriod, companyTaxConfig, scheduleExtensionMonths]);
 
   const billingScheduleByKey = useMemo(() => {
     return new Map((billingScheduleData || []).map((row) => [row.periodKey, row]));

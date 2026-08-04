@@ -600,11 +600,15 @@ const AddReceipt = () => {
     // Fallback: use tenant + payment month when no invoices are applied yet
     if (!autoDesc && selectedTenant && formData.paymentDate) {
       const tenantName = getTenantName(selectedTenant);
-      const unitNumber = selectedTenant?.unit?.unitNumber || "";
+      const primaryUnit = selectedTenant?.unit?.unitNumber || selectedTenant?.unit?.unitName || selectedTenant?.unit?.name || "";
+      const extraUnits = Array.isArray(selectedTenant?.additionalUnits)
+        ? selectedTenant.additionalUnits.map((u) => u?.unitNumber || u?.unitName || u?.name || "").filter(Boolean)
+        : [];
+      const unitLabel = [primaryUnit, ...extraUnits].filter(Boolean).join(", ");
       const d = new Date(`${formData.paymentDate}T00:00:00`);
       const monthYear = Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-KE", { month: "short", year: "numeric" });
       if (monthYear) {
-        autoDesc = unitNumber ? `${monthYear} — ${tenantName} (Unit ${unitNumber})` : `${monthYear} — ${tenantName}`;
+        autoDesc = unitLabel ? `${monthYear} — ${tenantName} (Unit ${unitLabel})` : `${monthYear} — ${tenantName}`;
       }
     }
 

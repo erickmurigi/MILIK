@@ -945,6 +945,16 @@ const normalizeSmsEditor = (config = {}) => {
   };
 };
 
+const getSessionStatus = (user = {}) => {
+  if (user.locked) return { label: "Locked", className: "border-amber-200 bg-amber-50 text-amber-700" };
+  if (user.isActive === false) return { label: "Inactive", className: "border-slate-200 bg-slate-50 text-slate-600" };
+  if (!user.lastLogin) return { label: "Never signed in", className: "border-rose-200 bg-rose-50 text-rose-700" };
+  const ageDays = Math.floor((Date.now() - new Date(user.lastLogin).getTime()) / (1000 * 60 * 60 * 24));
+  if (ageDays <= 1) return { label: "Recently active", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
+  if (ageDays <= 30) return { label: "Active", className: "border-blue-200 bg-blue-50 text-blue-700" };
+  return { label: "Dormant", className: "border-orange-200 bg-orange-50 text-orange-700" };
+};
+
 export default function CompanySetupPage() {
   const confirm = useConfirm();
   const dispatch = useDispatch();
@@ -1633,10 +1643,10 @@ export default function CompanySetupPage() {
   const smsStatus = useMemo(() => buildSmsStatus(smsForm), [smsForm]);
   const smsTheme = statusTheme[smsStatus.code] || statusTheme.not_configured;
 
-  const hasPM   = hasCompanyModule(currentCompany, "propertyManagement");
-  const hasHR   = hasCompanyModule(currentCompany, "hr");
-  const hasCW   = hasCompanyModule(currentCompany, "carwash");
-  const hasSale = hasCompanyModule(currentCompany, "propertySale");
+  const hasPM   = useMemo(() => hasCompanyModule(currentCompany, "propertyManagement"), [currentCompany]);
+  const hasHR   = useMemo(() => hasCompanyModule(currentCompany, "hr"), [currentCompany]);
+  const hasCW   = useMemo(() => hasCompanyModule(currentCompany, "carwash"), [currentCompany]);
+  const hasSale = useMemo(() => hasCompanyModule(currentCompany, "propertySale"), [currentCompany]);
 
   const smsSummary = useMemo(() => {
     const total = smsProfiles.length;
@@ -1683,6 +1693,106 @@ export default function CompanySetupPage() {
     { value: "demo_requests",      label: "Demo Requests" },
     { value: "onboarding",         label: "Onboarding" },
   ], [hasPM]);
+
+  const filteredPaymentConfigs = useMemo(() => {
+    if (!paymentSearch.trim()) return paymentConfigs;
+    const q = paymentSearch.trim().toLowerCase();
+    return paymentConfigs.filter((c) => `${c.name} ${c.shortCode}`.toLowerCase().includes(q));
+  }, [paymentConfigs, paymentSearch]);
+
+  const filteredEmailProfiles = useMemo(() => {
+    if (!emailProfileSearch) return emailProfiles;
+    const q = emailProfileSearch.toLowerCase();
+    return emailProfiles.filter((p) => `${p.name} ${p.senderEmail} ${p.smtpHost}`.toLowerCase().includes(q));
+  }, [emailProfiles, emailProfileSearch]);
+
+  const filteredEmailLogs = useMemo(() => {
+    if (!emailLogsSearch) return emailLogs;
+    const q = emailLogsSearch.toLowerCase();
+    return emailLogs.filter((log) =>
+      String(log.to || "").toLowerCase().includes(q) ||
+      String(log.recipientName || "").toLowerCase().includes(q) ||
+      String(log.subject || "").toLowerCase().includes(q) ||
+      String(log.templateKey || "").toLowerCase().includes(q) ||
+      String(log.profileName || "").toLowerCase().includes(q) ||
+      String(log.contextType || "").toLowerCase().includes(q)
+    );
+  }, [emailLogs, emailLogsSearch]);
+
+  const filteredSmsProfiles = useMemo(() => {
+    if (!smsProfileSearch.trim()) return smsProfiles;
+    const q = smsProfileSearch.trim().toLowerCase();
+    return smsProfiles.filter((p) => `${p.name} ${p.provider} ${p.senderId}`.toLowerCase().includes(q));
+  }, [smsProfiles, smsProfileSearch]);
+
+  const smsNavItems = useMemo(() => [
+    { key: "configuration", label: "Configuration", icon: <FaServer className="text-[9px]" /> },
+    ...(hasPM || hasCW ? [{ key: "templates", label: "SMS Templates", icon: <FaListAlt className="text-[9px]" /> }] : []),
+    { key: "sent", label: "Sent", icon: <FaPaperPlane className="text-[9px]" /> },
+    { key: "failed", label: "Failed", icon: <FaExclamationTriangle className="text-[9px]" /> },
+    { key: "pending", label: "Inbox / Pending", icon: <FaHistory className="text-[9px]" /> },
+  ], [hasPM, hasCW]);
+
+  const filteredSmsLogs = useMemo(() => {
+    if (!smsLogsSearch) return smsLogs;
+    const q = smsLogsSearch.toLowerCase();
+    return smsLogs.filter((log) =>
+      String(log.to || "").toLowerCase().includes(q) ||
+      String(log.recipientName || "").toLowerCase().includes(q) ||
+      String(log.body || "").toLowerCase().includes(q) ||
+      String(log.templateKey || "").toLowerCase().includes(q) ||
+      String(log.profileName || "").toLowerCase().includes(q) ||
+      String(log.provider || "").toLowerCase().includes(q) ||
+      String(log.contextType || "").toLowerCase().includes(q)
+    );
+  }, [smsLogs, smsLogsSearch]);
+
+  const smsTemplatesMemo = useMemo(() => {
+    const moduleVisibleTemplates = smsTemplates.filter((t) => {
+      const moduleKey = TEMPLATE_MODULE_MAP[t.key];
+      if (!moduleKey) return true;
+      if (moduleKey === "propertyManagement") return hasPM;
+      if (moduleKey === "carwash") return hasCW;
+      return true;
+    });
+    const tplSearch = smsTemplateSearch.trim().toLowerCase();
+    const filteredTemplates = moduleVisibleTemplates.filter((t) => {
+      if (smsTemplateRecipientFilter !== "all" && t.recipientType !== smsTemplateRecipientFilter) return false;
+      if (smsTemplateStatusFilter === "enabled" && !t.enabled) return false;
+      if (smsTemplateStatusFilter === "disabled" && t.enabled) return false;
+      if (smsTemplatesModeFilter !== "all" && t.sendMode !== smsTemplatesModeFilter) return false;
+      if (tplSearch && !`${t.name} ${t.description} ${t.key}`.toLowerCase().includes(tplSearch)) return false;
+      return true;
+    });
+    return {
+      moduleVisibleTemplates,
+      filteredTemplates,
+      enabledCount: moduleVisibleTemplates.filter((t) => t.enabled).length,
+      autoCount: moduleVisibleTemplates.filter((t) => t.sendMode === "automatic").length,
+    };
+  }, [smsTemplates, hasPM, hasCW, smsTemplateSearch, smsTemplateRecipientFilter, smsTemplateStatusFilter, smsTemplatesModeFilter]);
+
+  const activityLogsMemo = useMemo(() => {
+    const searchLower = activitySearch.trim().toLowerCase();
+    const filteredLogs = auditLogs.filter((log) => {
+      if (!searchLower) return true;
+      return (
+        (log.message || "").toLowerCase().includes(searchLower) ||
+        (log.actorName || "").toLowerCase().includes(searchLower) ||
+        (log.actorEmail || "").toLowerCase().includes(searchLower) ||
+        (log.category || "").toLowerCase().includes(searchLower) ||
+        (log.targetName || "").toLowerCase().includes(searchLower) ||
+        (log.action || "").toLowerCase().includes(searchLower)
+      );
+    });
+    return {
+      filteredLogs,
+      searchLower,
+      criticalCount: auditLogs.filter((log) => log.severity === "critical").length,
+      signedInCount: userSessions.filter((user) => Boolean(user.lastLogin)).length,
+      lockedCount: userSessions.filter((user) => user.locked || user.isActive === false).length,
+    };
+  }, [auditLogs, userSessions, activitySearch]);
 
   const handleRefreshSetup = async () => {
     if (!currentCompany?._id || isRefreshing) return;
@@ -2530,8 +2640,7 @@ export default function CompanySetupPage() {
                   </td>
                 </tr>
               ) : (
-                paymentConfigs
-                  .filter((c) => !paymentSearch.trim() || `${c.name} ${c.shortCode}`.toLowerCase().includes(paymentSearch.trim().toLowerCase()))
+                filteredPaymentConfigs
                   .map((config, idx) => {
                     const status = buildPaymentStatus(config);
                     const theme = statusTheme[status.code] || statusTheme.not_configured;
@@ -2637,19 +2746,6 @@ export default function CompanySetupPage() {
       { key: "pending", label: "Inbox / Pending", count: null },
     ];
 
-    const filteredEmailLogs = emailLogs.filter((log) => {
-      if (!emailLogsSearch) return true;
-      const q = emailLogsSearch.toLowerCase();
-      return (
-        String(log.to || "").toLowerCase().includes(q) ||
-        String(log.recipientName || "").toLowerCase().includes(q) ||
-        String(log.subject || "").toLowerCase().includes(q) ||
-        String(log.templateKey || "").toLowerCase().includes(q) ||
-        String(log.profileName || "").toLowerCase().includes(q) ||
-        String(log.contextType || "").toLowerCase().includes(q)
-      );
-    });
-
     const emailLogsTotalPages = Math.max(1, Math.ceil(filteredEmailLogs.length / EMAIL_LOGS_PAGE_SIZE));
     const emailLogsSafePage = Math.min(emailLogsPage, emailLogsTotalPages);
     const emailLogsStart = filteredEmailLogs.length === 0 ? 0 : (emailLogsSafePage - 1) * EMAIL_LOGS_PAGE_SIZE;
@@ -2752,8 +2848,7 @@ export default function CompanySetupPage() {
                     {emailProfiles.length === 0 ? (
                       <tr><td colSpan="7" className="px-4 py-10 text-center text-slate-500">No email profiles configured yet. Click "Add Email Profile" to get started.</td></tr>
                     ) : (
-                      emailProfiles
-                        .filter((p) => !emailProfileSearch || `${p.name} ${p.senderEmail} ${p.smtpHost}`.toLowerCase().includes(emailProfileSearch.toLowerCase()))
+                      filteredEmailProfiles
                         .map((profile, idx) => {
                           const status = buildEmailStatus(profile);
                           const theme = statusTheme[status.code] || statusTheme.not_configured;
@@ -2969,8 +3064,7 @@ export default function CompanySetupPage() {
                   </td>
                 </tr>
               ) : (
-                smsProfiles
-                  .filter((p) => !smsProfileSearch.trim() || `${p.name} ${p.provider} ${p.senderId}`.toLowerCase().includes(smsProfileSearch.trim().toLowerCase()))
+                filteredSmsProfiles
                   .map((profile, idx) => {
                     const status = buildSmsStatus(profile);
                     const theme = statusTheme[status.code] || statusTheme.not_configured;
@@ -3017,26 +3111,7 @@ export default function CompanySetupPage() {
   );
 
   const renderSmsTemplatesTab = () => {
-    const tplSearch = smsTemplateSearch.trim().toLowerCase();
-
-    const moduleVisibleTemplates = smsTemplates.filter((t) => {
-      const moduleKey = TEMPLATE_MODULE_MAP[t.key];
-      if (!moduleKey) return true;
-      if (moduleKey === "propertyManagement") return hasPM;
-      if (moduleKey === "carwash") return hasCW;
-      return true;
-    });
-
-    const filteredTemplates = moduleVisibleTemplates.filter((t) => {
-      if (smsTemplateRecipientFilter !== "all" && t.recipientType !== smsTemplateRecipientFilter) return false;
-      if (smsTemplateStatusFilter === "enabled" && !t.enabled) return false;
-      if (smsTemplateStatusFilter === "disabled" && t.enabled) return false;
-      if (smsTemplatesModeFilter !== "all" && t.sendMode !== smsTemplatesModeFilter) return false;
-      if (tplSearch && !`${t.name} ${t.description} ${t.key}`.toLowerCase().includes(tplSearch)) return false;
-      return true;
-    });
-    const enabledCount = moduleVisibleTemplates.filter((t) => t.enabled).length;
-    const autoCount = moduleVisibleTemplates.filter((t) => t.sendMode === "automatic").length;
+    const { moduleVisibleTemplates, filteredTemplates, enabledCount, autoCount } = smsTemplatesMemo;
 
     return (
       <div className="flex min-h-0 flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">
@@ -3198,28 +3273,6 @@ export default function CompanySetupPage() {
   };
 
   const renderSmsTab = () => {
-    const smsNavItems = [
-      { key: "configuration", label: "Configuration", icon: <FaServer className="text-[9px]" /> },
-      ...(hasPM || hasCW ? [{ key: "templates", label: "SMS Templates", icon: <FaListAlt className="text-[9px]" /> }] : []),
-      { key: "sent", label: "Sent", icon: <FaPaperPlane className="text-[9px]" /> },
-      { key: "failed", label: "Failed", icon: <FaExclamationTriangle className="text-[9px]" /> },
-      { key: "pending", label: "Inbox / Pending", icon: <FaHistory className="text-[9px]" /> },
-    ];
-
-    const filteredSmsLogs = smsLogs.filter((log) => {
-      if (!smsLogsSearch) return true;
-      const q = smsLogsSearch.toLowerCase();
-      return (
-        String(log.to || "").toLowerCase().includes(q) ||
-        String(log.recipientName || "").toLowerCase().includes(q) ||
-        String(log.body || "").toLowerCase().includes(q) ||
-        String(log.templateKey || "").toLowerCase().includes(q) ||
-        String(log.profileName || "").toLowerCase().includes(q) ||
-        String(log.provider || "").toLowerCase().includes(q) ||
-        String(log.contextType || "").toLowerCase().includes(q)
-      );
-    });
-
     const smsLogsTotalPages = Math.max(1, Math.ceil(filteredSmsLogs.length / SMS_LOGS_PAGE_SIZE));
     const smsLogsSafePage = Math.min(smsLogsPage, smsLogsTotalPages);
     const smsLogsStart = filteredSmsLogs.length === 0 ? 0 : (smsLogsSafePage - 1) * SMS_LOGS_PAGE_SIZE;
@@ -3357,33 +3410,8 @@ export default function CompanySetupPage() {
     );
   };
 
-  const getSessionStatus = (user = {}) => {
-    if (user.locked) return { label: "Locked", className: "border-amber-200 bg-amber-50 text-amber-700" };
-    if (user.isActive === false) return { label: "Inactive", className: "border-slate-200 bg-slate-50 text-slate-600" };
-    if (!user.lastLogin) return { label: "Never signed in", className: "border-rose-200 bg-rose-50 text-rose-700" };
-    const ageDays = Math.floor((Date.now() - new Date(user.lastLogin).getTime()) / (1000 * 60 * 60 * 24));
-    if (ageDays <= 1) return { label: "Recently active", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
-    if (ageDays <= 30) return { label: "Active", className: "border-blue-200 bg-blue-50 text-blue-700" };
-    return { label: "Dormant", className: "border-orange-200 bg-orange-50 text-orange-700" };
-  };
-
   const renderActivitiesTab = () => {
-    const criticalCount = auditLogs.filter((log) => log.severity === "critical").length;
-    const signedInCount = userSessions.filter((user) => Boolean(user.lastLogin)).length;
-    const lockedCount = userSessions.filter((user) => user.locked || user.isActive === false).length;
-
-    const searchLower = activitySearch.trim().toLowerCase();
-    const filteredLogs = auditLogs.filter((log) => {
-      if (!searchLower) return true;
-      return (
-        (log.message || "").toLowerCase().includes(searchLower) ||
-        (log.actorName || "").toLowerCase().includes(searchLower) ||
-        (log.actorEmail || "").toLowerCase().includes(searchLower) ||
-        (log.category || "").toLowerCase().includes(searchLower) ||
-        (log.targetName || "").toLowerCase().includes(searchLower) ||
-        (log.action || "").toLowerCase().includes(searchLower)
-      );
-    });
+    const { filteredLogs, criticalCount, signedInCount, lockedCount, searchLower } = activityLogsMemo;
 
     const actTotalPages = Math.max(1, Math.ceil(filteredLogs.length / ACTIVITIES_PAGE_SIZE));
     const actPage = Math.min(activitiesPage, actTotalPages);

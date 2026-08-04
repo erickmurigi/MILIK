@@ -14,16 +14,17 @@ export const buildTenantOption = (tenant) => {
   if (!tenant) return null;
   const name = getTenantName(tenant);
   const code = tenant.tenantCode || tenant.code || "";
-  const unitNum =
-    tenant.unit?.unitNumber ||
-    tenant.unitNumber ||
-    tenant.unit?.name ||
-    "";
+  const primaryUnit = tenant.unit?.unitNumber || tenant.unit?.unitName || tenant.unit?.name || tenant.unitNumber || "";
+  const additionalUnits = Array.isArray(tenant.additionalUnits)
+    ? tenant.additionalUnits.map((u) => u?.unitNumber || u?.unitName || u?.name || "").filter(Boolean)
+    : [];
+  const allUnits = [primaryUnit, ...additionalUnits].filter(Boolean);
+  const unitLabel = allUnits.join(", ");
   const status = tenant.status || tenant.tenantStatus || "";
 
   const parts = [
     code,
-    unitNum ? `Unit ${unitNum}` : "",
+    unitLabel ? `Unit ${unitLabel}` : "",
     status,
   ].filter(Boolean);
 

@@ -765,7 +765,7 @@ export const updateUnit = async (req, res, next) => {
     const statusValidation = await validateUnitStatusChange({
       unit,
       requestedStatus,
-      allowOccupiedWithoutTenant: false,
+      allowOccupiedWithoutTenant: Boolean(req.body.ownerOccupied),
     });
 
     if (!statusValidation.ok) {
