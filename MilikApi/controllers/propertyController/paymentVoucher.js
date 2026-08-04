@@ -683,6 +683,20 @@ const reverseVoucherLedgerEntries = async ({ voucher, userId, reason }) => {
 };
 
 const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate = null }) => {
+  // If the voucher was created from a requisition that already generated GL entries,
+  // skip the accrual step — expense + AP liability were already posted at requisition approval.
+  if (voucher.sourceRequisition) {
+    const reqGlCount = await FinancialLedgerEntry.countDocuments({
+      business: voucher.business,
+      sourceTransactionType: "expense_requisition",
+      sourceTransactionId: String(voucher.sourceRequisition),
+      status: "approved",
+    });
+    if (reqGlCount > 0) {
+      return { voucher, entries: [], expenseRecord: voucher.expenseRecord || null, journalGroupId: voucher.journalGroupId || null, reused: false, skippedForRequisition: true };
+    }
+  }
+
   const existingEntries = await FinancialLedgerEntry.find({
     business: voucher.business,
     sourceTransactionType: "payment_voucher",
@@ -745,11 +759,12 @@ const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate
   const amount = Math.abs(Number(voucher.amount || 0));
 
   try {
-    const debitLeg = await postEntry({
+    const accrualBase = {
       business: accountingContext.businessId,
       property: accountingContext.propertyId || null,
       landlord: accountingContext.landlordId || null,
       allowUnscoped: Boolean(accountingContext.unscoped),
+      serviceProvider: voucher.serviceProvider || null,
       sourceTransactionType: "payment_voucher",
       sourceTransactionId: String(voucher._id),
       transactionDate: txDate,
@@ -757,14 +772,22 @@ const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate
       statementPeriodEnd: end,
       category: voucher.category === "deposit_refund" ? "ADJUSTMENT" : "EXPENSE_DEDUCTION",
       amount,
+      journalGroupId,
+      payer: "manager",
+      notes: narration,
+      createdBy: actorUserId,
+      approvedBy: actorUserId,
+      approvedAt: new Date(),
+      status: "approved",
+    };
+
+    const debitLeg = await postEntry({
+      ...accrualBase,
       direction: "debit",
       debit: amount,
       credit: 0,
       accountId: debitAccount._id,
-      journalGroupId,
-      payer: "manager",
       receiver: voucher.category === "deposit_refund" ? "landlord" : "vendor",
-      notes: narration,
       metadata: {
         voucherNo: voucher.voucherNo,
         voucherCategory: voucher.category,
@@ -772,32 +795,15 @@ const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate
         includeInLandlordStatement: false,
         expenseRecordId: expenseRecord?._id ? String(expenseRecord._id) : null,
       },
-      createdBy: actorUserId,
-      approvedBy: actorUserId,
-      approvedAt: new Date(),
-      status: "approved",
     });
 
     const creditLeg = await postEntry({
-      business: accountingContext.businessId,
-      property: accountingContext.propertyId || null,
-      landlord: accountingContext.landlordId || null,
-      allowUnscoped: Boolean(accountingContext.unscoped),
-      sourceTransactionType: "payment_voucher",
-      sourceTransactionId: String(voucher._id),
-      transactionDate: txDate,
-      statementPeriodStart: start,
-      statementPeriodEnd: end,
-      category: voucher.category === "deposit_refund" ? "ADJUSTMENT" : "EXPENSE_DEDUCTION",
-      amount,
+      ...accrualBase,
       direction: "credit",
       debit: 0,
       credit: amount,
       accountId: liabilityAccount._id,
-      journalGroupId,
-      payer: "manager",
       receiver: voucher.category === "deposit_refund" ? "tenant" : "vendor",
-      notes: narration,
       metadata: {
         voucherNo: voucher.voucherNo,
         voucherCategory: voucher.category,
@@ -806,10 +812,6 @@ const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate
         offsetOfEntryId: String(debitLeg._id),
         expenseRecordId: expenseRecord?._id ? String(expenseRecord._id) : null,
       },
-      createdBy: actorUserId,
-      approvedBy: actorUserId,
-      approvedAt: new Date(),
-      status: "approved",
     });
 
     voucher.landlord = accountingContext.landlordId;
@@ -900,6 +902,7 @@ const ensureVoucherSettlementPosting = async ({ voucher, actorUserId, paidDate =
     property: accountingContext.propertyId || null,
     landlord: accountingContext.landlordId || null,
     allowUnscoped: Boolean(accountingContext.unscoped),
+    serviceProvider: voucher.serviceProvider || null,
     sourceTransactionType: "payment_voucher",
     sourceTransactionId: String(voucher._id),
     transactionDate: txDate,

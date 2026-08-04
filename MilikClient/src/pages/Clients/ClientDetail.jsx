@@ -944,7 +944,7 @@ const CreateInvoiceModal = ({ clientId, contracts, onClose, onCreated }) => {
         periodEnd:   form.periodEnd || undefined,
         issueDate:   form.issueDate,
         dueDate:     form.dueDate,
-        vatRate:     Number(form.vatRate) || 16,
+        vatRate:     form.vatRate !== '' && form.vatRate !== null && form.vatRate !== undefined ? Number(form.vatRate) : 16,
         lineItems:   lines
           .filter((l) => l.description.trim())
           .map((l) => ({

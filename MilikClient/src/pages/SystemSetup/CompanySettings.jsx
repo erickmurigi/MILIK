@@ -534,6 +534,7 @@ const CompanySettings = () => {
     notifyChannel: "none",
     lastRunAt: null,
     lastRunSummary: null,
+    runHistory: [],
   });
   const [savingAutoInvoicing, setSavingAutoInvoicing] = useState(false);
   const [triggeringAutoInvoicing, setTriggeringAutoInvoicing] = useState(false);
@@ -596,6 +597,7 @@ const CompanySettings = () => {
         notifyChannel: ai.notifyChannel || "none",
         lastRunAt: ai.lastRunAt || null,
         lastRunSummary: ai.lastRunSummary || null,
+        runHistory: Array.isArray(ai.runHistory) ? ai.runHistory : [],
       });
     } catch (error) {
       toast.error(extractErrorMessage(error));
@@ -1121,7 +1123,11 @@ const CompanySettings = () => {
         notifyChannel: autoInvoicing.notifyChannel,
       });
       const ai = res?.data?.autoInvoicing || {};
-      setAutoInvoicing((prev) => ({ ...prev, ...ai }));
+      setAutoInvoicing((prev) => ({
+        ...prev,
+        ...ai,
+        runHistory: Array.isArray(ai.runHistory) ? ai.runHistory : prev.runHistory,
+      }));
       toast.success("Auto invoicing settings saved.");
     } catch (err) {
       toast.error(extractErrorMessage(err));
@@ -1144,8 +1150,55 @@ const CompanySettings = () => {
     }
   };
 
+  const autoInvoicingNextTrigger = useMemo(() => {
+    if (!autoInvoicing.enabled) return null;
+    const bd = Math.max(1, Math.min(28, Number(autoInvoicing.billingDay) || 1));
+    const adv = Math.max(0, Math.min(14, Number(autoInvoicing.daysInAdvance) || 0));
+    const triggerDay = bd - adv;
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    let candidate;
+    if (triggerDay >= 1) {
+      candidate = new Date(year, month, triggerDay);
+      if (candidate <= now) candidate = new Date(year, month + 1, triggerDay);
+    } else {
+      const prevLastDay = new Date(year, month, 0).getDate();
+      candidate = new Date(year, month - 1, prevLastDay + triggerDay);
+      if (candidate <= now) {
+        const nextPrevLastDay = new Date(year, month + 1, 0).getDate();
+        candidate = new Date(year, month, nextPrevLastDay + triggerDay);
+      }
+    }
+    return candidate;
+  }, [autoInvoicing.enabled, autoInvoicing.billingDay, autoInvoicing.daysInAdvance]);
+
   const renderAutoInvoicingTab = () => (
     <div className="space-y-4">
+      {/* Status summary strip */}
+      <div className="flex flex-wrap items-center gap-2 border border-slate-200 bg-slate-50 px-3 py-2">
+        <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold ${autoInvoicing.enabled ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-500"}`}>
+          <span className={`h-1.5 w-1.5 rounded-full ${autoInvoicing.enabled ? "bg-emerald-500" : "bg-slate-400"}`} />
+          {autoInvoicing.enabled ? "Enabled" : "Disabled"}
+        </span>
+        {autoInvoicing.enabled && autoInvoicingNextTrigger && (
+          <span className="text-[11px] text-slate-600">
+            Next run: <strong className="text-slate-800">
+              {autoInvoicingNextTrigger.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+            </strong>
+            {" "}(billing day {autoInvoicing.billingDay}{autoInvoicing.daysInAdvance > 0 ? `, ${autoInvoicing.daysInAdvance}d advance` : ""})
+          </span>
+        )}
+        {autoInvoicing.notifyTenants && autoInvoicing.notifyChannel !== "none" && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700">
+            Notify: {autoInvoicing.notifyChannel === "both" ? "SMS + Email" : String(autoInvoicing.notifyChannel).toUpperCase()}
+          </span>
+        )}
+        {autoInvoicing.runHistory?.length > 0 && (
+          <span className="ml-auto text-[11px] text-slate-400">{autoInvoicing.runHistory.length} run{autoInvoicing.runHistory.length !== 1 ? "s" : ""} recorded</span>
+        )}
+      </div>
+
       <Card
         title="Automatic Rent Invoicing"
         subtitle="Configure when rent invoices are automatically generated each month for active tenants. Invoices are created with an idempotency key — running twice in a month is safe."
@@ -1213,10 +1266,10 @@ const CompanySettings = () => {
           {autoInvoicing.notifyTenants && (
             <AppSelect
               label="Notification Channel"
+              hint="Requires configured SMS / email profile"
               value={autoInvoicing.notifyChannel}
               onChange={(v) => setAutoInvoicing((p) => ({ ...p, notifyChannel: v ?? "none" }))}
               options={[
-                { value: "none", label: "None" },
                 { value: "sms", label: "SMS only" },
                 { value: "email", label: "Email only" },
                 { value: "both", label: "SMS + Email" },
@@ -1225,9 +1278,16 @@ const CompanySettings = () => {
             />
           )}
         </div>
+
+        <div className="mt-4 border border-slate-200 bg-slate-50 px-3 py-2.5 text-[11px] leading-5 text-slate-600">
+          <strong className="text-slate-800">How it works:</strong> Daily at 08:00 EAT the system checks all active leases.
+          Monthly leases are invoiced every month; quarterly/semi-annual/annual leases only in their billing cycle months (calculated from lease start date).
+          Each lease uses its own <strong>Payment Due Day</strong> for the invoice due date.
+          To exclude a single lease from auto-invoicing, disable the <strong>Auto Invoice</strong> toggle on that lease — no need to change settings here.
+        </div>
       </Card>
 
-      <Card title="Manual Trigger" subtitle="Run the auto invoicing process right now for this company. Safe to run multiple times — duplicate invoices are skipped automatically.">
+      <Card title="Manual Trigger & Run History" subtitle="Run the auto invoicing process right now for this company. Safe to run multiple times — duplicate invoices are skipped automatically.">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-xs text-slate-600">
             {autoInvoicing.lastRunAt ? (
@@ -1249,6 +1309,56 @@ const CompanySettings = () => {
             {triggeringAutoInvoicing ? "Running..." : "Run Now"}
           </ActionButton>
         </div>
+
+        {autoInvoicing.runHistory?.length > 0 && (
+          <div className="mt-4 border-t border-slate-100 pt-3">
+            <div className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-400">
+              Recent Runs (last {autoInvoicing.runHistory.length})
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-[11px]">
+                <thead>
+                  <tr className="bg-[#0B3B2E] text-white">
+                    <th className="border-r border-white/10 px-3 py-1 text-left font-bold">Run At</th>
+                    <th className="border-r border-white/10 px-3 py-1 text-center font-bold">Created</th>
+                    <th className="border-r border-white/10 px-3 py-1 text-center font-bold">Skipped</th>
+                    <th className="border-r border-white/10 px-3 py-1 text-center font-bold">Errors</th>
+                    <th className="px-3 py-1 text-left font-bold">Source</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {autoInvoicing.runHistory.map((run, i) => (
+                    <tr
+                      key={i}
+                      className={`border-b border-slate-100 ${i % 2 === 0 ? "bg-white" : "bg-slate-50"}`}
+                    >
+                      <td className="border-r border-slate-100 px-3 py-1 text-slate-700">
+                        {run.runAt
+                          ? new Date(run.runAt).toLocaleString("en-GB", {
+                              day: "2-digit", month: "short", year: "numeric",
+                              hour: "2-digit", minute: "2-digit",
+                            })
+                          : "—"}
+                      </td>
+                      <td className="border-r border-slate-100 px-3 py-1 text-center font-bold text-emerald-700">
+                        {run.created ?? 0}
+                      </td>
+                      <td className="border-r border-slate-100 px-3 py-1 text-center text-slate-500">
+                        {run.skipped ?? 0}
+                      </td>
+                      <td className={`border-r border-slate-100 px-3 py-1 text-center font-bold ${Number(run.errors) > 0 ? "text-rose-600" : "text-slate-400"}`}>
+                        {run.errors ?? 0}
+                      </td>
+                      <td className="px-3 py-1 capitalize text-slate-500">
+                        {run.triggeredBy || "cron"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </Card>
     </div>
   );
@@ -1763,9 +1873,14 @@ const CompanySettings = () => {
                 >
                   <Icon size={10} />
                   {tab.label}
-                  {!["tax", "accounting"].includes(key) && (
+                  {!["tax", "accounting", "autoInvoicing"].includes(key) && (
                     <span className={`px-1.5 py-0.5 text-[9px] font-bold ${isActive ? "bg-[#0B3B2E]/10 text-[#0B3B2E]" : "bg-slate-100 text-slate-500"}`}>
                       {activeCounts[key] ?? 0}
+                    </span>
+                  )}
+                  {key === "autoInvoicing" && (
+                    <span className={`px-1.5 py-0.5 text-[9px] font-bold ${autoInvoicing.enabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                      {autoInvoicing.enabled ? "ON" : "OFF"}
                     </span>
                   )}
                 </button>

@@ -306,6 +306,17 @@ const CompanySettingsSchema = new mongoose.Schema(
         notifyChannel:    { type: String, enum: ["sms", "email", "both", "none"], default: "none" },
         lastRunAt:        { type: Date, default: null },
         lastRunSummary:   { type: String, default: null },
+        runHistory: {
+          type: [new mongoose.Schema({
+            runAt:       { type: Date, required: true },
+            created:     { type: Number, default: 0 },
+            skipped:     { type: Number, default: 0 },
+            errors:      { type: Number, default: 0 },
+            summary:     { type: String, default: "" },
+            triggeredBy: { type: String, enum: ["cron", "manual"], default: "cron" },
+          }, { _id: false })],
+          default: [],
+        },
       }, { _id: false }),
       default: () => ({}),
     },

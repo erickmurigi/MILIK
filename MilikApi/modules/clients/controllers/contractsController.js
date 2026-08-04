@@ -1,7 +1,7 @@
 import { createError } from "../../../utils/error.js";
 import ClientContract from "../models/ClientContract.js";
 import Client from "../models/Client.js";
-import { resolveActiveBusinessId, currentUserId } from "../services/businessScope.js";
+import { resolveActiveBusinessId, currentUserId, escapeRegex } from "../services/businessScope.js";
 import { nextContractNumber } from "../services/clientSequenceService.js";
 
 // ─── Sanitizers ──────────────────────────────────────────────────────────────
@@ -54,6 +54,13 @@ export const listContracts = async (req, res, next) => {
     if (req.query.clientId) filter.client = String(req.query.clientId).trim();
     if (req.query.status && ALLOWED_STATUSES.includes(req.query.status)) {
       filter.status = req.query.status;
+    }
+    if (req.query.search) {
+      const s = escapeRegex(String(req.query.search).trim());
+      filter.$or = [
+        { contractNumber: new RegExp(s, "i") },
+        { description:   new RegExp(s, "i") },
+      ];
     }
 
     // Expiring within N days — always excludes open-ended contracts

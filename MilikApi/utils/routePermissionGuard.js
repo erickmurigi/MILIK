@@ -34,6 +34,10 @@ const RULES = [
   { prefix: "/api/meter-readings", resource: "meterReadings", moduleKey: "propertyManagement" },
   { prefix: "/api/late-penalties", resource: "latePenalties", moduleKey: "propertyManagement" },
   { prefix: "/api/notifications", resource: "notifications", moduleKey: "propertyManagement" },
+  { prefix: "/api/clients/contracts",    resource: "clientContracts",    moduleKey: "clients" },
+  { prefix: "/api/clients/invoices",     resource: "clientInvoices",     moduleKey: "clients" },
+  { prefix: "/api/clients/interactions", resource: "clientInteractions", moduleKey: "clients" },
+  { prefix: "/api/clients",             resource: "clients",             moduleKey: "clients" },
   { prefix: "/api/printers", resource: "printers", moduleKey: null },
 ];
 

@@ -148,6 +148,9 @@ export const reopenAccountingPeriod = async (req, res, next) => {
     if (period.status === "locked")
       return res.status(400).json({ message: "Locked periods cannot be reopened" });
 
+    if (period.yearEndClosed)
+      return res.status(400).json({ message: "Year-end closed periods cannot be reopened" });
+
     if (period.status === "open")
       return res.status(400).json({ message: "Period is already open" });
 

@@ -112,6 +112,7 @@ const LeaseSchema = new mongoose.Schema(
       default: null,
     },
     autoCreatedFromTenant: { type: Boolean, default: false },
+    autoInvoice: { type: Boolean, default: true },
     billingScheduleAdjustments: [BillingScheduleAdjustmentSchema],
     rentReviewRecords: [RentReviewRecordSchema],
   },

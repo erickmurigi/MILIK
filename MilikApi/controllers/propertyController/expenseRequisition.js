@@ -1,7 +1,12 @@
 import mongoose from "mongoose";
 import ExpenseRequisition from "../../models/ExpenseRequisition.js";
 import ServiceProvider from "../../models/ServiceProvider.js";
+import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
+import ChartOfAccount from "../../models/ChartOfAccount.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
+import { postEntry, postReversal } from "../../services/ledgerPostingService.js";
+import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
+import { resolveConfiguredAccountingDefaultAccount } from "../../services/companyAccountingDefaultsService.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 
@@ -243,6 +248,108 @@ const ensureAllowedTransition = (row, nextStatus) => {
   }
 };
 
+// ─── GL HELPERS ──────────────────────────────────────────────────────────────
+
+const buildStatementPeriod = (value) => {
+  const dt = value ? new Date(value) : new Date();
+  const year = dt.getFullYear();
+  const month = dt.getMonth();
+  return { start: new Date(year, month, 1, 0, 0, 0, 0), end: new Date(year, month + 1, 0, 23, 59, 59, 999) };
+};
+
+const CATEGORY_ACCOUNT_CANDIDATES = {
+  maintenance: [{ nameRegex: "maintenance", type: "expense" }, { nameRegex: "repair", type: "expense" }],
+  repair:      [{ nameRegex: "repair", type: "expense" }, { nameRegex: "maintenance", type: "expense" }],
+  utility:     [{ nameRegex: "utilit", type: "expense" }],
+  tax:         [{ nameRegex: "tax|rates|levies", type: "expense" }],
+  insurance:   [{ nameRegex: "insurance", type: "expense" }],
+  supplies:    [{ nameRegex: "supplies|consumable|stationery", type: "expense" }],
+  other:       [{ nameRegex: "general.*expense|operating.*expense|other.*expense", type: "expense" }],
+  general:     [{ nameRegex: "general.*expense|operating.*expense|other.*expense", type: "expense" }],
+};
+
+const resolveRequisitionExpenseAccount = async (businessId, category) => {
+  const candidates = CATEGORY_ACCOUNT_CANDIDATES[category] || CATEGORY_ACCOUNT_CANDIDATES.other;
+  for (const c of candidates) {
+    const account = await ChartOfAccount.findOne({
+      business: businessId, type: "expense",
+      isPosting: { $ne: false }, isHeader: { $ne: true },
+      ...(c.nameRegex && { name: { $regex: c.nameRegex, $options: "i" } }),
+    }).lean();
+    if (account) return account;
+  }
+  return ChartOfAccount.findOne({ business: businessId, type: "expense", isPosting: { $ne: false }, isHeader: { $ne: true } }).lean();
+};
+
+const postRequisitionAccrualGL = async ({ requisition, actorUserId }) => {
+  if (!requisition.serviceProvider || !Number(requisition.amount)) return;
+
+  const [expenseAccount, apAccount] = await Promise.all([
+    resolveRequisitionExpenseAccount(requisition.business, requisition.category),
+    resolveConfiguredAccountingDefaultAccount({ businessId: requisition.business, field: "purchaseClearingAccount" }),
+  ]);
+  if (!expenseAccount || !apAccount) return;
+
+  const txDate = requisition.approvedAt || new Date();
+  const { start, end } = buildStatementPeriod(txDate);
+  const journalGroupId = new mongoose.Types.ObjectId();
+  const amount = Math.abs(Number(requisition.amount));
+  const narration = `Expense Accrual — ${requisition.title || requisition.requisitionNo}`;
+
+  const base = {
+    business: requisition.business,
+    property: requisition.property || null,
+    allowUnscoped: !requisition.property,
+    serviceProvider: requisition.serviceProvider,
+    sourceTransactionType: "expense_requisition",
+    sourceTransactionId: String(requisition._id),
+    transactionDate: txDate,
+    statementPeriodStart: start,
+    statementPeriodEnd: end,
+    category: "EXPENSE_DEDUCTION",
+    amount,
+    journalGroupId,
+    payer: "manager",
+    receiver: "vendor",
+    notes: narration,
+    createdBy: actorUserId,
+    approvedBy: actorUserId,
+    approvedAt: new Date(),
+    status: "approved",
+  };
+
+  const debitLeg = await postEntry({
+    ...base, direction: "debit", debit: amount, credit: 0, accountId: expenseAccount._id,
+    metadata: { postingRole: "ap_invoice_expense", requisitionNo: requisition.requisitionNo || requisition.referenceNo || "" },
+  });
+  await postEntry({
+    ...base, direction: "credit", debit: 0, credit: amount, accountId: apAccount._id,
+    metadata: { postingRole: "ap_invoice_liability", offsetOfEntryId: String(debitLeg._id), requisitionNo: requisition.requisitionNo || requisition.referenceNo || "" },
+  });
+
+  await aggregateChartOfAccountBalances(String(requisition.business), [String(expenseAccount._id), String(apAccount._id)]);
+};
+
+const reverseRequisitionAccrualGL = async ({ requisition, actorUserId }) => {
+  if (!requisition.serviceProvider) return;
+  const entries = await FinancialLedgerEntry.find({
+    business: requisition.business,
+    sourceTransactionType: "expense_requisition",
+    sourceTransactionId: String(requisition._id),
+    status: "approved",
+    reversalOf: null,
+  }).lean();
+  for (const entry of entries) {
+    await postReversal({
+      entryId: entry._id,
+      reason: `Requisition cancelled — ${requisition.cancellationReason || requisition.requisitionNo || ""}`,
+      userId: actorUserId,
+    });
+  }
+};
+
+// ─── CONTROLLERS ──────────────────────────────────────────────────────────────
+
 export const createExpenseRequisition = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
@@ -425,6 +532,7 @@ export const updateExpenseRequisitionStatus = async (req, res, next) => {
     }
 
     const actorUserId = await resolveActorUserId(req, businessId);
+    const previousStatus = row.status;
 
     row.status = status;
 
@@ -441,6 +549,7 @@ export const updateExpenseRequisitionStatus = async (req, res, next) => {
       row.cancellationReason = "";
     } else if (status === "approved") {
       setApprovedAudit(row, actorUserId, req.body?.approvalNote || req.body?.reason || "");
+      await postRequisitionAccrualGL({ requisition: row, actorUserId });
     } else if (status === "rejected") {
       const reason = sanitizeReason(req.body?.reason || req.body?.rejectionReason || "");
       if (!reason) {
@@ -450,6 +559,9 @@ export const updateExpenseRequisitionStatus = async (req, res, next) => {
     } else if (status === "cancelled") {
       const reason = sanitizeReason(req.body?.reason || req.body?.cancellationReason || "Cancelled");
       setCancelledAudit(row, actorUserId, reason);
+      if (previousStatus === "approved") {
+        await reverseRequisitionAccrualGL({ requisition: row, actorUserId });
+      }
     } else if (status === "draft") {
       clearSubmissionAuditForDraft(row);
       row.approvedAt = null;

@@ -81,6 +81,7 @@ const SOURCE_TYPES = [
   "journal_entry",
   "tax_remittance",
   "year_end_close",
+  "expense_requisition",
   "other",
 ];
 
@@ -118,6 +119,12 @@ const FinancialLedgerEntrySchema = new mongoose.Schema(
     unit: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Unit",
+      default: null,
+      index: true,
+    },
+    serviceProvider: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ServiceProvider",
       default: null,
       index: true,
     },

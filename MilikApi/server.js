@@ -95,6 +95,7 @@ import carWashDisplayRoutes from "./modules/carwash/routes/display.js";
 import carWashCreditsRoutes from "./modules/carwash/routes/credits.js";
 import { processDueBilling } from "./modules/carwash/controllers/creditAccountsController.js";
 import { processAutoRentInvoices } from "./services/autoRentInvoicingService.js";
+import { processRenewalReminders } from "./modules/clients/services/renewalReminderService.js";
 import hrDepartmentRoutes from "./modules/hr/routes/departments.js";
 import hrDesignationRoutes from "./modules/hr/routes/designations.js";
 import hrEmployeeRoutes from "./modules/hr/routes/employees.js";
@@ -842,6 +843,60 @@ async function startServer() {
       console.log("[AutoInvoicing Cron] Scheduled — daily at 08:00 EAT");
     } catch (cronErr) {
       console.error("[AutoInvoicing Cron] Failed to schedule:", cronErr?.message || cronErr);
+    }
+
+    // ── Overdue invoice + pending_renewal contract cron ───────────────────────
+    // Runs at 08:15 EAT daily.
+    // Marks sent/partial client invoices as overdue when past their due date.
+    // Marks active contracts expiring within 60 days as pending_renewal.
+    try {
+      const cron = await import("node-cron");
+      const ClientInvoiceMod  = await import("./modules/clients/models/ClientInvoice.js");
+      const ClientContractMod = await import("./modules/clients/models/ClientContract.js");
+      const ClientInvoiceModel  = ClientInvoiceMod.default;
+      const ClientContractModel = ClientContractMod.default;
+      cron.default.schedule("15 8 * * *", async () => {
+        const now = new Date();
+        try {
+          const ri = await ClientInvoiceModel.updateMany(
+            { status: { $in: ["sent", "partial"] }, dueDate: { $lt: now } },
+            { $set: { status: "overdue" } }
+          );
+          if (ri.modifiedCount) console.log(`[Overdue Cron] Marked ${ri.modifiedCount} invoice(s) as overdue`);
+        } catch (err) {
+          console.error("[Overdue Cron] Invoice error:", err?.message || err);
+        }
+        try {
+          const cutoff = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
+          const rc = await ClientContractModel.updateMany(
+            { status: "active", openEnded: { $ne: true }, endDate: { $gt: now, $lte: cutoff } },
+            { $set: { status: "pending_renewal" } }
+          );
+          if (rc.modifiedCount) console.log(`[PendingRenewal Cron] Set ${rc.modifiedCount} contract(s) to pending_renewal`);
+        } catch (err) {
+          console.error("[PendingRenewal Cron] Contract error:", err?.message || err);
+        }
+      }, { timezone: "Africa/Nairobi" });
+      console.log("[Overdue/PendingRenewal Cron] Scheduled — daily at 08:15 EAT");
+    } catch (cronErr) {
+      console.error("[Overdue/PendingRenewal Cron] Failed to schedule:", cronErr?.message || cronErr);
+    }
+
+    // ── Contract renewal reminder cron ────────────────────────────────────────
+    // Runs at 08:30 EAT daily. Sends email reminders at 90/60/30/7 days before expiry.
+    try {
+      const cron = await import("node-cron");
+      cron.default.schedule("30 8 * * *", async () => {
+        try {
+          const sent = await processRenewalReminders();
+          if (sent) console.log(`[RenewalReminder Cron] Sent ${sent} renewal reminder email(s)`);
+        } catch (err) {
+          console.error("[RenewalReminder Cron] Error:", err?.message || err);
+        }
+      }, { timezone: "Africa/Nairobi" });
+      console.log("[RenewalReminder Cron] Scheduled — daily at 08:30 EAT");
+    } catch (cronErr) {
+      console.error("[RenewalReminder Cron] Failed to schedule:", cronErr?.message || cronErr);
     }
 
     server.listen(PORT, () => {

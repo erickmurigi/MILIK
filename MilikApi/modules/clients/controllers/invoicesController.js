@@ -4,7 +4,7 @@ import ClientInvoice from "../models/ClientInvoice.js";
 import ClientInteraction from "../models/ClientInteraction.js";
 import Client from "../models/Client.js";
 import Company from "../../../models/Company.js";
-import { resolveActiveBusinessId, currentUserId } from "../services/businessScope.js";
+import { resolveActiveBusinessId, currentUserId, escapeRegex } from "../services/businessScope.js";
 import { nextInvoiceNumber } from "../services/clientSequenceService.js";
 import { sendInvoiceEmail, sendReceiptEmail } from "../services/clientEmailService.js";
 
@@ -54,6 +54,14 @@ export const listInvoices = async (req, res, next) => {
     if (req.query.contractId) filter.contract = String(req.query.contractId).trim();
     if (req.query.status && ALLOWED_STATUSES.includes(req.query.status)) {
       filter.status = req.query.status;
+    }
+    if (req.query.search) {
+      filter.invoiceNumber = new RegExp(escapeRegex(String(req.query.search).trim()), "i");
+    }
+    if (req.query.dateFrom || req.query.dateTo) {
+      filter.issueDate = {};
+      if (req.query.dateFrom) filter.issueDate.$gte = new Date(req.query.dateFrom);
+      if (req.query.dateTo)   filter.issueDate.$lte = new Date(req.query.dateTo);
     }
 
     const limit = Math.min(Math.max(Number(req.query.limit || 25), 1), 200);

@@ -4,9 +4,8 @@ import { useEntityCache } from '../../hooks/useEntityCache';
 import { useDispatch, useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import {
-  FaPlus, FaFilter, FaSync, FaEdit, FaTrash, FaDownload,
-  FaBuilding, FaSearch, FaTimes, FaReceipt, FaMoneyBillWave,
-  FaChartPie, FaCalendarAlt,
+  FaPlus, FaSync, FaEdit, FaTrash, FaDownload,
+  FaSearch, FaTimes, FaReceipt, FaMoneyBillWave, FaCalendarAlt,
 } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { selectCurrentUser, selectCurrentCompany, selectAllProperties, selectAllUnits, selectAllExpenseProperties } from '../../redux/selectors';
@@ -40,6 +39,10 @@ const CATEGORY_COLORS = {
 const humanize = (s) => String(s || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 const CATEGORY_OPTIONS = CATEGORIES.map((c) => ({ value: c, label: humanize(c) }));
 const PAYMENT_METHOD_OPTIONS = PAYMENT_METHODS.map((m) => ({ value: m, label: humanize(m) }));
+const CATEGORY_DOT = {
+  maintenance: 'bg-orange-400', repair: 'bg-red-400', utility: 'bg-blue-400',
+  tax: 'bg-purple-400', insurance: 'bg-teal-400', supplies: 'bg-yellow-400', other: 'bg-slate-400',
+};
 const formatMoney = (v, currency = 'KES') => `${currency} ${Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const toInput = (d) => { try { return new Date(d).toISOString().split('T')[0]; } catch { return ''; } };
 const today = () => toInput(new Date());
@@ -299,8 +302,9 @@ const PropertyExpenses = () => {
   useEffect(() => { load(); }, [load]);
 
   // ─── derived data ──────────────────────────────────────────────────────────
-  const propertyMap = useMemo(() => new Map(properties.map((p) => [String(p._id), p.propertyName || p.name || 'Unknown'])), [properties]);
-  const unitMap     = useMemo(() => new Map(units.map((u) => [String(u._id), u.unitNumber || u.name || '—'])), [units]);
+  const propertyMap     = useMemo(() => new Map(properties.map((p) => [String(p._id), p.propertyName || p.name || 'Unknown'])), [properties]);
+  const unitMap         = useMemo(() => new Map(units.map((u) => [String(u._id), u.unitNumber || u.name || '—'])), [units]);
+  const propertyOptions = useMemo(() => properties.map((p) => ({ value: p._id, label: p.propertyName || p.name })), [properties]);
 
   const filtered = useMemo(() => {
     const q = filters.search.trim().toLowerCase();
@@ -391,7 +395,7 @@ const PropertyExpenses = () => {
   };
 
   return (
-    <DashboardLayout>
+    <DashboardLayout lockContentScroll>
       <ExpenseModal
         open={modalOpen}
         editing={editing}
@@ -402,229 +406,185 @@ const PropertyExpenses = () => {
         onSave={handleSave}
       />
 
-      <div className="flex min-h-0 flex-1 flex-col bg-slate-50">
-        {/* ─── Header ─────────────────────────────────────────────────────── */}
-        <div className="border-b border-gray-200 bg-white px-5 py-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h1 className="text-base font-extrabold uppercase tracking-tight text-[#1f4a35]">Property Expenses</h1>
-              <p className="mt-0.5 text-xs font-medium text-gray-500">
-                Track maintenance, repair, utility, tax, insurance and other property costs
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={handleExport} title="Export CSV"
-                className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 hover:bg-gray-50 transition">
-                <FaDownload size={11} /> Export
-              </button>
-              <button onClick={load}
-                className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 hover:bg-gray-50 transition">
-                <FaSync size={11} className={loading ? 'animate-spin' : ''} />
-              </button>
-              {canCreateExpense && (
-                <button onClick={() => { setEditing(null); setModalOpen(true); }}
-                  className="flex items-center gap-1.5 rounded-lg bg-[#31694E] px-4 py-2 text-xs font-extrabold text-white hover:bg-[#1f4a35] transition shadow-sm">
-                  <FaPlus size={11} /> Record Expense
-                </button>
-              )}
-            </div>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
+
+        {/* ─── Summary chips ──────────────────────────────────────────────── */}
+        <div className="shrink-0 flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
+          <div className="inline-flex items-center gap-2 border border-slate-200 bg-slate-50 px-3 py-1.5">
+            <FaMoneyBillWave size={9} className="text-slate-500 shrink-0" />
+            <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Total</span>
+            <span className="text-sm font-black text-[#0B3B2E]">{formatMoney(summary.total, currency)}</span>
           </div>
+          {summary.byCat.slice(0, 4).map(({ cat, total, count }) => (
+            <div key={cat} className="inline-flex items-center gap-2 border border-slate-200 bg-white px-3 py-1.5">
+              <span className={`h-2 w-2 shrink-0 rounded-full ${CATEGORY_DOT[cat] || 'bg-slate-400'}`} />
+              <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">{humanize(cat)}</span>
+              <span className="text-xs font-black text-slate-700">{formatMoney(total, currency)}</span>
+              <span className="text-[10px] text-slate-400">{count}</span>
+            </div>
+          ))}
+          <span className="ml-auto text-[10px] font-semibold text-slate-400">
+            {summary.count} expense{summary.count !== 1 ? 's' : ''} in period
+          </span>
         </div>
 
-        <div className="flex-1 overflow-auto p-4 space-y-4">
-          {/* ─── Summary cards ──────────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-xl border border-[#dce9e1] bg-white p-4 shadow-sm">
-              <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e]">
-                <FaMoneyBillWave size={11} /> Total Expenses
-              </div>
-              <div className="mt-2 text-lg font-extrabold text-[#1f4a35]">{formatMoney(summary.total, currency)}</div>
-              <div className="mt-0.5 text-[10px] text-gray-400">{summary.count} record{summary.count !== 1 ? 's' : ''} in period</div>
-            </div>
-
-            {summary.byCat.slice(0, 3).map(({ cat, total, count }) => (
-              <div key={cat} className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
-                <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-widest text-gray-500">
-                  <FaChartPie size={11} /> {humanize(cat)}
-                </div>
-                <div className="mt-2 text-base font-extrabold text-slate-800">{formatMoney(total, currency)}</div>
-                <div className="mt-0.5 text-[10px] text-gray-400">{count} transaction{count !== 1 ? 's' : ''}</div>
-              </div>
-            ))}
+        {/* ─── Filter bar ─────────────────────────────────────────────────── */}
+        <div className="shrink-0 flex flex-wrap items-center gap-1.5 border-b border-slate-200 bg-white px-3 py-1.5">
+          <input type="date" value={filters.startDate} onChange={setFilter('startDate')}
+            className="h-7 rounded border border-slate-200 px-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+          <span className="text-[10px] text-slate-400">—</span>
+          <input type="date" value={filters.endDate} onChange={setFilter('endDate')}
+            className="h-7 rounded border border-slate-200 px-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+          <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+          <AppSelect
+            value={filters.propertyId || null}
+            onChange={(v) => { setFilters((f) => ({ ...f, propertyId: v ?? '' })); setPage(1); }}
+            options={propertyOptions}
+            placeholder="All properties"
+            searchable clearable size="sm"
+          />
+          <AppSelect
+            value={filters.category || null}
+            onChange={(v) => { setFilters((f) => ({ ...f, category: v ?? '' })); setPage(1); }}
+            options={CATEGORY_OPTIONS}
+            placeholder="All categories"
+            clearable size="sm"
+          />
+          <div className="relative shrink-0">
+            <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]" />
+            <input type="text" value={filters.search} onChange={setFilter('search')} placeholder="Search description, property…"
+              className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs outline-none focus:border-[#0B3B2E]" />
           </div>
+          <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+          <button onClick={load} title="Refresh"
+            className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50">
+            <FaSync size={9} className={loading ? 'animate-spin' : ''} />
+          </button>
+          <button onClick={handleExport}
+            className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+            <FaDownload size={9} /> Export
+          </button>
+          {canCreateExpense && (
+            <button onClick={() => { setEditing(null); setModalOpen(true); }}
+              className="inline-flex h-7 items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-black text-white hover:bg-[#0A3127]">
+              <FaPlus size={9} /> Record Expense
+            </button>
+          )}
+        </div>
 
-          {/* ─── Filters ──────────────────────────────────────────────────── */}
-          <div className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-sm">
-            <div className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e]">
-              <FaFilter size={10} /> Filters
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-[9px] font-extrabold uppercase tracking-widest text-gray-400">From</label>
-              <input type="date" value={filters.startDate} onChange={setFilter('startDate')}
-                className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:border-[#31694E] focus:outline-none" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[9px] font-extrabold uppercase tracking-widest text-gray-400">To</label>
-              <input type="date" value={filters.endDate} onChange={setFilter('endDate')}
-                className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:border-[#31694E] focus:outline-none" />
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-[9px] font-extrabold uppercase tracking-widest text-gray-400">Property</label>
-              <AppSelect
-                value={filters.propertyId}
-                onChange={(v) => { setFilters((f) => ({ ...f, propertyId: v ?? '' })); setPage(1); }}
-                options={propertyOptions}
-                placeholder="All properties"
-                searchable
-                clearable
-                size="sm"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-[9px] font-extrabold uppercase tracking-widest text-gray-400">Category</label>
-              <AppSelect
-                value={filters.category}
-                onChange={(v) => { setFilters((f) => ({ ...f, category: v ?? '' })); setPage(1); }}
-                options={CATEGORY_OPTIONS}
-                placeholder="All categories"
-                clearable
-                size="sm"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1 flex-1 min-w-[160px]">
-              <label className="text-[9px] font-extrabold uppercase tracking-widest text-gray-400">Search</label>
-              <div className="relative">
-                <FaSearch size={10} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input type="text" value={filters.search} onChange={setFilter('search')} placeholder="Description, property, receipt…"
-                  className="w-full rounded-lg border border-gray-200 py-1.5 pl-7 pr-3 text-xs focus:border-[#31694E] focus:outline-none" />
-              </div>
-            </div>
-          </div>
-
-          {/* ─── Table ────────────────────────────────────────────────────── */}
-          <div className="rounded-xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+        {/* ─── Table ──────────────────────────────────────────────────────── */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white m-2 rounded-lg shadow-sm">
+          <div className="min-h-0 flex-1 overflow-auto">
             {loading && expenses.length === 0 ? (
-              <div className="flex items-center justify-center py-16 text-xs text-gray-400">Loading expenses…</div>
+              <div className="flex items-center justify-center py-16 text-xs text-slate-400">Loading expenses…</div>
             ) : filtered.length === 0 ? (
               <div className="flex flex-col items-center gap-3 py-16">
-                <FaReceipt size={28} className="text-gray-200" />
-                <p className="text-xs font-semibold text-gray-400">No expenses found for this period</p>
+                <FaReceipt size={28} className="text-slate-200" />
+                <p className="text-xs font-semibold text-slate-400">No expenses found for this period</p>
                 {canCreateExpense && (
                   <button onClick={() => { setEditing(null); setModalOpen(true); }}
-                    className="mt-1 flex items-center gap-1.5 rounded-lg bg-[#31694E] px-4 py-2 text-xs font-extrabold text-white hover:bg-[#1f4a35] transition">
+                    className="mt-1 inline-flex items-center gap-1.5 rounded bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0A3127]">
                     <FaPlus size={10} /> Record your first expense
                   </button>
                 )}
               </div>
             ) : (
-              <>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-[11px] border-collapse">
-                    <thead>
-                      <tr className="bg-[#0B3B2E] text-white">
-                        {['Date', 'Property / Unit', 'Category', 'Description', 'Amount', 'Payment', 'Cashbook', 'Ref / By', ''].map((h, i, arr) => (
-                          <th key={h} className={`px-3 py-1 text-left font-bold ${i < arr.length - 1 ? "border-r border-white/10" : ""}`}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paginated.map((exp, idx) => {
-                        const propName = propertyMap.get(normalizeId(exp.property)) || '—';
-                        const unitNum  = unitMap.get(normalizeId(exp.unit)) || null;
-                        return (
-                          <tr key={exp._id} className={`border-b border-gray-100 transition-colors hover:bg-blue-50/40 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"}`}>
-                            <td className="whitespace-nowrap px-3 py-1 border-r border-gray-100 font-semibold text-gray-700">
-                              <div className="flex items-center gap-1.5">
-                                <FaCalendarAlt size={9} className="text-gray-400 shrink-0" />
-                                {toInput(exp.date)}
-                              </div>
-                            </td>
-                            <td className="px-3 py-1 border-r border-gray-100">
-                              <div className="flex items-center gap-1.5">
-                                <FaBuilding size={9} className="text-gray-400 shrink-0" />
-                                <div>
-                                  <div className="font-semibold text-slate-800 truncate max-w-[140px]">{propName}</div>
-                                  {unitNum && <div className="text-gray-400">Unit {unitNum}</div>}
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-3 py-1 border-r border-gray-100">
-                              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${CATEGORY_COLORS[exp.category] || CATEGORY_COLORS.other}`}>
-                                {humanize(exp.category)}
-                              </span>
-                            </td>
-                            <td className="px-3 py-1 border-r border-gray-100 max-w-[200px]">
-                              <div className="truncate font-medium text-slate-700" title={exp.description}>{exp.description}</div>
-                            </td>
-                            <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900 whitespace-nowrap">
-                              {formatMoney(exp.amount, currency)}
-                            </td>
-                            <td className="px-3 py-1 border-r border-gray-100 text-gray-500">{humanize(exp.paymentMethod)}</td>
-                            <td className="px-3 py-1 border-r border-gray-100 text-gray-500 whitespace-nowrap">{exp.cashbook || '—'}</td>
-                            <td className="px-3 py-1 border-r border-gray-100 text-gray-500">
-                              {exp.receiptNumber && <div className="font-medium text-gray-600">{exp.receiptNumber}</div>}
-                              {exp.paidBy && <div className="text-[10px]">{exp.paidBy}</div>}
-                            </td>
-                            <td className="px-3 py-1">
-                              <div className="flex items-center gap-1">
-                                {canUpdateExpense && (
-                                  <button onClick={() => { setEditing(exp); setModalOpen(true); }}
-                                    className="rounded p-1.5 text-[#0B3B2E] hover:bg-[#ECF6F1] transition" title="Edit">
-                                    <FaEdit size={11} />
-                                  </button>
-                                )}
-                                {canDeleteExpense && (
-                                  <button onClick={() => handleDelete(exp)} disabled={deleting === exp._id}
-                                    className="rounded p-1.5 text-red-500 hover:bg-red-50 transition disabled:opacity-40" title="Delete">
-                                    <FaTrash size={11} />
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                    <tfoot>
-                      <tr className="border-t-2 border-gray-100 bg-slate-50">
-                        <td colSpan={4} className="px-3 py-2.5 text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e]">
-                          Total ({filtered.length} expense{filtered.length !== 1 ? 's' : ''})
+              <table className="w-full min-w-[900px] text-[11px] border-collapse">
+                <thead className="sticky top-0 z-10 shadow-sm">
+                  <tr className="bg-[#0B3B2E] text-white">
+                    {['Date', 'Property / Unit', 'Category', 'Description', 'Amount', 'Payment', 'Cashbook', 'Ref / By', ''].map((h, i, arr) => (
+                      <th key={h || i} className={`px-3 py-1.5 text-left font-bold ${i < arr.length - 1 ? 'border-r border-white/10' : ''}`}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginated.map((exp, idx) => {
+                    const propName = propertyMap.get(normalizeId(exp.property)) || '—';
+                    const unitNum  = unitMap.get(normalizeId(exp.unit)) || null;
+                    return (
+                      <tr key={exp._id} className={`border-b border-gray-100 hover:bg-blue-50/40 align-top ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
+                        <td className="whitespace-nowrap px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-700">
+                          <div className="flex items-center gap-1.5">
+                            <FaCalendarAlt size={9} className="text-slate-400 shrink-0" />
+                            {toInput(exp.date)}
+                          </div>
                         </td>
-                        <td className="px-3 py-2.5 font-extrabold text-[#1f4a35]" colSpan={5}>
-                          {formatMoney(summary.total, currency)}
+                        <td className="px-3 py-1.5 border-r border-gray-100">
+                          <div className="font-semibold text-slate-800 truncate max-w-[160px]">{propName}</div>
+                          {unitNum && <div className="text-[10px] text-slate-500">Unit {unitNum}</div>}
+                        </td>
+                        <td className="px-3 py-1.5 border-r border-gray-100">
+                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${CATEGORY_COLORS[exp.category] || CATEGORY_COLORS.other}`}>
+                            {humanize(exp.category)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-1.5 border-r border-gray-100 max-w-[220px]">
+                          <div className="truncate font-medium text-slate-700" title={exp.description}>{exp.description}</div>
+                        </td>
+                        <td className="px-3 py-1.5 border-r border-gray-100 font-bold text-slate-900 whitespace-nowrap">
+                          {formatMoney(exp.amount, currency)}
+                        </td>
+                        <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500">{humanize(exp.paymentMethod)}</td>
+                        <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500 whitespace-nowrap">{exp.cashbook || '—'}</td>
+                        <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500">
+                          {exp.receiptNumber && <div className="font-medium text-slate-600">{exp.receiptNumber}</div>}
+                          {exp.paidBy && <div className="text-[10px] text-slate-400">{exp.paidBy}</div>}
+                        </td>
+                        <td className="px-3 py-1.5">
+                          <div className="flex items-center gap-1">
+                            {canUpdateExpense && (
+                              <button onClick={() => { setEditing(exp); setModalOpen(true); }}
+                                className="rounded p-1.5 text-[#0B3B2E] hover:bg-[#ECF6F1]" title="Edit">
+                                <FaEdit size={11} />
+                              </button>
+                            )}
+                            {canDeleteExpense && (
+                              <button onClick={() => handleDelete(exp)} disabled={deleting === exp._id}
+                                className="rounded p-1.5 text-red-500 hover:bg-red-50 disabled:opacity-40" title="Delete">
+                                <FaTrash size={11} />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
-                    </tfoot>
-                  </table>
-                </div>
-
-                {/* Pagination */}
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-between border-t border-gray-100 px-4 py-3">
-                    <span className="text-[10px] font-semibold text-gray-400">
-                      Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
-                        className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition">
-                        ‹ Prev
-                      </button>
-                      <span className="px-2 text-xs font-semibold text-gray-500">{page} / {totalPages}</span>
-                      <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                        className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition">
-                        Next ›
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-slate-200 bg-slate-50">
+                    <td colSpan={4} className="px-3 py-2 text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e]">
+                      Total ({filtered.length} expense{filtered.length !== 1 ? 's' : ''})
+                    </td>
+                    <td className="px-3 py-2 font-extrabold text-[#0B3B2E]" colSpan={5}>
+                      {formatMoney(summary.total, currency)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
             )}
           </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="shrink-0 flex items-center justify-between border-t border-slate-200 bg-white px-4 py-2">
+              <span className="text-[10px] font-semibold text-slate-400">
+                {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}
+              </span>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
+                  className="inline-flex h-6 items-center rounded border border-slate-200 px-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40">
+                  ‹ Prev
+                </button>
+                <span className="px-2 text-xs font-semibold text-slate-500">{page} / {totalPages}</span>
+                <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                  className="inline-flex h-6 items-center rounded border border-slate-200 px-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40">
+                  Next ›
+                </button>
+              </div>
+            </div>
+          )}
         </div>
+
       </div>
     </DashboardLayout>
   );

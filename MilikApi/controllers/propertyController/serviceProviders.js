@@ -3,6 +3,7 @@ import { escapeRegex } from "../../utils/escapeRegex.js";
 import ServiceProvider from "../../models/ServiceProvider.js";
 import ExpenseRequisition from "../../models/ExpenseRequisition.js";
 import PaymentVoucher from "../../models/PaymentVoucher.js";
+import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 const resolveBusinessId = (req) =>
@@ -153,48 +154,42 @@ export const getCreditorsSummary = async (req, res, next) => {
     if (!businessId) return res.status(400).json({ success: false, message: "Company context is required" });
 
     const businessIdObj = new mongoose.Types.ObjectId(String(businessId));
-
     const providers = await ServiceProvider.find({ business: businessId }).sort({ name: 1 }).lean();
     if (!providers.length) return res.status(200).json([]);
 
     const providerIds = providers.map((p) => p._id);
 
-    // Aggregate invoiced amounts from approved/submitted/converted requisitions
-    const reqAgg = await ExpenseRequisition.aggregate([
-      { $match: { business: businessIdObj, serviceProvider: { $in: providerIds } } },
-      {
-        $group: {
-          _id: "$serviceProvider",
-          totalInvoiced: {
-            $sum: {
-              $cond: [{ $in: ["$status", ["submitted", "approved", "converted"]] }, "$amount", 0],
-            },
+    const [invoicedAgg, paidAgg] = await Promise.all([
+      FinancialLedgerEntry.aggregate([
+        {
+          $match: {
+            business: businessIdObj,
+            serviceProvider: { $in: providerIds },
+            status: "approved",
+            "metadata.postingRole": { $in: ["liability_accrual", "ap_invoice_liability"] },
           },
-          reqIds: { $push: "$_id" },
         },
-      },
+        { $group: { _id: "$serviceProvider", totalInvoiced: { $sum: "$credit" } } },
+      ]),
+      FinancialLedgerEntry.aggregate([
+        {
+          $match: {
+            business: businessIdObj,
+            serviceProvider: { $in: providerIds },
+            status: "approved",
+            "metadata.postingRole": "liability_settlement",
+          },
+        },
+        { $group: { _id: "$serviceProvider", totalPaid: { $sum: "$debit" } } },
+      ]),
     ]);
 
-    const allReqIds = reqAgg.flatMap((r) => r.reqIds);
-    const paidByProvider = new Map();
-
-    if (allReqIds.length) {
-      const paidAgg = await PaymentVoucher.aggregate([
-        { $match: { business: businessIdObj, sourceRequisition: { $in: allReqIds }, status: "paid" } },
-        { $lookup: { from: "expenserequisitions", localField: "sourceRequisition", foreignField: "_id", as: "req" } },
-        { $unwind: { path: "$req", preserveNullAndEmpty: false } },
-        { $group: { _id: "$req.serviceProvider", totalPaid: { $sum: "$amount" } } },
-      ]);
-      paidAgg.forEach((r) => paidByProvider.set(String(r._id), r.totalPaid));
-    }
-
-    const reqByProvider = new Map();
-    reqAgg.forEach((r) => reqByProvider.set(String(r._id), r));
+    const invoicedMap = new Map(invoicedAgg.map((r) => [String(r._id), r.totalInvoiced]));
+    const paidMap = new Map(paidAgg.map((r) => [String(r._id), r.totalPaid]));
 
     const result = providers.map((p) => {
-      const rData = reqByProvider.get(String(p._id)) || {};
-      const totalInvoiced = rData.totalInvoiced || 0;
-      const totalPaid = paidByProvider.get(String(p._id)) || 0;
+      const totalInvoiced = invoicedMap.get(String(p._id)) || 0;
+      const totalPaid = paidMap.get(String(p._id)) || 0;
       return { ...p, totalInvoiced, totalPaid, outstanding: totalInvoiced - totalPaid };
     });
 
@@ -212,69 +207,37 @@ export const getCreditorStatement = async (req, res, next) => {
     const providerId = req.params.id;
     if (!isValidObjectId(providerId)) return res.status(400).json({ success: false, message: "Invalid provider ID" });
 
-    const provider = await ServiceProvider.findOne({ _id: providerId, business: businessId }).lean();
+    const [provider, glEntries] = await Promise.all([
+      ServiceProvider.findOne({ _id: providerId, business: businessId }).lean(),
+      FinancialLedgerEntry.find({
+        business: new mongoose.Types.ObjectId(String(businessId)),
+        serviceProvider: new mongoose.Types.ObjectId(String(providerId)),
+        status: "approved",
+        "metadata.postingRole": { $in: ["liability_accrual", "ap_invoice_liability", "liability_settlement"] },
+      })
+        .sort({ transactionDate: 1, createdAt: 1 })
+        .lean(),
+    ]);
+
     if (!provider) return res.status(404).json({ success: false, message: "Service provider not found" });
 
-    const requisitions = await ExpenseRequisition.find({
-      business: businessId,
-      serviceProvider: providerId,
-      status: { $in: ["submitted", "approved", "converted", "rejected", "cancelled"] },
-    })
-      .sort({ requestDate: 1, createdAt: 1 })
-      .lean();
-
-    const reqIds = requisitions.map((r) => r._id);
-    const vouchers = reqIds.length
-      ? await PaymentVoucher.find({
-          business: businessId,
-          sourceRequisition: { $in: reqIds },
-          status: { $in: ["approved", "paid"] },
-        })
-          .sort({ paidDate: 1, createdAt: 1 })
-          .lean()
-      : [];
-
-    const vouchersByReqId = new Map();
-    vouchers.forEach((v) => {
-      const key = String(v.sourceRequisition);
-      if (!vouchersByReqId.has(key)) vouchersByReqId.set(key, []);
-      vouchersByReqId.get(key).push(v);
-    });
-
-    const lines = [];
-    for (const req of requisitions) {
-      lines.push({
-        date: req.requestDate || req.createdAt,
-        ref: req.requisitionNo || req.referenceNo || "",
-        type: "invoice",
-        description: req.title || req.description || "",
-        status: req.status,
-        invoiced: req.amount || 0,
-        paid: 0,
-      });
-      const linked = vouchersByReqId.get(String(req._id)) || [];
-      for (const v of linked) {
-        if (v.status === "paid") {
-          lines.push({
-            date: v.paidDate || v.paidAt || v.createdAt,
-            ref: v.voucherNo || "",
-            type: "payment",
-            description: v.narration || `Payment against ${req.requisitionNo || req.referenceNo || ""}`,
-            status: v.status,
-            invoiced: 0,
-            paid: v.amount || 0,
-          });
-        }
-      }
-    }
-
-    lines.sort((a, b) => new Date(a.date) - new Date(b.date));
-
     let balance = 0;
-    for (const line of lines) {
-      balance += line.invoiced - line.paid;
-      line.balance = balance;
-    }
+    const lines = glEntries.map((e) => {
+      const isInvoice = ["liability_accrual", "ap_invoice_liability"].includes(e.metadata?.postingRole);
+      const invoiced = isInvoice ? Number(e.credit || 0) : 0;
+      const paid = !isInvoice ? Number(e.debit || 0) : 0;
+      balance += invoiced - paid;
+      return {
+        date: e.transactionDate,
+        ref: e.metadata?.voucherNo || e.metadata?.requisitionNo || String(e.sourceTransactionId || ""),
+        type: isInvoice ? "invoice" : "payment",
+        sourceType: e.sourceTransactionType,
+        description: e.notes || "",
+        invoiced,
+        paid,
+        balance,
+      };
+    });
 
     const totalInvoiced = lines.reduce((s, l) => s + l.invoiced, 0);
     const totalPaid = lines.reduce((s, l) => s + l.paid, 0);

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { FaFileContract, FaSearch, FaTimes } from 'react-icons/fa';
@@ -36,7 +36,7 @@ const statusBadge = (status) => {
 };
 
 const daysColor = (days) => {
-  if (days < 0)  return 'text-red-700 font-bold';
+  if (days < 0)   return 'text-red-700 font-bold';
   if (days <= 30) return 'text-red-600 font-bold';
   if (days <= 60) return 'text-amber-600 font-semibold';
   return 'text-slate-500';
@@ -46,13 +46,18 @@ const daysColor = (days) => {
 
 const ClientsContracts = () => {
   const navigate  = useNavigate();
-  const [contracts, setContracts]     = useState([]);
-  const [pagination, setPagination]   = useState({ total: 0, page: 1, pages: 1 });
-  const [loading, setLoading]         = useState(true);
-  const [statusFilter, setStatusFilter] = useState('');
-  const [expiringOnly, setExpiringOnly] = useState(false);
-  const [page, setPage]               = useState(1);
-  const limit                         = 25;
+  const [contracts, setContracts]         = useState([]);
+  const [pagination, setPagination]       = useState({ total: 0, page: 1, pages: 1 });
+  const [loading, setLoading]             = useState(true);
+  const [statusFilter, setStatusFilter]   = useState('');
+  const [expiringOnly, setExpiringOnly]   = useState(false);
+  const [search, setSearch]               = useState('');
+  const [searchInput, setSearchInput]     = useState('');
+  const [page, setPage]                   = useState(1);
+  const [activating, setActivating]       = useState({});
+  const [terminating, setTerminating]     = useState({});
+  const searchTimerRef                    = useRef(null);
+  const limit                             = 25;
 
   const fetchContracts = useCallback(async () => {
     setLoading(true);
@@ -60,6 +65,7 @@ const ClientsContracts = () => {
       const params = { page, limit };
       if (statusFilter)  params.status      = statusFilter;
       if (expiringOnly)  params.expiringDays = 60;
+      if (search)        params.search       = search;
       const { data } = await clientsApi.listContracts(params);
       setContracts(data?.contracts || data?.data || []);
       setPagination(data?.pagination || { total: 0, page: 1, pages: 1 });
@@ -68,9 +74,52 @@ const ClientsContracts = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, statusFilter, expiringOnly]);
+  }, [page, limit, statusFilter, expiringOnly, search]);
 
   useEffect(() => { fetchContracts(); }, [fetchContracts]);
+
+  const handleSearchInput = (v) => {
+    setSearchInput(v);
+    clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      setSearch(v);
+      setPage(1);
+    }, 400);
+  };
+
+  const clearSearch = () => {
+    setSearchInput('');
+    setSearch('');
+    setPage(1);
+  };
+
+  const handleActivate = async (c) => {
+    setActivating((p) => ({ ...p, [c._id]: true }));
+    try {
+      await clientsApi.activateContract(c._id);
+      toast.success('Contract activated');
+      fetchContracts();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || err?.message || 'Failed to activate contract');
+    } finally {
+      setActivating((p) => ({ ...p, [c._id]: false }));
+    }
+  };
+
+  const handleTerminate = async (c) => {
+    const reason = window.prompt(`Reason for terminating contract ${c.contractNumber || ''}? (optional)`);
+    if (reason === null) return; // user cancelled the prompt
+    setTerminating((p) => ({ ...p, [c._id]: true }));
+    try {
+      await clientsApi.terminateContract(c._id, { lostReason: reason.trim() });
+      toast.success('Contract terminated');
+      fetchContracts();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || err?.message || 'Failed to terminate contract');
+    } finally {
+      setTerminating((p) => ({ ...p, [c._id]: false }));
+    }
+  };
 
   const pages = pagination.pages || 1;
 
@@ -91,7 +140,23 @@ const ClientsContracts = () => {
 
         {/* ── Filters ──────────────────────────────────────────────────────── */}
         <div className="flex-shrink-0 border-b border-slate-200 px-3 py-2 space-y-2">
+          {/* Search + expiring toggle + count */}
           <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 max-w-xs">
+              <FaSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={11} />
+              <input
+                type="text"
+                value={searchInput}
+                onChange={(e) => handleSearchInput(e.target.value)}
+                placeholder="Search contract # or description…"
+                className="w-full pl-7 pr-7 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/30"
+              />
+              {searchInput && (
+                <button type="button" onClick={clearSearch} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  <FaTimes size={9} />
+                </button>
+              )}
+            </div>
             <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -106,6 +171,7 @@ const ClientsContracts = () => {
             </span>
           </div>
 
+          {/* Status tabs */}
           <div className="flex flex-wrap gap-0.5">
             {STATUS_TABS.map((tab) => (
               <button
@@ -129,7 +195,7 @@ const ClientsContracts = () => {
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10">
               <tr className="bg-[#0B3B2E] text-white text-[10px]">
-                {['Contract #', 'Client', 'Description', 'Period', 'Value (KES)', 'Billing', 'Expires', 'Status'].map((h) => (
+                {['Contract #', 'Client', 'Description', 'Period', 'Value (KES)', 'Billing', 'Expires', 'Status', 'Actions'].map((h) => (
                   <th key={h} className="px-3 py-2 text-left font-black uppercase tracking-widest whitespace-nowrap">
                     {h}
                   </th>
@@ -139,11 +205,11 @@ const ClientsContracts = () => {
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-16 text-center text-sm text-slate-400">Loading contracts…</td>
+                  <td colSpan={9} className="py-16 text-center text-sm text-slate-400">Loading contracts…</td>
                 </tr>
               ) : !contracts.length ? (
                 <tr>
-                  <td colSpan={8} className="py-16 text-center">
+                  <td colSpan={9} className="py-16 text-center">
                     <FaFileContract className="mx-auto mb-2 text-slate-300" size={24} />
                     <p className="text-sm font-semibold text-slate-500">No contracts found</p>
                   </td>
@@ -154,13 +220,15 @@ const ClientsContracts = () => {
                   return (
                     <tr
                       key={c._id}
-                      className={`hover:bg-emerald-50/30 cursor-pointer transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}
-                      onClick={() => navigate(`/clients/${c.client?._id || c.client}`)}
+                      className={`hover:bg-emerald-50/30 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}
                     >
                       <td className="px-3 py-2.5 font-mono text-[11px] text-[#0B3B2E]">
                         {c.contractNumber || c._id?.slice(-6).toUpperCase()}
                       </td>
-                      <td className="px-3 py-2.5 font-semibold text-slate-800">
+                      <td
+                        className="px-3 py-2.5 font-semibold text-slate-800 cursor-pointer hover:text-[#0B3B2E]"
+                        onClick={() => navigate(`/clients/${c.client?._id || c.client}`)}
+                      >
                         {c.client?.name || '—'}
                       </td>
                       <td className="px-3 py-2.5 max-w-[160px] truncate text-slate-600">
@@ -177,7 +245,7 @@ const ClientsContracts = () => {
                       </td>
                       <td className="px-3 py-2.5 capitalize text-slate-500">{c.billingCycle || '—'}</td>
                       <td className="px-3 py-2.5 whitespace-nowrap">
-                        {c.status === 'active' && days !== null ? (
+                        {(c.status === 'active' || c.status === 'pending_renewal') && days !== null ? (
                           <span className={`tabular-nums text-[11px] ${daysColor(days)}`}>
                             {days < 0 ? `${Math.abs(days)}d overdue` : `${days}d`}
                           </span>
@@ -189,6 +257,39 @@ const ClientsContracts = () => {
                         <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusBadge(c.status)}`}>
                           {c.status?.replace('_', ' ') || '—'}
                         </span>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex flex-wrap items-center gap-1">
+                          {c.status === 'draft' && (
+                            <button
+                              type="button"
+                              onClick={() => handleActivate(c)}
+                              disabled={activating[c._id]}
+                              className="border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-2 py-0.5 rounded text-[10px] font-semibold disabled:opacity-50"
+                            >
+                              {activating[c._id] ? '…' : 'Activate'}
+                            </button>
+                          )}
+                          {(c.status === 'active' || c.status === 'draft' || c.status === 'pending_renewal') && (
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/clients/${c.client?._id || c.client}`)}
+                              className="border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 px-2 py-0.5 rounded text-[10px] font-semibold"
+                            >
+                              View
+                            </button>
+                          )}
+                          {(c.status === 'active' || c.status === 'draft' || c.status === 'pending_renewal') && (
+                            <button
+                              type="button"
+                              onClick={() => handleTerminate(c)}
+                              disabled={terminating[c._id]}
+                              className="border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 px-2 py-0.5 rounded text-[10px] font-semibold disabled:opacity-50"
+                            >
+                              {terminating[c._id] ? '…' : 'Terminate'}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );

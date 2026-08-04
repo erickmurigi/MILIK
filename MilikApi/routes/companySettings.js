@@ -85,7 +85,7 @@ router.post("/:businessId/auto-invoicing/trigger", verifyUser, async (req, res) 
   try {
     const businessId = req.params.businessId;
     const today = req.body?.date ? new Date(req.body.date) : new Date();
-    const results = await processAutoRentInvoices(businessId, today, { forceRun: true });
+    const results = await processAutoRentInvoices(businessId, today, { forceRun: true, triggeredBy: "manual" });
     const summary = results[0] || { created: 0, skipped: 0, errors: [] };
     res.status(200).json({
       message: `Auto invoicing run complete: created ${summary.created}, skipped ${summary.skipped}`,
