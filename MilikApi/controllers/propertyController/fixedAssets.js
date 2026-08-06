@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import FixedAsset from "../../models/FixedAsset.js";
-import { postEntry } from "../../services/ledgerPostingService.js";
+import { postEntry, postReversal } from "../../services/ledgerPostingService.js";
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
 import { toObjectId } from "../../utils/db.js";
 
@@ -245,6 +245,18 @@ export const runDepreciation = async (req, res, next) => {
           return;
         }
 
+        const alreadyPosted = await FinancialLedgerEntry.findOne({
+          sourceTransactionType: "fixed_asset_depreciation",
+          sourceTransactionId: asset._id,
+          statementPeriodStart: start,
+          statementPeriodEnd: end,
+        }).select("_id").lean();
+
+        if (alreadyPosted) {
+          results.push({ assetId: asset._id, name: asset.name, skipped: true, reason: "Already posted for this period" });
+          return;
+        }
+
         const journalGroupId = new mongoose.Types.ObjectId();
         const transactionDate = end;
 
@@ -353,37 +365,50 @@ export const disposeFixedAsset = async (req, res, next) => {
       notes: `Asset disposal — ${asset.name} on ${disposalAt.toISOString().split("T")[0]}`,
     };
 
-    // 1. DR Accumulated Depreciation (clear contra-asset)
-    if (accumulated > 0) {
-      await postEntry({ ...basePayload, accountId: asset.accumulatedDepreciationAccount._id, direction: "debit", amount: accumulated });
-      touchedAccounts.add(String(asset.accumulatedDepreciationAccount._id));
-    }
+    const postedLegs = [];
+    try {
+      // 1. DR Accumulated Depreciation (clear contra-asset)
+      if (accumulated > 0) {
+        const leg = await postEntry({ ...basePayload, accountId: asset.accumulatedDepreciationAccount._id, direction: "debit", amount: accumulated });
+        postedLegs.push(leg);
+        touchedAccounts.add(String(asset.accumulatedDepreciationAccount._id));
+      }
 
-    // 2. DR Proceeds Account (if provided and proceeds > 0)
-    if (proceedsAccountId && proceeds > 0) {
-      await postEntry({ ...basePayload, accountId: proceedsAccountId, direction: "debit", amount: proceeds });
-      touchedAccounts.add(String(proceedsAccountId));
-    }
+      // 2. DR Proceeds Account (if provided and proceeds > 0)
+      if (proceedsAccountId && proceeds > 0) {
+        const leg = await postEntry({ ...basePayload, accountId: proceedsAccountId, direction: "debit", amount: proceeds });
+        postedLegs.push(leg);
+        touchedAccounts.add(String(proceedsAccountId));
+      }
 
-    // 3. DR Loss on Disposal / CR Gain on Disposal (balancing leg via depreciationExpenseAccount)
-    //    netGainLoss > 0 → gain → CR expense account (reduces net expense = income-like)
-    //    netGainLoss < 0 → loss → DR expense account
-    if (Math.abs(netGainLoss) > 0.005) {
-      const gainLossDir = netGainLoss > 0 ? "credit" : "debit";
-      await postEntry({
-        ...basePayload,
-        accountId: asset.depreciationExpenseAccount._id,
-        direction: gainLossDir,
-        amount: Math.abs(netGainLoss),
-        notes: `${netGainLoss > 0 ? "Gain" : "Loss"} on disposal — ${asset.name}`,
-      });
-      touchedAccounts.add(String(asset.depreciationExpenseAccount._id));
-    }
+      // 3. DR Loss on Disposal / CR Gain on Disposal (balancing leg via depreciationExpenseAccount)
+      //    netGainLoss > 0 → gain → CR; netGainLoss < 0 → loss → DR
+      if (Math.abs(netGainLoss) > 0.005) {
+        const gainLossDir = netGainLoss > 0 ? "credit" : "debit";
+        const leg = await postEntry({
+          ...basePayload,
+          accountId: asset.depreciationExpenseAccount._id,
+          direction: gainLossDir,
+          amount: Math.abs(netGainLoss),
+          notes: `${netGainLoss > 0 ? "Gain" : "Loss"} on disposal — ${asset.name}`,
+        });
+        postedLegs.push(leg);
+        touchedAccounts.add(String(asset.depreciationExpenseAccount._id));
+      }
 
-    // 4. CR Asset Account (remove at cost)
-    if (cost > 0) {
-      await postEntry({ ...basePayload, accountId: asset.assetAccount._id, direction: "credit", amount: cost });
-      touchedAccounts.add(String(asset.assetAccount._id));
+      // 4. CR Asset Account (remove at cost)
+      if (cost > 0) {
+        const leg = await postEntry({ ...basePayload, accountId: asset.assetAccount._id, direction: "credit", amount: cost });
+        postedLegs.push(leg);
+        touchedAccounts.add(String(asset.assetAccount._id));
+      }
+    } catch (glError) {
+      for (const leg of postedLegs) {
+        if (leg?._id) {
+          await postReversal({ entryId: leg._id, reason: `Auto-reversal: GL balance protection for failed disposal of ${asset.name}`, userId }).catch(() => null);
+        }
+      }
+      throw glError;
     }
 
     if (touchedAccounts.size) {

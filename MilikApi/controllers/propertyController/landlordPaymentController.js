@@ -183,6 +183,7 @@ const postPayableCreationIfMissing = async ({ statement, actorUserId, transactio
 
   if (existing) return;
 
+  const { postEntry, postReversal } = await import("../../services/ledgerPostingService.js");
   const [propertyControlAccount, landlordPayableAccount] = await Promise.all([
     ensurePropertyControlAccount({ businessId: statement.business, propertyId: statement.property }),
     resolveLandlordRemittancePayableAccount(statement.business),
@@ -194,57 +195,65 @@ const postPayableCreationIfMissing = async ({ statement, actorUserId, transactio
     autoPostedOnProcessing: false,
   };
 
-  const debitLeg = await postEntry({
-    business: statement.business,
-    property: statement.property,
-    landlord: statement.landlord,
-    sourceTransactionType: "processed_statement",
-    sourceTransactionId: String(statement._id),
-    transactionDate,
-    statementPeriodStart: statement.periodStart,
-    statementPeriodEnd: statement.periodEnd,
-    category: "LANDLORD_PAYABLE",
-    amount: netAmountDue,
-    debit: netAmountDue,
-    credit: 0,
-    direction: "debit",
-    accountId: propertyControlAccount._id,
-    journalGroupId,
-    payer: "manager",
-    receiver: "landlord",
-    notes: `Landlord Payable — ${stmtRef} (retroactive)`,
-    metadata: { ...meta, postingRole: "property_control_payable_transfer" },
-    createdBy: actorUserId,
-    approvedBy: actorUserId,
-    approvedAt: transactionDate,
-    status: "approved",
-  });
+  let debitLeg;
+  try {
+    debitLeg = await postEntry({
+      business: statement.business,
+      property: statement.property,
+      landlord: statement.landlord,
+      sourceTransactionType: "processed_statement",
+      sourceTransactionId: String(statement._id),
+      transactionDate,
+      statementPeriodStart: statement.periodStart,
+      statementPeriodEnd: statement.periodEnd,
+      category: "LANDLORD_PAYABLE",
+      amount: netAmountDue,
+      debit: netAmountDue,
+      credit: 0,
+      direction: "debit",
+      accountId: propertyControlAccount._id,
+      journalGroupId,
+      payer: "manager",
+      receiver: "landlord",
+      notes: `Landlord Payable — ${stmtRef} (retroactive)`,
+      metadata: { ...meta, postingRole: "property_control_payable_transfer" },
+      createdBy: actorUserId,
+      approvedBy: actorUserId,
+      approvedAt: transactionDate,
+      status: "approved",
+    });
 
-  await postEntry({
-    business: statement.business,
-    property: statement.property,
-    landlord: statement.landlord,
-    sourceTransactionType: "processed_statement",
-    sourceTransactionId: String(statement._id),
-    transactionDate,
-    statementPeriodStart: statement.periodStart,
-    statementPeriodEnd: statement.periodEnd,
-    category: "LANDLORD_PAYABLE",
-    amount: netAmountDue,
-    debit: 0,
-    credit: netAmountDue,
-    direction: "credit",
-    accountId: landlordPayableAccount._id,
-    journalGroupId,
-    payer: "manager",
-    receiver: "system",
-    notes: `Landlord Payable — ${stmtRef} (retroactive)`,
-    metadata: { ...meta, postingRole: "landlord_remittance_payable", offsetOfEntryId: String(debitLeg._id) },
-    createdBy: actorUserId,
-    approvedBy: actorUserId,
-    approvedAt: transactionDate,
-    status: "approved",
-  });
+    await postEntry({
+      business: statement.business,
+      property: statement.property,
+      landlord: statement.landlord,
+      sourceTransactionType: "processed_statement",
+      sourceTransactionId: String(statement._id),
+      transactionDate,
+      statementPeriodStart: statement.periodStart,
+      statementPeriodEnd: statement.periodEnd,
+      category: "LANDLORD_PAYABLE",
+      amount: netAmountDue,
+      debit: 0,
+      credit: netAmountDue,
+      direction: "credit",
+      accountId: landlordPayableAccount._id,
+      journalGroupId,
+      payer: "manager",
+      receiver: "system",
+      notes: `Landlord Payable — ${stmtRef} (retroactive)`,
+      metadata: { ...meta, postingRole: "landlord_remittance_payable", offsetOfEntryId: String(debitLeg._id) },
+      createdBy: actorUserId,
+      approvedBy: actorUserId,
+      approvedAt: transactionDate,
+      status: "approved",
+    });
+  } catch (error) {
+    if (debitLeg?._id) {
+      await postReversal({ entryId: debitLeg._id, reason: `Auto-reversal: GL balance protection for landlord payable creation — ${stmtRef}`, userId: actorUserId }).catch(() => null);
+    }
+    throw error;
+  }
 
   await aggregateChartOfAccountBalances(statement.business, [
     String(propertyControlAccount._id),
@@ -322,7 +331,7 @@ const postCommissionAccrualIfMissing = async ({ statement, actorUserId, transact
     return { alreadyPosted: true, entries: existingEntries };
   }
 
-  const { postEntry } = await import("../../services/ledgerPostingService.js");
+  const { postEntry, postReversal } = await import("../../services/ledgerPostingService.js");
   const [propertyControlAccount, commissionIncomeAccount, companyTaxConfig] = await Promise.all([
     ensurePropertyControlAccount({ businessId: statement.business, propertyId: statement.property }),
     resolveCommissionIncomeAccount(statement.business),
@@ -342,70 +351,11 @@ const postCommissionAccrualIfMissing = async ({ statement, actorUserId, transact
     commissionTaxCodeKey: statement.commissionTaxCodeKey || "no_tax",
   };
 
-  const debitLeg = await postEntry({
-    business: statement.business,
-    property: statement.property,
-    landlord: statement.landlord,
-    sourceTransactionType: "processed_statement",
-    sourceTransactionId: String(statement._id),
-    transactionDate,
-    statementPeriodStart: statement.periodStart,
-    statementPeriodEnd: statement.periodEnd,
-    category: "COMMISSION_CHARGE",
-    amount: commissionGrossAmount,
-    debit: commissionGrossAmount,
-    credit: 0,
-    direction: "debit",
-    accountId: propertyControlAccount._id,
-    journalGroupId,
-    payer: "manager",
-    receiver: "landlord",
-    notes: notes || `Management Commission — ${stmtRef}`,
-    metadata: {
-      ...commonMetadata,
-      postingRole: "property_control_charge",
-    },
-    createdBy: actorUserId,
-    approvedBy: actorUserId,
-    approvedAt: transactionDate,
-    status: "approved",
-  });
-
-  const creditLeg = await postEntry({
-    business: statement.business,
-    property: statement.property,
-    landlord: statement.landlord,
-    sourceTransactionType: "processed_statement",
-    sourceTransactionId: String(statement._id),
-    transactionDate,
-    statementPeriodStart: statement.periodStart,
-    statementPeriodEnd: statement.periodEnd,
-    category: "COMMISSION_CHARGE",
-    amount: commissionAmount,
-    debit: 0,
-    credit: commissionAmount,
-    direction: "credit",
-    accountId: commissionIncomeAccount._id,
-    journalGroupId,
-    payer: "manager",
-    receiver: "system",
-    notes: notes || `Commission Income — ${stmtRef}`,
-    metadata: {
-      ...commonMetadata,
-      postingRole: "commission_income_accrual",
-      offsetOfEntryId: String(debitLeg._id),
-    },
-    createdBy: actorUserId,
-    approvedBy: actorUserId,
-    approvedAt: transactionDate,
-    status: "approved",
-  });
-
-  const entries = [debitLeg, creditLeg];
+  let debitLeg, creditLeg;
+  const entries = [];
   const touchedAccounts = [String(propertyControlAccount._id), String(commissionIncomeAccount._id)];
-
-  if (commissionTaxAmount > 0 && outputVatAccount?._id) {
-    const taxLeg = await postEntry({
+  try {
+    debitLeg = await postEntry({
       business: statement.business,
       property: statement.property,
       landlord: statement.landlord,
@@ -415,18 +365,47 @@ const postCommissionAccrualIfMissing = async ({ statement, actorUserId, transact
       statementPeriodStart: statement.periodStart,
       statementPeriodEnd: statement.periodEnd,
       category: "COMMISSION_CHARGE",
-      amount: commissionTaxAmount,
+      amount: commissionGrossAmount,
+      debit: commissionGrossAmount,
+      credit: 0,
+      direction: "debit",
+      accountId: propertyControlAccount._id,
+      journalGroupId,
+      payer: "manager",
+      receiver: "landlord",
+      notes: notes || `Management Commission — ${stmtRef}`,
+      metadata: {
+        ...commonMetadata,
+        postingRole: "property_control_charge",
+      },
+      createdBy: actorUserId,
+      approvedBy: actorUserId,
+      approvedAt: transactionDate,
+      status: "approved",
+    });
+
+    creditLeg = await postEntry({
+      business: statement.business,
+      property: statement.property,
+      landlord: statement.landlord,
+      sourceTransactionType: "processed_statement",
+      sourceTransactionId: String(statement._id),
+      transactionDate,
+      statementPeriodStart: statement.periodStart,
+      statementPeriodEnd: statement.periodEnd,
+      category: "COMMISSION_CHARGE",
+      amount: commissionAmount,
       debit: 0,
-      credit: commissionTaxAmount,
+      credit: commissionAmount,
       direction: "credit",
-      accountId: outputVatAccount._id,
+      accountId: commissionIncomeAccount._id,
       journalGroupId,
       payer: "manager",
       receiver: "system",
-      notes: notes || `Commission VAT — ${stmtRef}`,
+      notes: notes || `Commission Income — ${stmtRef}`,
       metadata: {
         ...commonMetadata,
-        postingRole: "commission_output_vat",
+        postingRole: "commission_income_accrual",
         offsetOfEntryId: String(debitLeg._id),
       },
       createdBy: actorUserId,
@@ -434,8 +413,48 @@ const postCommissionAccrualIfMissing = async ({ statement, actorUserId, transact
       approvedAt: transactionDate,
       status: "approved",
     });
-    entries.push(taxLeg);
-    touchedAccounts.push(String(outputVatAccount._id));
+
+    entries.push(debitLeg, creditLeg);
+
+    if (commissionTaxAmount > 0 && outputVatAccount?._id) {
+      const taxLeg = await postEntry({
+        business: statement.business,
+        property: statement.property,
+        landlord: statement.landlord,
+        sourceTransactionType: "processed_statement",
+        sourceTransactionId: String(statement._id),
+        transactionDate,
+        statementPeriodStart: statement.periodStart,
+        statementPeriodEnd: statement.periodEnd,
+        category: "COMMISSION_CHARGE",
+        amount: commissionTaxAmount,
+        debit: 0,
+        credit: commissionTaxAmount,
+        direction: "credit",
+        accountId: outputVatAccount._id,
+        journalGroupId,
+        payer: "manager",
+        receiver: "system",
+        notes: notes || `Commission VAT — ${stmtRef}`,
+        metadata: {
+          ...commonMetadata,
+          postingRole: "commission_output_vat",
+          offsetOfEntryId: String(debitLeg._id),
+        },
+        createdBy: actorUserId,
+        approvedBy: actorUserId,
+        approvedAt: transactionDate,
+        status: "approved",
+      });
+      entries.push(taxLeg);
+      touchedAccounts.push(String(outputVatAccount._id));
+    }
+  } catch (error) {
+    const rollbackIds = [debitLeg?._id, creditLeg?._id].filter(Boolean);
+    for (const id of rollbackIds) {
+      await postReversal({ entryId: id, reason: `Auto-reversal: GL balance protection for commission accrual — ${stmtRef}`, userId: actorUserId }).catch(() => null);
+    }
+    throw error;
   }
 
   await aggregateChartOfAccountBalances(statement.business, touchedAccounts);
@@ -616,75 +635,84 @@ export const payLandlord = async (req, res, next) => {
       business: statement.business,
     });
 
-    const { postEntry } = await import("../../services/ledgerPostingService.js");
+    const { postEntry, postReversal } = await import("../../services/ledgerPostingService.js");
     const journalGroupId = new mongoose.Types.ObjectId();
 
-    const debitLeg = await postEntry({
-      business: statement.business,
-      property: statement.property,
-      landlord: statement.landlord,
-      sourceTransactionType: "payment_voucher",
-      sourceTransactionId: String(voucher._id),
-      transactionDate: postingDate,
-      statementPeriodStart: statement.periodStart,
-      statementPeriodEnd: statement.periodEnd,
-      category: "EXPENSE_DEDUCTION",
-      amount: paymentAmount,
-      debit: paymentAmount,
-      credit: 0,
-      direction: "debit",
-      accountId: landlordPayableAccount._id,
-      journalGroupId,
-      payer: "manager",
-      receiver: "landlord",
-      notes: `Landlord payment voucher ${voucherNo}${cashbookAccount?.name ? ` via ${cashbookAccount.name}` : ""}`,
-      metadata: {
-        processedStatementId: String(statement._id),
-        paymentMethod: normalizedPaymentMethod,
-        referenceNumber: referenceNumber || null,
-        cashbook: cashbookAccount?.name || cashbook || null,
-        cashbookAccountId: cashbookAccount?._id ? String(cashbookAccount._id) : null,
-        postingRole: "landlord_payable_reduction",
-      },
-      createdBy: actorUserId,
-      approvedBy: actorUserId,
-      approvedAt: postingDate,
-      status: "approved",
-    });
+    let debitLeg, creditLeg;
+    try {
+      debitLeg = await postEntry({
+        business: statement.business,
+        property: statement.property,
+        landlord: statement.landlord,
+        sourceTransactionType: "payment_voucher",
+        sourceTransactionId: String(voucher._id),
+        transactionDate: postingDate,
+        statementPeriodStart: statement.periodStart,
+        statementPeriodEnd: statement.periodEnd,
+        category: "EXPENSE_DEDUCTION",
+        amount: paymentAmount,
+        debit: paymentAmount,
+        credit: 0,
+        direction: "debit",
+        accountId: landlordPayableAccount._id,
+        journalGroupId,
+        payer: "manager",
+        receiver: "landlord",
+        notes: `Landlord payment voucher ${voucherNo}${cashbookAccount?.name ? ` via ${cashbookAccount.name}` : ""}`,
+        metadata: {
+          processedStatementId: String(statement._id),
+          paymentMethod: normalizedPaymentMethod,
+          referenceNumber: referenceNumber || null,
+          cashbook: cashbookAccount?.name || cashbook || null,
+          cashbookAccountId: cashbookAccount?._id ? String(cashbookAccount._id) : null,
+          postingRole: "landlord_payable_reduction",
+        },
+        createdBy: actorUserId,
+        approvedBy: actorUserId,
+        approvedAt: postingDate,
+        status: "approved",
+      });
 
-    const creditLeg = await postEntry({
-      business: statement.business,
-      property: statement.property,
-      landlord: statement.landlord,
-      sourceTransactionType: "payment_voucher",
-      sourceTransactionId: String(voucher._id),
-      transactionDate: postingDate,
-      statementPeriodStart: statement.periodStart,
-      statementPeriodEnd: statement.periodEnd,
-      category: "EXPENSE_DEDUCTION",
-      amount: paymentAmount,
-      debit: 0,
-      credit: paymentAmount,
-      direction: "credit",
-      accountId: cashbookAccount._id,
-      journalGroupId,
-      payer: "manager",
-      receiver: "system",
-      notes: `Landlord payment voucher ${voucherNo}${cashbookAccount?.name ? ` via ${cashbookAccount.name}` : ""}`,
-      metadata: {
-        processedStatementId: String(statement._id),
-        paymentMethod: normalizedPaymentMethod,
-        referenceNumber: referenceNumber || null,
-        cashbook: cashbookAccount?.name || cashbook || null,
-        cashbookAccountId: cashbookAccount?._id ? String(cashbookAccount._id) : null,
-        offsetOfEntryId: String(debitLeg._id),
-        postingRole: "cashbook_outflow",
-      },
-      createdBy: actorUserId,
-      approvedBy: actorUserId,
-      approvedAt: postingDate,
-      status: "approved",
-    });
+      creditLeg = await postEntry({
+        business: statement.business,
+        property: statement.property,
+        landlord: statement.landlord,
+        sourceTransactionType: "payment_voucher",
+        sourceTransactionId: String(voucher._id),
+        transactionDate: postingDate,
+        statementPeriodStart: statement.periodStart,
+        statementPeriodEnd: statement.periodEnd,
+        category: "EXPENSE_DEDUCTION",
+        amount: paymentAmount,
+        debit: 0,
+        credit: paymentAmount,
+        direction: "credit",
+        accountId: cashbookAccount._id,
+        journalGroupId,
+        payer: "manager",
+        receiver: "system",
+        notes: `Landlord payment voucher ${voucherNo}${cashbookAccount?.name ? ` via ${cashbookAccount.name}` : ""}`,
+        metadata: {
+          processedStatementId: String(statement._id),
+          paymentMethod: normalizedPaymentMethod,
+          referenceNumber: referenceNumber || null,
+          cashbook: cashbookAccount?.name || cashbook || null,
+          cashbookAccountId: cashbookAccount?._id ? String(cashbookAccount._id) : null,
+          offsetOfEntryId: String(debitLeg._id),
+          postingRole: "cashbook_outflow",
+        },
+        createdBy: actorUserId,
+        approvedBy: actorUserId,
+        approvedAt: postingDate,
+        status: "approved",
+      });
+    } catch (postError) {
+      if (debitLeg?._id) {
+        await postReversal({ entryId: debitLeg._id, reason: `Auto-reversal: GL balance protection for landlord payment ${voucherNo}`, userId: actorUserId }).catch(() => null);
+      }
+      await PaymentVoucher.findByIdAndDelete(voucher._id).catch(() => null);
+      throw postError;
+    }
 
     voucher.ledgerEntries = [debitLeg._id, creditLeg._id];
     voucher.journalGroupId = journalGroupId;
@@ -805,78 +833,86 @@ export const recordRecoveryFromLandlord = async (req, res, next) => {
       return next(createError(400, "A valid property control account could not be resolved for this recovery."));
     }
 
-    const { postEntry } = await import("../../services/ledgerPostingService.js");
+    const { postEntry, postReversal } = await import("../../services/ledgerPostingService.js");
     const journalGroupId = new mongoose.Types.ObjectId();
     const recoveryEntryId = new mongoose.Types.ObjectId();
 
-    const debitLeg = await postEntry({
-      business: statement.business,
-      property: statement.property,
-      landlord: statement.landlord,
-      sourceTransactionType: "processed_statement_payment",
-      sourceTransactionId: String(recoveryEntryId),
-      transactionDate: postingDate,
-      statementPeriodStart: statement.periodStart,
-      statementPeriodEnd: statement.periodEnd,
-      category: "ADJUSTMENT",
-      amount: recoveryAmount,
-      debit: recoveryAmount,
-      credit: 0,
-      direction: "debit",
-      accountId: cashbookAccount._id,
-      journalGroupId,
-      payer: "landlord",
-      receiver: "manager",
-      notes: `Landlord Recovery — ${stmtRef}${cashbookAccount?.name ? ` via ${cashbookAccount.name}` : ""}`,
-      metadata: {
-        processedStatementId: String(statement._id),
-        postingKind: "landlord_recovery",
-        postingRole: "cashbook_inflow",
-        paymentMethod: normalizedPaymentMethod,
-        referenceNumber: referenceNumber || null,
-        cashbook: cashbookAccount?.name || cashbook || null,
-        cashbookAccountId: cashbookAccount?._id ? String(cashbookAccount._id) : null,
-      },
-      createdBy: actorUserId,
-      approvedBy: actorUserId,
-      approvedAt: postingDate,
-      status: "approved",
-    });
+    let debitLeg, creditLeg;
+    try {
+      debitLeg = await postEntry({
+        business: statement.business,
+        property: statement.property,
+        landlord: statement.landlord,
+        sourceTransactionType: "processed_statement_payment",
+        sourceTransactionId: String(recoveryEntryId),
+        transactionDate: postingDate,
+        statementPeriodStart: statement.periodStart,
+        statementPeriodEnd: statement.periodEnd,
+        category: "ADJUSTMENT",
+        amount: recoveryAmount,
+        debit: recoveryAmount,
+        credit: 0,
+        direction: "debit",
+        accountId: cashbookAccount._id,
+        journalGroupId,
+        payer: "landlord",
+        receiver: "manager",
+        notes: `Landlord Recovery — ${stmtRef}${cashbookAccount?.name ? ` via ${cashbookAccount.name}` : ""}`,
+        metadata: {
+          processedStatementId: String(statement._id),
+          postingKind: "landlord_recovery",
+          postingRole: "cashbook_inflow",
+          paymentMethod: normalizedPaymentMethod,
+          referenceNumber: referenceNumber || null,
+          cashbook: cashbookAccount?.name || cashbook || null,
+          cashbookAccountId: cashbookAccount?._id ? String(cashbookAccount._id) : null,
+        },
+        createdBy: actorUserId,
+        approvedBy: actorUserId,
+        approvedAt: postingDate,
+        status: "approved",
+      });
 
-    const creditLeg = await postEntry({
-      business: statement.business,
-      property: statement.property,
-      landlord: statement.landlord,
-      sourceTransactionType: "processed_statement_payment",
-      sourceTransactionId: String(recoveryEntryId),
-      transactionDate: postingDate,
-      statementPeriodStart: statement.periodStart,
-      statementPeriodEnd: statement.periodEnd,
-      category: "ADJUSTMENT",
-      amount: recoveryAmount,
-      debit: 0,
-      credit: recoveryAmount,
-      direction: "credit",
-      accountId: propertyControlAccount._id,
-      journalGroupId,
-      payer: "landlord",
-      receiver: "system",
-      notes: `Recovery Cleared — ${stmtRef}`,
-      metadata: {
-        processedStatementId: String(statement._id),
-        postingKind: "landlord_recovery",
-        postingRole: "property_control_recovery",
-        paymentMethod: normalizedPaymentMethod,
-        referenceNumber: referenceNumber || null,
-        cashbook: cashbookAccount?.name || cashbook || null,
-        cashbookAccountId: cashbookAccount?._id ? String(cashbookAccount._id) : null,
-        offsetOfEntryId: String(debitLeg._id),
-      },
-      createdBy: actorUserId,
-      approvedBy: actorUserId,
-      approvedAt: postingDate,
-      status: "approved",
-    });
+      creditLeg = await postEntry({
+        business: statement.business,
+        property: statement.property,
+        landlord: statement.landlord,
+        sourceTransactionType: "processed_statement_payment",
+        sourceTransactionId: String(recoveryEntryId),
+        transactionDate: postingDate,
+        statementPeriodStart: statement.periodStart,
+        statementPeriodEnd: statement.periodEnd,
+        category: "ADJUSTMENT",
+        amount: recoveryAmount,
+        debit: 0,
+        credit: recoveryAmount,
+        direction: "credit",
+        accountId: propertyControlAccount._id,
+        journalGroupId,
+        payer: "landlord",
+        receiver: "system",
+        notes: `Recovery Cleared — ${stmtRef}`,
+        metadata: {
+          processedStatementId: String(statement._id),
+          postingKind: "landlord_recovery",
+          postingRole: "property_control_recovery",
+          paymentMethod: normalizedPaymentMethod,
+          referenceNumber: referenceNumber || null,
+          cashbook: cashbookAccount?.name || cashbook || null,
+          cashbookAccountId: cashbookAccount?._id ? String(cashbookAccount._id) : null,
+          offsetOfEntryId: String(debitLeg._id),
+        },
+        createdBy: actorUserId,
+        approvedBy: actorUserId,
+        approvedAt: postingDate,
+        status: "approved",
+      });
+    } catch (postError) {
+      if (debitLeg?._id) {
+        await postReversal({ entryId: debitLeg._id, reason: `Auto-reversal: GL balance protection for landlord recovery — ${stmtRef}`, userId: actorUserId }).catch(() => null);
+      }
+      throw postError;
+    }
 
     statement.amountRecovered = Number(statement.amountRecovered || 0) + recoveryAmount;
     statement.recoveryBalance = Math.max(
@@ -984,7 +1020,7 @@ export const postCommission = async (req, res, next) => {
       });
     }
 
-    const { postEntry } = await import("../../services/ledgerPostingService.js");
+    const { postEntry, postReversal } = await import("../../services/ledgerPostingService.js");
     const propertyControlAccount = await ensurePropertyControlAccount({
       businessId: statement.business,
       propertyId: statement.property,
@@ -992,68 +1028,76 @@ export const postCommission = async (req, res, next) => {
     const commissionIncomeAccount = await resolveCommissionIncomeAccount(statement.business);
     const journalGroupId = new mongoose.Types.ObjectId();
 
-    const debitLeg = await postEntry({
-      business: statement.business,
-      property: statement.property,
-      landlord: statement.landlord,
-      sourceTransactionType: "processed_statement",
-      sourceTransactionId: String(statement._id),
-      transactionDate,
-      statementPeriodStart: statement.periodStart,
-      statementPeriodEnd: statement.periodEnd,
-      category: "COMMISSION_CHARGE",
-      amount: commissionAmount,
-      debit: commissionAmount,
-      credit: 0,
-      direction: "debit",
-      accountId: propertyControlAccount._id,
-      journalGroupId,
-      payer: "manager",
-      receiver: "landlord",
-      notes: `Management Commission — ${stmtRef}`,
-      metadata: {
-        processedStatementId: String(statement._id),
-        postingKind: "commission_accrual",
-        notes: notes || "",
-        postingRole: "property_control_charge",
-      },
-      createdBy: actorUserId,
-      approvedBy: actorUserId,
-      approvedAt: transactionDate,
-      status: "approved",
-    });
+    let debitLeg, creditLeg;
+    try {
+      debitLeg = await postEntry({
+        business: statement.business,
+        property: statement.property,
+        landlord: statement.landlord,
+        sourceTransactionType: "processed_statement",
+        sourceTransactionId: String(statement._id),
+        transactionDate,
+        statementPeriodStart: statement.periodStart,
+        statementPeriodEnd: statement.periodEnd,
+        category: "COMMISSION_CHARGE",
+        amount: commissionAmount,
+        debit: commissionAmount,
+        credit: 0,
+        direction: "debit",
+        accountId: propertyControlAccount._id,
+        journalGroupId,
+        payer: "manager",
+        receiver: "landlord",
+        notes: `Management Commission — ${stmtRef}`,
+        metadata: {
+          processedStatementId: String(statement._id),
+          postingKind: "commission_accrual",
+          notes: notes || "",
+          postingRole: "property_control_charge",
+        },
+        createdBy: actorUserId,
+        approvedBy: actorUserId,
+        approvedAt: transactionDate,
+        status: "approved",
+      });
 
-    const creditLeg = await postEntry({
-      business: statement.business,
-      property: statement.property,
-      landlord: statement.landlord,
-      sourceTransactionType: "processed_statement",
-      sourceTransactionId: String(statement._id),
-      transactionDate,
-      statementPeriodStart: statement.periodStart,
-      statementPeriodEnd: statement.periodEnd,
-      category: "COMMISSION_CHARGE",
-      amount: commissionAmount,
-      debit: 0,
-      credit: commissionAmount,
-      direction: "credit",
-      accountId: commissionIncomeAccount._id,
-      journalGroupId,
-      payer: "manager",
-      receiver: "system",
-      notes: `Management Commission — ${stmtRef}`,
-      metadata: {
-        processedStatementId: String(statement._id),
-        postingKind: "commission_accrual",
-        notes: notes || "",
-        offsetOfEntryId: String(debitLeg._id),
-        postingRole: "commission_income_accrual",
-      },
-      createdBy: actorUserId,
-      approvedBy: actorUserId,
-      approvedAt: transactionDate,
-      status: "approved",
-    });
+      creditLeg = await postEntry({
+        business: statement.business,
+        property: statement.property,
+        landlord: statement.landlord,
+        sourceTransactionType: "processed_statement",
+        sourceTransactionId: String(statement._id),
+        transactionDate,
+        statementPeriodStart: statement.periodStart,
+        statementPeriodEnd: statement.periodEnd,
+        category: "COMMISSION_CHARGE",
+        amount: commissionAmount,
+        debit: 0,
+        credit: commissionAmount,
+        direction: "credit",
+        accountId: commissionIncomeAccount._id,
+        journalGroupId,
+        payer: "manager",
+        receiver: "system",
+        notes: `Management Commission — ${stmtRef}`,
+        metadata: {
+          processedStatementId: String(statement._id),
+          postingKind: "commission_accrual",
+          notes: notes || "",
+          offsetOfEntryId: String(debitLeg._id),
+          postingRole: "commission_income_accrual",
+        },
+        createdBy: actorUserId,
+        approvedBy: actorUserId,
+        approvedAt: transactionDate,
+        status: "approved",
+      });
+    } catch (postError) {
+      if (debitLeg?._id) {
+        await postReversal({ entryId: debitLeg._id, reason: `Auto-reversal: GL balance protection for commission repost — ${stmtRef}`, userId: actorUserId }).catch(() => null);
+      }
+      throw postError;
+    }
 
     await aggregateChartOfAccountBalances(statement.business, [
       String(propertyControlAccount._id),

@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { escapeRegex } from "../../utils/escapeRegex.js";
 import JournalEntry from "../../models/JournalEntry.js";
+import SequenceCounter from "../../models/SequenceCounter.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import PaymentVoucher from "../../models/PaymentVoucher.js";
@@ -101,19 +102,12 @@ const resolveJournalLandlordId = async ({ businessId, payload = {} }) => {
 };
 
 const generateJournalNo = async (businessId) => {
-  const prefix = "JRN";
-  const lastJournal = await JournalEntry.findOne(
-    { business: businessId, journalNo: { $regex: `^${prefix}\\d+$` } },
-    { journalNo: 1 },
-    { sort: { createdAt: -1 } }
+  const counter = await SequenceCounter.findOneAndUpdate(
+    { business: businessId, key: "journal_no" },
+    { $setOnInsert: { business: businessId, key: "journal_no" }, $inc: { sequence: 1 } },
+    { new: true, upsert: true }
   ).lean();
-
-  let seq = 1;
-  if (lastJournal?.journalNo) {
-    seq = (parseInt(lastJournal.journalNo.replace(prefix, ""), 10) || 0) + 1;
-  }
-
-  return `${prefix}${String(seq).padStart(4, "0")}`;
+  return `JRN${String(counter.sequence).padStart(4, "0")}`;
 };
 
 const ensurePostingAccount = async ({ businessId, accountId, label }) => {
@@ -462,35 +456,43 @@ const postJournalToLedger = async ({ journal, actorUserId }) => {
     },
   };
 
-  const debitLeg = await postEntry({
-    ...commonPayload,
-    accountId: journal.debitAccount,
-    direction: "debit",
-    debit: amount,
-    credit: 0,
-    metadata: {
-      ...commonPayload.metadata,
-      includeInLandlordStatement: Boolean(statementPostingConfig.debitLeg?.includeInLandlordStatement),
-      ...(statementPostingConfig.debitLeg?.statementBucket
-        ? { statementBucket: statementPostingConfig.debitLeg.statementBucket }
-        : {}),
-    },
-  });
+  let debitLeg, creditLeg;
+  try {
+    debitLeg = await postEntry({
+      ...commonPayload,
+      accountId: journal.debitAccount,
+      direction: "debit",
+      debit: amount,
+      credit: 0,
+      metadata: {
+        ...commonPayload.metadata,
+        includeInLandlordStatement: Boolean(statementPostingConfig.debitLeg?.includeInLandlordStatement),
+        ...(statementPostingConfig.debitLeg?.statementBucket
+          ? { statementBucket: statementPostingConfig.debitLeg.statementBucket }
+          : {}),
+      },
+    });
 
-  const creditLeg = await postEntry({
-    ...commonPayload,
-    accountId: journal.creditAccount,
-    direction: "credit",
-    debit: 0,
-    credit: amount,
-    metadata: {
-      ...commonPayload.metadata,
-      includeInLandlordStatement: Boolean(statementPostingConfig.creditLeg?.includeInLandlordStatement),
-      ...(statementPostingConfig.creditLeg?.statementBucket
-        ? { statementBucket: statementPostingConfig.creditLeg.statementBucket }
-        : {}),
-    },
-  });
+    creditLeg = await postEntry({
+      ...commonPayload,
+      accountId: journal.creditAccount,
+      direction: "credit",
+      debit: 0,
+      credit: amount,
+      metadata: {
+        ...commonPayload.metadata,
+        includeInLandlordStatement: Boolean(statementPostingConfig.creditLeg?.includeInLandlordStatement),
+        ...(statementPostingConfig.creditLeg?.statementBucket
+          ? { statementBucket: statementPostingConfig.creditLeg.statementBucket }
+          : {}),
+      },
+    });
+  } catch (error) {
+    if (debitLeg?._id) {
+      await postReversal({ entryId: debitLeg._id, reason: `Auto-reversal: GL balance protection for journal ${journal.journalNo}`, userId: actorUserId }).catch(() => null);
+    }
+    throw error;
+  }
 
   journal.status = "posted";
   journal.postedAt = new Date();

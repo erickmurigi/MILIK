@@ -498,78 +498,86 @@ export const postLandlordReceipt = async (req, res, next) => {
 
     const narration = receipt.narration || `${_receiptCategoryLabel} — ${receipt.receiptNumber}`;
 
-    const debitLeg = await postEntry({
-      business: receipt.business,
-      property: receipt.property,
-      landlord: receipt.landlord,
-      sourceTransactionType: "landlord_receipt",
-      sourceTransactionId: String(receipt._id),
-      transactionDate: postingDate,
-      statementPeriodStart: periodDate,
-      statementPeriodEnd: periodDate,
-      category: "LANDLORD_RECEIPT",
-      amount,
-      direction: "debit",
-      accountId: cashbookAccount._id,
-      journalGroupId,
-      payer: "landlord",
-      receiver: "manager",
-      notes: narration,
-      metadata: {
-        category: receipt.category,
-        referenceNumber: receipt.referenceNumber,
-        receiptNumber: receipt.receiptNumber,
-        cashbook: receipt.cashbook,
-        cashbookAccountId: String(cashbookAccount._id),
-        linkedDocumentType: receipt.linkedDocumentType || "",
-        linkedDocumentId: receipt.linkedDocumentId || "",
-        linkedDocumentRef: receipt.linkedDocumentRef || "",
-        postingRole: "cashbook_inflow",
-      },
-      createdBy: actorUserId,
-      approvedBy: actorUserId,
-      approvedAt: postingDate,
-      status: "approved",
-    });
+    let debitLeg, creditLeg;
+    try {
+      debitLeg = await postEntry({
+        business: receipt.business,
+        property: receipt.property,
+        landlord: receipt.landlord,
+        sourceTransactionType: "landlord_receipt",
+        sourceTransactionId: String(receipt._id),
+        transactionDate: postingDate,
+        statementPeriodStart: periodDate,
+        statementPeriodEnd: periodDate,
+        category: "LANDLORD_RECEIPT",
+        amount,
+        direction: "debit",
+        accountId: cashbookAccount._id,
+        journalGroupId,
+        payer: "landlord",
+        receiver: "manager",
+        notes: narration,
+        metadata: {
+          category: receipt.category,
+          referenceNumber: receipt.referenceNumber,
+          receiptNumber: receipt.receiptNumber,
+          cashbook: receipt.cashbook,
+          cashbookAccountId: String(cashbookAccount._id),
+          linkedDocumentType: receipt.linkedDocumentType || "",
+          linkedDocumentId: receipt.linkedDocumentId || "",
+          linkedDocumentRef: receipt.linkedDocumentRef || "",
+          postingRole: "cashbook_inflow",
+        },
+        createdBy: actorUserId,
+        approvedBy: actorUserId,
+        approvedAt: postingDate,
+        status: "approved",
+      });
 
-    const { includeInLandlordStatement, statementBucket } = statementInclusionForCategory(receipt.category);
+      const { includeInLandlordStatement, statementBucket } = statementInclusionForCategory(receipt.category);
 
-    const creditLeg = await postEntry({
-      business: receipt.business,
-      property: receipt.property,
-      landlord: receipt.landlord,
-      sourceTransactionType: "landlord_receipt",
-      sourceTransactionId: String(receipt._id),
-      transactionDate: postingDate,
-      statementPeriodStart: periodDate,
-      statementPeriodEnd: periodDate,
-      category: "LANDLORD_RECEIPT",
-      amount,
-      direction: "credit",
-      accountId: categoryAccount._id,
-      journalGroupId,
-      payer: "landlord",
-      receiver: "system",
-      notes: narration,
-      metadata: {
-        category: receipt.category,
-        referenceNumber: receipt.referenceNumber,
-        receiptNumber: receipt.receiptNumber,
-        cashbook: receipt.cashbook,
-        cashbookAccountId: String(cashbookAccount._id),
-        linkedDocumentType: receipt.linkedDocumentType || "",
-        linkedDocumentId: receipt.linkedDocumentId || "",
-        linkedDocumentRef: receipt.linkedDocumentRef || "",
-        postingRole,
-        offsetOfEntryId: String(debitLeg._id),
-        includeInLandlordStatement,
-        statementBucket: statementBucket || "",
-      },
-      createdBy: actorUserId,
-      approvedBy: actorUserId,
-      approvedAt: postingDate,
-      status: "approved",
-    });
+      creditLeg = await postEntry({
+        business: receipt.business,
+        property: receipt.property,
+        landlord: receipt.landlord,
+        sourceTransactionType: "landlord_receipt",
+        sourceTransactionId: String(receipt._id),
+        transactionDate: postingDate,
+        statementPeriodStart: periodDate,
+        statementPeriodEnd: periodDate,
+        category: "LANDLORD_RECEIPT",
+        amount,
+        direction: "credit",
+        accountId: categoryAccount._id,
+        journalGroupId,
+        payer: "landlord",
+        receiver: "system",
+        notes: narration,
+        metadata: {
+          category: receipt.category,
+          referenceNumber: receipt.referenceNumber,
+          receiptNumber: receipt.receiptNumber,
+          cashbook: receipt.cashbook,
+          cashbookAccountId: String(cashbookAccount._id),
+          linkedDocumentType: receipt.linkedDocumentType || "",
+          linkedDocumentId: receipt.linkedDocumentId || "",
+          linkedDocumentRef: receipt.linkedDocumentRef || "",
+          postingRole,
+          offsetOfEntryId: String(debitLeg._id),
+          includeInLandlordStatement,
+          statementBucket: statementBucket || "",
+        },
+        createdBy: actorUserId,
+        approvedBy: actorUserId,
+        approvedAt: postingDate,
+        status: "approved",
+      });
+    } catch (glError) {
+      if (debitLeg?._id) {
+        await postReversal({ entryId: debitLeg._id, reason: `Auto-reversal: GL balance protection for landlord receipt ${receipt.receiptNumber}`, userId: actorUserId }).catch(() => null);
+      }
+      throw glError;
+    }
 
     // When settling an advance, update the advancement record's outstanding balance
     if (receipt.category === "advance_settlement" && receipt.linkedDocumentId) {

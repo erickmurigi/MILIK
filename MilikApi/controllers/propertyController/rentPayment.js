@@ -1542,51 +1542,61 @@ const confirmNonCashDirectToLandlordReceipt = async (payment, actorId) => {
     creditLegEntries.push(leg);
   }
 
-  const balancingLeg = await postEntry({
-    business: payment.business,
-    property: propertyId,
-    landlord: landlordId,
-    tenant: payment.tenant || null,
-    unit: payment.unit || null,
-    sourceTransactionType: "rent_payment",
-    sourceTransactionId: String(payment._id),
-    transactionDate: txDate,
-    statementPeriodStart: start,
-    statementPeriodEnd: end,
-    category: "ADJUSTMENT",
-    amount,
-    direction: "debit",
-    debit: amount,
-    credit: 0,
-    accountId: remittanceAccount._id,
-    journalGroupId,
-    payer: "tenant",
-    receiver,
-    notes: (() => {
-      const modeLabel = payment?.metadata?.autoReceiptSource === "mpesa_c2b" ? "M-Pesa Auto" : "Manual";
-      const num = payment.receiptNumber || payment.referenceNumber || String(payment._id).slice(-6);
-      const _ref = payment.referenceNumber ? ` [${payment.referenceNumber}]` : "";
-      return `${modeLabel} – Landlord Settlement – ${num}${_ref}`;
-    })(),
-    metadata: {
-      includeInLandlordStatement: false,
-      includeInCategoryTotals: false,
-      postingRole: "landlord_settlement",
-      paymentType: getPrimaryPaymentTypeFromAllocations(payment),
-      paymentMethod: payment.paymentMethod,
-      cashbook: null,
-      paidDirectToLandlord: true,
-      ledgerType: "receipts",
-      receiptNumber: payment.receiptNumber || null,
-      referenceNumber: payment.referenceNumber || null,
-      allocationSummary: payment.allocationSummary || {},
-      offsetOfEntryIds: creditLegEntries.map((entry) => String(entry._id)),
-    },
-    createdBy: actorId,
-    approvedBy: actorId,
-    approvedAt: new Date(),
-    status: "approved",
-  });
+  let balancingLeg;
+  try {
+    balancingLeg = await postEntry({
+      business: payment.business,
+      property: propertyId,
+      landlord: landlordId,
+      tenant: payment.tenant || null,
+      unit: payment.unit || null,
+      sourceTransactionType: "rent_payment",
+      sourceTransactionId: String(payment._id),
+      transactionDate: txDate,
+      statementPeriodStart: start,
+      statementPeriodEnd: end,
+      category: "ADJUSTMENT",
+      amount,
+      direction: "debit",
+      debit: amount,
+      credit: 0,
+      accountId: remittanceAccount._id,
+      journalGroupId,
+      payer: "tenant",
+      receiver,
+      notes: (() => {
+        const modeLabel = payment?.metadata?.autoReceiptSource === "mpesa_c2b" ? "M-Pesa Auto" : "Manual";
+        const num = payment.receiptNumber || payment.referenceNumber || String(payment._id).slice(-6);
+        const _ref = payment.referenceNumber ? ` [${payment.referenceNumber}]` : "";
+        return `${modeLabel} – Landlord Settlement – ${num}${_ref}`;
+      })(),
+      metadata: {
+        includeInLandlordStatement: false,
+        includeInCategoryTotals: false,
+        postingRole: "landlord_settlement",
+        paymentType: getPrimaryPaymentTypeFromAllocations(payment),
+        paymentMethod: payment.paymentMethod,
+        cashbook: null,
+        paidDirectToLandlord: true,
+        ledgerType: "receipts",
+        receiptNumber: payment.receiptNumber || null,
+        referenceNumber: payment.referenceNumber || null,
+        allocationSummary: payment.allocationSummary || {},
+        offsetOfEntryIds: creditLegEntries.map((entry) => String(entry._id)),
+      },
+      createdBy: actorId,
+      approvedBy: actorId,
+      approvedAt: new Date(),
+      status: "approved",
+    });
+  } catch (debitError) {
+    await rollbackPostedAllocationReleaseEntries({
+      entryIds: creditLegEntries.map((entry) => entry?._id).filter(Boolean),
+      actorId,
+      reason: `Auto-reversal: remittance debit failed for receipt ${payment.receiptNumber || payment.referenceNumber || payment._id}`,
+    });
+    throw debitError;
+  }
 
   payment.journalGroupId = journalGroupId;
   payment.ledgerEntries = [...creditLegEntries.map((entry) => entry._id), balancingLeg._id];
@@ -1620,6 +1630,12 @@ const postReceiptJournal = async (payment, actorId) => {
 
   const { propertyId, landlordId } = await resolvePropertyAndLandlord(payment);
   const balancingAccount = await resolveCashbookAccount(payment.business, payment);
+  if (!balancingAccount?._id) {
+    throw new Error(
+      "Cashbook/bank account could not be resolved for this receipt. " +
+      "Direct-to-landlord receipts must use confirmNonCashDirectToLandlordReceipt."
+    );
+  }
 
   // Resolve property-specific receivable account for In-GL properties
   const propCtx = await resolvePropertyAccountingContext({
@@ -1775,56 +1791,65 @@ const postReceiptJournal = async (payment, actorId) => {
     creditLegEntries.push(leg);
   }
 
-  const balancingLeg = await postEntry({
-    business: payment.business,
-    property: propertyId,
-    landlord: landlordId,
-    tenant: payment.tenant || null,
-    unit: payment.unit || null,
-    sourceTransactionType: "rent_payment",
-    sourceTransactionId: String(payment._id),
-    transactionDate: txDate,
-    statementPeriodStart: start,
-    statementPeriodEnd: end,
-    category: "ADJUSTMENT",
-    amount,
-    direction: "debit",
-    debit: amount,
-    credit: 0,
-    accountId: balancingAccount._id,
-    journalGroupId,
-    payer: "tenant",
-    receiver,
-    notes: (() => {
-      const modeLabel = payment?.metadata?.autoReceiptSource === "mpesa_c2b" ? "M-Pesa Auto" : "Manual";
-      const num = payment.receiptNumber || payment.referenceNumber || "receipt";
-      const _rcptRef = payment.referenceNumber ? ` [${payment.referenceNumber}]` : "";
-      const _rcptPeriod = (payment.month && payment.year)
-        ? ` – ${new Date(payment.year, payment.month - 1).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}`
-        : "";
-      return payment?.paidDirectToLandlord
-        ? `${modeLabel} – Direct to Landlord – ${num}${_rcptRef}${_rcptPeriod}`
-        : `${modeLabel} – Cash Received – ${num}${_rcptRef}${_rcptPeriod}`;
-    })(),
-    metadata: {
-      includeInLandlordStatement: false,
-      includeInCategoryTotals: false,
-      postingRole: payment?.paidDirectToLandlord ? "landlord_settlement" : "cashbook",
-      paymentType: getPrimaryPaymentTypeFromAllocations(payment),
-      paymentMethod: payment.paymentMethod,
-      cashbook: payment?.paidDirectToLandlord ? null : payment.cashbook || "",
-      paidDirectToLandlord: !!payment.paidDirectToLandlord,
-      ledgerType: "receipts",
-      receiptNumber: payment.receiptNumber || null,
-      referenceNumber: payment.referenceNumber || null,
-      allocationSummary: payment.allocationSummary || {},
-      offsetOfEntryIds: creditLegEntries.map((entry) => String(entry._id)),
-    },
-    createdBy: actorId,
-    approvedBy: actorId,
-    approvedAt: new Date(),
-    status: "approved",
-  });
+  let balancingLeg;
+  try {
+    balancingLeg = await postEntry({
+      business: payment.business,
+      property: propertyId,
+      landlord: landlordId,
+      tenant: payment.tenant || null,
+      unit: payment.unit || null,
+      sourceTransactionType: "rent_payment",
+      sourceTransactionId: String(payment._id),
+      transactionDate: txDate,
+      statementPeriodStart: start,
+      statementPeriodEnd: end,
+      category: "ADJUSTMENT",
+      amount,
+      direction: "debit",
+      debit: amount,
+      credit: 0,
+      accountId: balancingAccount._id,
+      journalGroupId,
+      payer: "tenant",
+      receiver,
+      notes: (() => {
+        const modeLabel = payment?.metadata?.autoReceiptSource === "mpesa_c2b" ? "M-Pesa Auto" : "Manual";
+        const num = payment.receiptNumber || payment.referenceNumber || "receipt";
+        const _rcptRef = payment.referenceNumber ? ` [${payment.referenceNumber}]` : "";
+        const _rcptPeriod = (payment.month && payment.year)
+          ? ` – ${new Date(payment.year, payment.month - 1).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}`
+          : "";
+        return `${modeLabel} – Cash Received – ${num}${_rcptRef}${_rcptPeriod}`;
+      })(),
+      metadata: {
+        includeInLandlordStatement: false,
+        includeInCategoryTotals: false,
+        postingRole: "cashbook",
+        paymentType: getPrimaryPaymentTypeFromAllocations(payment),
+        paymentMethod: payment.paymentMethod,
+        cashbook: payment.cashbook || "",
+        paidDirectToLandlord: false,
+        ledgerType: "receipts",
+        receiptNumber: payment.receiptNumber || null,
+        referenceNumber: payment.referenceNumber || null,
+        allocationSummary: payment.allocationSummary || {},
+        offsetOfEntryIds: creditLegEntries.map((entry) => String(entry._id)),
+      },
+      createdBy: actorId,
+      approvedBy: actorId,
+      approvedAt: new Date(),
+      status: "approved",
+    });
+  } catch (debitError) {
+    // Debit leg failed — reverse the already-posted credit legs so the GL stays balanced.
+    await rollbackPostedAllocationReleaseEntries({
+      entryIds: creditLegEntries.map((entry) => entry?._id).filter(Boolean),
+      actorId,
+      reason: `Auto-reversal: bank debit failed for receipt ${payment.receiptNumber || payment.referenceNumber || payment._id}`,
+    });
+    throw debitError;
+  }
 
   payment.journalGroupId = journalGroupId;
   payment.ledgerEntries = [...creditLegEntries.map((entry) => entry._id), balancingLeg._id];
@@ -2136,7 +2161,7 @@ export const postReceiptUnappliedAllocationReleaseJournal = async ({
       journalGroupId,
       payer: "tenant",
       receiver,
-      notes: `Apply unapplied balance from receipt ${payment.receiptNumber || payment.referenceNumber || payment._id}`,
+      notes: `Allocate unapplied balance — receipt ${payment.receiptNumber || payment.referenceNumber || String(payment._id).slice(-6)} — KES ${releaseTotal.toFixed(2)} applied to tenant charges`,
       metadata: {
         includeInLandlordStatement: false,
         includeInCategoryTotals: false,
@@ -2193,7 +2218,7 @@ export const postReceiptUnappliedAllocationReleaseJournal = async ({
         journalGroupId,
         payer: "tenant",
         receiver,
-        notes: `Release unapplied balance from receipt ${payment.receiptNumber || payment.referenceNumber || payment._id}`,
+        notes: `Allocate receipt ${payment.receiptNumber || payment.referenceNumber || String(payment._id).slice(-6)} — ${({ rent: "Rent", deposit: "Deposit", deposit_landlord: "Deposit", utility: "Utility", late_penalty: "Penalty", debit_note: "Debit Note", other: "Other" }[group.key] || "Payment")} — KES ${group.total.toFixed(2)}`,
         metadata: {
           includeInLandlordStatement: false,
           includeInCategoryTotals: false,
@@ -3088,7 +3113,7 @@ export const getPaymentAllocationOptions = async (req, res, next) => {
       return res.status(404).json({ success: false, message: "Receipt not found." });
     }
 
-    const isAdminUser = req.user?.isSystemAdmin === true;
+    const isAdminUser = req.user?.isSystemAdmin === true || Boolean(req.user?.superAdminAccess) || Boolean(req.user?.adminAccess);
     const adminOverride = isAdminUser && req.query?.adminOverride === "true";
     const workspace = await buildReceiptAllocationWorkspace(payment, { adminOverride });
 
@@ -3152,7 +3177,7 @@ export const updatePaymentAllocations = async (req, res, next) => {
       });
     }
 
-    const isAdminUser = req.user?.isSystemAdmin === true;
+    const isAdminUser = req.user?.isSystemAdmin === true || Boolean(req.user?.superAdminAccess) || Boolean(req.user?.adminAccess);
     const adminOverride = isAdminUser && req.body?.adminOverride === true;
 
     const hasPostedLedger =

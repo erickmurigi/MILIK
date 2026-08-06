@@ -1483,8 +1483,8 @@ const Receipts = ({ viewMode = "tenant" }) => {
       const currentLine = prev[index] || {};
       const currentOption = allocationOptionMap.get(String(currentLine?.invoiceId || ""));
       const lockedFloor = Math.max(0, Number(currentOption?.currentAllocation || 0));
-      if (isAppendOnlyAllocationMode && lockedFloor > 0) {
-        toast.error("Already applied lines on a confirmed receipt are locked. Only the remaining unapplied balance can be added from this workspace.");
+      if (isAppendOnlyAllocationMode && lockedFloor > 0 && !allocationAdminOverride) {
+        toast.error("Already applied lines on a confirmed receipt are locked. Use Admin Override to remove them.");
         return prev;
       }
       const next = prev.filter((_, currentIndex) => currentIndex !== index);
@@ -1515,7 +1515,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
         if (key === "invoiceId") {
           const currentOption = allocationOptionMap.get(String(line?.invoiceId || ""));
           const lockedFloor = Math.max(0, Number(currentOption?.currentAllocation || 0));
-          if (isAppendOnlyAllocationMode && lockedFloor > 0) {
+          if (isAppendOnlyAllocationMode && lockedFloor > 0 && !allocationAdminOverride) {
             return line;
           }
           const option = allocationOptionMap.get(String(value || ""));
@@ -1641,7 +1641,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
       appliedAmount,
     }));
 
-    if (payloadRows.length === 0 && Number(allocationRules?.lockedAllocatedTotal || 0) > 0) {
+    if (payloadRows.length === 0 && Number(allocationRules?.lockedAllocatedTotal || 0) > 0 && !allocationAdminOverride) {
       toast.error("Allocate the locked receipt amount before saving.");
       return;
     }
@@ -1747,18 +1747,25 @@ const Receipts = ({ viewMode = "tenant" }) => {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-1 sm:p-2">
         <div className="mx-auto flex h-full w-full max-w-none flex-col overflow-hidden">
           <div className="flex-none sticky top-0 z-30 mb-2 border-b border-slate-200 bg-white shadow-sm">
-            <div className="filter-bar flex items-center gap-1 overflow-x-auto px-2 py-1.5">
+            <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
               {fromLedger && (
-                <button onClick={() => navigate(`/properties/${location.state.propertyId}/ledger`)} className="h-7 shrink-0 flex items-center gap-1 rounded px-2 text-xs font-semibold text-[#0B3B2E] hover:bg-[#EDF5F1]">
-                  <FaArrowLeft size={11} /> {location.state.propertyName} Ledger
+                <button onClick={() => navigate(`/properties/${location.state.propertyId}/ledger`)} className="h-[20px] shrink-0 flex items-center gap-1 px-2 text-[9px] font-semibold text-[#0B3B2E] hover:bg-[#EDF5F1]">
+                  <FaArrowLeft size={8} /> {location.state.propertyName} Ledger
                 </button>
               )}
-              <span className="shrink-0 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[9px] font-bold text-slate-700">{stats.count} Receipts</span>
-              <span className="shrink-0 rounded border border-green-300 bg-green-50 px-1.5 py-0.5 text-[9px] font-bold text-green-700">Ksh {stats.total.toLocaleString()}</span>
-              <span className="shrink-0 rounded border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">{stats.confirmedCount} Conf.</span>
-              <span className="shrink-0 rounded border border-orange-300 bg-orange-50 px-1.5 py-0.5 text-[9px] font-bold text-orange-700">{stats.pendingCount} Pend.</span>
-              <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
-              <input value={draftFilters.tenantSearch} onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenantSearch: normalizeUppercaseInput(e.target.value) }))} placeholder="Tenant" className="h-7 w-20 shrink-0 rounded border border-slate-200 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              <span className="shrink-0 border border-slate-300 bg-white px-1 py-0.5 text-[8px] font-bold text-slate-700">{stats.count} Receipts</span>
+              <span className="shrink-0 border border-green-300 bg-green-50 px-1 py-0.5 text-[8px] font-bold text-green-700">Ksh {stats.total.toLocaleString()}</span>
+              <span className="shrink-0 border border-blue-300 bg-blue-50 px-1 py-0.5 text-[8px] font-bold text-blue-700">{stats.confirmedCount} Conf.</span>
+              <span className="shrink-0 border border-orange-300 bg-orange-50 px-1 py-0.5 text-[8px] font-bold text-orange-700">{stats.pendingCount} Pend.</span>
+              <div className="mx-0.5 h-3 w-px shrink-0 bg-slate-200" />
+              <input
+                value={draftFilters.search}
+                onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: e.target.value }))}
+                onKeyDown={(e) => e.key === "Enter" && applySearchFilters()}
+                placeholder="Receipt #"
+                className="h-[20px] w-[4.5rem] shrink-0 border border-slate-200 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+              />
+              <input value={draftFilters.tenantSearch} onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenantSearch: normalizeUppercaseInput(e.target.value) }))} placeholder="Tenant" className="h-[20px] w-[4.5rem] shrink-0 border border-slate-200 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
               <AppSelect
                 value={draftFilters.property}
                 onChange={(v) => setDraftFilters((prev) => ({ ...prev, property: v ?? "all", unit: "" }))}
@@ -1766,13 +1773,13 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 placeholder="Property"
                 searchable
                 clearable
-                size="sm"
+                compact
               />
               <input
                 value={draftFilters.unit}
                 onChange={(e) => setDraftFilters((prev) => ({ ...prev, unit: e.target.value || "" }))}
                 placeholder="Unit"
-                className="h-7 w-16 shrink-0 rounded border border-slate-200 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                className="h-[20px] w-10 shrink-0 border border-slate-200 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
               <AppSelect
                 value={draftFilters.ledger}
@@ -1780,7 +1787,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 options={[{ value: "receipts", label: "Receipts" }, { value: "cashbook", label: "Cashbook" }]}
                 placeholder="Ledger"
                 clearable
-                size="sm"
+                compact
               />
               <AppSelect
                 value={draftFilters.status}
@@ -1792,7 +1799,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
                   { value: "reversed", label: "Reversed" },
                   { value: "all", label: "All" },
                 ]}
-                size="sm"
+                compact
               />
               <AppSelect
                 value={draftFilters.paymentType}
@@ -1806,11 +1813,11 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 ]}
                 placeholder="Type"
                 clearable
-                size="sm"
+                compact
               />
-              <input type="date" value={draftFilters.from} onChange={setFilter("from")} className="h-7 w-[7.5rem] shrink-0 rounded border border-slate-200 bg-white px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-              <input type="date" value={draftFilters.to} onChange={setFilter("to")} className="h-7 w-[7.5rem] shrink-0 rounded border border-slate-200 bg-white px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-              <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+              <input type="date" value={draftFilters.from} onChange={setFilter("from")} className="h-[20px] w-[5.5rem] shrink-0 border border-slate-200 bg-white px-1 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              <input type="date" value={draftFilters.to} onChange={setFilter("to")} className="h-[20px] w-[5.5rem] shrink-0 border border-slate-200 bg-white px-1 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              <div className="mx-0.5 h-3 w-px shrink-0 bg-slate-200" />
               <AppSelect
                 value=""
                 onChange={(v) => { if (v) applyDatePresetAndSearch(v); }}
@@ -1827,12 +1834,12 @@ const Receipts = ({ viewMode = "tenant" }) => {
                   { value: "lastYear", label: "Last Year" },
                 ]}
                 placeholder="Period"
-                size="sm"
+                compact
               />
-              <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
-              <button onClick={applySearchFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2 text-xs font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSearch size={10} /></button>
-              <button onClick={resetSearchFilters} className="h-7 shrink-0 flex items-center gap-1 rounded bg-slate-500 px-2 text-xs font-semibold text-white hover:bg-slate-600"><FaRedoAlt size={10} /></button>
-              <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+              <div className="mx-0.5 h-3 w-px shrink-0 bg-slate-200" />
+              <button onClick={applySearchFilters} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSearch size={7} /> Search</button>
+              <button onClick={resetSearchFilters} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white bg-slate-500 hover:bg-slate-600"><FaRedoAlt size={7} /> Reset</button>
+              <div className="mx-0.5 h-3 w-px shrink-0 bg-slate-200" />
               <AppSelect
                 value=""
                 disabled={selectedIds.length === 0}
@@ -1847,17 +1854,17 @@ const Receipts = ({ viewMode = "tenant" }) => {
                   ...(canDeleteReceipt ? [{ value: "delete", label: "Delete selected" }] : []),
                 ]}
                 placeholder="Actions"
-                size="sm"
+                compact
               />
-              {canExportReceipt && <button onClick={handlePrintList} title="Print list" className="h-7 shrink-0 flex items-center rounded bg-indigo-600 px-2 text-xs text-white hover:bg-indigo-700"><FaPrint size={10} /></button>}
-              <button onClick={() => setShowSmsModal(true)} disabled={selectedIds.length === 0} title={selectedIds.length > 0 ? `SMS ${selectedIds.length} receipt${selectedIds.length !== 1 ? "s" : ""}` : "Select receipts to SMS"} className="h-7 shrink-0 flex items-center rounded bg-teal-600 px-2 text-xs text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"><FaSms size={10} /></button>
-              <button onClick={() => setShowEmailModal(true)} disabled={selectedIds.length === 0} title={selectedIds.length > 0 ? `Email ${selectedIds.length} receipt${selectedIds.length !== 1 ? "s" : ""}` : "Select receipts to email"} className="h-7 shrink-0 flex items-center rounded bg-blue-600 px-2 text-xs text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><FaEnvelope size={10} /></button>
+              {canExportReceipt && <button onClick={handlePrintList} title="Print list" className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white bg-indigo-600 hover:bg-indigo-700"><FaPrint size={7} /> Print</button>}
+              <button onClick={() => setShowSmsModal(true)} disabled={selectedIds.length === 0} title={selectedIds.length > 0 ? `SMS ${selectedIds.length} receipt${selectedIds.length !== 1 ? "s" : ""}` : "Select receipts to SMS"} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white bg-teal-600 hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"><FaSms size={7} /> SMS</button>
+              <button onClick={() => setShowEmailModal(true)} disabled={selectedIds.length === 0} title={selectedIds.length > 0 ? `Email ${selectedIds.length} receipt${selectedIds.length !== 1 ? "s" : ""}` : "Select receipts to email"} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white bg-blue-600 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><FaEnvelope size={7} /> Email</button>
               {canCreateReceipt && !isLandlordReceiptView && (
-                <button onClick={() => navigate("/receipts/batch")} title="Batch Receipt Entry" className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2 text-xs text-white hover:bg-[#0d4a38]">
-                  <FaListAlt size={10} /> Batch
+                <button onClick={() => navigate("/receipts/batch")} title="Batch Receipt Entry" className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#0B3B2E] px-1.5 text-[9px] text-white hover:bg-[#0d4a38]">
+                  <FaListAlt size={7} /> Batch
                 </button>
               )}
-              {canCreateReceipt && <button onClick={openCreateForm} title={pageCreateLabel} className={`h-7 shrink-0 flex items-center rounded px-2 text-xs text-white ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaPlus size={10} /></button>}
+              {canCreateReceipt && <button onClick={openCreateForm} title={pageCreateLabel} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaPlus size={7} /> New</button>}
             </div>
           </div>
 
@@ -2732,6 +2739,14 @@ const Receipts = ({ viewMode = "tenant" }) => {
                             The already applied portion of <strong>{formatMoney(allocationRules?.lockedAllocatedTotal || 0)}</strong> stays locked. You can safely apply the remaining unapplied balance of <strong>{formatMoney(allocationRules?.currentUnapplied || 0)}</strong> to open bills without reversing the original receipt.
                           </p>
                         </div>
+                        {canAdminOverride && !allocationAdminOverride && (
+                          <button
+                            onClick={() => openAllocationDrawer(allocationTarget, { adminOverride: true })}
+                            className="shrink-0 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-50"
+                          >
+                            Admin Override
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}

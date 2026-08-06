@@ -3189,8 +3189,16 @@ export const repairBalanceGroup = async (groupId, data) => {
   const res = await adminRequests.post(`/ledger/repair/balance-group/${groupId}`, data);
   return res.data;
 };
+export const repairClearAbnormalBalance = async (data) => {
+  const res = await adminRequests.post("/ledger/repair/clear-abnormal-balance", data);
+  return res.data;
+};
 export const reverseGlCorrectionEntry = async (groupId, data) => {
   const res = await adminRequests.post(`/ledger/repair/reverse-correction/${groupId}`, data);
+  return res.data;
+};
+export const apiVoidReversedCorrections = async (data) => {
+  const res = await adminRequests.post("/ledger/repair/void-reversed-corrections", data);
   return res.data;
 };
 export const getActiveGlCorrections = async (params) => {

@@ -582,17 +582,17 @@ const LandlordPayments = ({ mode = "payments" }) => {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
         <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col overflow-hidden">
           <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
-            <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+            <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
               <div className="relative shrink-0">
                 <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]" />
-                <input value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder="Search name, code, email…" className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                <input value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder="Search name, code, email…" className="h-[20px] w-36 border border-slate-200 bg-white pl-6 pr-1 text-[9px] outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </div>
               <AppSelect
                 value={filters.status}
                 onChange={(v) => setFilters({ ...filters, status: v ?? '' })}
                 options={[{ value: 'Active', label: 'Active' }, { value: 'Archived', label: 'Archived' }]}
                 placeholder="All Status"
-                size="sm"
+                compact
                 clearable
               />
               <AppSelect
@@ -600,16 +600,16 @@ const LandlordPayments = ({ mode = "payments" }) => {
                 onChange={(v) => setFilters({ ...filters, paymentStatus: v ?? '' })}
                 options={[{ value: 'owed', label: 'Balance Owed' }, { value: 'clear', label: 'Fully Paid' }]}
                 placeholder="All Payment Status"
-                size="sm"
+                compact
                 clearable
               />
-              <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-              <span className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600">{stats.totalLandlords} landlords</span>
-              <span className="shrink-0 rounded border border-green-200 bg-green-50 px-2 py-0.5 text-[10px] font-bold text-green-700">Paid: Ksh {stats.totalPaid.toLocaleString()}</span>
-              <span className="shrink-0 rounded border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700">Balance: Ksh {stats.totalOwed.toLocaleString()}</span>
-              <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-              <button onClick={() => setShowSmsModal(true)} disabled={selectedLandlords.length === 0} title={selectedLandlords.length > 0 ? `SMS ${selectedLandlords.length} landlord${selectedLandlords.length !== 1 ? "s" : ""}` : "Select landlords to SMS"} className="h-7 shrink-0 flex items-center gap-1 rounded bg-teal-600 px-2.5 text-xs font-semibold text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"><FaSms size={10} />{selectedLandlords.length > 0 && <span>{selectedLandlords.length}</span>}</button>
-              <button onClick={() => dispatch(getLandlords({ business: currentCompany._id }))} className="h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white bg-[#0B3B2E] hover:bg-[#0A3127]"><FaRedoAlt /></button>
+              <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
+              <span className="shrink-0 border border-slate-200 bg-white px-1 py-0.5 text-[8px] font-bold text-slate-600">{stats.totalLandlords} landlords</span>
+              <span className="shrink-0 border border-green-200 bg-green-50 px-1 py-0.5 text-[8px] font-bold text-green-700">Paid: Ksh {stats.totalPaid.toLocaleString()}</span>
+              <span className="shrink-0 border border-orange-200 bg-orange-50 px-1 py-0.5 text-[8px] font-bold text-orange-700">Balance: Ksh {stats.totalOwed.toLocaleString()}</span>
+              <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
+              <button onClick={() => setShowSmsModal(true)} disabled={selectedLandlords.length === 0} title={selectedLandlords.length > 0 ? `SMS ${selectedLandlords.length} landlord${selectedLandlords.length !== 1 ? "s" : ""}` : "Select landlords to SMS"} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-teal-600 px-1.5 text-[9px] font-semibold text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"><FaSms size={7} /> SMS{selectedLandlords.length > 0 && <span> ({selectedLandlords.length})</span>}</button>
+              <button onClick={() => dispatch(getLandlords({ business: currentCompany._id }))} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white bg-[#0B3B2E] hover:bg-[#0A3127]"><FaRedoAlt size={7} /> Refresh</button>
             </div>
           </div>
 

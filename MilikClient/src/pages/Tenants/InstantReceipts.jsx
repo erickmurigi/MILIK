@@ -342,17 +342,17 @@ const InstantReceipts = () => {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
         <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
           <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
-            <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-              <button onClick={() => navigate("/tenants")} className="h-7 shrink-0 flex items-center gap-1 rounded px-2 text-[11px] font-semibold text-slate-600 hover:text-slate-900"><FaArrowLeft size={11} /> Back</button>
+            <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
+              <button onClick={() => navigate("/tenants")} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-slate-600 hover:text-slate-900"><FaArrowLeft size={7} /> Back</button>
               <span className="shrink-0 text-xs font-black text-slate-900">Instant Receipts</span>
-              <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-              <span className="shrink-0 rounded border border-slate-300 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-700">{stats.count} Notifications</span>
-              <span className="shrink-0 rounded border border-green-300 bg-green-50 px-2 py-0.5 text-[10px] font-bold text-green-700">{formatMoney(stats.totalAmount)}</span>
-              <span className="shrink-0 rounded border border-blue-300 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">{stats.captured} Captured</span>
-              <span className="shrink-0 rounded border border-orange-300 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700">{stats.unconfirmed} Unconfirmed</span>
-              <span className="shrink-0 rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">{stats.unmatched} Pending</span>
-              <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search code, tenant, TNT…" className="h-7 w-44 shrink-0 rounded border border-slate-200 px-2 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
+              <span className="shrink-0 border border-slate-300 bg-slate-50 px-1 py-0.5 text-[8px] font-bold text-slate-700">{stats.count} Notifications</span>
+              <span className="shrink-0 border border-green-300 bg-green-50 px-1 py-0.5 text-[8px] font-bold text-green-700">{formatMoney(stats.totalAmount)}</span>
+              <span className="shrink-0 border border-blue-300 bg-blue-50 px-1 py-0.5 text-[8px] font-bold text-blue-700">{stats.captured} Captured</span>
+              <span className="shrink-0 border border-orange-300 bg-orange-50 px-1 py-0.5 text-[8px] font-bold text-orange-700">{stats.unconfirmed} Unconfirmed</span>
+              <span className="shrink-0 border border-amber-300 bg-amber-50 px-1 py-0.5 text-[8px] font-bold text-amber-700">{stats.unmatched} Pending</span>
+              <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search code, tenant, TNT…" className="h-[20px] w-36 shrink-0 border border-slate-200 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
               <AppSelect
                 value={selectedShortCode}
                 onChange={(v) => setSelectedShortCode(v ?? "")}
@@ -362,7 +362,7 @@ const InstantReceipts = () => {
                 }))}
                 placeholder="Paybill"
                 clearable
-                size="sm"
+                compact
               />
               <AppSelect
                 value={sourceFilter}
@@ -374,7 +374,7 @@ const InstantReceipts = () => {
                   { value: "all", label: "All Sources" },
                 ]}
                 clearable
-                size="sm"
+                compact
               />
               <AppSelect
                 value={statusFilter}
@@ -386,9 +386,9 @@ const InstantReceipts = () => {
                 ]}
                 placeholder="All"
                 clearable
-                size="sm"
+                compact
               />
-              <button onClick={loadRows} disabled={loading} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 text-[11px] font-semibold hover:bg-slate-50 disabled:opacity-60"><FaRedoAlt size={10} className={loading ? "animate-spin" : ""} /></button>
+              <button onClick={loadRows} disabled={loading} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-slate-200 bg-white px-1.5 text-[9px] font-semibold hover:bg-slate-50 disabled:opacity-60"><FaRedoAlt size={7} className={loading ? "animate-spin" : ""} /> Refresh</button>
             </div>
           </div>
 

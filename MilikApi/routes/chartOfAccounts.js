@@ -18,6 +18,7 @@ import {
 import { aggregateChartOfAccountBalances, invalidateBalanceCache } from "../services/chartAccountAggregationService.js";
 import { clearInvoiceAccountCache } from "../controllers/propertyController/tenantInvoices.js";
 import { postCorrection } from "../services/ledgerPostingService.js";
+import { resolveAuditActorUserId } from "../utils/systemActor.js";
 import {
   entrySignedForAccount,
   normalizeAccountGroup,
@@ -338,7 +339,7 @@ router.post("/activity/:entryId/reclassify", verifyUser, requireCompanyModule("a
       return res.status(400).json({ error: "Reversed entries cannot be reclassified" });
     }
 
-    const actorId = req.user?._id || req.user?.id;
+    const actorId = await resolveAuditActorUserId({ req, businessId: business });
 
     const correction = await postCorrection({
       entryId,
@@ -641,7 +642,7 @@ router.delete("/:id", verifyUser, requireCompanyModule("accounts"), async (req, 
       }
       account.isActive = false;
       account.deletedAt = new Date();
-      account.deletedBy = req.user?._id || null;
+      account.deletedBy = await resolveAuditActorUserId({ req, businessId: business }).catch(() => null);
       await account.save();
       clearInvoiceAccountCache();
       invalidateBalanceCache(business);

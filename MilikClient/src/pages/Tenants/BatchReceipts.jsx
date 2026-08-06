@@ -448,20 +448,20 @@ const BatchReceipts = () => {
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
 
               {/* Filter bar */}
-              <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 bg-slate-50/60 px-4 py-2.5">
+              <div className="flex items-center gap-0.5 overflow-x-auto border-b border-slate-100 bg-slate-50/60 px-2 py-1">
                 <div className="flex items-center gap-1.5">
                   <label className="text-[10px] font-semibold text-slate-500">From</label>
                   <input type="date" value={mpesaDateFrom} onChange={(e) => setMpesaDateFrom(e.target.value)}
-                    className="h-7 rounded border border-slate-200 bg-white px-2 text-[11px] focus:border-emerald-500 focus:outline-none" />
+                    className="h-[20px] w-[5.5rem] border border-slate-200 bg-white px-1 text-[9px] focus:border-emerald-500 focus:outline-none" />
                 </div>
                 <div className="flex items-center gap-1.5">
                   <label className="text-[10px] font-semibold text-slate-500">To</label>
                   <input type="date" value={mpesaDateTo} onChange={(e) => setMpesaDateTo(e.target.value)}
-                    className="h-7 rounded border border-slate-200 bg-white px-2 text-[11px] focus:border-emerald-500 focus:outline-none" />
+                    className="h-[20px] w-[5.5rem] border border-slate-200 bg-white px-1 text-[9px] focus:border-emerald-500 focus:outline-none" />
                 </div>
                 {mpesaPropertyOptions.length > 1 && (
                   <AppSelect
-                    size="sm"
+                    compact
                     clearable
                     placeholder="All Properties"
                     value={mpesaPropertyFilter}
@@ -472,9 +472,9 @@ const BatchReceipts = () => {
                 <button
                   onClick={loadCollections}
                   disabled={colLoading}
-                  className="flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition"
+                  className="flex h-[20px] items-center gap-0.5 border border-slate-200 bg-white px-1.5 text-[9px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition"
                 >
-                  {colLoading && <FaSpinner className="animate-spin" size={9} />}
+                  {colLoading && <FaSpinner className="animate-spin" size={7} />}
                   {colLoading ? "Loading…" : "Refresh"}
                 </button>
                 <span className="ml-auto text-[11px] text-slate-400">
@@ -614,9 +614,9 @@ const BatchReceipts = () => {
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
 
               {/* Toolbar */}
-              <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 bg-slate-50/60 px-4 py-2.5">
+              <div className="flex items-center gap-0.5 overflow-x-auto border-b border-slate-100 bg-slate-50/60 px-2 py-1">
                 <AppSelect
-                  size="sm"
+                  compact
                   clearable
                   placeholder="— Select Property —"
                   value={propertyId}
@@ -627,9 +627,9 @@ const BatchReceipts = () => {
                 {propertyId && propertyTenants.length > 0 && (
                   <button
                     onClick={quickFillBalance}
-                    className="flex h-7 items-center gap-1.5 rounded border border-amber-300 bg-amber-50 px-3 text-[11px] font-bold text-amber-800 hover:bg-amber-100 transition"
+                    className="flex h-[20px] items-center gap-0.5 border border-amber-300 bg-amber-50 px-1.5 text-[9px] font-bold text-amber-800 hover:bg-amber-100 transition"
                   >
-                    <FaBolt size={9} /> Select All + Fill Balance
+                    <FaBolt size={7} /> Select All + Fill Balance
                   </button>
                 )}
 

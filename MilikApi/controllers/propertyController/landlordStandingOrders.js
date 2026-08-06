@@ -672,74 +672,82 @@ export const runLandlordStandingOrder = async (req, res, next) => {
     const sourceTransactionId = `${row._id}:${selectedPeriod.periodKey}`;
     const notes = String(req.body?.note || row.narration || row.title || "Standing order deduction").trim();
 
-    const visibleEntry = await postEntry({
-      business: accountingContext.businessId,
-      property: accountingContext.propertyId,
-      landlord: accountingContext.landlordId,
-      sourceTransactionType: "recurring_deduction",
-      sourceTransactionId,
-      transactionDate: runDate,
-      statementPeriodStart: selectedPeriod.periodStart,
-      statementPeriodEnd: selectedPeriod.periodEnd,
-      category: "ADJUSTMENT",
-      amount: round2(amount),
-      direction: "debit",
-      accountId: remittancePayableAccount._id,
-      journalGroupId,
-      payer: "manager",
-      receiver: "landlord",
-      notes,
-      metadata: {
-        includeInLandlordStatement: true,
-        statementBucket: "deduction",
-        standingOrderId: String(row._id),
-        standingOrderNo: row.standingOrderNo || row.referenceNo,
-        periodKey: selectedPeriod.periodKey,
-        periodLabel: selectedPeriod.periodLabel,
-        postingKind: "standing_order_run",
-        description: notes,
-        referenceNo: row.referenceNo,
-        paymentMethod: normalizePaymentMethod(req.body?.paymentMethod || row.paymentMethod),
-        cashbookAccountId: String(cashbookAccount._id),
-      },
-      createdBy: actorUserId,
-      approvedBy: actorUserId,
-      approvedAt: runDate,
-      status: "approved",
-    });
+    let visibleEntry, offsetEntry;
+    try {
+      visibleEntry = await postEntry({
+        business: accountingContext.businessId,
+        property: accountingContext.propertyId,
+        landlord: accountingContext.landlordId,
+        sourceTransactionType: "recurring_deduction",
+        sourceTransactionId,
+        transactionDate: runDate,
+        statementPeriodStart: selectedPeriod.periodStart,
+        statementPeriodEnd: selectedPeriod.periodEnd,
+        category: "ADJUSTMENT",
+        amount: round2(amount),
+        direction: "debit",
+        accountId: remittancePayableAccount._id,
+        journalGroupId,
+        payer: "manager",
+        receiver: "landlord",
+        notes,
+        metadata: {
+          includeInLandlordStatement: true,
+          statementBucket: "deduction",
+          standingOrderId: String(row._id),
+          standingOrderNo: row.standingOrderNo || row.referenceNo,
+          periodKey: selectedPeriod.periodKey,
+          periodLabel: selectedPeriod.periodLabel,
+          postingKind: "standing_order_run",
+          description: notes,
+          referenceNo: row.referenceNo,
+          paymentMethod: normalizePaymentMethod(req.body?.paymentMethod || row.paymentMethod),
+          cashbookAccountId: String(cashbookAccount._id),
+        },
+        createdBy: actorUserId,
+        approvedBy: actorUserId,
+        approvedAt: runDate,
+        status: "approved",
+      });
 
-    const offsetEntry = await postEntry({
-      business: accountingContext.businessId,
-      property: accountingContext.propertyId,
-      landlord: accountingContext.landlordId,
-      sourceTransactionType: "recurring_deduction",
-      sourceTransactionId,
-      transactionDate: runDate,
-      statementPeriodStart: selectedPeriod.periodStart,
-      statementPeriodEnd: selectedPeriod.periodEnd,
-      category: "RECURRING_DEDUCTION",
-      amount: round2(amount),
-      direction: "credit",
-      accountId: cashbookAccount._id,
-      journalGroupId,
-      payer: "manager",
-      receiver: "system",
-      notes,
-      metadata: {
-        includeInLandlordStatement: false,
-        standingOrderId: String(row._id),
-        standingOrderNo: row.standingOrderNo || row.referenceNo,
-        periodKey: selectedPeriod.periodKey,
-        periodLabel: selectedPeriod.periodLabel,
-        postingKind: "standing_order_cashbook_offset",
-        paymentMethod: normalizePaymentMethod(req.body?.paymentMethod || row.paymentMethod),
-        cashbookAccountId: String(cashbookAccount._id),
-      },
-      createdBy: actorUserId,
-      approvedBy: actorUserId,
-      approvedAt: runDate,
-      status: "approved",
-    });
+      offsetEntry = await postEntry({
+        business: accountingContext.businessId,
+        property: accountingContext.propertyId,
+        landlord: accountingContext.landlordId,
+        sourceTransactionType: "recurring_deduction",
+        sourceTransactionId,
+        transactionDate: runDate,
+        statementPeriodStart: selectedPeriod.periodStart,
+        statementPeriodEnd: selectedPeriod.periodEnd,
+        category: "RECURRING_DEDUCTION",
+        amount: round2(amount),
+        direction: "credit",
+        accountId: cashbookAccount._id,
+        journalGroupId,
+        payer: "manager",
+        receiver: "system",
+        notes,
+        metadata: {
+          includeInLandlordStatement: false,
+          standingOrderId: String(row._id),
+          standingOrderNo: row.standingOrderNo || row.referenceNo,
+          periodKey: selectedPeriod.periodKey,
+          periodLabel: selectedPeriod.periodLabel,
+          postingKind: "standing_order_cashbook_offset",
+          paymentMethod: normalizePaymentMethod(req.body?.paymentMethod || row.paymentMethod),
+          cashbookAccountId: String(cashbookAccount._id),
+        },
+        createdBy: actorUserId,
+        approvedBy: actorUserId,
+        approvedAt: runDate,
+        status: "approved",
+      });
+    } catch (glError) {
+      if (visibleEntry?._id) {
+        await postReversal({ entryId: visibleEntry._id, reason: `Auto-reversal: GL balance protection for standing order run ${row.standingOrderNo || row._id}`, userId: actorUserId }).catch(() => null);
+      }
+      throw glError;
+    }
 
     row.runHistory.unshift({
       runDate,
@@ -837,7 +845,15 @@ export const reverseLandlordStandingOrderRun = async (req, res, next) => {
     };
 
     const visibleReversal = await reverseOne(runRow.visibleStatementEntryId);
-    const offsetReversal = await reverseOne(runRow.offsetEntryId);
+    let offsetReversal;
+    try {
+      offsetReversal = await reverseOne(runRow.offsetEntryId);
+    } catch (e) {
+      if (visibleReversal?.reversalEntry?._id) {
+        await postReversal({ entryId: visibleReversal.reversalEntry._id, reason: `Auto-reversal: undo partial ${reason}`, userId: actorUserId }).catch(() => null);
+      }
+      throw e;
+    }
 
     if (touchedAccountIds.size > 0) {
       await aggregateChartOfAccountBalances(String(row.business), Array.from(touchedAccountIds));

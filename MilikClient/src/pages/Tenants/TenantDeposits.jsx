@@ -751,19 +751,19 @@ const TenantDeposits = () => {
         <div className="mx-auto flex h-full min-h-0 w-full max-w-none flex-col overflow-hidden">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
             <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-              <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-                <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">Deposits: {totals.count}</span>
-                <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{formatCurrency(totals.amount)}</span>
-                <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">O/S: {formatCurrency(totals.outstanding)}</span>
-                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+              <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
+                <span className="shrink-0 border border-blue-200 bg-blue-50 px-1 py-0.5 text-[8px] font-bold text-blue-700">Deposits: {totals.count}</span>
+                <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-1 py-0.5 text-[8px] font-bold text-emerald-700">{formatCurrency(totals.amount)}</span>
+                <span className="shrink-0 border border-amber-200 bg-amber-50 px-1 py-0.5 text-[8px] font-bold text-amber-700">O/S: {formatCurrency(totals.outstanding)}</span>
+                <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
                 {DEPOSIT_STATUS_FILTERS.map(({val,label}) => (
-                  <button key={val} onClick={() => setDraftFilters((prev) => ({ ...prev, status: val }))} className={`h-7 shrink-0 rounded px-2.5 text-xs font-semibold ${draftFilters.status === val ? `${MILIK_GREEN} text-white` : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-100"}`}>{label}</button>
+                  <button key={val} onClick={() => setDraftFilters((prev) => ({ ...prev, status: val }))} className={`h-[20px] shrink-0 px-1.5 text-[9px] font-semibold ${draftFilters.status === val ? `${MILIK_GREEN} text-white` : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-100"}`}>{label}</button>
                 ))}
-                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                <input type="text" value={draftFilters.invoiceNo} onChange={(e) => setDraftFilters((prev) => ({ ...prev, invoiceNo: normalizeUppercaseInput(e.target.value) }))} placeholder="Invoice #" className="h-7 w-24 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <input type="text" value={draftFilters.tenantName} onChange={setFilter("tenantName")} placeholder="Tenant" className="h-7 w-24 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
+                <input type="text" value={draftFilters.invoiceNo} onChange={(e) => setDraftFilters((prev) => ({ ...prev, invoiceNo: normalizeUppercaseInput(e.target.value) }))} placeholder="Invoice #" className="h-[20px] w-20 shrink-0 border border-gray-300 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <input type="text" value={draftFilters.tenantName} onChange={setFilter("tenantName")} placeholder="Tenant" className="h-[20px] w-20 shrink-0 border border-gray-300 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
                 <AppSelect
-                  size="sm"
+                  compact
                   clearable
                   searchable
                   placeholder="Property"
@@ -772,7 +772,7 @@ const TenantDeposits = () => {
                   options={activePropertyOptions}
                 />
                 <AppSelect
-                  size="sm"
+                  compact
                   clearable
                   placeholder="Unit"
                   value={draftFilters.unitId}
@@ -780,7 +780,7 @@ const TenantDeposits = () => {
                   options={unitsForFilter.map((unit) => ({ value: unit._id, label: formatUnitName(unit) }))}
                 />
                 <AppSelect
-                  size="sm"
+                  compact
                   clearable
                   placeholder="Deposit Type"
                   value={draftFilters.depositTypeId}
@@ -788,7 +788,7 @@ const TenantDeposits = () => {
                   options={activeDepositTypes.map((type) => ({ value: type._id || `deposit:${slugify(type.code || type.name)}`, label: type.name }))}
                 />
                 <AppSelect
-                  size="sm"
+                  compact
                   clearable
                   placeholder={holderColumnLabel}
                   value={draftFilters.holder}
@@ -798,26 +798,26 @@ const TenantDeposits = () => {
                     { value: "landlord", label: isLandlordWorkspace ? "Owner / Landlord" : "Landlord" },
                   ]}
                 />
-                <input type="date" value={draftFilters.fromDate} onChange={setFilter("fromDate")} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <input type="date" value={draftFilters.toDate} onChange={setFilter("toDate")} className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <button onClick={applySearch} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSearch size={10} /></button>
-                <button onClick={resetFilters} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={10} /></button>
-                <button onClick={loadDepositInvoices} disabled={loading} className="h-7 shrink-0 flex items-center gap-1 rounded border border-gray-300 bg-white px-2.5 text-xs text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-60">{loading ? <FaSpinner className="animate-spin" size={10} /> : <FaRedoAlt size={10} />}</button>
-                <button onClick={handleDeleteSelected} disabled={!canDeleteInvoice || selectedCount === 0 || deleting} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${selectedCount > 0 ? "bg-red-600 hover:bg-red-700" : "cursor-not-allowed bg-gray-400"}`}><FaTrash size={10} /></button>
+                <input type="date" value={draftFilters.fromDate} onChange={setFilter("fromDate")} className="h-[20px] w-[5.5rem] shrink-0 border border-slate-200 bg-white px-1 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <input type="date" value={draftFilters.toDate} onChange={setFilter("toDate")} className="h-[20px] w-[5.5rem] shrink-0 border border-slate-200 bg-white px-1 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <button onClick={applySearch} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaSearch size={7} /> Search</button>
+                <button onClick={resetFilters} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={7} /> Reset</button>
+                <button onClick={loadDepositInvoices} disabled={loading} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-gray-300 bg-white px-1.5 text-[9px] text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-60">{loading ? <FaSpinner className="animate-spin" size={7} /> : <FaRedoAlt size={7} />} Refresh</button>
+                <button onClick={handleDeleteSelected} disabled={!canDeleteInvoice || selectedCount === 0 || deleting} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white shadow-sm ${selectedCount > 0 ? "bg-red-600 hover:bg-red-700" : "cursor-not-allowed bg-gray-400"}`}><FaTrash size={7} /> Delete</button>
                 <button
                   onClick={() => setCommunicationModal({ contextType: "invoice", recordIds: selectedInvoices, title: `Notify ${selectedCount} Tenant${selectedCount !== 1 ? "s" : ""}`, subtitle: "Send deposit invoice notification via SMS.", allowedChannels: ["sms", "email"], defaultChannel: "sms" })}
                   disabled={selectedCount === 0}
                   title={selectedCount === 0 ? "Select deposits to SMS tenants" : `SMS ${selectedCount} tenant${selectedCount !== 1 ? "s" : ""}`}
-                  className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${selectedCount > 0 ? "bg-teal-600 hover:bg-teal-700" : "cursor-not-allowed bg-gray-400"}`}
-                ><FaSms size={10} /></button>
+                  className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white shadow-sm ${selectedCount > 0 ? "bg-teal-600 hover:bg-teal-700" : "cursor-not-allowed bg-gray-400"}`}
+                ><FaSms size={7} /> SMS</button>
                 <button
                   onClick={() => setCommunicationModal({ contextType: "invoice", recordIds: selectedInvoices, title: `Email ${selectedCount} Tenant${selectedCount !== 1 ? "s" : ""}`, subtitle: "Send deposit invoice notification via email.", allowedChannels: ["email"], defaultChannel: "email" })}
                   disabled={selectedCount === 0}
                   title={selectedCount === 0 ? "Select deposits to email tenants" : `Email ${selectedCount} tenant${selectedCount !== 1 ? "s" : ""}`}
-                  className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${selectedCount > 0 ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-gray-400"}`}
-                ><FaEnvelope size={10} /></button>
-                <button onClick={handlePrintList} disabled={!canExportInvoice || totalFilteredCount === 0} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${totalFilteredCount > 0 ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "cursor-not-allowed bg-gray-400"}`}><FaPrint size={10} /></button>
-                <button type="button" onClick={openDepositModal} disabled={!canCreateInvoice} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white shadow-sm ${canCreateInvoice ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "cursor-not-allowed bg-gray-400"}`}><FaPlus size={10} /> Deposit</button>
+                  className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white shadow-sm ${selectedCount > 0 ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-gray-400"}`}
+                ><FaEnvelope size={7} /> Email</button>
+                <button onClick={handlePrintList} disabled={!canExportInvoice || totalFilteredCount === 0} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white shadow-sm ${totalFilteredCount > 0 ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "cursor-not-allowed bg-gray-400"}`}><FaPrint size={7} /> Print</button>
+                <button type="button" onClick={openDepositModal} disabled={!canCreateInvoice} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white shadow-sm ${canCreateInvoice ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "cursor-not-allowed bg-gray-400"}`}><FaPlus size={7} /> Deposit</button>
               </div>
             </div>
 

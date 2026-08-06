@@ -14,9 +14,11 @@ import {
   getChartOfAccounts,
   getGLHealthHistory,
   repairBalanceGroup as apiRepairBalanceGroup,
+  repairClearAbnormalBalance as apiRepairAbnormal,
   repairRecomputeBalances as apiRepairRecompute,
   repairRepostInvoices as apiRepairRepost,
   reverseGlCorrectionEntry as apiReverseGlCorrection,
+  apiVoidReversedCorrections,
   getActiveGlCorrections,
   getGlGroupEntries,
   runGLIntegrityReport,
@@ -304,6 +306,106 @@ function BalanceGroupModal({ group, accounts, businessId, healthRunId, onClose, 
   );
 }
 
+// ─── Abnormal-Balance Fix Modal ───────────────────────────────────────────────
+function AbnormalBalanceModal({ row, accounts, businessId, healthRunId, onClose, onDone }) {
+  const [offsetId, setOffsetId] = useState("");
+  const [notes,    setNotes]    = useState("");
+  const [saving,   setSaving]   = useState(false);
+
+  if (!row) return null;
+
+  const isDebitNormal = ["asset", "expense"].includes(row.type);
+  // netBalance > 0 means debit balance; for credit-normal accounts that's abnormal
+  const balanceSign  = row.netBalance > 0 ? "Debit" : "Credit";
+  const corrDir      = row.netBalance > 0 ? "Credit" : "Debit";
+  const postingAccts = accounts.filter((a) => a.isPosting && !a.isHeader);
+
+  const submit = async () => {
+    if (!offsetId) { toast.error("Select an offset account"); return; }
+    setSaving(true);
+    try {
+      const res = await apiRepairAbnormal({
+        business: businessId,
+        accountId: String(row.accountId),
+        offsetAccountId: offsetId,
+        notes: notes.trim() || undefined,
+        healthRunId,
+      });
+      toast.success(`Correcting entry posted — KES ${res.amount?.toLocaleString("en-KE", { minimumFractionDigits: 2 })} ${res.direction}`);
+      onDone();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "Repair failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-[480px] max-h-[90vh] flex flex-col border border-slate-200 bg-white shadow-xl">
+        {/* Header */}
+        <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3 shrink-0" style={{ backgroundColor: GRN }}>
+          <FaWrench size={11} className="text-white/70" />
+          <span className="text-[11px] font-black uppercase tracking-[0.12em] text-white">Clear Abnormal Balance</span>
+          <button onClick={onClose} className="ml-auto text-white/60 hover:text-white text-lg leading-none">&times;</button>
+        </div>
+
+        <div className="overflow-y-auto px-4 py-4 space-y-4">
+          {/* Warning advisory */}
+          <div className="flex items-start gap-2.5 border border-amber-200 bg-amber-50 px-3 py-2.5">
+            <FaExclamationTriangle size={11} className="mt-0.5 text-amber-500 shrink-0" />
+            <div className="text-[10px] text-amber-800">
+              <strong>{row.code} {row.name}</strong> has a net <strong>{balanceSign} balance of KES {fmtNum(Math.abs(row.netBalance))}</strong>,
+              which is abnormal for a <span className="capitalize">{row.type}</span> account.
+              This posts a <strong>{corrDir} of KES {fmtNum(Math.abs(row.netBalance))}</strong> to bring it to zero.
+              Select an offset account that makes sense economically — for unallocated receipts a cash or income account is typical.
+            </div>
+          </div>
+
+          {/* Offset account */}
+          <div>
+            <label className="block text-[10px] font-bold text-slate-600 mb-1">Offset Account <span className="text-red-500">*</span></label>
+            <AppSelect
+              options={postingAccts.map((a) => ({ value: String(a._id), label: `${a.code} — ${a.name}` }))}
+              value={offsetId}
+              onChange={setOffsetId}
+              placeholder="Select offset account…"
+            />
+            <p className="mt-1 text-[9px] text-slate-400">
+              The correction to <strong>{row.code}</strong> will be offset here to keep the GL balanced.
+            </p>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="block text-[10px] font-bold text-slate-600 mb-1">Notes (optional)</label>
+            <textarea
+              rows={2}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder={`GL Clear Abnormal Balance: ${corrDir} KES ${fmtNum(Math.abs(row.netBalance))} — restoring ${row.code} to zero`}
+              className="w-full border border-slate-200 px-3 py-2 text-[11px] text-slate-700 placeholder-slate-300 resize-none focus:outline-none focus:border-slate-400"
+            />
+          </div>
+        </div>
+
+        {/* Buttons */}
+        <div className="flex items-center justify-end gap-2 px-4 pb-4 shrink-0">
+          <button onClick={onClose} disabled={saving}
+            className="border border-slate-200 px-4 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+            Cancel
+          </button>
+          <button onClick={submit} disabled={saving || !offsetId}
+            className="px-5 py-1.5 text-[11px] font-bold text-white disabled:opacity-50"
+            style={{ backgroundColor: GRN }}>
+            {saving ? "Posting…" : "Post Correction"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 export default function GLIntegrityReport() {
   const company      = useSelector(selectCurrentCompany);
@@ -317,14 +419,15 @@ export default function GLIntegrityReport() {
 
   const [activeTab,  setActiveTab]  = useTabState("/accounts/gl-integrity:activeTab", "check");
   const [loading,    setLoading]    = useState(false);
-  const [report,     setReport]     = useState(null);
-  const [history,    setHistory]    = useState([]);
+  const [report,     setReport]     = useTabState("/accounts/gl-integrity:report", null);
+  const [history,    setHistory]    = useTabState("/accounts/gl-integrity:history", []);
   const [histLoading, setHistLoading] = useState(false);
   const [accounts,   setAccounts]   = useState([]);
-  const [repairing,    setRepairing]    = useState(new Set());
-  const [groupModal,   setGroupModal]   = useState(null);
-  const [expandedRun,  setExpandedRun]  = useState(null);
-  const [corrections,  setCorrections]  = useState([]);
+  const [repairing,      setRepairing]      = useState(new Set());
+  const [groupModal,     setGroupModal]     = useState(null);
+  const [abnormalModal,  setAbnormalModal]  = useState(null);
+  const [expandedRun,    setExpandedRun]    = useState(null);
+  const [corrections,  setCorrections]  = useTabState("/accounts/gl-integrity:corrections", []);
 
   const healthRunId = report?.healthRunId;
 
@@ -423,7 +526,13 @@ export default function GLIntegrityReport() {
     runCheck().then(loadHistory);
   };
 
-  const doReverseCorrection = async (groupId) => {
+  const onAbnormalRepaired = () => {
+    setAbnormalModal(null);
+    runCheck().then(loadHistory);
+    loadCorrections();
+  };
+
+  const doReverseCorrection = async (groupId, entryIds = []) => {
     const ok = await confirm({
       title:       "Undo GL Correction",
       message:     `This will reverse the manual correcting entry posted to journal group …${String(groupId).slice(-8)}. The GL will return to its state before the correction so you can find and fix the original transaction.`,
@@ -433,14 +542,38 @@ export default function GLIntegrityReport() {
     const key = `reverse-${groupId}`;
     startRepair(key);
     try {
-      const res = await apiReverseGlCorrection(groupId, { business: businessId, healthRunId });
-      toast.success(`Correction reversed — ${res.reversedCount} entr${res.reversedCount === 1 ? "y" : "ies"} set to reversed`);
+      const res = await apiReverseGlCorrection(groupId, { business: businessId, healthRunId, entryIds });
+      toast.success(`Correction voided — ${res.reversedCount} entr${res.reversedCount === 1 ? "y" : "ies"} removed from ledger`);
       runCheck().then(loadHistory);
       loadCorrections();
     } catch (err) {
       toast.error(err?.response?.data?.error || "Reverse failed");
     } finally {
       endRepair(key);
+    }
+  };
+
+  const doVoidReversed = async () => {
+    const ok = await confirm({
+      title:       "Rollback All Undone Corrections",
+      message:     "This permanently voids every correction entry that was previously undone (status = reversed). They will be excluded from the Trial Balance and Balance Sheet immediately. This cannot be undone.",
+      confirmText: "Rollback Now",
+    });
+    if (!ok) return;
+    startRepair("void-reversed");
+    try {
+      const res = await apiVoidReversedCorrections({ business: businessId, healthRunId });
+      if (res.voidedCount === 0) {
+        toast.info("No reversed corrections found — nothing to rollback");
+      } else {
+        toast.success(`Rollback complete — ${res.voidedCount} entr${res.voidedCount === 1 ? "y" : "ies"} voided and removed from Trial Balance`);
+      }
+      runCheck().then(loadHistory);
+      loadCorrections();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "Rollback failed");
+    } finally {
+      endRepair("void-reversed");
     }
   };
 
@@ -724,7 +857,7 @@ export default function GLIntegrityReport() {
                         </div>
                         {canRepair && (
                           <button
-                            onClick={() => doReverseCorrection(c.journalGroupId)}
+                            onClick={() => doReverseCorrection(c.journalGroupId, c.entries.map((e) => e._id))}
                             disabled={repairing.has(`reverse-${c.journalGroupId}`)}
                             className="shrink-0 flex h-7 items-center gap-1.5 border border-amber-300 bg-amber-50 px-3 text-[10px] font-bold text-amber-700 hover:bg-amber-100 disabled:opacity-50"
                           >
@@ -765,6 +898,35 @@ export default function GLIntegrityReport() {
                       </span>
                     </div>
                   )}
+
+                  {/* ── Rollback Undone Corrections ── */}
+                  <div className="border border-red-300 bg-white shadow-sm overflow-hidden">
+                    <div className="border-b border-red-200 bg-red-50 px-4 py-2.5" style={{ borderLeftWidth: 3, borderLeftColor: "#dc2626" }}>
+                      <span className="text-[10px] font-black uppercase tracking-[0.12em] text-red-700">Rollback</span>
+                      <span className="ml-2 text-[10px] text-red-400">Permanently removes undone corrections from Trial Balance</span>
+                    </div>
+                    <div className="flex items-start gap-3 px-4 py-3">
+                      <FaUndo size={12} className="mt-0.5 text-red-400 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[11px] font-bold text-slate-700">Void All Undone Corrections</div>
+                        <div className="text-[10px] text-slate-500 mt-0.5">
+                          Any correction entry that was previously "Undone" is still counted in the Trial Balance and Balance Sheet
+                          (status = <span className="font-mono">reversed</span>). This button permanently voids them so they are fully
+                          excluded — fixing the mismatch between GL Health and the financial statements.
+                        </div>
+                      </div>
+                      <button
+                        onClick={doVoidReversed}
+                        disabled={!canRepair || repairing.has("void-reversed")}
+                        title={!canRepair ? "Full Access required" : undefined}
+                        className="shrink-0 flex h-7 items-center gap-1.5 border border-red-300 bg-red-50 px-3 text-[10px] font-bold text-red-700 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {repairing.has("void-reversed")
+                          ? <><FaSyncAlt size={8} className="animate-spin" /> Running…</>
+                          : <><FaUndo size={8} /> Rollback</>}
+                      </button>
+                    </div>
+                  </div>
 
                   {/* ── Safe Maintenance ── */}
                   <div className="border border-slate-200 bg-white shadow-sm overflow-hidden">
@@ -935,7 +1097,7 @@ export default function GLIntegrityReport() {
                     </div>
                   )}
 
-                  {/* ── Abnormal balances (info only) ── */}
+                  {/* ── Abnormal balances ── */}
                   {abnormal.length > 0 && (
                     <div className="border border-amber-200 bg-white shadow-sm overflow-hidden">
                       <div className="border-b border-amber-100 bg-amber-50 px-4 py-2.5">
@@ -948,13 +1110,14 @@ export default function GLIntegrityReport() {
                         <div className="text-[10px] text-slate-600">
                           These accounts carry a balance on their abnormal side (e.g. an asset account with a net credit).
                           This may indicate a reversed entry with no original, a data issue, or a genuine negative balance.
-                          <span className="font-semibold text-slate-700"> Review each account's ledger history before posting corrections.</span>
+                          <span className="font-semibold text-slate-700"> Review each account's ledger before clicking Fix.</span>
                         </div>
                       </div>
                       <div className="overflow-x-auto border-t border-amber-100">
                         <table className="w-full">
                           <thead><tr>
                             <TH>Code</TH><TH>Account</TH><TH>Type</TH><TH right>Net Balance</TH>
+                            {canRepair && <TH></TH>}
                           </tr></thead>
                           <tbody>
                             {abnormal.map((row) => (
@@ -965,6 +1128,17 @@ export default function GLIntegrityReport() {
                                 <TD right cls={`font-bold ${row.netBalance < 0 ? "text-red-600" : "text-amber-600"}`}>
                                   {fmtNum(row.netBalance)}
                                 </TD>
+                                {canRepair && (
+                                  <TD>
+                                    <button
+                                      onClick={() => setAbnormalModal(row)}
+                                      className="flex items-center gap-1 px-2.5 py-1 text-[9px] font-bold text-white"
+                                      style={{ backgroundColor: GRN }}
+                                    >
+                                      <FaWrench size={8} /> Fix
+                                    </button>
+                                  </TD>
+                                )}
                               </tr>
                             ))}
                           </tbody>
@@ -1110,6 +1284,18 @@ export default function GLIntegrityReport() {
             onClose={() => setGroupModal(null)}
             onDone={onGroupRepaired}
             navigate={navigate}
+          />
+        )}
+
+        {/* Abnormal Balance Fix Modal */}
+        {abnormalModal && (
+          <AbnormalBalanceModal
+            row={abnormalModal}
+            accounts={accounts}
+            businessId={businessId}
+            healthRunId={healthRunId}
+            onClose={() => setAbnormalModal(null)}
+            onDone={onAbnormalRepaired}
           />
         )}
 

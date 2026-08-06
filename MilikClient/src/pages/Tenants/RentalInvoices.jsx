@@ -988,7 +988,7 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   const [draftFilters, setDraftFilters] = useState(appliedFilters);
   const setFilter = (key) => (e) => setDraftFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const actionBtnCls = (enabled, activeCls) =>
-    `h-7 shrink-0 flex items-center rounded px-2 text-xs text-white ${enabled ? activeCls : "bg-gray-400 cursor-not-allowed"}`;
+    `h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white ${enabled ? activeCls : "bg-gray-400 cursor-not-allowed"}`;
   const [selectedInvoices, setSelectedInvoices] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
   const [showSmsModal, setShowSmsModal] = useState(false);
@@ -3278,30 +3278,30 @@ const createInvoiceForTenant = async (
         <div className="mx-auto flex h-full w-full max-w-none flex-col overflow-hidden">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
             <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-              <div className="filter-bar flex items-center gap-1 overflow-x-auto px-2 py-1.5">
+              <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
                 {fromLedger && (
-                  <button onClick={() => navigate(`/properties/${location.state.propertyId}/ledger`)} className="h-7 shrink-0 flex items-center gap-1 rounded px-2 text-xs font-semibold text-[#0B3B2E] hover:bg-[#EDF5F1]">
-                    <FaArrowLeft size={11} /> {location.state.propertyName} Ledger
+                  <button onClick={() => navigate(`/properties/${location.state.propertyId}/ledger`)} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-[#0B3B2E] hover:bg-[#EDF5F1]">
+                    <FaArrowLeft size={7} /> {location.state.propertyName} Ledger
                   </button>
                 )}
                 {!fromLedger && tenantId && (
-                  <button onClick={() => navigate("/tenants")} className="h-7 shrink-0 flex items-center gap-1 rounded px-2 text-xs font-semibold text-gray-600 hover:text-gray-900">
-                    <FaArrowLeft size={11} /> Back
+                  <button onClick={() => navigate("/tenants")} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-gray-600 hover:text-gray-900">
+                    <FaArrowLeft size={7} /> Back
                   </button>
                 )}
-                <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">Invoices: {invoiceListPagination.totalItems || 0}</span>
-                <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">Total: {formatCurrency(invoicePageSummary.pageTotalAmount || 0)}</span>
-                <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">Pend: {formatCurrency(invoicePageSummary.pagePendingAmount || 0)}</span>
-                <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+                <span className="shrink-0 border border-blue-200 bg-blue-50 px-1 py-0.5 text-[8px] font-bold text-blue-700">Invoices: {invoiceListPagination.totalItems || 0}</span>
+                <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-1 py-0.5 text-[8px] font-bold text-emerald-700">Total: {formatCurrency(invoicePageSummary.pageTotalAmount || 0)}</span>
+                <span className="shrink-0 border border-amber-200 bg-amber-50 px-1 py-0.5 text-[8px] font-bold text-amber-700">Pend: {formatCurrency(invoicePageSummary.pagePendingAmount || 0)}</span>
+                <div className="mx-0.5 h-3 w-px shrink-0 bg-slate-200" />
                 <AppSelect
                   value={draftFilters.status}
                   onChange={(v) => setDraftFilters((prev) => ({ ...prev, status: v ?? "ACTIVE" }))}
                   options={[{ value: "ACTIVE", label: "All" }, { value: "Issued", label: "Issued" }, { value: "Paid", label: "Paid" }]}
-                  size="sm"
+                  compact
                 />
-                <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
-                <input type="text" value={draftFilters.invoiceNo} onChange={(e) => setDraftFilters((prev) => ({ ...prev, invoiceNo: normalizeUppercaseInput(e.target.value) }))} placeholder="Invoice #" className="h-7 w-20 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                {!tenantId && <input type="text" value={draftFilters.tenantName} onChange={setFilter("tenantName")} placeholder="Tenant" className="h-7 w-20 shrink-0 rounded border border-gray-300 px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />}
+                <div className="mx-0.5 h-3 w-px shrink-0 bg-slate-200" />
+                <input type="text" value={draftFilters.invoiceNo} onChange={(e) => setDraftFilters((prev) => ({ ...prev, invoiceNo: normalizeUppercaseInput(e.target.value) }))} placeholder="Invoice #" className="h-[20px] w-20 shrink-0 border border-gray-300 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                {!tenantId && <input type="text" value={draftFilters.tenantName} onChange={setFilter("tenantName")} placeholder="Tenant" className="h-[20px] w-20 shrink-0 border border-gray-300 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />}
                 <AppSelect
                   value={draftFilters.property === "any" ? "" : draftFilters.property}
                   onChange={(v) => setDraftFilters((prev) => ({ ...prev, property: v ?? "any", unit: "any" }))}
@@ -3309,7 +3309,7 @@ const createInvoiceForTenant = async (
                   placeholder="Property"
                   searchable
                   clearable
-                  size="sm"
+                  compact
                 />
                 <AppSelect
                   value={draftFilters.unit === "any" ? "" : draftFilters.unit}
@@ -3318,28 +3318,28 @@ const createInvoiceForTenant = async (
                   placeholder="Unit"
                   searchable
                   clearable
-                  size="sm"
+                  compact
                 />
-                <input type="date" value={draftFilters.fromDate} onChange={setFilter("fromDate")} className="h-7 w-[7.5rem] shrink-0 rounded border border-slate-200 bg-white px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <input type="date" value={draftFilters.toDate} onChange={setFilter("toDate")} className="h-7 w-[7.5rem] shrink-0 rounded border border-slate-200 bg-white px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
-                <button onClick={applySearch} className={`h-7 shrink-0 flex items-center rounded px-2 text-xs text-white ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaSearch size={10} /></button>
-                <button onClick={resetFilters} className={`h-7 shrink-0 flex items-center rounded px-2 text-xs text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={10} /></button>
-                <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+                <input type="date" value={draftFilters.fromDate} onChange={setFilter("fromDate")} className="h-[20px] w-[5.5rem] shrink-0 border border-slate-200 bg-white px-1 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <input type="date" value={draftFilters.toDate} onChange={setFilter("toDate")} className="h-[20px] w-[5.5rem] shrink-0 border border-slate-200 bg-white px-1 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <div className="mx-0.5 h-3 w-px shrink-0 bg-slate-200" />
+                <button onClick={applySearch} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaSearch size={7} /> Search</button>
+                <button onClick={resetFilters} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaRedoAlt size={7} /> Reset</button>
+                <div className="mx-0.5 h-3 w-px shrink-0 bg-slate-200" />
                 {canUpdateInvoice && (
-                  <button onClick={handleEditSelected} disabled={!canEdit} className={actionBtnCls(canEdit, `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`)}><FaEdit size={10} /></button>
+                  <button onClick={handleEditSelected} disabled={!canEdit} className={actionBtnCls(canEdit, `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`)}><FaEdit size={7} /> Edit</button>
                 )}
                 {canDeleteInvoice && (
-                  <button onClick={handleDeleteSelected} disabled={selectedCount === 0} className={actionBtnCls(selectedCount > 0, "bg-red-600 hover:bg-red-700")}><FaTrash size={10} /></button>
+                  <button onClick={handleDeleteSelected} disabled={selectedCount === 0} className={actionBtnCls(selectedCount > 0, "bg-red-600 hover:bg-red-700")}><FaTrash size={7} /> Delete</button>
                 )}
                 {canExportInvoice && (
-                  <button onClick={handlePrintList} disabled={totalFilteredCount === 0} className={actionBtnCls(totalFilteredCount > 0, `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`)}><FaPrint size={10} /></button>
+                  <button onClick={handlePrintList} disabled={totalFilteredCount === 0} className={actionBtnCls(totalFilteredCount > 0, `${MILIK_GREEN} ${MILIK_GREEN_HOVER}`)}><FaPrint size={7} /> Print</button>
                 )}
-                <button onClick={() => setShowSmsModal(true)} disabled={selectedCount === 0} title={selectedCount === 0 ? "Select invoices to SMS" : `SMS ${selectedCount} invoice${selectedCount !== 1 ? "s" : ""}`} className={actionBtnCls(selectedCount > 0, "bg-emerald-600 hover:bg-emerald-700")}><FaSms size={10} /></button>
-                <button onClick={() => setShowEmailModal(true)} disabled={selectedCount === 0} title={selectedCount === 0 ? "Select invoices to email" : `Email ${selectedCount} invoice${selectedCount !== 1 ? "s" : ""}`} className={actionBtnCls(selectedCount > 0, "bg-blue-600 hover:bg-blue-700")}><FaEnvelope size={10} /></button>
-                <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+                <button onClick={() => setShowSmsModal(true)} disabled={selectedCount === 0} title={selectedCount === 0 ? "Select invoices to SMS" : `SMS ${selectedCount} invoice${selectedCount !== 1 ? "s" : ""}`} className={actionBtnCls(selectedCount > 0, "bg-emerald-600 hover:bg-emerald-700")}><FaSms size={7} /> SMS</button>
+                <button onClick={() => setShowEmailModal(true)} disabled={selectedCount === 0} title={selectedCount === 0 ? "Select invoices to email" : `Email ${selectedCount} invoice${selectedCount !== 1 ? "s" : ""}`} className={actionBtnCls(selectedCount > 0, "bg-blue-600 hover:bg-blue-700")}><FaEnvelope size={7} /> Email</button>
+                <div className="mx-0.5 h-3 w-px shrink-0 bg-slate-200" />
                 {canCreateInvoice && (
-                  <button type="button" onClick={() => navigate("/tenants/deposits")} className={`h-7 shrink-0 rounded px-2 text-xs font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}>Deposit</button>
+                  <button type="button" onClick={() => navigate("/tenants/deposits")} className={`h-[20px] shrink-0 px-1.5 text-[9px] font-semibold text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}>Deposit</button>
                 )}
                 {canCreateInvoice && (
                   <div className="flex shrink-0 items-center gap-0.5">
@@ -3349,7 +3349,7 @@ const createInvoiceForTenant = async (
                       onChange={(v) => handleBookingActionChange(v ?? "")}
                       options={[{ value: "single", label: "Single Booking" }, { value: "batch", label: "Batch Booking" }]}
                       placeholder="Booking"
-                      size="sm"
+                      compact
                     />
                   </div>
                 )}

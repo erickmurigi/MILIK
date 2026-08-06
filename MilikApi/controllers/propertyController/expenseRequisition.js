@@ -318,14 +318,22 @@ const postRequisitionAccrualGL = async ({ requisition, actorUserId }) => {
     status: "approved",
   };
 
-  const debitLeg = await postEntry({
-    ...base, direction: "debit", debit: amount, credit: 0, accountId: expenseAccount._id,
-    metadata: { postingRole: "ap_invoice_expense", requisitionNo: requisition.requisitionNo || requisition.referenceNo || "" },
-  });
-  await postEntry({
-    ...base, direction: "credit", debit: 0, credit: amount, accountId: apAccount._id,
-    metadata: { postingRole: "ap_invoice_liability", offsetOfEntryId: String(debitLeg._id), requisitionNo: requisition.requisitionNo || requisition.referenceNo || "" },
-  });
+  let debitLeg;
+  try {
+    debitLeg = await postEntry({
+      ...base, direction: "debit", debit: amount, credit: 0, accountId: expenseAccount._id,
+      metadata: { postingRole: "ap_invoice_expense", requisitionNo: requisition.requisitionNo || requisition.referenceNo || "" },
+    });
+    await postEntry({
+      ...base, direction: "credit", debit: 0, credit: amount, accountId: apAccount._id,
+      metadata: { postingRole: "ap_invoice_liability", offsetOfEntryId: String(debitLeg._id), requisitionNo: requisition.requisitionNo || requisition.referenceNo || "" },
+    });
+  } catch (error) {
+    if (debitLeg?._id) {
+      await postReversal({ entryId: debitLeg._id, reason: `Auto-reversal: GL balance protection for requisition accrual ${requisition.requisitionNo || requisition._id}`, userId: actorUserId }).catch(() => null);
+    }
+    throw error;
+  }
 
   await aggregateChartOfAccountBalances(String(requisition.business), [String(expenseAccount._id), String(apAccount._id)]);
 };

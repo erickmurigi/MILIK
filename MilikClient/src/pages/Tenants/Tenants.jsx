@@ -2028,8 +2028,8 @@ const confirmTransferUnit = useCallback(async () => {
         {/* Toolbar — single scrollable row */}
         <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
           <div className="flex items-center gap-0">
-            {/* Scrollable filters section */}
-            <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5 min-w-0 flex-1">
+            {/* Filters section — scrolls horizontally; no flex-1 so action buttons sit flush */}
+            <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1 min-w-0">
               <AppSelect
                 value={draftFilters.property !== "any" ? draftFilters.property : ""}
                 onChange={(v) => setDraftFilters({ ...draftFilters, property: v ?? "any" })}
@@ -2037,7 +2037,7 @@ const confirmTransferUnit = useCallback(async () => {
                 placeholder="All Properties"
                 searchable
                 clearable
-                size="sm"
+                compact
               />
 
               <AppSelect
@@ -2046,7 +2046,7 @@ const confirmTransferUnit = useCallback(async () => {
                 options={statusOptions.filter((s) => s !== "any").map((s) => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))}
                 placeholder="All Status"
                 clearable
-                size="sm"
+                compact
               />
 
               <AppSelect
@@ -2055,39 +2055,39 @@ const confirmTransferUnit = useCallback(async () => {
                 options={[{ value: "with_balance", label: "With Balance" }]}
                 placeholder="All Balances"
                 clearable
-                size="sm"
+                compact
               />
 
-              <div className="h-4 w-px shrink-0 bg-slate-200" />
+              <div className="h-3 w-px shrink-0 bg-slate-200" />
 
               <input type="text" placeholder="Name" value={draftFilters.tenantName}
                 onChange={(e) => setDraftFilters({ ...draftFilters, tenantName: normalizeUppercaseInput(e.target.value) })}
-                className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                className="h-[20px] w-24 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
               <input type="text" placeholder="Code (TT####)" value={draftFilters.tenantCode}
                 onChange={(e) => setDraftFilters({ ...draftFilters, tenantCode: normalizeUppercaseInput(e.target.value) })}
-                className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                className="h-[20px] w-24 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
               <input type="text" placeholder={isTerminatedView ? "Search terminated…" : "Search tenants…"} value={draftFilters.search}
                 onChange={(e) => setDraftFilters({ ...draftFilters, search: normalizeUppercaseInput(e.target.value) })}
-                className="h-7 w-36 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                className="h-[20px] w-28 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
 
-              <div className="h-4 w-px shrink-0 bg-slate-200" />
+              <div className="h-3 w-px shrink-0 bg-slate-200" />
 
-              <button onClick={() => { setAppliedFilters(draftFilters); setCurrentPage(1); }} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]">
-                <FaSearch size={9} /> Search
+              <button onClick={() => { setAppliedFilters(draftFilters); setCurrentPage(1); }} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#0B3B2E] px-1.5 text-[9px] font-semibold text-white hover:bg-[#0A3127]">
+                <FaSearch size={7} /> Search
               </button>
-              <button onClick={handleResetFilters} className="h-7 shrink-0 flex items-center gap-1 rounded bg-gray-500 px-2.5 text-xs font-semibold text-white hover:bg-gray-600">
-                <FaRedoAlt size={9} /> Reset
+              <button onClick={handleResetFilters} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-gray-500 px-1.5 text-[9px] font-semibold text-white hover:bg-gray-600">
+                <FaRedoAlt size={7} /> Reset
               </button>
-              <button onClick={expandAllTenants} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 px-2 text-xs text-gray-600 hover:bg-gray-50" title="Expand all">
-                <FaExpandAlt size={9} />
+              <button onClick={expandAllTenants} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-slate-200 px-1.5 text-[9px] text-gray-600 hover:bg-gray-50" title="Expand all">
+                <FaExpandAlt size={7} /> Expand
               </button>
-              <button onClick={collapseAllTenants} className="h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 px-2 text-xs text-gray-600 hover:bg-gray-50" title="Collapse all">
-                <FaCompressAlt size={9} />
+              <button onClick={collapseAllTenants} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-slate-200 px-1.5 text-[9px] text-gray-600 hover:bg-gray-50" title="Collapse all">
+                <FaCompressAlt size={7} /> Collapse
               </button>
               {canUpdateTenant && (
                 <button onClick={handleEditTenant} disabled={selectedTenants.length !== 1}
-                  className="h-7 shrink-0 flex items-center gap-1 rounded bg-blue-500 px-2.5 text-xs font-semibold text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed">
-                  <FaEdit size={9} /> Edit
+                  className="h-[20px] shrink-0 flex items-center gap-0.5 bg-blue-500 px-1.5 text-[9px] font-semibold text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed">
+                  <FaEdit size={7} /> Edit
                 </button>
               )}
               {selectedTenants.length > 0 && (
@@ -2096,11 +2096,11 @@ const confirmTransferUnit = useCallback(async () => {
             </div>
 
             {/* Action buttons — NOT inside overflow container so dropdowns are never clipped */}
-            <div className="flex items-center gap-1.5 shrink-0 px-2 py-1.5 border-l border-slate-200">
+            <div className="flex items-center gap-0.5 shrink-0 px-2 py-1 border-l border-slate-200">
               <div className="relative" ref={actionMenuRef}>
                 <button onClick={() => setActionMenuOpen(!actionMenuOpen)}
-                  className="h-7 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]">
-                  <FaEllipsisV size={9} /> Actions
+                  className="h-[20px] flex items-center gap-0.5 bg-[#0B3B2E] px-1.5 text-[9px] font-semibold text-white hover:bg-[#0A3127]">
+                  <FaEllipsisV size={7} /> Actions
                 </button>
                 {actionMenuOpen && (
                   <div className="absolute right-0 mt-1 w-64 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg z-50">
@@ -2220,24 +2220,24 @@ const confirmTransferUnit = useCallback(async () => {
 
               {(isTerminatedView || canCreateTenant) && (
                 <button onClick={() => isTerminatedView ? navigate("/invoices/new") : navigate("/tenant/new")}
-                  className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#FF8C00] hover:bg-[#e67e00] px-2.5 text-xs font-semibold text-white">
-                  <FaPlus size={9} /> {isTerminatedView ? "Final Billing" : "Add"}
+                  className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#FF8C00] hover:bg-[#e67e00] px-1.5 text-[9px] font-semibold text-white">
+                  <FaPlus size={7} /> {isTerminatedView ? "Final Billing" : "Add"}
                 </button>
               )}
-              <button onClick={handleDownloadTemplate} className="h-7 shrink-0 flex items-center gap-1 rounded bg-blue-500 px-2.5 text-xs font-semibold text-white hover:bg-blue-600">
-                <FaDownload size={9} /> Template
+              <button onClick={handleDownloadTemplate} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-blue-500 px-1.5 text-[9px] font-semibold text-white hover:bg-blue-600">
+                <FaDownload size={7} /> Template
               </button>
               {canCreateTenant && !isTerminatedView && (
                 <button onClick={() => setShowImportModal(true)}
-                  className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#FF8C00] hover:bg-[#e67e00] px-2.5 text-xs font-semibold text-white">
-                  <FaFileExport size={9} className="rotate-180" /> Import
+                  className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#FF8C00] hover:bg-[#e67e00] px-1.5 text-[9px] font-semibold text-white">
+                  <FaFileExport size={7} className="rotate-180" /> Import
                 </button>
               )}
-<button onClick={handlePrintList} className="h-7 shrink-0 flex items-center gap-1 rounded bg-slate-700 px-2.5 text-xs font-semibold text-white hover:bg-slate-800">
-                <FaPrint size={9} /> Print
+              <button onClick={handlePrintList} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-slate-700 px-1.5 text-[9px] font-semibold text-white hover:bg-slate-800">
+                <FaPrint size={7} /> Print
               </button>
-              <button onClick={handleExportToExcel} className="h-7 shrink-0 flex items-center gap-1 rounded bg-gray-600 px-2.5 text-xs font-semibold text-white hover:bg-gray-700">
-                <FaFileExport size={9} /> Export
+              <button onClick={handleExportToExcel} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-gray-600 px-1.5 text-[9px] font-semibold text-white hover:bg-gray-700">
+                <FaFileExport size={7} /> Export
               </button>
             </div>
           </div>

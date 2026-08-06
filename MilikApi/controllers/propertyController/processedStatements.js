@@ -278,7 +278,8 @@ const postCommissionAccrualForProcessedStatement = async ({ processedStatement, 
   const commissionAmount = numberOrZero(processedStatement?.commissionAmount);
   const commissionTaxAmount = numberOrZero(processedStatement?.commissionTaxAmount);
   const commissionGrossAmount = numberOrZero(processedStatement?.commissionGrossAmount || commissionAmount + commissionTaxAmount);
-  if (!processedStatement?._id || !approvedStatement?._id || !userId || commissionGrossAmount <= 0) {
+  const netAmountDue = numberOrZero(processedStatement?.netAmountDue);
+  if (!processedStatement?._id || !approvedStatement?._id || !userId || (commissionGrossAmount <= 0 && netAmountDue <= 0)) {
     return;
   }
 
@@ -289,7 +290,8 @@ const postCommissionAccrualForProcessedStatement = async ({ processedStatement, 
     category: "COMMISSION_CHARGE",
     status: { $ne: "reversed" },
   }).select("_id").lean();
-  if (existingCommission) return;
+  if (existingCommission && netAmountDue <= 0) return;
+  const skipCommission = !!existingCommission || commissionGrossAmount <= 0;
 
   const { postEntry } = await import("../../services/ledgerPostingService.js");
   const transactionDate = processedStatement.cutoffAt || processedStatement.closedAt || new Date();
@@ -298,7 +300,7 @@ const postCommissionAccrualForProcessedStatement = async ({ processedStatement, 
     resolveCommissionIncomeAccount(processedStatement.business),
     getCompanyTaxConfiguration(processedStatement.business),
   ]);
-  const outputVatAccount = commissionTaxAmount > 0
+  const outputVatAccount = !skipCommission && commissionTaxAmount > 0
     ? await resolveOutputVatAccount({ businessId: processedStatement.business, companyTaxConfig })
     : null;
   const journalGroupId = new mongoose.Types.ObjectId();
@@ -313,69 +315,74 @@ const postCommissionAccrualForProcessedStatement = async ({ processedStatement, 
     commissionTaxCodeKey: processedStatement.commissionTaxCodeKey || "no_tax",
   };
 
-  const debitLeg = await postEntry({
-    business: processedStatement.business,
-    property: processedStatement.property,
-    landlord: processedStatement.landlord,
-    sourceTransactionType: "processed_statement",
-    sourceTransactionId: processedStatement._id,
-    transactionDate,
-    statementPeriodStart: processedStatement.periodStart,
-    statementPeriodEnd: processedStatement.periodEnd,
-    category: "COMMISSION_CHARGE",
-    amount: commissionGrossAmount,
-    debit: commissionGrossAmount,
-    credit: 0,
-    direction: "debit",
-    accountId: propertyControlAccount._id,
-    journalGroupId,
-    payer: "manager",
-    receiver: "landlord",
-    notes: `Commission accrued on statement processing ${processedStatement.sourceStatementNumber || approvedStatement.statementNumber || processedStatement._id}`,
-    metadata: {
-      ...metadata,
-      postingRole: "property_control_charge",
-    },
-    createdBy: userId,
-    approvedBy: userId,
-    approvedAt: transactionDate,
-    status: "approved",
-  });
+  const entries = [];
+  const touchedAccounts = [String(propertyControlAccount._id)];
 
-  const creditLeg = await postEntry({
-    business: processedStatement.business,
-    property: processedStatement.property,
-    landlord: processedStatement.landlord,
-    sourceTransactionType: "processed_statement",
-    sourceTransactionId: processedStatement._id,
-    transactionDate,
-    statementPeriodStart: processedStatement.periodStart,
-    statementPeriodEnd: processedStatement.periodEnd,
-    category: "COMMISSION_CHARGE",
-    amount: commissionAmount,
-    debit: 0,
-    credit: commissionAmount,
-    direction: "credit",
-    accountId: commissionIncomeAccount._id,
-    journalGroupId,
-    payer: "manager",
-    receiver: "system",
-    notes: `Commission income accrued on statement processing ${processedStatement.sourceStatementNumber || approvedStatement.statementNumber || processedStatement._id}`,
-    metadata: {
-      ...metadata,
-      offsetOfEntryId: String(debitLeg._id),
-      postingRole: "commission_income_accrual",
-    },
-    createdBy: userId,
-    approvedBy: userId,
-    approvedAt: transactionDate,
-    status: "approved",
-  });
+  if (!skipCommission) {
+    const debitLeg = await postEntry({
+      business: processedStatement.business,
+      property: processedStatement.property,
+      landlord: processedStatement.landlord,
+      sourceTransactionType: "processed_statement",
+      sourceTransactionId: processedStatement._id,
+      transactionDate,
+      statementPeriodStart: processedStatement.periodStart,
+      statementPeriodEnd: processedStatement.periodEnd,
+      category: "COMMISSION_CHARGE",
+      amount: commissionGrossAmount,
+      debit: commissionGrossAmount,
+      credit: 0,
+      direction: "debit",
+      accountId: propertyControlAccount._id,
+      journalGroupId,
+      payer: "manager",
+      receiver: "landlord",
+      notes: `Commission accrued on statement processing ${processedStatement.sourceStatementNumber || approvedStatement.statementNumber || processedStatement._id}`,
+      metadata: {
+        ...metadata,
+        postingRole: "property_control_charge",
+      },
+      createdBy: userId,
+      approvedBy: userId,
+      approvedAt: transactionDate,
+      status: "approved",
+    });
 
-  const entries = [debitLeg, creditLeg];
-  const touchedAccounts = [String(propertyControlAccount._id), String(commissionIncomeAccount._id)];
+    const creditLeg = await postEntry({
+      business: processedStatement.business,
+      property: processedStatement.property,
+      landlord: processedStatement.landlord,
+      sourceTransactionType: "processed_statement",
+      sourceTransactionId: processedStatement._id,
+      transactionDate,
+      statementPeriodStart: processedStatement.periodStart,
+      statementPeriodEnd: processedStatement.periodEnd,
+      category: "COMMISSION_CHARGE",
+      amount: commissionAmount,
+      debit: 0,
+      credit: commissionAmount,
+      direction: "credit",
+      accountId: commissionIncomeAccount._id,
+      journalGroupId,
+      payer: "manager",
+      receiver: "system",
+      notes: `Commission income accrued on statement processing ${processedStatement.sourceStatementNumber || approvedStatement.statementNumber || processedStatement._id}`,
+      metadata: {
+        ...metadata,
+        offsetOfEntryId: String(debitLeg._id),
+        postingRole: "commission_income_accrual",
+      },
+      createdBy: userId,
+      approvedBy: userId,
+      approvedAt: transactionDate,
+      status: "approved",
+    });
 
-  if (commissionTaxAmount > 0 && outputVatAccount?._id) {
+    entries.push(debitLeg, creditLeg);
+    touchedAccounts.push(String(commissionIncomeAccount._id));
+  }
+
+  if (!skipCommission && commissionTaxAmount > 0 && outputVatAccount?._id) {
     const taxLeg = await postEntry({
       business: processedStatement.business,
       property: processedStatement.property,
@@ -411,7 +418,6 @@ const postCommissionAccrualForProcessedStatement = async ({ processedStatement, 
 
   // Post landlord remittance payable (CR 2110 / DR PCTRL) for the net amount due.
   // This creates the GL liability entry that matches what ProcessedStatement.balanceDue tracks.
-  const netAmountDue = numberOrZero(processedStatement?.netAmountDue);
   if (netAmountDue > 0) {
     const alreadyHasPayable = await FinancialLedgerEntry.findOne({
       business: processedStatement.business,
@@ -1086,22 +1092,12 @@ export const closeStatement = async (req, res) => {
             } catch (_) {}
           }
 
-          const existingCommission = numberOrZero(existingProcessedStatement.commissionAmount);
-          if (existingCommission > 0) {
-            const existingCommissionEntry = await FinancialLedgerEntry.findOne({
-              business: existingProcessedStatement.business,
-              sourceTransactionType: "processed_statement",
-              sourceTransactionId: String(existingProcessedStatement._id),
-              category: "COMMISSION_CHARGE",
-            }).lean();
-
-            if (!existingCommissionEntry) {
-              await postCommissionAccrualForProcessedStatement({
-                processedStatement: existingProcessedStatement,
-                approvedStatement,
-                userId,
-              });
-            }
+          if (numberOrZero(existingProcessedStatement.commissionAmount) > 0 || numberOrZero(existingProcessedStatement.netAmountDue) > 0) {
+            await postCommissionAccrualForProcessedStatement({
+              processedStatement: existingProcessedStatement,
+              approvedStatement,
+              userId,
+            });
           }
 
           const hydratedExistingStatement =
@@ -1119,7 +1115,7 @@ export const closeStatement = async (req, res) => {
       throw error;
     }
 
-    if (approvedStatement?._id && numberOrZero(snapshotData.commissionAmount) > 0) {
+    if (approvedStatement?._id && (numberOrZero(snapshotData.commissionAmount) > 0 || numberOrZero(snapshotData.netAmountDue) > 0)) {
       try {
         await postCommissionAccrualForProcessedStatement({
           processedStatement: savedStatement,
@@ -1327,6 +1323,8 @@ export const updateStatement = async (req, res) => {
           },
         ];
       }
+
+      statement.balanceDue = Math.max(0, due - nextAmountPaid);
 
       if (due <= 0) {
         statement.status = "processed";

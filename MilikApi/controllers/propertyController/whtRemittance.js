@@ -237,6 +237,7 @@ export const remitWht = async (req, res, next) => {
       touchedAccountIds.push(cashbookAccountId);
     } catch (glErr) {
       await TaxRemittance.deleteOne({ _id: remittance._id }).catch(() => {});
+      await FinancialLedgerEntry.deleteMany({ sourceTransactionType: "tax_remittance", sourceTransactionId: String(remittance._id) }).catch(() => {});
       throw glErr;
     }
 

@@ -735,10 +735,26 @@ export const repairBalanceGroup = async (req, res) => {
     const correctionAmount    = Math.abs(diff);
     // Prefer the first original entry (not a prior correction) to pull source identity
     const sample = entries.find((e) => e.sourceTransactionType !== "manual_adjustment") || entries[0];
-    const sourceLabel = sample?.sourceTransactionType && sample.sourceTransactionType !== "manual_adjustment"
-      ? ` | ${sample.sourceTransactionType} …${String(sample.sourceTransactionId || "").slice(-8)}`
-      : "";
     const actorUserId = await resolveAuditActorUserId({ req, businessId });
+
+    // Build a human-readable source label by looking up the source document
+    let sourceLabel = "";
+    if (sample?.sourceTransactionId && sample.sourceTransactionType === "rent_payment") {
+      const srcPayment = await RentPayment.findById(sample.sourceTransactionId)
+        .populate("tenant", "name")
+        .populate("unit", "unitNumber")
+        .select("receiptNumber referenceNumber tenant unit")
+        .lean();
+      if (srcPayment) {
+        const rcptNo = srcPayment.receiptNumber || srcPayment.referenceNumber || String(sample.sourceTransactionId).slice(-6);
+        const tenantName = srcPayment.tenant?.name || "";
+        const unitNo = srcPayment.unit?.unitNumber ? `Unit ${srcPayment.unit.unitNumber}` : "";
+        const who = [tenantName, unitNo].filter(Boolean).join(", ");
+        sourceLabel = ` — ${rcptNo}${who ? ` — ${who}` : ""}`;
+      }
+    } else if (sample?.sourceTransactionType && sample.sourceTransactionType !== "manual_adjustment") {
+      sourceLabel = ` — ${sample.sourceTransactionType} …${String(sample.sourceTransactionId || "").slice(-8)}`;
+    }
 
     // Use current date to avoid closed-period lock; compute period from it
     const now         = new Date();
@@ -761,7 +777,7 @@ export const repairBalanceGroup = async (req, res) => {
       direction:             correctionDirection,
       payer:                 "n/a",
       receiver:              "n/a",
-      notes:                 notes?.trim() || `GL correction – balancing entry for journal group ${String(groupOid).slice(-8)}${sourceLabel}`,
+      notes:                 notes?.trim() || `GL Balance Correction: ${correctionDirection === "credit" ? "CR" : "DR"} KES ${correctionAmount.toFixed(2)}${sourceLabel}`,
       createdBy:             actorUserId,
       approvedBy:            actorUserId,
       approvedAt:            new Date(),
@@ -776,7 +792,7 @@ export const repairBalanceGroup = async (req, res) => {
       repairType:      "balance_group",
       appliedAt:       new Date(),
       appliedBy:       actorUserId,
-      description:     `Balanced group ${String(groupOid).slice(-8)} — posted ${correctionDirection} KES ${correctionAmount} to account ${accountId}`,
+      description:     `GL Balance Correction: ${correctionDirection === "credit" ? "CR" : "DR"} KES ${correctionAmount.toFixed(2)}${sourceLabel} — posted to account ${accountId}`,
       outcome:         "success",
       recordsAffected: 1,
     });
@@ -787,6 +803,102 @@ export const repairBalanceGroup = async (req, res) => {
       direction:         correctionDirection,
       amount:            correctionAmount,
     });
+  } catch (err) {
+    return res.status(500).json({ error: err.message || "Repair failed" });
+  }
+};
+
+// ─── REPAIR: CLEAR ABNORMAL ACCOUNT BALANCE ──────────────────────────────────
+// Posts a balanced 2-leg correcting journal to bring an account's net balance
+// back to zero when it sits on its abnormal side.
+export const repairClearAbnormalBalance = async (req, res) => {
+  try {
+    const { business: businessId, accountId, offsetAccountId, notes, healthRunId } = req.body;
+
+    if (!businessId)
+      return res.status(400).json({ error: "Business context required" });
+    if (!accountId || !mongoose.Types.ObjectId.isValid(accountId))
+      return res.status(400).json({ error: "Valid account ID required" });
+    if (!offsetAccountId || !mongoose.Types.ObjectId.isValid(offsetAccountId))
+      return res.status(400).json({ error: "Select an offset account" });
+    if (String(accountId) === String(offsetAccountId))
+      return res.status(400).json({ error: "Offset account must differ from the account being corrected" });
+
+    const bizId     = new mongoose.Types.ObjectId(String(businessId));
+    const accOid    = new mongoose.Types.ObjectId(String(accountId));
+    const offsetOid = new mongoose.Types.ObjectId(String(offsetAccountId));
+
+    // Compute net balance using the same status filter as the health check
+    // (approved + reversed) so the result matches what the integrity report shows.
+    const [balanceRow] = await FinancialLedgerEntry.aggregate([
+      { $match: { business: bizId, accountId: accOid, status: { $in: ["approved", "reversed"] } } },
+      { $group: { _id: null, debit: { $sum: "$debit" }, credit: { $sum: "$credit" } } },
+    ]);
+    const netBalance = round2((balanceRow?.debit || 0) - (balanceRow?.credit || 0));
+
+    if (Math.abs(netBalance) < 0.005)
+      return res.status(400).json({ error: "Account balance is already at zero — no correction needed" });
+
+    // Positive netBalance = net debit. Clearing it means posting a CR to the account.
+    const corrAmount   = Math.abs(netBalance);
+    const accDirection = netBalance > 0 ? "credit" : "debit";
+    const offDirection = netBalance > 0 ? "debit"  : "credit";
+
+    const actorUserId = await resolveAuditActorUserId({ req, businessId });
+    const newGroupId  = new mongoose.Types.ObjectId();
+    const now         = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1,  0, 0, 0, 0);
+    const periodEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    const desc = notes?.trim() ||
+      `GL Clear Abnormal Balance: ${accDirection === "credit" ? "CR" : "DR"} KES ${corrAmount.toFixed(2)} — restoring account to zero`;
+
+    const baseEntry = {
+      business:              bizId,
+      sourceTransactionType: "manual_adjustment",
+      sourceTransactionId:   String(newGroupId),
+      transactionDate:       now,
+      statementPeriodStart:  periodStart,
+      statementPeriodEnd:    periodEnd,
+      category:              "ADJUSTMENT",
+      journalGroupId:        newGroupId,
+      amount:                corrAmount,
+      payer:                 "n/a",
+      receiver:              "n/a",
+      createdBy:             actorUserId,
+      approvedBy:            actorUserId,
+      approvedAt:            now,
+      status:                "approved",
+      allowUnscoped:         true,
+    };
+
+    await postEntry({
+      ...baseEntry,
+      accountId:  accOid,
+      direction:  accDirection,
+      notes:      desc,
+      metadata:   { postingRole: "gl_correction", correctedBy: String(actorUserId), abnormalBalance: netBalance },
+    });
+    await postEntry({
+      ...baseEntry,
+      accountId:  offsetOid,
+      direction:  offDirection,
+      notes:      `Offset — ${desc}`,
+      metadata:   { postingRole: "gl_correction_offset", correctedBy: String(actorUserId) },
+    });
+
+    aggregateChartOfAccountBalances(businessId, [String(accountId), String(offsetAccountId)]).catch(() => {});
+
+    await appendRepairLog(healthRunId, {
+      repairType:      "clear_abnormal_balance",
+      appliedAt:       now,
+      appliedBy:       actorUserId,
+      description:     `Clear Abnormal Balance: ${accDirection === "credit" ? "CR" : "DR"} KES ${corrAmount.toFixed(2)} on account ${accountId} — offset to ${offsetAccountId}`,
+      outcome:         "success",
+      recordsAffected: 2,
+    });
+
+    return res.status(200).json({ success: true, amount: corrAmount, direction: accDirection });
   } catch (err) {
     return res.status(500).json({ error: err.message || "Repair failed" });
   }
@@ -897,21 +1009,26 @@ export const getActiveCorrections = async (req, res) => {
 // them to "reversed", then recomputes affected account balances.
 export const reverseGlCorrectionEntry = async (req, res) => {
   const { groupId } = req.params;
-  const businessId  = req.body?.business || req.query?.business || req.user?.company;
-  const healthRunId = req.body?.healthRunId;
+  const { business, healthRunId, entryIds } = req.body;
+  const businessId = business || req.query?.business || req.user?.company;
 
   if (!businessId) return res.status(400).json({ error: "Business context required" });
-  if (!groupId || !mongoose.Types.ObjectId.isValid(groupId)) {
+  const isUngrouped = groupId === "ungrouped";
+  if (!isUngrouped && !mongoose.Types.ObjectId.isValid(groupId)) {
     return res.status(400).json({ error: "Invalid groupId" });
   }
 
   try {
-    const corrections = await FinancialLedgerEntry.find({
+    const baseMatch = {
       business:              new mongoose.Types.ObjectId(String(businessId)),
-      journalGroupId:        new mongoose.Types.ObjectId(groupId),
       sourceTransactionType: "manual_adjustment",
       status:                "approved",
-    }).select("_id accountId").lean();
+    };
+    const query = isUngrouped
+      ? { ...baseMatch, _id: { $in: (entryIds || []).map((id) => new mongoose.Types.ObjectId(String(id))) } }
+      : { ...baseMatch, journalGroupId: new mongoose.Types.ObjectId(groupId) };
+
+    const corrections = await FinancialLedgerEntry.find(query).select("_id accountId").lean();
 
     if (!corrections.length) {
       return res.status(404).json({ error: "No active correction entries found for this journal group" });
@@ -920,7 +1037,7 @@ export const reverseGlCorrectionEntry = async (req, res) => {
     const ids        = corrections.map((e) => e._id);
     const accountIds = [...new Set(corrections.map((e) => String(e.accountId)).filter(Boolean))];
 
-    await FinancialLedgerEntry.updateMany({ _id: { $in: ids } }, { $set: { status: "reversed" } });
+    await FinancialLedgerEntry.updateMany({ _id: { $in: ids } }, { $set: { status: "void" } });
 
     aggregateChartOfAccountBalances(businessId, accountIds).catch(() => {});
 
@@ -937,6 +1054,38 @@ export const reverseGlCorrectionEntry = async (req, res) => {
     return res.status(200).json({ success: true, reversedCount: corrections.length });
   } catch (err) {
     return res.status(500).json({ error: err.message || "Reverse failed" });
+  }
+};
+
+// ─── REPAIR: VOID ALL REVERSED CORRECTION ENTRIES ────────────────────────────
+// POST /api/ledger/repair/void-reversed
+// Changes status of any manual_adjustment entries that are still "reversed"
+// (from older Undo runs) to "void" so they are excluded from COA/Trial Balance.
+export const voidReversedCorrections = async (req, res) => {
+  const businessId = req.body?.business || req.user?.company;
+  if (!businessId) return res.status(400).json({ error: "Business context required" });
+
+  try {
+    const bizId = new mongoose.Types.ObjectId(String(businessId));
+
+    const entries = await FinancialLedgerEntry.find({
+      business:              bizId,
+      sourceTransactionType: "manual_adjustment",
+      status:                "reversed",
+    }).select("_id accountId").lean();
+
+    if (!entries.length) return res.status(200).json({ success: true, voidedCount: 0 });
+
+    const ids        = entries.map((e) => e._id);
+    const accountIds = [...new Set(entries.map((e) => String(e.accountId)).filter(Boolean))];
+
+    await FinancialLedgerEntry.updateMany({ _id: { $in: ids } }, { $set: { status: "void" } });
+
+    aggregateChartOfAccountBalances(businessId, accountIds).catch(() => {});
+
+    return res.status(200).json({ success: true, voidedCount: entries.length });
+  } catch (err) {
+    return res.status(500).json({ error: err.message || "Void failed" });
   }
 };
 

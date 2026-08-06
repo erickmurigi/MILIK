@@ -73,21 +73,43 @@ export async function aggregateChartOfAccountBalances(businessId, accountIds = [
       },
       {
         $group: {
-          _id: { accountId: "$accountId", direction: "$direction" },
-          total: { $sum: "$amount" },
+          _id: "$accountId",
+          totalDebit: {
+            $sum: {
+              $cond: [
+                { $gt: ["$debit", 0] }, "$debit",
+                { $cond: [
+                  { $eq: [{ $toLower: { $ifNull: ["$direction", ""] } }, "debit"] },
+                  { $ifNull: ["$amount", 0] },
+                  0,
+                ]},
+              ],
+            },
+          },
+          totalCredit: {
+            $sum: {
+              $cond: [
+                { $gt: ["$credit", 0] }, "$credit",
+                { $cond: [
+                  { $eq: [{ $toLower: { $ifNull: ["$direction", ""] } }, "credit"] },
+                  { $ifNull: ["$amount", 0] },
+                  0,
+                ]},
+              ],
+            },
+          },
         },
       },
     ]);
 
     const totalsMap = new Map();
     for (const row of grouped) {
-      const accountId = String(row?._id?.accountId || "");
-      const direction = String(row?._id?.direction || "").toLowerCase();
+      const accountId = String(row?._id || "");
       if (!accountId) continue;
-      const current = totalsMap.get(accountId) || { debit: 0, credit: 0 };
-      if (direction === "debit") current.debit = Number(row?.total || 0);
-      if (direction === "credit") current.credit = Number(row?.total || 0);
-      totalsMap.set(accountId, current);
+      totalsMap.set(accountId, {
+        debit:  Number(row?.totalDebit  || 0),
+        credit: Number(row?.totalCredit || 0),
+      });
     }
 
     for (const account of regularAccounts) {

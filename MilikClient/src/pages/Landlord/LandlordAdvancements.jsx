@@ -657,10 +657,10 @@ const LandlordAdvancements = () => {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
         <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
         <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
-          <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+          <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
             <div className="relative shrink-0">
               <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]" />
-              <input value={filters.search} onChange={setFilter("search")} placeholder="Reference, title…" className="h-7 w-40 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs outline-none focus:border-[#0B3B2E]" />
+              <input value={filters.search} onChange={setFilter("search")} placeholder="Reference, title…" className="h-[20px] w-32 border border-slate-200 bg-white pl-6 pr-1 text-[9px] outline-none focus:border-[#0B3B2E]" />
             </div>
             <AppSelect
               value={filters.status}
@@ -669,7 +669,7 @@ const LandlordAdvancements = () => {
               placeholder="All statuses"
               searchable
               clearable
-              size="sm"
+              compact
             />
             <AppSelect
               value={filters.landlordId}
@@ -678,7 +678,7 @@ const LandlordAdvancements = () => {
               placeholder="All landlords"
               searchable
               clearable
-              size="sm"
+              compact
             />
             <AppSelect
               value={filters.advanceType}
@@ -686,10 +686,10 @@ const LandlordAdvancements = () => {
               options={TYPE_OPTIONS.map((item) => ({ value: item.value, label: item.label }))}
               placeholder="All types"
               clearable
-              size="sm"
+              compact
             />
-            <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-            <button onClick={openCreate} disabled={!canWrite} className="h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white bg-[#FF8C00] hover:bg-[#e67e00] disabled:cursor-not-allowed disabled:bg-slate-300"><FaPlus /> New Advance</button>
+            <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
+            <button onClick={openCreate} disabled={!canWrite} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white bg-[#FF8C00] hover:bg-[#e67e00] disabled:cursor-not-allowed disabled:bg-slate-300"><FaPlus size={7} /> New Advance</button>
           </div>
         </div>
 

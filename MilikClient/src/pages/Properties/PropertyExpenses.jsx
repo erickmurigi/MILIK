@@ -429,45 +429,45 @@ const PropertyExpenses = () => {
         </div>
 
         {/* ─── Filter bar ─────────────────────────────────────────────────── */}
-        <div className="shrink-0 flex flex-wrap items-center gap-1.5 border-b border-slate-200 bg-white px-3 py-1.5">
+        <div className="shrink-0 flex flex-wrap items-center gap-0.5 border-b border-slate-200 bg-white px-3 py-1">
           <input type="date" value={filters.startDate} onChange={setFilter('startDate')}
-            className="h-7 rounded border border-slate-200 px-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+            className="h-[20px] w-[5.5rem] border border-slate-200 px-1 text-[9px] focus:border-[#0B3B2E] focus:outline-none" />
           <span className="text-[10px] text-slate-400">—</span>
           <input type="date" value={filters.endDate} onChange={setFilter('endDate')}
-            className="h-7 rounded border border-slate-200 px-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
-          <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+            className="h-[20px] w-[5.5rem] border border-slate-200 px-1 text-[9px] focus:border-[#0B3B2E] focus:outline-none" />
+          <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
           <AppSelect
             value={filters.propertyId || null}
             onChange={(v) => { setFilters((f) => ({ ...f, propertyId: v ?? '' })); setPage(1); }}
             options={propertyOptions}
             placeholder="All properties"
-            searchable clearable size="sm"
+            searchable clearable compact
           />
           <AppSelect
             value={filters.category || null}
             onChange={(v) => { setFilters((f) => ({ ...f, category: v ?? '' })); setPage(1); }}
             options={CATEGORY_OPTIONS}
             placeholder="All categories"
-            clearable size="sm"
+            clearable compact
           />
           <div className="relative shrink-0">
             <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]" />
             <input type="text" value={filters.search} onChange={setFilter('search')} placeholder="Search description, property…"
-              className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs outline-none focus:border-[#0B3B2E]" />
+              className="h-[20px] w-36 border border-slate-200 bg-white pl-6 pr-1.5 text-[9px] outline-none focus:border-[#0B3B2E]" />
           </div>
-          <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+          <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
           <button onClick={load} title="Refresh"
-            className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50">
-            <FaSync size={9} className={loading ? 'animate-spin' : ''} />
+            className="inline-flex h-[20px] items-center gap-0.5 border border-slate-200 bg-white px-1.5 text-[9px] text-slate-600 hover:bg-slate-50">
+            <FaSync size={7} className={loading ? 'animate-spin' : ''} /> Refresh
           </button>
           <button onClick={handleExport}
-            className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-            <FaDownload size={9} /> Export
+            className="inline-flex h-[20px] items-center gap-0.5 border border-slate-200 bg-white px-1.5 text-[9px] font-semibold text-slate-700 hover:bg-slate-50">
+            <FaDownload size={7} /> Export
           </button>
           {canCreateExpense && (
             <button onClick={() => { setEditing(null); setModalOpen(true); }}
-              className="inline-flex h-7 items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-black text-white hover:bg-[#0A3127]">
-              <FaPlus size={9} /> Record Expense
+              className="inline-flex h-[20px] items-center gap-0.5 bg-[#0B3B2E] px-2.5 text-[9px] font-black text-white hover:bg-[#0A3127]">
+              <FaPlus size={7} /> Record Expense
             </button>
           )}
         </div>

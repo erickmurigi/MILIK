@@ -234,7 +234,7 @@ const TenantPrepayments = () => {
         <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col gap-2">
           <div className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
-              <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+              <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
                 {[
                   { label: "Open", value: totals.rowCount, accent: "text-slate-900" },
                   { label: "Unapplied", value: formatMoney(totals.totalUnapplied), accent: "text-amber-700" },
@@ -242,12 +242,12 @@ const TenantPrepayments = () => {
                   { label: "Confirmed", value: totals.confirmedRows, accent: "text-blue-700" },
                   { label: "Receipt Value", value: formatMoney(totals.totalReceiptAmount), accent: "text-slate-900" },
                 ].map((card) => (
-                  <span key={card.label} className="shrink-0 inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                  <span key={card.label} className="shrink-0 inline-flex h-[20px] items-center gap-1 border border-slate-200 bg-white px-1 text-[8px] font-bold uppercase tracking-[0.08em] text-slate-500">
                     {card.label} <span className={`normal-case tracking-normal ${card.accent}`}>{card.value}</span>
                   </span>
                 ))}
-                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…" className="h-7 w-40 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-[11px] outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…" className="h-[20px] w-32 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 <AppSelect
                   value={propertyFilter}
                   onChange={(v) => setPropertyFilter(v ?? "all")}
@@ -255,7 +255,7 @@ const TenantPrepayments = () => {
                   placeholder="Property"
                   clearable
                   searchable
-                  size="sm"
+                  compact
                 />
                 <AppSelect
                   value={statusFilter}
@@ -266,10 +266,10 @@ const TenantPrepayments = () => {
                   ]}
                   placeholder="All Active"
                   clearable
-                  size="sm"
+                  compact
                 />
-                <button onClick={() => navigate("/receipts/new")} className="h-7 shrink-0 flex items-center gap-1.5 rounded-md bg-[#0B3B2E] px-2.5 text-[11px] font-bold text-white shadow-sm hover:bg-[#0A3127]"><FaReceipt size={10} /> New Receipt</button>
-                <button onClick={() => { setSearch(""); setPropertyFilter("all"); setStatusFilter("all"); }} className="h-7 shrink-0 flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[11px] font-bold text-slate-700 shadow-sm hover:bg-slate-50"><FaCoins size={10} /> Reset</button>
+                <button onClick={() => navigate("/receipts/new")} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#0B3B2E] px-1.5 text-[9px] font-bold text-white shadow-sm hover:bg-[#0A3127]"><FaReceipt size={7} /> New Receipt</button>
+                <button onClick={() => { setSearch(""); setPropertyFilter("all"); setStatusFilter("all"); }} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-slate-200 bg-white px-1.5 text-[9px] font-bold text-slate-700 shadow-sm hover:bg-slate-50"><FaCoins size={7} /> Reset</button>
               </div>
             </div>
 

@@ -545,7 +545,7 @@ const Properties = () => {
       <div className="flex flex-col h-full min-h-0 p-0 bg-white overflow-hidden">
         {/* Toolbar — single scrollable row */}
         <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-          <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+          <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
             <AppSelect
               value={draftFilters.status}
               onChange={(v) => setDraftFilters((p) => ({ ...p, status: v ?? "" }))}
@@ -557,7 +557,7 @@ const Properties = () => {
               ]}
               placeholder="All Status"
               clearable
-              size="sm"
+              compact
             />
 
             <AppSelect
@@ -567,7 +567,7 @@ const Properties = () => {
               placeholder="All Zones"
               searchable
               clearable
-              size="sm"
+              compact
             />
 
             <AppSelect
@@ -582,7 +582,7 @@ const Properties = () => {
               ]}
               placeholder="All Categories"
               clearable
-              size="sm"
+              compact
             />
 
             <AppSelect
@@ -592,40 +592,40 @@ const Properties = () => {
               placeholder="All Landlords"
               searchable
               clearable
-              size="sm"
+              compact
             />
 
-            <div className="h-4 w-px shrink-0 bg-slate-200" />
+            <div className="h-3 w-px shrink-0 bg-slate-200" />
 
             <input value={draftFilters.code} onChange={(e) => setDraftFilters((p) => ({ ...p, code: normalizeUppercaseInput(e.target.value) }))}
               onKeyDown={onFilterEnter} placeholder="Code"
-              className="h-7 w-20 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              className="h-[20px] w-[4.5rem] shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
             <input value={draftFilters.name} onChange={(e) => setDraftFilters((p) => ({ ...p, name: normalizeUppercaseInput(e.target.value) }))}
               onKeyDown={onFilterEnter} placeholder="Name"
-              className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              className="h-[20px] w-24 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
             <input value={draftFilters.lr} onChange={(e) => setDraftFilters((p) => ({ ...p, lr: e.target.value }))}
               onKeyDown={onFilterEnter} placeholder="LR No."
-              className="h-7 w-20 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              className="h-[20px] w-[4.5rem] shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
             <input value={draftFilters.location} onChange={(e) => setDraftFilters((p) => ({ ...p, location: normalizeUppercaseInput(e.target.value) }))}
               onKeyDown={onFilterEnter} placeholder="Location"
-              className="h-7 w-24 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              className="h-[20px] w-20 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
 
-            <div className="h-4 w-px shrink-0 bg-slate-200" />
+            <div className="h-3 w-px shrink-0 bg-slate-200" />
 
-            <button onClick={applySearch} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#FF8C00] px-2.5 text-xs font-semibold text-white hover:bg-[#e67e00]">
-              <FaSearch size={9} /> Search
+            <button onClick={applySearch} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#FF8C00] px-2.5 text-[9px] font-semibold text-white hover:bg-[#e67e00]">
+              <FaSearch size={7} /> Search
             </button>
-            <button onClick={resetFilters} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]">
-              <FaRedoAlt size={9} /> Reset
+            <button onClick={resetFilters} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#0B3B2E] px-2.5 text-[9px] font-semibold text-white hover:bg-[#0A3127]">
+              <FaRedoAlt size={7} /> Reset
             </button>
             <button onClick={allRowsExpanded ? collapseAllRows : expandAllRows} disabled={!properties || properties.length === 0}
-              className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${properties && properties.length > 0 ? allRowsExpanded ? "bg-orange-600 hover:bg-orange-700" : "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
-              {allRowsExpanded ? <><FaCompressAlt size={9} /> Collapse</> : <><FaExpandAlt size={9} /> Expand</>}
+              className={`h-[20px] shrink-0 flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${properties && properties.length > 0 ? allRowsExpanded ? "bg-orange-600 hover:bg-orange-700" : "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
+              {allRowsExpanded ? <><FaCompressAlt size={7} /> Collapse</> : <><FaExpandAlt size={7} /> Expand</>}
             </button>
             {canUpdateProperty && (
               <button onClick={() => openEditProperty(selectedProperties[0])} disabled={selectedProperties.length !== 1}
-                className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedProperties.length === 1 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
-                <FaEdit size={9} /> Edit
+                className={`h-[20px] shrink-0 flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${selectedProperties.length === 1 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
+                <FaEdit size={7} /> Edit
               </button>
             )}
 
@@ -641,9 +641,9 @@ const Properties = () => {
                     setActionMenuOpen((v) => !v);
                   }}
                   disabled={selectedProperties.length === 0}
-                  className={`h-7 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedProperties.length > 0 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}
+                  className={`h-[20px] flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${selectedProperties.length > 0 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}
                 >
-                  <FaArchive size={9} /> Actions <FaChevronDown size={8} />
+                  <FaArchive size={7} /> Actions <FaChevronDown size={8} />
                 </button>
                 {actionMenuOpen && selectedProperties.length > 0 && (
                   <div
@@ -664,28 +664,28 @@ const Properties = () => {
 
             {canDeleteProperty && (
               <button onClick={handleBulkDelete} disabled={selectedProperties.length === 0}
-                className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedProperties.length > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}>
-                <FaTrash size={9} /> Delete{selectedProperties.length > 0 ? ` (${selectedProperties.length})` : ""}
+                className={`h-[20px] shrink-0 flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${selectedProperties.length > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}>
+                <FaTrash size={7} /> Delete{selectedProperties.length > 0 ? ` (${selectedProperties.length})` : ""}
               </button>
             )}
             {canCreateProperty && (
               <Link to="/properties/new" className="shrink-0">
-                <button className="h-7 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]">
-                  <FaPlus size={9} /> Add
+                <button className="h-[20px] flex items-center gap-0.5 bg-[#0B3B2E] px-2.5 text-[9px] font-semibold text-white hover:bg-[#0A3127]">
+                  <FaPlus size={7} /> Add
                 </button>
               </Link>
             )}
-            <button onClick={() => downloadPropertiesTemplate()} className="h-7 shrink-0 flex items-center gap-1 rounded border border-blue-300 bg-blue-50 px-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
-              <FaFileDownload size={9} /> Template
+            <button onClick={() => downloadPropertiesTemplate()} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-blue-300 bg-blue-50 px-2.5 text-[9px] font-semibold text-blue-700 hover:bg-blue-100">
+              <FaFileDownload size={7} /> Template
             </button>
-            <button onClick={() => setShowImportModal(true)} className="h-7 shrink-0 flex items-center gap-1 rounded border border-green-300 bg-green-50 px-2.5 text-xs font-semibold text-green-700 hover:bg-green-100">
-              <FaFileImport size={9} /> Import
+            <button onClick={() => setShowImportModal(true)} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-green-300 bg-green-50 px-2.5 text-[9px] font-semibold text-green-700 hover:bg-green-100">
+              <FaFileImport size={7} /> Import
             </button>
-            <button onClick={handlePrintList} className="h-7 shrink-0 flex items-center gap-1 rounded bg-slate-700 px-2.5 text-xs font-semibold text-white hover:bg-slate-800">
-              <FaPrint size={9} /> Print
+            <button onClick={handlePrintList} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-slate-700 px-2.5 text-[9px] font-semibold text-white hover:bg-slate-800">
+              <FaPrint size={7} /> Print
             </button>
-            <button onClick={handleExport} className="h-7 shrink-0 flex items-center gap-1 rounded border border-gray-300 px-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50">
-              <FaFileExport size={9} /> Export
+            <button onClick={handleExport} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-gray-300 px-2.5 text-[9px] font-semibold text-gray-600 hover:bg-gray-50">
+              <FaFileExport size={7} /> Export
             </button>
           </div>
         </div>

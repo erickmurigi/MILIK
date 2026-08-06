@@ -596,10 +596,10 @@ const LandlordStandingOrders = () => {
         <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col gap-2">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
-              <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+              <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
                 <div className="relative shrink-0">
                   <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]" />
-                  <input value={filters.search} onChange={setFilter("search")} placeholder="Search order, title…" className="h-7 w-40 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                  <input value={filters.search} onChange={setFilter("search")} placeholder="Search order, title…" className="h-[20px] w-32 border border-slate-200 bg-white pl-6 pr-1 text-[9px] outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 </div>
                 <AppSelect
                   value={filters.landlordId}
@@ -608,7 +608,7 @@ const LandlordStandingOrders = () => {
                   placeholder="All Landlords"
                   searchable
                   clearable
-                  size="sm"
+                  compact
                 />
                 <AppSelect
                   value={filters.propertyId}
@@ -617,7 +617,7 @@ const LandlordStandingOrders = () => {
                   placeholder="All Properties"
                   searchable
                   clearable
-                  size="sm"
+                  compact
                 />
                 <AppSelect
                   value={filters.status}
@@ -630,17 +630,17 @@ const LandlordStandingOrders = () => {
                   ]}
                   placeholder="All Statuses"
                   clearable
-                  size="sm"
+                  compact
                 />
-                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                <span className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600">{stats.total} orders</span>
-                <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Active: {stats.active}</span>
-                <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">Processed: {money(stats.processed)}</span>
-                <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">Pending: {stats.pendingPeriods}</span>
-                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                <button onClick={handleRunSelected} disabled={bulkRunning || selectedIds.length === 0} className="h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"><FaCheck /> {bulkRunning ? "Running…" : `Run${selectedIds.length ? ` (${selectedIds.length})` : ""}`}</button>
-                <button onClick={openCreate} disabled={!canWrite} className="h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white bg-[#0B3B2E] hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:bg-slate-300"><FaPlus /> Add</button>
-                <button onClick={() => setFilters({ search: "", status: "all", landlordId: "all", propertyId: "all" })} className="h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white bg-slate-500 hover:bg-slate-600">Reset</button>
+                <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
+                <span className="shrink-0 border border-slate-200 bg-white px-1 py-0.5 text-[8px] font-bold text-slate-600">{stats.total} orders</span>
+                <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-1 py-0.5 text-[8px] font-bold text-emerald-700">Active: {stats.active}</span>
+                <span className="shrink-0 border border-blue-200 bg-blue-50 px-1 py-0.5 text-[8px] font-bold text-blue-700">Processed: {money(stats.processed)}</span>
+                <span className="shrink-0 border border-amber-200 bg-amber-50 px-1 py-0.5 text-[8px] font-bold text-amber-700">Pending: {stats.pendingPeriods}</span>
+                <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
+                <button onClick={handleRunSelected} disabled={bulkRunning || selectedIds.length === 0} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white bg-green-600 hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"><FaCheck size={7} /> {bulkRunning ? "Running…" : `Run${selectedIds.length ? ` (${selectedIds.length})` : ""}`}</button>
+                <button onClick={openCreate} disabled={!canWrite} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white bg-[#0B3B2E] hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:bg-slate-300"><FaPlus size={7} /> Add</button>
+                <button onClick={() => setFilters({ search: "", status: "all", landlordId: "all", propertyId: "all" })} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white bg-slate-500 hover:bg-slate-600">Reset</button>
               </div>
             </div>
 

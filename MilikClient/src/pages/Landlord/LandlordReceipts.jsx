@@ -518,10 +518,10 @@ const LandlordReceipts = () => {
       <div className="no-print flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
         <div className="mx-auto flex h-full w-full max-w-none min-h-0 flex-1 flex-col gap-2">
           <div className="flex-none sticky top-0 z-20 border-b border-gray-200 bg-white shadow-sm">
-            <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+            <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
               <label className="relative shrink-0">
                 <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"><FaSearch /></span>
-                <input value={filters.search} onChange={(e) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, search: e.target.value })); }} placeholder="Search receipt, landlord…" className="h-7 w-44 rounded border border-slate-200 bg-white pl-6 pr-2 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                <input value={filters.search} onChange={(e) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, search: e.target.value })); }} placeholder="Search receipt, landlord…" className="h-[20px] w-36 border border-slate-200 bg-white pl-6 pr-1 text-[9px] outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </label>
               <AppSelect
                 value={filters.status}
@@ -533,7 +533,7 @@ const LandlordReceipts = () => {
                 ]}
                 placeholder="All Statuses"
                 clearable
-                size="sm"
+                compact
               />
               <AppSelect
                 value={filters.category}
@@ -541,7 +541,7 @@ const LandlordReceipts = () => {
                 options={CATEGORY_OPTIONS}
                 placeholder="All Categories"
                 clearable
-                size="sm"
+                compact
               />
               <AppSelect
                 value={filters.landlord}
@@ -550,16 +550,16 @@ const LandlordReceipts = () => {
                 placeholder="All Landlords"
                 searchable
                 clearable
-                size="sm"
+                compact
               />
 
-              <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-              <span className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600">{totalReceipts} receipts</span>
-              <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Posted: {formatMoney(stats.posted)}</span>
-              <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">Draft: {formatMoney(stats.draft)}</span>
-              <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-              <button type="button" onClick={loadData} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaRedoAlt /></button>
-              <button type="button" onClick={openCreateModal} disabled={!canCreate} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaPlus /> Add Receipt</button>
+              <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
+              <span className="shrink-0 border border-slate-200 bg-white px-1 py-0.5 text-[8px] font-bold text-slate-600">{totalReceipts} receipts</span>
+              <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-1 py-0.5 text-[8px] font-bold text-emerald-700">Posted: {formatMoney(stats.posted)}</span>
+              <span className="shrink-0 border border-amber-200 bg-amber-50 px-1 py-0.5 text-[8px] font-bold text-amber-700">Draft: {formatMoney(stats.draft)}</span>
+              <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
+              <button type="button" onClick={loadData} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaRedoAlt size={7} /> Refresh</button>
+              <button type="button" onClick={openCreateModal} disabled={!canCreate} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaPlus size={7} /> Add Receipt</button>
             </div>
           </div>
 

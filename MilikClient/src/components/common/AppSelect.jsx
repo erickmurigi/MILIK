@@ -37,6 +37,7 @@ const AppSelect = ({
   disabled = false,
   clearable = false,
   size = "md",
+  compact = false,
   label = "",
   required = false,
   hint = "",
@@ -189,12 +190,15 @@ const AppSelect = ({
     }
   };
 
-  const heightCls = size === "sm" ? "h-7 text-xs" : "h-9 text-sm";
+  const heightCls = compact ? "h-[20px] text-[9px]" : size === "sm" ? "h-7 text-xs" : "h-9 text-sm";
+  const roundedCls = compact ? "rounded-none" : "rounded-lg";
+  const paddingCls = compact ? "px-1.5" : "px-3";
+  const minWidthCls = compact ? "min-w-[70px]" : "min-w-[110px]";
   const hasError = Boolean(error);
   const hasWarning = !hasError && Boolean(warning);
 
   return (
-    <div className={`${label ? "w-full" : "min-w-[110px]"} ${className}`}>
+    <div className={`${label ? "w-full" : minWidthCls} ${className}`}>
       {label && (
         <label className="mb-1 block text-xs font-bold text-slate-700">
           {label}
@@ -211,7 +215,7 @@ const AppSelect = ({
         aria-haspopup="listbox"
         aria-expanded={open}
         className={[
-          "flex w-full items-center justify-between gap-2 rounded-lg border px-3 text-left transition-all",
+          `flex w-full items-center justify-between gap-1.5 ${roundedCls} border ${paddingCls} text-left transition-all`,
           heightCls,
           disabled
             ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
@@ -249,7 +253,7 @@ const AppSelect = ({
             </span>
           )}
           <FaChevronDown
-            size={10}
+            size={compact ? 7 : 10}
             className={`shrink-0 text-slate-400 transition-transform duration-150 ${
               open ? "rotate-180" : ""
             }`}
@@ -272,10 +276,12 @@ const AppSelect = ({
           <div
             id="app-select-portal"
             style={dropdownStyle}
-            className="rounded-xl border border-slate-200 bg-white shadow-2xl"
+            className={compact
+              ? "border border-slate-300 bg-white shadow-lg"
+              : "rounded-xl border border-slate-200 bg-white shadow-2xl"}
           >
             {searchable && (
-              <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-2">
+              <div className={`flex items-center gap-2 border-b border-slate-100 ${compact ? "px-2 py-1" : "px-3 py-2"}`}>
                 <FaSearch size={10} className="shrink-0 text-slate-400" />
                 <input
                   ref={searchRef}
@@ -286,7 +292,7 @@ const AppSelect = ({
                   }}
                   onKeyDown={handleListKeyDown}
                   placeholder="Search..."
-                  className="flex-1 bg-transparent text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none"
+                  className={`flex-1 bg-transparent text-slate-800 placeholder:text-slate-400 focus:outline-none ${compact ? "text-[11px]" : "text-xs"}`}
                 />
                 {search && (
                   <button
@@ -306,10 +312,10 @@ const AppSelect = ({
             <ul
               ref={listRef}
               role="listbox"
-              className="max-h-60 overflow-auto py-1"
+              className={`overflow-auto py-0.5 ${compact ? "max-h-52" : "max-h-60"}`}
             >
               {filtered.length === 0 ? (
-                <li className="px-4 py-6 text-center text-xs text-slate-400">
+                <li className={`text-center text-slate-400 ${compact ? "px-2 py-3 text-[9px]" : "px-4 py-6 text-xs"}`}>
                   {emptyMessage}
                 </li>
               ) : (
@@ -326,7 +332,7 @@ const AppSelect = ({
                       onMouseEnter={() => !opt.disabled && setHighlightedIndex(idx)}
                       onClick={() => selectOption(opt)}
                       className={[
-                        "flex flex-col px-3 py-2 text-xs transition-colors",
+                        `flex flex-col transition-colors ${compact ? "px-1.5 py-0.5 text-[9px]" : "px-3 py-2 text-xs"}`,
                         opt.disabled
                           ? "cursor-not-allowed opacity-40"
                           : "cursor-pointer",
@@ -347,7 +353,7 @@ const AppSelect = ({
                         {opt.label}
                       </span>
                       {opt.description && (
-                        <span className="mt-0.5 text-[11px] leading-snug text-slate-500">
+                        <span className={`leading-snug text-slate-500 ${compact ? "mt-0 text-[8px]" : "mt-0.5 text-[11px]"}`}>
                           {opt.description}
                         </span>
                       )}

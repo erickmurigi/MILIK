@@ -1971,81 +1971,89 @@ const postInvoiceNoteJournal = async ({ note, createdBy, sourceInvoice = null, p
   const _noteLabel = note.noteType === "CREDIT_NOTE" ? "Credit Note" : "Debit Note";
   const _srcRef = note.sourceInvoiceNumber ? ` — against ${note.sourceInvoiceNumber}` : "";
 
-  const receivableLeg = await postEntry({
-    business: note.business,
-    property: note.property,
-    landlord: note.landlord,
-    tenant: note.tenant,
-    unit: note.unit,
-    sourceTransactionType: TENANT_INVOICE_NOTE_SOURCE_TYPE,
-    sourceTransactionId: String(note._id),
-    transactionDate: txDate,
-    statementPeriodStart: start,
-    statementPeriodEnd: end,
-    category: ledgerCategory,
-    amount,
-    direction: isCreditNote ? "credit" : "debit",
-    debit: isCreditNote ? 0 : amount,
-    credit: isCreditNote ? amount : 0,
-    accountId: receivableAccount._id,
-    journalGroupId,
-    payer: "tenant",
-    receiver: "manager",
-    notes: `${_noteLabel}${_srcRef} (${note.noteNumber})`,
-    metadata: {
-      noteType: note.noteType,
-      noteNumber: note.noteNumber,
-      sourceInvoiceId: sourceInvoice?._id ? String(sourceInvoice._id) : null,
-      sourceInvoiceNumber: sourceInvoice?.invoiceNumber || null,
-      postingRole: "tenant_receivable",
-      ...(note.metadata || {}),
-    },
-    createdBy,
-    approvedBy: createdBy,
-    approvedAt: new Date(),
-    status: "approved",
-  });
+  let receivableLeg;
+  try {
+    receivableLeg = await postEntry({
+      business: note.business,
+      property: note.property,
+      landlord: note.landlord,
+      tenant: note.tenant,
+      unit: note.unit,
+      sourceTransactionType: TENANT_INVOICE_NOTE_SOURCE_TYPE,
+      sourceTransactionId: String(note._id),
+      transactionDate: txDate,
+      statementPeriodStart: start,
+      statementPeriodEnd: end,
+      category: ledgerCategory,
+      amount,
+      direction: isCreditNote ? "credit" : "debit",
+      debit: isCreditNote ? 0 : amount,
+      credit: isCreditNote ? amount : 0,
+      accountId: receivableAccount._id,
+      journalGroupId,
+      payer: "tenant",
+      receiver: "manager",
+      notes: `${_noteLabel}${_srcRef} (${note.noteNumber})`,
+      metadata: {
+        noteType: note.noteType,
+        noteNumber: note.noteNumber,
+        sourceInvoiceId: sourceInvoice?._id ? String(sourceInvoice._id) : null,
+        sourceInvoiceNumber: sourceInvoice?.invoiceNumber || null,
+        postingRole: "tenant_receivable",
+        ...(note.metadata || {}),
+      },
+      createdBy,
+      approvedBy: createdBy,
+      approvedAt: new Date(),
+      status: "approved",
+    });
 
-  const offsetLeg = await postEntry({
-    business: note.business,
-    property: note.property,
-    landlord: note.landlord,
-    tenant: note.tenant,
-    unit: note.unit,
-    sourceTransactionType: TENANT_INVOICE_NOTE_SOURCE_TYPE,
-    sourceTransactionId: String(note._id),
-    transactionDate: txDate,
-    statementPeriodStart: start,
-    statementPeriodEnd: end,
-    category: ledgerCategory,
-    amount,
-    direction: isCreditNote ? "debit" : "credit",
-    debit: isCreditNote ? amount : 0,
-    credit: isCreditNote ? 0 : amount,
-    accountId: postingAccount._id,
-    journalGroupId,
-    payer: "tenant",
-    receiver: "manager",
-    notes: `${_noteLabel} Offset${_srcRef} (${note.noteNumber})`,
-    metadata: {
-      noteType: note.noteType,
-      noteNumber: note.noteNumber,
-      sourceInvoiceId: sourceInvoice?._id ? String(sourceInvoice._id) : null,
-      sourceInvoiceNumber: sourceInvoice?.invoiceNumber || null,
-      postingRole: "income_or_charge",
-      offsetOfEntryId: String(receivableLeg._id),
-      ...(note.metadata || {}),
-    },
-    createdBy,
-    approvedBy: createdBy,
-    approvedAt: new Date(),
-    status: "approved",
-  });
+    const offsetLeg = await postEntry({
+      business: note.business,
+      property: note.property,
+      landlord: note.landlord,
+      tenant: note.tenant,
+      unit: note.unit,
+      sourceTransactionType: TENANT_INVOICE_NOTE_SOURCE_TYPE,
+      sourceTransactionId: String(note._id),
+      transactionDate: txDate,
+      statementPeriodStart: start,
+      statementPeriodEnd: end,
+      category: ledgerCategory,
+      amount,
+      direction: isCreditNote ? "debit" : "credit",
+      debit: isCreditNote ? amount : 0,
+      credit: isCreditNote ? 0 : amount,
+      accountId: postingAccount._id,
+      journalGroupId,
+      payer: "tenant",
+      receiver: "manager",
+      notes: `${_noteLabel} Offset${_srcRef} (${note.noteNumber})`,
+      metadata: {
+        noteType: note.noteType,
+        noteNumber: note.noteNumber,
+        sourceInvoiceId: sourceInvoice?._id ? String(sourceInvoice._id) : null,
+        sourceInvoiceNumber: sourceInvoice?.invoiceNumber || null,
+        postingRole: "income_or_charge",
+        offsetOfEntryId: String(receivableLeg._id),
+        ...(note.metadata || {}),
+      },
+      createdBy,
+      approvedBy: createdBy,
+      approvedAt: new Date(),
+      status: "approved",
+    });
 
-  return {
-    journalGroupId,
-    entries: [receivableLeg, offsetLeg],
-  };
+    return {
+      journalGroupId,
+      entries: [receivableLeg, offsetLeg],
+    };
+  } catch (error) {
+    if (receivableLeg?._id) {
+      await postReversal({ entryId: receivableLeg._id, reason: `Auto-reversal: GL balance protection for failed note journal ${note.noteNumber}`, userId: createdBy }).catch(() => null);
+    }
+    throw error;
+  }
 };
 
 export const getTenantInvoiceNoteChargeTypes = async (req, res, next) => {

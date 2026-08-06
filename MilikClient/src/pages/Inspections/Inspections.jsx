@@ -414,16 +414,16 @@ const Inspections = () => {
         </div>
 
         {/* Filter bar */}
-        <div className="shrink-0 flex flex-wrap items-center gap-1.5 border-b border-slate-200 bg-white px-3 py-2">
-          <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search inspections…" className="h-7 w-48 shrink-0 border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:border-[#0B3B2E]" />
-          <AppSelect value={statusFilter} onChange={(v) => setStatusFilter(v ?? "")} options={STATUS_OPTIONS} placeholder="All statuses" clearable size="sm" />
-          <AppSelect value={typeFilter} onChange={(v) => setTypeFilter(v ?? "")} options={TYPE_OPTIONS} placeholder="All types" clearable size="sm" />
-          <button onClick={() => { setSearchTerm(""); setStatusFilter(""); setTypeFilter(""); }} className="inline-flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"><FaFilter size={9} /> Reset</button>
-          <button onClick={loadInspections} className="inline-flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50"><FaRedoAlt size={9} /></button>
-          <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-          <button onClick={exportCsv} className="inline-flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"><FaDownload size={9} /> CSV</button>
+        <div className="shrink-0 flex items-center gap-0.5 overflow-x-auto border-b border-slate-200 bg-white px-2 py-1">
+          <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search inspections…" className="h-[20px] w-40 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:border-[#0B3B2E]" />
+          <AppSelect value={statusFilter} onChange={(v) => setStatusFilter(v ?? "")} options={STATUS_OPTIONS} placeholder="All statuses" clearable compact />
+          <AppSelect value={typeFilter} onChange={(v) => setTypeFilter(v ?? "")} options={TYPE_OPTIONS} placeholder="All types" clearable compact />
+          <button onClick={() => { setSearchTerm(""); setStatusFilter(""); setTypeFilter(""); }} className="inline-flex h-[20px] items-center gap-0.5 border border-slate-200 bg-white px-1.5 text-[9px] font-semibold text-slate-600 hover:bg-slate-50"><FaFilter size={7} /> Reset</button>
+          <button onClick={loadInspections} className="inline-flex h-[20px] items-center gap-0.5 border border-slate-200 bg-white px-1.5 text-[9px] text-slate-600 hover:bg-slate-50"><FaRedoAlt size={7} /> Refresh</button>
+          <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
+          <button onClick={exportCsv} className="inline-flex h-[20px] items-center gap-0.5 border border-slate-200 bg-white px-1.5 text-[9px] font-semibold text-slate-700 hover:bg-slate-50"><FaDownload size={7} /> CSV</button>
           {canCreate && (
-            <button onClick={openCreateModal} className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-2 text-xs font-black text-white hover:bg-[#0A3127]"><FaPlus size={9} /> Schedule Inspection</button>
+            <button onClick={openCreateModal} className="inline-flex h-[20px] items-center gap-0.5 bg-[#0B3B2E] px-1.5 text-[9px] font-black text-white hover:bg-[#0A3127]"><FaPlus size={7} /> Schedule Inspection</button>
           )}
         </div>
 

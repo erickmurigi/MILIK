@@ -688,14 +688,14 @@ export default function PmsMpesaNotifications() {
         </div>
 
         {/* Filter bar */}
-        <form onSubmit={apply} className="shrink-0 flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
+        <form onSubmit={apply} className="shrink-0 flex items-center gap-0.5 overflow-x-auto border-b border-slate-200 bg-white px-2 py-1">
           <AppSelect
             value={filters.status}
             onChange={(v) => setFilters(p => ({ ...p, status: v ?? "" }))}
             options={Object.entries(STATUS_META).map(([k, v]) => ({ value: k, label: v.label }))}
             placeholder="All statuses"
             clearable
-            size="sm"
+            compact
           />
           {paybills.length > 1 && (
             <AppSelect
@@ -705,40 +705,40 @@ export default function PmsMpesaNotifications() {
               placeholder="All paybills"
               searchable
               clearable
-              size="sm"
+              compact
             />
           )}
           <input
-            className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 placeholder:font-normal focus:border-[#0B3B2E] focus:outline-none"
+            className="h-[20px] border border-slate-300 px-1.5 text-[9px] font-semibold text-slate-700 placeholder:font-normal focus:border-[#0B3B2E] focus:outline-none"
             placeholder="Account ref / tenant code"
             value={filters.ref} onChange={e => setFilters(p => ({ ...p, ref: e.target.value }))} />
           <div className="relative flex items-center">
             <FaSearch size={9} className="pointer-events-none absolute left-2 text-slate-400" />
             <input
-              className="h-8 w-48 border border-slate-300 pl-6 pr-2 text-xs font-semibold text-slate-700 placeholder:font-normal focus:border-[#0B3B2E] focus:outline-none"
+              className="h-[20px] w-40 border border-slate-300 pl-6 pr-2 text-[9px] font-semibold text-slate-700 placeholder:font-normal focus:border-[#0B3B2E] focus:outline-none"
               placeholder="Txn ID or payer name"
               value={filters.search} onChange={e => setFilters(p => ({ ...p, search: e.target.value }))} />
           </div>
           <input type="date" value={filters.dateFrom} onChange={e => setFilters(p => ({ ...p, dateFrom: e.target.value }))}
-            className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none" />
-          <span className="text-xs font-bold text-slate-400">→</span>
+            className="h-[20px] w-[5.5rem] border border-slate-300 px-1 text-[9px] font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none" />
+          <span className="text-[9px] font-bold text-slate-400">→</span>
           <input type="date" value={filters.dateTo} onChange={e => setFilters(p => ({ ...p, dateTo: e.target.value }))}
-            className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none" />
-          <button type="submit" className="inline-flex h-8 items-center gap-1.5 bg-[#FF8C00] px-4 text-xs font-bold text-white hover:bg-[#E67E00]">
-            <FaSearch size={10} /> Search
+            className="h-[20px] w-[5.5rem] border border-slate-300 px-1 text-[9px] font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none" />
+          <button type="submit" className="inline-flex h-[20px] items-center gap-0.5 bg-[#FF8C00] px-1.5 text-[9px] font-bold text-white hover:bg-[#E67E00]">
+            <FaSearch size={7} /> Search
           </button>
-          <button type="button" onClick={reset} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0A3127]">
-            <FaRedoAlt size={10} /> Reset
+          <button type="button" onClick={reset} className="inline-flex h-[20px] items-center gap-0.5 bg-[#0B3B2E] px-1.5 text-[9px] font-bold text-white hover:bg-[#0A3127]">
+            <FaRedoAlt size={7} /> Reset
           </button>
           <div className="ml-auto flex items-center gap-2">
             <button type="button" onClick={() => setShowUpload(true)}
-              className="inline-flex h-8 items-center gap-1.5 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50">
-              <FaUpload size={10} /> Import
+              className="inline-flex h-[20px] items-center gap-0.5 border border-slate-300 bg-white px-1.5 text-[9px] font-bold text-slate-700 hover:bg-slate-50">
+              <FaUpload size={7} /> Import
             </button>
             <button type="button" onClick={() => load()}
-              className="inline-flex h-8 items-center gap-1.5 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              className="inline-flex h-[20px] items-center gap-0.5 border border-slate-300 bg-white px-1.5 text-[9px] font-bold text-slate-700 hover:bg-slate-50"
               title={`Auto-refreshes in ${countdown}s`}>
-              {loading ? <FaSpinner size={10} className="animate-spin" /> : <FaRedoAlt size={10} />}
+              {loading ? <FaSpinner size={7} className="animate-spin" /> : <FaRedoAlt size={7} />}
               <span>{loading ? "Loading" : `${countdown}s`}</span>
             </button>
           </div>

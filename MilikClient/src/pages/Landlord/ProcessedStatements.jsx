@@ -576,17 +576,17 @@ const ProcessedStatements = () => {
         <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
           <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col overflow-hidden gap-2">
             <div className="flex-none sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
-              <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+              <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
                 {fromLedger && (
-                  <button onClick={() => navigate(`/properties/${location.state.propertyId}/ledger`)} className="h-7 shrink-0 flex items-center gap-1 rounded px-2 text-xs font-semibold text-[#0B3B2E] hover:bg-[#EDF5F1]">
-                    <FaArrowLeft size={11} /> {location.state.propertyName} Ledger
+                  <button onClick={() => navigate(`/properties/${location.state.propertyId}/ledger`)} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-[#0B3B2E] hover:bg-[#EDF5F1]">
+                    <FaArrowLeft size={7} /> {location.state.propertyName} Ledger
                   </button>
                 )}
-                <button onClick={() => handleTabChange("outstanding")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "outstanding" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaHourglass /> Outstanding {activeTab === "outstanding" ? `(${pagination.total})` : ""}</button>
-                <button onClick={() => handleTabChange("recoveries")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "recoveries" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaHourglass /> Recoveries {activeTab === "recoveries" ? `(${pagination.total})` : ""}</button>
-                <button onClick={() => handleTabChange("paid")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "paid" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaCheckCircle /> Paid {activeTab === "paid" ? `(${pagination.total})` : ""}</button>
-                <button onClick={() => handleTabChange("management_fees")} className={`h-7 shrink-0 inline-flex items-center gap-1 rounded px-2.5 text-xs font-bold ${activeTab === "management_fees" ? "bg-[#FF8C00] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaDownload /> Mgmt Fees {activeTab === "management_fees" ? `(${pagination.total})` : ""}</button>
-                <input type="text" placeholder="Search landlord, property…" value={searchText} onChange={(e) => handleSearchChange(e.target.value)} onBlur={applySearch} onKeyDown={(e) => e.key === "Enter" && applySearch()} className="h-7 w-44 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                <button onClick={() => handleTabChange("outstanding")} className={`h-[20px] shrink-0 inline-flex items-center gap-0.5 px-1.5 text-[9px] font-bold ${activeTab === "outstanding" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaHourglass size={7} /> Outstanding {activeTab === "outstanding" ? `(${pagination.total})` : ""}</button>
+                <button onClick={() => handleTabChange("recoveries")} className={`h-[20px] shrink-0 inline-flex items-center gap-0.5 px-1.5 text-[9px] font-bold ${activeTab === "recoveries" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaHourglass size={7} /> Recoveries {activeTab === "recoveries" ? `(${pagination.total})` : ""}</button>
+                <button onClick={() => handleTabChange("paid")} className={`h-[20px] shrink-0 inline-flex items-center gap-0.5 px-1.5 text-[9px] font-bold ${activeTab === "paid" ? "bg-[#0B3B2E] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaCheckCircle size={7} /> Paid {activeTab === "paid" ? `(${pagination.total})` : ""}</button>
+                <button onClick={() => handleTabChange("management_fees")} className={`h-[20px] shrink-0 inline-flex items-center gap-0.5 px-1.5 text-[9px] font-bold ${activeTab === "management_fees" ? "bg-[#FF8C00] text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`}><FaDownload size={7} /> Mgmt Fees {activeTab === "management_fees" ? `(${pagination.total})` : ""}</button>
+                <input type="text" placeholder="Search landlord, property…" value={searchText} onChange={(e) => handleSearchChange(e.target.value)} onBlur={applySearch} onKeyDown={(e) => e.key === "Enter" && applySearch()} className="h-[20px] w-36 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                 <AppSelect
                   value={sortBy || null}
                   onChange={(v) => handleSortChange(v ?? "date-desc")}
@@ -594,14 +594,14 @@ const ProcessedStatements = () => {
                     { value: "date-desc", label: "Newest First" },
                     { value: "date-asc", label: "Oldest First" },
                   ]}
-                  size="sm"
+                  compact
                 />
-                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                <span className="shrink-0 rounded border border-yellow-200 bg-yellow-50 px-2 py-0.5 text-[10px] font-bold text-yellow-700">Outstanding: {activeTab === "outstanding" ? pagination.total : "—"} • {activeTab === "outstanding" ? money(stats.totalAmountUnpaid) : "—"}</span>
-                <span className="shrink-0 rounded border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-700">Recoveries: {activeTab === "recoveries" ? pagination.total : "—"} • {activeTab === "recoveries" ? money(stats.totalRecoveryAmount) : "—"}</span>
-                <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Paid: {activeTab === "paid" ? pagination.total : "—"} • {activeTab === "paid" ? money(stats.totalAmountPaid) : "—"}</span>
-                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                <button onClick={() => navigate(-1)} className="h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white bg-slate-600 hover:bg-slate-700"><FaArrowLeft /> Back</button>
+                <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
+                <span className="shrink-0 border border-yellow-200 bg-yellow-50 px-1 py-0.5 text-[8px] font-bold text-yellow-700">Outstanding: {activeTab === "outstanding" ? pagination.total : "—"} • {activeTab === "outstanding" ? money(stats.totalAmountUnpaid) : "—"}</span>
+                <span className="shrink-0 border border-red-200 bg-red-50 px-1 py-0.5 text-[8px] font-bold text-red-700">Recoveries: {activeTab === "recoveries" ? pagination.total : "—"} • {activeTab === "recoveries" ? money(stats.totalRecoveryAmount) : "—"}</span>
+                <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-1 py-0.5 text-[8px] font-bold text-emerald-700">Paid: {activeTab === "paid" ? pagination.total : "—"} • {activeTab === "paid" ? money(stats.totalAmountPaid) : "—"}</span>
+                <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
+                <button onClick={() => navigate(-1)} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white bg-slate-600 hover:bg-slate-700"><FaArrowLeft size={7} /> Back</button>
 
               </div>
             </div>

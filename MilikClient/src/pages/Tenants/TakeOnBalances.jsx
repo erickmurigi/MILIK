@@ -964,10 +964,10 @@ const TakeOnBalances = () => {
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
-              <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-                <span className="shrink-0 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">Rows <span className="text-slate-900 normal-case">{filteredRows.length}</span></span>
-                <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-                <input value={draftFilters.search} onChange={setFilter("search")} placeholder="Search…" className="h-7 w-40 shrink-0 rounded border border-slate-200 bg-white px-2 text-[10px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
+                <span className="shrink-0 border border-slate-200 bg-white px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide text-slate-500">Rows <span className="text-slate-900 normal-case">{filteredRows.length}</span></span>
+                <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
+                <input value={draftFilters.search} onChange={setFilter("search")} placeholder="Search…" className="h-[20px] w-32 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
                 <AppSelect
                   value={draftFilters.propertyId}
                   onChange={(v) => setDraftFilters((prev) => ({ ...prev, propertyId: v ?? "", tenant: "" }))}
@@ -975,7 +975,7 @@ const TakeOnBalances = () => {
                   placeholder="Property"
                   searchable
                   clearable
-                  size="sm"
+                  compact
                 />
                 <AppSelect
                   value={draftFilters.tenant}
@@ -984,7 +984,7 @@ const TakeOnBalances = () => {
                   placeholder="Tenant"
                   searchable
                   clearable
-                  size="sm"
+                  compact
                 />
                 <AppSelect
                   value={draftFilters.billItem}
@@ -992,7 +992,7 @@ const TakeOnBalances = () => {
                   options={filterBillItemOptions}
                   placeholder="Bill Item"
                   clearable
-                  size="sm"
+                  compact
                 />
                 <AppSelect
                   value={draftFilters.type}
@@ -1003,7 +1003,7 @@ const TakeOnBalances = () => {
                   ]}
                   placeholder="Type"
                   clearable
-                  size="sm"
+                  compact
                 />
                 <AppSelect
                   value={draftFilters.status}
@@ -1015,12 +1015,12 @@ const TakeOnBalances = () => {
                   ]}
                   placeholder="Status"
                   clearable
-                  size="sm"
+                  compact
                 />
-                <button type="button" onClick={() => setAppliedFilters(draftFilters)} className={`h-7 shrink-0 rounded px-2 text-[10px] font-semibold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}>Apply</button>
-                <button type="button" onClick={() => { setDraftFilters(emptyFilters); setAppliedFilters(emptyFilters); }} className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-700 shadow-sm hover:bg-slate-100">Reset</button>
-                <button type="button" onClick={loadRows} className={`h-7 shrink-0 flex items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-700 shadow-sm hover:bg-slate-50`}><FaRedoAlt size={9} /></button>
-                <button type="button" onClick={openCreateModal} className={`h-7 shrink-0 flex items-center gap-1 rounded px-2 text-[10px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaPlus size={9} /> Add Take-On</button>
+                <button type="button" onClick={() => setAppliedFilters(draftFilters)} className={`h-[20px] shrink-0 px-1.5 text-[9px] font-semibold text-white shadow-sm ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}>Apply</button>
+                <button type="button" onClick={() => { setDraftFilters(emptyFilters); setAppliedFilters(emptyFilters); }} className="h-[20px] shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] font-semibold text-slate-700 shadow-sm hover:bg-slate-100">Reset</button>
+                <button type="button" onClick={loadRows} className={`h-[20px] shrink-0 flex items-center gap-0.5 border border-slate-200 bg-white px-1.5 text-[9px] font-bold text-slate-700 shadow-sm hover:bg-slate-50`}><FaRedoAlt size={7} /> Refresh</button>
+                <button type="button" onClick={openCreateModal} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaPlus size={7} /> Add Take-On</button>
               </div>
             </div>
 

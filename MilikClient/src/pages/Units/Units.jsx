@@ -825,7 +825,7 @@ const Units = () => {
       <div className="flex flex-col h-full min-h-0 p-0 bg-gray-50 overflow-hidden">
         {/* Toolbar — single scrollable row */}
         <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-          <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+          <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
             <AppSelect
               value={draftFilters.property === "any" ? "" : draftFilters.property}
               onChange={(v) => setDraftFilters((p) => ({ ...p, property: v ?? "any" }))}
@@ -833,7 +833,7 @@ const Units = () => {
               placeholder="Property"
               searchable
               clearable
-              size="sm"
+              compact
             />
 
             <AppSelect
@@ -849,7 +849,7 @@ const Units = () => {
               ]}
               placeholder="All Statuses"
               clearable
-              size="sm"
+              compact
             />
 
             <AppSelect
@@ -859,34 +859,34 @@ const Units = () => {
               placeholder="Unit Type"
               searchable
               clearable
-              size="sm"
+              compact
             />
 
-            <div className="h-4 w-px shrink-0 bg-slate-200" />
+            <div className="h-3 w-px shrink-0 bg-slate-200" />
 
             <input value={draftFilters.unitNo} onChange={(e) => setDraftFilters((p) => ({ ...p, unitNo: normalizeUppercaseInput(e.target.value) }))}
               onKeyDown={onFilterEnter} placeholder="Unit No."
-              className="h-7 w-24 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              className="h-[20px] w-20 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
             <input value={draftFilters.tenant} onChange={(e) => setDraftFilters((p) => ({ ...p, tenant: normalizeUppercaseInput(e.target.value) }))}
               onKeyDown={onFilterEnter} placeholder="Tenant"
-              className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+              className="h-[20px] w-24 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
 
-            <div className="h-4 w-px shrink-0 bg-slate-200" />
+            <div className="h-3 w-px shrink-0 bg-slate-200" />
 
-            <button onClick={applySearch} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#FF8C00] px-2.5 text-xs font-semibold text-white hover:bg-[#e67e00]">
-              <FaSearch size={9} /> Search
+            <button onClick={applySearch} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#FF8C00] px-2.5 text-[9px] font-semibold text-white hover:bg-[#e67e00]">
+              <FaSearch size={7} /> Search
             </button>
-            <button onClick={resetFilters} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]">
-              <FaRedoAlt size={9} /> Reset
+            <button onClick={resetFilters} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#0B3B2E] px-2.5 text-[9px] font-semibold text-white hover:bg-[#0A3127]">
+              <FaRedoAlt size={7} /> Reset
             </button>
             <button onClick={allUnitsExpanded ? collapseAllUnits : expandAllUnits} disabled={currentUnits.length === 0}
-              className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${currentUnits.length > 0 ? allUnitsExpanded ? "bg-orange-600 hover:bg-orange-700" : "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
-              {allUnitsExpanded ? <><FaCompressAlt size={9} /> Collapse</> : <><FaExpandAlt size={9} /> Expand</>}
+              className={`h-[20px] shrink-0 flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${currentUnits.length > 0 ? allUnitsExpanded ? "bg-orange-600 hover:bg-orange-700" : "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
+              {allUnitsExpanded ? <><FaCompressAlt size={7} /> Collapse</> : <><FaExpandAlt size={7} /> Expand</>}
             </button>
             {canUpdateUnit && (
               <button disabled={!canEdit} onClick={() => { const id = selectedUnits[0]; if (id) navigate(`/units/${id}`); }}
-                className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${canEdit ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
-                <FaEdit size={9} /> Edit
+                className={`h-[20px] shrink-0 flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${canEdit ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
+                <FaEdit size={7} /> Edit
               </button>
             )}
 
@@ -902,8 +902,8 @@ const Units = () => {
                     setActionMenuOpen((v) => !v);
                   }}
                   disabled={selectedCount === 0}
-                  className={`h-7 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedCount > 0 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
-                  <FaArchive size={9} /> Actions <FaChevronDown size={8} />
+                  className={`h-[20px] flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${selectedCount > 0 ? "bg-[#0B3B2E] hover:bg-[#0A3127]" : "bg-gray-400 cursor-not-allowed"}`}>
+                  <FaArchive size={7} /> Actions <FaChevronDown size={8} />
                 </button>
                 {actionMenuOpen && selectedCount > 0 && (
                   <div
@@ -925,26 +925,26 @@ const Units = () => {
 
             {canDeleteUnit && (
               <button onClick={deleteSelected} disabled={selectedCount === 0 || selectedDeletableUnits.length === 0}
-                className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-semibold text-white ${selectedCount > 0 && selectedDeletableUnits.length > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}>
-                <FaTrash size={9} /> Delete{selectedCount > 0 ? ` (${selectedCount})` : ""}
+                className={`h-[20px] shrink-0 flex items-center gap-0.5 px-2.5 text-[9px] font-semibold text-white ${selectedCount > 0 && selectedDeletableUnits.length > 0 ? "bg-red-600 hover:bg-red-700" : "bg-gray-400 cursor-not-allowed"}`}>
+                <FaTrash size={7} /> Delete{selectedCount > 0 ? ` (${selectedCount})` : ""}
               </button>
             )}
             {canCreateUnit && (
-              <button onClick={() => navigate("/units/new")} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]">
-                <FaPlus size={9} /> Add
+              <button onClick={() => navigate("/units/new")} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#0B3B2E] px-2.5 text-[9px] font-semibold text-white hover:bg-[#0A3127]">
+                <FaPlus size={7} /> Add
               </button>
             )}
-            <button onClick={handlePrintList} className="h-7 shrink-0 flex items-center gap-1 rounded bg-slate-700 px-2.5 text-xs font-semibold text-white hover:bg-slate-800">
-              <FaPrint size={9} /> Print
+            <button onClick={handlePrintList} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-slate-700 px-2.5 text-[9px] font-semibold text-white hover:bg-slate-800">
+              <FaPrint size={7} /> Print
             </button>
-            <button onClick={handleDownloadTemplate} className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127]">
-              <FaDownload size={9} /> Template
+            <button onClick={handleDownloadTemplate} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#0B3B2E] px-2.5 text-[9px] font-semibold text-white hover:bg-[#0A3127]">
+              <FaDownload size={7} /> Template
             </button>
-            <button onClick={() => setShowImportModal(true)} className="h-7 shrink-0 flex items-center gap-1 rounded bg-orange-600 px-2.5 text-xs font-semibold text-white hover:bg-orange-700">
-              <FaFileExport size={9} /> Import
+            <button onClick={() => setShowImportModal(true)} className="h-[20px] shrink-0 flex items-center gap-0.5 bg-orange-600 px-2.5 text-[9px] font-semibold text-white hover:bg-orange-700">
+              <FaFileExport size={7} /> Import
             </button>
-            <button onClick={handleExportToExcel} className="h-7 shrink-0 flex items-center gap-1 rounded border border-gray-300 px-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50">
-              <FaFileExport size={9} /> Export
+            <button onClick={handleExportToExcel} className="h-[20px] shrink-0 flex items-center gap-0.5 border border-gray-300 px-2.5 text-[9px] font-semibold text-gray-600 hover:bg-gray-50">
+              <FaFileExport size={7} /> Export
             </button>
           </div>
         </div>

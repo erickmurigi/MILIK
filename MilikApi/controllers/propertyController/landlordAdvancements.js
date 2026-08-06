@@ -396,15 +396,15 @@ const computeCurrentLandlordPayable = async ({ businessId, propertyId, landlordI
     },
     {
       $group: {
-        _id: null,
-        totalDebit: { $sum: { $ifNull: ["$debit", 0] } },
-        totalCredit: { $sum: { $ifNull: ["$credit", 0] } },
+        _id: "$direction",
+        total: { $sum: "$amount" },
       },
     },
   ]);
 
-  const totals = grouped[0] || { totalDebit: 0, totalCredit: 0 };
-  return round2(Number(totals.totalCredit || 0) - Number(totals.totalDebit || 0));
+  const debitTotal = grouped.find((g) => g._id === "debit")?.total || 0;
+  const creditTotal = grouped.find((g) => g._id === "credit")?.total || 0;
+  return round2(Number(creditTotal) - Number(debitTotal));
 };
 
 const ensureAgainstPayableAmountIsSafe = async ({ businessId, propertyId, landlordId, amount }) => {
@@ -632,62 +632,70 @@ const postDisbursementIfMissing = async ({ row, actorUserId, paymentMethod, cash
 
   const statementWindow = computeStatementWindowForDisbursement(row);
 
-  const primaryEntry = await postEntry({
-    business: accountingContext.businessId,
-    property: accountingContext.propertyId,
-    landlord: accountingContext.landlordId,
-    sourceTransactionType: "advance",
-    sourceTransactionId: String(row._id),
-    transactionDate: row.disbursementDate,
-    statementPeriodStart: statementWindow.periodStart,
-    statementPeriodEnd: statementWindow.periodEnd,
-    category: primaryCategory,
-    amount: round2(row.amount || 0),
-    direction: primaryDirection,
-    accountId: primaryAccount._id,
-    journalGroupId,
-    payer: "manager",
-    receiver: "landlord",
-    notes,
-    metadata: primaryMetadata,
-    createdBy: actorUserId,
-    approvedBy: actorUserId,
-    approvedAt: row.disbursementDate,
-    status: "approved",
-  });
+  let primaryEntry;
+  try {
+    primaryEntry = await postEntry({
+      business: accountingContext.businessId,
+      property: accountingContext.propertyId,
+      landlord: accountingContext.landlordId,
+      sourceTransactionType: "advance",
+      sourceTransactionId: String(row._id),
+      transactionDate: row.disbursementDate,
+      statementPeriodStart: statementWindow.periodStart,
+      statementPeriodEnd: statementWindow.periodEnd,
+      category: primaryCategory,
+      amount: round2(row.amount || 0),
+      direction: primaryDirection,
+      accountId: primaryAccount._id,
+      journalGroupId,
+      payer: "manager",
+      receiver: "landlord",
+      notes,
+      metadata: primaryMetadata,
+      createdBy: actorUserId,
+      approvedBy: actorUserId,
+      approvedAt: row.disbursementDate,
+      status: "approved",
+    });
 
-  const offsetEntry = await postEntry({
-    business: accountingContext.businessId,
-    property: accountingContext.propertyId,
-    landlord: accountingContext.landlordId,
-    sourceTransactionType: "advance",
-    sourceTransactionId: String(row._id),
-    transactionDate: row.disbursementDate,
-    statementPeriodStart: statementWindow.periodStart,
-    statementPeriodEnd: statementWindow.periodEnd,
-    category: primaryCategory,
-    amount: round2(row.amount || 0),
-    direction: "credit",
-    accountId: cashbookAccount._id,
-    journalGroupId,
-    payer: "manager",
-    receiver: "system",
-    notes,
-    metadata: {
-      advancementId: String(row._id),
-      referenceNo: row.referenceNo,
-      advanceType,
-      postingKind: "landlord_advancement_cashbook_offset",
-      includeInLandlordStatement: false,
-      paymentMethod,
-      cashbookId: String(cashbookAccount._id),
-      cashbookName: cashbookAccount.name || cashbookAccount.accountName || cashbookAccount.code || "",
-    },
-    createdBy: actorUserId,
-    approvedBy: actorUserId,
-    approvedAt: row.disbursementDate,
-    status: "approved",
-  });
+    await postEntry({
+      business: accountingContext.businessId,
+      property: accountingContext.propertyId,
+      landlord: accountingContext.landlordId,
+      sourceTransactionType: "advance",
+      sourceTransactionId: String(row._id),
+      transactionDate: row.disbursementDate,
+      statementPeriodStart: statementWindow.periodStart,
+      statementPeriodEnd: statementWindow.periodEnd,
+      category: primaryCategory,
+      amount: round2(row.amount || 0),
+      direction: "credit",
+      accountId: cashbookAccount._id,
+      journalGroupId,
+      payer: "manager",
+      receiver: "system",
+      notes,
+      metadata: {
+        advancementId: String(row._id),
+        referenceNo: row.referenceNo,
+        advanceType,
+        postingKind: "landlord_advancement_cashbook_offset",
+        includeInLandlordStatement: false,
+        paymentMethod,
+        cashbookId: String(cashbookAccount._id),
+        cashbookName: cashbookAccount.name || cashbookAccount.accountName || cashbookAccount.code || "",
+      },
+      createdBy: actorUserId,
+      approvedBy: actorUserId,
+      approvedAt: row.disbursementDate,
+      status: "approved",
+    });
+  } catch (error) {
+    if (primaryEntry?._id) {
+      await postReversal({ entryId: primaryEntry._id, reason: `Auto-reversal: GL balance protection for advancement disbursement ${row.referenceNo || row._id}`, userId: actorUserId }).catch(() => null);
+    }
+    throw error;
+  }
 
   row.disbursementJournalGroupId = journalGroupId;
   row.disbursementEntryId = primaryEntry._id;
@@ -752,8 +760,15 @@ const reverseDisbursementIfPossible = async ({ row, businessId, actorUserId, rea
     return reversal;
   };
 
-  await reverseOne(row.disbursementEntryId);
-  await reverseOne(row.disbursementOffsetEntryId);
+  const firstReversal = await reverseOne(row.disbursementEntryId);
+  try {
+    await reverseOne(row.disbursementOffsetEntryId);
+  } catch (e) {
+    if (firstReversal?.reversalEntry?._id) {
+      await postReversal({ entryId: firstReversal.reversalEntry._id, reason: `Auto-reversal: undo partial ${reason}`, userId: actorUserId }).catch(() => null);
+    }
+    throw e;
+  }
 
   if (touchedAccountIds.size > 0) {
     await aggregateChartOfAccountBalances(String(row.business), Array.from(touchedAccountIds));
@@ -1394,70 +1409,78 @@ export const processLandlordAdvancementRecovery = async (req, res, next) => {
     const sourceTransactionId = `${row._id}:${selectedPeriod.periodKey}`;
     const notes = String(req.body?.note || row.narration || row.title || "Recoverable landlord advance recovery").trim();
 
-    const visibleEntry = await postEntry({
-      business: accountingContext.businessId,
-      property: accountingContext.propertyId,
-      landlord: accountingContext.landlordId,
-      sourceTransactionType: "advance",
-      sourceTransactionId,
-      transactionDate: processedAt,
-      statementPeriodStart: selectedPeriod.periodStart,
-      statementPeriodEnd: selectedPeriod.periodEnd,
-      category: "ADJUSTMENT",
-      amount: round2(amount),
-      direction: "debit",
-      accountId: remittancePayableAccount._id,
-      journalGroupId,
-      payer: "manager",
-      receiver: "landlord",
-      notes,
-      metadata: {
-        includeInLandlordStatement: true,
-        statementBucket: "advance_recovery",
-        advancementId: String(row._id),
-        referenceNo: row.referenceNo,
-        advanceType,
-        periodKey: selectedPeriod.periodKey,
-        periodLabel: selectedPeriod.periodLabel,
-        postingKind: "landlord_advancement_recovery",
-      },
-      createdBy: actorUserId,
-      approvedBy: actorUserId,
-      approvedAt: processedAt,
-      status: "approved",
-    });
+    let visibleEntry, offsetEntry;
+    try {
+      visibleEntry = await postEntry({
+        business: accountingContext.businessId,
+        property: accountingContext.propertyId,
+        landlord: accountingContext.landlordId,
+        sourceTransactionType: "advance",
+        sourceTransactionId,
+        transactionDate: processedAt,
+        statementPeriodStart: selectedPeriod.periodStart,
+        statementPeriodEnd: selectedPeriod.periodEnd,
+        category: "ADJUSTMENT",
+        amount: round2(amount),
+        direction: "debit",
+        accountId: remittancePayableAccount._id,
+        journalGroupId,
+        payer: "manager",
+        receiver: "landlord",
+        notes,
+        metadata: {
+          includeInLandlordStatement: true,
+          statementBucket: "advance_recovery",
+          advancementId: String(row._id),
+          referenceNo: row.referenceNo,
+          advanceType,
+          periodKey: selectedPeriod.periodKey,
+          periodLabel: selectedPeriod.periodLabel,
+          postingKind: "landlord_advancement_recovery",
+        },
+        createdBy: actorUserId,
+        approvedBy: actorUserId,
+        approvedAt: processedAt,
+        status: "approved",
+      });
 
-    const offsetEntry = await postEntry({
-      business: accountingContext.businessId,
-      property: accountingContext.propertyId,
-      landlord: accountingContext.landlordId,
-      sourceTransactionType: "advance",
-      sourceTransactionId,
-      transactionDate: processedAt,
-      statementPeriodStart: selectedPeriod.periodStart,
-      statementPeriodEnd: selectedPeriod.periodEnd,
-      category: "ADVANCE_RECOVERY",
-      amount: round2(amount),
-      direction: "credit",
-      accountId: advanceRecoverableAccount._id,
-      journalGroupId,
-      payer: "manager",
-      receiver: "system",
-      notes,
-      metadata: {
-        includeInLandlordStatement: false,
-        advancementId: String(row._id),
-        referenceNo: row.referenceNo,
-        advanceType,
-        periodKey: selectedPeriod.periodKey,
-        periodLabel: selectedPeriod.periodLabel,
-        postingKind: "landlord_advancement_recoverable_offset",
-      },
-      createdBy: actorUserId,
-      approvedBy: actorUserId,
-      approvedAt: processedAt,
-      status: "approved",
-    });
+      offsetEntry = await postEntry({
+        business: accountingContext.businessId,
+        property: accountingContext.propertyId,
+        landlord: accountingContext.landlordId,
+        sourceTransactionType: "advance",
+        sourceTransactionId,
+        transactionDate: processedAt,
+        statementPeriodStart: selectedPeriod.periodStart,
+        statementPeriodEnd: selectedPeriod.periodEnd,
+        category: "ADVANCE_RECOVERY",
+        amount: round2(amount),
+        direction: "credit",
+        accountId: advanceRecoverableAccount._id,
+        journalGroupId,
+        payer: "manager",
+        receiver: "system",
+        notes,
+        metadata: {
+          includeInLandlordStatement: false,
+          advancementId: String(row._id),
+          referenceNo: row.referenceNo,
+          advanceType,
+          periodKey: selectedPeriod.periodKey,
+          periodLabel: selectedPeriod.periodLabel,
+          postingKind: "landlord_advancement_recoverable_offset",
+        },
+        createdBy: actorUserId,
+        approvedBy: actorUserId,
+        approvedAt: processedAt,
+        status: "approved",
+      });
+    } catch (error) {
+      if (visibleEntry?._id) {
+        await postReversal({ entryId: visibleEntry._id, reason: `Auto-reversal: GL balance protection for advancement recovery ${row.referenceNo || row._id}`, userId: actorUserId }).catch(() => null);
+      }
+      throw error;
+    }
 
     row.recoveryHistory.unshift({
       processedAt,
@@ -1554,8 +1577,15 @@ export const cancelLandlordAdvancementRecovery = async (req, res, next) => {
       return reversal;
     };
 
-    await reverseOne(recoveryRow.visibleStatementEntryId);
-    await reverseOne(recoveryRow.offsetEntryId);
+    const firstRecoveryReversal = await reverseOne(recoveryRow.visibleStatementEntryId);
+    try {
+      await reverseOne(recoveryRow.offsetEntryId);
+    } catch (e) {
+      if (firstRecoveryReversal?.reversalEntry?._id) {
+        await postReversal({ entryId: firstRecoveryReversal.reversalEntry._id, reason: `Auto-reversal: undo partial ${reason}`, userId: actorUserId }).catch(() => null);
+      }
+      throw e;
+    }
 
     if (touchedAccountIds.size > 0) {
       await aggregateChartOfAccountBalances(String(row.business), Array.from(touchedAccountIds));

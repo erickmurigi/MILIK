@@ -344,8 +344,9 @@ export const remitVat = async (req, res, next) => {
       touchedAccountIds.push(cashbookAccountId);
 
     } catch (glErr) {
-      // GL posting failed — delete the orphaned TaxRemittance to keep state consistent
+      // GL posting failed — delete the orphaned TaxRemittance and any partial GL entries
       await TaxRemittance.deleteOne({ _id: remittance._id }).catch(() => {});
+      await FinancialLedgerEntry.deleteMany({ sourceTransactionType: "tax_remittance", sourceTransactionId: String(remittance._id) }).catch(() => {});
       throw glErr;
     }
 

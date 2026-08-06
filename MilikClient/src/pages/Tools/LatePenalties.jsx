@@ -690,29 +690,29 @@ const LatePenalties = () => {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-100 via-slate-50 to-white p-2 md:p-3">
         <div className="mx-auto flex w-full max-w-none min-h-0 flex-1 flex-col gap-2">
           <div className={`${pageShellClass} flex-shrink-0`}>
-            <div className="flex items-center gap-1.5 overflow-x-auto border-b border-slate-200 bg-white px-2 py-1.5 shadow-sm">
+            <div className="flex items-center gap-0.5 overflow-x-auto border-b border-slate-200 bg-white px-2 py-1 shadow-sm">
               <button
                 type="button"
                 onClick={() => { setWorkspaceView("processed_penalties"); setSelectedBatchRows({}); }}
-                className={`h-7 shrink-0 flex items-center rounded border px-2.5 text-xs font-bold transition ${pillTabClass(workspaceView === "processed_penalties", "green")}`}
+                className={`h-[20px] shrink-0 flex items-center border px-1.5 text-[9px] font-bold transition ${pillTabClass(workspaceView === "processed_penalties", "green")}`}
               >
                 Processed Penalties
               </button>
               <button
                 type="button"
                 onClick={() => { setWorkspaceView("processed_batches"); setSelectedBatchRows({}); }}
-                className={`h-7 shrink-0 flex items-center rounded border px-2.5 text-xs font-bold transition ${pillTabClass(workspaceView === "processed_batches", "slate")}`}
+                className={`h-[20px] shrink-0 flex items-center border px-1.5 text-[9px] font-bold transition ${pillTabClass(workspaceView === "processed_batches", "slate")}`}
               >
                 Processed Batches
               </button>
               <button
                 type="button"
                 onClick={() => { setWorkspaceView("rules"); setSelectedBatchRows({}); }}
-                className={`h-7 shrink-0 flex items-center rounded border px-2.5 text-xs font-bold transition ${pillTabClass(workspaceView === "rules", "orange")}`}
+                className={`h-[20px] shrink-0 flex items-center border px-1.5 text-[9px] font-bold transition ${pillTabClass(workspaceView === "rules", "orange")}`}
               >
                 Rules / Preview / Process
               </button>
-              <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+              <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
               {[
                 { label: "Processed", value: processedPenaltyStats.totalRows, accent: "text-slate-900" },
                 { label: "Active", value: processedPenaltyStats.activeRows, accent: "text-emerald-700" },
@@ -720,17 +720,17 @@ const LatePenalties = () => {
                 { label: "Deleted", value: processedPenaltyStats.deletedRows, accent: "text-rose-700" },
                 { label: "Amount", value: formatCurrency(processedPenaltyStats.activeAmount), accent: "text-slate-900" },
               ].map((item) => (
-                <span key={item.label} className="shrink-0 inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                <span key={item.label} className="shrink-0 inline-flex h-7 items-center gap-1 border border-slate-200 bg-white px-1 text-[8px] font-bold uppercase tracking-[0.08em] text-slate-500">
                   {item.label} <span className={`normal-case tracking-normal ${item.accent}`}>{item.value}</span>
                 </span>
               ))}
-              <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+              <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
               <button
                 type="button"
                 onClick={openNewRuleModal}
-                className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-bold text-white hover:bg-[#0A3127]"
+                className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#0B3B2E] px-1.5 text-[9px] font-bold text-white hover:bg-[#0A3127]"
               >
-                <FaPlus size={9} /> Add Rule
+                <FaPlus size={7} /> Add Rule
               </button>
             </div>
           </div>
@@ -739,12 +739,12 @@ const LatePenalties = () => {
             {workspaceView === "processed_penalties" ? (
               <>
                 <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
-                  <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+                  <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
                     <input
                       value={penaltySearch}
                       onChange={(e) => setPenaltySearch(e.target.value)}
                       placeholder="Batch, tenant, penalty invoice, property, unit"
-                      className="h-7 w-52 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
+                      className="h-[20px] w-44 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                     />
                     <AppSelect
                       value={penaltyStatusFilter !== "all" ? penaltyStatusFilter : ""}
@@ -752,7 +752,7 @@ const LatePenalties = () => {
                       options={[{ value: "processed", label: "Processed" }, { value: "reversed", label: "Reversed" }, { value: "deleted", label: "Deleted" }]}
                       placeholder="All statuses"
                       clearable
-                      size="sm"
+                      compact
                     />
                     <AppSelect
                       value={penaltyRuleFilter !== "all" ? penaltyRuleFilter : ""}
@@ -761,7 +761,7 @@ const LatePenalties = () => {
                       placeholder="All rules"
                       searchable
                       clearable
-                      size="sm"
+                      compact
                     />
                     <AppSelect
                       value={penaltyPropertyFilter !== "all" ? penaltyPropertyFilter : ""}
@@ -770,46 +770,46 @@ const LatePenalties = () => {
                       placeholder="All properties"
                       searchable
                       clearable
-                      size="sm"
+                      compact
                     />
-                    <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                    <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
                     <button
                       type="button"
                       onClick={() => runReverseForItems(selectedProcessedItemIds)}
                       disabled={processingBatchAction || selectedProcessedItemIds.length === 0}
-                      className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-bold text-white ${
+                      className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-bold text-white ${
                         selectedProcessedItemIds.length > 0 ? "bg-orange-500 hover:bg-orange-600" : "bg-slate-400 cursor-not-allowed"
                       }`}
                     >
-                      <FaCheckSquare size={9} /> Reverse Selected
+                      <FaCheckSquare size={7} /> Reverse Selected
                     </button>
                     <button
                       type="button"
                       onClick={() => runDeleteForItems(selectedProcessedItemIds)}
                       disabled={processingBatchAction || selectedProcessedItemIds.length === 0}
-                      className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-bold text-white ${
+                      className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-bold text-white ${
                         selectedProcessedItemIds.length > 0 ? "bg-rose-600 hover:bg-rose-700" : "bg-slate-400 cursor-not-allowed"
                       }`}
                     >
-                      <FaTrash size={9} /> Delete Selected
+                      <FaTrash size={7} /> Delete Selected
                     </button>
                     <button
                       type="button"
                       onClick={() => setCommunicationModal({ contextType: "penalty_invoice", recordIds: selectedProcessedItemIds, title: `Notify ${selectedProcessedItemIds.length} Tenant${selectedProcessedItemIds.length !== 1 ? "s" : ""}`, subtitle: "Send late penalty notice via SMS.", allowedChannels: ["sms", "email"], defaultChannel: "sms" })}
                       disabled={selectedProcessedItemIds.length === 0}
                       title={selectedProcessedItemIds.length === 0 ? "Select penalties to SMS tenants" : `SMS ${selectedProcessedItemIds.length} tenant${selectedProcessedItemIds.length !== 1 ? "s" : ""}`}
-                      className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-bold text-white ${selectedProcessedItemIds.length > 0 ? "bg-teal-600 hover:bg-teal-700" : "bg-slate-400 cursor-not-allowed"}`}
+                      className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-bold text-white ${selectedProcessedItemIds.length > 0 ? "bg-teal-600 hover:bg-teal-700" : "bg-slate-400 cursor-not-allowed"}`}
                     >
-                      <FaSms size={9} />
+                      <FaSms size={7} /> SMS
                     </button>
                     <button
                       type="button"
                       onClick={() => setCommunicationModal({ contextType: "penalty_invoice", recordIds: selectedProcessedItemIds, title: `Email ${selectedProcessedItemIds.length} Tenant${selectedProcessedItemIds.length !== 1 ? "s" : ""}`, subtitle: "Send late penalty notice via email.", allowedChannels: ["email"], defaultChannel: "email" })}
                       disabled={selectedProcessedItemIds.length === 0}
                       title={selectedProcessedItemIds.length === 0 ? "Select penalties to email tenants" : `Email ${selectedProcessedItemIds.length} tenant${selectedProcessedItemIds.length !== 1 ? "s" : ""}`}
-                      className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-bold text-white ${selectedProcessedItemIds.length > 0 ? "bg-blue-600 hover:bg-blue-700" : "bg-slate-400 cursor-not-allowed"}`}
+                      className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-bold text-white ${selectedProcessedItemIds.length > 0 ? "bg-blue-600 hover:bg-blue-700" : "bg-slate-400 cursor-not-allowed"}`}
                     >
-                      <FaEnvelope size={9} />
+                      <FaEnvelope size={7} /> Email
                     </button>
                   </div>
                 </div>
@@ -938,12 +938,12 @@ const LatePenalties = () => {
             {workspaceView === "processed_batches" ? (
               <>
                 <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
-                  <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+                  <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
                     <input
                       value={batchSearch}
                       onChange={(e) => setBatchSearch(e.target.value)}
                       placeholder="Batch name, rule, status"
-                      className="h-7 w-48 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
+                      className="h-[20px] w-40 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                     />
                     <AppSelect
                       value={batchStatusFilter !== "all" ? batchStatusFilter : ""}
@@ -951,9 +951,9 @@ const LatePenalties = () => {
                       options={[{ value: "processed", label: "Processed" }, { value: "partial", label: "Partial" }, { value: "failed", label: "Failed" }, { value: "reversed_ready", label: "Reversed ready" }]}
                       placeholder="All batch statuses"
                       clearable
-                      size="sm"
+                      compact
                     />
-                    <span className="shrink-0 text-xs text-slate-500">Click a row to open details.</span>
+                    <span className="shrink-0 text-[9px] text-slate-500">Click a row to open details.</span>
                   </div>
                 </div>
 
@@ -1135,7 +1135,7 @@ const LatePenalties = () => {
 
                 <div className="flex min-h-0 flex-col rounded-xl border border-slate-200 bg-white">
                   <div className="flex-none sticky top-0 z-10 border-b border-slate-200 bg-white shadow-sm">
-                    <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+                    <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
                       <AppSelect
                         value={selectedRuleId}
                         onChange={(v) => setSelectedRuleId(v ?? "")}
@@ -1143,35 +1143,35 @@ const LatePenalties = () => {
                         placeholder="Select rule"
                         searchable
                         clearable
-                        size="sm"
+                        compact
                       />
                       <input
                         type="date"
-                        className="h-7 w-28 shrink-0 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
+                        className="h-[20px] w-[5.5rem] shrink-0 border border-slate-200 bg-white px-1 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
                         value={runDate}
                         onChange={(e) => setRunDate(e.target.value)}
                       />
-                      <span className="shrink-0 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-700">
+                      <span className="shrink-0 border border-slate-200 bg-slate-50 px-1 py-0.5 text-[8px] font-bold text-slate-700">
                         {selectedCount} row(s) · {formatCurrency(selectedPenaltyAmount)}
                       </span>
-                      <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+                      <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
                       <button
                         type="button"
                         onClick={handlePreview}
                         disabled={loading}
-                        className="h-7 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2.5 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-60"
+                        className="h-[20px] shrink-0 flex items-center gap-0.5 bg-[#0B3B2E] px-1.5 text-[9px] font-bold text-white hover:bg-[#0A3127] disabled:opacity-60"
                       >
-                        <FaEye size={9} /> Preview
+                        <FaEye size={7} /> Preview
                       </button>
                       <button
                         type="button"
                         onClick={handleProcess}
                         disabled={loading || selectedCount === 0}
-                        className={`h-7 shrink-0 flex items-center gap-1 rounded px-2.5 text-xs font-bold text-white ${
+                        className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-bold text-white ${
                           selectedCount > 0 ? "bg-orange-500 hover:bg-orange-600" : "bg-slate-400 cursor-not-allowed"
                         }`}
                       >
-                        <FaCheckSquare size={9} /> Process Selected
+                        <FaCheckSquare size={7} /> Process Selected
                       </button>
                     </div>
                   </div>

@@ -758,6 +758,7 @@ const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate
   const narration = String(voucher.narration || voucher.reference || `${_voucherCategoryLabel} — ${voucher.voucherNo}`).trim();
   const amount = Math.abs(Number(voucher.amount || 0));
 
+  let debitLeg;
   try {
     const accrualBase = {
       business: accountingContext.businessId,
@@ -781,7 +782,7 @@ const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate
       status: "approved",
     };
 
-    const debitLeg = await postEntry({
+    debitLeg = await postEntry({
       ...accrualBase,
       direction: "debit",
       debit: amount,
@@ -834,6 +835,9 @@ const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate
       reused: false,
     };
   } catch (error) {
+    if (debitLeg?._id) {
+      await postReversal({ entryId: debitLeg._id, reason: `Auto-reversal: GL balance protection for voucher accrual ${voucher.voucherNo}`, userId: actorUserId }).catch(() => null);
+    }
     if (expenseRecord?._id) {
       await ExpenseProperty.findByIdAndDelete(expenseRecord._id).catch(() => null);
     }
@@ -919,78 +923,87 @@ const ensureVoucherSettlementPosting = async ({ voucher, actorUserId, paidDate =
     status: "approved",
   };
 
-  const debitLeg = await postEntry({
-    ...baseEntry,
-    amount,
-    direction: "debit",
-    accountId: liabilityAccount._id,
-    metadata: {
-      voucherNo: voucher.voucherNo,
-      voucherCategory: voucher.category,
-      postingRole: "liability_settlement",
-      includeInLandlordStatement: false,
-    },
-  });
+  let debitLeg, creditLeg, whtLeg;
+  try {
+    debitLeg = await postEntry({
+      ...baseEntry,
+      amount,
+      direction: "debit",
+      accountId: liabilityAccount._id,
+      metadata: {
+        voucherNo: voucher.voucherNo,
+        voucherCategory: voucher.category,
+        postingRole: "liability_settlement",
+        includeInLandlordStatement: false,
+      },
+    });
 
-  // Cr Cashbook — net cash paid to vendor (gross - WHT if applicable)
-  const creditLeg = await postEntry({
-    ...baseEntry,
-    amount: whtAmount > 0 ? netCashAmount : amount,
-    direction: "credit",
-    accountId: settlementAccount._id,
-    metadata: {
-      voucherNo: voucher.voucherNo,
-      voucherCategory: voucher.category,
-      postingRole: "cashbook_outflow",
-      includeInLandlordStatement: false,
-      offsetOfEntryId: String(debitLeg._id),
-    },
-  });
+    // Cr Cashbook — net cash paid to vendor (gross - WHT if applicable)
+    creditLeg = await postEntry({
+      ...baseEntry,
+      amount: whtAmount > 0 ? netCashAmount : amount,
+      direction: "credit",
+      accountId: settlementAccount._id,
+      metadata: {
+        voucherNo: voucher.voucherNo,
+        voucherCategory: voucher.category,
+        postingRole: "cashbook_outflow",
+        includeInLandlordStatement: false,
+        offsetOfEntryId: String(debitLeg._id),
+      },
+    });
 
-  // Cr WHT Payable — tax withheld from vendor
-  let whtLeg = null;
-  const touchedAccounts = [String(liabilityAccount._id), String(settlementAccount._id)];
-  if (whtAmount > 0) {
-    const whtAccount = voucher.whtAccountId
-      ? await ChartOfAccount.findById(voucher.whtAccountId).lean()
-      : await findSystemAccountByCode(String(accountingContext.businessId), "2141").catch(() => null);
+    // Cr WHT Payable — tax withheld from vendor
+    whtLeg = null;
+    const touchedAccounts = [String(liabilityAccount._id), String(settlementAccount._id)];
+    if (whtAmount > 0) {
+      const whtAccount = voucher.whtAccountId
+        ? await ChartOfAccount.findById(voucher.whtAccountId).lean()
+        : await findSystemAccountByCode(String(accountingContext.businessId), "2141").catch(() => null);
 
-    if (whtAccount) {
-      whtLeg = await postEntry({
-        ...baseEntry,
-        amount: whtAmount,
-        direction: "credit",
-        accountId: whtAccount._id,
-        metadata: {
-          voucherNo: voucher.voucherNo,
-          voucherCategory: voucher.category,
-          postingRole: "wht_payable",
-          includeInLandlordStatement: false,
-        },
-      });
-      touchedAccounts.push(String(whtAccount._id));
-    } else {
-      console.warn("[PaymentVoucher] WHT Payable account (2141) not found for business=%s — WHT leg skipped", accountingContext.businessId);
+      if (whtAccount) {
+        whtLeg = await postEntry({
+          ...baseEntry,
+          amount: whtAmount,
+          direction: "credit",
+          accountId: whtAccount._id,
+          metadata: {
+            voucherNo: voucher.voucherNo,
+            voucherCategory: voucher.category,
+            postingRole: "wht_payable",
+            includeInLandlordStatement: false,
+          },
+        });
+        touchedAccounts.push(String(whtAccount._id));
+      } else {
+        console.warn("[PaymentVoucher] WHT Payable account (2141) not found for business=%s — WHT leg skipped", accountingContext.businessId);
+      }
     }
+
+    voucher.journalGroupId = journalGroupId;
+    voucher.ledgerEntries = Array.from(new Set([
+      ...(Array.isArray(voucher.ledgerEntries) ? voucher.ledgerEntries.map((entry) => String(entry)) : []),
+      String(debitLeg._id),
+      String(creditLeg._id),
+      ...(whtLeg ? [String(whtLeg._id)] : []),
+    ]));
+    await voucher.save();
+
+    await aggregateChartOfAccountBalances(voucher.business, touchedAccounts);
+
+    return {
+      voucher,
+      entries: [debitLeg, creditLeg, ...(whtLeg ? [whtLeg] : [])],
+      journalGroupId,
+      reused: false,
+    };
+  } catch (error) {
+    const rollbackIds = [debitLeg?._id, creditLeg?._id, whtLeg?._id].filter(Boolean);
+    for (const id of rollbackIds) {
+      await postReversal({ entryId: id, reason: `Auto-reversal: GL balance protection for voucher settlement ${voucher.voucherNo}`, userId: actorUserId }).catch(() => null);
+    }
+    throw error;
   }
-
-  voucher.journalGroupId = journalGroupId;
-  voucher.ledgerEntries = Array.from(new Set([
-    ...(Array.isArray(voucher.ledgerEntries) ? voucher.ledgerEntries.map((entry) => String(entry)) : []),
-    String(debitLeg._id),
-    String(creditLeg._id),
-    ...(whtLeg ? [String(whtLeg._id)] : []),
-  ]));
-  await voucher.save();
-
-  await aggregateChartOfAccountBalances(voucher.business, touchedAccounts);
-
-  return {
-    voucher,
-    entries: [debitLeg, creditLeg, ...(whtLeg ? [whtLeg] : [])],
-    journalGroupId,
-    reused: false,
-  };
 };
 
 export const createPaymentVoucher = async (req, res, next) => {

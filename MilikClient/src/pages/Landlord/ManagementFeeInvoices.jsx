@@ -195,14 +195,14 @@ const ManagementFeeInvoices = () => {
               )}
             </div>
 
-            <div className={LISTING_UI.filterRow}>
+            <div className="flex items-center gap-0.5 overflow-x-auto px-2 py-1">
               <input
                 type="text"
                 placeholder="Search landlord / invoice no..."
                 value={draftFilters.search}
                 onChange={setFilter("search")}
                 onKeyDown={(e) => e.key === "Enter" && applyFilters()}
-                className={`${LISTING_UI.filterInput} w-52`}
+                className="h-[20px] w-40 border border-slate-200 px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
               />
               <AppSelect
                 value={draftFilters.propertyId || null}
@@ -211,7 +211,7 @@ const ManagementFeeInvoices = () => {
                 placeholder="All Properties"
                 searchable
                 clearable
-                size="sm"
+                compact
               />
               <AppSelect
                 value={draftFilters.month || null}
@@ -219,7 +219,7 @@ const ManagementFeeInvoices = () => {
                 options={MONTH_SELECT_OPTIONS}
                 placeholder="All Months"
                 clearable
-                size="sm"
+                compact
               />
               <AppSelect
                 value={draftFilters.year || null}
@@ -227,13 +227,13 @@ const ManagementFeeInvoices = () => {
                 options={YEAR_SELECT_OPTIONS}
                 placeholder="All Years"
                 clearable
-                size="sm"
+                compact
               />
-              <button onClick={applyFilters} className={LISTING_UI.searchButton}>
-                <FaSearch size={11} /> Search
+              <button onClick={applyFilters} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white bg-[#FF8C00] hover:bg-[#e67e00]">
+                <FaSearch size={7} /> Search
               </button>
-              <button onClick={resetFilters} className={LISTING_UI.resetButton}>
-                <FaRedoAlt size={11} /> Reset
+              <button onClick={resetFilters} className="h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-semibold text-white bg-slate-500 hover:bg-slate-600">
+                <FaRedoAlt size={7} /> Reset
               </button>
               <span className="ml-auto text-xs text-slate-500">
                 {pagination.total} invoice{pagination.total !== 1 ? "s" : ""}
