@@ -3201,6 +3201,10 @@ export const apiVoidReversedCorrections = async (data) => {
   const res = await adminRequests.post("/ledger/repair/void-reversed-corrections", data);
   return res.data;
 };
+export const apiVoidOrphanedJournalGroup = async (groupId, data) => {
+  const res = await adminRequests.post(`/ledger/repair/void-orphaned-group/${groupId}`, data);
+  return res.data;
+};
 export const getActiveGlCorrections = async (params) => {
   const res = await adminRequests.get("/ledger/repair/active-corrections", { params });
   return res.data;

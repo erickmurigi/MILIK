@@ -14,6 +14,7 @@ import {
   repairRepostInvoices,
   reverseGlCorrectionEntry,
   voidReversedCorrections,
+  voidOrphanedJournalGroup,
   getActiveCorrections,
   getGroupEntries,
   getEntriesBySource,
@@ -37,6 +38,7 @@ router.post("/repair/recompute-balances", verifyUser, requireCompanyModule("acco
 router.post("/repair/repost-invoices", verifyUser, requireCompanyModule("accounts"), repairRepostInvoices);
 router.post("/repair/reverse-correction/:groupId", verifyUser, requireCompanyModule("accounts"), reverseGlCorrectionEntry);
 router.post("/repair/void-reversed-corrections", verifyUser, requireCompanyModule("accounts"), voidReversedCorrections);
+router.post("/repair/void-orphaned-group/:groupId", verifyUser, requireCompanyModule("accounts"), voidOrphanedJournalGroup);
 router.get("/repair/active-corrections", verifyUser, requireCompanyModule("accounts"), getActiveCorrections);
 router.get("/repair/group-entries/:groupId", verifyUser, requireCompanyModule("accounts"), getGroupEntries);
 

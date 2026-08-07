@@ -57,9 +57,7 @@ const FinancialOverview = ({ summaryData = {} }) => {
     collected: collectedByMonth[m] || 0,
   })), [curYear, expectedByMonth, collectedByMonth]);
 
-  const cur            = chartData[curMonth] || { expected: 0, collected: 0 };
-  const remaining      = Math.max(0, cur.expected - cur.collected);
-  const collectionRate = cur.expected > 0 ? (cur.collected / cur.expected) * 100 : 0;
+  const cur              = chartData[curMonth] || { expected: 0, collected: 0 };
   const outstandingTotal = Number(summaryData?.outstandingArrears || 0);
 
   const curExpenses = useMemo(() => {
@@ -73,22 +71,25 @@ const FinancialOverview = ({ summaryData = {} }) => {
     }, 0);
   }, [isLandlord, expenseProperties, curYear, curMonth]);
 
-  const netIncome  = cur.collected - curExpenses;
-  const rateColor  = collectionRate >= 80 ? 'text-emerald-700' : collectionRate >= 50 ? 'text-amber-700' : 'text-red-700';
-
-  const statRows = isLandlord ? [
-    { label: 'Billed',          value: fmtKES(cur.expected) },
-    { label: 'Collected',       value: fmtKES(cur.collected) },
-    { label: 'Expenses',        value: fmtKES(curExpenses) },
-    { label: 'Net Income',      value: fmtKES(netIncome),       cls: netIncome >= 0 ? 'text-emerald-700' : 'text-red-700' },
-    { label: 'Live Arrears',    value: fmtKES(outstandingTotal) },
-    { label: 'Collection Rate', value: `${collectionRate.toFixed(1)}%`, cls: rateColor },
-  ] : [
-    { label: 'Expected',        value: fmtKES(cur.expected) },
-    { label: 'Collected',       value: fmtKES(cur.collected) },
-    { label: 'Arrears',         value: fmtKES(outstandingTotal) },
-    { label: 'Collection Rate', value: `${collectionRate.toFixed(1)}%`, cls: rateColor },
-  ];
+  const { remaining, statRows } = useMemo(() => {
+    const rate      = cur.expected > 0 ? (cur.collected / cur.expected) * 100 : 0;
+    const net       = cur.collected - curExpenses;
+    const color     = rate >= 80 ? 'text-emerald-700' : rate >= 50 ? 'text-amber-700' : 'text-red-700';
+    const rows = isLandlord ? [
+      { label: 'Billed',          value: fmtKES(cur.expected) },
+      { label: 'Collected',       value: fmtKES(cur.collected) },
+      { label: 'Expenses',        value: fmtKES(curExpenses) },
+      { label: 'Net Income',      value: fmtKES(net),              cls: net >= 0 ? 'text-emerald-700' : 'text-red-700' },
+      { label: 'Live Arrears',    value: fmtKES(outstandingTotal) },
+      { label: 'Collection Rate', value: `${rate.toFixed(1)}%`,    cls: color },
+    ] : [
+      { label: 'Expected',        value: fmtKES(cur.expected) },
+      { label: 'Collected',       value: fmtKES(cur.collected) },
+      { label: 'Arrears',         value: fmtKES(outstandingTotal) },
+      { label: 'Collection Rate', value: `${rate.toFixed(1)}%`,    cls: color },
+    ];
+    return { remaining: Math.max(0, cur.expected - cur.collected), statRows: rows };
+  }, [isLandlord, cur, curExpenses, outstandingTotal]);
 
   if (!canFinancials) return null;
 

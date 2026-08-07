@@ -143,14 +143,12 @@ router.get("/summary", verifyUser, async (req, res, next) => {
       pendingStatementCount,
       unpostedReceiptCount,
       leasesExpiringSoonCount,
-      collectedThisMonthAgg,
       collectedByMonthRaw,
       totalLandlordPayableAgg,
-      // ── NEW: eliminates the large /tenant-invoices fetch on the frontend ──
-      expectedByMonthRaw,    // 12-bucket billed amounts for the chart
-      outstandingArrearsAgg, // total outstanding invoice balance
-      propertyExpectedRaw,   // per-property billed this month
-      propertyCollectedRaw,  // per-property collected this month (via unit→property)
+      expectedByMonthRaw,
+      outstandingArrearsAgg,
+      propertyExpectedRaw,
+      propertyCollectedRaw,
     ] = await Promise.all([
       Unit.countDocuments({ business, ownerOccupied: { $ne: true } }),
       Unit.countDocuments({
@@ -202,15 +200,6 @@ router.get("/summary", verifyUser, async (req, res, next) => {
         status: { $nin: ["inactive", "terminated", "expired", "cancelled"] },
         endDate: { $gte: nowUTC, $lte: in30Days },
       }),
-      RentPayment.aggregate([
-        {
-          $match: {
-            ...receiptBaseMatch,
-            $or: [{ paymentDate: { $gte: monthStart } }, { createdAt: { $gte: monthStart } }],
-          },
-        },
-        { $group: { _id: null, total: { $sum: { $ifNull: ["$amount", 0] } } } },
-      ]),
       RentPayment.aggregate([
         {
           $match: {
@@ -361,14 +350,15 @@ router.get("/summary", verifyUser, async (req, res, next) => {
     const totalRevenue        = Number(totalRevenueAgg[0]?.total   || 0);
     const monthlyRevenue      = Number(monthRevenueAgg[0]?.total   || 0);
     const currentMonthExpenses= Number(monthExpenseAgg[0]?.total   || 0);
-    const collectedThisMonth  = Number(collectedThisMonthAgg[0]?.total || 0);
     const totalLandlordPayable= Number(totalLandlordPayableAgg[0]?.total || 0);
     const outstandingArrears  = Number(outstandingArrearsAgg[0]?.total || 0);
 
     // collectedByMonth — 0-indexed [Jan…Dec]
     const monthMap = {};
     for (const row of collectedByMonthRaw) monthMap[row._id] = Number(row.total || 0);
-    const collectedByMonth = Array.from({ length: 12 }, (_, i) => monthMap[i + 1] || 0);
+    const collectedByMonth   = Array.from({ length: 12 }, (_, i) => monthMap[i + 1] || 0);
+    // Derive from the same correct query (paymentDate-first, createdAt fallback only when null).
+    const collectedThisMonth = monthMap[nowKE.getUTCMonth() + 1] || 0;
 
     // expectedByMonth — 0-indexed [Jan…Dec]
     const expMap = {};

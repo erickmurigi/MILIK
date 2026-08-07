@@ -37,14 +37,15 @@ const OccupancyRing = React.memo(({ pct }) => {
 });
 
 // ─── Property tile ────────────────────────────────────────────────────────────
-const PropertyTile = React.memo(({ property, onClick }) => {
+const PropertyTile = React.memo(({ property }) => {
+  const navigate  = useNavigate();
   const collColor = health(property.collectionRate);
   const invoiced  = property.expectedRevenue > 0;
 
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={() => navigate('/tenants', { state: { propertyFilter: property.name } })}
       className="group flex w-44 shrink-0 flex-col gap-2 border border-slate-200 bg-white p-3 text-left transition-all hover:border-[#0B3B2E] hover:shadow-sm"
     >
       {/* Ring + name */}
@@ -145,8 +146,6 @@ const PropertiesOverview = ({
   const units      = useSelector(selectAllUnits);
   const loading    = useSelector((s) => s.property?.loading || s.property?.isFetching);
 
-  const now = new Date();
-
   // Server-computed per-property collection stats — O(1) lookup by propertyId
   const propStatsMap = useMemo(() => {
     const map = new Map();
@@ -213,7 +212,7 @@ const PropertiesOverview = ({
       <div className="flex items-center justify-between border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5">
         <h2 className="text-[10px] font-black uppercase tracking-widest text-[#0B3B2E]">Portfolio Pulse</h2>
         <span className="text-[10px] font-semibold text-slate-400">
-          {now.toLocaleString('en-KE', { month: 'long', year: 'numeric' })} · {propertiesWithStats.length} propert{propertiesWithStats.length === 1 ? 'y' : 'ies'}
+          {new Date().toLocaleString('en-KE', { month: 'long', year: 'numeric' })} · {propertiesWithStats.length} propert{propertiesWithStats.length === 1 ? 'y' : 'ies'}
         </span>
       </div>
       <div className="flex overflow-x-auto">
@@ -233,7 +232,6 @@ const PropertiesOverview = ({
               <PropertyTile
                 key={property.id}
                 property={property}
-                onClick={() => navigate('/tenants', { state: { propertyFilter: property.name } })}
               />
             ))}
           </div>

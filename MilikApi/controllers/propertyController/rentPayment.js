@@ -39,6 +39,20 @@ const CATEGORY_TO_SUMMARY = {
   LATE_PENALTY_CHARGE: "latePenalty", OTHER_CHARGE: "other", DEBIT_NOTE: "debitNote",
 };
 
+const PRIORITY_GROUP_TO_SUMMARY = {
+  rent: "rent", deposit: "deposit", utility: "utility",
+  late_penalty: "latePenalty", debit_note: "debitNote", other: "other",
+};
+
+const allocationRowToSummaryKey = (row) => {
+  if (!row?.invoice) return "unapplied";
+  return (
+    CATEGORY_TO_SUMMARY[row.category] ||
+    PRIORITY_GROUP_TO_SUMMARY[String(row.priorityGroup || "").toLowerCase()] ||
+    "other"
+  );
+};
+
 const populateReceiptQuery = (query) =>
   query
     .populate("tenant", "name email phone unit business")
@@ -397,27 +411,23 @@ const resolvePropertyAndLandlord = async (payment) => {
 };
 
 const findFirstAccount = async (businessId, candidates = []) => {
-  const results = await Promise.all(
-    candidates.map((candidate) => {
-      const query = { business: businessId };
-      const and = [];
-      if (candidate._id) {
-        query._id = candidate._id;
-      } else {
-        if (candidate.type) and.push({ type: candidate.type });
-        if (candidate.code) and.push({ code: candidate.code });
-        if (candidate.group) and.push({ group: candidate.group });
-        if (candidate.nameRegex) and.push({ name: { $regex: candidate.nameRegex, $options: "i" } });
-        if (and.length > 0) query.$and = and;
-      }
-      return ChartOfAccount.findOne(query).lean();
-    })
-  );
-  const account = results.find((r) => r != null) ?? null;
-  if (!account) {
-    console.warn("[findFirstAccount] No matching account found for candidates:", JSON.stringify(candidates));
+  for (const candidate of candidates) {
+    const query = { business: businessId };
+    const and = [];
+    if (candidate._id) {
+      query._id = candidate._id;
+    } else {
+      if (candidate.type) and.push({ type: candidate.type });
+      if (candidate.code) and.push({ code: candidate.code });
+      if (candidate.group) and.push({ group: candidate.group });
+      if (candidate.nameRegex) and.push({ name: { $regex: candidate.nameRegex, $options: "i" } });
+      if (and.length > 0) query.$and = and;
+    }
+    const account = await ChartOfAccount.findOne(query).lean();
+    if (account) return account;
   }
-  return account;
+  console.warn("[findFirstAccount] No matching account found for candidates:", JSON.stringify(candidates));
+  return null;
 };
 
 const resolveCashbookAccount = async (businessId, payment) => {
@@ -976,6 +986,7 @@ const summarizeAllocationRows = ({ rows = [], receiptAmount = 0, metadata = {}, 
   const utilityMap = new Map();
 
   rows.forEach((row) => {
+    if (!row?.invoice) return; // prepayment rows (invoice=null) are unapplied; exclude from category totals
     const priorityGroup = String(row?.priorityGroup || "other").toLowerCase();
     const appliedAmount = round2(Math.abs(Number(row?.appliedAmount || 0)));
     if (appliedAmount <= 0) return;
@@ -1452,6 +1463,7 @@ const confirmNonCashDirectToLandlordReceipt = async (payment, actorId) => {
   const grouped = new Map();
 
   allocationRows.forEach((row) => {
+    if (!row?.invoice) return; // prepayment rows (invoice=null) are captured by allocationSummary.unapplied
     const key = getReceiptPostingBucketFromAllocationRow(row);
     if (!grouped.has(key)) grouped.set(key, []);
     grouped.get(key).push(row);
@@ -1697,6 +1709,7 @@ const postReceiptJournal = async (payment, actorId) => {
   const postingGroups = [];
   const grouped = new Map();
   allocationRows.forEach((row) => {
+    if (!row?.invoice) return; // prepayment rows (invoice=null) are captured by allocationSummary.unapplied
     const key = getReceiptPostingBucketFromAllocationRow(row);
     if (!grouped.has(key)) grouped.set(key, []);
     grouped.get(key).push(row);
@@ -1876,11 +1889,29 @@ const reverseAllLedgerEntriesForPayment = async (payment, userId, reason) => {
     return [];
   }
 
+  // Collect unique journal groups so we can also reverse any GL-correction
+  // entries (manual_adjustment) that were added to those groups via the
+  // GL Integrity fix tool.  Without this, a prior correction that balanced
+  // the group becomes an orphaned credit/debit after reversal, causing a
+  // trial-balance imbalance.
+  const groupIds = [...new Set(originalEntries.map((e) => String(e.journalGroupId)).filter(Boolean))];
+
+  const glCorrectionEntries = groupIds.length
+    ? await FinancialLedgerEntry.find({
+        business: payment.business,
+        journalGroupId: { $in: groupIds.map((id) => new mongoose.Types.ObjectId(id)) },
+        sourceTransactionType: "manual_adjustment",
+        status: "approved",
+      }).lean()
+    : [];
+
+  const allEntriesToReverse = [...originalEntries, ...glCorrectionEntries];
+
   const reversalResults = [];
   const session = await mongoose.startSession();
   try {
     await session.withTransaction(async () => {
-      for (const entry of originalEntries) {
+      for (const entry of allEntriesToReverse) {
         if (entry.reversedByEntry || entry.status === "reversed") continue;
         const result = await postReversal({
           entryId: entry._id,
@@ -2055,8 +2086,8 @@ export const autoApplyPrepayments = async ({ businessId, tenantId, invoice, acto
     // Rebuild allocationSummary from new allocations array
     const summary = { rent: 0, deposit: 0, utility: 0, latePenalty: 0, debitNote: 0, other: 0, unapplied: 0 };
     for (const a of receipt.allocations) {
-      const key = a.invoice ? (CATEGORY_TO_SUMMARY[a.category] || "other") : "unapplied";
-      summary[key] = round2(summary[key] + Number(a.appliedAmount || 0));
+      const key = allocationRowToSummaryKey(a);
+      summary[key] = round2((summary[key] || 0) + Number(a.appliedAmount || 0));
     }
     receipt.allocationSummary = summary;
     receipt.markModified("allocations");
@@ -2405,19 +2436,13 @@ export const createPayment = async (req, res, next) => {
     const savedPayment = await payment.save();
 
     if (savedPayment.isConfirmed) {
+      let posting;
       try {
-        const posting = savedPayment.paidDirectToLandlord
+        posting = savedPayment.paidDirectToLandlord
           ? await confirmNonCashDirectToLandlordReceipt(savedPayment, actorUserId)
           : await postReceiptJournal(savedPayment, actorUserId);
 
-        // Fast incremental balance update, then parallel full recompute + chart account aggregate
         await applyIncrementalBalanceDelta({ tenantId: savedPayment.tenant, businessId: savedPayment.business, delta: -Math.abs(Number(savedPayment.amount || 0)) });
-        await Promise.all([
-          recomputeTenantBalance(savedPayment.tenant, savedPayment.business),
-          posting.entries?.length
-            ? aggregateChartOfAccountBalances(savedPayment.business, posting.entries.map((e) => e.accountId))
-            : Promise.resolve(),
-        ]);
       } catch (postingError) {
         const rollbackEntries = await rollbackFailedReceiptPosting({
           payment: savedPayment,
@@ -2453,6 +2478,14 @@ export const createPayment = async (req, res, next) => {
           message: `Receipt was saved but confirmation posting failed: ${postingError.message}`,
         });
       }
+
+      // Recompute is non-fatal — GL posting already committed above
+      await Promise.all([
+        recomputeTenantBalance(savedPayment.tenant, savedPayment.business),
+        posting.entries?.length
+          ? aggregateChartOfAccountBalances(savedPayment.business, posting.entries.map((e) => e.accountId))
+          : Promise.resolve(),
+      ]).catch((err) => console.error("[createPayment] Balance recompute failed after posting:", err));
     }
 
     emitToCompany(businessId, "payment:new", savedPayment);
@@ -2592,6 +2625,7 @@ export const batchCreatePayments = async (req, res, next) => {
     for (let i = 0; i < items.length; i++) {
       const item          = items[i];
       const receiptNumber = receiptNumbers[i];
+      let savedPayment;
 
       try {
         const tenantId  = item?.tenant;
@@ -2706,7 +2740,7 @@ export const batchCreatePayments = async (req, res, next) => {
           metadata:          { ...depositContext.metadata, ...mpesaMeta },
         });
 
-        const savedPayment = await payment.save();
+        savedPayment = await payment.save();
         usedRefSet.add(refNumber); // prevent subsequent items in the same batch from reusing it
 
         if (savedPayment.isConfirmed) {
@@ -2736,6 +2770,11 @@ export const batchCreatePayments = async (req, res, next) => {
           tenantName:      tenant?.name || "",
         });
       } catch (itemErr) {
+        if (savedPayment?._id) {
+          await RentPayment.findByIdAndUpdate(savedPayment._id, {
+            $set: { postingStatus: "failed", postingError: itemErr.message || "Batch posting failed" },
+          }).catch(() => {});
+        }
         failed.push({
           index:           i,
           referenceNumber: String(items[i]?.referenceNumber || ""),
@@ -3264,10 +3303,22 @@ export const updatePaymentAllocations = async (req, res, next) => {
       previousByInvoice.set(invoiceId, round2(Number(previousByInvoice.get(invoiceId) || 0) + Number(row?.appliedAmount || 0)));
     });
 
+    // Validate that invoice IDs in the new allocations actually exist — prevents
+    // phantom invoice references from triggering spurious GL release entries.
+    const candidateInvoiceIds = (Array.isArray(depositContext.allocations) ? depositContext.allocations : [])
+      .map((row) => String(row?.invoice || row?.invoiceId || "").trim())
+      .filter(Boolean);
+    const validInvoiceIdSet = candidateInvoiceIds.length > 0
+      ? new Set(
+          (await TenantInvoice.find({ _id: { $in: candidateInvoiceIds } }).select("_id").lean())
+            .map((inv) => String(inv._id))
+        )
+      : new Set();
+
     const releaseRows = (Array.isArray(depositContext.allocations) ? depositContext.allocations : [])
       .map((row) => {
         const invoiceId = String(row?.invoice || row?.invoiceId || "").trim();
-        if (!invoiceId) return null;
+        if (!invoiceId || !validInvoiceIdSet.has(invoiceId)) return null;
         const previousAmount = round2(Number(previousByInvoice.get(invoiceId) || 0));
         const nextAmount = round2(Number(row?.appliedAmount || 0));
         const delta = round2(nextAmount - previousAmount);
@@ -3737,20 +3788,13 @@ export const confirmPayment = async (req, res, next) => {
     existingPayment.ledgerType = "receipts";
     await existingPayment.save();
 
+    let posting;
     try {
-      const posting = existingPayment.paidDirectToLandlord
+      posting = existingPayment.paidDirectToLandlord
         ? await confirmNonCashDirectToLandlordReceipt(existingPayment, actorUserId)
         : await postReceiptJournal(existingPayment, actorUserId);
 
       await applyIncrementalBalanceDelta({ tenantId: existingPayment.tenant, businessId: existingPayment.business, delta: -Math.abs(Number(existingPayment.amount || 0)) });
-      await recomputeTenantBalance(existingPayment.tenant, existingPayment.business);
-
-      if (posting.entries?.length) {
-        await aggregateChartOfAccountBalances(
-          existingPayment.business,
-          posting.entries.map((entry) => entry.accountId)
-        );
-      }
     } catch (postingError) {
       const rollbackEntries = await rollbackFailedReceiptPosting({
         payment: existingPayment,
@@ -3785,6 +3829,14 @@ export const confirmPayment = async (req, res, next) => {
         message: `Receipt confirmation failed because ledger posting did not complete: ${postingError.message}`,
       });
     }
+
+    // Recompute is non-fatal — GL posting already committed above
+    await Promise.all([
+      recomputeTenantBalance(existingPayment.tenant, existingPayment.business),
+      posting.entries?.length
+        ? aggregateChartOfAccountBalances(existingPayment.business, posting.entries.map((e) => e.accountId))
+        : Promise.resolve(),
+    ]).catch((err) => console.error("[confirmPayment] Balance recompute failed after posting:", err));
 
     const populated = await populateReceiptQuery(RentPayment.findById(existingPayment._id));
     await logAuditEvent({
@@ -3894,6 +3946,23 @@ export const deletePayment = async (req, res, next) => {
     if (payment.isReversed && payment.reversalEntry) {
       const reversalDoc = await RentPayment.findById(payment.reversalEntry);
       if (reversalDoc && !reversalDoc.isCancelled) {
+        // Collect journal group IDs before voiding so we can also void any
+        // manual_adjustment (GL Repair) entries that share those groups.
+        // reverseAllLedgerEntriesForPayment reversed those corrections during the
+        // receipt reversal, creating their own REVERSAL entries — if we don't void
+        // them here they become orphaned debits that break the GL balance.
+        const chainEntries = await FinancialLedgerEntry.find(
+          {
+            business: payment.business,
+            sourceTransactionType: "rent_payment",
+            sourceTransactionId: String(payment._id),
+          },
+          { journalGroupId: 1 }
+        ).lean();
+        const chainGroupIds = [
+          ...new Set(chainEntries.map((e) => String(e.journalGroupId)).filter(Boolean)),
+        ].map((id) => new mongoose.Types.ObjectId(id));
+
         // Void REVERSAL GL entries
         await FinancialLedgerEntry.updateMany(
           {
@@ -3916,6 +3985,18 @@ export const deletePayment = async (req, res, next) => {
           },
           { $set: { status: "void", reversedByEntry: null } }
         );
+        // Void manual_adjustment entries (original corrections + their reversals)
+        // in the same journal groups — these are not covered by the queries above.
+        if (chainGroupIds.length) {
+          await FinancialLedgerEntry.updateMany(
+            {
+              business: payment.business,
+              journalGroupId: { $in: chainGroupIds },
+              sourceTransactionType: "manual_adjustment",
+            },
+            { $set: { status: "void" } }
+          );
+        }
         // Cancel the reversal RentPayment doc (keep for audit trail)
         reversalDoc.isCancelled = true;
         reversalDoc.cancelledAt = new Date();

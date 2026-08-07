@@ -124,7 +124,10 @@
       "Bash(xargs grep -c \"<select\")",
       "Bash(awk -F: '{sum+=$2} END {print sum \" total selects remaining\"}')",
       "Bash(del \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikClient\\\\src\\\\pages\\\\Reports\\\\ZoneCollectionReport.jsx\")",
-      "Bash(del \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikClient\\\\src\\\\pages\\\\Reports\\\\ZoneArrearsReport.jsx\")"
+      "Bash(del \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikClient\\\\src\\\\pages\\\\Reports\\\\ZoneArrearsReport.jsx\")",
+      "Bash(xargs grep -l \"income.statement\\\\|incomeStatement\\\\|Income.*Statement\")",
+      "Bash(grep -v \"//\\\\|credit\")",
+      "Bash(grep -v \"//\\\\|comment\")"
     ]
   }
 }

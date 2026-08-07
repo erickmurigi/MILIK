@@ -41,29 +41,37 @@ const MetricsGrid = ({ summaryData = {}, loading = false }) => {
   const canFinancials = hasCompanyPermission(currentUser || {}, currentCompany, 'financialReports', 'view', ['accounts', 'propertyManagement']);
 
   const totalProperties = properties.length;
-  const totalUnits = units.filter(
-    (u) => !['off_market', 'inactive', 'archived', 'disabled'].includes(String(u?.status || '').trim().toLowerCase())
-  ).length;
-  const occupiedUnits = units.filter(
-    (u) => ['occupied', 'notice_given', 'reserved'].includes(String(u?.status || '').trim().toLowerCase())
-  ).length;
-  const occupancyRate = totalUnits > 0 ? ((occupiedUnits / totalUnits) * 100).toFixed(1) : '0.0';
 
-  const now      = new Date();
-  const curMonth = now.getMonth();
-  const curYear  = now.getFullYear();
+  const { totalUnits, occupiedUnits, occupancyRate } = useMemo(() => {
+    const NON_MARKET = new Set(['off_market', 'inactive', 'archived', 'disabled']);
+    const OCCUPIED   = new Set(['occupied', 'notice_given', 'reserved']);
+    let total = 0, occ = 0;
+    for (const u of units) {
+      const s = String(u?.status || '').trim().toLowerCase();
+      if (NON_MARKET.has(s)) continue;
+      total++;
+      if (OCCUPIED.has(s)) occ++;
+    }
+    return { totalUnits: total, occupiedUnits: occ, occupancyRate: total > 0 ? ((occ / total) * 100).toFixed(1) : '0.0' };
+  }, [units]);
 
-  const serverCollected = Number(summaryData?.collectedThisMonth ?? summaryData?.monthlyRevenue ?? -1);
-  const monthlyCollected = serverCollected >= 0
-    ? serverCollected
-    : rentPayments
-        .filter((p) => {
-          const d = parseDate(p?.paymentDate || p?.createdAt);
-          return d && d.getMonth() === curMonth && d.getFullYear() === curYear
-            && p?.isConfirmed === true && !p?.isCancelled && !p?.isReversed && !p?.reversalOf
-            && String(p?.postingStatus || '').toLowerCase() !== 'reversed';
-        })
-        .reduce((s, p) => s + Math.abs(Number(p?.amount || 0)), 0);
+  const { curMonth, curYear } = useMemo(() => {
+    const n = new Date();
+    return { curMonth: n.getMonth(), curYear: n.getFullYear() };
+  }, []);
+
+  const monthlyCollected = useMemo(() => {
+    const serverCollected = Number(summaryData?.collectedThisMonth ?? summaryData?.monthlyRevenue ?? -1);
+    if (serverCollected >= 0) return serverCollected;
+    return rentPayments
+      .filter((p) => {
+        const d = parseDate(p?.paymentDate || p?.createdAt);
+        return d && d.getMonth() === curMonth && d.getFullYear() === curYear
+          && p?.isConfirmed === true && !p?.isCancelled && !p?.isReversed && !p?.reversalOf
+          && String(p?.postingStatus || '').toLowerCase() !== 'reversed';
+      })
+      .reduce((s, p) => s + Math.abs(Number(p?.amount || 0)), 0);
+  }, [summaryData, rentPayments, curMonth, curYear]);
 
   const monthlyExpenses = useMemo(() => {
     if (!isLandlord) return 0;

@@ -177,53 +177,59 @@ export const postReversal = async ({ entryId, reason, userId, session = null }) 
     throw new Error("Ledger entry already reversed");
   }
 
-  const reversalDirection = flipDirection(originalEntry.direction);
+  // Guarantee the original has a journalGroupId before reversing.
+  // If it was posted without one (pre-fix entries), create a shared group now so
+  // both the original and its reversal end up in the same group — keeping the
+  // GL integrity report from treating the reversal as an orphan.
+  const groupId = originalEntry.journalGroupId || new mongoose.Types.ObjectId();
+
+  // statementPeriod must reflect when the reversal is posted (today), not the original
+  // entry's period — otherwise period-based P&L reports will double-count the original period.
+  const reversalDate = new Date();
+  const reversalPeriodStart = new Date(reversalDate.getFullYear(), reversalDate.getMonth(), 1, 0, 0, 0, 0);
+  const reversalPeriodEnd   = new Date(reversalDate.getFullYear(), reversalDate.getMonth() + 1, 0, 23, 59, 59, 999);
 
   const reversalEntry = await postEntry({
     session,
-    business: originalEntry.business,
-    property: originalEntry.property,
-    landlord: originalEntry.landlord,
-    tenant: originalEntry.tenant,
-    unit: originalEntry.unit,
+    business:              originalEntry.business,
+    property:              originalEntry.property,
+    landlord:              originalEntry.landlord,
+    tenant:                originalEntry.tenant,
+    unit:                  originalEntry.unit,
     sourceTransactionType: originalEntry.sourceTransactionType,
-    sourceTransactionId: originalEntry.sourceTransactionId,
-    transactionDate: new Date(),
-    statementPeriodStart: originalEntry.statementPeriodStart,
-    statementPeriodEnd: originalEntry.statementPeriodEnd,
-    category: "REVERSAL",
-    accountId: originalEntry.accountId || null,
-    journalGroupId: originalEntry.journalGroupId || null,
-    amount: originalEntry.amount,
-    direction: reversalDirection,
-    debit: reversalDirection === "debit" ? Number(originalEntry.amount || 0) : 0,
-    credit: reversalDirection === "credit" ? Number(originalEntry.amount || 0) : 0,
-    payer: originalEntry.receiver || "n/a",
-    receiver: originalEntry.payer || "n/a",
-    notes: reason || `Reversal of ledger entry ${originalEntry._id}`,
-    reversalOf: originalEntry._id,
+    sourceTransactionId:   originalEntry.sourceTransactionId,
+    transactionDate:       reversalDate,
+    statementPeriodStart:  reversalPeriodStart,
+    statementPeriodEnd:    reversalPeriodEnd,
+    category:              "REVERSAL",
+    accountId:             originalEntry.accountId || null,
+    journalGroupId:        groupId,
+    amount:                originalEntry.amount,
+    direction:             flipDirection(originalEntry.direction),
+    payer:                 originalEntry.receiver || "n/a",
+    receiver:              originalEntry.payer   || "n/a",
+    notes:                 reason || `Reversal of ledger entry ${originalEntry._id}`,
+    reversalOf:            originalEntry._id,
     metadata: {
-      reversalReason: reason || "Correction",
-      reversedEntryCategory: originalEntry.category,
-      reversedEntryId: String(originalEntry._id),
-      originalAccountId: String(originalEntry.accountId || ""),
-      originalJournalGroupId: String(originalEntry.journalGroupId || ""),
-      originalMetadata: originalEntry.metadata || {},
+      reversalReason:          reason || "Correction",
+      reversedEntryCategory:   originalEntry.category,
+      reversedEntryId:         String(originalEntry._id),
+      originalAccountId:       String(originalEntry.accountId   || ""),
+      originalJournalGroupId:  String(originalEntry.journalGroupId || ""),
+      originalMetadata:        originalEntry.metadata || {},
     },
-    createdBy: userId,
+    createdBy:  userId,
     approvedBy: userId,
     approvedAt: new Date(),
-    status: "approved",
+    status:     "approved",
   });
 
-  originalEntry.status = "reversed";
-  originalEntry.reversedByEntry = reversalEntry._id;
+  originalEntry.status           = "reversed";
+  originalEntry.reversedByEntry  = reversalEntry._id;
+  if (!originalEntry.journalGroupId) originalEntry.journalGroupId = groupId;
   await originalEntry.save(session ? { session } : undefined);
 
-  return {
-    originalEntry,
-    reversalEntry,
-  };
+  return { originalEntry, reversalEntry };
 };
 
 export const postCorrection = async ({ entryId, correctedPayload, reason, userId, session = null }) => {

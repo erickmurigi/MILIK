@@ -482,15 +482,33 @@ const isLeaseAgreementFeeInvoice = ({ category, metadata = {} } = {}) => {
   );
 };
 
-const getInvoiceChargeTypeKey = ({ category, metadata = {} } = {}) => {
+const getInvoiceChargeTypeKey = ({ category, metadata = {}, invoiceNumber = "", description = "" } = {}) => {
   const normalizedCategory = String(category || "").toUpperCase();
+
   if (isLeaseAgreementFeeInvoice({ category, metadata })) return "lease_agreement_fee";
-  if (
-    normalizedCategory === "RENT_CHARGE" &&
-    String(metadata?.billItemKey || "").toLowerCase() === "rent_utility:combined"
-  ) {
-    return "combined";
+
+  // Debit note TenantInvoice records (DN-prefix or "Debit Note" in description) may have
+  // been stored with RENT_CHARGE category even when the actual charge was utility/penalty.
+  // Derive the real type from the category first, then metadata signals.
+  const isDebitNoteRecord =
+    /^DN\d/i.test(String(invoiceNumber || "")) ||
+    /debit\s*note/i.test(String(description || ""));
+
+  if (isDebitNoteRecord) {
+    if (normalizedCategory === "UTILITY_CHARGE") return "utility";
+    if (normalizedCategory === "DEPOSIT_CHARGE") return "deposit";
+    if (normalizedCategory === "LATE_PENALTY_CHARGE") return "late_penalty";
+    const billItemKey = String(metadata?.billItemKey || "").toLowerCase();
+    const utilityType = String(
+      metadata?.utilityType || metadata?.meterUtilityType || metadata?.statementUtilityType || ""
+    ).toLowerCase();
+    if (utilityType || billItemKey.startsWith("utility:") || billItemKey === "utility") return "utility";
+    if (billItemKey === "deposit") return "deposit";
+    if (billItemKey === "late_payment" || billItemKey === "late_penalty") return "late_penalty";
+    return "debit_note";
   }
+
+  if (normalizedCategory === "RENT_CHARGE" && String(metadata?.billItemKey || "").toLowerCase() === "rent_utility:combined") return "combined";
   if (normalizedCategory === "DEPOSIT_CHARGE") return "deposit";
   if (normalizedCategory === "UTILITY_CHARGE") return "utility";
   if (normalizedCategory === "LATE_PENALTY_CHARGE") return "late_penalty";
@@ -504,6 +522,7 @@ const getInvoiceChargeTypeLabel = (chargeType = "rent") => {
   if (normalized === "utility") return "Utility";
   if (normalized === "late_penalty") return "Late Penalty";
   if (normalized === "lease_agreement_fee") return "Lease / Agreement Fee";
+  if (normalized === "debit_note") return "Debit Note";
   return "Rent";
 };
 
@@ -751,6 +770,8 @@ const buildInvoiceRows = ({ invoices = [], tenantLookup = {}, unitsFromStore = [
       const chargeType = getInvoiceChargeTypeKey({
         category: invoice?.category,
         metadata: invoice?.metadata || {},
+        invoiceNumber: invoice?.invoiceNumber,
+        description: invoice?.description,
       });
       const invoiceDocumentDateValue = invoice?.invoiceDate || invoice?.createdAt || null;
       const invoiceDateValue = invoice?.bookingDate || invoiceDocumentDateValue || null;

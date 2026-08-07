@@ -1773,7 +1773,9 @@ const postInvoiceJournal = async ({ invoice, createdBy, incomeAccount, receivabl
   const amount = Math.abs(Number(invoice.amount || 0));
   const taxSnapshot = invoice?.taxSnapshot || {};
   const outputTaxAmount = Math.abs(Number(taxSnapshot.taxAmount || 0));
-  const netAmount = outputTaxAmount > 0 ? Math.abs(Number(taxSnapshot.netAmount || amount)) : amount;
+  const netAmount = outputTaxAmount > 0
+    ? (Number(taxSnapshot.netAmount) > 0 ? Math.abs(Number(taxSnapshot.netAmount)) : Math.max(0, amount - outputTaxAmount))
+    : amount;
   const recognitionDate = normalizeDate(invoice.bookingDate || invoice.invoiceDate);
   const { start, end } = buildStatementPeriod(recognitionDate);
   const txDate = recognitionDate;
@@ -1876,49 +1878,10 @@ const postInvoiceJournal = async ({ invoice, createdBy, incomeAccount, receivabl
     session,
   });
 
-  const creditLeg = await postEntry({
-    business: invoice.business,
-    property: invoice.property,
-    landlord: invoice.landlord,
-    tenant: invoice.tenant,
-    unit: invoice.unit,
-    sourceTransactionType: "invoice",
-    sourceTransactionId: String(invoice._id),
-    transactionDate: txDate,
-    statementPeriodStart: start,
-    statementPeriodEnd: end,
-    category: ledgerCategory,
-    amount: netAmount,
-    direction: "credit",
-    debit: 0,
-    credit: netAmount,
-    accountId: creditAccount._id,
-    journalGroupId,
-    payer: "tenant",
-    receiver: "manager",
-    notes: invoiceNarration,
-    metadata: {
-      ...commonMetadata,
-      postingRole,
-      offsetOfEntryId: String(receivableLeg._id),
-    },
-    createdBy,
-    approvedBy: createdBy,
-    approvedAt: new Date(),
-    status: "approved",
-    session,
-  });
-
-  const entries = [receivableLeg, creditLeg];
-
-  if (outputTaxAmount > 0 && invoice.category !== "DEPOSIT_CHARGE") {
-    const companyTaxConfig = await getCompanyTaxConfiguration(invoice.business);
-    const outputVatAccount = await resolveOutputVatAccount({
-      businessId: invoice.business,
-      companyTaxConfig,
-    });
-
-    const taxLeg = await postEntry({
+  let creditLeg;
+  let taxLeg;
+  try {
+    creditLeg = await postEntry({
       business: invoice.business,
       property: invoice.property,
       landlord: invoice.landlord,
@@ -1930,18 +1893,18 @@ const postInvoiceJournal = async ({ invoice, createdBy, incomeAccount, receivabl
       statementPeriodStart: start,
       statementPeriodEnd: end,
       category: ledgerCategory,
-      amount: outputTaxAmount,
+      amount: netAmount,
       direction: "credit",
       debit: 0,
-      credit: outputTaxAmount,
-      accountId: outputVatAccount._id,
+      credit: netAmount,
+      accountId: creditAccount._id,
       journalGroupId,
       payer: "tenant",
-      receiver: "system",
-      notes: `Output VAT — ${invoiceNarration}`,
+      receiver: "manager",
+      notes: invoiceNarration,
       metadata: {
         ...commonMetadata,
-        postingRole: "output_vat_payable",
+        postingRole,
         offsetOfEntryId: String(receivableLeg._id),
       },
       createdBy,
@@ -1951,8 +1914,66 @@ const postInvoiceJournal = async ({ invoice, createdBy, incomeAccount, receivabl
       session,
     });
 
-    entries.push(taxLeg);
+    if (outputTaxAmount > 0 && invoice.category !== "DEPOSIT_CHARGE") {
+      const companyTaxConfig = await getCompanyTaxConfiguration(invoice.business);
+      const outputVatAccount = await resolveOutputVatAccount({
+        businessId: invoice.business,
+        companyTaxConfig,
+      });
+
+      taxLeg = await postEntry({
+        business: invoice.business,
+        property: invoice.property,
+        landlord: invoice.landlord,
+        tenant: invoice.tenant,
+        unit: invoice.unit,
+        sourceTransactionType: "invoice",
+        sourceTransactionId: String(invoice._id),
+        transactionDate: txDate,
+        statementPeriodStart: start,
+        statementPeriodEnd: end,
+        category: ledgerCategory,
+        amount: outputTaxAmount,
+        direction: "credit",
+        debit: 0,
+        credit: outputTaxAmount,
+        accountId: outputVatAccount._id,
+        journalGroupId,
+        payer: "tenant",
+        receiver: "system",
+        notes: `Output VAT — ${invoiceNarration}`,
+        metadata: {
+          ...commonMetadata,
+          postingRole: "output_vat_payable",
+          offsetOfEntryId: String(receivableLeg._id),
+        },
+        createdBy,
+        approvedBy: createdBy,
+        approvedAt: new Date(),
+        status: "approved",
+        session,
+      });
+    }
+  } catch (err) {
+    // If no Mongoose session is wrapping this call, manually reverse any committed legs so the
+    // GL does not end up with an orphaned DR-receivable and no offsetting CR-income.
+    if (!session) {
+      const rollbackIds = [receivableLeg?._id, creditLeg?._id].filter(Boolean);
+      await Promise.allSettled(
+        rollbackIds.map((id) =>
+          postReversal({
+            entryId: id,
+            reason: `Auto-reversal: GL balance protection for failed invoice journal (${invoice.invoiceNumber || invoice._id})`,
+            userId: createdBy,
+          }).catch(() => null)
+        )
+      );
+    }
+    throw err;
   }
+
+  const entries = [receivableLeg, creditLeg];
+  if (taxLeg) entries.push(taxLeg);
 
   return {
     journalGroupId,
@@ -3048,11 +3069,9 @@ export const reverseTenantInvoiceNote = async (req, res, next) => {
       : [];
 
     const reversalReason = req.body?.reason || `Reversal of ${normalizedNoteType === "CREDIT_NOTE" ? "credit" : "debit"} note ${note.noteNumber}`;
-    await Promise.all(
-      originalEntries
-        .filter((entry) => entry?.status !== "reversed" && !entry?.reversedByEntry)
-        .map((entry) => postReversal({ entryId: entry._id, userId: actorUserId, reason: reversalReason }))
-    );
+    for (const entry of originalEntries.filter((e) => e?.status !== "reversed" && !e?.reversedByEntry)) {
+      await postReversal({ entryId: entry._id, userId: actorUserId, reason: reversalReason });
+    }
 
     note.status = "reversed";
     note.postingStatus = "reversed";
@@ -4418,16 +4437,17 @@ export const deleteTenantInvoice = async (req, res, next) => {
       for (const entry of originalEntries) {
         if (entry?.accountId) touchedAccountIds.add(String(entry.accountId));
       }
-      const deleteReversals = await Promise.all(
-        originalEntries
-          .filter((entry) => !entry.reversedByEntry && entry.status !== "reversed")
-          .map((entry) => postReversal({
-            entryId: entry._id,
-            reason: `Invoice ${invoice.invoiceNumber} deleted`,
-            userId: actorUserId,
-          }))
+      const pendingEntries = originalEntries.filter(
+        (entry) => !entry.reversedByEntry && entry.status !== "reversed"
       );
-      for (const reversal of deleteReversals) {
+      const deleteReversals = [];
+      for (const entry of pendingEntries) {
+        const reversal = await postReversal({
+          entryId: entry._id,
+          reason: `Invoice ${invoice.invoiceNumber} deleted`,
+          userId: actorUserId,
+        });
+        deleteReversals.push(reversal);
         if (reversal?.reversalEntry?.accountId) touchedAccountIds.add(String(reversal.reversalEntry.accountId));
       }
     }

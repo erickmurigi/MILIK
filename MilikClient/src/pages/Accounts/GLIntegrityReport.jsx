@@ -19,6 +19,7 @@ import {
   repairRepostInvoices as apiRepairRepost,
   reverseGlCorrectionEntry as apiReverseGlCorrection,
   apiVoidReversedCorrections,
+  apiVoidOrphanedJournalGroup,
   getActiveGlCorrections,
   getGlGroupEntries,
   runGLIntegrityReport,
@@ -95,20 +96,34 @@ const TABS = [
 
 // ─── Balance-Group Modal ───────────────────────────────────────────────────────
 function BalanceGroupModal({ group, accounts, businessId, healthRunId, onClose, onDone, navigate }) {
-  const [accountId,   setAccountId]   = useState("");
-  const [notes,       setNotes]       = useState("");
-  const [saving,      setSaving]      = useState(false);
-  const [entries,     setEntries]     = useState(null);  // null = loading, [] = none
-  const [entriesErr,  setEntriesErr]  = useState(false);
+  const [accountId,    setAccountId]   = useState("");
+  const [notes,        setNotes]       = useState("");
+  const [saving,       setSaving]      = useState(false);
+  const [voidingGroup, setVoidingGroup] = useState(false);
+  const [entries,      setEntries]     = useState(null);  // null = loading, [] = none
+  const [entriesErr,   setEntriesErr]  = useState(false);
 
   useEffect(() => {
     if (!group?.journalGroupId || !businessId) return;
     setEntries(null);
     setEntriesErr(false);
     getGlGroupEntries(group.journalGroupId, { business: businessId })
-      .then((d) => setEntries(d?.entries ?? []))
+      .then((d) => {
+        const loaded = d?.entries ?? [];
+        setEntries(loaded);
+        // For orphaned groups, auto-populate the correcting account with the
+        // imbalanced entry's account so the user can post with one click.
+        if (group.sourceOrphaned && !accountId) {
+          const active = loaded.filter((e) => e.status !== "reversed");
+          const imbalanced = group.difference > 0
+            ? active.find((e) => e.debit  > 0)  // credit missing → debit entry is the orphan
+            : active.find((e) => e.credit > 0);  // debit missing  → credit entry is the orphan
+          const autoId = String(imbalanced?.accountId || "");
+          if (autoId) setAccountId(autoId);
+        }
+      })
       .catch(() => { setEntriesErr(true); setEntries([]); });
-  }, [group?.journalGroupId, businessId]);
+  }, [group?.journalGroupId, businessId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!group) return null;
 
@@ -117,6 +132,7 @@ function BalanceGroupModal({ group, accounts, businessId, healthRunId, onClose, 
   const postingAccounts = accounts.filter((a) => a.isPosting && !a.isHeader);
   const sourceUrl       = sourceNavUrl(group.sourceType, group.sourceId);
   const sourceLabel     = group.sourceRef || (group.sourceId ? `…${String(group.sourceId).slice(-12)}` : null);
+  const busy            = saving || voidingGroup;
 
   const submit = async () => {
     if (!accountId) { toast.error("Select a correcting account"); return; }
@@ -129,6 +145,19 @@ function BalanceGroupModal({ group, accounts, businessId, healthRunId, onClose, 
       toast.error(err?.response?.data?.error || "Repair failed");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const voidOrphaned = async () => {
+    setVoidingGroup(true);
+    try {
+      const res = await apiVoidOrphanedJournalGroup(group.journalGroupId, { business: businessId });
+      toast.success(`Orphaned entries voided — ${res.voidedCount} entr${res.voidedCount === 1 ? "y" : "ies"} removed from ledger`);
+      onDone();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "Void failed");
+    } finally {
+      setVoidingGroup(false);
     }
   };
 
@@ -290,11 +319,17 @@ function BalanceGroupModal({ group, accounts, businessId, healthRunId, onClose, 
 
           {/* Buttons */}
           <div className="flex items-center justify-end gap-2 pt-1 shrink-0">
-            <button onClick={onClose} disabled={saving}
+            <button onClick={onClose} disabled={busy}
               className="border border-slate-200 px-4 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">
               Cancel
             </button>
-            <button onClick={submit} disabled={saving || !accountId}
+            {group.sourceOrphaned && (
+              <button onClick={voidOrphaned} disabled={busy}
+                className="flex items-center gap-1.5 bg-red-600 px-4 py-1.5 text-[11px] font-bold text-white hover:bg-red-700 disabled:opacity-50">
+                {voidingGroup ? "Voiding…" : "Void All Entries"}
+              </button>
+            )}
+            <button onClick={submit} disabled={busy || !accountId}
               className="px-5 py-1.5 text-[11px] font-bold text-white disabled:opacity-50"
               style={{ backgroundColor: GRN }}>
               {saving ? "Posting…" : "Post Correction"}

@@ -10,11 +10,21 @@ import Unit from "../../models/Unit.js";
 import Property from "../../models/Property.js";
 import GLHealthRun from "../../models/GLHealthRun.js";
 import { postEntry } from "../../services/ledgerPostingService.js";
+import { postInvoiceJournal } from "./tenantInvoices.js";
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
 import { ensureSystemChartOfAccounts, findSystemAccountByCode } from "../../services/chartOfAccountsService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+const toOid  = (id) => new mongoose.Types.ObjectId(String(id));
+const currentMonthBounds = () => {
+  const now = new Date();
+  return {
+    now,
+    periodStart: new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0),
+    periodEnd:   new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999),
+  };
+};
 
 // Batch-fetch human-readable reference numbers for a list of unbalanced groups.
 // Groups the sourceIds by sourceType and does one query per type — no N+1.
@@ -189,7 +199,7 @@ export const repostInvoicesToLedger = async (req, res) => {
       periodEnd = new Date(year, month, 0, 23, 59, 59, 999);
     }
 
-    const invoiceQuery = { business: businessId };
+    const invoiceQuery = { business: businessId, status: { $nin: ["cancelled", "reversed"] } };
     if (propertyId) invoiceQuery.property = propertyId;
     if (periodStart && periodEnd) invoiceQuery.invoiceDate = { $gte: periodStart, $lte: periodEnd };
 
@@ -229,84 +239,18 @@ export const repostInvoicesToLedger = async (req, res) => {
 
     for (const invoice of needsPosting) {
       try {
-        const txDate = invoice.invoiceDate ? new Date(invoice.invoiceDate) : new Date();
-        const monthStart = new Date(txDate.getFullYear(), txDate.getMonth(), 1, 0, 0, 0, 0);
-        const monthEnd = new Date(txDate.getFullYear(), txDate.getMonth() + 1, 0, 23, 59, 59, 999);
-        const journalGroupId = invoice.journalGroupId || undefined;
-
-        const receivableEntry = await postEntry({
-          business: invoice.business,
-          property: invoice.property,
-          landlord: invoice.landlord,
-          tenant: invoice.tenant,
-          unit: invoice.unit,
-          sourceTransactionType: "invoice",
-          sourceTransactionId: String(invoice._id),
-          transactionDate: txDate,
-          statementPeriodStart: monthStart,
-          statementPeriodEnd: monthEnd,
-          category: invoice.category,
-          amount: Math.abs(Number(invoice.amount || 0)),
-          direction: "debit",
-          debit: Math.abs(Number(invoice.amount || 0)),
-          credit: 0,
-          accountId: receivableAccount._id,
-          journalGroupId,
-          payer: "tenant",
-          receiver: "manager",
-          notes: `Rebuilt receivable leg for invoice ${invoice.invoiceNumber}`,
-          metadata: {
-            includeInLandlordStatement: true,
-            includeInCategoryTotals: true,
-            rebuiltByDiagnostics: true,
-          },
+        // Delegate to postInvoiceJournal — identical to the original posting path.
+        // This ensures VAT splitting, correct netAmount on income leg, and fresh journalGroupId.
+        const incomeAccount = invoice.chartAccount ? { _id: invoice.chartAccount } : null;
+        const { entries } = await postInvoiceJournal({
+          invoice,
           createdBy: userId,
-          approvedBy: userId,
-          approvedAt: new Date(),
-          status: "approved",
+          incomeAccount,
+          receivableAccount,
         });
-
-        let incomeEntry;
-        try {
-          incomeEntry = await postEntry({
-            business: invoice.business,
-            property: invoice.property,
-            landlord: invoice.landlord,
-            tenant: invoice.tenant,
-            unit: invoice.unit,
-            sourceTransactionType: "invoice",
-            sourceTransactionId: String(invoice._id),
-            transactionDate: txDate,
-            statementPeriodStart: monthStart,
-            statementPeriodEnd: monthEnd,
-            category: invoice.category,
-            amount: Math.abs(Number(invoice.amount || 0)),
-            direction: "credit",
-            debit: 0,
-            credit: Math.abs(Number(invoice.amount || 0)),
-            accountId: invoice.chartAccount,
-            journalGroupId,
-            payer: "tenant",
-            receiver: "manager",
-            notes: `Rebuilt income leg for invoice ${invoice.invoiceNumber}`,
-            metadata: {
-              includeInLandlordStatement: false,
-              includeInCategoryTotals: false,
-              rebuiltByDiagnostics: true,
-            },
-            createdBy: userId,
-            approvedBy: userId,
-            approvedAt: new Date(),
-            status: "approved",
-          });
-        } catch (incomeErr) {
-          // Income leg failed — void the receivable leg to prevent an orphan debit entry
-          await FinancialLedgerEntry.findByIdAndUpdate(receivableEntry._id, { $set: { status: "void" } });
-          throw incomeErr;
+        for (const e of entries) {
+          e.accountId && touchedAccountIds.add(String(e.accountId));
         }
-
-        touchedAccountIds.add(String(receivableEntry.accountId || ""));
-        touchedAccountIds.add(String(incomeEntry.accountId || ""));
         posted += 1;
       } catch (err) {
         errors.push({
@@ -458,8 +402,10 @@ export const checkLedgerBalance = async (req, res) => {
 
 export const checkUtilityReceiptLedgerEntries = async (req, res) => {
   try {
+    const businessId = req.query?.businessId || req.user?.company;
     const { propertyId, landlordId, periodStart, periodEnd } = req.query;
     const match = {
+      business: businessId,
       status: "approved",
       category: { $in: ["UTILITY_RECEIPT_MANAGER", "UTILITY_RECEIPT_LANDLORD"] },
     };
@@ -492,7 +438,29 @@ export const runIntegrityReport = async (req, res) => {
     if (!businessId) return res.status(400).json({ error: "Business context required" });
 
     const bizId = new mongoose.Types.ObjectId(String(businessId));
+    // ACTIVE_STATUSES: used for totals and account-orphan checks (approved entries only)
     const ACTIVE_STATUSES = ["approved"];
+    // REPORT_STATUSES: matches the trial balance — both "approved" and "reversed" entries
+    // are included so that a properly reversed journal group (original "reversed" + REVERSAL
+    // "approved" pairs) shows as balanced, consistent with what the trial balance shows.
+    const REPORT_STATUSES = ["approved", "reversed"];
+
+    // Legacy entries stored amount+direction instead of explicit debit/credit fields.
+    // These $cond expressions fall back to that format so old entries are counted correctly.
+    const debitExpr = {
+      $cond: [
+        { $gt: [{ $ifNull: ["$debit", -1] }, -1] },
+        "$debit",
+        { $cond: [{ $eq: ["$direction", "debit"] }, "$amount", 0] },
+      ],
+    };
+    const creditExpr = {
+      $cond: [
+        { $gt: [{ $ifNull: ["$credit", -1] }, -1] },
+        "$credit",
+        { $cond: [{ $eq: ["$direction", "credit"] }, "$amount", 0] },
+      ],
+    };
 
     const [
       [totals],
@@ -509,19 +477,19 @@ export const runIntegrityReport = async (req, res) => {
         {
           $group: {
             _id: null,
-            totalDebit: { $sum: "$debit" },
-            totalCredit: { $sum: "$credit" },
+            totalDebit: { $sum: debitExpr },
+            totalCredit: { $sum: creditExpr },
             count: { $sum: 1 },
           },
         },
       ]),
       FinancialLedgerEntry.aggregate([
-        { $match: { business: bizId, status: { $in: ACTIVE_STATUSES }, journalGroupId: { $ne: null } } },
+        { $match: { business: bizId, status: { $in: REPORT_STATUSES }, journalGroupId: { $ne: null } } },
         {
           $group: {
             _id: "$journalGroupId",
-            debitSum: { $sum: "$debit" },
-            creditSum: { $sum: "$credit" },
+            debitSum: { $sum: debitExpr },
+            creditSum: { $sum: creditExpr },
             entryCount: { $sum: 1 },
             firstDate: { $min: "$transactionDate" },
             sourceType: { $first: "$sourceTransactionType" },
@@ -545,8 +513,8 @@ export const runIntegrityReport = async (req, res) => {
         {
           $group: {
             _id: "$accountId",
-            netDebit: { $sum: "$debit" },
-            netCredit: { $sum: "$credit" },
+            netDebit: { $sum: debitExpr },
+            netCredit: { $sum: creditExpr },
           },
         },
         { $addFields: { netBalance: { $subtract: ["$netDebit", "$netCredit"] } } },
@@ -704,18 +672,24 @@ export const repairBalanceGroup = async (req, res) => {
     const bizId   = new mongoose.Types.ObjectId(String(businessId));
     const groupOid = new mongoose.Types.ObjectId(String(groupId));
 
-    // Fetch all approved entries in the group
-    const entries = await FinancialLedgerEntry.find({
+    // Use approved+reversed (same set as the trial balance) so the imbalance we
+    // measure matches what the trial balance actually shows.  If a receipt was
+    // reversed and its REVERSAL entries are in this same group they will cancel
+    // the originals to zero — diff = 0 → "already balanced" blocks the correction,
+    // which is the right outcome.  If the reversal entries ended up in the wrong
+    // group (data corruption) the group will still show a real imbalance here and
+    // the correction is allowed.
+    const allEntries = await FinancialLedgerEntry.find({
       business: bizId,
       journalGroupId: groupOid,
-      status: "approved",
+      status: { $in: ["approved", "reversed"] },
     }).lean();
 
-    if (!entries.length)
-      return res.status(404).json({ error: "No approved entries found for this journal group" });
+    if (!allEntries.length)
+      return res.status(404).json({ error: "No entries found for this journal group" });
 
-    const debitSum  = round2(entries.reduce((s, e) => s + (Number(e.debit)  || 0), 0));
-    const creditSum = round2(entries.reduce((s, e) => s + (Number(e.credit) || 0), 0));
+    const debitSum  = round2(allEntries.reduce((s, e) => s + (Number(e.debit)  || 0), 0));
+    const creditSum = round2(allEntries.reduce((s, e) => s + (Number(e.credit) || 0), 0));
     const diff      = round2(debitSum - creditSum);
 
     if (Math.abs(diff) < 0.005)
@@ -731,10 +705,11 @@ export const repairBalanceGroup = async (req, res) => {
     if (existingCorrection)
       return res.status(409).json({ error: "A correction entry already exists for this group. Undo it first before posting a new one." });
 
+    // Derive context (property, landlord, source label) from the first non-correction entry
+    const sample = allEntries.find((e) => e.sourceTransactionType !== "manual_adjustment") || allEntries[0];
+
     const correctionDirection = diff > 0 ? "credit" : "debit";
     const correctionAmount    = Math.abs(diff);
-    // Prefer the first original entry (not a prior correction) to pull source identity
-    const sample = entries.find((e) => e.sourceTransactionType !== "manual_adjustment") || entries[0];
     const actorUserId = await resolveAuditActorUserId({ req, businessId });
 
     // Build a human-readable source label by looking up the source document
@@ -756,10 +731,7 @@ export const repairBalanceGroup = async (req, res) => {
       sourceLabel = ` — ${sample.sourceTransactionType} …${String(sample.sourceTransactionId || "").slice(-8)}`;
     }
 
-    // Use current date to avoid closed-period lock; compute period from it
-    const now         = new Date();
-    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-    const periodEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    const { now, periodStart, periodEnd } = currentMonthBounds();
 
     const correctionEntry = await postEntry({
       business:              bizId,
@@ -844,11 +816,9 @@ export const repairClearAbnormalBalance = async (req, res) => {
     const accDirection = netBalance > 0 ? "credit" : "debit";
     const offDirection = netBalance > 0 ? "debit"  : "credit";
 
-    const actorUserId = await resolveAuditActorUserId({ req, businessId });
-    const newGroupId  = new mongoose.Types.ObjectId();
-    const now         = new Date();
-    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1,  0, 0, 0, 0);
-    const periodEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    const actorUserId             = await resolveAuditActorUserId({ req, businessId });
+    const newGroupId              = new mongoose.Types.ObjectId();
+    const { now, periodStart, periodEnd } = currentMonthBounds();
 
     const desc = notes?.trim() ||
       `GL Clear Abnormal Balance: ${accDirection === "credit" ? "CR" : "DR"} KES ${corrAmount.toFixed(2)} — restoring account to zero`;
@@ -1017,10 +987,13 @@ export const reverseGlCorrectionEntry = async (req, res) => {
   if (!isUngrouped && !mongoose.Types.ObjectId.isValid(groupId)) {
     return res.status(400).json({ error: "Invalid groupId" });
   }
+  if (isUngrouped && !(entryIds?.length)) {
+    return res.status(400).json({ error: "entryIds required for ungrouped corrections" });
+  }
 
   try {
     const baseMatch = {
-      business:              new mongoose.Types.ObjectId(String(businessId)),
+      business:              toOid(businessId),
       sourceTransactionType: "manual_adjustment",
       status:                "approved",
     };
@@ -1113,6 +1086,7 @@ export const getGroupEntries = async (req, res) => {
     return res.status(200).json({
       entries: entries.map((e) => ({
         _id:                   e._id,
+        accountId:             e.accountId?._id || null,
         direction:             e.direction,
         debit:                 e.debit  || 0,
         credit:                e.credit || 0,
@@ -1125,6 +1099,43 @@ export const getGroupEntries = async (req, res) => {
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });
+  }
+};
+
+// ─── VOID ORPHANED JOURNAL GROUP ─────────────────────────────────────────────
+// POST /api/ledger/repair/void-orphaned-group/:groupId
+// Voids all approved entries in a journal group whose source document has been
+// deleted. Cleaner than posting a correcting entry — removes them from the
+// trial balance entirely without adding more ledger noise.
+export const voidOrphanedJournalGroup = async (req, res) => {
+  const { groupId }   = req.params;
+  const { business: businessId } = req.body;
+
+  if (!businessId) return res.status(400).json({ error: "Business context required" });
+  if (!mongoose.Types.ObjectId.isValid(groupId)) return res.status(400).json({ error: "Invalid groupId" });
+
+  try {
+    const bizId    = new mongoose.Types.ObjectId(String(businessId));
+    const groupOid = new mongoose.Types.ObjectId(String(groupId));
+
+    const entries = await FinancialLedgerEntry.find({
+      business:       bizId,
+      journalGroupId: groupOid,
+      status:         "approved",
+    }).select("_id accountId").lean();
+
+    if (!entries.length) return res.status(200).json({ success: true, voidedCount: 0 });
+
+    const ids        = entries.map((e) => e._id);
+    const accountIds = [...new Set(entries.map((e) => String(e.accountId)).filter(Boolean))];
+
+    await FinancialLedgerEntry.updateMany({ _id: { $in: ids } }, { $set: { status: "void" } });
+
+    aggregateChartOfAccountBalances(businessId, accountIds).catch(() => {});
+
+    return res.status(200).json({ success: true, voidedCount: entries.length });
+  } catch (err) {
+    return res.status(500).json({ error: err.message || "Void failed" });
   }
 };
 
