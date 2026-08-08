@@ -4,9 +4,11 @@ import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
 import { toast } from "react-toastify";
+import { printReceipt } from "../../utils/posReceipt";
 import {
   FaBarcode, FaCheck, FaMinus, FaPlus, FaSearch,
   FaTimes, FaTrash, FaCashRegister, FaPrint, FaChevronDown, FaChevronUp,
+  FaPause, FaPlay,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { inventoryApi, formatMoney } from "../../services/inventoryApi";
@@ -36,22 +38,36 @@ const ProductSearchRow = ({ product, onAdd }) => (
   </button>
 );
 
-const ProductCard = ({ product, onAdd }) => (
-  <button
-    type="button"
-    onClick={() => onAdd(product)}
-    className="flex flex-col gap-1 border border-slate-200 bg-white p-2 text-left hover:border-[#0B3B2E] hover:bg-[#EDF5F1] transition-colors active:scale-95"
-  >
-    <div className="text-[11px] font-bold text-slate-800 leading-tight line-clamp-2">{product.name}</div>
-    {product.sku && <div className="text-[9px] text-slate-400 font-mono">{product.sku}</div>}
-    <div className="mt-auto flex items-end justify-between gap-1">
-      <span className="text-xs font-extrabold text-[#0B3B2E]">{formatMoney(product.sellingPrice)}</span>
-      {product.trackStock && (
-        <span className="text-[9px] font-bold text-slate-400">{product.stockQty ?? ""}  {product.unitOfMeasure || ""}</span>
-      )}
-    </div>
-  </button>
-);
+const ProductCard = ({ product, onAdd }) => {
+  const qty       = product.stockQty ?? null;
+  const reorder   = product.reorderLevel ?? 0;
+  const isLow     = product.trackStock && qty !== null && qty <= reorder && qty > 0;
+  const isOut     = product.trackStock && qty !== null && qty <= 0;
+  const stockColor = isOut ? "text-red-500" : isLow ? "text-amber-500" : "text-slate-400";
+  return (
+    <button
+      type="button"
+      onClick={() => onAdd(product)}
+      disabled={isOut}
+      className={`flex flex-col gap-1 border p-2 text-left transition-colors active:scale-95 ${
+        isOut
+          ? "border-red-200 bg-red-50 opacity-60 cursor-not-allowed"
+          : "border-slate-200 bg-white hover:border-[#0B3B2E] hover:bg-[#EDF5F1]"
+      }`}
+    >
+      <div className="text-[11px] font-bold text-slate-800 leading-tight line-clamp-2">{product.name}</div>
+      {product.sku && <div className="text-[9px] text-slate-400 font-mono">{product.sku}</div>}
+      <div className="mt-auto flex items-end justify-between gap-1">
+        <span className="text-xs font-extrabold text-[#0B3B2E]">{formatMoney(product.sellingPrice)}</span>
+        {product.trackStock && qty !== null && (
+          <span className={`text-[9px] font-bold ${stockColor}`}>
+            {isOut ? "Out of stock" : `${qty} ${product.unitOfMeasure || ""}`}
+          </span>
+        )}
+      </div>
+    </button>
+  );
+};
 
 const CartLine = ({ line, onQtyChange, onRemove, onDiscountChange }) => {
   const lineTotal = round2((line.unitPrice - line.discount) * line.qty);
@@ -107,7 +123,9 @@ const fmtDateTime = (iso) =>
 
 const POSTerminal = () => {
   const navigate   = useNavigate();
-  const scanRef    = useRef(null);
+  const scanRef        = useRef(null);
+  const lastKeyTimeRef = useRef(0);   // timestamp of last keydown in search box
+  const isScanRef      = useRef(false); // true when chars are arriving at scanner speed
 
   /* Location / session state */
   const [locations,        setLocations]        = useState([]);
@@ -130,8 +148,14 @@ const POSTerminal = () => {
   const [searching,     setSearching]     = useState(false);
 
   /* Cart state */
-  const [cart,       setCart]       = useState(emptyCart());
-  const [keyCounter, setKeyCounter] = useState(0);
+  const [cart,         setCart]         = useState(emptyCart());
+  const [keyCounter,   setKeyCounter]   = useState(0);
+  const [cartDiscount, setCartDiscount] = useState({ type: "amount", value: "" }); // bill-level discount
+  const [orderRef,     setOrderRef]     = useState(""); // table / room / order number
+
+  /* Parked (held) carts */
+  const [parkedCarts,  setParkedCarts]  = useState([]);
+  const [showParked,   setShowParked]   = useState(false);
 
   /* Checkout state */
   const [customerName,    setCustomerName]    = useState("");
@@ -162,16 +186,83 @@ const POSTerminal = () => {
   const [closingSession, setClosingSession] = useState(false);
 
   /* Active company — used to detect company switches and reset POS state */
-  const companyId = useSelector((state) => selectCurrentCompany(state)?._id);
+  const company   = useSelector(selectCurrentCompany);
+  const companyId = company?._id;
 
   /* Totals */
-  const subtotal   = round2(cart.reduce((s, l) => s + l.unitPrice * l.qty, 0));
-  const totalDisc  = round2(cart.reduce((s, l) => s + l.discount * l.qty, 0));
-  const taxable    = round2(subtotal - totalDisc);
-  const totalVat   = round2(cart.reduce((s, l) => s + round2((l.unitPrice - l.discount) * l.qty * (l.vatRate / 100)), 0));
-  const grandTotal = round2(taxable + totalVat);
-  const payTotal   = round2(payments.reduce((s, p) => s + Number(p.amount || 0), 0));
-  const change     = round2(Number(amountTendered || payTotal) - grandTotal);
+  const subtotal      = round2(cart.reduce((s, l) => s + l.unitPrice * l.qty, 0));
+  const totalLineDisc = round2(cart.reduce((s, l) => s + l.discount * l.qty, 0));
+  const lineNet       = round2(subtotal - totalLineDisc);
+  const cartDiscAmt   = cartDiscount.type === "percent"
+    ? round2(lineNet * Math.min(100, Math.max(0, Number(cartDiscount.value || 0))) / 100)
+    : round2(Math.max(0, Number(cartDiscount.value || 0)));
+  const totalDisc     = round2(totalLineDisc + cartDiscAmt);
+  const totalVat      = round2(cart.reduce((s, l) => s + round2((l.unitPrice - l.discount) * l.qty * (l.vatRate / 100)), 0));
+  const grandTotal    = round2(lineNet - cartDiscAmt + totalVat);
+  const payTotal      = round2(payments.reduce((s, p) => s + Number(p.amount || 0), 0));
+  const change        = round2(Number(amountTendered || payTotal) - grandTotal);
+
+  /* Global keyboard shortcuts (active when session is open) */
+  useEffect(() => {
+    if (!session) return;
+    const handler = (e) => {
+      // Don't fire if user is typing inside an input/textarea/select
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName)) {
+        // Exception: F-keys always fire
+        if (!e.key.startsWith("F")) return;
+      }
+      switch (e.key) {
+        case "F1":
+          e.preventDefault();
+          scanRef.current?.focus();
+          break;
+        case "F2":
+          e.preventDefault();
+          if (cart.length && !showCheckout) {
+            setPayments([{ method: "cash", amount: String(grandTotal) }]);
+            setAmountTendered(String(grandTotal));
+            setShowCheckout(true);
+          }
+          break;
+        case "F3":
+          e.preventDefault();
+          if (cart.length && !showCheckout) {
+            setPayments([{ method: "mpesa", amount: String(grandTotal) }]);
+            setAmountTendered(String(grandTotal));
+            setShowCheckout(true);
+          }
+          break;
+        case "F4":
+          e.preventDefault();
+          if (cart.length && !showCheckout) {
+            setPayments([{ method: "card", amount: String(grandTotal) }]);
+            setAmountTendered(String(grandTotal));
+            setShowCheckout(true);
+          }
+          break;
+        case "F9":
+          e.preventDefault();
+          parkCart();
+          break;
+        case "F10":
+          e.preventDefault();
+          if (parkedCarts.length) setShowParked((v) => !v);
+          break;
+        case "Escape":
+          setShowCheckout(false);
+          setShowParked(false);
+          setShowCashModal(false);
+          setShowXRead(false);
+          setShowCloseModal(false);
+          scanRef.current?.focus();
+          break;
+        default:
+          break;
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [session, cart, grandTotal, showCheckout, parkCart, parkedCarts.length]);
 
   /* Reset ALL POS state when the active company changes (admin switching between companies) */
   useEffect(() => {
@@ -218,30 +309,30 @@ const POSTerminal = () => {
       .finally(() => setLoadingSession(false));
   }, [selectedTill]);
 
-  /* Load product catalog + categories when session opens */
-  const loadCatalog = useCallback(async () => {
+  /* Load categories once when session opens */
+  useEffect(() => {
+    if (!session) { setCategories([]); return; }
+    inventoryApi.listCategories({ active: true })
+      .then((res) => setCategories(Array.isArray(res) ? res : (res?.data ?? [])))
+      .catch(() => {});
+  }, [session]);
+
+  /* Load products — server-side per category + stock qty for selected location */
+  const loadProducts = useCallback(async (categoryId = "all") => {
     setLoadingGrid(true);
     try {
-      const [prods, cats] = await Promise.allSettled([
-        inventoryApi.listProducts({ active: true, limit: 200 }),
-        inventoryApi.listCategories({ active: true }),
-      ]);
-      if (prods.status === "fulfilled") {
-        const list = Array.isArray(prods.value) ? prods.value : (prods.value?.data ?? []);
-        setGridProducts(list);
-      }
-      if (cats.status === "fulfilled") {
-        const list = Array.isArray(cats.value) ? cats.value : (cats.value?.data ?? []);
-        setCategories(list);
-      }
+      const params = { active: true, limit: 150, location: selectedLocation };
+      if (categoryId !== "all") params.category = categoryId;
+      const res  = await inventoryApi.listProducts(params);
+      setGridProducts(Array.isArray(res) ? res : (res?.data ?? []));
     } finally {
       setLoadingGrid(false);
     }
-  }, []);
+  }, [selectedLocation]);
 
   useEffect(() => {
-    if (session) loadCatalog();
-  }, [session, loadCatalog]);
+    if (session) loadProducts(catFilter);
+  }, [session, catFilter, loadProducts]);
 
   /* Debounced product search */
   useEffect(() => {
@@ -261,10 +352,8 @@ const POSTerminal = () => {
     return () => clearTimeout(t);
   }, [searchQuery]);
 
-  /* Filtered product grid */
-  const filteredProducts = catFilter === "all"
-    ? gridProducts
-    : gridProducts.filter((p) => p.category?._id === catFilter || p.category === catFilter);
+  /* Products are already filtered server-side by category */
+  const filteredProducts = gridProducts;
 
   /* Cart operations */
   const addToCart = useCallback((product) => {
@@ -292,13 +381,109 @@ const POSTerminal = () => {
     scanRef.current?.focus();
   }, [keyCounter]);
 
+  /* Barcode scanner direct lookup — called when Enter fires after fast input */
+  const handleScannerLookup = useCallback(async (barcode) => {
+    const q = barcode.trim();
+    if (!q) return;
+    setSearchQuery("");
+    setSearchResults([]);
+    isScanRef.current = false;
+    try {
+      const product = await inventoryApi.lookupProduct(q);
+      if (product) {
+        addToCart(product);
+        toast.success(`✓ ${product.name}`, { autoClose: 1200, position: "bottom-right" });
+      } else {
+        toast.error(`Barcode not found: ${q}`, { autoClose: 2500 });
+        setSearchQuery(q); // fall back to search so cashier can still find it
+      }
+    } catch {
+      toast.error(`Barcode not found: ${q}`, { autoClose: 2500 });
+    }
+  }, [addToCart]);
+
+  /* onKeyDown for the search input — detects scanner vs keyboard */
+  const handleSearchKeyDown = useCallback((e) => {
+    const now = Date.now();
+    const gap = now - lastKeyTimeRef.current;
+    lastKeyTimeRef.current = now;
+
+    if (e.key !== "Enter") {
+      if (gap < 60) isScanRef.current = true;   // scanner speed
+      else if (gap > 300) isScanRef.current = false; // reset on slow typing
+      return;
+    }
+
+    // Enter pressed ─────────────────────────────────────────────────────────
+    e.preventDefault();
+
+    if (isScanRef.current && searchQuery.trim()) {
+      // Barcode scanner path — bypass dropdown, go direct to API lookup
+      handleScannerLookup(searchQuery);
+      return;
+    }
+
+    // Manual typing path — add first search result if dropdown is visible
+    if (searchResults.length > 0) {
+      addToCart(searchResults[0]);
+      setSearchQuery("");
+      setSearchResults([]);
+    }
+  }, [searchQuery, searchResults, addToCart, handleScannerLookup]);
+
   const updateQty      = (key, qty) => {
     if (qty <= 0) setCart((c) => c.filter((l) => l._key !== key));
     else          setCart((c) => c.map((l) => l._key === key ? { ...l, qty } : l));
   };
   const updateDiscount  = (key, discount) => setCart((c) => c.map((l) => l._key === key ? { ...l, discount: Math.max(0, discount) } : l));
   const removeFromCart  = (key) => setCart((c) => c.filter((l) => l._key !== key));
-  const clearCart       = () => { setCart(emptyCart()); setPayments(emptyPayment()); setAmountTendered(""); setCustomerName(""); setCustomerPhone(""); setNotes(""); };
+  const clearCart       = () => {
+    setCart(emptyCart()); setPayments(emptyPayment()); setAmountTendered("");
+    setCustomerName(""); setCustomerPhone(""); setNotes("");
+    setCartDiscount({ type: "amount", value: "" }); setOrderRef("");
+  };
+
+  /* Park current cart (hold) */
+  const parkCart = useCallback(() => {
+    if (!cart.length) return;
+    const id = Date.now();
+    const label = orderRef.trim() || customerName.trim() || `Hold #${parkedCarts.length + 1}`;
+    setParkedCarts((prev) => [
+      ...prev,
+      { id, label, cart, payments, customerName, customerPhone, notes, cartDiscount, orderRef, parkedAt: new Date() },
+    ]);
+    clearCart();
+    toast.info(`Cart parked as "${label}"`, { autoClose: 1500 });
+  }, [cart, payments, customerName, customerPhone, notes, cartDiscount, orderRef, parkedCarts.length]);
+
+  /* Resume a parked cart */
+  const resumeCart = useCallback((parked) => {
+    if (cart.length) {
+      const id = Date.now();
+      const label = orderRef.trim() || customerName.trim() || `Hold #${parkedCarts.length + 1}`;
+      setParkedCarts((prev) =>
+        prev
+          .filter((p) => p.id !== parked.id)
+          .concat({ id, label, cart, payments, customerName, customerPhone, notes, cartDiscount, orderRef, parkedAt: new Date() })
+      );
+    } else {
+      setParkedCarts((prev) => prev.filter((p) => p.id !== parked.id));
+    }
+    setCart(parked.cart);
+    setPayments(parked.payments ?? emptyPayment());
+    setCustomerName(parked.customerName ?? "");
+    setCustomerPhone(parked.customerPhone ?? "");
+    setNotes(parked.notes ?? "");
+    setCartDiscount(parked.cartDiscount ?? { type: "amount", value: "" });
+    setOrderRef(parked.orderRef ?? "");
+    setShowParked(false);
+    toast.success(`Resumed: ${parked.label}`, { autoClose: 1200 });
+  }, [cart, payments, customerName, customerPhone, notes, cartDiscount, orderRef, parkedCarts.length]);
+
+  /* Discard a parked cart */
+  const discardParked = useCallback((id) => {
+    setParkedCarts((prev) => prev.filter((p) => p.id !== id));
+  }, []);
 
   /* Payment operations */
   const addPaymentLine    = () => setPayments((p) => [...p, { method: "cash", amount: "" }]);
@@ -384,21 +569,35 @@ const POSTerminal = () => {
     }
     setSubmitting(true);
     try {
+      // Distribute cart-level discount proportionally across lines
+      const lineNetTotal = round2(cart.reduce((s, l) => s + (l.unitPrice - l.discount) * l.qty, 0));
+      const saleLines = cart.map((l) => {
+        let effectiveDiscount = l.discount;
+        if (cartDiscAmt > 0 && lineNetTotal > 0) {
+          const lineNet   = round2((l.unitPrice - l.discount) * l.qty);
+          const lineShare = round2(cartDiscAmt * lineNet / lineNetTotal);
+          effectiveDiscount = round2(l.discount + (l.qty > 0 ? lineShare / l.qty : 0));
+        }
+        return { product: l.productId, qty: l.qty, unitPrice: l.unitPrice, discount: effectiveDiscount, vatRate: l.vatRate };
+      });
+
       const sale = await inventoryApi.createSale({
         location:       selectedLocation,
         session:        session._id,
-        lines:          cart.map((l) => ({ product: l.productId, qty: l.qty, unitPrice: l.unitPrice, discount: l.discount, vatRate: l.vatRate })),
+        lines:          saleLines,
         payments:       payments.map((p) => ({ method: p.method, amount: Number(p.amount || 0) })),
         customerName,
         customerPhone,
         amountTendered: Number(amountTendered || payTotal),
-        notes,
+        notes:          [notes, orderRef ? `Ref: ${orderRef}` : ""].filter(Boolean).join(" | "),
       });
-      setLastReceipt(sale?.data ?? sale);
+      const receipt = sale?.data ?? sale;
+      setLastReceipt(receipt);
       setShowReceipt(true);
       clearCart();
       setShowCheckout(false);
       toast.success("Sale posted successfully");
+      printReceipt(receipt, company, { locationName, tillName });
     } catch (err) {
       const msg = err?.response?.data?.message || "Sale failed";
       toast.error(msg);
@@ -504,18 +703,24 @@ const POSTerminal = () => {
           {/* Search */}
           <div className="relative border-b border-slate-200 bg-white px-2 py-2">
             <div className="flex items-center gap-2 border border-slate-300 bg-white px-2.5 py-1.5 focus-within:border-[#0B3B2E]">
-              <FaSearch className="text-slate-400 text-xs shrink-0" />
+              <FaBarcode className="text-slate-400 text-xs shrink-0" />
               <input
                 ref={scanRef}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search name, SKU or scan barcode…"
+                onKeyDown={handleSearchKeyDown}
+                placeholder="Search name / SKU or scan barcode → Enter"
                 className="flex-1 text-sm outline-none"
                 autoFocus
               />
               {searching && <span className="text-[10px] text-slate-400">Searching…</span>}
+              {searchResults.length > 0 && !searching && (
+                <span className="shrink-0 text-[9px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5">
+                  Enter ↵ to add first
+                </span>
+              )}
               {searchQuery && (
-                <button onClick={() => { setSearchQuery(""); setSearchResults([]); }}><FaTimes className="text-slate-400 text-xs" /></button>
+                <button onClick={() => { setSearchQuery(""); setSearchResults([]); isScanRef.current = false; }}><FaTimes className="text-slate-400 text-xs" /></button>
               )}
             </div>
             {searchResults.length > 0 && (
@@ -546,11 +751,35 @@ const POSTerminal = () => {
                 <div className="flex items-center justify-between text-[11px] text-slate-500">
                   <span>Subtotal</span><span className="font-semibold">{formatMoney(subtotal)}</span>
                 </div>
-                {totalDisc > 0 && (
+                {totalLineDisc > 0 && (
                   <div className="flex items-center justify-between text-[11px] text-slate-500">
-                    <span>Discount</span><span className="font-semibold text-red-500">-{formatMoney(totalDisc)}</span>
+                    <span>Line discounts</span>
+                    <span className="font-semibold text-red-500">-{formatMoney(totalLineDisc)}</span>
                   </div>
                 )}
+                {/* Cart-level discount row */}
+                <div className="flex items-center gap-1 text-[11px]">
+                  <span className="text-slate-500 shrink-0">Bill disc.</span>
+                  <div className="flex flex-1 items-center gap-1 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setCartDiscount((d) => ({ ...d, type: d.type === "percent" ? "amount" : "percent", value: "" }))}
+                      className="shrink-0 border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-600 hover:bg-slate-100"
+                    >
+                      {cartDiscount.type === "percent" ? "%" : "KES"}
+                    </button>
+                    <input
+                      type="number" min="0" step="0.01"
+                      value={cartDiscount.value}
+                      onChange={(e) => setCartDiscount((d) => ({ ...d, value: e.target.value }))}
+                      placeholder="0"
+                      className="w-20 border border-slate-200 px-1.5 py-0.5 text-right text-[11px] outline-none focus:border-[#0B3B2E]"
+                    />
+                    {cartDiscAmt > 0 && (
+                      <span className="shrink-0 font-semibold text-red-500">-{formatMoney(cartDiscAmt)}</span>
+                    )}
+                  </div>
+                </div>
                 {totalVat > 0 && (
                   <div className="flex items-center justify-between text-[11px] text-slate-500">
                     <span>VAT</span><span className="font-semibold">{formatMoney(totalVat)}</span>
@@ -558,11 +787,33 @@ const POSTerminal = () => {
                 )}
               </div>
             )}
-            {/* Total row + clear */}
+            {/* Total row + clear + hold */}
             <div className="flex items-center justify-between mb-2">
-              <button onClick={clearCart} disabled={!cart.length} className="flex items-center gap-1 text-[11px] font-bold text-red-400 hover:text-red-600 disabled:opacity-30">
-                <FaTrash className="text-[9px]" /> Clear
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={clearCart} disabled={!cart.length} className="flex items-center gap-1 text-[11px] font-bold text-red-400 hover:text-red-600 disabled:opacity-30">
+                  <FaTrash className="text-[9px]" /> Clear
+                </button>
+                <button
+                  onClick={parkCart}
+                  disabled={!cart.length}
+                  title="Park this cart and start a new one (Hold)"
+                  className="flex items-center gap-1 text-[11px] font-bold text-amber-600 hover:text-amber-700 disabled:opacity-30"
+                >
+                  <FaPause className="text-[9px]" /> Hold
+                </button>
+                {parkedCarts.length > 0 && (
+                  <button
+                    onClick={() => setShowParked((v) => !v)}
+                    className="flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-700"
+                  >
+                    <FaPlay className="text-[9px]" />
+                    Resume
+                    <span className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-[9px] font-black text-white">
+                      {parkedCarts.length}
+                    </span>
+                  </button>
+                )}
+              </div>
               <span className="text-xl font-extrabold text-[#0B3B2E]">{formatMoney(grandTotal)}</span>
             </div>
             {/* Charge button — always prominent */}
@@ -598,7 +849,10 @@ const POSTerminal = () => {
                   <div className="mb-1 flex items-center justify-between">
                     <span className="font-mono font-bold text-[#0B3B2E]">{lastReceipt.receiptNumber}</span>
                     <div className="flex gap-2">
-                      <button className="flex items-center gap-1 border border-slate-200 px-2 py-0.5 text-[9px] font-bold text-slate-600 hover:bg-slate-50">
+                      <button
+                        onClick={() => printReceipt(lastReceipt, company, { locationName, tillName })}
+                        className="flex items-center gap-1 border border-slate-200 px-2 py-0.5 text-[9px] font-bold text-slate-600 hover:bg-slate-50"
+                      >
                         <FaPrint className="text-[8px]" /> Print
                       </button>
                       <button onClick={() => { setLastReceipt(null); setShowReceipt(false); }} className="text-slate-400 hover:text-slate-600">
@@ -662,10 +916,20 @@ const POSTerminal = () => {
             )}
           </div>
 
-          {/* Product count footer */}
-          <div className="border-t border-slate-200 bg-slate-50 px-3 py-1 text-[10px] text-slate-500">
-            {filteredProducts.length} product{filteredProducts.length !== 1 ? "s" : ""}
-            {catFilter !== "all" && " in this category"} · {cart.length} item{cart.length !== 1 ? "s" : ""} in cart
+          {/* Shortcut bar */}
+          <div className="border-t border-slate-200 bg-slate-50 px-3 py-1 flex items-center justify-between">
+            <span className="text-[10px] text-slate-500">
+              {filteredProducts.length} product{filteredProducts.length !== 1 ? "s" : ""}
+              {catFilter !== "all" && " in category"} · {cart.length} in cart
+            </span>
+            <span className="hidden lg:flex items-center gap-2 text-[9px] font-mono text-slate-400">
+              <span><kbd className="rounded border border-slate-200 bg-white px-1 py-0.5">F1</kbd> Search</span>
+              <span><kbd className="rounded border border-slate-200 bg-white px-1 py-0.5">F2</kbd> Cash</span>
+              <span><kbd className="rounded border border-slate-200 bg-white px-1 py-0.5">F3</kbd> M-Pesa</span>
+              <span><kbd className="rounded border border-slate-200 bg-white px-1 py-0.5">F4</kbd> Card</span>
+              <span><kbd className="rounded border border-slate-200 bg-white px-1 py-0.5">F9</kbd> Hold</span>
+              <span><kbd className="rounded border border-slate-200 bg-white px-1 py-0.5">Esc</kbd> Cancel</span>
+            </span>
           </div>
         </div>
       </div>
@@ -829,8 +1093,76 @@ const POSTerminal = () => {
             ) : (
               <div className="flex items-center justify-center py-12 text-sm text-slate-400">Failed to load X-Read data.</div>
             )}
-            <div className="flex justify-end border-t border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="flex justify-between border-t border-slate-200 bg-slate-50 px-4 py-3">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="flex items-center gap-1.5 border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100"
+              >
+                <FaPrint className="text-[10px]" /> Print Report
+              </button>
               <button type="button" onClick={() => setShowXRead(false)} className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Parked Carts modal ────────────────────────────────────── */}
+      {showParked && (
+        <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+          <div className="w-full max-w-md border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-amber-600 px-4 py-3 text-white">
+              <h2 className="text-sm font-extrabold uppercase tracking-wide">
+                <FaPause className="inline mr-1.5 text-xs" />
+                Parked Carts — {parkedCarts.length}
+              </h2>
+              <button type="button" onClick={() => setShowParked(false)} className="p-1 text-white/80 hover:bg-white/10">
+                <FaTimes />
+              </button>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {parkedCarts.map((p) => {
+                const total = p.cart.reduce((s, l) => s + (l.unitPrice - l.discount) * l.qty, 0);
+                const elapsed = Math.round((Date.now() - new Date(p.parkedAt).getTime()) / 60000);
+                return (
+                  <div key={p.id} className="flex items-center gap-3 px-4 py-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-bold text-slate-800">{p.label}</div>
+                      <div className="text-[10px] text-slate-400">
+                        {p.cart.length} item{p.cart.length !== 1 ? "s" : ""} · {formatMoney(total)} · {elapsed < 1 ? "just now" : `${elapsed}m ago`}
+                      </div>
+                      <div className="mt-0.5 text-[10px] text-slate-500 truncate">
+                        {p.cart.slice(0, 3).map((l) => l.productName).join(", ")}
+                        {p.cart.length > 3 ? ` +${p.cart.length - 3} more` : ""}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        onClick={() => resumeCart(p)}
+                        className="flex items-center gap-1 bg-[#0B3B2E] px-3 py-1.5 text-[11px] font-bold text-white hover:bg-[#0A3127]"
+                      >
+                        <FaPlay className="text-[9px]" /> Resume
+                      </button>
+                      <button
+                        onClick={() => discardParked(p.id)}
+                        className="flex items-center gap-1 border border-red-200 px-2 py-1.5 text-[11px] font-bold text-red-500 hover:bg-red-50"
+                        title="Discard this parked cart"
+                      >
+                        <FaTrash className="text-[9px]" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 text-center">
+              <button
+                type="button"
+                onClick={() => setShowParked(false)}
+                className="text-xs font-bold text-slate-500 hover:text-slate-700"
+              >
+                Close — keep shopping
+              </button>
             </div>
           </div>
         </div>
@@ -845,7 +1177,7 @@ const POSTerminal = () => {
               <button onClick={() => setShowCheckout(false)}><FaTimes className="text-slate-300" /></button>
             </div>
             <div className="p-4 space-y-3">
-              {/* Customer */}
+              {/* Customer + Order Ref */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500">Customer Name</label>
@@ -855,6 +1187,17 @@ const POSTerminal = () => {
                   <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500">Phone</label>
                   <input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="w-full border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-[#0B3B2E]" />
                 </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                  Order / Table / Room Ref <span className="font-normal text-slate-400">(optional)</span>
+                </label>
+                <input
+                  value={orderRef}
+                  onChange={(e) => setOrderRef(e.target.value)}
+                  placeholder="e.g. Table 4, Room 12, Order #001"
+                  className="w-full border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-[#0B3B2E]"
+                />
               </div>
 
               {/* Payments */}
@@ -907,6 +1250,9 @@ const POSTerminal = () => {
                 <FaCheck />
                 {submitting ? "Processing…" : `Complete Sale — ${formatMoney(grandTotal)}`}
               </button>
+              <p className="text-center text-[10px] text-slate-400">
+                A receipt will print automatically after completing the sale.
+              </p>
             </div>
           </div>
         </div>

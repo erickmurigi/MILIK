@@ -141,7 +141,9 @@
       "PowerShell(adb version)",
       "PowerShell(echo $env:ANDROID_HOME)",
       "PowerShell(echo $env:ANDROID_SDK_ROOT)",
-      "Read(//c//**)"
+      "Read(//c//**)",
+      "Bash(node_modules/.bin/vite build *)",
+      "Bash(xargs grep -l \"email.*password\\\\|bcrypt\\\\|findOne.*email\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\murig\\OneDrive\\Desktop\\MILIKPMS\\Milik\\MilikMobile\\app\\(app)\\pms\\tenants",
