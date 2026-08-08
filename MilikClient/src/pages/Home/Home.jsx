@@ -29,7 +29,6 @@ import {
 import FreeTrialModal from "../../components/FreeTrialModal";
 import { loginSuccess } from "../../redux/authSlice";
 import { getCompanySuccess } from "../../redux/companiesRedux";
-import landingPageImg from "../../assets/landing/LANDING PAGE.png";
 import "./home.css";
 
 const heroHighlights = [
@@ -119,15 +118,21 @@ const features = [
 
 const steps = [
   {
-    title: "1. Request your free trial",
+    num: "01",
+    icon: <FaClipboardList />,
+    title: "Request your free trial",
     description: "Fill a short form — your name, email, phone and the module you need. No sales call, no commitment required.",
   },
   {
-    title: "2. We reach out personally",
+    num: "02",
+    icon: <FaHandshake />,
+    title: "We reach out personally",
     description: "Our team contacts you within 24 hours to walk you through the system and set up your workspace with your actual configuration.",
   },
   {
-    title: "3. Start working in your live workspace",
+    num: "03",
+    icon: <FaBolt />,
+    title: "Start working in your live workspace",
     description: "Once onboarded, you get your own dedicated workspace. Your data, your settings, your team — ready from day one.",
   },
 ];
@@ -310,41 +315,6 @@ const statItems = [
   { target: 99, suffix: "%", label: "Platform uptime" },
 ];
 
-const API_BASE = String(import.meta.env.VITE_API_URL || "/api").replace(/\/$/, "");
-
-const PUBLIC_SITE_URL = "https://milikproperty.com";
-
-const ensureHeadElement = (selector, tagName, attributes = {}) => {
-  let element = document.head.querySelector(selector);
-  if (!element) {
-    element = document.createElement(tagName);
-    Object.entries(attributes).forEach(([key, value]) => {
-      element.setAttribute(key, value);
-    });
-    document.head.appendChild(element);
-  }
-  return element;
-};
-
-const setDocumentDescription = (content) => {
-  ensureHeadElement('meta[name="description"]', "meta", { name: "description" }).setAttribute("content", content);
-};
-
-const setDocumentRobots = (content) => {
-  ensureHeadElement('meta[name="robots"]', "meta", { name: "robots" }).setAttribute("content", content);
-};
-
-const setCanonicalHref = (href) => {
-  ensureHeadElement('link[rel="canonical"]', "link", { rel: "canonical" }).setAttribute("href", href);
-};
-
-const setOpenGraphContent = (property, content) => {
-  ensureHeadElement(`meta[property="${property}"]`, "meta", { property }).setAttribute("content", content);
-};
-
-const setTwitterContent = (name, content) => {
-  ensureHeadElement(`meta[name="${name}"]`, "meta", { name }).setAttribute("content", content);
-};
 
 const AnimatedNumber = React.memo(function AnimatedNumber({ target, suffix = "", formatK = false }) {
   const [val, setVal] = React.useState(0);
@@ -377,27 +347,228 @@ const AnimatedNumber = React.memo(function AnimatedNumber({ target, suffix = "",
   return <span ref={ref}>{display}{suffix}</span>;
 });
 
-const HeroWorkspaceVisual = React.memo(function HeroWorkspaceVisual() {
+const PropertyIllustration = React.memo(function PropertyIllustration() {
   return (
     <div className="hero-person-shell" aria-hidden="true">
-      {/* Floating stat chip — top left */}
       <div className="hero-float-stat">
         <span className="hero-float-stat-dot" />
         50+ Active businesses
       </div>
 
-      {/* Main person photo */}
       <div className="hero-person-frame">
-        <img
-          src={landingPageImg}
-          alt="Business professional using Milik"
-          className="hero-person-img"
-          loading="eager"
-        />
-        <div className="hero-person-overlay" />
+        <svg viewBox="0 0 380 480" fill="none" width="100%" height="100%" style={{ display: "block" }}>
+          <defs>
+            <linearGradient id="hSky" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#e8f5ef" />
+              <stop offset="100%" stopColor="#cde8da" />
+            </linearGradient>
+            <linearGradient id="hBldg" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="#0e4535" />
+              <stop offset="100%" stopColor="#0B3B2E" />
+            </linearGradient>
+            <linearGradient id="hGround" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#b8dfc8" />
+              <stop offset="100%" stopColor="#9ecdb4" />
+            </linearGradient>
+            <linearGradient id="hLitWin" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#ffffff" />
+              <stop offset="100%" stopColor="#dff5ea" />
+            </linearGradient>
+          </defs>
+
+          {/* Sky */}
+          <rect width="380" height="480" fill="url(#hSky)" />
+
+          {/* Sun */}
+          <circle cx="344" cy="42" r="28" fill="#fff9cc" opacity="0.55" />
+          <circle cx="344" cy="42" r="17" fill="#ffe566" opacity="0.42" />
+
+          {/* Clouds */}
+          <ellipse cx="68" cy="56" rx="38" ry="18" fill="white" opacity="0.7" />
+          <ellipse cx="98" cy="47" rx="28" ry="14" fill="white" opacity="0.7" />
+          <ellipse cx="46" cy="63" rx="23" ry="12" fill="white" opacity="0.7" />
+          <ellipse cx="288" cy="38" rx="30" ry="13" fill="white" opacity="0.48" />
+          <ellipse cx="312" cy="30" rx="21" ry="11" fill="white" opacity="0.48" />
+
+          {/* Background small buildings */}
+          <rect x="6" y="290" width="50" height="150" rx="4" fill="#0B3B2E" opacity="0.11" />
+          <rect x="324" y="300" width="50" height="140" rx="4" fill="#0B3B2E" opacity="0.1" />
+          <rect x="18" y="300" width="10" height="12" rx="2" fill="white" opacity="0.2" />
+          <rect x="34" y="300" width="10" height="12" rx="2" fill="white" opacity="0.2" />
+          <rect x="18" y="322" width="10" height="12" rx="2" fill="white" opacity="0.2" />
+          <rect x="34" y="322" width="10" height="12" rx="2" fill="white" opacity="0.2" />
+          <rect x="334" y="312" width="30" height="10" rx="2" fill="white" opacity="0.15" />
+          <rect x="334" y="332" width="30" height="10" rx="2" fill="white" opacity="0.15" />
+
+          {/* Ground */}
+          <rect x="0" y="418" width="380" height="62" fill="url(#hGround)" />
+          <rect x="0" y="416" width="380" height="5" fill="#8ecbaa" opacity="0.65" />
+
+          {/* Pathway */}
+          <rect x="148" y="418" width="84" height="62" rx="3" fill="#c5e6d2" opacity="0.8" />
+          <rect x="162" y="426" width="56" height="3" rx="1" fill="white" opacity="0.4" />
+          <rect x="162" y="436" width="56" height="3" rx="1" fill="white" opacity="0.32" />
+          <rect x="162" y="446" width="56" height="3" rx="1" fill="white" opacity="0.28" />
+
+          {/* Building base shadow */}
+          <rect x="66" y="420" width="248" height="10" rx="5" fill="#0B3B2E" opacity="0.11" />
+
+          {/* ── MAIN BUILDING ── */}
+          <rect x="70" y="90" width="240" height="332" rx="8" fill="url(#hBldg)" />
+
+          {/* Roof */}
+          <rect x="62" y="82" width="256" height="14" rx="6" fill="#073029" />
+          <rect x="78" y="66" width="224" height="20" rx="5" fill="#082d22" />
+
+          {/* Water tank */}
+          <rect x="164" y="48" width="52" height="20" rx="4" fill="#051e14" />
+          <ellipse cx="190" cy="48" rx="26" ry="11" fill="#073328" />
+          <rect x="166" y="36" width="48" height="14" rx="5" fill="#082d22" />
+          <rect x="186" y="58" width="5" height="10" rx="2" fill="#051e14" />
+          <rect x="194" y="58" width="5" height="10" rx="2" fill="#051e14" />
+
+          {/* Flag */}
+          <rect x="189" y="12" width="3" height="26" fill="#062820" />
+          <polygon points="192,12 208,18 192,24" fill="#C96F00" />
+
+          {/* Floor dividers */}
+          <rect x="70" y="170" width="240" height="5" rx="1" fill="#062820" />
+          <rect x="70" y="250" width="240" height="5" rx="1" fill="#062820" />
+          <rect x="70" y="330" width="240" height="5" rx="1" fill="#062820" />
+
+          {/* ── FLOOR 4 (y 95–167) ── */}
+          {/* 4-A lit */}
+          <rect x="84" y="100" width="38" height="60" rx="4" fill="#18a06f" opacity="0.35" />
+          <rect x="86" y="102" width="34" height="56" rx="3" fill="url(#hLitWin)" />
+          <rect x="86" y="102" width="14" height="56" rx="2" fill="white" opacity="0.28" />
+          {/* 4-B unlit */}
+          <rect x="132" y="100" width="38" height="60" rx="4" fill="#18a06f" opacity="0.25" />
+          <rect x="134" y="102" width="34" height="56" rx="3" fill="#0d4f38" opacity="0.82" />
+          {/* 4-C lit */}
+          <rect x="180" y="100" width="38" height="60" rx="4" fill="#18a06f" opacity="0.35" />
+          <rect x="182" y="102" width="34" height="56" rx="3" fill="url(#hLitWin)" />
+          <rect x="182" y="102" width="14" height="56" rx="2" fill="white" opacity="0.28" />
+          {/* 4-D dim */}
+          <rect x="228" y="100" width="38" height="60" rx="4" fill="#18a06f" opacity="0.28" />
+          <rect x="230" y="102" width="34" height="56" rx="3" fill="#dff5ea" opacity="0.55" />
+
+          {/* Balcony F4 */}
+          <rect x="76" y="157" width="228" height="5" rx="2" fill="#C96F00" opacity="0.78" />
+          <rect x="78" y="143" width="3" height="18" fill="#C96F00" opacity="0.52" />
+          <rect x="122" y="143" width="3" height="18" fill="#C96F00" opacity="0.52" />
+          <rect x="168" y="143" width="3" height="18" fill="#C96F00" opacity="0.52" />
+          <rect x="214" y="143" width="3" height="18" fill="#C96F00" opacity="0.52" />
+          <rect x="298" y="143" width="3" height="18" fill="#C96F00" opacity="0.52" />
+
+          {/* ── FLOOR 3 (y 175–247) ── */}
+          {/* 3-A unlit */}
+          <rect x="84" y="180" width="38" height="60" rx="4" fill="#18a06f" opacity="0.25" />
+          <rect x="86" y="182" width="34" height="56" rx="3" fill="#0d4f38" opacity="0.78" />
+          {/* 3-B lit */}
+          <rect x="132" y="180" width="38" height="60" rx="4" fill="#18a06f" opacity="0.35" />
+          <rect x="134" y="182" width="34" height="56" rx="3" fill="url(#hLitWin)" />
+          <rect x="134" y="182" width="14" height="56" rx="2" fill="white" opacity="0.25" />
+          {/* 3-C lit */}
+          <rect x="180" y="180" width="38" height="60" rx="4" fill="#18a06f" opacity="0.35" />
+          <rect x="182" y="182" width="34" height="56" rx="3" fill="#dff5ea" opacity="0.88" />
+          <rect x="182" y="182" width="34" height="16" rx="2" fill="white" opacity="0.32" />
+          {/* 3-D lit */}
+          <rect x="228" y="180" width="38" height="60" rx="4" fill="#18a06f" opacity="0.35" />
+          <rect x="230" y="182" width="34" height="56" rx="3" fill="url(#hLitWin)" />
+
+          {/* Balcony F3 */}
+          <rect x="76" y="237" width="228" height="5" rx="2" fill="#C96F00" opacity="0.72" />
+          <rect x="78" y="223" width="3" height="18" fill="#C96F00" opacity="0.5" />
+          <rect x="122" y="223" width="3" height="18" fill="#C96F00" opacity="0.5" />
+          <rect x="168" y="223" width="3" height="18" fill="#C96F00" opacity="0.5" />
+          <rect x="214" y="223" width="3" height="18" fill="#C96F00" opacity="0.5" />
+          <rect x="298" y="223" width="3" height="18" fill="#C96F00" opacity="0.5" />
+
+          {/* ── FLOOR 2 (y 255–327) ── */}
+          {/* 2-A lit */}
+          <rect x="84" y="259" width="38" height="61" rx="4" fill="#18a06f" opacity="0.35" />
+          <rect x="86" y="261" width="34" height="57" rx="3" fill="url(#hLitWin)" />
+          {/* 2-B lit */}
+          <rect x="132" y="259" width="38" height="61" rx="4" fill="#18a06f" opacity="0.35" />
+          <rect x="134" y="261" width="34" height="57" rx="3" fill="#dff5ea" opacity="0.88" />
+          <rect x="134" y="261" width="34" height="16" rx="2" fill="white" opacity="0.3" />
+          <rect x="134" y="277" width="14" height="41" rx="2" fill="#c8eeda" opacity="0.55" />
+          {/* 2-C unlit */}
+          <rect x="180" y="259" width="38" height="61" rx="4" fill="#18a06f" opacity="0.25" />
+          <rect x="182" y="261" width="34" height="57" rx="3" fill="#0d4f38" opacity="0.78" />
+          {/* 2-D lit */}
+          <rect x="228" y="259" width="38" height="61" rx="4" fill="#18a06f" opacity="0.35" />
+          <rect x="230" y="261" width="34" height="57" rx="3" fill="url(#hLitWin)" />
+          <rect x="230" y="261" width="13" height="57" rx="2" fill="white" opacity="0.28" />
+
+          {/* Balcony F2 */}
+          <rect x="76" y="317" width="228" height="5" rx="2" fill="#C96F00" opacity="0.72" />
+          <rect x="78" y="303" width="3" height="18" fill="#C96F00" opacity="0.5" />
+          <rect x="122" y="303" width="3" height="18" fill="#C96F00" opacity="0.5" />
+          <rect x="168" y="303" width="3" height="18" fill="#C96F00" opacity="0.5" />
+          <rect x="214" y="303" width="3" height="18" fill="#C96F00" opacity="0.5" />
+          <rect x="298" y="303" width="3" height="18" fill="#C96F00" opacity="0.5" />
+
+          {/* ── GROUND FLOOR (y 335–418) ── */}
+          {/* Left shop */}
+          <rect x="84" y="339" width="54" height="79" rx="4" fill="#082d22" />
+          <rect x="86" y="354" width="50" height="36" rx="3" fill="#0d4f38" opacity="0.72" />
+          <rect x="90" y="341" width="42" height="11" rx="3" fill="#C96F00" opacity="0.82" />
+
+          {/* Main entrance */}
+          <rect x="148" y="335" width="84" height="83" rx="6" fill="#062820" />
+          <rect x="150" y="337" width="80" height="17" rx="4" fill="#0B3B2E" opacity="0.5" />
+          {/* Left door */}
+          <rect x="150" y="354" width="38" height="64" rx="4" fill="#18a06f" opacity="0.48" />
+          {/* Right door */}
+          <rect x="192" y="354" width="38" height="64" rx="4" fill="#18a06f" opacity="0.48" />
+          {/* Door windows */}
+          <rect x="159" y="358" width="14" height="14" rx="2" fill="#ccf0e2" opacity="0.68" />
+          <rect x="207" y="358" width="14" height="14" rx="2" fill="#ccf0e2" opacity="0.68" />
+          {/* Door handles */}
+          <circle cx="188" cy="388" r="3" fill="#C96F00" />
+          <circle cx="192" cy="388" r="3" fill="#C96F00" />
+
+          {/* Right shop */}
+          <rect x="242" y="339" width="54" height="79" rx="4" fill="#082d22" />
+          <rect x="244" y="354" width="50" height="36" rx="3" fill="#0d4f38" opacity="0.72" />
+          <rect x="248" y="341" width="42" height="11" rx="3" fill="#18a06f" opacity="0.58" />
+
+          {/* Name plate */}
+          <rect x="140" y="334" width="100" height="17" rx="4" fill="#062820" />
+          <rect x="143" y="337" width="94" height="11" rx="3" fill="#C96F00" opacity="0.22" />
+
+          {/* Steps */}
+          <rect x="140" y="414" width="100" height="6" rx="2" fill="#062820" opacity="0.38" />
+          <rect x="148" y="419" width="84" height="4" rx="2" fill="#062820" opacity="0.22" />
+
+          {/* Corner accent dots */}
+          <circle cx="76" cy="92" r="4" fill="#C96F00" opacity="0.88" />
+          <circle cx="304" cy="92" r="4" fill="#C96F00" opacity="0.88" />
+          <circle cx="190" cy="86" r="5" fill="#C96F00" opacity="0.82" />
+
+          {/* ── TREES ── */}
+          {/* Left tree */}
+          <rect x="26" y="375" width="12" height="48" rx="4" fill="#062820" />
+          <circle cx="32" cy="355" r="30" fill="#18a06f" opacity="0.78" />
+          <circle cx="14" cy="369" r="18" fill="#18a06f" opacity="0.68" />
+          <circle cx="50" cy="367" r="20" fill="#18a06f" opacity="0.72" />
+          <circle cx="26" cy="343" r="12" fill="#28c98a" opacity="0.28" />
+
+          {/* Right tree */}
+          <rect x="342" y="382" width="10" height="42" rx="3" fill="#062820" />
+          <circle cx="347" cy="366" r="24" fill="#18a06f" opacity="0.74" />
+          <circle cx="332" cy="378" r="14" fill="#18a06f" opacity="0.64" />
+          <circle cx="360" cy="376" r="16" fill="#18a06f" opacity="0.68" />
+
+          {/* Base shrubs */}
+          <circle cx="74" cy="420" r="11" fill="#18a06f" opacity="0.58" />
+          <circle cx="62" cy="424" r="8" fill="#18a06f" opacity="0.48" />
+          <circle cx="306" cy="420" r="11" fill="#18a06f" opacity="0.58" />
+          <circle cx="318" cy="424" r="8" fill="#18a06f" opacity="0.48" />
+        </svg>
       </div>
 
-      {/* Floating software metrics card */}
       <div className="hero-float-software">
         <p className="hero-float-software-title">Live metrics</p>
         <div className="hero-float-software-row">
@@ -418,7 +589,6 @@ const HeroWorkspaceVisual = React.memo(function HeroWorkspaceVisual() {
         </div>
       </div>
 
-      {/* Activity feed — bottom left, overlapping frame */}
       <div className="hero-person-activity">
         <p className="hero-activity-title">Live activity</p>
         <div className="hero-activity-item">
@@ -448,38 +618,8 @@ function Home() {
   const [showTrialModal, setShowTrialModal] = React.useState(false);
   const [trialRole, setTrialRole] = React.useState("property_manager");
   const [activeFaq, setActiveFaq] = React.useState(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
-  React.useEffect(() => {
-    const canonicalUrl = `${PUBLIC_SITE_URL}/`;
-
-    document.title = "Milik | Business Management Software Kenya — Property, Car Wash, HR & Inventory";
-    setDocumentDescription(
-      "Milik is Kenya's business management platform — property management, car wash operations, HR, inventory and property sales in one workspace. Request a free trial today."
-    );
-    setDocumentRobots("index,follow");
-    setCanonicalHref(canonicalUrl);
-    setOpenGraphContent("og:type", "website");
-    setOpenGraphContent("og:site_name", "Milik");
-    setOpenGraphContent("og:locale", "en_KE");
-    setOpenGraphContent("og:title", "Milik | Business Management Software Kenya");
-    setOpenGraphContent(
-      "og:description",
-      "Kenya's business management platform — property management, car wash, HR, inventory and property sales in one professional workspace."
-    );
-    setOpenGraphContent("og:url", canonicalUrl);
-    setOpenGraphContent("og:image", `${PUBLIC_SITE_URL}/logo.png`);
-    setOpenGraphContent("og:image:width", "512");
-    setOpenGraphContent("og:image:height", "512");
-    setOpenGraphContent("og:image:alt", "Milik — Business Management Software Kenya");
-    setTwitterContent("twitter:card", "summary_large_image");
-    setTwitterContent("twitter:site", "@milikproperty");
-    setTwitterContent("twitter:title", "Milik | Business Management Software Kenya");
-    setTwitterContent(
-      "twitter:description",
-      "Property management, car wash, HR, inventory and property sales in one workspace. Built for Kenya."
-    );
-    setTwitterContent("twitter:image", `${PUBLIC_SITE_URL}/logo.png`);
-  }, []);
 
   const openTrialModal = (role = "property_manager") => {
     setTrialRole(role);
@@ -504,7 +644,7 @@ function Home() {
       <nav className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-2 sm:px-6 lg:px-8">
           <div className="relative">
-            <img src="/logo.png" alt="Milik" className="h-9 w-auto object-contain" style={{ maxWidth: "140px" }} />
+            <img src="/logo.png" alt="Milik" className="h-9 w-auto object-contain" width="140" height="36" />
             <span className="nav-logo-live-dot" title="System live" />
           </div>
           <div className="hidden items-center gap-8 md:flex">
@@ -528,11 +668,60 @@ function Home() {
               onClick={() => openTrialModal("property_manager")}
               className="rounded-full bg-[#0B3B2E] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#0A3127]"
             >
-              Trial
+              Free Trial
             </button>
-            <Link to="/login" className="rounded-full border border-[#0B3B2E] px-4 py-2 text-xs font-bold text-[#0B3B2E] transition hover:bg-[#0B3B2E] hover:text-white">Sign in</Link>
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(o => !o)}
+              className="ml-1 flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:border-[#0B3B2E] hover:text-[#0B3B2E]"
+              aria-label="Toggle menu"
+            >
+              {mobileMenuOpen
+                ? <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 2l14 14M16 2L2 16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                : <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect y="3" width="18" height="2" rx="1" fill="currentColor"/><rect y="8" width="18" height="2" rx="1" fill="currentColor"/><rect y="13" width="18" height="2" rx="1" fill="currentColor"/></svg>
+              }
+            </button>
           </div>
         </div>
+        {/* Mobile dropdown menu */}
+        {mobileMenuOpen && (
+          <div className="border-t border-slate-100 bg-white px-4 pb-4 md:hidden">
+            <div className="flex flex-col gap-1 pt-3">
+              {[
+                { label: "Modules", href: "#modules" },
+                { label: "Features", href: "#features" },
+                { label: "Pricing", href: "#pricing" },
+                { label: "How it works", href: "#how-it-works" },
+                { label: "FAQ", href: "#faq" },
+              ].map(l => (
+                <a
+                  key={l.label}
+                  href={l.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="rounded-xl px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-[#0B3B2E]/5 hover:text-[#0B3B2E]"
+                >
+                  {l.label}
+                </a>
+              ))}
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setMobileMenuOpen(false); openTrialModal("property_manager"); }}
+                  className="flex-1 rounded-full bg-[#0B3B2E] px-4 py-2.5 text-sm font-bold text-white"
+                >
+                  Request Free Demo
+                </button>
+                <Link
+                  to="/login"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex-1 rounded-full border border-[#0B3B2E] px-4 py-2.5 text-center text-sm font-bold text-[#0B3B2E]"
+                >
+                  Sign in
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* Hero */}
@@ -602,7 +791,7 @@ function Home() {
 
           <div className="relative z-10 lg:h-full lg:overflow-hidden">
             <div className="erp-hero-shell lg:h-full">
-              <HeroWorkspaceVisual />
+              <PropertyIllustration />
             </div>
           </div>
         </div>
@@ -862,8 +1051,18 @@ function Home() {
             <h2 className="mt-2 text-2xl font-extrabold text-slate-950 sm:text-3xl">From your first request to a live workspace — here's how we get you started.</h2>
           </div>
           <div className="mt-7 grid gap-4 lg:grid-cols-3">
-            {steps.map((step) => (
-              <div key={step.title} className="rounded-2xl border border-slate-200 bg-[#f7fbf8] p-5 shadow-sm">
+            {steps.map((step, idx) => (
+              <div key={step.title} className="relative rounded-2xl border border-slate-200 bg-[#f7fbf8] p-6 shadow-sm overflow-hidden reveal reveal-d1">
+                {/* Step number watermark */}
+                <span className="absolute top-3 right-4 text-6xl font-extrabold text-[#0B3B2E]/5 select-none leading-none">{step.num}</span>
+                {/* Icon */}
+                <div className="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-[#0B3B2E] text-white text-lg mb-4">
+                  {step.icon}
+                </div>
+                {/* Connector line on desktop */}
+                {idx < steps.length - 1 && (
+                  <span className="hidden lg:block absolute top-[34px] -right-3 w-6 h-0.5 bg-[#0B3B2E]/20 z-10" />
+                )}
                 <h3 className="text-base font-extrabold text-slate-900">{step.title}</h3>
                 <p className="mt-2 text-sm leading-6 text-slate-600">{step.description}</p>
               </div>
@@ -964,7 +1163,7 @@ function Home() {
           <div className="grid gap-10 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
             <div>
               <div className="flex items-center gap-3">
-                <img src="/logo.png" alt="Milik" className="h-10 w-10 object-contain" />
+                <img src="/logo.png" alt="Milik" className="h-10 w-10 object-contain" width="40" height="40" />
                 <div>
                   <p className="font-extrabold text-white">Milik Business Suite</p>
                   <p className="text-xs uppercase tracking-[0.2em] text-white/50">Property · Car Wash · HR · Inventory</p>

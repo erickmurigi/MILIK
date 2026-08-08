@@ -127,7 +127,25 @@
       "Bash(del \"c:\\\\Users\\\\murig\\\\OneDrive\\\\Desktop\\\\MILIKPMS\\\\Milik\\\\MilikClient\\\\src\\\\pages\\\\Reports\\\\ZoneArrearsReport.jsx\")",
       "Bash(xargs grep -l \"income.statement\\\\|incomeStatement\\\\|Income.*Statement\")",
       "Bash(grep -v \"//\\\\|credit\")",
-      "Bash(grep -v \"//\\\\|comment\")"
+      "Bash(grep -v \"//\\\\|comment\")",
+      "Bash(npx create-expo-app@latest MilikMobile --template blank-typescript)",
+      "Bash(mkdir -p \"c:/Users/murig/OneDrive/Desktop/MILIKPMS/Milik/MilikMobile/app/\\(app\\)/pms/tenants/[id]\")",
+      "Bash(git checkout *)",
+      "Bash(python3 \"C:/Users/murig/AppData/Local/Temp/claude/c--Users-murig-OneDrive-Desktop-MILIKPMS-Milik/34774303-d59c-424d-adf4-762c599e6bc1/scratchpad/patch_rental.py\")",
+      "Bash(python3 \"C:/Users/murig/AppData/Local/Temp/claude/c--Users-murig-OneDrive-Desktop-MILIKPMS-Milik/34774303-d59c-424d-adf4-762c599e6bc1/scratchpad/patch_rental2.py\")",
+      "Bash(python3 \"C:/Users/murig/AppData/Local/Temp/claude/c--Users-murig-OneDrive-Desktop-MILIKPMS-Milik/34774303-d59c-424d-adf4-762c599e6bc1/scratchpad/patch_tenant_statement.py\")",
+      "Bash(python3 \"C:/Users/murig/AppData/Local/Temp/claude/c--Users-murig-OneDrive-Desktop-MILIKPMS-Milik/34774303-d59c-424d-adf4-762c599e6bc1/scratchpad/patch_tenant_statement2.py\")",
+      "Bash(python3 -)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('expo',{}\\), indent=2\\)\\)\")",
+      "Bash(mkdir -p \"c:/Users/murig/OneDrive/Desktop/MILIKPMS/Milik/MilikMobile/app/\\(app\\)/pms/penalties\")",
+      "PowerShell(adb version)",
+      "PowerShell(echo $env:ANDROID_HOME)",
+      "PowerShell(echo $env:ANDROID_SDK_ROOT)",
+      "Read(//c//**)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\murig\\OneDrive\\Desktop\\MILIKPMS\\Milik\\MilikMobile\\app\\(app)\\pms\\tenants",
+      "c:\\Users\\murig\\OneDrive\\Desktop\\MILIKPMS\\Milik\\MilikMobile\\app\\(app)\\pms"
     ]
   }
 }

@@ -1,9 +1,11 @@
 import axios from "axios";
 import mongoose from "mongoose";
+import ChartOfAccount from "../../models/ChartOfAccount.js";
 import Company from "../../models/Company.js";
 import MpesaCollection from "../../models/MpesaCollection.js";
 import RentPayment from "../../models/RentPayment.js";
 import Tenant from "../../models/Tenant.js";
+import User from "../../models/User.js";
 import { getRawMpesaPaybillConfigs, getPrimaryMpesaPaybillConfig } from "../../utils/companyModules.js";
 import { createAutoReceipt } from "./rentPayment.js";
 
@@ -286,8 +288,7 @@ const findReceiptMatch = async ({ businessId, transactionCode = "", amount = 0 }
 
 const deriveMatchingStatus = ({ tenant = null, matchedReceipt = null }) => {
   if (matchedReceipt) return "captured";
-  if (tenant) return "matched_tenant";
-  return "unmatched";
+  return "unmatched"; // tenant known but no receipt yet stays unmatched — auto-receipt handles capture
 };
 
 const syncCollectionMatches = async (collection) => {
@@ -604,10 +605,13 @@ export const listMpesaCollections = async (req, res) => {
     const captured = [];
     const needsSync = [];
     for (const row of rows) {
+      const status = String(row.matchingStatus || "");
       if (
-        String(row.matchingStatus || "") === "captured" &&
-        row.tenant?._id &&
-        row.matchedReceipt?._id
+        // Terminal statuses set by explicit user action — never auto-sync over them
+        status === "ignored" ||
+        status === "duplicate" ||
+        // Fully captured with both references already populated — no DB I/O needed
+        (status === "captured" && row.tenant?._id && row.matchedReceipt?._id)
       ) {
         captured.push(row);
       } else {
@@ -782,10 +786,33 @@ const attemptAutoReceipt = async ({ stored, config }) => {
   const unitId = tenant?.unit?._id || tenant?.unit;
   if (!unitId) {
     console.warn("[PMS-AutoReceipt] No unit on tenant=%s collection=%s — skipping", tenant._id, stored._id);
+    await MpesaCollection.findByIdAndUpdate(stored._id, {
+      $set: { "metadata.autoReceiptSkipReason": "Tenant has no unit assigned" },
+    });
+    return;
+  }
+
+  const configAccountId = config?.defaultCashbookAccountId;
+  if (!configAccountId) {
+    console.warn("[PMS-AutoReceipt] No cashbook account on config — skipping collection=%s", stored._id);
+    await MpesaCollection.findByIdAndUpdate(stored._id, {
+      $set: { "metadata.autoReceiptSkipReason": "Paybill config has no default cashbook account" },
+    });
     return;
   }
 
   try {
+    // Resolve cashbook name live from ChartOfAccount (avoids stale config cache)
+    let cashbookAccountId   = configAccountId;
+    let cashbookAccountName = config?.defaultCashbookAccountName || "M-Pesa";
+    if (isValidObjectId(String(cashbookAccountId))) {
+      const acct = await ChartOfAccount.findOne(
+        { _id: cashbookAccountId, business: String(stored.business) },
+        { name: 1 }
+      ).lean();
+      if (acct?.name) cashbookAccountName = acct.name;
+    }
+
     const receipt = await createAutoReceipt({
       businessId: String(stored.business),
       tenantId: String(tenant._id),
@@ -793,20 +820,24 @@ const attemptAutoReceipt = async ({ stored, config }) => {
       amount: stored.amount,
       referenceNumber: stored.transactionCode,
       paymentDate: stored.transactionDate instanceof Date ? stored.transactionDate : new Date(),
-      cashbookAccountId: config?.defaultCashbookAccountId || null,
-      cashbookAccountName: config?.defaultCashbookAccountName || "M-Pesa",
+      cashbookAccountId,
+      cashbookAccountName,
+      configName: config?.name || "M-Pesa Paybill",
       description: `M-Pesa Auto – ${stored.transactionCode}${stored.payerName ? ` – ${stored.payerName}` : ""}`,
     });
     await MpesaCollection.findByIdAndUpdate(stored._id, {
-      $set: { matchingStatus: "captured", matchedReceipt: receipt._id },
+      $set: { matchingStatus: "captured", matchedReceipt: receipt._id, "metadata.autoReceiptSkipReason": "" },
     });
   } catch (err) {
     if (err.isDuplicate) {
       await MpesaCollection.findByIdAndUpdate(stored._id, {
-        $set: { matchingStatus: "captured", matchedReceipt: err.existingId },
+        $set: { matchingStatus: "captured", matchedReceipt: err.existingId, "metadata.autoReceiptSkipReason": "" },
       });
       console.warn("[PMS-AutoReceipt] Duplicate ref=%s linked to existing=%s", stored.transactionCode, err.existingId);
     } else {
+      await MpesaCollection.findByIdAndUpdate(stored._id, {
+        $set: { "metadata.autoReceiptSkipReason": err.message || "Auto-receipt failed" },
+      });
       console.error("[PMS-AutoReceipt] Failed ref=%s tenant=%s: %s", stored.transactionCode, tenant._id, err.message);
     }
   }
@@ -920,12 +951,33 @@ export const assignTenantToCollection = async (req, res) => {
     const matchedReceipt = await findReceiptMatch({ businessId, transactionCode: row.transactionCode, amount: row.amount });
     const nextStatus = deriveMatchingStatus({ tenant, matchedReceipt });
 
+    // Resolve assigning user's display name
+    let assignedByName = "Unknown";
+    const actorId = req.user?.id || req.user?._id;
+    if (req.user?.isSystemAdmin || req.user?.superAdminAccess) {
+      assignedByName = "MILIK ADMIN";
+    } else if (actorId) {
+      const actorUser = await User.findById(actorId).select("surname otherNames profile").lean().catch(() => null);
+      if (actorUser) {
+        assignedByName = [actorUser.otherNames, actorUser.surname].filter(Boolean).join(" ") || actorUser.profile || "User";
+      }
+    }
+
     await MpesaCollection.findByIdAndUpdate(row._id, {
-      $set: { tenant: tenant._id, matchingStatus: nextStatus, matchedReceipt: matchedReceipt?._id || null },
+      $set: {
+        tenant: tenant._id,
+        matchingStatus: nextStatus,
+        matchedReceipt: matchedReceipt?._id || null,
+        "metadata.manualAssignment": {
+          assignedBy: actorId || null,
+          assignedByName,
+          assignedAt: new Date(),
+        },
+      },
     });
 
-    // No existing receipt found — attempt auto-receipt immediately so admin doesn't need a second step
-    if (nextStatus === "matched_tenant") {
+    // No existing receipt — attempt auto-receipt; if it fails the row stays unmatched (tenant is stored)
+    if (nextStatus === "unmatched") {
       const { config } = await resolveCompanyAndConfig({ businessId, shortCode: row.shortCode }).catch(() => ({ config: null }));
       const stored = { ...row, tenant, matchingStatus: nextStatus, matchedReceipt: null };
       await attemptAutoReceipt({ stored, config });

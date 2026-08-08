@@ -1,4 +1,4 @@
-﻿import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtils";
+import { LISTING_UI, normalizeUppercaseInput } from "../../utils/listingPageUtils";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
@@ -53,6 +53,39 @@ import {
 import { hasCompanyPermission } from "../../utils/permissions";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
+import SingleBookingModal from "./SingleBookingModal";
+import { useInvoicePricing } from "./useInvoicePricing";
+import {
+  MONTH_OPTIONS,
+  INVOICE_REVENUE_ACCOUNT_MAP,
+  canonicalBillingPeriodKey,
+  addMonthsPreservingDay,
+  buildSchedulePeriodKey,
+  formatScheduleLabel,
+  formatPeriodLabel,
+  formatDateDisplay,
+  getDaysInMonth,
+  normalizeDueDay,
+  getStartOfPeriod,
+  getDueDateForPeriod,
+  clampBillingPeriod,
+  isFutureBillingPeriod,
+  normalizeBillingMode,
+  getBillingModeLabel,
+  createBookingGroupId,
+  resolveBookingAmountsForMode,
+  buildRecurringInvoiceDescription,
+  buildUtilityChargeDescription,
+  extractUtilityLabel,
+  buildScaledBreakdown,
+  buildCombinedInvoiceMetadata,
+  buildUtilityInvoiceMetadata,
+  buildBookingMetadata,
+  hasBlockingInvoiceForRequest,
+  getBookingTaxSelection,
+  resolveBookingDateOverride,
+  getTenantDisplayName,
+} from "./invoiceBookingUtils";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -60,88 +93,12 @@ const MILIK_ORANGE = "bg-[#FF8C00]";
 const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
 const ITEMS_PER_PAGE = 50;
 
-const INVOICE_REVENUE_ACCOUNT_MAP = {
-  utility: { code: "4102", name: "Utility Recharge Income", category: "UTILITY_CHARGE" },
-  rent: { code: "4100", name: "Rent Income", category: "RENT_CHARGE" },
-  combined: { code: "4100", name: "Rent Income", category: "RENT_CHARGE" },
-};
-
-const MONTH_OPTIONS = [
-  { value: 0, label: "January" },
-  { value: 1, label: "February" },
-  { value: 2, label: "March" },
-  { value: 3, label: "April" },
-  { value: 4, label: "May" },
-  { value: 5, label: "June" },
-  { value: 6, label: "July" },
-  { value: 7, label: "August" },
-  { value: 8, label: "September" },
-  { value: 9, label: "October" },
-  { value: 10, label: "November" },
-  { value: 11, label: "December" },
-];
 
 
-const FALLBACK_BILLING_PERIOD_MONTHS = {
-  monthly: 1,
-  bi_monthly: 2,
-  quarterly: 3,
-  semi_annual: 6,
-  annual: 12,
-};
 
-const normalizeBillingPeriodKey = (value = "") =>
-  String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .replace(/_+/g, "_");
 
-const canonicalBillingPeriodKey = (value = "") => {
-  const normalized = normalizeBillingPeriodKey(value);
-  const aliases = {
-    month: "monthly",
-    monthly: "monthly",
-    quarter: "quarterly",
-    quarterly: "quarterly",
-    semiannual: "semi_annual",
-    semi_annually: "semi_annual",
-    biannual: "semi_annual",
-    annually: "annual",
-    yearly: "annual",
-    annual: "annual",
-  };
-  return aliases[normalized] || normalized || "monthly";
-};
 
-const addMonthsPreservingDay = (dateValue, months = 1) => {
-  const source = new Date(dateValue);
-  if (Number.isNaN(source.getTime())) return null;
-  const day = source.getDate();
-  const next = new Date(source);
-  next.setMonth(next.getMonth() + Number(months || 0), 1);
-  const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
-  next.setDate(Math.min(day, lastDay));
-  return next;
-};
 
-const formatScheduleLabel = ({ startDate, endDate, billingPeriod }) => {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return "-";
-  if (Number(billingPeriod?.durationInMonths || 1) <= 1) {
-    return `${start.toLocaleString("en-US", { month: "short" })} ${String(start.getFullYear()).slice(-2)}`;
-  }
-  return `${start.toLocaleDateString("en-GB")} - ${end.toLocaleDateString("en-GB")}`;
-};
-
-const buildSchedulePeriodKey = ({ startDate, billingPeriodKey = "monthly" }) => {
-  const dt = new Date(startDate);
-  if (Number.isNaN(dt.getTime())) return "";
-  return `${canonicalBillingPeriodKey(billingPeriodKey)}:${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
-};
 
 const emptyFilters = {
   status: "ACTIVE",
@@ -153,10 +110,6 @@ const emptyFilters = {
   invoiceNo: "",
 };
 
-const getTenantDisplayName = (tenant) => {
-  const fullName = `${tenant?.firstName || ""} ${tenant?.lastName || ""}`.trim();
-  return fullName || tenant?.tenantName || tenant?.name || "N/A";
-};
 
 const getUnitDisplayName = (tenant) => {
   const primary = tenant?.unit?.unitName || tenant?.unit?.name || tenant?.unit?.unitNumber || tenant?.unitName || "";
@@ -174,12 +127,6 @@ const getAdditionalUnitDisplayNames = (tenant) => {
     .filter(Boolean);
 };
 
-const formatDateDisplay = (dateValue, options = {}) => {
-  if (!dateValue) return "-";
-  const date = new Date(dateValue);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString("en-GB", options);
-};
 
 const formatDateTimeDisplay = (dateValue, options = {}) => {
   if (!dateValue) return "-";
@@ -235,172 +182,20 @@ const ensureArray = (value) => {
   return [];
 };
 
-const formatPeriodLabel = (month, year) => {
-  const date = new Date(year, month, 1);
-  return `${date.toLocaleString("en-US", { month: "short" })} ${String(year).slice(-2)}`;
-};
 
-const formatInvoiceDescriptionPeriod = (month, year) => {
-  const date = new Date(year, month, 1);
-  return `${date.toLocaleString("en-US", { month: "short" })}/${String(year).slice(-2)}`;
-};
 
-const buildRecurringInvoiceDescription = ({ month, year, label }) => {
-  const normalizedLabel = String(label || "Charge").trim();
-  return `${formatInvoiceDescriptionPeriod(month, year)} ${normalizedLabel}`;
-};
 
-const toPeriodDateString = (year, month, day) => {
-  const safeYear = Number(year);
-  const safeMonth = Number(month);
-  const safeDay = Number(day);
-  return `${String(safeYear).padStart(4, "0")}-${String(safeMonth + 1).padStart(2, "0")}-${String(safeDay).padStart(2, "0")}`;
-};
 
-const getDaysInMonth = (month, year) => new Date(Number(year), Number(month) + 1, 0).getDate();
-const normalizeDueDay = (value, month, year) => {
-  const parsed = Number(value);
-  const safeDay = Number.isFinite(parsed) ? Math.trunc(parsed) : 5;
-  const maxDay = getDaysInMonth(month, year);
-  return Math.min(Math.max(safeDay, 1), maxDay);
-};
-const getStartOfPeriod = (month, year) => toPeriodDateString(year, month, 1);
-const getDueDateForPeriod = (month, year, dueDay = 5) =>
-  toPeriodDateString(year, month, normalizeDueDay(dueDay, month, year));
-const isFutureBillingPeriod = (month, year) => {
-  const parsedMonth = Number(month);
-  const parsedYear = Number(year);
-  if (!Number.isFinite(parsedMonth) || !Number.isFinite(parsedYear)) return false;
 
-  const selectedPeriodStart = new Date(parsedYear, parsedMonth, 1, 0, 0, 0, 0);
-  if (Number.isNaN(selectedPeriodStart.getTime())) return false;
 
-  const now = new Date();
-  const currentPeriodStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-  return selectedPeriodStart.getTime() > currentPeriodStart.getTime();
-};
 
-const clampBillingPeriod = (month, year) => {
-  const now = new Date();
-  const fallback = { month: now.getMonth(), year: now.getFullYear() };
-  const parsedMonth = Number(month);
-  const parsedYear = Number(year);
 
-  if (!Number.isFinite(parsedMonth) || !Number.isFinite(parsedYear)) {
-    return fallback;
-  }
 
-  if (isFutureBillingPeriod(parsedMonth, parsedYear)) {
-    return fallback;
-  }
 
-  return {
-    month: parsedMonth,
-    year: parsedYear,
-  };
-};
 
-const normalizeBillingMode = (value = "separate") => {
-  const normalized = String(value || "separate").trim().toLowerCase();
-  if (["rent", "utility", "combined"].includes(normalized)) return normalized;
-  return "separate";
-};
 
-const getBillingModeLabel = (value = "separate") => {
-  const normalized = normalizeBillingMode(value);
-  if (normalized === "rent") return "Rent only";
-  if (normalized === "utility") return "Utility only";
-  if (normalized === "combined") return "Rent + Utility (combined invoice)";
-  return "Rent + Utility (separate invoices)";
-};
 
-const resolveBookingAmountsForMode = ({ rentAmount = 0, utilityAmount = 0, billingMode = "separate" } = {}) => {
-  const normalizedMode = normalizeBillingMode(billingMode);
-  const safeRentAmount = Number(rentAmount || 0);
-  const safeUtilityAmount = Number(utilityAmount || 0);
 
-  return {
-    billingMode: normalizedMode,
-    rentAmount: normalizedMode === "utility" ? 0 : safeRentAmount,
-    utilityAmount: normalizedMode === "rent" ? 0 : safeUtilityAmount,
-    totalAmount:
-      (normalizedMode === "utility" ? 0 : safeRentAmount) +
-      (normalizedMode === "rent" ? 0 : safeUtilityAmount),
-  };
-};
-
-const createBookingGroupId = () => {
-  if (typeof globalThis !== "undefined" && globalThis.crypto?.randomUUID) {
-    return `booking_${globalThis.crypto.randomUUID()}`;
-  }
-
-  return `booking_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-};
-
-// Scale each utility row proportionally to the resolved booking amount and round to 2dp.
-const buildScaledBreakdown = (rows = [], utilityAmount = 0) => {
-  const total = rows.reduce((s, r) => s + r.amount, 0);
-  const scale = total > 0 ? utilityAmount / total : 1;
-  return rows
-    .map((r) => ({ label: r.label, amount: Math.round(r.amount * scale * 100) / 100 }))
-    .filter((r) => r.amount > 0);
-};
-
-const buildCombinedInvoiceMetadata = (rows = [], utilityAmount = 0, utilityLabel = "") => {
-  const breakdown = buildScaledBreakdown(rows, utilityAmount);
-  return {
-    billItemKey: "rent_utility:combined",
-    utilityBreakdown: breakdown.length > 0 ? breakdown : [{ label: utilityLabel || "Utility", amount: utilityAmount }],
-    utilityAmount,
-    utilityLabel,
-  };
-};
-
-const buildBookingMetadata = ({ metadata = undefined, bookingGroupId = "", billingMode = "separate" } = {}) => {
-  const baseMetadata = metadata && typeof metadata === "object" ? metadata : {};
-  const normalizedMode = normalizeBillingMode(billingMode);
-
-  return {
-    ...baseMetadata,
-    bookingGroupId: bookingGroupId || baseMetadata?.bookingGroupId || "",
-    bookingMode: normalizedMode,
-    bookingSource: "rental_invoice_booking",
-  };
-};
-
-const buildUtilityInvoiceMetadata = (utilityLabel = "") => {
-  const normalizedUtilityLabel = String(utilityLabel || "").trim();
-  // Always return metadata even when label is empty — use "Utility" as the
-  // canonical fallback so deriveInvoiceDescription can always find a type.
-  const resolvedLabel = normalizedUtilityLabel || "Utility";
-  return {
-    utilityType: resolvedLabel,
-    meterUtilityType: resolvedLabel,
-    statementUtilityType: resolvedLabel,
-  };
-};
-
-const extractUtilityLabel = (utility = {}) => {
-  if (!utility) return "";
-  if (typeof utility === "string") return utility.trim();
-
-  const nestedUtility = utility?.utility;
-  if (typeof nestedUtility === "string" && nestedUtility.trim()) return nestedUtility.trim();
-  if (nestedUtility && typeof nestedUtility === "object") {
-    const nestedLabel =
-      nestedUtility?.name || nestedUtility?.utilityName || nestedUtility?.label || nestedUtility?._id || "";
-    if (String(nestedLabel || "").trim()) return String(nestedLabel).trim();
-  }
-
-  return String(
-    utility?.utilityLabel || utility?.utilityName || utility?.name || utility?.label || ""
-  ).trim();
-};
-
-const buildUtilityChargeDescription = ({ utilityLabel = "", month, year } = {}) => {
-  const normalizedLabel = String(utilityLabel || "").trim() || "Utility";
-  return buildRecurringInvoiceDescription({ month, year, label: normalizedLabel });
-};
 
 const deriveInvoiceDescription = (invoice = {}) => {
   const description = String(invoice?.description || "").trim();
@@ -526,131 +321,15 @@ const getInvoiceChargeTypeLabel = (chargeType = "rent") => {
   return "Rent";
 };
 
-const normalizeInvoiceStatus = (status = "") => String(status || "").trim().toLowerCase();
-const isActiveInvoiceStatus = (status = "") => !["cancelled", "reversed"].includes(normalizeInvoiceStatus(status));
 
-const normalizeUtilityConflictKey = (value = "") =>
-  String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
 
-const getInvoiceConflictBucket = ({ category, metadata = {} } = {}) => {
-  const normalizedCategory = String(category || "").trim().toUpperCase();
 
-  if (normalizedCategory === "RENT_CHARGE") {
-    return String(metadata?.billItemKey || "").trim().toLowerCase() === "rent_utility:combined"
-      ? "combined"
-      : "rent";
-  }
 
-  if (normalizedCategory === "UTILITY_CHARGE") {
-    const utilityKey = normalizeUtilityConflictKey(
-      metadata?.utilityType ||
-        metadata?.meterUtilityType ||
-        metadata?.statementUtilityType ||
-        metadata?.utilityName ||
-        metadata?.utility ||
-        ""
-    );
 
-    return utilityKey ? `utility:${utilityKey}` : "utility";
-  }
 
-  return "";
-};
 
-const isUtilityConflictBucket = (bucket = "") =>
-  bucket === "utility" || String(bucket || "").startsWith("utility:");
 
-const doInvoiceConflictBucketsOverlap = (requestedBucket = "", existingBucket = "") => {
-  if (!requestedBucket || !existingBucket) return false;
 
-  if (requestedBucket === "combined") {
-    return existingBucket === "combined" || existingBucket === "rent" || isUtilityConflictBucket(existingBucket);
-  }
-
-  if (requestedBucket === "rent") {
-    return existingBucket === "combined" || existingBucket === "rent";
-  }
-
-  if (isUtilityConflictBucket(requestedBucket)) {
-    if (existingBucket === "combined") return true;
-    if (!isUtilityConflictBucket(existingBucket)) return false;
-    if (requestedBucket === "utility" || existingBucket === "utility") return true;
-    return requestedBucket === existingBucket;
-  }
-
-  return false;
-};
-
-const isInvoiceInBillingPeriod = (dateRef, month, year) => {
-  if (!dateRef) return false;
-  const dt = new Date(dateRef);
-  if (Number.isNaN(dt.getTime())) return false;
-  return dt.getMonth() === Number(month) && dt.getFullYear() === Number(year);
-};
-
-const isInvoiceTakeOnBalance = (invoice = {}) => {
-  const metadata = invoice?.metadata || {};
-  return (
-    metadata?.isTakeOnBalance === true ||
-    metadata?.takeOnBalance === true ||
-    metadata?.openingBalance === true ||
-    ["tenant_take_on_balance", "tenant_opening_balance", "opening_balance"].includes(
-      String(metadata?.sourceTransactionType || "").toLowerCase()
-    )
-  );
-};
-
-const getActiveInvoicesForTenantPeriod = ({ invoices = [], tenantId, unitId = null, month, year, periodKey = "" }) =>
-  invoices.filter((invoice) => {
-    const invoiceTenantId = String(invoice?.tenant?._id || invoice?.tenant || "");
-    if (invoiceTenantId !== String(tenantId || "")) return false;
-    if (unitId) {
-      const invoiceUnitId = String(invoice?.unit?._id || invoice?.unit || "");
-      if (invoiceUnitId !== String(unitId)) return false;
-    }
-    if (!isActiveInvoiceStatus(invoice?.status)) return false;
-    if (isInvoiceTakeOnBalance(invoice)) return false;
-
-    const invoicePeriodKey = String(invoice?.metadata?.periodKey || "").trim();
-    if (periodKey && invoicePeriodKey) {
-      return invoicePeriodKey === String(periodKey);
-    }
-
-    return isInvoiceInBillingPeriod(invoice?.invoiceDate || invoice?.createdAt, month, year);
-  });
-
-const hasBlockingInvoiceForRequest = ({
-  invoices = [],
-  tenantId,
-  unitId = null,
-  month,
-  year,
-  category,
-  metadata,
-  periodKey = "",
-}) => {
-  const requestedBucket = getInvoiceConflictBucket({ category, metadata });
-  if (!requestedBucket) return false;
-
-  return getActiveInvoicesForTenantPeriod({ invoices, tenantId, unitId, month, year, periodKey }).some((invoice) => {
-    const existingBucket = getInvoiceConflictBucket({
-      category: invoice?.category,
-      metadata: invoice?.metadata || {},
-    });
-
-    return doInvoiceConflictBucketsOverlap(requestedBucket, existingBucket);
-  });
-};
-
-const getBookingTaxSelection = (form = {}) => ({
-  handling: form?.taxHandling || "company_default",
-  taxCodeKey: form?.taxCodeKey || "vat_standard",
-  taxMode: form?.taxMode || "company_default",
-});
 
 const mapInvoiceStatusLabel = ({ rawStatus = "", outstanding = 0, appliedAmount = 0 }) => {
   const normalizedStatus = String(rawStatus || "").toLowerCase();
@@ -668,8 +347,6 @@ const mapInvoiceStatusLabel = ({ rawStatus = "", outstanding = 0, appliedAmount 
   return appliedAmount > 0 ? "Partially Paid" : "Issued";
 };
 
-const resolveBookingDateOverride = (form = {}) =>
-  form?.bookWithInvoiceDate ? form?.invoiceDate || null : null;
 
 const resolveTenantPropertyName = (tenant, unitsFromStore = [], propertiesFromStore = []) => {
   const directPropertyName =
@@ -1034,28 +711,11 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   });
   const [invoiceRevenueAccounts, setInvoiceRevenueAccounts] = useState([]);
   const [deletingInvoiceIds, setDeletingInvoiceIds] = useState([]);
-  const [submittingSingleBooking, setSubmittingSingleBooking] = useState(false);
   const [submittingBatchBooking, setSubmittingBatchBooking] = useState(false);
-  const [singleBookingPropertyFilter, setSingleBookingPropertyFilter] = useState("all");
-  const [singleBookingTenantSearch, setSingleBookingTenantSearch] = useState("");
-  const [singleBookingTenantDropdownOpen, setSingleBookingTenantDropdownOpen] = useState(false);
   const { currentBookingMonth, currentBookingYear } = useMemo(() => {
     const d = new Date();
     return { currentBookingMonth: d.getMonth(), currentBookingYear: d.getFullYear() };
   }, []);
-
-  const [singleBookingForm, setSingleBookingForm] = useState({
-    tenantId: tenantId || "",
-    month: currentBookingMonth,
-    year: currentBookingYear,
-    dueDay: 5,
-    billingMode: "separate",
-    invoiceDate: getStartOfPeriod(currentBookingMonth, currentBookingYear),
-    bookWithInvoiceDate: false,
-    taxHandling: "company_default",
-    taxCodeKey: "vat_standard",
-    taxMode: "company_default",
-  });
 
   const [batchBookingForm, setBatchBookingForm] = useState({
     propertyId: "all",
@@ -1101,146 +761,13 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
     [activeTaxCodes]
   );
   const companyTaxEnabled = Boolean(normalizedTaxConfig?.taxSettings?.enabled);
-  const normalizedBillingPeriods = useMemo(() => {
-    const source = Array.isArray(companyBillingPeriods) && companyBillingPeriods.length > 0
-      ? companyBillingPeriods
-      : [{ key: "monthly", name: "Monthly", durationInMonths: 1, isActive: true }];
-    const seen = new Set();
-    return source
-      .map((item) => ({
-        key: canonicalBillingPeriodKey(item?.key || item?.name || "monthly"),
-        name: String(item?.name || item?.label || item?.key || "Monthly").trim() || "Monthly",
-        durationInMonths: Math.max(1, Number(item?.durationInMonths || FALLBACK_BILLING_PERIOD_MONTHS[canonicalBillingPeriodKey(item?.key || item?.name)] || 1)),
-        isActive: item?.isActive !== false,
-      }))
-      .filter((item) => {
-        if (!item.key || seen.has(item.key)) return false;
-        seen.add(item.key);
-        return true;
-      });
-  }, [companyBillingPeriods]);
-
-  const resolveBillingPeriodDefinition = useCallback((billingPeriodKey = "monthly") => {
-    const normalizedKey = canonicalBillingPeriodKey(billingPeriodKey);
-    return (
-      normalizedBillingPeriods.find((item) => item.key === normalizedKey) ||
-      normalizedBillingPeriods.find((item) => item.key === "monthly") ||
-      { key: "monthly", name: "Monthly", durationInMonths: 1, isActive: true }
-    );
-  }, [normalizedBillingPeriods]);
-
-  const leaseLookup = useMemo(() => {
-    const byTenant = new Map();
-    const byTenantUnit = new Map();
-
-    const activeLeases = (Array.isArray(leases) ? leases : [])
-      .filter((lease) => ["active", "draft", "pending_signature"].includes(String(lease?.status || "").toLowerCase()))
-      .sort((a, b) => new Date(b?.startDate || b?.createdAt || 0) - new Date(a?.startDate || a?.createdAt || 0));
-
-    activeLeases.forEach((lease) => {
-      const tenantKey = String(lease?.tenant?._id || lease?.tenant || "");
-      const unitKey = String(lease?.unit?._id || lease?.unit || "");
-      if (tenantKey && !byTenant.has(tenantKey)) {
-        byTenant.set(tenantKey, lease);
-      }
-      if (tenantKey && unitKey) {
-        const compositeKey = `${tenantKey}:${unitKey}`;
-        if (!byTenantUnit.has(compositeKey)) {
-          byTenantUnit.set(compositeKey, lease);
-        }
-      }
-    });
-
-    return { byTenant, byTenantUnit };
-  }, [leases]);
-
-  const resolveLeaseForTenantUnit = (tenant, unitId = null) => {
-    const tenantKey = String(tenant?._id || "");
-    const unitKey = String(unitId || tenant?.invoiceUnit?._id || tenant?.invoiceUnit || tenant?.unit?._id || tenant?.unit || "");
-    if (tenantKey && unitKey) {
-      const exact = leaseLookup.byTenantUnit.get(`${tenantKey}:${unitKey}`);
-      if (exact) return exact;
-    }
-    return tenantKey ? leaseLookup.byTenant.get(tenantKey) || null : null;
-  };
-
-  const resolveTenantBookingPeriod = ({ tenant, unitContext, month, year }) => {
-    const lease = resolveLeaseForTenantUnit(tenant, unitContext?.unitId);
-    const invoiceMonthStart = new Date(Number(year), Number(month), 1, 0, 0, 0, 0);
-    if (Number.isNaN(invoiceMonthStart.getTime())) {
-      return { allowed: false, reason: "Invalid billing period selected." };
-    }
-
-    const billingPeriod = resolveBillingPeriodDefinition(
-      lease?.billingPeriodKey ||
-      tenant?.billingPeriodKey ||
-      tenant?.billingFrequency ||
-      unitContext?.unit?.billingPeriodKey ||
-      unitContext?.unit?.billingFrequency ||
-      "monthly"
-    );
-    const leaseStartDate = new Date(lease?.startDate || tenant?.moveInDate || invoiceMonthStart);
-    leaseStartDate.setHours(0, 0, 0, 0);
-    const scheduleAnchor = new Date(leaseStartDate);
-    const leaseEndDate = lease?.endDate ? new Date(lease.endDate) : null;
-    if (leaseEndDate && !Number.isNaN(leaseEndDate.getTime())) {
-      leaseEndDate.setHours(23, 59, 59, 999);
-    }
-
-    let currentDate = new Date(scheduleAnchor);
-    while (currentDate <= invoiceMonthStart) {
-      const nextDate = addMonthsPreservingDay(currentDate, billingPeriod.durationInMonths) || new Date(invoiceMonthStart);
-      const periodEnd = new Date(nextDate.getTime() - 1);
-      if (
-        invoiceMonthStart.getFullYear() === currentDate.getFullYear() &&
-        invoiceMonthStart.getMonth() === currentDate.getMonth()
-      ) {
-        const periodKey = buildSchedulePeriodKey({ startDate: currentDate, billingPeriodKey: billingPeriod.key });
-        const rawAdjustments = Array.isArray(lease?.billingScheduleAdjustments) ? lease.billingScheduleAdjustments : [];
-        const adjustment =
-          rawAdjustments.find((item) => String(item?.periodKey || "") === String(periodKey)) ||
-          rawAdjustments.find((item) => {
-            const itemFrom = item?.fromDate ? new Date(item.fromDate) : null;
-            return itemFrom && itemFrom.getFullYear() === currentDate.getFullYear() && itemFrom.getMonth() === currentDate.getMonth();
-          }) ||
-          null;
-
-        if (adjustment?.status === "deleted") {
-          return { allowed: false, reason: "Selected billing period has been deleted from the lease schedule." };
-        }
-        if (adjustment?.status === "frozen") {
-          return { allowed: false, reason: "Selected billing period is frozen in the lease schedule." };
-        }
-        if (leaseEndDate && currentDate > leaseEndDate) {
-          return { allowed: false, reason: "Selected billing period falls outside the lease term." };
-        }
-
-        const fromDate = adjustment?.fromDate ? new Date(adjustment.fromDate) : currentDate;
-        const toDate = adjustment?.toDate ? new Date(adjustment.toDate) : periodEnd;
-        const paymentDueDay = Math.max(1, Math.min(28, Number(lease?.paymentDueDay || 5)));
-        const dueDate = new Date(fromDate);
-        dueDate.setDate(Math.min(paymentDueDay, new Date(dueDate.getFullYear(), dueDate.getMonth() + 1, 0).getDate()));
-        dueDate.setHours(23, 59, 59, 999);
-
-        return {
-          allowed: true,
-          lease,
-          billingPeriod,
-          periodKey,
-          fromDate,
-          toDate,
-          dueDate,
-          description: formatScheduleLabel({ startDate: fromDate, endDate: toDate, billingPeriod }),
-          rentAmount: Number(adjustment?.rentAmount ?? Number(unitContext?.rentAmount || 0) * billingPeriod.durationInMonths),
-          utilityAmount: Number(adjustment?.utilityAmount ?? Number(unitContext?.utilityAmount || 0) * billingPeriod.durationInMonths),
-          utilityNames: Array.isArray(adjustment?.utilityNames) ? adjustment.utilityNames : [],
-        };
-      }
-      currentDate = nextDate;
-    }
-
-    return { allowed: false, reason: "Selected month is not a scheduled billing start for this tenant's billing frequency." };
-  };
+  const {
+    getTenantPricing,
+    getTenantPricingForBookingPeriod,
+    getTenantPropertyId,
+    getAssignedUnitContexts,
+    resolveTenantBookingPeriod,
+  } = useInvoicePricing({ units: unitsFromStore, leases, companyBillingPeriods });
 
   useEffect(() => {
     if (!currentCompany?._id) return;
@@ -1250,28 +777,10 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   }, [currentCompany?._id]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!tenantId) return;
-    setSingleBookingForm((prev) => ({ ...prev, tenantId }));
-  }, [tenantId]);
-
-  useEffect(() => {
     if (!(initialOpenSingleBooking || location?.state?.openSingleBooking)) return;
     setShowSingleBooking(true);
     setBookingAction("single");
-    if (tenantId) {
-      setSingleBookingForm((prev) => ({ ...prev, tenantId }));
-    }
-  }, [initialOpenSingleBooking, location?.state?.openSingleBooking, tenantId]);
-
-  useEffect(() => {
-    if (!isFutureBillingPeriod(singleBookingForm.month, singleBookingForm.year)) return;
-
-    setSingleBookingForm((prev) => ({
-      ...prev,
-      month: currentBookingMonth,
-      year: currentBookingYear,
-    }));
-  }, [singleBookingForm.month, singleBookingForm.year, currentBookingMonth, currentBookingYear]);
+  }, [initialOpenSingleBooking, location?.state?.openSingleBooking]);
 
   useEffect(() => {
     if (!isFutureBillingPeriod(batchBookingForm.month, batchBookingForm.year)) return;
@@ -1282,15 +791,6 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
       year: currentBookingYear,
     }));
   }, [batchBookingForm.month, batchBookingForm.year, currentBookingMonth, currentBookingYear]);
-
-  useEffect(() => {
-    setSingleBookingForm((prev) => {
-      const normalizedDueDay = normalizeDueDay(prev.dueDay, prev.month, prev.year);
-      const nextInvoiceDate = prev.bookWithInvoiceDate ? prev.invoiceDate : getStartOfPeriod(prev.month, prev.year);
-      if (normalizedDueDay === prev.dueDay && String(nextInvoiceDate) === String(prev.invoiceDate)) return prev;
-      return { ...prev, dueDay: normalizedDueDay, invoiceDate: nextInvoiceDate };
-    });
-  }, [singleBookingForm.month, singleBookingForm.year]);
 
   useEffect(() => {
     setBatchBookingForm((prev) => {
@@ -1308,8 +808,7 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
 
   useEffect(() => {
     const defaultTaxCodeKey = storedSettings?.taxSettings?.defaultTaxCodeKey || "vat_standard";
-    setSingleBookingForm((prev) => ({ ...prev, taxCodeKey: prev.taxCodeKey || defaultTaxCodeKey }));
-    setBatchBookingForm((prev) => ({ ...prev, taxCodeKey: prev.taxCodeKey || defaultTaxCodeKey }));
+setBatchBookingForm((prev) => ({ ...prev, taxCodeKey: prev.taxCodeKey || defaultTaxCodeKey }));
   }, [storedSettings]);
 
   useEffect(() => {
@@ -1475,143 +974,10 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
     return lookup;
   }, [tenantsFromStore]);
 
-  const unitLookupById = useMemo(() => {
-    const m = new Map();
-    unitsFromStore.forEach(u => { if (u?._id) m.set(String(u._id), u); });
-    return m;
-  }, [unitsFromStore]);
 
 
-const getAssignedUnitContexts = useCallback((tenant) => {
-  const rawUnits = [tenant?.unit, ...(Array.isArray(tenant?.additionalUnits) ? tenant.additionalUnits : [])]
-    .filter(Boolean)
-    .map((unitRef) => {
-      const unitId = unitRef?._id || unitRef;
-      const matchedUnit = unitLookupById.get(String(unitId));
-      return matchedUnit || unitRef || null;
-    })
-    .filter(Boolean);
-
-  const seen = new Set();
-  return rawUnits.filter((unit) => {
-    const key = String(unit?._id || unit || "");
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).map((unit) => ({
-    unit,
-    unitId: unit?._id || unit,
-    unitName: unit?.unitName || unit?.name || unit?.unitNumber || "N/A",
-    propertyId: unit?.property?._id || unit?.property || null,
-    rentAmount: Number(unit?.rent || unit?.monthlyRent || 0) || 0,
-    utilityRows: Array.isArray(unit?.utilities) ? unit.utilities : [],
-  }));
-}, [unitLookupById]);
 
 
-const getTenantPricing = useCallback((tenant) => {
-  const assignedUnitContexts = getAssignedUnitContexts(tenant);
-  if (!assignedUnitContexts.length) {
-    return {
-      rentAmount: 0,
-      utilityAmount: 0,
-      utilityLabel: "",
-      total: 0,
-      unitContexts: [],
-    };
-  }
-
-  const unitContexts = assignedUnitContexts.map((context) => {
-    const tenantUtilities = Array.isArray(tenant?.utilities) ? tenant.utilities : [];
-    const utilitiesFromTenant = tenantUtilities.reduce((sum, utility) => {
-      if (utility?.isIncluded === true) return sum;
-      return sum + (Number(utility?.unitCharge || utility?.amount || 0) || 0);
-    }, 0);
-
-    const useTenantUtilities = utilitiesFromTenant > 0 && assignedUnitContexts.length === 1;
-    const sourceRows = useTenantUtilities ? tenantUtilities : context.utilityRows;
-    let utilitiesFromUnit = 0;
-    const billableUtilityRows = sourceRows.reduce((acc, item) => {
-      if (item?.isIncluded === true) return acc;
-      const amount = Number(item?.unitCharge || item?.amount || 0);
-      utilitiesFromUnit += amount;
-      const label = extractUtilityLabel(item);
-      if (label && amount > 0) acc.push({ label, amount });
-      return acc;
-    }, []);
-    const billableUtilityLabels = billableUtilityRows.map((r) => r.label);
-
-    return {
-      ...context,
-      utilityAmount: useTenantUtilities ? utilitiesFromTenant : utilitiesFromUnit,
-      utilityLabel:
-        billableUtilityLabels.length > 0 ? billableUtilityLabels.join(", ") : "",
-      billableUtilityRows,
-    };
-  });
-
-  const rentAmount = unitContexts.reduce((sum, item) => sum + Number(item.rentAmount || 0), 0);
-  const utilityAmount = unitContexts.reduce((sum, item) => sum + Number(item.utilityAmount || 0), 0);
-  const utilityLabels = Array.from(new Set(unitContexts.map((item) => item.utilityLabel).filter(Boolean)));
-
-  return {
-    rentAmount,
-    utilityAmount,
-    utilityLabel: utilityLabels.length > 0 ? utilityLabels.join(", ") : "",
-    total: rentAmount + utilityAmount,
-    unitContexts,
-  };
-}, [getAssignedUnitContexts]);
-
-const getTenantPricingForBookingPeriod = useCallback((tenant, month, year) => {
-  const pricing = getTenantPricing(tenant);
-  const scheduleAwareUnitContexts = pricing.unitContexts
-    .map((context) => {
-      const bookingPeriod = resolveTenantBookingPeriod({ tenant, unitContext: context, month, year });
-      if (!bookingPeriod?.allowed) return null;
-      return {
-        ...context,
-        rentAmount: bookingPeriod.rentAmount,
-        utilityAmount: bookingPeriod.utilityAmount,
-        utilityLabel:
-          Array.isArray(bookingPeriod.utilityNames) && bookingPeriod.utilityNames.length === 1
-            ? bookingPeriod.utilityNames[0]
-            : context.utilityLabel,
-      };
-    })
-    .filter(Boolean);
-
-  if (!scheduleAwareUnitContexts.length) {
-    return {
-      rentAmount: 0,
-      utilityAmount: 0,
-      utilityLabel: "",
-      total: 0,
-      unitContexts: [],
-    };
-  }
-
-  const rentAmount = scheduleAwareUnitContexts.reduce((sum, item) => sum + Number(item.rentAmount || 0), 0);
-  const utilityAmount = scheduleAwareUnitContexts.reduce((sum, item) => sum + Number(item.utilityAmount || 0), 0);
-  const utilityLabels = Array.from(new Set(scheduleAwareUnitContexts.map((item) => item.utilityLabel).filter(Boolean)));
-
-  return {
-    rentAmount,
-    utilityAmount,
-    utilityLabel: utilityLabels.length > 0 ? utilityLabels.join(", ") : "",
-    total: rentAmount + utilityAmount,
-    unitContexts: scheduleAwareUnitContexts,
-  };
-}, [getTenantPricing]);
-
-const getTenantPropertyId = useCallback((tenant) => {
-    const directPropertyId = tenant?.property?._id || tenant?.property;
-    if (directPropertyId) return directPropertyId;
-
-    const tenantUnitId = String(tenant?.unit?._id || tenant?.unit || "");
-    const matchedUnit = unitLookupById.get(tenantUnitId);
-    return matchedUnit?.property?._id || matchedUnit?.property || null;
-  }, [unitLookupById]);
 
   const activeProperties = useMemo(() => {
     return propertiesFromStore.filter((property) => {
@@ -1624,87 +990,6 @@ const getTenantPropertyId = useCallback((tenant) => {
     [activeProperties]
   );
 
-  const singleBookingTenantOptions = useMemo(() => {
-    const normalizedSearch = String(singleBookingTenantSearch || "").trim().toLowerCase();
-    const BOOKABLE_STATUSES = new Set(["active", "overdue"]);
-
-    const mapped = tenantsFromStore
-      .filter(tenant => {
-        if (!BOOKABLE_STATUSES.has(String(tenant?.status || "active").toLowerCase())) return false;
-        if (singleBookingPropertyFilter !== "all" && String(getTenantPropertyId(tenant) || "") !== String(singleBookingPropertyFilter)) return false;
-        return true;
-      })
-      .map(tenant => ({
-        id: tenant._id,
-        name: getTenantDisplayName(tenant),
-        tenantCode: tenant?.tenantCode || tenant?.code || tenant?.tenantNo || "",
-        propertyName: resolveTenantPropertyName(tenant, unitsFromStore, propertiesFromStore),
-        unitName: getUnitDisplayName(tenant),
-      }));
-
-    const filtered = normalizedSearch
-      ? mapped.filter(o => `${o.name} ${o.tenantCode} ${o.propertyName} ${o.unitName}`.toLowerCase().includes(normalizedSearch))
-      : mapped;
-
-    return filtered.sort((a, b) => a.name.localeCompare(b.name));
-  }, [tenantsFromStore, unitsFromStore, propertiesFromStore, singleBookingPropertyFilter, singleBookingTenantSearch]);
-
-  const selectedSingleBookingTenant = useMemo(() => {
-    return tenantLookup[singleBookingForm.tenantId] || null;
-  }, [tenantLookup, singleBookingForm.tenantId]);
-
-  const selectedSingleBookingPreview = useMemo(() => {
-    if (!selectedSingleBookingTenant) return null;
-    const pricing = getTenantPricingForBookingPeriod(selectedSingleBookingTenant, Number(singleBookingForm.month), Number(singleBookingForm.year));
-    const bookingAmounts = resolveBookingAmountsForMode({
-      rentAmount: pricing.rentAmount,
-      utilityAmount: pricing.utilityAmount,
-      billingMode: singleBookingForm.billingMode,
-    });
-
-    return {
-      periodLabel: formatPeriodLabel(Number(singleBookingForm.month), Number(singleBookingForm.year)),
-      rentAmount: pricing.rentAmount,
-      utilityAmount: pricing.utilityAmount,
-      totalAmount: pricing.total,
-      selectedRentAmount: bookingAmounts.rentAmount,
-      selectedUtilityAmount: bookingAmounts.utilityAmount,
-      selectedTotalAmount: bookingAmounts.totalAmount,
-      normalizedBillingMode: bookingAmounts.billingMode,
-      propertyName: resolveTenantPropertyName(
-        selectedSingleBookingTenant,
-        unitsFromStore,
-        propertiesFromStore
-      ),
-      unitName: getUnitDisplayName(selectedSingleBookingTenant),
-    };
-  }, [
-    singleBookingForm.billingMode,
-    singleBookingForm.month,
-    singleBookingForm.year,
-    selectedSingleBookingTenant,
-    unitsFromStore,
-    propertiesFromStore,
-  ]);
-
-  const selectedSingleBookingTaxPreview = useMemo(() => {
-    if (!selectedSingleBookingPreview) return null;
-
-    const components = [
-      selectedSingleBookingPreview.selectedRentAmount > 0
-        ? { category: "RENT_CHARGE", amount: selectedSingleBookingPreview.selectedRentAmount }
-        : null,
-      selectedSingleBookingPreview.selectedUtilityAmount > 0
-        ? { category: "UTILITY_CHARGE", amount: selectedSingleBookingPreview.selectedUtilityAmount }
-        : null,
-    ].filter(Boolean);
-
-    return buildTaxPreviewForComponents({
-      components,
-      companyTaxConfig: normalizedTaxConfig,
-      selection: getBookingTaxSelection(singleBookingForm),
-    });
-  }, [selectedSingleBookingPreview, singleBookingForm, normalizedTaxConfig]);
 
   const batchBookingScopeTenants = useMemo(() => {
     return tenantsFromStore.filter((tenant) => {
@@ -1724,24 +1009,6 @@ const getTenantPropertyId = useCallback((tenant) => {
 
   const batchBookingScopeCount = batchBookingScopeTenants.length;
 
-  const selectedSingleBookingTenantOption = useMemo(() => {
-    if (!singleBookingForm.tenantId) return null;
-    const tenant = tenantLookup[singleBookingForm.tenantId];
-    if (!tenant) return null;
-    return {
-      id: tenant._id,
-      name: getTenantDisplayName(tenant),
-      tenantCode: tenant?.tenantCode || tenant?.code || tenant?.tenantNo || "",
-      propertyName: resolveTenantPropertyName(tenant, unitsFromStore, propertiesFromStore),
-      unitName: getUnitDisplayName(tenant),
-    };
-  }, [singleBookingForm.tenantId, tenantLookup, unitsFromStore, propertiesFromStore]);
-
-  const formatTenantOptionLabel = (tenantOption) => {
-    if (!tenantOption) return "";
-    const code = tenantOption.tenantCode ? ` · ${tenantOption.tenantCode}` : "";
-    return `${tenantOption.name}${code} - ${tenantOption.propertyName} (${tenantOption.unitName})`;
-  };
 
   const batchBookingTaxPreview = useMemo(() => {
     const components = batchBookingScopeTenants.flatMap((tenant) => {
@@ -2781,77 +2048,6 @@ const createInvoiceForTenant = async (
       setShowBatchBooking(true);
     }
   };
-  const handleSingleBooking = async () => {
-    if (submittingSingleBooking) return;
-
-    const selectedTenant = tenantLookup[singleBookingForm.tenantId];
-
-    if (!selectedTenant) {
-      toast.error("Please select a tenant");
-      return;
-    }
-
-    if (isFutureBillingPeriod(singleBookingForm.month, singleBookingForm.year)) {
-      toast.error("Future invoicing is disabled. Select the current month or an earlier clean period.");
-      return;
-    }
-
-    const pricing = getTenantPricingForBookingPeriod(selectedTenant, Number(singleBookingForm.month), Number(singleBookingForm.year));
-    const selectedAmounts = resolveBookingAmountsForMode({
-      rentAmount: pricing.rentAmount,
-      utilityAmount: pricing.utilityAmount,
-      billingMode: singleBookingForm.billingMode,
-    });
-    if (selectedAmounts.totalAmount <= 0) {
-      toast.error(`Selected tenant has no billable ${getBillingModeLabel(singleBookingForm.billingMode).toLowerCase()} amount`);
-      return;
-    }
-
-    const bookingGroupId = createBookingGroupId();
-    setSubmittingSingleBooking(true);
-    try {
-      const result = await createInvoiceForTenant(
-        selectedTenant,
-        Number(singleBookingForm.month),
-        Number(singleBookingForm.year),
-        Number(singleBookingForm.dueDay || 5),
-        singleBookingForm.billingMode,
-        getBookingTaxSelection(singleBookingForm),
-        resolveBookingDateOverride(singleBookingForm),
-        bookingGroupId
-      );
-
-      if (!result.created && result.reason === "already_exists") {
-        toast.info(`Invoice for ${result.periodLabel} already exists for this tenant`);
-        return;
-      }
-
-      if (!result.created) {
-        toast.error(result.reason || "Failed to create booking");
-        return;
-      }
-
-      toast.success(
-        `Booked ${result.invoiceIds.join(", ")} for ${getTenantDisplayName(selectedTenant)}`
-      );
-
-      setShowSingleBooking(false);
-      setBookingAction("");
-      window.dispatchEvent(new Event("invoicesUpdated"));
-      setRefreshTick((prev) => prev + 1);
-    } catch (error) {
-      console.error("Single booking failed:", error);
-      toast.error(
-        error?.response?.data?.error ||
-        error?.response?.data?.message ||
-        error?.message ||
-        "Failed to create invoice"
-      );
-    } finally {
-      setSubmittingSingleBooking(false);
-    }
-  };
-
   const handleBatchBooking = async () => {
     if (submittingBatchBooking) return;
 
@@ -3480,324 +2676,18 @@ const createInvoiceForTenant = async (
         </div>
       </div>
 
-      {showSingleBooking && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
-          <div className="flex w-full max-w-3xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
-            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
-              <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">Single Tenant Booking</h3>
-              <button
-                onClick={() => {
-                  setShowSingleBooking(false);
-                  setBookingAction("");
-                }}
-                className="text-white/70 transition-colors hover:text-white"
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto bg-white px-5 py-4 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
-                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Property Filter</label>
-                  <AppSelect
-                    value={singleBookingPropertyFilter}
-                    onChange={(v) => {
-                      setSingleBookingPropertyFilter(v ?? "all");
-                      setSingleBookingTenantSearch("");
-                      setSingleBookingTenantDropdownOpen(false);
-                      setSingleBookingForm((prev) => ({ ...prev, tenantId: "" }));
-                    }}
-                    options={activePropertyOptions}
-                    searchable
-                    size="md"
-                  />
-                </div>
-
-                <div className="relative md:col-span-2">
-                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tenant</label>
-                  <input
-                    type="text"
-                    value={singleBookingTenantSearch || formatTenantOptionLabel(selectedSingleBookingTenantOption)}
-                    onFocus={() => setSingleBookingTenantDropdownOpen(true)}
-                    onChange={(e) => {
-                      setSingleBookingTenantSearch(e.target.value);
-                      setSingleBookingTenantDropdownOpen(true);
-                      setSingleBookingForm((prev) => ({ ...prev, tenantId: "" }));
-                    }}
-                    placeholder="Type tenant name, code, unit, or property..."
-                    className="w-full px-3 py-2 pr-9 text-sm border border-slate-300 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setSingleBookingTenantDropdownOpen((open) => !open)}
-                    className="absolute right-2 top-[29px] rounded px-2 py-1 text-xs font-black text-slate-500 hover:bg-slate-100"
-                    aria-label="Toggle tenant search results"
-                  >
-                    ▾
-                  </button>
-                  {singleBookingTenantDropdownOpen && (
-                    <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-64 overflow-y-auto rounded-lg border border-slate-300 bg-white shadow-xl">
-                      {singleBookingTenantOptions.length > 0 ? (
-                        singleBookingTenantOptions.map((tenantOption) => (
-                          <button
-                            key={tenantOption.id}
-                            type="button"
-                            onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => {
-                              setSingleBookingForm((prev) => ({ ...prev, tenantId: tenantOption.id }));
-                              setSingleBookingTenantSearch(formatTenantOptionLabel(tenantOption));
-                              setSingleBookingTenantDropdownOpen(false);
-                            }}
-                            className={`block w-full border-b border-slate-100 px-3 py-2 text-left text-xs transition last:border-b-0 hover:bg-[#0B3B2E]/5 ${
-                              String(singleBookingForm.tenantId || "") === String(tenantOption.id) ? "bg-[#0B3B2E]/10" : "bg-white"
-                            }`}
-                          >
-                            <span className="block font-black text-slate-900">
-                              {tenantOption.name}{tenantOption.tenantCode ? ` · ${tenantOption.tenantCode}` : ""}
-                            </span>
-                            <span className="mt-0.5 block text-[11px] font-semibold text-slate-500">
-                              {tenantOption.propertyName} · {tenantOption.unitName}
-                            </span>
-                          </button>
-                        ))
-                      ) : (
-                        <div className="px-3 py-2 text-xs font-semibold text-slate-500">No matching tenants found.</div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className="md:col-span-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-600">
-                  Showing {singleBookingTenantOptions.length.toLocaleString()} active tenant{singleBookingTenantOptions.length === 1 ? "" : "s"} for this single booking filter.
-                </div>
-
-                <div>
-                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Period</label>
-                  <AppSelect
-                    value={singleBookingForm.month}
-                    onChange={(v) =>
-                      setSingleBookingForm((prev) => {
-                        const nextPeriod = clampBillingPeriod(Number(v), prev.year);
-                        return { ...prev, month: nextPeriod.month, year: nextPeriod.year };
-                      })
-                    }
-                    options={MONTH_OPTIONS.filter((o) => !isFutureBillingPeriod(o.value, Number(singleBookingForm.year))).map((o) => ({ value: o.value, label: o.label }))}
-                    size="md"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Year</label>
-                  <input
-                    type="number"
-                    min="2000"
-                    max={currentBookingYear}
-                    value={singleBookingForm.year}
-                    onChange={(e) =>
-                      setSingleBookingForm((prev) => {
-                        const nextYear = Math.min(Number(e.target.value) || currentBookingYear, currentBookingYear);
-                        const nextPeriod = clampBillingPeriod(prev.month, nextYear);
-                        return { ...prev, month: nextPeriod.month, year: nextPeriod.year };
-                      })
-                    }
-                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  />
-                </div>
-
-
-                <div>
-                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Booking Date</label>
-                  <input
-                    type="date"
-                    value={singleBookingForm.invoiceDate ? new Date(singleBookingForm.invoiceDate).toISOString().slice(0, 10) : ""}
-                    onChange={(e) =>
-                      setSingleBookingForm((prev) => ({ ...prev, invoiceDate: e.target.value ? new Date(e.target.value) : prev.invoiceDate, bookWithInvoiceDate: true }))
-                    }
-                    className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  />
-                  <label className="mt-2 flex items-center gap-2 text-xs font-semibold text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(singleBookingForm.bookWithInvoiceDate)}
-                      onChange={(e) =>
-                        setSingleBookingForm((prev) => ({
-                          ...prev,
-                          bookWithInvoiceDate: e.target.checked,
-                          invoiceDate: e.target.checked ? prev.invoiceDate : getStartOfPeriod(prev.month, prev.year),
-                        }))
-                      }
-                    />
-                    Book with booking date
-                  </label>
-                </div>
-
-                <div>
-                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Due Day</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min="1"
-                      max={getDaysInMonth(Number(singleBookingForm.month), Number(singleBookingForm.year))}
-                      value={singleBookingForm.dueDay}
-                      onChange={(e) =>
-                        setSingleBookingForm((prev) => ({
-                          ...prev,
-                          dueDay: normalizeDueDay(e.target.value, prev.month, prev.year),
-                        }))
-                      }
-                      className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setSingleBookingForm((prev) => ({ ...prev, dueDay: 5 }))}
-                      className="shrink-0 rounded-lg border border-slate-300 px-2.5 py-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
-                    >
-                      Default 5th
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Booking Option</label>
-                  <AppSelect
-                    value={singleBookingForm.billingMode}
-                    onChange={(v) => setSingleBookingForm((prev) => ({ ...prev, billingMode: v ?? "separate" }))}
-                    options={[
-                      { value: "separate", label: "Rent + Utility (separate)" },
-                      { value: "combined", label: "Rent + Utility (combined)" },
-                      { value: "rent", label: "Rent only" },
-                      { value: "utility", label: "Utility only" },
-                    ]}
-                    size="md"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tax Handling</label>
-                  <AppSelect
-                    value={singleBookingForm.taxHandling}
-                    onChange={(v) => setSingleBookingForm((prev) => ({ ...prev, taxHandling: v ?? "company_default" }))}
-                    options={[
-                      { value: "company_default", label: "Use company default" },
-                      ...(companyTaxEnabled ? [{ value: "taxable", label: "Force taxable" }] : []),
-                      { value: "non_taxable", label: "Force non-taxable" },
-                    ]}
-                    size="md"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tax Code</label>
-                  <AppSelect
-                    value={singleBookingForm.taxCodeKey}
-                    onChange={(v) => setSingleBookingForm((prev) => ({ ...prev, taxCodeKey: v ?? "vat_standard" }))}
-                    options={taxCodeOptions}
-                    disabled={singleBookingForm.taxHandling === "non_taxable"}
-                    size="md"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Tax Mode</label>
-                  <AppSelect
-                    value={singleBookingForm.taxMode}
-                    onChange={(v) => setSingleBookingForm((prev) => ({ ...prev, taxMode: v ?? "company_default" }))}
-                    options={[
-                      { value: "company_default", label: "Use company default" },
-                      { value: "exclusive", label: "Exclusive" },
-                      { value: "inclusive", label: "Inclusive" },
-                    ]}
-                    disabled={singleBookingForm.taxHandling === "non_taxable"}
-                    size="md"
-                  />
-                </div>
-              </div>
-
-              {selectedSingleBookingPreview && (
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-                  <p className="text-xs font-semibold text-emerald-800 mb-2">
-                    Booking Preview - {selectedSingleBookingPreview.periodLabel}
-                  </p>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-                    <div>
-                      <p className="text-slate-500">Property</p>
-                      <p className="font-semibold text-slate-900">{selectedSingleBookingPreview.propertyName}</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-500">Unit</p>
-                      <p className="font-semibold text-slate-900">{selectedSingleBookingPreview.unitName}</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-500">Rent</p>
-                      <p className="font-semibold text-slate-900">
-                        KES {selectedSingleBookingPreview.rentAmount.toLocaleString()}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-slate-500">Utility</p>
-                      <p className="font-semibold text-slate-900">
-                        KES {selectedSingleBookingPreview.utilityAmount.toLocaleString()}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-slate-500">Booking Date</p>
-                      <p className="font-semibold text-slate-900">
-                        {formatDateDisplay(singleBookingForm.bookWithInvoiceDate ? singleBookingForm.invoiceDate : getStartOfPeriod(Number(singleBookingForm.month), Number(singleBookingForm.year)))}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-slate-500">Due Date</p>
-                      <p className="font-semibold text-slate-900">
-                        {formatDateDisplay(getDueDateForPeriod(Number(singleBookingForm.month), Number(singleBookingForm.year), Number(singleBookingForm.dueDay || 5)))}
-                      </p>
-                    </div>
-                  </div>
-                  <p className="mt-2 text-sm font-bold text-[#0B3B2E]">
-                    Subtotal: KES {Number(selectedSingleBookingPreview.selectedTotalAmount || 0).toLocaleString()}
-                  </p>
-                  <p className="mt-1 text-sm font-semibold text-emerald-900">
-                    Estimated tax: KES {Number(selectedSingleBookingTaxPreview?.taxAmount || 0).toLocaleString()}
-                  </p>
-                  <p className="mt-1 text-sm font-bold text-[#0B3B2E]">
-                    Gross total: KES {Number(selectedSingleBookingTaxPreview?.grossAmount || selectedSingleBookingPreview.selectedTotalAmount || 0).toLocaleString()}
-                  </p>
-                  <p className="mt-1 text-[11px] text-emerald-800 font-semibold">
-                    Mode: {getBillingModeLabel(singleBookingForm.billingMode)}
-                  </p>
-                  <p className="mt-1 text-[11px] text-emerald-800 font-semibold">
-                    Tax: {singleBookingForm.taxHandling === "company_default" ? "Company default" : singleBookingForm.taxHandling === "non_taxable" ? "Forced non-taxable" : `${getTaxCodeLabel(singleBookingForm.taxCodeKey, normalizedTaxConfig)} (${singleBookingForm.taxMode === "company_default" ? "Company mode" : singleBookingForm.taxMode})`}
-                  </p>
-                  {!companyTaxEnabled && (
-                    <p className="mt-1 text-[11px] text-amber-700 font-semibold">
-                      Company tax is currently disabled. Backend tax posting will remain non-taxable until tax is enabled in Company Setup.
-                    </p>
-                  )}
-                </div>
-              )}
-
-            </div>
-            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
-              <button
-                onClick={() => {
-                  setShowSingleBooking(false);
-                  setBookingAction("");
-                }}
-                className="px-4 py-2 text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-100"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSingleBooking}
-                disabled={submittingSingleBooking}
-                className="bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0d5442] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {submittingSingleBooking ? "Creating..." : "Create Booking"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <SingleBookingModal
+        isOpen={showSingleBooking}
+        onClose={() => { setShowSingleBooking(false); setBookingAction(""); }}
+        onSuccess={() => { setShowSingleBooking(false); setBookingAction(""); setRefreshTick((prev) => prev + 1); }}
+        tenants={tenantsFromStore}
+        activeProperties={activeProperties}
+        leases={leases}
+        companyBillingPeriods={companyBillingPeriods}
+        companyTaxConfig={normalizedTaxConfig}
+        existingInvoices={tenantInvoicesFromApi}
+        initialTenantId={tenantId}
+      />
 
       {showBatchBooking && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">

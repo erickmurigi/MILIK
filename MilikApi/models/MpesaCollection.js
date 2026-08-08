@@ -114,7 +114,7 @@ const MpesaCollectionSchema = new mongoose.Schema(
     },
     matchingStatus: {
       type: String,
-      enum: ["unmatched", "matched_tenant", "captured", "duplicate", "ignored"],
+      enum: ["unmatched", "captured", "duplicate", "ignored", "matched_tenant"], // matched_tenant: legacy only
       default: "unmatched",
       index: true,
     },

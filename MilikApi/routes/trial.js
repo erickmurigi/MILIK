@@ -68,25 +68,26 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ success: false, message: "Please provide a valid phone number" });
     }
 
-    const existingTrial = await TrialRequest.findOne({ email });
-    const trial = existingTrial || new TrialRequest({ email });
+    const updateFields = {
+      name, phone, company, role,
+      portfolioSize, city, country, notes,
+      rawPayload: payload,
+    };
+    if (selectedModules.length > 0) updateFields.selectedModules = selectedModules;
 
-    trial.name = name;
-    trial.email = email;
-    trial.phone = phone;
-    trial.company = company;
-    trial.role = role;
-    trial.portfolioSize = portfolioSize;
-    trial.city = city;
-    trial.country = country;
-    trial.notes = notes;
-    trial.rawPayload = payload;
-    trial.status = trial.status || "pending";
-    if (selectedModules.length > 0) trial.selectedModules = selectedModules;
+    // Atomic upsert — avoids E11000 duplicate key errors from race conditions or
+    // retried submissions. $setOnInsert keeps status/email unchanged on updates.
+    const before = await TrialRequest.findOne({ email }, { _id: 1 }).lean();
+    const trial = await TrialRequest.findOneAndUpdate(
+      { email },
+      {
+        $set: updateFields,
+        $setOnInsert: { email, status: "pending" },
+      },
+      { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
+    );
 
-    await trial.save();
-
-    const isNew = !existingTrial;
+    const isNew = !before;
     const emailNotification = await sendTrialRequestNotification(trial).catch(() => ({
       attempted: false, sent: false, skipped: true, error: "Notification failed silently",
     }));

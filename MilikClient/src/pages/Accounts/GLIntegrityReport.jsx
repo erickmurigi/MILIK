@@ -18,7 +18,6 @@ import {
   repairRecomputeBalances as apiRepairRecompute,
   repairRepostInvoices as apiRepairRepost,
   reverseGlCorrectionEntry as apiReverseGlCorrection,
-  apiVoidReversedCorrections,
   apiVoidOrphanedJournalGroup,
   getActiveGlCorrections,
   getGlGroupEntries,
@@ -463,6 +462,7 @@ export default function GLIntegrityReport() {
   const [abnormalModal,  setAbnormalModal]  = useState(null);
   const [expandedRun,    setExpandedRun]    = useState(null);
   const [corrections,  setCorrections]  = useTabState("/accounts/gl-integrity:corrections", []);
+  const [showCorrections, setShowCorrections] = useState(false);
 
   const healthRunId = report?.healthRunId;
 
@@ -588,29 +588,6 @@ export default function GLIntegrityReport() {
     }
   };
 
-  const doVoidReversed = async () => {
-    const ok = await confirm({
-      title:       "Rollback All Undone Corrections",
-      message:     "This permanently voids every correction entry that was previously undone (status = reversed). They will be excluded from the Trial Balance and Balance Sheet immediately. This cannot be undone.",
-      confirmText: "Rollback Now",
-    });
-    if (!ok) return;
-    startRepair("void-reversed");
-    try {
-      const res = await apiVoidReversedCorrections({ business: businessId, healthRunId });
-      if (res.voidedCount === 0) {
-        toast.info("No reversed corrections found — nothing to rollback");
-      } else {
-        toast.success(`Rollback complete — ${res.voidedCount} entr${res.voidedCount === 1 ? "y" : "ies"} voided and removed from Trial Balance`);
-      }
-      runCheck().then(loadHistory);
-      loadCorrections();
-    } catch (err) {
-      toast.error(err?.response?.data?.error || "Rollback failed");
-    } finally {
-      endRepair("void-reversed");
-    }
-  };
 
   // ── Derived ─────────────────────────────────────────────────────────────────
   const status   = report?.overallStatus;
@@ -857,55 +834,64 @@ export default function GLIntegrityReport() {
           {/* ── REPAIR CENTRE TAB ── */}
           {activeTab === "repair" && (
             <>
-              {/* ── Active GL Corrections (always visible when present) ── */}
+              {/* ── Active GL Corrections (collapsed by default) ── */}
               {corrections.length > 0 && (
                 <div className="border border-amber-200 bg-white shadow-sm overflow-hidden mb-3">
-                  <div className="border-b border-amber-100 bg-amber-50 px-4 py-2.5 flex items-center gap-2">
-                    <FaUndo size={10} className="text-amber-600" />
+                  <button
+                    type="button"
+                    onClick={() => setShowCorrections((v) => !v)}
+                    className="w-full border-b border-amber-100 bg-amber-50 px-4 py-2.5 flex items-center gap-2 text-left hover:bg-amber-100 transition-colors"
+                  >
+                    <FaUndo size={10} className="text-amber-600 shrink-0" />
                     <span className="text-[10px] font-black uppercase tracking-[0.12em] text-amber-700">
                       Active GL Corrections · {corrections.length}
                     </span>
-                    <span className="ml-1 text-[10px] text-amber-500">Manual correcting entries that can be reversed</span>
-                  </div>
-                  <div className="divide-y divide-slate-100">
-                    {corrections.map((c) => (
-                      <div key={c.journalGroupId} className="flex items-start gap-3 px-4 py-3">
-                        <FaWrench size={11} className="mt-0.5 text-amber-400 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-[11px] font-bold text-slate-700">Journal Group</span>
-                            <span className="font-mono text-[10px] text-slate-400">…{String(c.journalGroupId).slice(-8)}</span>
-                            <span className="text-[10px] text-slate-400">{fmtTs(c.postedAt)}</span>
+                    <span className="ml-1 text-[10px] text-amber-500 flex-1">Manual correcting entries that can be reversed</span>
+                    <span className="text-[10px] font-bold text-amber-600 shrink-0">
+                      {showCorrections ? "▲ Hide" : "▼ Show"}
+                    </span>
+                  </button>
+                  {showCorrections && (
+                    <div className="divide-y divide-slate-100">
+                      {corrections.map((c) => (
+                        <div key={c.journalGroupId} className="flex items-start gap-3 px-4 py-3">
+                          <FaWrench size={11} className="mt-0.5 text-amber-400 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-[11px] font-bold text-slate-700">Journal Group</span>
+                              <span className="font-mono text-[10px] text-slate-400">…{String(c.journalGroupId).slice(-8)}</span>
+                              <span className="text-[10px] text-slate-400">{fmtTs(c.postedAt)}</span>
+                            </div>
+                            <div className="mt-1 space-y-0.5">
+                              {c.entries.map((e) => (
+                                <div key={String(e._id)} className="flex items-center gap-2 text-[10px] text-slate-600">
+                                  <span className={`w-10 font-bold ${e.direction === "credit" ? "text-blue-600" : "text-emerald-600"}`}>
+                                    {e.direction === "credit" ? "CR" : "DR"}
+                                  </span>
+                                  <span className="font-mono tabular-nums">KES {fmtNum(e.direction === "credit" ? e.credit : e.debit)}</span>
+                                  <span className="text-slate-400">→ {e.accountCode} {e.accountName}</span>
+                                  {e.notes && <span className="text-slate-400 truncate max-w-[200px]">· {e.notes}</span>}
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                          <div className="mt-1 space-y-0.5">
-                            {c.entries.map((e) => (
-                              <div key={String(e._id)} className="flex items-center gap-2 text-[10px] text-slate-600">
-                                <span className={`w-10 font-bold ${e.direction === "credit" ? "text-blue-600" : "text-emerald-600"}`}>
-                                  {e.direction === "credit" ? "CR" : "DR"}
-                                </span>
-                                <span className="font-mono tabular-nums">KES {fmtNum(e.direction === "credit" ? e.credit : e.debit)}</span>
-                                <span className="text-slate-400">→ {e.accountCode} {e.accountName}</span>
-                                {e.notes && <span className="text-slate-400 truncate max-w-[200px]">· {e.notes}</span>}
-                              </div>
-                            ))}
-                          </div>
+                          {canRepair && (
+                            <button
+                              onClick={() => doReverseCorrection(c.journalGroupId, c.entries.map((e) => e._id))}
+                              disabled={repairing.has(`reverse-${c.journalGroupId}`)}
+                              className="shrink-0 flex h-7 items-center gap-1.5 border border-amber-300 bg-amber-50 px-3 text-[10px] font-bold text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+                            >
+                              {repairing.has(`reverse-${c.journalGroupId}`) ? (
+                                <><FaSyncAlt size={8} className="animate-spin" /> Undoing…</>
+                              ) : (
+                                <><FaUndo size={8} /> Undo</>
+                              )}
+                            </button>
+                          )}
                         </div>
-                        {canRepair && (
-                          <button
-                            onClick={() => doReverseCorrection(c.journalGroupId, c.entries.map((e) => e._id))}
-                            disabled={repairing.has(`reverse-${c.journalGroupId}`)}
-                            className="shrink-0 flex h-7 items-center gap-1.5 border border-amber-300 bg-amber-50 px-3 text-[10px] font-bold text-amber-700 hover:bg-amber-100 disabled:opacity-50"
-                          >
-                            {repairing.has(`reverse-${c.journalGroupId}`) ? (
-                              <><FaSyncAlt size={8} className="animate-spin" /> Undoing…</>
-                            ) : (
-                              <><FaUndo size={8} /> Undo</>
-                            )}
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -933,35 +919,6 @@ export default function GLIntegrityReport() {
                       </span>
                     </div>
                   )}
-
-                  {/* ── Rollback Undone Corrections ── */}
-                  <div className="border border-red-300 bg-white shadow-sm overflow-hidden">
-                    <div className="border-b border-red-200 bg-red-50 px-4 py-2.5" style={{ borderLeftWidth: 3, borderLeftColor: "#dc2626" }}>
-                      <span className="text-[10px] font-black uppercase tracking-[0.12em] text-red-700">Rollback</span>
-                      <span className="ml-2 text-[10px] text-red-400">Permanently removes undone corrections from Trial Balance</span>
-                    </div>
-                    <div className="flex items-start gap-3 px-4 py-3">
-                      <FaUndo size={12} className="mt-0.5 text-red-400 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[11px] font-bold text-slate-700">Void All Undone Corrections</div>
-                        <div className="text-[10px] text-slate-500 mt-0.5">
-                          Any correction entry that was previously "Undone" is still counted in the Trial Balance and Balance Sheet
-                          (status = <span className="font-mono">reversed</span>). This button permanently voids them so they are fully
-                          excluded — fixing the mismatch between GL Health and the financial statements.
-                        </div>
-                      </div>
-                      <button
-                        onClick={doVoidReversed}
-                        disabled={!canRepair || repairing.has("void-reversed")}
-                        title={!canRepair ? "Full Access required" : undefined}
-                        className="shrink-0 flex h-7 items-center gap-1.5 border border-red-300 bg-red-50 px-3 text-[10px] font-bold text-red-700 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        {repairing.has("void-reversed")
-                          ? <><FaSyncAlt size={8} className="animate-spin" /> Running…</>
-                          : <><FaUndo size={8} /> Rollback</>}
-                      </button>
-                    </div>
-                  </div>
 
                   {/* ── Safe Maintenance ── */}
                   <div className="border border-slate-200 bg-white shadow-sm overflow-hidden">

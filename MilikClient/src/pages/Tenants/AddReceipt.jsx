@@ -118,6 +118,7 @@ const AddReceipt = () => {
   const prefilledAccountReference = searchParams.get("accountReference") || "";
   const prefilledMsisdn = searchParams.get("msisdn") || "";
   const prefilledPayerName = searchParams.get("payerName") || "";
+  const prefilledCashbookAccountId = searchParams.get("cashbookAccountId") || "";
   const currentCompany = useSelector(selectCurrentCompany);
   const isCompanyLandlordMode = isSelfManagingLandlordCompany(currentCompany);
   const entityCache = useEntityCache(currentCompany?._id);
@@ -251,9 +252,12 @@ const AddReceipt = () => {
         setCashbookOptions(liveCashbooks);
 
         if (liveCashbooks.length > 0) {
-          const preferred = liveCashbooks.some((item) => item.name === "Main Cashbook")
-            ? "Main Cashbook"
-            : liveCashbooks[0].name;
+          // If a cashbook was pre-specified via URL (e.g. from M-Pesa paybill config), honour it
+          const fromUrl = prefilledCashbookAccountId
+            ? liveCashbooks.find((item) => String(item._id || "") === prefilledCashbookAccountId)
+            : null;
+          const preferred = fromUrl?.name
+            || (liveCashbooks.some((item) => item.name === "Main Cashbook") ? "Main Cashbook" : liveCashbooks[0].name);
 
           setFormData((prev) => ({
             ...prev,

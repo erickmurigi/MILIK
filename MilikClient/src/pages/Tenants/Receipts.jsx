@@ -207,7 +207,10 @@ const getUnitName = (payment, tenants) => {
   return found?.unit?.unitNumber || "N/A";
 };
 
-const getActorDisplayName = (user) => {
+const getActorDisplayName = (user, receipt) => {
+  if (receipt?.metadata?.autoReceiptSource === "mpesa_c2b") {
+    return receipt.metadata?.configName || "M-Pesa Paybill";
+  }
   if (!user) return "-";
   const surname = String(user?.surname || "").trim();
   const otherNames = String(user?.otherNames || "").trim();
@@ -463,11 +466,13 @@ const Receipts = ({ viewMode = "tenant" }) => {
   const loadDataRef = useRef(loadData);
   useEffect(() => { loadDataRef.current = loadData; });
 
-  const initialFiltersRef = useRef(initialFilters);
+  // Always reflects the latest appliedFilters so the mount-load picks up persisted filters
+  const appliedFiltersRef = useRef(appliedFilters);
+  appliedFiltersRef.current = appliedFilters;
 
   useEffect(() => {
     if (!currentCompany?._id) return;
-    loadDataRef.current(1, initialFiltersRef.current);
+    loadDataRef.current(1, appliedFiltersRef.current);
     loadInvoices();
   }, [currentCompany?._id, loadInvoices]);
 
@@ -1954,7 +1959,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
                               {receipt.isReversed ? "Reversed" : receipt.isConfirmed ? "Confirmed" : "Pending"}
                             </span>
                           </td>
-                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getActorDisplayName(receipt.confirmedBy)}</td>
+                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getActorDisplayName(receipt.confirmedBy, receipt)}</td>
                           <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{getActorDisplayName(receipt.reversedBy)}</td>
                           <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{receipt.referenceNumber || "-"}</td>
                           <td className="px-3 py-1">

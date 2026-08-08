@@ -882,7 +882,7 @@ body {
     0 48px 110px rgba(15, 23, 42, 0.22),
     0 10px 28px rgba(15, 23, 42, 0.09);
   aspect-ratio: 3 / 4;
-  background: linear-gradient(180deg, #e8f0ec 0%, #d4e3d9 100%);
+  background: linear-gradient(180deg, #e8f5ef 0%, #cde8da 100%);
 }
 
 /* On desktop: hero fills exactly one screen — constrain the frame to fit */

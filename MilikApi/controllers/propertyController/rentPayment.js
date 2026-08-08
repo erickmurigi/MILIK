@@ -4450,6 +4450,7 @@ export const createAutoReceipt = async ({
   paymentDate,
   cashbookAccountId,
   cashbookAccountName,
+  configName,
   description,
 }) => {
   const receiptAmount = round2(Math.abs(Number(amount || 0)));
@@ -4508,7 +4509,7 @@ export const createAutoReceipt = async ({
     confirmedAt: new Date(),
     postingStatus: "unposted",
     ledgerEntries: [],
-    metadata: { allocationMode: "auto", autoReceiptSource: "mpesa_c2b" },
+    metadata: { allocationMode: "auto", autoReceiptSource: "mpesa_c2b", configName: configName || "M-Pesa Paybill" },
   });
 
   const saved = await payment.save();

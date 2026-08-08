@@ -1,11 +1,11 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import {
-  FaCheckCircle, FaExclamationTriangle, FaTimesCircle, FaCopy,
+  FaExclamationTriangle,
   FaSearch, FaRedoAlt, FaTimes, FaLink, FaBan, FaUndo, FaUpload,
-  FaFileAlt, FaReceipt, FaUser, FaMobileAlt, FaTrash, FaSpinner,
-  FaChevronDown, FaChevronUp, FaPaste,
+  FaFileAlt, FaReceipt, FaUser, FaTrash, FaSpinner,
+  FaChevronDown, FaChevronUp, FaChevronLeft, FaChevronRight, FaPaste,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { adminRequests } from "../../utils/requestMethods";
@@ -17,8 +17,8 @@ import AppSelect from "../../components/common/AppSelect";
 const PAGE_SIZE   = 50;
 const AUTO_RELOAD = 30; // seconds
 
-const todayISO        = () => new Date().toISOString().slice(0, 10);
-const firstOfMonthISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`; };
+const todayISO          = () => new Date().toISOString().slice(0, 10);
+const threeMonthsAgoISO = () => { const d = new Date(); d.setMonth(d.getMonth() - 3); return d.toISOString().slice(0, 10); };
 const formatMoney = (v) => `Ksh ${Number(v || 0).toLocaleString()}`;
 const fmtDate     = (v) =>
   v ? new Date(v).toLocaleString("en-KE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
@@ -27,22 +27,48 @@ const getTenantLabel = (t) => t?.name || "—";
 const getUnitLabel   = (t) => [t?.unit?.unitNumber, t?.unit?.property?.propertyName].filter(Boolean).join(" · ") || "";
 
 const STATUS_META = {
-  unmatched:      { label: "Unmatched",      bg: "bg-amber-50",   border: "border-amber-200",   text: "text-amber-700",   dot: "bg-amber-400"   },
-  matched_tenant: { label: "Tenant Matched", bg: "bg-blue-50",    border: "border-blue-200",    text: "text-blue-700",    dot: "bg-blue-400"    },
-  captured:       { label: "Captured",       bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-700", dot: "bg-emerald-500" },
-  duplicate:      { label: "Duplicate",      bg: "bg-slate-50",   border: "border-slate-200",   text: "text-slate-500",   dot: "bg-slate-400"   },
-  ignored:        { label: "Ignored",        bg: "bg-red-50",     border: "border-red-200",     text: "text-red-700",     dot: "bg-red-400"     },
+  unmatched:  { label: "Unmatched", pill: "bg-amber-100 text-amber-800 ring-1 ring-inset ring-amber-300",      chip: { dot: "bg-amber-400",   text: "text-amber-700",   bg: "bg-amber-50",   border: "border-amber-300",   accent: "border-l-amber-400"   }, sub: "pending action"    },
+  captured:   { label: "Captured",  pill: "bg-emerald-100 text-emerald-800 ring-1 ring-inset ring-emerald-300", chip: { dot: "bg-emerald-500", text: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-300", accent: "border-l-emerald-500" }, sub: ""                  },
+  duplicate:  { label: "Duplicate", pill: "bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-300",      chip: { dot: "bg-slate-400",   text: "text-slate-600",   bg: "bg-white",      border: "border-slate-300",   accent: "border-l-slate-400"   }, sub: "already processed" },
+  ignored:    { label: "Ignored",   pill: "bg-red-100 text-red-800 ring-1 ring-inset ring-red-300",            chip: { dot: "bg-red-400",     text: "text-red-700",     bg: "bg-red-50",     border: "border-red-300",     accent: "border-l-red-400"     }, sub: "excluded"          },
+  // legacy — old DB records; treated as unmatched
+  matched_tenant: { label: "Unmatched", pill: "bg-amber-100 text-amber-800 ring-1 ring-inset ring-amber-300", chip: { dot: "bg-amber-400", text: "text-amber-700", bg: "bg-amber-50", border: "border-amber-300", accent: "border-l-amber-400" }, sub: "pending action" },
 };
 
 const StatusBadge = ({ status }) => {
   const m = STATUS_META[status] || STATUS_META.unmatched;
   return (
-    <span className={`inline-flex items-center gap-1 border px-2 py-0.5 text-[10px] font-bold uppercase ${m.bg} ${m.border} ${m.text}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${m.dot}`} />
-      {m.label}
-    </span>
+    <div className="flex flex-col gap-px">
+      <span className={`inline-flex items-center rounded px-1.5 py-px text-[9px] font-black uppercase tracking-wide ${m.pill}`}>
+        {m.label}
+      </span>
+      {m.sub && <span className="text-[8px] italic text-slate-400 leading-tight">{m.sub}</span>}
+    </div>
   );
 };
+
+// ─── Countdown refresh button — isolated so per-second ticks don't re-render the page ──
+const CountdownButton = React.memo(function CountdownButton({ onRefresh, loading }) {
+  const [countdown, setCountdown] = useState(AUTO_RELOAD);
+  useEffect(() => {
+    setCountdown(AUTO_RELOAD);
+    const tick = setInterval(() => {
+      setCountdown(c => {
+        if (c <= 1) { onRefresh(true); return AUTO_RELOAD; }
+        return c - 1;
+      });
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [onRefresh]);
+  return (
+    <button type="button" onClick={() => onRefresh()}
+      className="inline-flex h-[20px] items-center gap-0.5 border border-slate-300 bg-white px-1.5 text-[9px] font-bold text-slate-700 hover:bg-slate-50"
+      title={`Auto-refreshes in ${countdown}s`}>
+      {loading ? <FaSpinner size={7} className="animate-spin" /> : <FaRedoAlt size={7} />}
+      <span>{loading ? "Loading" : `${countdown}s`}</span>
+    </button>
+  );
+});
 
 // ─── Assign Tenant Modal ──────────────────────────────────────────────────────
 function AssignTenantModal({ notif, businessId, onClose, onAssigned }) {
@@ -51,39 +77,50 @@ function AssignTenantModal({ notif, businessId, onClose, onAssigned }) {
   const [searching, setSearching] = useState(false);
   const [selected,  setSelected]  = useState(null);
   const [saving,    setSaving]    = useState(false);
-  const inputRef = useRef(null);
+  const inputRef    = useRef(null);
+  const debounceRef = useRef(null);
+
+  const doSearch = useCallback(async (q) => {
+    const term = (q ?? search).trim();
+    if (!term) return;
+    setSearching(true); setSelected(null);
+    try {
+      const res  = await adminRequests.get("/tenants", { params: { business: businessId, search: term, limit: 20 } });
+      const list = Array.isArray(res?.data?.data) ? res.data.data : [];
+      setTenants(list);
+    } catch { toast.error("Tenant search failed"); }
+    finally   { setSearching(false); }
+  }, [businessId, search]);
 
   useEffect(() => {
     inputRef.current?.focus();
     if (notif?.accountReference) doSearch(notif.accountReference);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const doSearch = async (q = search) => {
-    const term = q.trim();
-    if (!term) return;
-    setSearching(true); setSelected(null);
-    try {
-      const res  = await adminRequests.get("/tenants", { params: { business: businessId, search: term, limit: 20 } });
-      const list = Array.isArray(res?.data?.tenants) ? res.data.tenants : Array.isArray(res?.data) ? res.data : [];
-      setTenants(list);
-    } catch { toast.error("Tenant search failed"); }
-    finally   { setSearching(false); }
+  const handleSearchChange = (e) => {
+    const val = e.target.value;
+    setSearch(val);
+    clearTimeout(debounceRef.current);
+    if (val.trim().length >= 2) {
+      debounceRef.current = setTimeout(() => doSearch(val), 350);
+    }
   };
 
-  const handleSubmit = async () => {
-    if (!selected) return;
+  // One-click assign — clicking a tenant immediately calls the API
+  const handleAssignTenant = async (t) => {
+    if (saving) return;
+    setSelected(t);
     setSaving(true);
     try {
-      const res = await adminRequests.post(`/mpesa-collections/${notif._id}/assign-tenant`, { tenantId: selected._id, business: businessId });
+      const res     = await adminRequests.post(`/mpesa-collections/${notif._id}/assign-tenant`, { tenantId: t._id, business: businessId });
       const updated = res?.data?.data || res?.data;
       const autoCaptured = updated?.matchingStatus === "captured" && updated?.matchedReceipt;
-      toast.success(autoCaptured
-        ? `Receipt created for ${selected.name}`
-        : `Assigned to ${selected.name}`);
-      onAssigned(updated);
+      toast.success(autoCaptured ? `Receipt recorded for ${t.name}` : `Assigned to ${t.name}`);
+      onAssigned(updated, t, autoCaptured);
       onClose();
     } catch (err) {
       toast.error(err?.response?.data?.message || "Assignment failed");
+      setSelected(null);
     } finally { setSaving(false); }
   };
 
@@ -102,59 +139,72 @@ function AssignTenantModal({ notif, businessId, onClose, onAssigned }) {
 
         <div className="border-b border-amber-100 bg-amber-50 px-4 py-2.5 text-[11px] text-amber-800">
           <FaExclamationTriangle className="mr-1.5 inline text-amber-500" size={11} />
-          Customer typed <strong className="font-mono">&ldquo;{notif.accountReference || notif.billRefNumber}&rdquo;</strong> as account reference — search to find the correct tenant.
+          Customer typed <strong className="font-mono">&ldquo;{notif.accountReference || notif.billRefNumber}&rdquo;</strong> as ref — search to find the correct tenant.
         </div>
 
         <div className="px-4 pb-2 pt-3">
           <div className="flex gap-2">
             <input ref={inputRef}
               className="h-9 flex-1 border border-slate-300 px-3 text-xs font-semibold placeholder:font-normal focus:border-[#0B3B2E] focus:outline-none"
-              placeholder="Name, tenant code, or phone"
-              value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Name, tenant code, phone, or ID"
+              value={search} onChange={handleSearchChange}
               onKeyDown={e => e.key === "Enter" && doSearch()} />
             <button type="button" onClick={() => doSearch()} disabled={searching}
               className="inline-flex h-9 items-center gap-1.5 bg-[#FF8C00] px-4 text-xs font-bold text-white hover:bg-[#E67E00] disabled:opacity-50">
-              <FaSearch size={10} /> Search
+              {searching ? <FaSpinner size={10} className="animate-spin" /> : <FaSearch size={10} />}
+              Search
             </button>
           </div>
         </div>
 
         <div className="max-h-64 overflow-y-auto border-t border-slate-100">
           {searching && <p className="px-4 py-6 text-center text-xs text-slate-400">Searching…</p>}
-          {!searching && tenants.length === 0 && (
-            <p className="px-4 py-6 text-center text-xs text-slate-400">No tenants found. Search by name, code, or phone.</p>
+          {!searching && tenants.length === 0 && search.trim() && (
+            <p className="px-4 py-6 text-center text-xs text-slate-400">No tenants found. Try name, TT code, phone, or ID number.</p>
+          )}
+          {!searching && tenants.length === 0 && !search.trim() && (
+            <p className="px-4 py-6 text-center text-xs text-slate-400">Type a name, code, or phone to search.</p>
           )}
           {!searching && tenants.map(t => {
-            const isSel = selected?._id === t._id;
+            const isAssigning = saving && selected?._id === t._id;
+            const inactive    = t.status && t.status !== "active";
             return (
-              <button key={t._id} type="button" onClick={() => setSelected(t)}
-                className={`flex w-full items-center gap-3 border-b border-slate-100 px-4 py-2.5 text-left transition-colors ${isSel ? "border-l-2 border-l-emerald-500 bg-emerald-50" : "hover:bg-slate-50"}`}>
-                <FaUser size={12} className={isSel ? "text-emerald-600" : "text-slate-400"} />
+              <button key={t._id} type="button" onClick={() => handleAssignTenant(t)}
+                disabled={saving}
+                className={`flex w-full items-center gap-3 border-b border-slate-100 px-4 py-2.5 text-left transition-colors disabled:cursor-wait ${isAssigning ? "bg-emerald-50" : "hover:bg-blue-50/60"}`}>
+                <span className="shrink-0">
+                  {isAssigning
+                    ? <FaSpinner size={12} className="animate-spin text-emerald-600" />
+                    : <FaUser size={12} className="text-slate-400" />}
+                </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-extrabold text-slate-900">{t.name}</span>
+                    <span className={`text-xs font-extrabold ${isAssigning ? "text-emerald-700" : "text-slate-900"}`}>{t.name}</span>
                     <span className="font-mono text-[10px] text-slate-500">{t.tenantCode}</span>
+                    {inactive && (
+                      <span className="rounded-full bg-red-100 px-1.5 py-px text-[9px] font-black uppercase text-red-600">{t.status}</span>
+                    )}
                   </div>
-                  <div className="mt-0.5 text-[10px] text-slate-500">
-                    {getUnitLabel(t)}{t.phone ? ` · ${t.phone}` : ""}
+                  <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+                    <span>{getUnitLabel(t)}{t.phone ? ` · ${t.phone}` : ""}</span>
+                    {t.balance > 0.009 && (
+                      <span className="font-bold text-amber-600">· Bal: {formatMoney(t.balance)}</span>
+                    )}
                   </div>
                 </div>
+                {isAssigning
+                  ? <span className="shrink-0 text-[10px] font-bold text-emerald-600">Assigning…</span>
+                  : <FaLink size={10} className="shrink-0 text-slate-300" />}
               </button>
             );
           })}
         </div>
 
-        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3">
-          {selected
-            ? <div className="text-[11px] text-slate-600">Assigning to <strong className="text-[#0B3B2E]">{selected.name} · {selected.tenantCode}</strong></div>
-            : <span className="text-[11px] text-slate-400">Select a tenant above</span>}
-          <div className="flex gap-2">
-            <button onClick={onClose} className="inline-flex h-8 items-center px-3 text-xs font-bold text-slate-600 hover:text-slate-900">Cancel</button>
-            <button onClick={handleSubmit} disabled={!selected || saving}
-              className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-50">
-              <FaLink size={10} /> {saving ? "Assigning…" : "Confirm Assignment"}
-            </button>
-          </div>
+        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-2.5">
+          <span className="text-[10px] text-slate-400">Click a tenant to assign instantly</span>
+          <button onClick={onClose} className="inline-flex h-7 items-center px-3 text-xs font-bold text-slate-500 hover:text-slate-800">
+            Cancel
+          </button>
         </div>
       </div>
     </div>
@@ -274,7 +324,7 @@ const ImportResultsSummary = ({ results, onClose }) => (
         <tbody>
           {results.items.map((item, i) => {
             const s    = item.matchingStatus || (item.wasDuplicate ? "duplicate" : "unmatched");
-            const meta = RESULT_META[s === "captured" || s === "matched_tenant" ? "matched" : s === "ignored" ? "skipped" : s] || RESULT_META.unmatched;
+            const meta = RESULT_META[s === "captured" ? "matched" : s === "ignored" ? "skipped" : "unmatched"] || RESULT_META.unmatched;
             return (
               <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
                 <td className="px-3 py-1 border-r border-gray-100"><span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black ${meta.cls}`}>{item.wasDuplicate ? "Duplicate" : meta.label}</span></td>
@@ -308,9 +358,9 @@ function UploadModal({ businessId, paybills = [], onClose, onUploaded }) {
   const [selectedShortCode, setSelectedShortCode] = useState("");
 
   const processItems = (items) => {
-    const matched   = items.filter(i => i.matchingStatus === "captured" || i.matchingStatus === "matched_tenant").length;
+    const matched   = items.filter(i => i.matchingStatus === "captured").length;
     const duplicate = items.filter(i => i.wasDuplicate).length;
-    const unmatched = items.filter(i => i.matchingStatus === "unmatched").length;
+    const unmatched = items.filter(i => i.matchingStatus !== "captured" && !i.wasDuplicate).length;
     setResults({ summary: { matched, duplicate, unmatched, total: items.length }, items });
     if (matched > 0) onUploaded?.();
   };
@@ -546,10 +596,9 @@ export default function PmsMpesaNotifications() {
   const [showUpload,    setShowUpload]    = useState(false);
   const [deletingId,    setDeletingId]    = useState(null);
   const [unignoringId,  setUnignoringId]  = useState(null);
-  const [countdown,     setCountdown]     = useState(AUTO_RELOAD);
 
-  const [filters, setFilters] = useTabState("/receipts/mpesa-collections:filters", () => ({ status: "", shortCode: "", ref: "", search: "", dateFrom: firstOfMonthISO(), dateTo: todayISO() }));
-  const [applied, setApplied] = useTabState("/receipts/mpesa-collections:applied", () => ({ status: "", shortCode: "", ref: "", search: "", dateFrom: firstOfMonthISO(), dateTo: todayISO() }));
+  const [filters, setFilters] = useTabState("/receipts/mpesa-collections:filters", () => ({ status: "", shortCode: "", ref: "", search: "", dateFrom: threeMonthsAgoISO(), dateTo: todayISO() }));
+  const [applied, setApplied] = useTabState("/receipts/mpesa-collections:applied", () => ({ status: "", shortCode: "", ref: "", search: "", dateFrom: threeMonthsAgoISO(), dateTo: todayISO() }));
   const [page,    setPage]    = useTabState("/receipts/mpesa-collections:page", 1);
 
   const load = useCallback(async (silent = false) => {
@@ -571,7 +620,6 @@ export default function PmsMpesaNotifications() {
       setNotifications(payload?.data || []);
       setPagination(payload?.pagination || { page: 1, limit: PAGE_SIZE, total: 0, pages: 1 });
       setSummary(Array.isArray(payload?.summary) ? payload.summary : []);
-      setCountdown(AUTO_RELOAD);
     } catch { if (!silent) toast.error("Failed to load M-Pesa collections"); }
     finally  { if (!silent) setLoading(false); }
   }, [businessId, applied, page]);
@@ -579,20 +627,9 @@ export default function PmsMpesaNotifications() {
   // Initial + filter/page load
   useEffect(() => { load(); }, [load]);
 
-  // Auto-refresh countdown
-  useEffect(() => {
-    const tick = setInterval(() => {
-      setCountdown(c => {
-        if (c <= 1) { load(true); return AUTO_RELOAD; }
-        return c - 1;
-      });
-    }, 1000);
-    return () => clearInterval(tick);
-  }, [load]);
-
   const apply = (e) => { e.preventDefault(); setPage(1); setApplied({ ...filters }); };
   const reset = () => {
-    const d = { status: "", shortCode: "", ref: "", search: "", dateFrom: firstOfMonthISO(), dateTo: todayISO() };
+    const d = { status: "", shortCode: "", ref: "", search: "", dateFrom: threeMonthsAgoISO(), dateTo: todayISO() };
     setFilters(d); setApplied(d); setPage(1);
   };
 
@@ -605,9 +642,9 @@ export default function PmsMpesaNotifications() {
   const handleUpdate = useCallback((updated) => {
     if (!updated) { load(); return; }
     setNotifications(prev => prev.map(n => n._id === updated._id ? { ...n, ...updated } : n));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [load]);
 
-  const handleDelete = async (id) => {
+  const handleDelete = useCallback(async (id) => {
     if (!window.confirm("Delete this M-Pesa collection record? This cannot be undone.")) return;
     setDeletingId(id);
     try {
@@ -616,9 +653,9 @@ export default function PmsMpesaNotifications() {
       setExpanded(null); load();
     } catch (err) { toast.error(err?.response?.data?.message || "Delete failed"); }
     finally      { setDeletingId(null); }
-  };
+  }, [businessId, load]);
 
-  const handleUnignore = async (id) => {
+  const handleUnignore = useCallback(async (id) => {
     setUnignoringId(id);
     try {
       const res = await adminRequests.post(`/mpesa-collections/${id}/unignore`, { business: businessId });
@@ -626,24 +663,26 @@ export default function PmsMpesaNotifications() {
       handleUpdate(res?.data?.data);
     } catch (err) { toast.error(err?.response?.data?.message || "Failed to restore"); }
     finally      { setUnignoringId(null); }
-  };
+  }, [businessId, handleUpdate]);
 
-  // Summary map
-  const summaryMap         = Object.fromEntries(summary.map(s => [s._id, s]));
-  const countUnmatched     = summaryMap.unmatched?.count      || 0;
-  const countMatchedTenant = summaryMap.matched_tenant?.count  || 0;
-  const countCaptured      = summaryMap.captured?.count        || 0;
-  const countDuplicate     = summaryMap.duplicate?.count       || 0;
-  const countIgnored       = summaryMap.ignored?.count         || 0;
-  const amountCaptured     = summaryMap.captured?.totalAmount  || 0;
+  const summaryMap = useMemo(
+    () => Object.fromEntries(summary.map(s => [s._id, s])),
+    [summary]
+  );
 
-  const SUMMARY_CHIPS = [
-    { key: "captured",       label: "Captured",       value: countCaptured,      sub: formatMoney(amountCaptured), dot: "bg-emerald-500", text: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200" },
-    { key: "matched_tenant", label: "Tenant Matched", value: countMatchedTenant, sub: "awaiting receipt",          dot: "bg-blue-400",    text: "text-blue-700",    bg: "bg-blue-50",    border: "border-blue-200"   },
-    { key: "unmatched",      label: "Unmatched",      value: countUnmatched,     sub: "needs assignment",          dot: "bg-amber-400",   text: "text-amber-700",   bg: "bg-amber-50",   border: "border-amber-200"  },
-    { key: "duplicate",      label: "Duplicate",      value: countDuplicate,     sub: "already processed",         dot: "bg-slate-400",   text: "text-slate-600",   bg: "bg-white",      border: "border-slate-200"  },
-    { key: "ignored",        label: "Ignored",        value: countIgnored,       sub: "excluded",                  dot: "bg-red-400",     text: "text-red-700",     bg: "bg-red-50",     border: "border-red-200"    },
-  ];
+  const SUMMARY_CHIPS = useMemo(() => {
+    const countUnmatched = (summaryMap.unmatched?.count || 0) + (summaryMap.matched_tenant?.count || 0);
+    const countCaptured  = summaryMap.captured?.count       || 0;
+    const countDuplicate = summaryMap.duplicate?.count      || 0;
+    const countIgnored   = summaryMap.ignored?.count        || 0;
+    const amountCaptured = summaryMap.captured?.totalAmount || 0;
+    return [
+      { key: "captured",  value: countCaptured,  sub: formatMoney(amountCaptured) },
+      { key: "unmatched", value: countUnmatched, sub: "pending action"            },
+      { key: "duplicate", value: countDuplicate, sub: "already processed"         },
+      { key: "ignored",   value: countIgnored,   sub: "excluded"                  },
+    ];
+  }, [summaryMap]);
 
   return (
     <DashboardLayout lockContentScroll>
@@ -654,7 +693,11 @@ export default function PmsMpesaNotifications() {
         {assignTarget && (
           <AssignTenantModal notif={assignTarget} businessId={businessId}
             onClose={() => setAssignTarget(null)}
-            onAssigned={(u) => { handleUpdate(u); setAssignTarget(null); load(); }} />
+            onAssigned={(u) => {
+              handleUpdate(u);
+              setAssignTarget(null);
+              load();
+            }} />
         )}
         {ignoreTarget && (
           <IgnoreModal notif={ignoreTarget} businessId={businessId}
@@ -663,27 +706,27 @@ export default function PmsMpesaNotifications() {
         )}
 
         {/* Summary chips — clickable quick-filters */}
-        <div className="shrink-0 flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
-          {SUMMARY_CHIPS.map(({ key, label, value, sub, dot, text, bg, border }) => {
+        <div className="shrink-0 flex items-center gap-1.5 border-b border-slate-200 bg-white px-3 py-1.5 overflow-x-auto">
+          {SUMMARY_CHIPS.map(({ key, value, sub }) => {
+            const meta   = STATUS_META[key];
             const active = applied.status === key;
             return (
               <button key={key} type="button" onClick={() => quickFilter(active ? "" : key)}
-                title={`Filter by ${label}`}
-                className={`inline-flex items-center gap-2 border px-3 py-1.5 transition-all ${bg} ${border} ${active ? "ring-2 ring-offset-1 ring-[#0B3B2E]" : "hover:opacity-80"}`}>
-                <span className={`h-2 w-2 rounded-full ${dot}`} />
-                <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">{label}</span>
-                <span className={`text-sm font-black ${text}`}>{value}</span>
-                <span className="text-[10px] text-slate-400">{sub}</span>
-                {active && <FaTimes size={8} className="ml-1 text-slate-500" />}
+                title={`Filter by ${meta.label}`}
+                className={`inline-flex items-center gap-1.5 border-l-[3px] border border-r px-2 py-1 text-left transition-all whitespace-nowrap
+                  ${meta.chip.accent} ${meta.chip.border}
+                  ${active ? `${meta.chip.bg} ring-1 ring-inset ring-[#0B3B2E]/25` : `bg-white hover:${meta.chip.bg}`}`}>
+                <span className={`text-sm font-black tabular-nums ${meta.chip.text}`}>{value}</span>
+                <span className="text-[9px] font-black uppercase tracking-wide text-slate-500">{meta.label}</span>
+                {sub && <span className="text-[9px] text-slate-400">· {sub}</span>}
+                {active && <FaTimes size={7} className="shrink-0 text-slate-400" />}
               </button>
             );
           })}
-          {/* Total — not a filter, just info */}
-          <div className="inline-flex items-center gap-2 border border-slate-200 bg-white px-3 py-1.5">
-            <span className="h-2 w-2 rounded-full bg-slate-400" />
-            <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Total</span>
-            <span className="text-sm font-black text-slate-700">{pagination.total}</span>
-            <span className="text-[10px] text-slate-400">in filter</span>
+          <div className="inline-flex items-center gap-1.5 border border-slate-200 bg-slate-50 px-2 py-1 whitespace-nowrap">
+            <span className="text-sm font-black tabular-nums text-slate-700">{pagination.total}</span>
+            <span className="text-[9px] font-black uppercase tracking-wide text-slate-500">Total</span>
+            <span className="text-[9px] text-slate-400">· in filter</span>
           </div>
         </div>
 
@@ -692,7 +735,7 @@ export default function PmsMpesaNotifications() {
           <AppSelect
             value={filters.status}
             onChange={(v) => setFilters(p => ({ ...p, status: v ?? "" }))}
-            options={Object.entries(STATUS_META).map(([k, v]) => ({ value: k, label: v.label }))}
+            options={["unmatched", "captured", "duplicate", "ignored"].map(k => ({ value: k, label: STATUS_META[k].label }))}
             placeholder="All statuses"
             clearable
             compact
@@ -735,12 +778,7 @@ export default function PmsMpesaNotifications() {
               className="inline-flex h-[20px] items-center gap-0.5 border border-slate-300 bg-white px-1.5 text-[9px] font-bold text-slate-700 hover:bg-slate-50">
               <FaUpload size={7} /> Import
             </button>
-            <button type="button" onClick={() => load()}
-              className="inline-flex h-[20px] items-center gap-0.5 border border-slate-300 bg-white px-1.5 text-[9px] font-bold text-slate-700 hover:bg-slate-50"
-              title={`Auto-refreshes in ${countdown}s`}>
-              {loading ? <FaSpinner size={7} className="animate-spin" /> : <FaRedoAlt size={7} />}
-              <span>{loading ? "Loading" : `${countdown}s`}</span>
-            </button>
+            <CountdownButton onRefresh={load} loading={loading} />
           </div>
         </form>
 
@@ -748,28 +786,34 @@ export default function PmsMpesaNotifications() {
         <div className="relative flex-1 overflow-auto">
           {loading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/60">
-              <FaSpinner size={22} className="animate-spin text-[#0B3B2E]" />
+              <div className="relative h-10 w-10">
+                <div className="absolute inset-0 animate-spin" style={{ border: "3px solid #e2e8f0", borderTopColor: "#027333", borderRightColor: "#0B3B2E", animationDuration: "0.9s" }} />
+                <div className="absolute inset-[9px] animate-spin" style={{ border: "2px solid #e2e8f0", borderBottomColor: "#027333", borderLeftColor: "#0B3B2E", animationDuration: "0.6s", animationDirection: "reverse" }} />
+              </div>
             </div>
           )}
 
-          <table className="w-full min-w-[1040px] text-[11px] border-collapse">
+          <table className="w-full min-w-[1200px] text-[11px] border-collapse">
             <thead className="sticky top-0 z-[5] bg-[#0B3B2E] text-white">
               <tr>
-                <th className="px-3 py-2 text-left font-bold border-r border-white/10">Time</th>
-                <th className="px-3 py-2 text-left font-bold border-r border-white/10">Status</th>
-                <th className="px-3 py-2 text-left font-bold border-r border-white/10">Account Ref</th>
-                <th className="px-3 py-2 text-right font-bold border-r border-white/10">Amount</th>
-                <th className="px-3 py-2 text-left font-bold border-r border-white/10">Payer</th>
-                <th className="px-3 py-2 text-left font-bold border-r border-white/10">Phone</th>
-                <th className="px-3 py-2 text-left font-bold border-r border-white/10">Transaction Code</th>
-                <th className="px-3 py-2 text-left font-bold border-r border-white/10">Matched Tenant</th>
-                <th className="px-2 py-2 text-center font-bold">Action</th>
+                <th className="px-2 py-1.5 text-left font-bold border-r border-white/10 whitespace-nowrap">Time</th>
+                <th className="px-2 py-1.5 text-left font-bold border-r border-white/10">Status</th>
+                <th className="px-2 py-1.5 text-left font-bold border-r border-white/10">Account Ref</th>
+                <th className="px-2 py-1.5 text-right font-bold border-r border-white/10">Amount</th>
+                <th className="px-2 py-1.5 text-left font-bold border-r border-white/10">Payer</th>
+                <th className="px-2 py-1.5 text-left font-bold border-r border-white/10">Txn Code</th>
+                <th className="px-2 py-1.5 text-left font-bold border-r border-white/10">Paybill Config</th>
+                <th className="px-2 py-1.5 text-left font-bold border-r border-white/10">Tenant</th>
+                <th className="px-2 py-1.5 text-left font-bold border-r border-white/10">Property</th>
+                <th className="px-2 py-1.5 text-left font-bold border-r border-white/10">Unit</th>
+                <th className="px-2 py-1.5 text-left font-bold border-r border-white/10">Receipt</th>
+                <th className="px-2 py-1.5 text-center font-bold">Action</th>
               </tr>
             </thead>
             <tbody>
               {!loading && notifications.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-16 text-center">
+                  <td colSpan={12} className="px-4 py-12 text-center">
                     <div className="flex flex-col items-center gap-2">
                       <FaSearch size={28} className="text-slate-200" />
                       <p className="text-sm font-bold text-slate-400">No collections found</p>
@@ -789,9 +833,10 @@ export default function PmsMpesaNotifications() {
               )}
 
               {notifications.map((n, index) => {
-                const canAssign = n.matchingStatus === "unmatched";
-                const canRecord = n.matchingStatus === "matched_tenant";
-                const canIgnore = n.matchingStatus !== "ignored" && !n.matchedReceipt;
+                const isUnmatched = n.matchingStatus === "unmatched" || n.matchingStatus === "matched_tenant";
+                const canAssign = isUnmatched && !n.tenant && !n.matchedReceipt;
+                const canRecord = isUnmatched && !!n.tenant && !n.matchedReceipt;
+                const canIgnore = isUnmatched && !n.matchedReceipt;
                 const isIgnored = n.matchingStatus === "ignored";
                 const isOpen    = expanded === n._id;
 
@@ -799,93 +844,128 @@ export default function PmsMpesaNotifications() {
                   <React.Fragment key={n._id}>
                     <tr
                       onClick={() => setExpanded(isOpen ? null : n._id)}
-                      className={`cursor-pointer border-b border-gray-100 transition-colors ${isIgnored ? "bg-red-50/30 hover:bg-red-50/50" : index % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
-                      <td className="px-3 py-1 border-r border-gray-100 text-slate-500 whitespace-nowrap">{fmtDate(n.transactionDate || n.createdAt)}</td>
-                      <td className="px-3 py-1 border-r border-gray-100"><StatusBadge status={n.matchingStatus} /></td>
-                      <td className="px-3 py-1 border-r border-gray-100">
-                        <div className="font-extrabold tracking-wider text-slate-900">{n.accountReference || "—"}</div>
+                      className={`cursor-pointer border-b border-gray-100 transition-colors ${isIgnored ? "opacity-60 bg-red-50/20 hover:bg-red-50/40" : index % 2 === 0 ? "bg-white hover:bg-blue-50/30" : "bg-slate-50/40 hover:bg-blue-50/30"}`}>
+                      <td className="px-2 py-1 border-r border-gray-100 text-[10px] text-slate-400 whitespace-nowrap tabular-nums">{fmtDate(n.transactionDate || n.createdAt)}</td>
+                      <td className="px-2 py-1 border-r border-gray-100"><StatusBadge status={n.matchingStatus} /></td>
+                      <td className="px-2 py-1 border-r border-gray-100">
+                        <div className="font-extrabold tracking-wider text-slate-900 leading-tight">{n.accountReference || "—"}</div>
                         {n.billRefNumber && n.billRefNumber !== n.accountReference && (
-                          <div className="text-[10px] text-slate-400">raw: {n.billRefNumber}</div>
+                          <div className="text-[9px] text-slate-400 font-mono leading-tight">↳ {n.billRefNumber}</div>
                         )}
                       </td>
-                      <td className={`px-3 py-1 border-r border-gray-100 text-right font-extrabold ${n.matchingStatus === "captured" ? "text-emerald-700" : "text-slate-700"}`}>
+                      <td className={`px-2 py-1 border-r border-gray-100 text-right font-extrabold tabular-nums ${n.matchingStatus === "captured" ? "text-emerald-700" : "text-slate-700"}`}>
                         {n.amount > 0 ? formatMoney(n.amount) : "—"}
                       </td>
-                      <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-700">{n.payerName || <span className="font-normal italic text-slate-400">—</span>}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-slate-600">
-                        {n.msisdn
-                          ? <span className="inline-flex items-center gap-1 font-mono"><FaMobileAlt size={9} className="text-slate-400" />{n.msisdn.slice(0, 4)}***{n.msisdn.slice(-3)}</span>
-                          : "—"}
+                      <td className="px-2 py-1 border-r border-gray-100">
+                        <div className="font-semibold text-slate-700 leading-tight">{n.payerName || <span className="font-normal italic text-slate-400">—</span>}</div>
                       </td>
-                      <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-700">{n.transactionCode || "—"}</td>
-                      <td className="px-3 py-1 border-r border-gray-100">
-                        {n.tenant ? (
-                          <div>
-                            <div className="font-bold text-[#0B3B2E]">{getTenantLabel(n.tenant)}</div>
-                            {getUnitLabel(n.tenant) && <div className="text-[10px] text-slate-500">{getUnitLabel(n.tenant)}</div>}
-                            {n.matchedReceipt && (
-                              <div className="text-[10px] font-semibold text-emerald-700">
-                                Receipt: {n.matchedReceipt.receiptNumber || n.matchedReceipt.referenceNumber || "linked"}
+                      <td className="px-2 py-1 border-r border-gray-100 font-mono text-[10px] text-slate-700 whitespace-nowrap">{n.transactionCode || "—"}</td>
+                      <td className="px-2 py-1 border-r border-gray-100 text-[10px] font-semibold text-slate-800 leading-tight">
+                        {n.configName || "—"}
+                      </td>
+                      {/* Tenant */}
+                      <td className="px-2 py-1 border-r border-gray-100">
+                        {n.tenant
+                          ? (
+                            <div className="leading-tight">
+                              <span className="font-bold text-[#0B3B2E]">{getTenantLabel(n.tenant)}</span>
+                              {n.metadata?.manualAssignment?.assignedByName && (
+                                <div className="mt-0.5 inline-flex items-center gap-1">
+                                  <span className="inline-flex items-center rounded px-1 py-px text-[8px] font-black uppercase tracking-wide bg-orange-100 text-orange-700 ring-1 ring-inset ring-orange-300 whitespace-nowrap">
+                                    ✎ {n.metadata.manualAssignment.assignedByName}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          )
+                          : <span className="italic text-[9px] text-slate-400">{n.notes || "—"}</span>}
+                      </td>
+                      {/* Property */}
+                      <td className="px-2 py-1 border-r border-gray-100 text-[10px] text-slate-600 leading-tight">
+                        {n.tenant?.unit?.property?.propertyName || n.tenant?.property?.propertyName || "—"}
+                      </td>
+                      {/* Unit */}
+                      <td className="px-2 py-1 border-r border-gray-100 text-[10px] font-semibold text-slate-700 leading-tight whitespace-nowrap">
+                        {n.tenant?.unit?.unitName || n.tenant?.unit?.unitNumber || n.tenant?.unit?.name || "—"}
+                      </td>
+                      {/* Receipt */}
+                      <td className="px-2 py-1 border-r border-gray-100 text-[10px] font-mono leading-tight">
+                        {n.matchedReceipt
+                          ? <span className="font-bold text-emerald-700">{n.matchedReceipt.receiptNumber || n.matchedReceipt.referenceNumber || "linked"}</span>
+                          : canRecord
+                            ? (
+                              <div className="flex flex-col gap-px">
+                                <span className="inline-flex items-center rounded px-1 py-px text-[8px] font-black uppercase tracking-wide bg-blue-50 text-blue-600 ring-1 ring-inset ring-blue-200 whitespace-nowrap">Awaiting Record</span>
+                                {n.metadata?.autoReceiptSkipReason && (
+                                  <span className="text-[8px] text-amber-600 leading-tight" title={n.metadata.autoReceiptSkipReason}>
+                                    ⚠ {n.metadata.autoReceiptSkipReason}
+                                  </span>
+                                )}
                               </div>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="italic text-[10px] text-slate-400">{n.notes || "No tenant matched"}</span>
-                        )}
+                            )
+                            : <span className="text-slate-300">—</span>}
                       </td>
                       <td className="px-2 py-1 text-center" onClick={e => e.stopPropagation()}>
                         <div className="flex flex-wrap items-center justify-center gap-1">
                           {canAssign && (
                             <button type="button" onClick={() => setAssignTarget(n)}
-                              className="inline-flex items-center gap-1 border border-amber-300 bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-700 hover:bg-amber-100">
-                              <FaLink size={9} /> Assign
+                              className="inline-flex items-center gap-1 border border-amber-300 bg-amber-50 px-2 py-px text-[10px] font-bold text-amber-700 hover:bg-amber-100">
+                              <FaLink size={8} /> Assign
                             </button>
                           )}
                           {canRecord && (
                             <button type="button"
-                              onClick={() => navigate(`/receipts/new?tenant=${n.tenant?._id}&amount=${n.amount}&reference=${n.transactionCode}&collectionId=${n._id}&paymentMethod=mpesa&payerName=${encodeURIComponent(n.payerName || "")}&msisdn=${n.msisdn || ""}`)  }
-                              className="inline-flex items-center gap-1 border border-emerald-300 bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100">
-                              <FaReceipt size={9} /> Record
+                              onClick={() => {
+                                const pb = paybills.find(p => String(p.shortCode || "") === String(n.shortCode || "")) || paybills[0];
+                                const cbParam = pb?.defaultCashbookAccountId ? `&cashbookAccountId=${pb.defaultCashbookAccountId}` : "";
+                                navigate(`/receipts/new?tenant=${n.tenant?._id}&amount=${n.amount}&reference=${n.transactionCode}&collectionId=${n._id}&paymentMethod=mpesa&payerName=${encodeURIComponent(n.payerName || "")}&msisdn=${encodeURIComponent(n.msisdn || "")}${cbParam}`);
+                              }}
+                              className="inline-flex items-center gap-1 border border-emerald-300 bg-emerald-50 px-2 py-px text-[10px] font-bold text-emerald-700 hover:bg-emerald-100">
+                              <FaReceipt size={8} /> Record
                             </button>
                           )}
                           {canIgnore && (
                             <button type="button" onClick={() => setIgnoreTarget(n)}
-                              className="inline-flex items-center gap-1 border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-bold text-red-600 hover:bg-red-100">
-                              <FaBan size={9} /> Ignore
+                              className="inline-flex items-center gap-1 border border-red-200 bg-red-50 px-2 py-px text-[10px] font-bold text-red-600 hover:bg-red-100">
+                              <FaBan size={8} /> Ignore
                             </button>
                           )}
                           {isIgnored && (
                             <button type="button" onClick={() => handleUnignore(n._id)} disabled={unignoringId === n._id}
-                              className="inline-flex items-center gap-1 border border-slate-300 bg-white px-2 py-1 text-[10px] font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50">
-                              <FaUndo size={9} /> {unignoringId === n._id ? "…" : "Restore"}
+                              className="inline-flex items-center gap-1 border border-slate-300 bg-white px-2 py-px text-[10px] font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50">
+                              <FaUndo size={8} /> {unignoringId === n._id ? "…" : "Restore"}
                             </button>
                           )}
-                          <span className="text-slate-400">{isOpen ? <FaChevronUp size={9} /> : <FaChevronDown size={9} />}</span>
+                          <span className="text-slate-300">{isOpen ? <FaChevronUp size={8} /> : <FaChevronDown size={8} />}</span>
                         </div>
                       </td>
                     </tr>
 
                     {isOpen && (
-                      <tr className="border-b border-slate-200 bg-slate-50">
-                        <td colSpan={9} className="px-4 py-3">
-                          <div className="mb-3 grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
+                      <tr className="border-b border-slate-200 bg-slate-50/80">
+                        <td colSpan={12} className="px-4 py-2.5">
+                          <div className="mb-2.5 grid grid-cols-3 gap-x-5 gap-y-1.5 sm:grid-cols-6">
                             {[
-                              { label: "Payer Name",       value: n.payerName || "—"                                              },
-                              { label: "Phone",            value: n.msisdn || "—"                                                 },
-                              { label: "Transaction Code", value: n.transactionCode || "—"                                        },
-                              { label: "Amount",           value: n.amount > 0 ? formatMoney(n.amount) : "—"                     },
-                              { label: "Account Ref",      value: n.accountReference || "—"                                       },
-                              { label: "Bill Ref",         value: n.billRefNumber || "—"                                          },
-                              { label: "Source",           value: n.source || "—"                                                 },
-                              { label: "Short Code",       value: n.shortCode || "—"                                              },
-                              { label: "Transaction Date", value: n.transactionDate ? new Date(n.transactionDate).toLocaleString("en-KE") : "—" },
-                              { label: "Config",           value: n.configName || "—"                                             },
-                              { label: "Org Balance",      value: n.orgAccountBalance || "—"                                      },
-                              { label: "Matching Status",  value: n.matchingStatus || "—"                                         },
+                              { label: "Payer",        value: n.payerName || "—"                                                     },
+                              { label: "Phone",        value: n.msisdn || "—"                                                        },
+                              { label: "Txn Code",     value: n.transactionCode || "—"                                               },
+                              { label: "Amount",       value: n.amount > 0 ? formatMoney(n.amount) : "—"                            },
+                              { label: "Account Ref",  value: n.accountReference || "—"                                              },
+                              { label: "Bill Ref",     value: n.billRefNumber || "—"                                                 },
+                              { label: "Source",       value: n.source || "—"                                                        },
+                              { label: "Short Code",   value: n.shortCode || "—"                                                     },
+                              { label: "Txn Date",     value: n.transactionDate ? new Date(n.transactionDate).toLocaleString("en-KE") : "—" },
+                              { label: "Config",       value: n.configName || "—"                                                    },
+                              { label: "Org Balance",  value: n.orgAccountBalance || "—"                                             },
+                              { label: "Status",       value: n.matchingStatus || "—"                                                },
+                              ...(n.metadata?.manualAssignment ? [
+                                { label: "Assigned By",  value: n.metadata.manualAssignment.assignedByName || "—"                   },
+                                { label: "Assigned At",  value: n.metadata.manualAssignment.assignedAt ? new Date(n.metadata.manualAssignment.assignedAt).toLocaleString("en-KE") : "—" },
+                              ] : []),
                             ].map(({ label, value }) => (
                               <div key={label}>
-                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">{label}</p>
-                                <p className="mt-0.5 break-all text-[11px] font-semibold text-slate-800">{value}</p>
+                                <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">{label}</p>
+                                <p className="mt-px break-all text-[10px] font-semibold text-slate-800">{value}</p>
                               </div>
                             ))}
                           </div>
@@ -922,19 +1002,19 @@ export default function PmsMpesaNotifications() {
           </table>
 
           {/* Pagination footer */}
-          <div className="sticky bottom-0 flex items-center justify-between border-t border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600">
-            <span className="text-slate-400">
-              Showing <strong className="text-slate-700">{notifications.length}</strong> of <strong className="text-slate-700">{pagination.total}</strong> · {PAGE_SIZE} per page
-            </span>
+          <div className="flex-shrink-0 sticky bottom-0 z-20 bg-white border-t border-gray-200 px-2 py-1 flex items-center justify-between">
+            <div className="text-xs font-bold text-gray-600">
+              Showing <strong>{notifications.length}</strong> of <strong>{pagination.total}</strong> · {PAGE_SIZE} per page
+            </div>
             <div className="flex items-center gap-1.5">
+              <span className="text-xs text-slate-500">Page {pagination.page} of {pagination.pages || 1}</span>
               <button disabled={page <= 1 || loading} onClick={() => setPage(p => p - 1)}
-                className="border border-slate-300 bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-40">
-                Previous
+                className="p-1 hover:bg-gray-100 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-gray-700">
+                <FaChevronLeft size={12} />
               </button>
-              <span className="px-2">Page {pagination.page} of {pagination.pages || 1}</span>
-              <button disabled={page >= pagination.pages || loading} onClick={() => setPage(p => p + 1)}
-                className="border border-slate-300 bg-white px-3 py-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-40">
-                Next
+              <button disabled={page >= (pagination.pages || 1) || loading} onClick={() => setPage(p => p + 1)}
+                className="p-1 hover:bg-gray-100 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-gray-700">
+                <FaChevronRight size={12} />
               </button>
             </div>
           </div>

@@ -1,4 +1,5 @@
-﻿import React, { useCallback, useState, useEffect, useMemo } from "react";
+import React, { useCallback, useState, useEffect, useMemo } from "react";
+import TenantStatementTab from "./TenantStatementTab";
 import { useTabState } from "../../hooks/useTabState";
 import { useEntityCache } from "../../hooks/useEntityCache";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
@@ -9,7 +10,6 @@ import { isActiveReceipt } from "../../utils/receiptUtils";
 import {
   selectCurrentCompany,
   selectAllLeases,
-  selectAllMaintenances,
   selectAllUnits,
   selectAllProperties,
 } from "../../redux/selectors";
@@ -28,15 +28,12 @@ import {
 } from "../../redux/apiCalls";
 import { deleteTenantInvoice } from "../../redux/invoiceApi";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
-import InvoiceCreationModal from "./InvoiceCreationModal";
+import SingleBookingModal from "./SingleBookingModal";
 import AppSelect from "../../components/common/AppSelect";
 import { toast } from "react-toastify";
 import { adminRequests } from "../../utils/requestMethods";
 import { fetchCompanySettings, selectCompanySettings } from "../../redux/companySettingsRedux";
-import {
-  normalizeCompanyTaxConfig,
-  resolveTaxSelectionPayload,
-} from "./invoiceTaxUtils";
+import { normalizeCompanyTaxConfig } from "./invoiceTaxUtils";
 import {
   FaArrowLeft,
   FaDownload,
@@ -103,31 +100,6 @@ const formatPeriodLabel = (dateValue) => {
   if (Number.isNaN(dt.getTime())) return "-";
   return dt.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
 };
-
-const formatInvoiceDescriptionPeriod = (year, month) => {
-  const date = new Date(year, month, 1);
-  return `${date.toLocaleString("en-US", { month: "short" })}/${String(year).slice(-2)}`;
-};
-
-const buildRecurringInvoiceDescription = ({ year, month, label }) => {
-  const normalizedLabel = String(label || "Charge").trim();
-  return `${formatInvoiceDescriptionPeriod(year, month)} ${normalizedLabel}`;
-};
-
-const buildUtilityInvoiceMetadata = (utilityLabel = "") => {
-  // Always return metadata — use "Utility" as the minimum fallback so every
-  // utility invoice has utilityType stored for description derivation.
-  const resolvedLabel = String(utilityLabel || "").trim() || "Utility";
-  return {
-    utilityType: resolvedLabel,
-    meterUtilityType: resolvedLabel,
-    statementUtilityType: resolvedLabel,
-  };
-};
-
-const buildUtilityInvoiceDescription = ({ year, month, label }) =>
-  buildRecurringInvoiceDescription({ year, month, label: label || "Utility" });
-
 
 const buildPeriodKey = (year, month) => `${year}-${String(Number(month) + 1).padStart(2, "0")}`;
 
@@ -401,7 +373,7 @@ const buildNoteDescription = (note, isCredit) => {
 };
 
 const buildTenantStatementReceiptDescription = (payment = {}, invoiceMap = new Map()) => {
-  const reference = cleanStatementPart(payment?.receiptNumber || payment?.referenceNumber || "");
+  const reference = cleanStatementPart(payment?.referenceNumber || "");
   const allocationRows = getReceiptAllocationRows(payment);
   const parts = [];
 
@@ -444,9 +416,11 @@ const TenantStatement = () => {
     `${location.pathname}:activeTab`,
     ["statement", "billing", "reviews"].includes(initialRequestedTab) ? initialRequestedTab : "statement"
   );
-  const [startDate, setStartDate] = useTabState(`${location.pathname}:startDate`, () => `${new Date().getFullYear()}-01-01`);
-  const [endDate, setEndDate] = useTabState(`${location.pathname}:endDate`, () => formatInputDate(new Date()));
-  const [transactionType, setTransactionType] = useTabState(`${location.pathname}:transactionType`, "ALL");
+  // These are kept only for the print/email/SMS handlers — statement display
+  // is now handled by TenantStatementTab which owns its own date state.
+  const [startDate, setStartDate] = useState(`${new Date().getFullYear()}-01-01`);
+  const [endDate,   setEndDate]   = useState(formatInputDate(new Date()));
+  const [transactionType,] = useState("ALL");
   const [reviewFormOpen, setReviewFormOpen] = useState(false);
   const [allocationTraceTarget, setAllocationTraceTarget] = useState(null);
   const [editingReviewId, setEditingReviewId] = useState(null);
@@ -479,6 +453,7 @@ const TenantStatement = () => {
     utility: "",
   });
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [selectedSchedulePeriod, setSelectedSchedulePeriod] = useState(null);
   const [invoiceRefresh, setInvoiceRefresh] = useState(0);
   const [tenantInvoices, setTenantInvoices] = useState([]);
   const [tenantInvoiceNotes, setTenantInvoiceNotes] = useState([]);
@@ -494,9 +469,6 @@ const TenantStatement = () => {
   const [tenantData, setTenantData] = useState(null);
   const leasesFromStore = useSelector(selectAllLeases);
   const [tenantPayments, setTenantPayments] = useState([]);
-  const maintenanceFromStore = useSelector(selectAllMaintenances);
-  const expensesFromStore = useSelector((state) => state.expenseProperty?.expenseProperties || []);
-  const utilitiesFromStore = useSelector((state) => state.utility?.utilities || []);
   const unitsFromStore = useSelector(selectAllUnits);
   const propertiesFromStore = useSelector(selectAllProperties);
   const normalizedTaxConfig = useMemo(
@@ -778,240 +750,6 @@ const TenantStatement = () => {
     });
   };
 
-  const handleConfirmInvoiceCreation = async (options = {}) => {
-    const normalizedOptions =
-      typeof options === "string"
-        ? {
-            billingMode: options,
-            includeDeposit: false,
-            depositAmount: 0,
-            taxSelection: {
-              handling: "company_default",
-              taxCodeKey: normalizedTaxConfig?.taxSettings?.defaultTaxCodeKey || "vat_standard",
-              taxMode: "company_default",
-            },
-          }
-        : {
-            billingMode: options?.billingMode || "combined",
-            includeDeposit: Boolean(options?.includeDeposit),
-            depositAmount: Number(options?.depositAmount || 0),
-            taxSelection: {
-              handling: options?.taxSelection?.handling || "company_default",
-              taxCodeKey:
-                options?.taxSelection?.taxCodeKey ||
-                normalizedTaxConfig?.taxSettings?.defaultTaxCodeKey ||
-                "vat_standard",
-              taxMode: options?.taxSelection?.taxMode || "company_default",
-            },
-          };
-
-    const { billingMode, includeDeposit, depositAmount, taxSelection } = normalizedOptions;
-    const taxPayload = resolveTaxSelectionPayload(taxSelection, normalizedTaxConfig);
-    const selectedRows = selectedSchedules
-      .map((key) => billingScheduleByKey.get(key))
-      .filter(Boolean)
-      .sort((a, b) => {
-        const aTime = new Date(a.periodYear, a.periodMonth, 1).getTime();
-        const bTime = new Date(b.periodYear, b.periodMonth, 1).getTime();
-        return aTime - bTime;
-      });
-    const periodsWithoutInvoices = selectedRows.filter((row) => row.invoice === "-");
-
-    try {
-      if (!tenant) {
-        toast.error("Tenant not found");
-        return;
-      }
-
-      let invoiceContext;
-      try {
-        invoiceContext = resolveTenantInvoiceContext(tenant);
-      } catch (contextError) {
-        toast.error(contextError.message || "Tenant invoice context is incomplete.");
-        return;
-      }
-
-      for (const period of periodsWithoutInvoices) {
-        const periodDate = period.fromRaw ? new Date(period.fromRaw) : new Date(period.periodYear, period.periodMonth, 1);
-        const dueDate = period.dueDateRaw ? new Date(period.dueDateRaw) : new Date(period.periodYear, period.periodMonth, 5);
-
-        if (billingMode === "separate") {
-          if (Number(period.rent || 0) > 0) {
-            await createTenantInvoice({
-              ...invoiceContext,
-              tenant: tenantId,
-              category: "RENT_CHARGE",
-              amount: Number(period.rent || 0),
-              description: buildRecurringInvoiceDescription({ year: period.periodYear, month: period.periodMonth, label: "Rent" }),
-              invoiceDate: periodDate,
-              dueDate,
-              metadata: {
-                periodKey: period.periodKey,
-                billingPeriodKey: period.billingPeriodKey,
-                billingPeriodLabel: period.billingPeriodLabel,
-                periodFromDate: period.fromRaw,
-                periodToDate: period.toRaw,
-                sourceTransactionType: "billing_schedule",
-              },
-              ...taxPayload,
-            });
-          }
-
-          if (Number(period.utility || 0) > 0) {
-            const utilityLabel =
-              Array.isArray(period.utilityNames) && period.utilityNames.length === 1
-                ? period.utilityNames[0]
-                : Array.isArray(period.utilityNames) && period.utilityNames.length > 1
-                ? period.utilityNames.join(", ")
-                : "Utility";
-            await createTenantInvoice({
-              ...invoiceContext,
-              tenant: tenantId,
-              category: "UTILITY_CHARGE",
-              amount: Number(period.utility || 0),
-              description: buildUtilityInvoiceDescription({
-                year: period.periodYear,
-                month: period.periodMonth,
-                label: utilityLabel,
-              }),
-              invoiceDate: periodDate,
-              dueDate,
-              metadata: {
-                ...(buildUtilityInvoiceMetadata(utilityLabel) || {}),
-                periodKey: period.periodKey,
-                billingPeriodKey: period.billingPeriodKey,
-                billingPeriodLabel: period.billingPeriodLabel,
-                periodFromDate: period.fromRaw,
-                periodToDate: period.toRaw,
-                sourceTransactionType: "billing_schedule",
-              },
-              ...taxPayload,
-            });
-          }
-        } else {
-          // "separate" mode (and any legacy "combined" call coerced here):
-          // always create rent and utility as separate invoices.
-          if (Number(period.rent || 0) > 0) {
-            await createTenantInvoice({
-              ...invoiceContext,
-              tenant: tenantId,
-              category: "RENT_CHARGE",
-              amount: Number(period.rent || 0),
-              description: buildRecurringInvoiceDescription({ year: period.periodYear, month: period.periodMonth, label: "Rent" }),
-              invoiceDate: periodDate,
-              dueDate,
-              metadata: {
-                periodKey: period.periodKey,
-                billingPeriodKey: period.billingPeriodKey,
-                billingPeriodLabel: period.billingPeriodLabel,
-                periodFromDate: period.fromRaw,
-                periodToDate: period.toRaw,
-                sourceTransactionType: "billing_schedule",
-              },
-              ...taxPayload,
-            });
-          }
-
-          if (Number(period.utility || 0) > 0) {
-            const utilityLabel =
-              Array.isArray(period.utilityNames) && period.utilityNames.length === 1
-                ? period.utilityNames[0]
-                : Array.isArray(period.utilityNames) && period.utilityNames.length > 1
-                ? period.utilityNames.join(", ")
-                : "Utility";
-            await createTenantInvoice({
-              ...invoiceContext,
-              tenant: tenantId,
-              category: "UTILITY_CHARGE",
-              amount: Number(period.utility || 0),
-              description: buildUtilityInvoiceDescription({
-                year: period.periodYear,
-                month: period.periodMonth,
-                label: utilityLabel,
-              }),
-              invoiceDate: periodDate,
-              dueDate,
-              metadata: {
-                ...buildUtilityInvoiceMetadata(utilityLabel),
-                periodKey: period.periodKey,
-                billingPeriodKey: period.billingPeriodKey,
-                billingPeriodLabel: period.billingPeriodLabel,
-                periodFromDate: period.fromRaw,
-                periodToDate: period.toRaw,
-                sourceTransactionType: "billing_schedule",
-              },
-              ...taxPayload,
-            });
-          }
-        }
-      }
-
-      let createdDepositInvoice = false;
-
-      if (includeDeposit) {
-        if (depositAmount <= 0) {
-          toast.error("Enter a valid deposit amount to bill.");
-          return;
-        }
-
-        if (hasActiveDepositInvoice) {
-          toast.error("A deposit invoice already exists for this tenant.");
-          return;
-        }
-
-        const depositPeriod = periodsWithoutInvoices[0] || selectedRows[0];
-
-        if (!depositPeriod) {
-          toast.error("Select at least one billing period for deposit invoicing.");
-          return;
-        }
-
-        const depositInvoiceDate = depositPeriod.fromRaw ? new Date(depositPeriod.fromRaw) : new Date(depositPeriod.periodYear, depositPeriod.periodMonth, 1);
-        const depositDueDate = depositPeriod.dueDateRaw ? new Date(depositPeriod.dueDateRaw) : new Date(depositPeriod.periodYear, depositPeriod.periodMonth, 5);
-
-        await createTenantInvoice({
-          ...invoiceContext,
-          tenant: tenantId,
-          category: "DEPOSIT_CHARGE",
-          amount: Number(depositAmount || 0),
-          description: buildRecurringInvoiceDescription({ year: depositPeriod.periodYear, month: depositPeriod.periodMonth, label: "Security Deposit" }),
-          invoiceDate: depositInvoiceDate,
-          dueDate: depositDueDate,
-          metadata: {
-            billItemKey: "deposit:security",
-            billItemLabel: "Security Deposit",
-            invoicePriorityCategory: "deposit",
-            sourceTransactionType: "tenant_statement_deposit",
-            includeInLandlordStatement: false,
-            includeInCategoryTotals: false,
-            periodKey: depositPeriod.periodKey,
-            billingPeriodKey: depositPeriod.billingPeriodKey,
-            billingPeriodLabel: depositPeriod.billingPeriodLabel,
-            periodFromDate: depositPeriod.fromRaw,
-            periodToDate: depositPeriod.toRaw,
-          },
-        });
-
-        createdDepositInvoice = true;
-      }
-
-      toast.success(
-        `Created ${periodsWithoutInvoices.length} invoice period(s) in ${billingMode} mode${
-          createdDepositInvoice
-            ? ` and billed a tenant deposit of KES ${Number(depositAmount || 0).toLocaleString()}.`
-            : ""
-        }`
-      );
-
-      setSelectedSchedules([]);
-      setShowInvoiceModal(false);
-      setInvoiceRefresh((v) => v + 1);
-      window.dispatchEvent(new Event("invoicesUpdated"));
-    } catch (error) {
-      toast.error("Failed to create invoices: " + (error?.response?.data?.error || error.message || "Unknown error"));
-    }
-  };
-
   const validTenantInvoices = useMemo(() => {
     return tenantInvoices
       .filter((invoice) => {
@@ -1092,23 +830,6 @@ const TenantStatement = () => {
       });
     });
 
-    const tenantMaintenanceCharges = maintenanceFromStore.filter(
-      (m) => safeId(m?.tenant) === String(tenantId)
-    );
-
-    tenantMaintenanceCharges.forEach((maintenance) => {
-      if (maintenance.actualCost || maintenance.estimatedCost) {
-        transactions.push({
-          id: transactionId++,
-          date: maintenance.completedDate || maintenance.createdAt,
-          description: `Maintenance - ${maintenance.category || "General"}`,
-          type: "CHARGE",
-          amount: Number(maintenance.actualCost || maintenance.estimatedCost || 0),
-          transactionCode: `MNT${transactionId}`,
-        });
-      }
-    });
-
     transactions.sort((a, b) => new Date(a.date) - new Date(b.date));
 
     let runningBalance = 0;
@@ -1148,7 +869,7 @@ const TenantStatement = () => {
       operationalOutstanding,
       netPosition,
     };
-  }, [validTenantInvoices, tenantInvoiceNotes, activeTenantReceipts, maintenanceFromStore, tenantId, tenant, unitsFromStore]);
+  }, [validTenantInvoices, tenantInvoiceNotes, activeTenantReceipts, tenantId, tenant, unitsFromStore]);
 
   const allocationReceiptRows = useMemo(() => {
     return activeTenantReceipts.map((receipt) => {
@@ -1194,34 +915,39 @@ const TenantStatement = () => {
   }, [allocationReceiptRows]);
 
   const allocationTraceData = useMemo(() => {
-    const invoiceRows = validTenantInvoices.map((invoice) => {
-      const invoiceId = safeId(invoice);
-      const receiptApplications = (appliedByInvoice.get(invoiceId) || []).sort(
+    const buildRow = (doc, numField) => {
+      const id = safeId(doc);
+      const receiptApplications = (appliedByInvoice.get(id) || []).sort(
         (a, b) => new Date(a.receiptDate || 0) - new Date(b.receiptDate || 0)
       );
-      const appliedAmount = round2(receiptApplications.reduce((sum, row) => sum + Number(row?.appliedAmount || 0), 0));
-      const outstandingAmount = round2(Math.max(0, Math.abs(Number(invoice?.balance || invoice?.amount || 0))));
       return {
-        invoiceId,
-        invoiceNumber: invoice?.invoiceNumber || "-",
-        invoiceDate: invoice?.invoiceDate || invoice?.createdAt || null,
-        categoryLabel: getInvoiceCategoryLabel(invoice),
-        amount: round2(Math.abs(Number(invoice?.amount || 0))),
-        appliedAmount,
-        outstandingAmount,
+        invoiceId: id,
+        invoiceNumber: doc?.[numField] || doc?.invoiceNumber || "-",
+        invoiceDate: doc?.invoiceDate || doc?.noteDate || doc?.createdAt || null,
+        categoryLabel: getInvoiceCategoryLabel(doc),
+        amount: round2(Math.abs(Number(doc?.amount || 0))),
+        appliedAmount: round2(receiptApplications.reduce((s, r) => s + Number(r?.appliedAmount || 0), 0)),
+        outstandingAmount: round2(Math.max(0, Math.abs(Number(doc?.balance || doc?.amount || 0)))),
         receiptApplications,
       };
-    });
+    };
+
+    const invoiceRows = validTenantInvoices.map((inv) => buildRow(inv, "invoiceNumber"));
+    const noteRows = tenantInvoiceNotes
+      .filter((n) => !["cancelled", "reversed"].includes(String(n?.status || "").toLowerCase()))
+      .map((n) => buildRow(n, "noteNumber"));
+    const allRows = [...invoiceRows, ...noteRows];
+
     return {
       receipts: allocationReceiptRows,
-      invoices: invoiceRows,
+      invoices: allRows,
       receiptMap: new Map(allocationReceiptRows.map((item) => [item.receiptId, item])),
-      invoiceMap: new Map(invoiceRows.map((item) => [item.invoiceId, item])),
+      invoiceMap: new Map(allRows.map((item) => [item.invoiceId, item])),
       receiptCount: allocationReceiptRows.length,
       unappliedReceipts: allocationReceiptRows.filter((item) => item.unappliedAmount > 0),
       partiallyAllocatedReceipts: allocationReceiptRows.filter((item) => item.allocatedAmount > 0 || item.unappliedAmount > 0),
     };
-  }, [allocationReceiptRows, appliedByInvoice, validTenantInvoices]);
+  }, [allocationReceiptRows, appliedByInvoice, validTenantInvoices, tenantInvoiceNotes]);
 
   const selectedAllocationTrace = useMemo(() => {
     if (allocationTraceTarget?.kind === "receipt") {
@@ -1254,26 +980,28 @@ const TenantStatement = () => {
     const hasSelection = Boolean(selectedAllocationTrace && allocationTraceTarget?.kind);
 
     return (
-      <div className="mt-1.5 grid max-h-[20vh] flex-shrink-0 gap-2 overflow-auto rounded-lg border border-slate-200 bg-slate-50/60 p-1.5 xl:grid-cols-[0.95fr_1.35fr]">
-        <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 px-2.5 py-1.5">
-            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Receipt application tracing</p>
-            <h3 className="mt-1 text-sm font-bold text-slate-900">Operational settlement view</h3>
+      <div className="mt-1 grid max-h-[20vh] flex-shrink-0 gap-px overflow-auto border border-slate-200 bg-slate-200 xl:grid-cols-[0.95fr_1.35fr]">
+        <div className="bg-white">
+          <div className="flex items-center justify-between border-b border-slate-200 px-3 py-1.5">
+            <div>
+              <p className="text-[8px] font-bold uppercase tracking-widest text-slate-400">Receipt Application Tracing</p>
+              <p className="text-[11px] font-bold text-slate-800">Operational settlement view</p>
+            </div>
           </div>
-          <div className="space-y-2 px-2.5 py-2">
-            <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Receipts in trace</p>
-                <p className="mt-0.5 text-sm font-black text-slate-900">{receiptCount}</p>
+          <div className="space-y-1.5 px-3 py-1.5">
+            <div className="grid grid-cols-2 gap-1.5">
+              <div className="border border-slate-200 bg-slate-50 px-2 py-1">
+                <p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Receipts in trace</p>
+                <p className="text-xs font-black text-slate-900">{receiptCount}</p>
               </div>
-              <div className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5">
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Receipts with unapplied balance</p>
-                <p className="mt-0.5 text-sm font-black text-amber-700">{unappliedCount}</p>
+              <div className="border border-amber-200 bg-amber-50 px-2 py-1">
+                <p className="text-[8px] font-bold uppercase tracking-wider text-amber-600">Unapplied balance</p>
+                <p className="text-xs font-black text-amber-700">{unappliedCount}</p>
               </div>
             </div>
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Quick trace</p>
-              <div className="mt-1.5 space-y-1.5">
+              <p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Quick trace</p>
+              <div className="mt-1 space-y-1">
                 {(allocationTraceData.partiallyAllocatedReceipts.length > 0
                   ? allocationTraceData.partiallyAllocatedReceipts
                   : allocationTraceData.receipts)
@@ -1283,21 +1011,21 @@ const TenantStatement = () => {
                       key={receipt.receiptId}
                       type="button"
                       onClick={() => setAllocationTraceTarget({ kind: "receipt", id: receipt.receiptId })}
-                      className={`flex w-full items-center justify-between rounded-md border px-2 py-1.5 text-left transition ${
+                      className={`flex w-full items-center justify-between border px-2 py-1 text-left transition ${
                         allocationTraceTarget?.kind === "receipt" && allocationTraceTarget?.id === receipt.receiptId
                           ? "border-orange-300 bg-orange-50"
                           : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
                       }`}
                     >
                       <div>
-                        <p className="text-xs font-bold text-slate-900">{receipt.receiptNumber}</p>
-                        <p className="text-[11px] text-slate-500">
+                        <p className="text-[11px] font-bold text-slate-900">{receipt.receiptNumber}</p>
+                        <p className="text-[10px] text-slate-500">
                           {receipt.paymentDate ? new Date(receipt.paymentDate).toLocaleDateString() : "-"} · {receipt.paymentType}
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-xs font-black text-slate-900">Ksh {receipt.amount.toLocaleString()}</p>
-                        <p className="text-[11px] text-amber-700">Unapplied {receipt.unappliedAmount.toLocaleString()}</p>
+                        <p className="text-[11px] font-black text-slate-900">Ksh {receipt.amount.toLocaleString()}</p>
+                        <p className="text-[10px] text-amber-700">Unapplied {receipt.unappliedAmount.toLocaleString()}</p>
                       </div>
                     </button>
                   ))}
@@ -1306,79 +1034,89 @@ const TenantStatement = () => {
           </div>
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 px-2.5 py-1.5 flex items-center justify-between gap-2">
+        <div className="bg-white">
+          <div className="flex items-center justify-between border-b border-slate-200 px-3 py-1.5">
             <div>
-              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Trace detail</p>
-              <h3 className="mt-1 text-sm font-bold text-slate-900">
+              <p className="text-[8px] font-bold uppercase tracking-widest text-slate-400">Trace detail</p>
+              <p className="text-[11px] font-bold text-slate-800">
                 {allocationTraceTarget?.kind === "invoice"
                   ? "Invoice settlement trace"
                   : allocationTraceTarget?.kind === "receipt"
                   ? "Receipt application trace"
                   : "Choose a receipt or charge row"}
-              </h3>
+              </p>
             </div>
             <button
               type="button"
               onClick={() => openReceiptAllocationWorkspace(allocationTraceTarget?.kind === "receipt" ? allocationTraceTarget?.id : "")}
-              className="inline-flex items-center gap-1.5 rounded-md bg-[#0B3B2E] px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-[#0A3127]"
+              className="inline-flex items-center gap-1 bg-[#0B3B2E] px-2 py-1 text-[10px] font-bold text-white hover:bg-[#0A3127]"
             >
-              <FaLink size={12} />
+              <FaLink size={10} />
               {allocationTraceTarget?.kind === "receipt" ? "Manage this receipt" : "Open receipts workspace"}
             </button>
           </div>
-          <div className="px-2.5 py-2">
+          <div className="px-3 py-1.5">
             {!hasSelection && (
-              <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-5 text-center">
-                <p className="text-sm font-semibold text-slate-700">Select a receipt from the trace list or click Trace in the transaction table.</p>
-                <p className="mt-2 text-xs text-slate-500">This page stays read-heavy. Allocation editing still happens safely from the Receipts page.</p>
+              <div className="border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-center">
+                <p className="text-[11px] font-semibold text-slate-600">Select a receipt from the trace list or click Trace in the transaction table.</p>
+                <p className="mt-1 text-[10px] text-slate-400">This page stays read-heavy. Allocation editing still happens safely from the Receipts page.</p>
               </div>
             )}
 
             {hasSelection && allocationTraceTarget?.kind === "receipt" && selectedAllocationTrace && (
-              <div className="space-y-2">
-                <div className="grid gap-2 md:grid-cols-3">
-                  <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Receipt</p>
-                    <p className="mt-0.5 text-xs font-black text-slate-900">{selectedAllocationTrace.receiptNumber}</p>
-                    <p className="text-[11px] text-slate-500">{selectedAllocationTrace.paymentDate ? new Date(selectedAllocationTrace.paymentDate).toLocaleDateString() : "-"}</p>
+              <div className="space-y-1.5">
+                <div className="grid gap-1.5 md:grid-cols-3">
+                  <div className="border border-slate-200 bg-slate-50 px-2 py-1">
+                    <p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Receipt</p>
+                    <p className="text-[11px] font-black text-slate-900">{selectedAllocationTrace.receiptNumber}</p>
+                    <p className="text-[10px] text-slate-500">{selectedAllocationTrace.paymentDate ? new Date(selectedAllocationTrace.paymentDate).toLocaleDateString() : "-"}</p>
                   </div>
-                  <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Allocated</p>
-                    <p className="mt-0.5 text-xs font-black text-green-700">Ksh {selectedAllocationTrace.allocatedAmount.toLocaleString()}</p>
-                    <p className="text-[11px] text-slate-500">Operational application</p>
+                  <div className="border border-slate-200 bg-slate-50 px-2 py-1">
+                    <p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Allocated</p>
+                    <p className="text-[11px] font-black text-green-700">Ksh {selectedAllocationTrace.allocatedAmount.toLocaleString()}</p>
+                    <p className="text-[10px] text-slate-400">Operational application</p>
                   </div>
-                  <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Unapplied</p>
-                    <p className="mt-0.5 text-xs font-black text-amber-700">Ksh {selectedAllocationTrace.unappliedAmount.toLocaleString()}</p>
-                    <p className="text-[11px] text-slate-500">Locked if receipt is already posted</p>
+                  <div className="border border-slate-200 bg-slate-50 px-2 py-1">
+                    <p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Unapplied</p>
+                    <p className="text-[11px] font-black text-amber-700">Ksh {selectedAllocationTrace.unappliedAmount.toLocaleString()}</p>
+                    <p className="text-[10px] text-slate-400">{selectedAllocationTrace.unappliedAmount > 0 ? "Locked if already posted" : "Fully applied"}</p>
                   </div>
                 </div>
 
                 {selectedAllocationTrace.allocations.length === 0 ? (
-                  <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-center text-xs text-slate-600">
+                  <div className="border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-center text-[10px] text-slate-500">
                     No invoice allocations recorded for this receipt yet.
                   </div>
                 ) : (
-                  <div className="overflow-hidden rounded-lg border border-slate-200">
-                    <table className="w-full text-[11px] border-collapse">
+                  <div className="overflow-hidden border border-slate-200">
+                    <table className="w-full border-collapse text-[10px]">
                       <thead className="bg-[#0B3B2E] text-white">
                         <tr>
-                          <th className="px-3 py-1 text-left font-bold border-r border-white/10">Invoice</th>
-                          <th className="px-3 py-1 text-left font-bold border-r border-white/10">Charge</th>
-                          <th className="px-3 py-1 text-right font-bold border-r border-white/10">Applied</th>
-                          <th className="px-3 py-1 text-right font-bold">Outstanding after</th>
+                          <th className="border-r border-white/10 px-2 py-1 text-left font-bold">Invoice</th>
+                          <th className="border-r border-white/10 px-2 py-1 text-left font-bold">Charge</th>
+                          <th className="border-r border-white/10 px-2 py-1 text-right font-bold">Applied</th>
+                          <th className="px-2 py-1 text-right font-bold">Invoice Balance</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {selectedAllocationTrace.allocations.map((row, i) => (
-                          <tr key={`${selectedAllocationTrace.receiptId}-${row.invoiceId}-${row.label}`} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}>
-                            <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.invoiceNumber}</td>
-                            <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{row.label}</td>
-                            <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-green-700">Ksh {row.appliedAmount.toLocaleString()}</td>
-                            <td className="px-3 py-1 text-right text-slate-700">Ksh {row.afterOutstanding.toLocaleString()}</td>
-                          </tr>
-                        ))}
+                        {selectedAllocationTrace.allocations.map((row, i) => {
+                          const resolvedNum = row.invoiceNumber !== "-"
+                            ? row.invoiceNumber
+                            : (allocationTraceData.invoiceMap.get(row.invoiceId)?.invoiceNumber || null);
+                          const hasInvoice = Boolean(resolvedNum);
+                          return (
+                            <tr key={`${selectedAllocationTrace.receiptId}-${row.invoiceId}-${row.label}`} className={`border-b border-slate-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}>
+                              <td className="border-r border-slate-100 px-2 py-1 font-semibold text-slate-900">
+                                {hasInvoice ? resolvedNum : <span className="text-slate-300">—</span>}
+                              </td>
+                              <td className="border-r border-slate-100 px-2 py-1 text-slate-500">{row.label}</td>
+                              <td className="border-r border-slate-100 px-2 py-1 text-right font-bold text-green-700">Ksh {row.appliedAmount.toLocaleString()}</td>
+                              <td className="px-2 py-1 text-right text-slate-600">
+                                {hasInvoice ? `Ksh ${row.afterOutstanding.toLocaleString()}` : <span className="text-slate-300">—</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -1387,56 +1125,56 @@ const TenantStatement = () => {
             )}
 
             {hasSelection && allocationTraceTarget?.kind === "invoice" && selectedAllocationTrace && (
-              <div className="space-y-2">
-                <div className="grid gap-2 md:grid-cols-3">
-                  <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Invoice</p>
-                    <p className="mt-0.5 text-xs font-black text-slate-900">{selectedAllocationTrace.invoiceNumber}</p>
-                    <p className="text-[11px] text-slate-500">{selectedAllocationTrace.categoryLabel}</p>
+              <div className="space-y-1.5">
+                <div className="grid gap-1.5 md:grid-cols-3">
+                  <div className="border border-slate-200 bg-slate-50 px-2 py-1">
+                    <p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Invoice</p>
+                    <p className="text-[11px] font-black text-slate-900">{selectedAllocationTrace.invoiceNumber}</p>
+                    <p className="text-[10px] text-slate-500">{selectedAllocationTrace.categoryLabel}</p>
                   </div>
-                  <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Applied by receipts</p>
-                    <p className="mt-0.5 text-xs font-black text-green-700">Ksh {selectedAllocationTrace.appliedAmount.toLocaleString()}</p>
-                    <p className="text-[11px] text-slate-500">Operational settlement to date</p>
+                  <div className="border border-slate-200 bg-slate-50 px-2 py-1">
+                    <p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Applied by receipts</p>
+                    <p className="text-[11px] font-black text-green-700">Ksh {selectedAllocationTrace.appliedAmount.toLocaleString()}</p>
+                    <p className="text-[10px] text-slate-400">Operational settlement to date</p>
                   </div>
-                  <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Outstanding</p>
-                    <p className="mt-0.5 text-xs font-black text-red-700">Ksh {selectedAllocationTrace.outstandingAmount.toLocaleString()}</p>
-                    <p className="text-[11px] text-slate-500">Current invoice balance</p>
+                  <div className="border border-slate-200 bg-slate-50 px-2 py-1">
+                    <p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Outstanding</p>
+                    <p className="text-[11px] font-black text-red-700">Ksh {selectedAllocationTrace.outstandingAmount.toLocaleString()}</p>
+                    <p className="text-[10px] text-slate-400">Current invoice balance</p>
                   </div>
                 </div>
 
                 {selectedAllocationTrace.receiptApplications.length === 0 ? (
-                  <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-center text-xs text-slate-600">
+                  <div className="border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-center text-[10px] text-slate-500">
                     No receipt has been applied to this invoice yet.
                   </div>
                 ) : (
-                  <div className="overflow-hidden rounded-lg border border-slate-200">
-                    <table className="w-full text-[11px] border-collapse">
+                  <div className="overflow-hidden border border-slate-200">
+                    <table className="w-full border-collapse text-[10px]">
                       <thead className="bg-[#0B3B2E] text-white">
                         <tr>
-                          <th className="px-3 py-1 text-left font-bold border-r border-white/10">Receipt</th>
-                          <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date</th>
-                          <th className="px-3 py-1 text-left font-bold border-r border-white/10">Charge</th>
-                          <th className="px-3 py-1 text-right font-bold border-r border-white/10">Applied</th>
-                          <th className="px-3 py-1 text-center font-bold">Action</th>
+                          <th className="border-r border-white/10 px-2 py-1 text-left font-bold">Receipt</th>
+                          <th className="border-r border-white/10 px-2 py-1 text-left font-bold">Date</th>
+                          <th className="border-r border-white/10 px-2 py-1 text-left font-bold">Charge</th>
+                          <th className="border-r border-white/10 px-2 py-1 text-right font-bold">Applied</th>
+                          <th className="px-2 py-1 text-center font-bold">Action</th>
                         </tr>
                       </thead>
                       <tbody>
                         {selectedAllocationTrace.receiptApplications.map((row, i) => (
-                          <tr key={`${selectedAllocationTrace.invoiceId}-${row.receiptId}-${row.appliedAmount}`} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}>
-                            <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.receiptNumber}</td>
-                            <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{row.receiptDate ? new Date(row.receiptDate).toLocaleDateString() : "-"}</td>
-                            <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{row.label}</td>
-                            <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-green-700">Ksh {row.appliedAmount.toLocaleString()}</td>
+                          <tr key={`${selectedAllocationTrace.invoiceId}-${row.receiptId}-${row.appliedAmount}`} className={`border-b border-slate-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}>
+                            <td className="border-r border-slate-100 px-2 py-1 font-semibold text-slate-900">{row.receiptNumber}</td>
+                            <td className="border-r border-slate-100 px-2 py-1 text-slate-500">{row.receiptDate ? new Date(row.receiptDate).toLocaleDateString() : "-"}</td>
+                            <td className="border-r border-slate-100 px-2 py-1 text-slate-500">{row.label}</td>
+                            <td className="border-r border-slate-100 px-2 py-1 text-right font-bold text-green-700">Ksh {row.appliedAmount.toLocaleString()}</td>
                             <td className="px-2 py-1 text-center">
                               <button
                                 type="button"
                                 onClick={() => openReceiptAllocationWorkspace(row.receiptId)}
-                                className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-100"
+                                className="inline-flex items-center gap-1 border border-slate-300 px-1.5 py-0.5 text-[9px] font-bold text-slate-700 hover:bg-slate-100"
                               >
-                                <FaLink size={10} />
-                                Open receipt
+                                <FaLink size={8} />
+                                Open
                               </button>
                             </td>
                           </tr>
@@ -1922,223 +1660,44 @@ const TenantStatement = () => {
     }
   };
 
-  const renderStatement = () => {
-    const allTransactions = statementData?.transactions || [];
-    const startBoundary = startDate ? new Date(`${startDate}T00:00:00`) : null;
-    const endBoundary = endDate ? new Date(`${endDate}T23:59:59`) : null;
+  const renderStatement = () => (
+    <TenantStatementTab
+      statementData={statementData}
+      tenant={tenant}
+      tenantLease={tenantLease}
+      onOpenAllocationTrace={(target) => setAllocationTraceTarget(target)}
+      onOpenReceiptWorkspace={(receiptId) => openReceiptAllocationWorkspace(receiptId ?? "")}
+      allocationTracePanel={renderAllocationTracePanel()}
+    />
+  );
 
-    const bbf = startBoundary
-      ? allTransactions.filter((t) => new Date(t.date) < startBoundary).reduce((sum, t) => sum + t.amount, 0)
-      : 0;
-    const hasBbf = startBoundary !== null && allTransactions.some((t) => new Date(t.date) < startBoundary);
 
-    const visibleStatementTransactions = allTransactions
-      .filter((t) => transactionType === "ALL" || t.type === transactionType)
-      .filter((t) => {
-        const txDate = new Date(t.date);
-        const fromOk = startBoundary ? txDate >= startBoundary : true;
-        const toOk = endBoundary ? txDate <= endBoundary : true;
-        return fromOk && toOk;
-      })
-      .map((t) => ({ ...t, balance: t.balance + bbf }));
-
-    const bbfRow = hasBbf ? { id: "BBF", type: "BBF", description: "Balance Brought Forward", amount: bbf, balance: bbf } : null;
-    const finalBalance = visibleStatementTransactions.length > 0
-      ? visibleStatementTransactions[visibleStatementTransactions.length - 1].balance
-      : hasBbf ? bbf : null;
-    const bcfRow = finalBalance !== null
-      ? { id: "BCF", type: "BCF", description: "Balance Carried Forward", amount: finalBalance, balance: finalBalance }
-      : null;
-    const displayRows = [
-      ...(bbfRow ? [bbfRow] : []),
-      ...visibleStatementTransactions,
-      ...(bcfRow ? [bcfRow] : []),
-    ];
-
-    const periodCharges = visibleStatementTransactions.reduce((s, t) => ["CHARGE", "DEBIT_NOTE"].includes(t.type) ? s + Math.abs(t.amount) : s, 0);
-    const periodPayments = visibleStatementTransactions.reduce((s, t) => ["PAYMENT", "CREDIT_NOTE"].includes(t.type) ? s + Math.abs(t.amount) : s, 0);
-
-    const defaultStart = `${new Date().getFullYear()}-01-01`;
-    const defaultEnd = new Date().toISOString().split("T")[0];
-    const isFiltered = startDate !== defaultStart || endDate !== defaultEnd || transactionType !== "ALL";
-
-    const statementSummaryChips = [
-      {
-        label: "Rent",
-        value: `Ksh ${(tenantLease?.rentAmount || tenant?.rent || 0).toLocaleString()}`,
-        accent: "text-blue-700",
-      },
-      ...(hasBbf ? [{
-        label: "Opening Bal.",
-        value: `Ksh ${Math.abs(bbf).toLocaleString()}${bbf < 0 ? " CR" : bbf > 0 ? " DR" : ""}`,
-        accent: bbf > 0 ? "text-red-700" : bbf < 0 ? "text-emerald-700" : "text-slate-500",
-      }] : []),
-      {
-        label: "Invoiced",
-        value: `Ksh ${(statementData?.totalCharges || 0).toLocaleString()}`,
-        accent: "text-orange-700",
-      },
-      {
-        label: "Paid",
-        value: `Ksh ${(statementData?.totalPayments || 0).toLocaleString()}`,
-        accent: "text-emerald-700",
-      },
-      {
-        label: "Outstanding",
-        value: `Ksh ${Math.abs(statementData?.operationalOutstanding || 0).toLocaleString()}`,
-        accent: "text-amber-700",
-      },
-      {
-        label: statementData?.unappliedCredits > 0 ? "Credit" : "Net",
-        value: `Ksh ${Math.abs((statementData?.unappliedCredits > 0 ? statementData?.unappliedCredits : statementData?.currentBalance) || 0).toLocaleString()}`,
-        accent: statementData?.unappliedCredits > 0 ? "text-sky-700" : statementData?.currentBalance >= 0 ? "text-emerald-700" : "text-red-700",
-      },
-    ];
-
-    return (
-      <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm statement-tab">
-        <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm filter-section">
-          {/* ── date + type controls ── */}
-          <div className="flex items-center gap-1.5 overflow-x-auto border-b border-slate-100 px-2 py-1.5">
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="h-7 w-28 shrink-0 border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:border-[#0B3B2E]"
-            />
-            <span className="shrink-0 text-[10px] text-slate-400">–</span>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="h-7 w-28 shrink-0 border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:border-[#0B3B2E]"
-            />
-            {/* Quick date presets */}
-            {(() => {
-              const _now = new Date();
-              const _today = _now.toISOString().split("T")[0];
-              const _monthStart = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,"0")}-01`;
-              const _ytdStart = `${_now.getFullYear()}-01-01`;
-              const _3mAgo = (() => { const d = new Date(_now); d.setMonth(d.getMonth()-3); return d.toISOString().split("T")[0]; })();
-              const activePreset =
-                startDate === _today && endDate === _today ? "Today" :
-                startDate === _monthStart && endDate === _today ? "This Month" :
-                startDate === _3mAgo && endDate === _today ? "3 Months" :
-                startDate === _ytdStart && endDate === _today ? "YTD" :
-                startDate === "2000-01-01" && endDate === _today ? "All" : null;
-              return [
-                { label: "Today", fn: () => { setStartDate(_today); setEndDate(_today); } },
-                { label: "This Month", fn: () => { setStartDate(_monthStart); setEndDate(_today); } },
-                { label: "3 Months", fn: () => { setStartDate(_3mAgo); setEndDate(_today); } },
-                { label: "YTD", fn: () => { setStartDate(_ytdStart); setEndDate(_today); } },
-                { label: "All", fn: () => { setStartDate("2000-01-01"); setEndDate(_today); } },
-              ].map(({ label, fn }) => (
-                <button key={label} type="button" onClick={fn}
-                  className={`h-7 shrink-0 border px-2.5 text-[10px] font-bold transition-colors ${
-                    activePreset === label
-                      ? "border-[#0B3B2E] bg-[#0B3B2E] text-white"
-                      : "border-slate-200 bg-slate-50 text-slate-600 hover:border-[#0B3B2E] hover:bg-[#EDF5F1] hover:text-[#0B3B2E]"
-                  }`}>
-                  {label}
-                </button>
-              ));
-            })()}
-            <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
-            <AppSelect
-              value={transactionType}
-              onChange={(v) => setTransactionType(v ?? "ALL")}
-              options={[
-                { value: "CHARGE", label: "Invoices" },
-                { value: "DEBIT_NOTE", label: "Debit Notes" },
-                { value: "CREDIT_NOTE", label: "Credit Notes" },
-                { value: "PAYMENT", label: "Receipts" },
-              ]}
-              placeholder="All Types"
-              clearable
-              size="sm"
-            />
-            <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
-            <button
-              type="button"
-              onClick={() => { setStartDate(`${new Date().getFullYear()}-01-01`); setEndDate(new Date().toISOString().split("T")[0]); setTransactionType("ALL"); }}
-              className={`h-7 shrink-0 border px-2.5 text-[10px] font-bold transition-colors ${isFiltered ? "border-red-200 bg-red-50 text-red-600 hover:bg-red-100" : "border-slate-200 bg-slate-50 text-slate-400 hover:text-slate-600"}`}
-            >
-              ↺ Reset
-            </button>
-            <span className="shrink-0 border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600">
-              {visibleStatementTransactions.length} row{visibleStatementTransactions.length !== 1 ? "s" : ""}
-            </span>
-          </div>
-          {/* ── summary strip ── */}
-          <div className="flex items-center gap-0 overflow-x-auto divide-x divide-slate-100">
-            {statementSummaryChips.map((chip) => (
-              <span key={chip.label} className="shrink-0 inline-flex flex-col items-start px-4 py-1.5">
-                <span className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">{chip.label}</span>
-                <span className={`text-[11px] font-black ${chip.accent}`}>{chip.value}</span>
-              </span>
-            ))}
-          </div>
-        </div>
-
-        <div className="transaction-scroll-area min-h-[260px] flex-1 overflow-auto">
-          <table className="transaction-table min-w-full table-fixed text-[10.5px]">
-            <colgroup><col className="w-[10%]" /><col className="w-[35%]" /><col className="w-[11%]" /><col className="w-[13%]" /><col className="w-[9%]" /><col className="w-[11%]" /><col className="w-[11%]" /></colgroup>
-            <thead className="sticky top-0 z-10 shadow-sm"><tr className="bg-[#0B3B2E] text-white">{['Date', 'Description', 'Type', 'Code', 'Trace', 'Amount', 'R. Balance'].map((header, index) => (<th key={header} className={`whitespace-nowrap px-2.5 py-1.5 text-[9.5px] font-black uppercase tracking-[0.12em] ${index >= 5 ? 'text-right' : index === 4 || index === 2 ? 'text-center' : 'text-left'}`}>{header}</th>))}</tr></thead>
-            <tbody>
-              {displayRows.length > 0 ? displayRows.map((transaction, idx) => {
-                const isBbcf = transaction.type === "BBF" || transaction.type === "BCF";
-                const isDebit = ["CHARGE", "DEBIT_NOTE"].includes(transaction.type);
-                const balColor = transaction.balance > 0 ? "text-red-700" : transaction.balance < 0 ? "text-emerald-700" : "text-slate-500";
-                if (isBbcf) return (
-                  <tr key={transaction.id} className="border-y-2 border-[#0B3B2E]/25 bg-[#0B3B2E]/[0.06]">
-                    <td className="px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-[#0B3B2E]/50">—</td>
-                    <td className="px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-[#0B3B2E]" colSpan="4">{transaction.description}</td>
-                    <td className="px-2.5 py-1"></td>
-                    <td className={`px-2.5 py-1 text-right text-[10.5px] font-black whitespace-nowrap ${balColor}`}>
-                      Ksh {Math.abs(transaction.balance).toLocaleString()}{transaction.balance < 0 ? " CR" : transaction.balance > 0 ? " DR" : ""}
-                    </td>
-                  </tr>
-                );
-                return (
-                  <tr key={transaction.id} className={`${idx % 2 === 0 ? "bg-white" : "bg-slate-50"} border-b border-slate-200 hover:bg-orange-50/40`}>
-                    <td className="px-2.5 py-0.5 font-semibold text-slate-900 whitespace-nowrap">{new Date(transaction.date).toLocaleDateString()}</td>
-                    <td className="px-2.5 py-0.5 text-slate-700 truncate" title={transaction.description}>{transaction.description}</td>
-                    <td className="px-2.5 py-0.5 text-center">{(() => {
-                      const typeMap = { CHARGE: ["Invoice", "bg-red-100 text-red-700"], DEBIT_NOTE: ["Debit", "bg-rose-100 text-rose-700"], CREDIT_NOTE: ["Credit", "bg-sky-100 text-sky-700"], PAYMENT: ["Receipt", "bg-emerald-100 text-emerald-700"] };
-                      const [label, cls] = typeMap[transaction.type] || [transaction.type, "bg-slate-100 text-slate-600"];
-                      return <span className={`inline-flex rounded px-2 py-0.5 text-[9px] font-black ${cls}`}>{label}</span>;
-                    })()}</td>
-                    <td className="px-2.5 py-0.5 font-semibold text-slate-900 whitespace-nowrap">{transaction.transactionCode}</td>
-                    <td className="px-2.5 py-0.5 text-center">{["invoice", "receipt"].includes(String(transaction.sourceKind || "")) ? (<button type="button" onClick={() => setAllocationTraceTarget({ kind: transaction.sourceKind === "invoice" ? "invoice" : "receipt", id: transaction.sourceId })} className="inline-flex h-6 items-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-[10px] font-bold text-slate-700 hover:bg-slate-100"><FaLink size={10} /> Trace</button>) : (<span className="text-[10px] text-slate-300">—</span>)}</td>
-                    <td className={`px-2.5 py-1 text-right font-black whitespace-nowrap ${isDebit ? "text-red-600" : "text-green-600"}`}>{isDebit ? "+" : "-"}Ksh {Math.abs(transaction.amount).toLocaleString()}</td>
-                    <td className={`px-2.5 py-0.5 text-right font-black whitespace-nowrap ${balColor}`}>Ksh {Math.abs(transaction.balance).toLocaleString()}{transaction.balance < 0 ? " CR" : transaction.balance > 0 ? " DR" : ""}</td>
-                  </tr>
-                );
-              }) : (<tr><td colSpan="7" className="px-3 py-12 text-center"><p className="text-sm font-semibold text-slate-400">No transactions match the selected filters.</p><p className="mt-1 text-[10px] text-slate-300">Try widening the date range or switching to "All Types".</p></td></tr>)}
-            </tbody>
-          </table>
-        </div>
-        <div className="flex-shrink-0 border-t border-slate-200 bg-slate-50/95 px-3 py-1.5 text-[10.5px] font-semibold text-slate-600 backdrop-blur">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-slate-500">{visibleStatementTransactions.length} transaction{visibleStatementTransactions.length !== 1 ? "s" : ""} in period</span>
-            <div className="flex flex-wrap items-center gap-3">
-              {isFiltered && (
-                <>
-                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Period</span>
-                  <span>Charged: <strong className="text-red-600">Ksh {periodCharges.toLocaleString()}</strong></span>
-                  <span>Received: <strong className="text-emerald-700">Ksh {periodPayments.toLocaleString()}</strong></span>
-                  <span className="mx-1 h-3 w-px bg-slate-300" />
-                </>
-              )}
-              <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">All-time</span>
-              <span>Outstanding: <strong className="text-amber-700">Ksh {Math.abs(statementData?.operationalOutstanding || 0).toLocaleString()}</strong></span>
-              <span>Credits: <strong className="text-sky-700">Ksh {(statementData?.unappliedCredits || 0).toLocaleString()}</strong></span>
-            </div>
-          </div>
-        </div>
-        {renderAllocationTracePanel()}
-      </div>
-    );
+  const persistRentReviewRecords = async (nextReviewRecords, nextScheduleAdjustments = localBillingScheduleAdjustments, successMessage = "Rent review changes saved") => {
+    try {
+      const targetLeaseId = safeId(tenantLease?._id);
+      if (!targetLeaseId) {
+        toast.error("No lease record found for this tenant. Save or restore the tenant agreement first.");
+        return false;
+      }
+      setReviewRecords(nextReviewRecords);
+      if (Array.isArray(nextScheduleAdjustments)) {
+        setLocalBillingScheduleAdjustments(nextScheduleAdjustments);
+      }
+      await updateLeaseReviews(targetLeaseId, {
+        rentReviewRecords: nextReviewRecords,
+        billingScheduleAdjustments: Array.isArray(nextScheduleAdjustments)
+          ? nextScheduleAdjustments
+          : localBillingScheduleAdjustments,
+      });
+      if (currentCompany?._id) {
+        await getLeases(dispatch, currentCompany._id, null, tenantId);
+      }
+      toast.success(successMessage);
+      return true;
+    } catch (error) {
+      toast.error(error?.response?.data?.message || error?.message || "Rent review action failed");
+      return false;
+    }
   };
 
   const renderBillingSchedule = () => {
@@ -2208,68 +1767,19 @@ const TenantStatement = () => {
       }
     };
 
-    const persistRentReviewRecords = async (nextReviewRecords, nextScheduleAdjustments = localBillingScheduleAdjustments, successMessage = "Rent review changes saved") => {
-      try {
-        const targetLeaseId = safeId(tenantLease?._id);
-        if (!targetLeaseId) {
-          toast.error("No lease record found for this tenant. Save or restore the tenant agreement first.");
-          return false;
-        }
-
-        setReviewRecords(nextReviewRecords);
-        if (Array.isArray(nextScheduleAdjustments)) {
-          setLocalBillingScheduleAdjustments(nextScheduleAdjustments);
-        }
-
-        await updateLeaseReviews(targetLeaseId, {
-          rentReviewRecords: nextReviewRecords,
-          billingScheduleAdjustments: Array.isArray(nextScheduleAdjustments)
-            ? nextScheduleAdjustments
-            : localBillingScheduleAdjustments,
-        });
-
-        if (currentCompany?._id) {
-          await getLeases(dispatch, currentCompany._id, null, tenantId);
-        }
-
-        toast.success(successMessage);
-        return true;
-      } catch (error) {
-        toast.error(error?.response?.data?.message || error?.message || "Rent review action failed");
-        return false;
-      }
-    };
-
     const handleCreateInvoices = () => {
       if (selectedSchedules.length === 0) {
         toast.warning("Please select at least one billing period");
         return;
       }
-
       const selectedRows = selectedSchedules.map((key) => billingScheduleByKey.get(key)).filter(Boolean);
-      const frozenRows = selectedRows.filter((row) => row.frozen === "Yes");
-      const periodsWithInvoices = selectedRows.filter((row) => row.invoice !== "-");
-      const periodsWithoutInvoices = selectedRows.filter((row) => row.invoice === "-" && row.frozen !== "Yes");
-
-      if (frozenRows.length > 0) {
-        toast.warning(`Frozen schedule(s) cannot be invoiced: ${frozenRows.map((p) => p.description).join(", ")}`);
+      const eligibleRows = selectedRows.filter((row) => row.invoice === "-" && row.frozen !== "Yes");
+      if (eligibleRows.length === 0) {
+        toast.warning("No uninvoiced, unfrozen periods selected");
         return;
       }
-
-      if (periodsWithInvoices.length > 0) {
-        toast.warning(
-          `${periodsWithInvoices.length} period(s) already have invoices: ${periodsWithInvoices
-            .map((p) => p.description)
-            .join(", ")}`
-        );
-        return;
-      }
-
-      if (periodsWithoutInvoices.length === 0) {
-        toast.warning("No valid periods selected for invoicing");
-        return;
-      }
-
+      const firstRow = eligibleRows[0];
+      setSelectedSchedulePeriod({ month: Number(firstRow.periodMonth), year: Number(firstRow.periodYear) });
       setShowInvoiceModal(true);
     };
 
@@ -2366,121 +1876,110 @@ const TenantStatement = () => {
     };
 
     return (
-      <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">
         <div className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-200 bg-white">
-          {/* ── Deposit summary strip ── */}
-          <div className="grid grid-cols-3 divide-x divide-slate-100 border-b border-slate-200">
-            <div className="px-3 py-2">
-              <p className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Deposit Amount</p>
-              <p className="mt-0.5 text-sm font-black text-[#0B3B2E]">KES {tenantDepositAmount.toLocaleString()}</p>
+          {/* ── Deposit strip (single row) ── */}
+          <div className="flex items-center gap-4 divide-x divide-slate-100 border-b border-slate-200 px-3 py-1">
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Deposit</span>
+              <span className="text-[11px] font-black text-[#0B3B2E]">KES {tenantDepositAmount.toLocaleString()}</span>
             </div>
-            <div className="px-3 py-2">
-              <p className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Deposit Holder</p>
-              <p className="mt-0.5 text-sm font-black text-slate-800">{tenantDepositHolder}</p>
+            <div className="flex items-center gap-2 pl-4 shrink-0">
+              <span className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Holder</span>
+              <span className="text-[11px] font-black text-slate-700">{tenantDepositHolder}</span>
             </div>
-            <div className="px-3 py-2">
-              <p className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">Deposit Invoice</p>
+            <div className="flex items-center gap-2 pl-4 shrink-0">
+              <span className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Invoice</span>
               {hasActiveDepositInvoice ? (
-                <p className="mt-0.5 text-sm font-black text-emerald-700">
-                  Billed {depositInvoiceSummary?.invoiceNumber ? `· ${depositInvoiceSummary.invoiceNumber}` : ""}
-                </p>
+                <span className="text-[11px] font-black text-emerald-700">
+                  Billed{depositInvoiceSummary?.invoiceNumber ? ` · ${depositInvoiceSummary.invoiceNumber}` : ""}
+                </span>
               ) : (
-                <p className="mt-0.5 text-sm font-black text-amber-600">Not yet billed</p>
+                <span className="text-[11px] font-black text-amber-600">Not yet billed</span>
               )}
             </div>
           </div>
 
-          {/* ── Filter row ── */}
-          <div className="flex items-center gap-1.5 overflow-x-auto border-b border-slate-100 px-2 py-1.5">
-            <AppSelect
-              value={scheduleDefinedPeriod}
-              onChange={(v) => {
-                const value = v ?? "custom";
-                setScheduleDefinedPeriod(value);
-                const today = new Date();
-                if (value === "this_year") {
-                  setScheduleFilterFrom(`${today.getFullYear()}-01-01`);
-                  setScheduleFilterTo(`${today.getFullYear()}-12-31`);
-                } else if (value === "next_12_months") {
-                  const from = new Date(today.getFullYear(), today.getMonth(), 1);
-                  const to = new Date(today.getFullYear(), today.getMonth() + 12, 0);
-                  setScheduleFilterFrom(formatInputDate(from));
-                  setScheduleFilterTo(formatInputDate(to));
-                }
-              }}
-              options={[
-                { value: "this_year", label: "This Year" },
-                { value: "next_12_months", label: "Next 12 Months" },
-              ]}
-              placeholder="Custom Period"
-              clearable
-              size="sm"
-            />
-            <input
-              type="date"
-              value={scheduleFilterFrom}
-              onChange={(e) => { setScheduleDefinedPeriod("custom"); setScheduleFilterFrom(e.target.value); }}
-              className="h-7 w-28 shrink-0 border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:border-[#0B3B2E]"
-            />
-            <span className="shrink-0 text-[10px] text-slate-400">–</span>
-            <input
-              type="date"
-              value={scheduleFilterTo}
-              onChange={(e) => { setScheduleDefinedPeriod("custom"); setScheduleFilterTo(e.target.value); }}
-              className="h-7 w-28 shrink-0 border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:border-[#0B3B2E]"
-            />
-            <input
-              type="text"
-              value={scheduleSearchText}
-              onChange={(e) => setScheduleSearchText(e.target.value)}
-              placeholder="Search month, invoice no…"
-              className="h-7 w-48 shrink-0 border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:border-[#0B3B2E]"
-            />
-            <button
-              onClick={() => { setScheduleDefinedPeriod("custom"); setScheduleFilterFrom(""); setScheduleFilterTo(""); setScheduleSearchText(""); setSelectedSchedules([]); }}
-              className="h-7 shrink-0 border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
-            >
-              Reset
-            </button>
-            <button
-              onClick={async () => {
-                if (currentCompany?._id) {
-                  await Promise.all([
-                    getLeases(dispatch, currentCompany._id, null, tenantId),
-                    getTenantInvoices(dispatch, currentCompany._id, tenantId),
-                  ]);
-                  setInvoiceRefresh((v) => v + 1);
-                  setSelectedSchedules([]);
-                  toast.success("Billing schedule refreshed.");
-                }
-              }}
-              className="h-7 shrink-0 flex items-center gap-1 border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
-            >
-              <FaSync size={9} /> Refresh
-            </button>
-            {selectedSchedules.length > 0 && (
-              <span className="ml-auto shrink-0 border border-[#0B3B2E] bg-[#EDF5F1] px-2 py-0.5 text-[10px] font-black text-[#0B3B2E]">
-                {selectedSchedules.length} selected
-              </span>
-            )}
-          </div>
-
-          {/* ── Action toolbar ── */}
+          {/* ── Filter + Actions (single row) ── */}
           {(() => {
-            const dis = "inline-flex items-center gap-1.5 h-7 px-2.5 text-[11px] font-bold border border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed";
-            const act = (color) => `inline-flex items-center gap-1.5 h-7 px-2.5 text-[11px] font-bold border ${color} text-white transition-colors`;
+            const dis = "inline-flex items-center gap-1 h-6 px-2 text-[10px] font-bold border border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed shrink-0";
+            const act = (color) => `inline-flex items-center gap-1 h-6 px-2 text-[10px] font-bold border ${color} text-white transition-colors shrink-0`;
             const hasSel = selectedSchedules.length > 0;
             const hasOneSel = selectedSchedules.length === 1;
             const off = !hasSel || savingScheduleAction;
             return (
-              <div className="filter-bar flex items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-                <button type="button" onClick={handleCreateInvoices} disabled={off} className={off ? dis : act("border-[#0B3B2E] bg-[#0B3B2E] hover:bg-[#0A3127]")}><FaFileInvoiceDollar size={10} /> Create Invoice</button>
-                <button type="button" onClick={handleCancelInvoices} disabled={off} className={off ? dis : act("border-red-600 bg-red-600 hover:bg-red-700")}><FaBan size={10} /> Cancel Invoice</button>
-                <button type="button" onClick={handleEditSchedules} disabled={!hasOneSel || savingScheduleAction} className={!hasOneSel || savingScheduleAction ? dis : act("border-amber-600 bg-amber-600 hover:bg-amber-700")}><FaCog size={10} /> Edit Schedule</button>
-                <button type="button" onClick={handleDeleteSchedules} disabled={off} className={off ? dis : act("border-slate-600 bg-slate-600 hover:bg-slate-700")}><FaTrash size={10} /> Delete Schedule</button>
-                <button type="button" onClick={handleFreezeSchedules} disabled={off} className={off ? dis : allFrozen ? act("border-sky-600 bg-sky-600 hover:bg-sky-700") : act("border-indigo-600 bg-indigo-600 hover:bg-indigo-700")}>
-                  {allFrozen ? <FaSun size={10} /> : <FaSnowflake size={10} />} {allFrozen ? "Unfreeze" : "Freeze"}
+              <div className="flex items-center gap-1.5 overflow-x-auto border-b border-slate-100 px-2 py-1">
+                {/* Filters */}
+                <AppSelect
+                  value={scheduleDefinedPeriod}
+                  onChange={(v) => {
+                    const value = v ?? "custom";
+                    setScheduleDefinedPeriod(value);
+                    const today = new Date();
+                    if (value === "this_year") {
+                      setScheduleFilterFrom(`${today.getFullYear()}-01-01`);
+                      setScheduleFilterTo(`${today.getFullYear()}-12-31`);
+                    } else if (value === "next_12_months") {
+                      const from = new Date(today.getFullYear(), today.getMonth(), 1);
+                      const to = new Date(today.getFullYear(), today.getMonth() + 12, 0);
+                      setScheduleFilterFrom(formatInputDate(from));
+                      setScheduleFilterTo(formatInputDate(to));
+                    }
+                  }}
+                  options={[
+                    { value: "this_year", label: "This Year" },
+                    { value: "next_12_months", label: "Next 12 Months" },
+                  ]}
+                  placeholder="Period"
+                  clearable
+                  size="sm"
+                />
+                <input type="date" value={scheduleFilterFrom}
+                  onChange={(e) => { setScheduleDefinedPeriod("custom"); setScheduleFilterFrom(e.target.value); }}
+                  className="h-6 w-28 shrink-0 border border-slate-200 bg-white px-1.5 text-[10px] focus:outline-none focus:border-[#0B3B2E]"
+                />
+                <span className="shrink-0 text-[10px] text-slate-400">–</span>
+                <input type="date" value={scheduleFilterTo}
+                  onChange={(e) => { setScheduleDefinedPeriod("custom"); setScheduleFilterTo(e.target.value); }}
+                  className="h-6 w-28 shrink-0 border border-slate-200 bg-white px-1.5 text-[10px] focus:outline-none focus:border-[#0B3B2E]"
+                />
+                <input type="text" value={scheduleSearchText}
+                  onChange={(e) => setScheduleSearchText(e.target.value)}
+                  placeholder="Search month, invoice no…"
+                  className="h-6 w-40 shrink-0 border border-slate-200 bg-white px-1.5 text-[10px] focus:outline-none focus:border-[#0B3B2E]"
+                />
+                <button onClick={() => { setScheduleDefinedPeriod("custom"); setScheduleFilterFrom(""); setScheduleFilterTo(""); setScheduleSearchText(""); setSelectedSchedules([]); }}
+                  className="h-6 shrink-0 border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-600 hover:bg-slate-50 transition-colors">
+                  Reset
                 </button>
+                <button onClick={async () => {
+                    if (currentCompany?._id) {
+                      await Promise.all([getLeases(dispatch, currentCompany._id, null, tenantId), getTenantInvoices(dispatch, currentCompany._id, tenantId)]);
+                      setInvoiceRefresh((v) => v + 1); setSelectedSchedules([]);
+                      toast.success("Billing schedule refreshed.");
+                    }
+                  }}
+                  className="h-6 shrink-0 flex items-center gap-1 border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-600 hover:bg-slate-50 transition-colors">
+                  <FaSync size={8} /> Refresh
+                </button>
+
+                {/* Divider */}
+                <span className="shrink-0 h-4 w-px bg-slate-200 mx-0.5" />
+
+                {/* Actions */}
+                <button type="button" onClick={handleCreateInvoices} disabled={off} className={off ? dis : act("border-[#0B3B2E] bg-[#0B3B2E] hover:bg-[#0A3127]")}><FaFileInvoiceDollar size={9} /> Create Invoice</button>
+                <button type="button" onClick={handleCancelInvoices} disabled={off} className={off ? dis : act("border-red-600 bg-red-600 hover:bg-red-700")}><FaBan size={9} /> Cancel</button>
+                <button type="button" onClick={handleEditSchedules} disabled={!hasOneSel || savingScheduleAction} className={!hasOneSel || savingScheduleAction ? dis : act("border-amber-600 bg-amber-600 hover:bg-amber-700")}><FaCog size={9} /> Edit</button>
+                <button type="button" onClick={handleDeleteSchedules} disabled={off} className={off ? dis : act("border-slate-600 bg-slate-600 hover:bg-slate-700")}><FaTrash size={9} /> Delete</button>
+                <button type="button" onClick={handleFreezeSchedules} disabled={off} className={off ? dis : allFrozen ? act("border-sky-600 bg-sky-600 hover:bg-sky-700") : act("border-indigo-600 bg-indigo-600 hover:bg-indigo-700")}>
+                  {allFrozen ? <FaSun size={9} /> : <FaSnowflake size={9} />} {allFrozen ? "Unfreeze" : "Freeze"}
+                </button>
+
+                {selectedSchedules.length > 0 && (
+                  <span className="ml-auto shrink-0 border border-[#0B3B2E] bg-[#EDF5F1] px-2 py-0.5 text-[9px] font-black text-[#0B3B2E]">
+                    {selectedSchedules.length} selected
+                  </span>
+                )}
               </div>
             );
           })()}
@@ -2756,6 +2255,15 @@ const TenantStatement = () => {
               </tr>
             </thead>
             <tbody>
+              {filteredBillingScheduleData.length === 0 && (
+                <tr>
+                  <td colSpan={10} className="px-4 py-10 text-center text-[11px] text-slate-400">
+                    {scheduleSearchText || scheduleFilterFrom || scheduleFilterTo
+                      ? "No billing periods match the current filter."
+                      : "No billing schedule generated yet. Check lease dates and rent amount."}
+                  </td>
+                </tr>
+              )}
               {filteredBillingScheduleData.map((row, index) => {
                 const total = row.rent + row.utility;
                 const isSelected = selectedSchedules.includes(row.periodKey);
@@ -3220,7 +2728,7 @@ const TenantStatement = () => {
                 {/* ── Category toggle ── */}
                 <div className="mb-4">
                   <p className={reviewLabelCls}>Category</p>
-                  <div className="flex overflow-hidden rounded border border-slate-200">
+                  <div className="flex overflow-hidden border border-slate-200">
                     <button type="button"
                       onClick={() => setReviewForm((p) => ({ ...p, reviewType: "escalation", direction: "increase", type: p.type === "fixed_rent" ? "percentage" : p.type, frequency: p.frequency === "once" ? "yearly" : p.frequency }))}
                       className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-black transition-colors ${isEscalation ? "bg-blue-600 text-white" : "bg-white text-slate-500 hover:bg-blue-50"}`}>
@@ -3784,9 +3292,9 @@ const TenantStatement = () => {
 
           <div className="sticky top-0 z-30 flex-shrink-0 overflow-hidden border border-slate-200 bg-white shadow-sm no-print">
             {/* ── Tenant meta bar ── */}
-            <div className="flex items-center gap-1.5 overflow-x-auto border-b border-slate-100 px-2 py-1.5 bg-[#0B3B2E]/[0.03]">
-              <button onClick={() => navigate("/tenants")} className="h-7 shrink-0 flex items-center gap-1 border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">
-                <FaArrowLeft size={10} /> Back
+            <div className="flex items-center gap-1.5 overflow-x-auto border-b border-slate-100 px-2 py-1 bg-[#0B3B2E]/[0.03]">
+              <button onClick={() => navigate("/tenants")} className="h-6 shrink-0 flex items-center gap-1 border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-700 hover:bg-slate-50 transition-colors">
+                <FaArrowLeft size={9} /> Back
               </button>
               <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
               {/* Tenant name */}
@@ -3825,31 +3333,31 @@ const TenantStatement = () => {
               )}
               <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200 ml-auto" />
               {/* Always-visible actions */}
-              <button onClick={() => navigate(`/receipts/${tenantId}`)} className="h-8 shrink-0 flex items-center gap-1.5 rounded bg-[#FF8C00] px-3 text-xs font-black text-white shadow-sm hover:bg-[#e67e00] active:scale-95 transition-all">
-                <FaMoneyBillWave size={11} /> Receipts
+              <button onClick={() => navigate(`/receipts/${tenantId}`)} className="h-6 shrink-0 flex items-center gap-1 rounded bg-[#FF8C00] px-2 text-[9px] font-black text-white shadow-sm hover:bg-[#e67e00] active:scale-95 transition-all">
+                <FaMoneyBillWave size={9} /> Receipts
               </button>
-              <button onClick={handlePrint} className="h-8 shrink-0 flex items-center gap-1.5 rounded bg-[#0B3B2E] px-3 text-xs font-black text-white shadow-sm hover:bg-[#0d4a39] active:scale-95 transition-all">
-                <FaPrint size={11} /> Print
+              <button onClick={handlePrint} className="h-6 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2 text-[9px] font-black text-white shadow-sm hover:bg-[#0d4a39] active:scale-95 transition-all">
+                <FaPrint size={9} /> Print
               </button>
-              <button onClick={handleDownload} className="h-8 shrink-0 flex items-center gap-1.5 rounded bg-slate-600 px-3 text-xs font-black text-white shadow-sm hover:bg-slate-700 active:scale-95 transition-all">
-                <FaDownload size={11} /> PDF
+              <button onClick={handleDownload} className="h-6 shrink-0 flex items-center gap-1 rounded bg-slate-600 px-2 text-[9px] font-black text-white shadow-sm hover:bg-slate-700 active:scale-95 transition-all">
+                <FaDownload size={9} /> PDF
               </button>
-              <div className="mx-1 h-5 w-px shrink-0 bg-slate-200" />
+              <div className="mx-0.5 h-3.5 w-px shrink-0 bg-slate-200" />
               <button
                 onClick={handleSendStatementSms}
                 disabled={sendingStatementSms || !tenant?.phone}
                 title={!tenant?.phone ? "No phone number on record" : "Send statement summary via SMS"}
-                className="h-8 shrink-0 flex items-center gap-1.5 rounded bg-emerald-600 px-3 text-xs font-black text-white shadow-sm hover:bg-emerald-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 transition-all"
+                className="h-6 shrink-0 flex items-center gap-1 rounded bg-emerald-600 px-2 text-[9px] font-black text-white shadow-sm hover:bg-emerald-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 transition-all"
               >
-                <FaSms size={11} /> {sendingStatementSms ? "Sending…" : "SMS"}
+                <FaSms size={9} /> {sendingStatementSms ? "Sending…" : "SMS"}
               </button>
               <button
                 onClick={handleSendStatementEmail}
                 disabled={sendingStatementEmail || !tenant?.email}
                 title={!tenant?.email ? "No email address on record" : "Email statement to tenant"}
-                className="h-8 shrink-0 flex items-center gap-1.5 rounded bg-blue-600 px-3 text-xs font-black text-white shadow-sm hover:bg-blue-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 transition-all"
+                className="h-6 shrink-0 flex items-center gap-1 rounded bg-blue-600 px-2 text-[9px] font-black text-white shadow-sm hover:bg-blue-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 transition-all"
               >
-                <FaEnvelope size={11} /> {sendingStatementEmail ? "Sending…" : "Email"}
+                <FaEnvelope size={9} /> {sendingStatementEmail ? "Sending…" : "Email"}
               </button>
             </div>
             {/* ── Tab bar ── */}
@@ -3858,10 +3366,10 @@ const TenantStatement = () => {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`inline-flex h-10 shrink-0 items-center justify-center gap-2 border-r border-slate-200 px-5 text-[11px] transition-colors ${
+                  className={`inline-flex h-8 shrink-0 items-center justify-center gap-1.5 border-r border-slate-200 px-3 text-[10px] transition-colors ${
                     activeTab === tab.id
-                      ? "border-b-[3px] border-b-[#0B3B2E] bg-white text-[#0B3B2E] font-black shadow-sm"
-                      : "border-b-[3px] border-b-transparent font-semibold text-slate-400 hover:bg-white hover:text-slate-700"
+                      ? "border-b-[2px] border-b-[#0B3B2E] bg-white text-[#0B3B2E] font-black shadow-sm"
+                      : "border-b-[2px] border-b-transparent font-semibold text-slate-400 hover:bg-white hover:text-slate-700"
                   }`}
                 >
                   <span className={activeTab === tab.id ? "text-[#0B3B2E]" : "text-slate-400"}>{tab.icon}</span>
@@ -4041,13 +3549,24 @@ const TenantStatement = () => {
         }
       `}</style>
 
-      <InvoiceCreationModal
+      <SingleBookingModal
         isOpen={showInvoiceModal}
-        periods={selectedSchedules.map((key) => billingScheduleByKey.get(key)).filter(Boolean)}
-        depositOption={depositBillingOption}
-        onConfirm={handleConfirmInvoiceCreation}
-        onCancel={() => setShowInvoiceModal(false)}
-        taxConfig={normalizedTaxConfig}
+        onClose={() => { setShowInvoiceModal(false); setSelectedSchedulePeriod(null); }}
+        onSuccess={() => {
+          setShowInvoiceModal(false);
+          setSelectedSchedulePeriod(null);
+          setSelectedSchedules([]);
+          setInvoiceRefresh((v) => v + 1);
+        }}
+        tenants={tenant ? [tenant] : []}
+        activeProperties={propertiesFromStore}
+        leases={leasesFromStore}
+        companyBillingPeriods={companyTaxConfig?.billingPeriods || []}
+        companyTaxConfig={normalizedTaxConfig}
+        existingInvoices={tenantInvoices}
+        lockedTenant={tenant}
+        lockedMonth={selectedSchedulePeriod?.month}
+        lockedYear={selectedSchedulePeriod?.year}
       />
     </DashboardLayout>
   );

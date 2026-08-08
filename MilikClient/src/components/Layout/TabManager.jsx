@@ -10,7 +10,7 @@ import {
   getWorkspaceFromRoute,
 } from '../../utils/workspaceRoutes';
 import { getPageTitle } from '../../utils/tabRouteNames';
-import { clearTabCache, clearAllTabCache } from '../../hooks/useTabState';
+import { clearTabCache } from '../../hooks/useTabState';
 
 let tabIdCounter = 0;
 const generateUniqueTabId = (prefix = 'tab') => {
@@ -99,7 +99,12 @@ const TabManager = ({ darkMode }) => {
     readActiveTabsByWorkspace(currentCompanyKey)
   );
 
+  // Ref so the route-sync effect can read current tabs without adding it as a dep
+  const tabsByWorkspaceRef = useRef(tabsByWorkspace);
+  useEffect(() => { tabsByWorkspaceRef.current = tabsByWorkspace; });
+
   const scrollRef  = useRef(null);
+  const tabRefs    = useRef({});
   const [scrollState, setScrollState] = useState({ left: false, right: false });
 
   const checkScroll = useCallback(() => {
@@ -136,8 +141,6 @@ const TabManager = ({ darkMode }) => {
     [location.pathname]
   );
 
-  // Keep locationPathRef current so the company-change effect can read the path
-  // without taking it as a dependency (avoids re-running on every route change).
   useEffect(() => { locationPathRef.current = location.pathname; }, [location.pathname]);
 
   // Reset tabs and navigate to module picker whenever the active company changes.
@@ -158,59 +161,58 @@ const TabManager = ({ darkMode }) => {
     }
   }, [currentCompanyKey, navigate]);
 
-  // Sync route navigation → tab state
+  // Sync route navigation → tab state.
+  // State updates are kept outside functional updaters so that side-effect-free
+  // updaters are never called with embedded setState (StrictMode double-invoke safe).
   useEffect(() => {
     const currentPath    = location.pathname;
     const requestedTitle = location.state?.tabTitle;
     const workspaceId    = getWorkspaceFromRoute(currentPath);
     const now            = Date.now();
+    const workspaceTabs  = tabsByWorkspaceRef.current[workspaceId] || [getWorkspaceDefaultTab(workspaceId)];
+    const existingTab    = workspaceTabs.find((tab) => tab.route === currentPath);
 
-    setTabsByWorkspace((prev) => {
-      const workspaceTabs = prev[workspaceId] || [getWorkspaceDefaultTab(workspaceId)];
-      const existingTab   = workspaceTabs.find((tab) => tab.route === currentPath);
+    if (existingTab) {
+      const updated = workspaceTabs.map((tab) =>
+        tab.id === existingTab.id
+          ? {
+              ...tab,
+              lastAccessed: now,
+              ...(requestedTitle && tab.title !== requestedTitle ? { title: requestedTitle } : {}),
+            }
+          : tab
+      );
+      setTabsByWorkspace((prev) => ({ ...prev, [workspaceId]: updated }));
+      setActiveTabsByWorkspace((a) => ({ ...a, [workspaceId]: existingTab.id }));
+      return;
+    }
 
-      if (existingTab) {
-        const updated = workspaceTabs.map((tab) =>
-          tab.id === existingTab.id
-            ? {
-                ...tab,
-                lastAccessed: now,
-                ...(requestedTitle && tab.title !== requestedTitle ? { title: requestedTitle } : {}),
-              }
-            : tab
-        );
-        setActiveTabsByWorkspace((a) => ({ ...a, [workspaceId]: existingTab.id }));
-        return { ...prev, [workspaceId]: updated };
-      }
+    const isDefault    = currentPath === getWorkspaceDefaultRoute(workspaceId);
+    const defaultTabId = getWorkspaceDefaultTab(workspaceId).id;
 
-      const isDefault    = currentPath === getWorkspaceDefaultRoute(workspaceId);
-      const defaultTabId = getWorkspaceDefaultTab(workspaceId).id;
+    if (isDefault && workspaceTabs.some((tab) => tab.id === defaultTabId)) {
+      setActiveTabsByWorkspace((a) => ({ ...a, [workspaceId]: defaultTabId }));
+      return;
+    }
 
-      if (isDefault && workspaceTabs.some((tab) => tab.id === defaultTabId)) {
-        setActiveTabsByWorkspace((a) => ({ ...a, [workspaceId]: defaultTabId }));
-        return prev;
-      }
+    const newTab = {
+      id:           generateUniqueTabId(workspaceId),
+      title:        requestedTitle || getPageTitle(currentPath),
+      route:        currentPath,
+      closable:     true,
+      timestamp:    now,
+      lastAccessed: now,
+    };
 
-      const newTab = {
-        id:           generateUniqueTabId(workspaceId),
-        title:        requestedTitle || getPageTitle(currentPath),
-        route:        currentPath,
-        closable:     true,
-        timestamp:    now,
-        lastAccessed: now,
-      };
+    const withNew     = [...workspaceTabs, newTab];
+    const nonClosable = withNew.filter((t) => !t.closable);
+    const closable    = withNew
+      .filter((t) => t.closable)
+      .sort((a, b) => (b.lastAccessed || b.timestamp || 0) - (a.lastAccessed || a.timestamp || 0));
+    const nextTabs = [...nonClosable, ...closable.slice(0, MAX_CLOSABLE_TABS)];
 
-      setActiveTabsByWorkspace((a) => ({ ...a, [workspaceId]: newTab.id }));
-
-      // Cap closable tabs: keep the MAX_CLOSABLE_TABS most-recently-accessed
-      const withNew     = [...workspaceTabs, newTab];
-      const nonClosable = withNew.filter((t) => !t.closable);
-      const closable    = withNew
-        .filter((t) => t.closable)
-        .sort((a, b) => (b.lastAccessed || b.timestamp || 0) - (a.lastAccessed || a.timestamp || 0));
-
-      return { ...prev, [workspaceId]: [...nonClosable, ...closable.slice(0, MAX_CLOSABLE_TABS)] };
-    });
+    setTabsByWorkspace((prev) => ({ ...prev, [workspaceId]: nextTabs }));
+    setActiveTabsByWorkspace((a) => ({ ...a, [workspaceId]: newTab.id }));
   }, [location.pathname, location.state]);
 
   const workspaceTabs = tabsByWorkspace[currentWorkspace] || [getWorkspaceDefaultTab(currentWorkspace)];
@@ -221,6 +223,23 @@ const TabManager = ({ darkMode }) => {
   );
 
   useEffect(() => { checkScroll(); }, [sortedTabs, checkScroll]);
+
+  // Auto-scroll the active tab chip into view whenever the active tab changes.
+  useEffect(() => {
+    const el        = tabRefs.current[activeTab];
+    const container = scrollRef.current;
+    if (!el || !container) return;
+    const tabLeft      = el.offsetLeft;
+    const tabRight     = el.offsetLeft + el.offsetWidth;
+    const containerLeft  = container.scrollLeft;
+    const containerRight = container.scrollLeft + container.clientWidth;
+    if (tabLeft < containerLeft) {
+      container.scrollLeft = tabLeft - 8;
+    } else if (tabRight > containerRight) {
+      container.scrollLeft = tabRight - container.clientWidth + 8;
+    }
+    checkScroll();
+  }, [activeTab, checkScroll]);
 
   const currentTabTitle = useMemo(() => {
     const direct = workspaceTabs.find((t) => t.route === location.pathname);
@@ -298,15 +317,20 @@ const TabManager = ({ darkMode }) => {
         className="flex-1 overflow-x-auto"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
-        <div className="flex min-h-[30px] items-center px-1.5 py-0.5 gap-1 min-w-max">
+        <div className="flex min-h-[26px] items-center px-1.5 py-0.5 gap-0.5 min-w-max">
           {sortedTabs.map((tab) => {
             const isActive = activeTab === tab.id;
             return (
               <div
                 key={tab.id}
+                ref={(el) => { if (el) tabRefs.current[tab.id] = el; else delete tabRefs.current[tab.id]; }}
                 onClick={() => switchTab(tab.id, tab.route)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); switchTab(tab.id, tab.route); } }}
+                tabIndex={0}
+                role="tab"
+                aria-selected={isActive}
                 title={tab.title}
-                className={`flex items-center px-2.5 py-1 rounded-t-md cursor-pointer transition-all duration-150 text-sm border-t border-l border-r select-none ${
+                className={`flex items-center px-2 py-0.5 rounded-t-md cursor-pointer transition-all duration-150 border-t border-l border-r select-none outline-none focus-visible:ring-1 focus-visible:ring-white/50 ${
                   isActive
                     ? darkMode
                       ? 'bg-gray-900 text-white border-gray-600 font-semibold shadow-md'
@@ -317,20 +341,21 @@ const TabManager = ({ darkMode }) => {
                 }`}
               >
                 {tab.route === '/dashboard' && (
-                  <FaHome className="mr-1.5 h-3.5 w-3.5 flex-shrink-0" />
+                  <FaHome className="mr-1 h-3 w-3 flex-shrink-0" />
                 )}
-                <span className="text-xs uppercase truncate max-w-[140px]">{tab.title}</span>
+                <span className="text-[11px] uppercase truncate max-w-[130px]">{tab.title}</span>
                 {tab.closable && sortedTabs.length > 1 && (
                   <button
                     onClick={(e) => closeTab(tab.id, e)}
-                    className={`ml-1.5 p-0.5 rounded-full flex-shrink-0 transition-colors duration-150 ${
+                    className={`ml-1 p-0.5 rounded-full flex-shrink-0 transition-colors duration-150 ${
                       isActive
                         ? 'text-white hover:bg-red-600'
                         : 'text-gray-300 hover:bg-red-500 hover:text-white'
                     }`}
                     title="Close tab"
+                    type="button"
                   >
-                    <FaTimes className="h-2.5 w-2.5" />
+                    <FaTimes className="h-2 w-2" />
                   </button>
                 )}
               </div>
@@ -350,6 +375,7 @@ const TabManager = ({ darkMode }) => {
           onClick={closeAllTabs}
           className={`${scrollBtnCls} hover:!bg-red-600 hover:!text-white`}
           title="Close all tabs"
+          type="button"
         >
           <FaWindowClose className="h-3.5 w-3.5" />
         </button>
