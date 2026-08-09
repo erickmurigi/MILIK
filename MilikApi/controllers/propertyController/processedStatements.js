@@ -826,16 +826,6 @@ export const closeStatement = async (req, res) => {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    // Block processed statement creation for pure Letting-mode properties only.
-    // Both mode still manages finances on behalf of the landlord so it remains allowed.
-    const propertyForModeCheck = await Property.findById(property).select("letManage propertyName").lean();
-    if (propertyForModeCheck && String(propertyForModeCheck.letManage || "").trim().toLowerCase() === "letting") {
-      return res.status(400).json({
-        success: false,
-        message: `Processed statements are not available for Letting-only properties (${propertyForModeCheck.propertyName || property}). Switch the property to Managing or Both mode to generate landlord disbursements.`,
-      });
-    }
-
     const start = startOfDay(periodStart);
     const end = endOfDay(periodEnd);
     if (!start || !end) {
@@ -846,17 +836,27 @@ export const closeStatement = async (req, res) => {
       return res.status(400).json({ message: "periodStart cannot be after periodEnd" });
     }
 
-    // Validate period start against the most recent processed statement for this property.
-    // periodStart must be the day after the last statement's cutoffAt — no gaps, no overlaps.
-    const lastProcessed = await ProcessedStatement.findOne({
-      business,
-      landlord,
-      property,
-      status: { $ne: "reversed" },
-    })
-      .sort({ cutoffAt: -1, closedAt: -1, periodEnd: -1 })
-      .select("cutoffAt closedAt periodEnd periodStart")
-      .lean();
+    // Fetch property mode check and last processed statement in parallel.
+    const [propertyForModeCheck, lastProcessed] = await Promise.all([
+      Property.findById(property).select("letManage propertyName").lean(),
+      ProcessedStatement.findOne({
+        business,
+        landlord,
+        property,
+        status: { $ne: "reversed" },
+      })
+        .sort({ cutoffAt: -1, closedAt: -1, periodEnd: -1 })
+        .select("cutoffAt closedAt periodEnd periodStart")
+        .lean(),
+    ]);
+
+    // Block processed statement creation for pure Letting-mode properties only.
+    if (propertyForModeCheck && String(propertyForModeCheck.letManage || "").trim().toLowerCase() === "letting") {
+      return res.status(400).json({
+        success: false,
+        message: `Processed statements are not available for Letting-only properties (${propertyForModeCheck.propertyName || property}). Switch the property to Managing or Both mode to generate landlord disbursements.`,
+      });
+    }
 
     if (lastProcessed) {
       const lastCutoff = lastProcessed.cutoffAt || lastProcessed.closedAt || lastProcessed.periodEnd;

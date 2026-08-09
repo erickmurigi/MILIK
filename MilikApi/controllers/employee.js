@@ -43,7 +43,7 @@ export const getEmployee = async(req, res, next) => {
 //get all business
 export const getAllEmployees = async(req, res, next) => {
     try {
-        const employees = await Employee.find()
+        const employees = await Employee.find().limit(500).lean()
         res.status(200).json(employees)
 
     } catch (err) {
@@ -60,7 +60,7 @@ export const getEmployees = async(req, res, next) => {
         }
 
         // Fetch all employees for the given business ID
-        const employees = await Employee.find({ business: businessId });
+        const employees = await Employee.find({ business: businessId }).limit(500).lean();
 
         // Filter out the support accounts
         const filteredEmployees = employees.filter(employee => !employee.isSupportUser);

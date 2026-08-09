@@ -622,6 +622,7 @@ export const getAccessibleCompanies = async (req, res, next) => {
       const companies = await Company.find(notArchivedFilter)
         .select(companyReferenceSelect)
         .sort({ companyName: 1 })
+        .limit(1000)
         .lean();
 
       return res.status(200).json({

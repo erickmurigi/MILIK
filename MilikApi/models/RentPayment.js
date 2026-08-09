@@ -284,7 +284,7 @@ RentPaymentSchema.index({ business: 1, ledgerType: 1, isCancelled: 1, isReversed
 RentPaymentSchema.index({ business: 1, postingStatus: 1, paymentDate: -1 });
 RentPaymentSchema.index({ business: 1, ledgerType: 1, isCancelled: 1, isReversed: 1, "allocationSummary.unapplied": 1, paymentDate: -1 });
 RentPaymentSchema.index({ business: 1, reversalOf: 1, isCancelled: 1, isReversed: 1, isConfirmed: 1, paymentDate: -1 });
-RentPaymentSchema.index({ year: -1, month: -1 });
+RentPaymentSchema.index({ business: 1, year: -1, month: -1 });
 RentPaymentSchema.index({ business: 1, tenant: 1, isConfirmed: 1, 'allocations.isPrepayment': 1, 'allocations.billItemKey': 1, paymentDate: 1 });
 
 RentPaymentSchema.index(

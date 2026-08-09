@@ -85,7 +85,8 @@ export const getMaintenances = async (req, res, next) => {
         .populate("tenant", "name phone")
         .sort({ priority: -1, createdAt: -1 })
         .skip((pageNum - 1) * limitNum)
-        .limit(limitNum),
+        .limit(limitNum)
+        .lean(),
       Maintenance.countDocuments(filter),
     ]);
 

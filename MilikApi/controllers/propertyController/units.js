@@ -1137,7 +1137,7 @@ export const bulkImportUnits = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "No units data provided" });
     }
 
-    const properties = await Property.find({ business: businessId }).select("_id propertyCode rentPerMeasure securityDeposits");
+    const properties = await Property.find({ business: businessId }).select("_id propertyCode rentPerMeasure securityDeposits").limit(500).lean();
     const propertyCodeMap = new Map(
       properties.map((p) => [String(p.propertyCode || "").toLowerCase(), p])
     );

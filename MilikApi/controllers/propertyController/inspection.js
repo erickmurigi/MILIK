@@ -97,7 +97,8 @@ export const getInspections = async (req, res, next) => {
         .populate("tenant", "name phone")
         .sort({ scheduledDate: -1, createdAt: -1 })
         .skip((pageNum - 1) * limitNum)
-        .limit(limitNum),
+        .limit(limitNum)
+        .lean(),
       Inspection.countDocuments(filter),
     ]);
 

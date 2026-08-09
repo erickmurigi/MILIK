@@ -1914,23 +1914,24 @@ export const getTrialBalanceExceptions = async (req, res, next) => {
     // would leave the correction debit without its original credit, triggering
     // false-positive abnormal-balance warnings on receipts/invoices that were
     // legitimately reversed and re-entered.
-    const accountBalances = await FinancialLedgerEntry.aggregate([
-      { $match: { business: bizId, status: { $in: REPORT_LEDGER_STATUSES } } },
-      {
-        $group: {
-          _id: "$accountId",
-          totalDebit: { $sum: "$debit" },
-          totalCredit: { $sum: "$credit" },
-          entryCount: { $sum: 1 },
-          lastEntry: { $max: "$transactionDate" },
+    const [accountBalances, accounts] = await Promise.all([
+      FinancialLedgerEntry.aggregate([
+        { $match: { business: bizId, status: { $in: REPORT_LEDGER_STATUSES } } },
+        {
+          $group: {
+            _id: "$accountId",
+            totalDebit: { $sum: "$debit" },
+            totalCredit: { $sum: "$credit" },
+            entryCount: { $sum: 1 },
+            lastEntry: { $max: "$transactionDate" },
+          },
         },
-      },
-      { $addFields: { netBalance: { $subtract: ["$totalDebit", "$totalCredit"] } } },
+        { $addFields: { netBalance: { $subtract: ["$totalDebit", "$totalCredit"] } } },
+      ]),
+      ChartOfAccount.find({ business: bizId }, {
+        _id: 1, code: 1, name: 1, type: 1, group: 1, isActive: 1,
+      }).lean(),
     ]);
-
-    const accounts = await ChartOfAccount.find({ business: bizId }, {
-      _id: 1, code: 1, name: 1, type: 1, group: 1, isActive: 1,
-    }).lean();
     const accountMap = new Map(accounts.map((a) => [String(a._id), a]));
 
     const exceptions = [];
@@ -2019,21 +2020,22 @@ export const getFinancialRatios = async (req, res, next) => {
 
     // Get per-account net balances — use REPORT_LEDGER_STATUSES so reversed
     // originals and their corrections net to zero before ratio calculation.
-    const rows = await FinancialLedgerEntry.aggregate([
-      { $match: { business: bizId, status: { $in: REPORT_LEDGER_STATUSES } } },
-      {
-        $group: {
-          _id: "$accountId",
-          totalDebit: { $sum: "$debit" },
-          totalCredit: { $sum: "$credit" },
+    const [rows, accounts] = await Promise.all([
+      FinancialLedgerEntry.aggregate([
+        { $match: { business: bizId, status: { $in: REPORT_LEDGER_STATUSES } } },
+        {
+          $group: {
+            _id: "$accountId",
+            totalDebit: { $sum: "$debit" },
+            totalCredit: { $sum: "$credit" },
+          },
         },
-      },
-      { $addFields: { netBalance: { $subtract: ["$totalDebit", "$totalCredit"] } } },
+        { $addFields: { netBalance: { $subtract: ["$totalDebit", "$totalCredit"] } } },
+      ]),
+      ChartOfAccount.find({ business: bizId }, {
+        _id: 1, type: 1, group: 1, subGroup: 1,
+      }).lean(),
     ]);
-
-    const accounts = await ChartOfAccount.find({ business: bizId }, {
-      _id: 1, type: 1, group: 1, subGroup: 1,
-    }).lean();
     const accMap = new Map(accounts.map((a) => [String(a._id), a]));
 
     let currentAssets = 0, nonCurrentAssets = 0;

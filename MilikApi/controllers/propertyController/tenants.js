@@ -2094,7 +2094,7 @@ export const bulkImportTenants = async (req, res, next) => {
       }
     });
 
-    const existingTenants = await Tenant.find({ business: businessId }).lean().select("_id idNumber tenantCode");
+    const existingTenants = await Tenant.find({ business: businessId }).select("_id idNumber tenantCode").limit(10000).lean();
     const existingIds = new Set(
       existingTenants.map((t) => String(t.idNumber || "").toLowerCase()).filter(Boolean)
     );
