@@ -10,9 +10,10 @@ const invSupplierSchema = new mongoose.Schema(
     kraPin:      { type: String, trim: true, uppercase: true, default: "" },
     address:     { type: String, trim: true, default: "" },
     notes:       { type: String, trim: true, default: "" },
-    active:      { type: Boolean, default: true },
-    createdBy:   { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
-    updatedBy:   { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    active:       { type: Boolean, default: true },
+    apAccountId:  { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
+    createdBy:    { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    updatedBy:    { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   },
   { timestamps: true }
 );

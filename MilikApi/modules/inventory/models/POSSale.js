@@ -21,7 +21,7 @@ const saleLineSchema = new mongoose.Schema(
 
 const paymentLineSchema = new mongoose.Schema(
   {
-    method: { type: String, enum: ["cash", "mpesa", "card", "credit"], required: true },
+    method: { type: String, required: true, trim: true, lowercase: true },
     amount: { type: Number, required: true, min: 0 },
     ref:    { type: String, trim: true, default: "" },  // M-Pesa ref, card auth
   },
@@ -45,7 +45,7 @@ const posSaleSchema = new mongoose.Schema(
     change:        { type: Number, default: 0 },
     customerName:  { type: String, trim: true, default: "" },
     customerPhone: { type: String, trim: true, default: "" },
-    cashier:       { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    cashier:       { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     voidedBy:      { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     voidedAt:      { type: Date, default: null },
     voidReason:    { type: String, trim: true, default: "" },

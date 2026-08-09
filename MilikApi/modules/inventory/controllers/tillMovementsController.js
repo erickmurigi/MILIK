@@ -100,6 +100,7 @@ export const getXRead = async (req, res, next) => {
           expectedCash,
           mpesaSales:    session.totalMpesa,
           cardSales:     session.totalCard,
+          creditSales:   session.totalCredit ?? 0,
           totalSales:    session.totalSales,
           salesCount:    session.salesCount,
           voidCount:     session.totalVoids,

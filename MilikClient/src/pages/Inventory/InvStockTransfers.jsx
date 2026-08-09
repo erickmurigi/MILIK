@@ -1,11 +1,13 @@
-﻿import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaCheck, FaExchangeAlt, FaPlus, FaRedoAlt, FaTimes, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
+import { useConfirm } from "../../context/ConfirmContext";
 import InventoryShell from "./InventoryShell";
 import { inventoryApi } from "../../services/inventoryApi";
 import AppSelect from "../../components/common/AppSelect";
+import PaginationBar from "../../components/PaginationBar";
 
 const STATUSES = ["draft", "in_transit", "partially_received", "received", "cancelled"];
 
@@ -43,19 +45,20 @@ const Modal = ({ title, onClose, children, footer, wide }) => (
 
 const InvStockTransfers = () => {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const [statusFilter, setStatusFilter] = useTabState("/inventory/transfers:statusFilter", "");
   const [page, setPage] = useTabState("/inventory/transfers:page", 1);
+  const [pageSize, setPageSize] = useTabState("/inventory/transfers:pageSize", 30);
 
-  // Create modal
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({ fromLocation: "", toLocation: "", notes: "", lines: [emptyLine()] });
   const [creating, setCreating] = useState(false);
 
-  // Receive modal
   const [showReceive, setShowReceive] = useState(false);
   const [selected, setSelected] = useState(null);
   const [receiveLines, setReceiveLines] = useState([]);
   const [receiving, setReceiving] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
 
   const { data: locations = [] } = useQuery({
     queryKey: ['inv-locations-ref'],
@@ -68,9 +71,9 @@ const InvStockTransfers = () => {
     staleTime: 5 * 60_000,
   });
   const { data: transData, isLoading: loading, error, refetch } = useQuery({
-    queryKey: ['inv-transfers', statusFilter, page],
+    queryKey: ['inv-transfers', statusFilter, page, pageSize],
     queryFn: async () => {
-      const res = await inventoryApi.listTransfers({ status: statusFilter || undefined, page, limit: 30 });
+      const res = await inventoryApi.listTransfers({ status: statusFilter || undefined, page, limit: pageSize });
       const list = Array.isArray(res) ? res : (res?.data ?? []);
       return { transfers: list, total: res?.total ?? list.length };
     },
@@ -81,14 +84,13 @@ const InvStockTransfers = () => {
 
   const transfers = transData?.transfers ?? [];
   const total = transData?.total ?? 0;
+  const pages = Math.ceil(total / pageSize) || 1;
 
-  // ── Line helpers ──────────────────────────────────────────────────────────
   const addLine = () => setCreateForm((f) => ({ ...f, lines: [...f.lines, emptyLine()] }));
   const removeLine = (idx) => setCreateForm((f) => ({ ...f, lines: f.lines.filter((_, i) => i !== idx) }));
   const setLineField = (idx, field, value) =>
     setCreateForm((f) => ({ ...f, lines: f.lines.map((l, i) => i === idx ? { ...l, [field]: value } : l) }));
 
-  // ── Create ────────────────────────────────────────────────────────────────
   const openCreate = () => {
     setCreateForm({ fromLocation: "", toLocation: "", notes: "", lines: [emptyLine()] });
     setShowCreate(true);
@@ -126,9 +128,9 @@ const InvStockTransfers = () => {
     }
   };
 
-  // ── Dispatch ──────────────────────────────────────────────────────────────
   const handleDispatch = async (t) => {
-    if (!window.confirm(`Dispatch transfer ${t.transferNumber}?\nThis will deduct stock from "${t.fromLocation?.name}".`)) return;
+    const ok = await confirm({ title: "Dispatch Transfer", message: `Dispatch ${t.transferNumber}? This will deduct stock from "${t.fromLocation?.name}".`, confirmText: "Dispatch", isDangerous: false });
+    if (!ok) return;
     try {
       await inventoryApi.dispatchTransfer(t._id);
       queryClient.invalidateQueries({ queryKey: ['inv-transfers'] });
@@ -138,7 +140,6 @@ const InvStockTransfers = () => {
     }
   };
 
-  // ── Receive ───────────────────────────────────────────────────────────────
   const openReceive = async (t) => {
     try {
       const detail = await inventoryApi.getTransfer(t._id);
@@ -174,9 +175,9 @@ const InvStockTransfers = () => {
     }
   };
 
-  // ── Cancel ────────────────────────────────────────────────────────────────
   const handleCancel = async (t) => {
-    if (!window.confirm(`Cancel transfer ${t.transferNumber}?`)) return;
+    const ok = await confirm({ title: "Cancel Transfer", message: `Cancel transfer ${t.transferNumber}?`, confirmText: "Cancel Transfer", isDangerous: true });
+    if (!ok) return;
     try {
       await inventoryApi.cancelTransfer(t._id);
       queryClient.invalidateQueries({ queryKey: ['inv-transfers'] });
@@ -188,109 +189,176 @@ const InvStockTransfers = () => {
 
   const inTransitCount = transfers.filter((t) => t.status === "in_transit").length;
 
+  // Selection
+  const allPageIds     = useMemo(() => transfers.map((t) => t._id), [transfers]);
+  const cancellableIds = useMemo(() => transfers.filter((t) => ["draft", "in_transit"].includes(t.status)).map((t) => t._id), [transfers]);
+  const allSelected    = allPageIds.length > 0 && allPageIds.every((id) => selectedIds.has(id));
+  const someSelected   = allPageIds.some((id) => selectedIds.has(id));
+  const selCount       = selectedIds.size;
+  const selCancellable = useMemo(() => [...selectedIds].filter((id) => cancellableIds.includes(id)).length, [selectedIds, cancellableIds]);
+
+  const toggleAll = useCallback(() => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) allPageIds.forEach((id) => next.delete(id));
+      else allPageIds.forEach((id) => next.add(id));
+      return next;
+    });
+  }, [allSelected, allPageIds]);
+
+  const toggleOne = useCallback((id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const clearSelection = () => setSelectedIds(new Set());
+  const [bulkWorking, setBulkWorking] = useState(false);
+
+  const handleBulkCancel = async () => {
+    const ids = [...selectedIds].filter((id) => cancellableIds.includes(id));
+    if (!ids.length) { toast.warn("No cancellable transfers selected"); return; }
+    const ok = await confirm({ title: "Cancel Transfers", message: `Cancel ${ids.length} transfer(s)?`, confirmText: "Cancel All", isDangerous: true });
+    if (!ok) return;
+    setBulkWorking(true);
+    let failed = 0;
+    await Promise.all(ids.map((id) => inventoryApi.cancelTransfer(id).catch(() => { failed++; })));
+    if (failed) toast.error(`${failed} transfer(s) could not be cancelled`);
+    else toast.success(`${ids.length} transfer(s) cancelled`);
+    clearSelection();
+    queryClient.invalidateQueries({ queryKey: ['inv-transfers'] });
+    setBulkWorking(false);
+  };
+
   return (
-    <InventoryShell
-      title="Stock Transfers"
-      action={
-        <>
-          <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-            <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
-          </button>
-          <button type="button" onClick={openCreate} className="inline-flex h-8 items-center gap-1.5 bg-[#FF8C00] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#E67E00]">
-            <FaPlus /> New Transfer
-          </button>
-        </>
-      }
-    >
-      <div className="min-h-[calc(100vh-14rem)] overflow-x-auto border border-slate-200 bg-white shadow-sm">
-        {/* Summary + filter strip */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-slate-200 bg-[#EDF5F1] px-3 py-2">
-          <span className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
-            Total: <strong className="text-[#0B3B2E]">{total}</strong>
-          </span>
-          {inTransitCount > 0 && (
-            <span className="text-[11px] font-bold uppercase tracking-wide text-blue-600">
-              In Transit: <strong>{inTransitCount}</strong>
-            </span>
-          )}
-          <div className="ml-auto">
-            <AppSelect value={statusFilter} onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }} options={STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }))} placeholder="All Statuses" clearable size="sm" />
+    <InventoryShell lockScroll>
+      <div className="flex h-full flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">
+        {/* Toolbar */}
+        {selCount > 0 ? (
+          <div className="flex shrink-0 items-center gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5">
+            <span className="text-[11px] font-extrabold text-amber-700">{selCount} selected</span>
+            {selCancellable > 0 && (
+              <>
+                <span className="h-3.5 w-px bg-amber-300" />
+                <button type="button" disabled={bulkWorking} onClick={handleBulkCancel}
+                  className="inline-flex items-center gap-1 border border-red-300 bg-white px-2.5 py-1 text-[10px] font-bold text-red-700 hover:bg-red-50 disabled:opacity-50">
+                  <FaTrash className="text-[9px]" /> Cancel {selCancellable}
+                </button>
+              </>
+            )}
+            <button type="button" onClick={clearSelection}
+              className="ml-auto inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 hover:text-slate-800">
+              <FaTimes className="text-[9px]" /> Clear selection
+            </button>
           </div>
-        </div>
-
-        <table className="w-full min-w-[700px] text-xs">
-          <thead className="bg-[#0B3B2E] text-white">
-            <tr>
-              <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">TRF #</th>
-              <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">From</th>
-              <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">To</th>
-              <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Status</th>
-              <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Dispatched</th>
-              <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Received By</th>
-              <th className="px-3 py-2 text-right font-bold uppercase tracking-wide">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={7} className="px-3 py-12 text-center text-slate-400">Loading…</td></tr>
-            ) : !transfers.length ? (
-              <tr>
-                <td colSpan={7} className="px-3 py-14 text-center">
-                  <FaExchangeAlt className="mx-auto mb-2 text-3xl text-slate-300" />
-                  <p className="text-sm font-semibold text-slate-500">
-                    {statusFilter ? "No transfers match this status" : "No stock transfers yet"}
-                  </p>
-                  {!statusFilter && (
-                    <p className="mt-0.5 text-xs text-slate-400">Create a transfer to move stock between locations.</p>
-                  )}
-                </td>
-              </tr>
-            ) : transfers.map((t) => (
-              <tr key={t._id} className="border-b border-slate-100 hover:bg-slate-50">
-                <td className="px-3 py-2">
-                  <span className="flex items-center gap-1.5 font-mono font-bold text-[#0B3B2E]">
-                    <FaExchangeAlt className="shrink-0 text-[10px]" /> {t.transferNumber}
-                  </span>
-                </td>
-                <td className="px-3 py-2 text-slate-700">{t.fromLocation?.name || "—"}</td>
-                <td className="px-3 py-2 text-slate-700">{t.toLocation?.name || "—"}</td>
-                <td className="px-3 py-2"><StatusPill status={t.status} /></td>
-                <td className="px-3 py-2 text-slate-400">{t.dispatchedAt ? new Date(t.dispatchedAt).toLocaleDateString("en-KE") : "—"}</td>
-                <td className="px-3 py-2 text-slate-400">{t.receivedBy?.name || "—"}</td>
-                <td className="px-3 py-2 text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    {t.status === "draft" && (
-                      <button type="button" onClick={() => handleDispatch(t)} className="inline-flex items-center gap-1 border border-blue-200 bg-white px-2 py-0.5 text-[11px] font-bold text-blue-600 hover:bg-blue-50">
-                        Dispatch
-                      </button>
-                    )}
-                    {["in_transit", "partially_received"].includes(t.status) && (
-                      <button type="button" onClick={() => openReceive(t)} className="inline-flex items-center gap-1 border border-emerald-200 bg-white px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-50">
-                        <FaCheck className="text-[9px]" /> Receive
-                      </button>
-                    )}
-                    {["draft", "in_transit"].includes(t.status) && (
-                      <button type="button" onClick={() => handleCancel(t)} className="inline-flex items-center gap-1 border border-red-200 bg-white px-2 py-0.5 text-[11px] font-bold text-red-600 hover:bg-red-50">
-                        Cancel
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {total > 30 && (
-          <div className="flex items-center justify-between border-t border-slate-100 px-3 py-2">
-            <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#0B3B2E]">← Previous</button>
-            <span className="text-xs text-slate-500">Page {page} of {Math.ceil(total / 30)}</span>
-            <button type="button" onClick={() => setPage((p) => p + 1)} disabled={transfers.length < 30} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#0B3B2E]">Next →</button>
+        ) : (
+          <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5">
+            <AppSelect value={statusFilter} onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }} options={STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }))} placeholder="All Statuses" clearable size="sm" />
+            {inTransitCount > 0 && (
+              <span className="text-[11px] font-bold uppercase tracking-wide text-blue-600">
+                In Transit: <strong>{inTransitCount}</strong>
+              </span>
+            )}
+            <div className="ml-auto flex items-center gap-1.5">
+              <button type="button" onClick={refetch} className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                <FaRedoAlt className={loading ? "animate-spin" : ""} />
+              </button>
+              <button type="button" onClick={openCreate} className="inline-flex h-7 items-center gap-1 bg-[#FF8C00] px-2.5 text-[10px] font-bold text-white hover:bg-[#E67E00]">
+                <FaPlus /> New Transfer
+              </button>
+            </div>
           </div>
         )}
+
+        <div className="min-h-0 flex-1 overflow-auto">
+          <table className="w-full min-w-[740px] text-xs">
+            <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+              <tr>
+                <th className="w-8 px-2 py-2">
+                  <input type="checkbox" checked={allSelected}
+                    ref={(el) => { if (el) el.indeterminate = someSelected && !allSelected; }}
+                    onChange={toggleAll} className="h-3.5 w-3.5 cursor-pointer accent-emerald-400" />
+                </th>
+                <th className="px-3 py-2 text-left text-[10px] font-extrabold uppercase tracking-widest">TRF #</th>
+                <th className="px-3 py-2 text-left text-[10px] font-extrabold uppercase tracking-widest">From</th>
+                <th className="px-3 py-2 text-left text-[10px] font-extrabold uppercase tracking-widest">To</th>
+                <th className="px-3 py-2 text-left text-[10px] font-extrabold uppercase tracking-widest">Status</th>
+                <th className="px-3 py-2 text-left text-[10px] font-extrabold uppercase tracking-widest">Dispatched</th>
+                <th className="px-3 py-2 text-left text-[10px] font-extrabold uppercase tracking-widest">Received By</th>
+                <th className="px-3 py-2 text-right text-[10px] font-extrabold uppercase tracking-widest">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={8} className="px-3 py-12 text-center text-slate-400">Loading…</td></tr>
+              ) : !transfers.length ? (
+                <tr>
+                  <td colSpan={8} className="px-3 py-14 text-center">
+                    <FaExchangeAlt className="mx-auto mb-2 text-3xl text-slate-300" />
+                    <p className="text-sm font-semibold text-slate-500">
+                      {statusFilter ? "No transfers match this status" : "No stock transfers yet"}
+                    </p>
+                    {!statusFilter && (
+                      <p className="mt-0.5 text-xs text-slate-400">Create a transfer to move stock between locations.</p>
+                    )}
+                  </td>
+                </tr>
+              ) : transfers.map((t) => {
+                const isSelected = selectedIds.has(t._id);
+                return (
+                  <tr key={t._id}
+                    onClick={() => toggleOne(t._id)}
+                    className={`cursor-pointer border-b border-slate-100 transition-colors ${isSelected ? "bg-emerald-50/70" : "hover:bg-slate-50"}`}>
+                    <td className="w-8 px-2 py-2" onClick={(e) => e.stopPropagation()}>
+                      <input type="checkbox" checked={isSelected} onChange={() => toggleOne(t._id)}
+                        className="h-3.5 w-3.5 cursor-pointer accent-[#0B3B2E]" />
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className="flex items-center gap-1.5 font-mono font-bold text-[#0B3B2E]">
+                        <FaExchangeAlt className="shrink-0 text-[10px]" /> {t.transferNumber}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-slate-700">{t.fromLocation?.name || "—"}</td>
+                    <td className="px-3 py-2 text-slate-700">{t.toLocation?.name || "—"}</td>
+                    <td className="px-3 py-2"><StatusPill status={t.status} /></td>
+                    <td className="px-3 py-2 text-slate-400">{t.dispatchedAt ? new Date(t.dispatchedAt).toLocaleDateString("en-KE") : "—"}</td>
+                    <td className="px-3 py-2 text-slate-400">{t.receivedBy?.name || "—"}</td>
+                    <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1">
+                        {t.status === "draft" && (
+                          <button type="button" onClick={() => handleDispatch(t)} className="inline-flex items-center gap-1 border border-blue-200 bg-white px-2 py-0.5 text-[11px] font-bold text-blue-600 hover:bg-blue-50">
+                            Dispatch
+                          </button>
+                        )}
+                        {["in_transit", "partially_received"].includes(t.status) && (
+                          <button type="button" onClick={() => openReceive(t)} className="inline-flex items-center gap-1 border border-emerald-200 bg-white px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-50">
+                            <FaCheck className="text-[9px]" /> Receive
+                          </button>
+                        )}
+                        {["draft", "in_transit"].includes(t.status) && (
+                          <button type="button" onClick={() => handleCancel(t)} className="inline-flex items-center gap-1 border border-red-200 bg-white px-2 py-0.5 text-[11px] font-bold text-red-600 hover:bg-red-50">
+                            Cancel
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <PaginationBar
+          page={page} pages={pages} total={total} pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(s) => { setPageSize(s); setPage(1); }}
+          loading={loading}
+        />
       </div>
 
-      {/* ── Create Transfer Modal ─────────────────────────────────────────── */}
       {showCreate && (
         <Modal title="New Stock Transfer" onClose={() => setShowCreate(false)} wide footer={
           <>
@@ -314,7 +382,6 @@ const InvStockTransfers = () => {
               </div>
             </div>
 
-            {/* Line items */}
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-[11px] font-extrabold uppercase tracking-widest text-[#0B3B2E]">Items to Transfer</span>
@@ -365,7 +432,6 @@ const InvStockTransfers = () => {
         </Modal>
       )}
 
-      {/* ── Receive Transfer Modal ────────────────────────────────────────── */}
       {showReceive && selected && (
         <Modal title={`Receive Transfer — ${selected.transferNumber}`} onClose={() => setShowReceive(false)} wide footer={
           <>

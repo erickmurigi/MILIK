@@ -136,8 +136,11 @@ const sanitizeBillingScheduleAdjustments = (rows = []) => {
 const populateLeaseQuery = (query) =>
   query
     .populate("tenant", "name tenantCode email phone idNumber leaseType moveInDate moveOutDate status")
-    .populate("unit", "unitNumber unitName property rent status")
-    .populate("unit.property", "propertyName propertyCode name address landlords")
+    .populate({
+      path: "unit",
+      select: "unitNumber unitName property rent status",
+      populate: { path: "property", select: "propertyName propertyCode name address landlords" },
+    })
     .populate("landlord", "landlordName landlordCode phoneNumber email");
 
 const buildAgreementNumber = async (businessId) => {

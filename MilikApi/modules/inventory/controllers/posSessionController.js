@@ -184,9 +184,10 @@ export const closeSession = async (req, res, next) => {
     const salesAgg   = facet.sales?.[0];
     const voidAgg    = facet.voids?.[0];
 
-    const totalCash  = paymentMap["cash"]  ?? 0;
-    const totalMpesa = paymentMap["mpesa"] ?? 0;
-    const totalCard  = paymentMap["card"]  ?? 0;
+    const totalCash   = paymentMap["cash"]   ?? 0;
+    const totalMpesa  = paymentMap["mpesa"]  ?? 0;
+    const totalCard   = paymentMap["card"]   ?? 0;
+    const totalCredit = paymentMap["credit"] ?? 0;
 
     const totalCashIn  = movements.filter((m) => m.type === "cash_in").reduce((s, m) => s + m.amount, 0);
     const totalCashOut = movements.filter((m) => m.type === "cash_out").reduce((s, m) => s + m.amount, 0);
@@ -201,6 +202,7 @@ export const closeSession = async (req, res, next) => {
     session.totalCash   = totalCash;
     session.totalMpesa  = totalMpesa;
     session.totalCard   = totalCard;
+    session.totalCredit = totalCredit;
     session.totalCashIn = totalCashIn;
     session.totalCashOut= totalCashOut;
     session.closingFloat= closingFloat;

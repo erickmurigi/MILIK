@@ -1457,7 +1457,6 @@ const confirmNonCashDirectToLandlordReceipt = async (payment, actorId) => {
   const journalGroupId = new mongoose.Types.ObjectId();
   const allocationRows = getReceiptAllocationRows(payment);
   const includeInStatement = shouldIncludeInLandlordStatement(payment);
-  const creditLegEntries = [];
 
   const postingGroups = [];
   const grouped = new Map();
@@ -1497,13 +1496,13 @@ const confirmNonCashDirectToLandlordReceipt = async (payment, actorId) => {
     )
   );
 
-  for (const group of postingGroups) {
+  const creditLegEntries = await Promise.all(
+    postingGroups.map(async (group) => {
     const category = getReceiptStatementCategoryForGroup(group.key, true);
     const postingRole = getPostingRoleForAllocationGroup(group.key);
     const creditAccount = _directGroupAccountMap.get(group.key);
     const includeGroupInStatement = ["rent", "utility"].includes(String(group.key || "").toLowerCase());
-
-    const leg = await postEntry({
+    return postEntry({
       business: payment.business,
       property: propertyId,
       landlord: landlordId,
@@ -1550,9 +1549,8 @@ const confirmNonCashDirectToLandlordReceipt = async (payment, actorId) => {
       approvedAt: new Date(),
       status: "approved",
     });
-
-    creditLegEntries.push(leg);
-  }
+    })
+  );
 
   let balancingLeg;
   try {
@@ -1704,7 +1702,6 @@ const postReceiptJournal = async (payment, actorId) => {
   const journalGroupId = new mongoose.Types.ObjectId();
   const includeInStatement = shouldIncludeInLandlordStatement(payment);
   const allocationRows = getReceiptAllocationRows(payment);
-  const creditLegEntries = [];
 
   const postingGroups = [];
   const grouped = new Map();
@@ -1745,13 +1742,13 @@ const postReceiptJournal = async (payment, actorId) => {
     )
   );
 
-  for (const group of postingGroups) {
+  const creditLegEntries = await Promise.all(
+    postingGroups.map(async (group) => {
     const category = getReceiptStatementCategoryForGroup(group.key, !!payment?.paidDirectToLandlord);
     const postingRole = getPostingRoleForAllocationGroup(group.key);
     const creditAccount = _normalGroupAccountMap.get(group.key);
     const includeGroupInStatement = ["rent", "utility"].includes(String(group.key || "").toLowerCase());
-
-    const leg = await postEntry({
+    return postEntry({
       business: payment.business,
       property: propertyId,
       landlord: landlordId,
@@ -1800,9 +1797,8 @@ const postReceiptJournal = async (payment, actorId) => {
       approvedAt: new Date(),
       status: "approved",
     });
-
-    creditLegEntries.push(leg);
-  }
+    })
+  );
 
   let balancingLeg;
   try {
@@ -1962,7 +1958,8 @@ const rollbackFailedReceiptPosting = async ({ payment, actorId, reason = "" }) =
           status: "approved",
           category: { $ne: "REVERSAL" },
         },
-        { $set: { status: "void" } }
+        { $set: { status: "void" } },
+        { _bypassImmutability: true }
       );
     } catch (voidError) {
       console.error("Failed to void orphan ledger entries after rollback failure:", voidError);
@@ -3972,7 +3969,8 @@ export const deletePayment = async (req, res, next) => {
             category: "REVERSAL",
             status: "approved",
           },
-          { $set: { status: "void" } }
+          { $set: { status: "void" } },
+          { _bypassImmutability: true }
         );
         // Void the original GL entries
         await FinancialLedgerEntry.updateMany(
@@ -3983,7 +3981,8 @@ export const deletePayment = async (req, res, next) => {
             status: "reversed",
             category: { $ne: "REVERSAL" },
           },
-          { $set: { status: "void", reversedByEntry: null } }
+          { $set: { status: "void", reversedByEntry: null } },
+          { _bypassImmutability: true }
         );
         // Void manual_adjustment entries (original corrections + their reversals)
         // in the same journal groups — these are not covered by the queries above.
@@ -3994,7 +3993,8 @@ export const deletePayment = async (req, res, next) => {
               journalGroupId: { $in: chainGroupIds },
               sourceTransactionType: "manual_adjustment",
             },
-            { $set: { status: "void" } }
+            { $set: { status: "void" } },
+            { _bypassImmutability: true }
           );
         }
         // Cancel the reversal RentPayment doc (keep for audit trail)
@@ -4353,7 +4353,7 @@ export const cancelReversal = async (req, res, next) => {
 
     const touchedAccountIds = [...new Set(reversalGLEntries.map((e) => String(e.accountId || "")).filter(Boolean))];
 
-    // Void the REVERSAL GL entries (updateMany is not blocked by the immutability hook)
+    // Void the REVERSAL GL entries
     await FinancialLedgerEntry.updateMany(
       {
         business: payment.business,
@@ -4362,7 +4362,8 @@ export const cancelReversal = async (req, res, next) => {
         category: "REVERSAL",
         status: "approved",
       },
-      { $set: { status: "void" } }
+      { $set: { status: "void" } },
+      { _bypassImmutability: true }
     );
 
     // Restore the original GL entries back to approved and clear the reversal pointer
@@ -4374,7 +4375,8 @@ export const cancelReversal = async (req, res, next) => {
         status: "reversed",
         category: { $ne: "REVERSAL" },
       },
-      { $set: { status: "approved", reversedByEntry: null } }
+      { $set: { status: "approved", reversedByEntry: null } },
+      { _bypassImmutability: true }
     );
 
     // Cancel the reversal RentPayment document

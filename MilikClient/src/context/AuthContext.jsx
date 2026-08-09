@@ -76,15 +76,13 @@ export const AuthContextProvider = ({ children }) => {
             }
         };
 
-        // Listen for storage changes (from other tabs/contexts)
+        // Cross-tab sync: native 'storage' event fires whenever another tab
+        // writes to localStorage. Within the same tab, login/logout actions
+        // update Redux state directly, so no polling is needed.
         window.addEventListener('storage', handleStorageChange);
-        
-        // Also check localStorage changes periodically (within same tab)
-        const interval = setInterval(handleStorageChange, 500);
 
         return () => {
             window.removeEventListener('storage', handleStorageChange);
-            clearInterval(interval);
         };
     }, []);
 

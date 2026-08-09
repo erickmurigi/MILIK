@@ -75,8 +75,13 @@ import invStockTransferRoutes from "./modules/inventory/routes/stockTransfers.js
 import invPurchaseOrderRoutes from "./modules/inventory/routes/purchaseOrders.js";
 import posSessionRoutes       from "./modules/inventory/routes/posSessions.js";
 import posSaleRoutes          from "./modules/inventory/routes/posSales.js";
-import invTillRoutes         from "./modules/inventory/routes/tills.js";
-import posTillMovementRoutes from "./modules/inventory/routes/tillMovements.js";
+import invTillRoutes          from "./modules/inventory/routes/tills.js";
+import posTillMovementRoutes  from "./modules/inventory/routes/tillMovements.js";
+import invTaxGroupRoutes      from "./modules/inventory/routes/taxGroups.js";
+import invUnitRoutes          from "./modules/inventory/routes/units.js";
+import invPaymentMethodRoutes from "./modules/inventory/routes/paymentMethods.js";
+import invPOSSettingsRoutes      from "./modules/inventory/routes/posSettings.js";
+import invSupplierPaymentRoutes  from "./modules/inventory/routes/supplierPayments.js";
 import carWashServiceRoutes from "./modules/carwash/routes/services.js";
 import carWashJobRoutes from "./modules/carwash/routes/jobs.js";
 import carWashPaymentRoutes from "./modules/carwash/routes/payments.js";
@@ -673,6 +678,11 @@ app.use("/api/pos/sessions",              posSessionRoutes);
 app.use("/api/pos/sales",                 posSaleRoutes);
 app.use("/api/inventory/tills",           invTillRoutes);
 app.use("/api/pos/till-movements",        posTillMovementRoutes);
+app.use("/api/inventory/tax-groups",      invTaxGroupRoutes);
+app.use("/api/inventory/units",           invUnitRoutes);
+app.use("/api/inventory/payment-methods", invPaymentMethodRoutes);
+app.use("/api/inventory/pos-settings",     invPOSSettingsRoutes);
+app.use("/api/inventory/supplier-payments", invSupplierPaymentRoutes);
 // Client Management — sub-resource routes must be registered BEFORE the parent
 // so that /api/clients/contracts is not caught by the /:id handler in clientRoutes
 app.use("/api/clients/contracts",         clientContractRoutes);
@@ -717,10 +727,6 @@ async function connect() {
 
       console.log(`Connected to MongoDB using ${candidate.label}`);
       warmBlacklistCache().catch(() => {});
-      // Run auto-billing check for monthly car wash accounts on startup (fire-and-forget)
-      processDueBilling(null).then((r) => { if (r.length) console.log(`[CW Billing] Auto-generated ${r.length} statement(s)`); }).catch(() => {});
-      // Run auto rent invoicing check on startup (fire-and-forget)
-      processAutoRentInvoices().then((r) => { if (r.length) console.log(`[AutoInvoicing] Startup run: ${r.length} company(s) processed`); }).catch(() => {});
       return;
     } catch (error) {
       lastError = error;
@@ -922,3 +928,24 @@ process.on("uncaughtException", (err) => {
   console.error("Uncaught Exception:", err);
   process.exit(1);
 });
+
+// Graceful shutdown — allows in-flight requests to complete before process exits.
+// Required for zero-downtime restarts under PM2, Docker, and Kubernetes (SIGTERM).
+const gracefulShutdown = (signal) => {
+  console.log(`[Shutdown] ${signal} received — closing server gracefully…`);
+  server.close(() => {
+    console.log("[Shutdown] HTTP server closed. Closing MongoDB connection…");
+    mongoose.connection.close(false, () => {
+      console.log("[Shutdown] MongoDB connection closed. Exiting.");
+      process.exit(0);
+    });
+  });
+  // Force exit after 15 s if draining takes too long
+  setTimeout(() => {
+    console.error("[Shutdown] Drain timeout — forcing exit.");
+    process.exit(1);
+  }, 15_000).unref();
+};
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT",  () => gracefulShutdown("SIGINT"));

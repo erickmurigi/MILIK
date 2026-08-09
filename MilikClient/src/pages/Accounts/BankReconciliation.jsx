@@ -53,6 +53,18 @@ const BankReconciliation = () => {
   const [creating,      setCreating]      = useState(false);
   const [showNewForm,   setShowNewForm]   = useState(false);
 
+  // ── Fetch all paginated entry pages and accumulate ────────────────────────
+  const fetchAllEntries = useCallback(async ({ business, account, from, to }, initial = [], initialCursor = null) => {
+    let all = [...initial];
+    let cursor = initialCursor;
+    while (cursor) {
+      const page = await getReconciliationEntries({ business, account, from, to, after: cursor });
+      all = [...all, ...(page.entries || [])];
+      cursor = page.nextCursor || null;
+    }
+    return all;
+  }, []);
+
   // ── Load accounts + history ───────────────────────────────────────────────
   const loadInitial = useCallback(async () => {
     if (!businessId) return;
@@ -78,9 +90,17 @@ const BankReconciliation = () => {
     setLoadingEntries(true);
     try {
       const full = await getReconciliations({ id: recon._id });
-      // getReconciliation returns single doc with entries
+      const accountId = full.account?._id || full.account;
+      let allEntries = full.entries || [];
+      if (full.hasMore) {
+        allEntries = await fetchAllEntries(
+          { business: businessId, account: accountId, from: localDate(full.periodStart), to: localDate(full.periodEnd) },
+          allEntries,
+          full.nextCursor
+        );
+      }
       setActiveRecon(full);
-      setEntries(full.entries || []);
+      setEntries(allEntries);
       setCleared(new Set((full.clearedEntries || []).map(String)));
       setSearch("");
       setView(VIEW.RECONCILE);
@@ -89,7 +109,7 @@ const BankReconciliation = () => {
     } finally {
       setLoadingEntries(false);
     }
-  }, []);
+  }, [businessId, fetchAllEntries]);
 
   // ── Create new reconciliation ──────────────────────────────────────────────
   const handleCreate = useCallback(async () => {
@@ -108,15 +128,23 @@ const BankReconciliation = () => {
         statementClosingBalance: Number(formCloseBal) || 0,
         notes:                  formNotes,
       });
-      // Load entries for this period
-      const ents = await getReconciliationEntries({
+      // Load entries for this period (cursor-paginated, accumulate all pages)
+      const firstPage = await getReconciliationEntries({
         business: businessId,
         account:  formAccount,
         from:     formFrom,
         to:       formTo,
       });
-      setActiveRecon({ ...recon, entries: ents });
-      setEntries(Array.isArray(ents) ? ents : []);
+      let allEnts = firstPage.entries || [];
+      if (firstPage.hasMore) {
+        allEnts = await fetchAllEntries(
+          { business: businessId, account: formAccount, from: formFrom, to: formTo },
+          allEnts,
+          firstPage.nextCursor
+        );
+      }
+      setActiveRecon({ ...recon, entries: allEnts });
+      setEntries(allEnts);
       setCleared(new Set());
       setSearch("");
       setShowNewForm(false);
@@ -129,7 +157,7 @@ const BankReconciliation = () => {
     } finally {
       setCreating(false);
     }
-  }, [businessId, formAccount, formFrom, formTo, formOpenBal, formCloseBal, formNotes]);
+  }, [businessId, formAccount, formFrom, formTo, formOpenBal, formCloseBal, formNotes, fetchAllEntries]);
 
   // ── Toggle a single entry cleared/uncleared ────────────────────────────────
   const toggleEntry = useCallback((entryId) => {

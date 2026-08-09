@@ -857,8 +857,10 @@ export const createTenant = async (req, res, next) => {
       return Math.round((feeValue / 100) * assignedRent * 100) / 100;
     })();
 
+    // Strip internal fields before spreading — prevents _id injection, portal credential bypass, etc.
+    const { _id: _stripId, __v: _stripV, portalPassword: _stripPwd, portalAccessPasswordHash: _stripHash, balance: _stripBal, ...safeBody } = req.body || {};
     const tenantBase = {
-      ...req.body,
+      ...safeBody,
       name: normalizedName,
       phone: normalizedPhone,
       idNumber: normalizedIdNumber,

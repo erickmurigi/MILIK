@@ -132,8 +132,8 @@ export const updateProduct = async (req, res, next) => {
       if (!String(b.name).trim()) throw createError(400, "Product name cannot be empty");
       product.name = String(b.name).trim();
     }
-    if (b.sku !== undefined) product.sku = b.sku ? String(b.sku).trim().toUpperCase() : "";
-    if (b.barcode !== undefined) product.barcode = b.barcode ? String(b.barcode).trim() : "";
+    if (b.sku !== undefined) product.sku = b.sku ? String(b.sku).trim().toUpperCase() : null;
+    if (b.barcode !== undefined) product.barcode = b.barcode ? String(b.barcode).trim() : null;
     if (b.unitOfMeasure !== undefined) product.unitOfMeasure = String(b.unitOfMeasure).trim() || "pcs";
     if (b.description !== undefined) product.description = String(b.description).trim();
     if (b.imageUrl !== undefined) product.imageUrl = String(b.imageUrl).trim();
@@ -181,6 +181,61 @@ export const deleteProduct = async (req, res, next) => {
 
     await InvProduct.deleteOne({ _id: product._id });
     res.json({ success: true, message: "Product deleted" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const bulkImportProducts = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+    if (!rows.length) throw createError(400, "No rows provided");
+    if (rows.length > 500) throw createError(400, "Maximum 500 rows per import");
+
+    const VAT_ALLOWED = new Set([0, 8, 16]);
+    const results = { created: 0, skipped: 0, errors: [] };
+
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const rowNum = i + 2; // 1-indexed + header
+      try {
+        const name = String(r.name || "").trim();
+        if (!name) { results.errors.push({ row: rowNum, reason: "Name is required" }); results.skipped++; continue; }
+
+        const sellingPrice = Number(r.sellingPrice ?? r.selling_price ?? 0);
+        if (isNaN(sellingPrice) || sellingPrice < 0) { results.errors.push({ row: rowNum, name, reason: "Invalid selling price" }); results.skipped++; continue; }
+
+        const vatRate = Number(r.vatRate ?? r.vat_rate ?? r.vat ?? 16);
+        const resolvedVat = VAT_ALLOWED.has(vatRate) ? vatRate : 16;
+
+        const sku = r.sku ? String(r.sku).trim().toUpperCase() : null;
+        const barcode = r.barcode ? String(r.barcode).trim() : null;
+
+        await InvProduct.create({
+          business,
+          name,
+          sku: sku || null,
+          barcode: barcode || null,
+          category: undefined,
+          unitOfMeasure: r.unitOfMeasure || r.unit_of_measure || r.unit || "pcs",
+          costPrice: Number(r.costPrice ?? r.cost_price ?? r.cost ?? 0),
+          sellingPrice,
+          vatRate: resolvedVat,
+          trackStock: String(r.trackStock ?? r.track_stock ?? "true").toLowerCase() !== "false",
+          serialized: String(r.serialized ?? "false").toLowerCase() === "true",
+          reorderLevel: Number(r.reorderLevel ?? r.reorder_level ?? 0),
+          description: String(r.description || "").trim(),
+        });
+        results.created++;
+      } catch (err) {
+        const reason = err.code === 11000 ? "Duplicate SKU" : (err.message || "Unknown error");
+        results.errors.push({ row: rowNum, name: String(r.name || "").trim(), reason });
+        results.skipped++;
+      }
+    }
+
+    res.status(201).json({ success: true, ...results });
   } catch (err) {
     next(err);
   }

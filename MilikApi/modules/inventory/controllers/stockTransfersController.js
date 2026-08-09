@@ -183,22 +183,24 @@ export const dispatchTransfer = async (req, res, next) => {
     const products = await InvProduct.find({ _id: { $in: lineProductIds }, business }).select("costPrice").lean();
     const productMap = new Map(products.map((p) => [String(p._id), p]));
 
-    // Post transfer_out entries
-    for (const line of transfer.lines) {
-      const product = productMap.get(String(line.product));
-      await postStockEntry({
-        business,
-        location: String(transfer.fromLocation),
-        product: String(line.product),
-        type: "transfer_out",
-        qty: -Number(line.qtyDispatched),
-        unitCost: Number(line.unitCost || product?.costPrice || 0),
-        reference: transfer.transferNumber,
-        stockTransfer: transfer._id,
-        notes: `Transfer out to ${transfer.toLocation} — ${transfer.transferNumber}`,
-        createdBy: userId,
-      });
-    }
+    // Post transfer_out entries — parallel across all lines
+    await Promise.all(
+      transfer.lines.map((line) => {
+        const product = productMap.get(String(line.product));
+        return postStockEntry({
+          business,
+          location: String(transfer.fromLocation),
+          product: String(line.product),
+          type: "transfer_out",
+          qty: -Number(line.qtyDispatched),
+          unitCost: Number(line.unitCost || product?.costPrice || 0),
+          reference: transfer.transferNumber,
+          stockTransfer: transfer._id,
+          notes: `Transfer out to ${transfer.toLocation} — ${transfer.transferNumber}`,
+          createdBy: userId,
+        });
+      })
+    );
 
     transfer.status = "in_transit";
     transfer.dispatchedAt = new Date();
@@ -228,29 +230,39 @@ export const receiveTransfer = async (req, res, next) => {
       throw createError(400, "Provide lines with quantities received");
     }
 
+    // Pre-validate and collect work items
+    const transferWorkItems = [];
     for (const recv of receivedLines) {
       const line = transfer.lines.id(recv.lineId);
       if (!line) throw createError(400, `Line ${recv.lineId} not found on this transfer`);
-
       const pending = Number(line.qtyDispatched) - Number(line.qtyReceived);
       const qty = Math.min(Number(recv.qtyReceived || 0), pending);
       if (qty <= 0) continue;
-
-      await postStockEntry({
-        business,
-        location: String(transfer.toLocation),
-        product: String(line.product),
-        type: "transfer_in",
-        qty,
-        unitCost: Number(line.unitCost || 0),
-        reference: transfer.transferNumber,
-        stockTransfer: transfer._id,
-        notes: `Transfer in from ${transfer.fromLocation} — ${transfer.transferNumber}`,
-        createdBy: userId,
-      });
-
-      line.qtyReceived = Number(line.qtyReceived) + qty;
+      transferWorkItems.push({ line, qty });
     }
+
+    // Parallel stock entries
+    await Promise.all(
+      transferWorkItems.map(({ line, qty }) =>
+        postStockEntry({
+          business,
+          location: String(transfer.toLocation),
+          product: String(line.product),
+          type: "transfer_in",
+          qty,
+          unitCost: Number(line.unitCost || 0),
+          reference: transfer.transferNumber,
+          stockTransfer: transfer._id,
+          notes: `Transfer in from ${transfer.fromLocation} — ${transfer.transferNumber}`,
+          createdBy: userId,
+        })
+      )
+    );
+
+    // Apply in-memory mutations
+    transferWorkItems.forEach(({ line, qty }) => {
+      line.qtyReceived = Number(line.qtyReceived) + qty;
+    });
 
     const allReceived = transfer.lines.every(
       (l) => Number(l.qtyReceived) >= Number(l.qtyDispatched)
@@ -275,30 +287,36 @@ export const cancelTransfer = async (req, res, next) => {
     const userId = currentUserId(req);
     const transfer = await InvStockTransfer.findOne({ _id: req.params.id, business });
     if (!transfer) throw createError(404, "Transfer not found");
-    if (!["draft", "in_transit"].includes(transfer.status)) {
-      throw createError(400, "Cannot cancel a transfer that has been received");
+    if (!["draft", "in_transit", "partially_received"].includes(transfer.status)) {
+      throw createError(400, "Cannot cancel a fully received transfer");
     }
 
-    // If already in_transit, reverse the transfer_out entries
-    if (transfer.status === "in_transit") {
+    // Reverse the dispatched-but-not-yet-received qty back to fromLocation.
+    // For in_transit: all dispatched qty. For partially_received: only the unaccounted remainder.
+    if (transfer.status === "in_transit" || transfer.status === "partially_received") {
       const cancelProductIds = transfer.lines.map((l) => String(l.product));
       const cancelProducts = await InvProduct.find({ _id: { $in: cancelProductIds }, business }).select("costPrice").lean();
       const cancelProductMap = new Map(cancelProducts.map((p) => [String(p._id), p]));
-      for (const line of transfer.lines) {
-        const product = cancelProductMap.get(String(line.product));
-        await postStockEntry({
-          business,
-          location: String(transfer.fromLocation),
-          product: String(line.product),
-          type: "transfer_in",
-          qty: Number(line.qtyDispatched),
-          unitCost: Number(line.unitCost || product?.costPrice || 0),
-          reference: transfer.transferNumber,
-          stockTransfer: transfer._id,
-          notes: `Reversal — transfer cancelled: ${transfer.transferNumber}`,
-          createdBy: userId,
-        });
-      }
+      const cancelLines = transfer.lines
+        .map((line) => ({ line, unreceived: Number(line.qtyDispatched) - Number(line.qtyReceived) }))
+        .filter(({ unreceived }) => unreceived > 0);
+      await Promise.all(
+        cancelLines.map(({ line, unreceived }) => {
+          const product = cancelProductMap.get(String(line.product));
+          return postStockEntry({
+            business,
+            location: String(transfer.fromLocation),
+            product: String(line.product),
+            type: "transfer_in",
+            qty: unreceived,
+            unitCost: Number(line.unitCost || product?.costPrice || 0),
+            reference: transfer.transferNumber,
+            stockTransfer: transfer._id,
+            notes: `Reversal — transfer cancelled: ${transfer.transferNumber}`,
+            createdBy: userId,
+          });
+        })
+      );
     }
 
     transfer.status = "cancelled";

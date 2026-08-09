@@ -104,8 +104,8 @@ router.post('/change-password', async (req, res) => {
     if (!currentPassword || !newPassword) {
       return res.status(400).json({ message: 'Current and new passwords are required' });
     }
-    if (newPassword.length < 6) {
-      return res.status(400).json({ message: 'New password must be at least 6 characters' });
+    if (newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+      return res.status(400).json({ message: 'New password must be at least 8 characters with at least one uppercase letter and one digit' });
     }
 
     const emp = await HREmployee.findOne({

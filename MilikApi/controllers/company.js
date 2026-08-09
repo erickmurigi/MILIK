@@ -30,7 +30,7 @@ import {
   normalizeSmsProvider,
   serializeCompanyForClient,
 } from "../utils/companyModules.js";
-import { canAccessCompanyId, normalizeCompanyId } from "./verifyToken.js";
+import { canAccessCompanyId, normalizeCompanyId, invalidateCompanyCache } from "./verifyToken.js";
 import { isSystemAdminUser, hasCompanySetupAccess } from "../utils/permissionControl.js";
 import { logAuditEvent } from "../utils/auditLogger.js";
 import { ensureSystemChartOfAccounts } from "../services/chartOfAccountsService.js";
@@ -1513,6 +1513,7 @@ export const updateCompany = async (req, res, next) => {
     ].filter(Boolean);
 
     const updatedCompany = await company.save();
+    invalidateCompanyCache(String(company._id));
 
     await logAuditEvent({
       req,

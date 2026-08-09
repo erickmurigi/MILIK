@@ -19,17 +19,18 @@
 
 import mongoose from "mongoose";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
+import InvSupplier from "../models/InvSupplier.js";
 import FinancialLedgerEntry from "../../../models/FinancialLedgerEntry.js";
 import { postEntry, postReversal } from "../../../services/ledgerPostingService.js";
 
 const INV_ACCOUNT_TEMPLATES = {
-  "1300": { name: "Inventory / Stock on Hand",       type: "asset",     group: "assets",      subGroup: "Current Assets" },
-  "1310": { name: "POS Receipts Control",            type: "asset",     group: "assets",      subGroup: "Current Assets" },
-  "2000": { name: "Accounts Payable – Suppliers",    type: "liability", group: "liabilities", subGroup: "Trade Payables" },
-  "2190": { name: "VAT Payable – Output Tax",        type: "liability", group: "liabilities", subGroup: "Tax Liabilities" },
-  "4000": { name: "POS Sales Revenue",               type: "income",    group: "income",      subGroup: "Sales Revenue" },
-  "5000": { name: "Cost of Goods Sold",              type: "expense",   group: "expenses",    subGroup: "Cost of Revenue" },
-  "5010": { name: "Stock Adjustments & Write-offs",  type: "expense",   group: "expenses",    subGroup: "Inventory Adjustments" },
+  "1300": { name: "Inventory / Stock on Hand",       type: "asset",     group: "assets",      subGroup: "Current Assets",      isHeader: false, isPosting: true  },
+  "1310": { name: "POS Receipts Control",            type: "asset",     group: "assets",      subGroup: "Current Assets",      isHeader: false, isPosting: true  },
+  "2000": { name: "Accounts Payable — Suppliers",    type: "liability", group: "liabilities", subGroup: "Payables",            isHeader: true,  isPosting: false },
+  "2190": { name: "VAT Payable — Output Tax",        type: "liability", group: "liabilities", subGroup: "Tax Liabilities",     isHeader: false, isPosting: true  },
+  "4000": { name: "POS Sales Revenue",               type: "income",    group: "income",      subGroup: "Sales Revenue",       isHeader: false, isPosting: true  },
+  "5000": { name: "Cost of Goods Sold",              type: "expense",   group: "expenses",    subGroup: "Cost of Revenue",     isHeader: false, isPosting: true  },
+  "5010": { name: "Stock Adjustments & Write-offs",  type: "expense",   group: "expenses",    subGroup: "Inventory Adjustments", isHeader: false, isPosting: true },
 };
 
 const round2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
@@ -53,22 +54,75 @@ const resolveInvAccount = async (businessId, code) => {
     { business: businessId, code },
     {
       $setOnInsert: {
-        business: businessId,
+        business:     businessId,
         code,
-        name: tpl.name,
-        type: tpl.type,
-        group: tpl.group,
-        subGroup: tpl.subGroup,
-        isSystem: true,
-        isPosting: true,
-        isHeader: false,
-        level: 0,
-        balance: 0,
+        name:         tpl.name,
+        type:         tpl.type,
+        group:        tpl.group,
+        subGroup:     tpl.subGroup,
+        isSystem:     true,
+        isPosting:    tpl.isPosting,
+        isHeader:     tpl.isHeader,
+        level:        0,
+        balance:      0,
         moduleScopes: ["inventory"],
       },
     },
     { upsert: true, new: true }
   );
+};
+
+// ─── Supplier AP sub-account resolution ──────────────────────────────────────
+// Each supplier gets their own posting sub-account under 2000 (AP header).
+// The account is created on first use and linked back to the supplier record.
+
+export const resolveSupplierApAccount = async (businessId, supplierId) => {
+  // Check supplier record first (fast path)
+  const supplier = await InvSupplier.findOne({ _id: supplierId, business: businessId });
+  if (!supplier) throw new Error(`Supplier ${supplierId} not found`);
+
+  if (supplier.apAccountId) {
+    const existing = await ChartOfAccount.findById(supplier.apAccountId);
+    if (existing) return existing;
+  }
+
+  // Ensure the 2000 header exists
+  const parent = await resolveInvAccount(businessId, "2000");
+
+  // Pick the next available sub-account code under 2000
+  const allSubs = await ChartOfAccount.find({
+    business: businessId,
+    code: { $regex: /^2000-SUP/ },
+  }).select("code").lean();
+  const nextSeq = allSubs.length + 1;
+  const code = `2000-SUP${String(nextSeq).padStart(3, "0")}`;
+
+  const safeName = String(supplier.name).replace(/[^\w\s&.,-]/g, "").trim().slice(0, 60);
+  const account = await ChartOfAccount.findOneAndUpdate(
+    { business: businessId, code },
+    {
+      $setOnInsert: {
+        business:      businessId,
+        code,
+        name:          `AP — ${safeName}`,
+        type:          "liability",
+        group:         "liabilities",
+        subGroup:      "Payables",
+        parentAccount: parent._id,
+        level:         1,
+        isSystem:      false,
+        isPosting:     true,
+        isHeader:      false,
+        moduleScopes:  ["inventory"],
+        balance:       0,
+      },
+    },
+    { upsert: true, new: true }
+  );
+
+  // Link back to supplier so we don't re-create next time
+  await InvSupplier.updateOne({ _id: supplierId }, { $set: { apAccountId: account._id } });
+  return account;
 };
 
 // ─── POS Sale — revenue + VAT + COGS ─────────────────────────────────────────
@@ -152,14 +206,12 @@ export const reversePosSaleLedger = async ({ businessId, sale, userId }) => {
     sourceTransactionType: "pos_sale",
     sourceTransactionId: String(sale._id),
     status: { $nin: ["reversed", "void"] },
-  }).lean();
+  }).select("_id").lean();
 
   if (!entries.length) return;
 
   const reason = `Void of POS sale ${sale.receiptNumber}: ${sale.voidReason || "voided"}`;
-  for (const entry of entries) {
-    await postReversal({ entryId: entry._id, reason, userId });
-  }
+  await Promise.all(entries.map((entry) => postReversal({ entryId: entry._id, reason, userId })));
 };
 
 // ─── Purchase receipt — Dr Inventory / Cr Accounts Payable ───────────────────
@@ -168,7 +220,7 @@ export const reversePosSaleLedger = async ({ businessId, sale, userId }) => {
  * Posts one double-entry pair per goods-received stock entry:
  *   Dr 1300 Inventory / Cr 2000 Accounts Payable — qty × unitCost
  */
-export const postPurchaseReceiptLedger = async ({ businessId, stockEntry, poNumber, userId }) => {
+export const postPurchaseReceiptLedger = async ({ businessId, stockEntry, poNumber, supplierId, userId }) => {
   const amount = round2(Number(stockEntry.totalCost || 0));
   if (amount <= 0) return;
 
@@ -185,7 +237,9 @@ export const postPurchaseReceiptLedger = async ({ businessId, stockEntry, poNumb
 
   const [inventoryAcc, payableAcc] = await Promise.all([
     resolveInvAccount(businessId, "1300"),
-    resolveInvAccount(businessId, "2000"),
+    supplierId
+      ? resolveSupplierApAccount(businessId, String(supplierId))
+      : resolveInvAccount(businessId, "2000"),
   ]);
 
   const base = {
@@ -216,19 +270,75 @@ export const postPurchaseReceiptLedger = async ({ businessId, stockEntry, poNumb
 export const reversePurchaseReceiptLedger = async ({ businessId, stockEntryIds, poNumber, userId }) => {
   if (!stockEntryIds?.length) return;
 
-  for (const stockEntryId of stockEntryIds) {
-    const entries = await FinancialLedgerEntry.find({
-      business: businessId,
-      sourceTransactionType: "pos_purchase_receipt",
-      sourceTransactionId: String(stockEntryId),
-      status: { $nin: ["reversed", "void"] },
-    }).lean();
+  const reason = `PO ${poNumber} cancelled — reversing receipt`;
 
-    const reason = `PO ${poNumber} cancelled — reversing receipt`;
-    for (const entry of entries) {
-      await postReversal({ entryId: entry._id, reason, userId });
-    }
-  }
+  // Fetch all affected ledger entries in one query, then reverse in parallel
+  const entries = await FinancialLedgerEntry.find({
+    business: businessId,
+    sourceTransactionType: "pos_purchase_receipt",
+    sourceTransactionId: { $in: stockEntryIds.map(String) },
+    status: { $nin: ["reversed", "void"] },
+  }).select("_id").lean();
+
+  await Promise.all(entries.map((entry) => postReversal({ entryId: entry._id, reason, userId })));
+};
+
+// ─── Supplier payment — Dr AP (2000) / Cr Cashbook ───────────────────────────
+
+export const postSupplierPaymentLedger = async ({ businessId, payment, userId }) => {
+  const amount = round2(Number(payment.amount || 0));
+  if (amount <= 0) return;
+
+  const existing = await FinancialLedgerEntry.countDocuments({
+    business: businessId,
+    sourceTransactionType: "inv_supplier_payment",
+    sourceTransactionId: String(payment._id),
+    status: { $ne: "reversed" },
+  });
+  if (existing > 0) return;
+
+  const { start, end } = dayRange(payment.paymentDate || new Date());
+  const journalGroupId = new mongoose.Types.ObjectId();
+
+  const [payableAcc, cashbookAcc] = await Promise.all([
+    payment.supplier
+      ? resolveSupplierApAccount(businessId, String(payment.supplier))
+      : resolveInvAccount(businessId, "2000"),
+    ChartOfAccount.findOne({ _id: payment.cashbookAccountId, business: businessId }).lean(),
+  ]);
+  if (!cashbookAcc) throw new Error(`Cashbook account ${payment.cashbookAccountId} not found`);
+
+  const narration = payment.reference
+    ? `Supplier payment ref ${payment.reference}`
+    : `Supplier payment ${payment.paymentNumber}`;
+
+  const base = {
+    business: businessId,
+    sourceTransactionType: "inv_supplier_payment",
+    sourceTransactionId: String(payment._id),
+    transactionDate: payment.paymentDate || new Date(),
+    statementPeriodStart: start,
+    statementPeriodEnd: end,
+    journalGroupId,
+    category: "SUPPLIER_PAYMENT",
+    createdBy: userId,
+    allowUnscoped: true,
+  };
+
+  await Promise.all([
+    postEntry({ ...base, accountId: payableAcc._id,  direction: "debit",  amount, notes: `${narration} — AP cleared` }),
+    postEntry({ ...base, accountId: cashbookAcc._id, direction: "credit", amount, notes: `${narration} — paid from ${cashbookAcc.name}` }),
+  ]);
+};
+
+export const reverseSupplierPaymentLedger = async ({ businessId, paymentId, userId }) => {
+  const entries = await FinancialLedgerEntry.find({
+    business: businessId,
+    sourceTransactionType: "inv_supplier_payment",
+    sourceTransactionId: String(paymentId),
+    status: { $nin: ["reversed", "void"] },
+  }).select("_id").lean();
+  await Promise.all(entries.map((entry) => postReversal({ entryId: entry._id, reason: "Supplier payment voided", userId })));
 };
 
 // ─── Stock adjustment / write-off ─────────────────────────────────────────────

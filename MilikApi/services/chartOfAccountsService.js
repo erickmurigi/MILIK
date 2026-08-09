@@ -46,6 +46,15 @@ const SYSTEM_CHART_TEMPLATE = [
   { code: "5311", name: "Car Wash Staff Wages", type: "expense", group: "expenses", subGroup: "Car Wash Expenses", isSystem: true, isHeader: false, isPosting: true },
   { code: "5312", name: "Car Wash Water and Utilities", type: "expense", group: "expenses", subGroup: "Car Wash Expenses", isSystem: true, isHeader: false, isPosting: true },
 
+  // Inventory / POS accounts
+  { code: "1300", name: "Inventory / Stock on Hand",      type: "asset",     group: "assets",      subGroup: "Current Assets",          isSystem: true, isHeader: false, isPosting: true },
+  { code: "1310", name: "POS Receipts Control",           type: "asset",     group: "assets",      subGroup: "Current Assets",          isSystem: true, isHeader: false, isPosting: true },
+  { code: "2000", name: "Accounts Payable — Suppliers",   type: "liability", group: "liabilities", subGroup: "Payables",                isSystem: true, isHeader: true,  isPosting: false },
+  { code: "2190", name: "VAT Payable — Output Tax",       type: "liability", group: "liabilities", subGroup: "Tax Liabilities",         isSystem: true, isHeader: false, isPosting: true },
+  { code: "4000", name: "POS Sales Revenue",              type: "income",    group: "income",      subGroup: "Sales Revenue",           isSystem: true, isHeader: false, isPosting: true },
+  { code: "5000", name: "Cost of Goods Sold",             type: "expense",   group: "expenses",    subGroup: "Cost of Revenue",         isSystem: true, isHeader: false, isPosting: true },
+  { code: "5010", name: "Stock Adjustments & Write-offs", type: "expense",   group: "expenses",    subGroup: "Inventory Adjustments",   isSystem: true, isHeader: false, isPosting: true },
+
   // Property Sale accounts
   { code: "1240", name: "Sale Deposits Receivable", type: "asset", group: "assets", subGroup: "Sale Receivables", isSystem: true, isHeader: false, isPosting: true },
   { code: "1250", name: "Sale Installments Receivable", type: "asset", group: "assets", subGroup: "Sale Receivables", isSystem: true, isHeader: false, isPosting: true },
@@ -78,6 +87,7 @@ const CARWASH_ACCOUNT_CODES = new Set(["2160", "2161", "4400", "5310", "5311", "
 const SHARED_CASHBOOK_CODES = new Set(["1100", "1110", "1130"]);
 const HR_ACCOUNT_CODES = new Set(["2170", "2171", "2172", "2173", "2174", "2175", "5400", "5401", "5402", "5403"]);
 const SALE_ACCOUNT_CODES = new Set(["1240", "1250", "2180", "2181", "4500", "4510", "5500", "5501", "5502"]);
+const INVENTORY_ACCOUNT_CODES = new Set(["1300", "1310", "2000", "2190", "4000", "5000", "5010"]);
 
 export const moduleScopesForAccount = (account = {}) => {
   const code = String(account.code || "").trim().toUpperCase();
@@ -88,6 +98,7 @@ export const moduleScopesForAccount = (account = {}) => {
   if (CARWASH_ACCOUNT_CODES.has(code) || name.includes("car wash") || subGroup.includes("car wash")) return ["carwash"];
   if (HR_ACCOUNT_CODES.has(code) || subGroup.includes("hr & payroll") || name.includes("payroll") || name.includes("paye") || name.includes("nhif") || name.includes("nssf") || name.includes("ahl levy")) return ["hr"];
   if (SALE_ACCOUNT_CODES.has(code) || subGroup.includes("sale ")) return ["propertySale"];
+  if (INVENTORY_ACCOUNT_CODES.has(code) || subGroup.includes("payables") || subGroup.includes("inventory") || subGroup.includes("cost of revenue") || subGroup.includes("sales revenue") || subGroup.includes("tax liabilities")) return ["inventory"];
   if (["3100", "3200"].includes(code)) return ["general"];
   return ["propertyManagement"];
 };
@@ -103,6 +114,7 @@ const getActiveModuleScopes = (modules = {}) => {
   if (modules.carwash)            scopes.add("carwash");
   if (modules.hr)                 scopes.add("hr");
   if (modules.propertySale)       scopes.add("propertySale");
+  if (modules.inventory)          scopes.add("inventory");
   return [...scopes];
 };
 
@@ -201,7 +213,7 @@ export const findChartOfAccounts = async ({
   const scopes = moduleScope
     ? normalizeModuleScopes(moduleScope)
     : await getCompanyActiveScopes(normalizedBusinessId);
-  await ensureSystemChartOfAccounts(normalizedBusinessId, { force: scopes.includes("carwash") || scopes.includes("hr") });
+  await ensureSystemChartOfAccounts(normalizedBusinessId, { force: scopes.includes("carwash") || scopes.includes("hr") || scopes.includes("inventory") });
 
   const query = { business: normalizedBusinessId };
 

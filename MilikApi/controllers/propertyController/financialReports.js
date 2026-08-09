@@ -899,9 +899,9 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
     // ── Step 1: batch-fetch tenants, units, properties in 3 parallel queries ──
     // Avoids the N+1 problem of cursor+nested-populate (2 queries per tenant).
     const [allTenants, allUnits, allProperties] = await Promise.all([
-      Tenant.find(tenantQuery).select("_id tenantName name unit").sort({ name: 1, createdAt: 1 }).lean(),
-      Unit.find({ business: businessId }).select("_id unitNumber name property").lean(),
-      Property.find({ business: businessId }).select("_id propertyName name landlords").lean(),
+      Tenant.find(tenantQuery).select("_id tenantName name unit").sort({ name: 1, createdAt: 1 }).limit(10000).lean(),
+      Unit.find({ business: businessId }).select("_id unitNumber name property").limit(10000).lean(),
+      Property.find({ business: businessId }).select("_id propertyName name landlords").limit(10000).lean(),
     ]);
 
     const unitMap = new Map(allUnits.map((u) => [String(u._id), u]));
@@ -1675,6 +1675,7 @@ export const getARAgingReport = async (req, res, next) => {
     const invoices = await TenantInvoice.find({
       business: businessId,
       status: { $in: ["pending", "partially_paid"] },
+      dueDate: { $lte: asOf },
     })
       .populate("tenant", "tenantName name email phone")
       .populate("property", "propertyName name")
@@ -1718,6 +1719,7 @@ export const getARAgingReport = async (req, res, next) => {
       const outstanding = outstandingMap.get(String(inv._id));
       if (!outstanding || outstanding <= 0) continue;
 
+      if (!inv.dueDate) continue;
       const applied = round2(inv.amount - outstanding);
       const daysOverdue = Math.floor((asOf - new Date(inv.dueDate)) / 86_400_000);
       const bucket = assignBucket(daysOverdue);
@@ -1774,6 +1776,7 @@ export const getAPAgingReport = async (req, res, next) => {
     for (const v of vouchers) {
       const outstanding = round2(v.amount || 0);
       if (outstanding <= 0) continue;
+      if (!v.dueDate) continue;
 
       const daysOverdue = Math.floor((asOf - new Date(v.dueDate)) / 86_400_000);
       const bucket = assignBucket(daysOverdue);

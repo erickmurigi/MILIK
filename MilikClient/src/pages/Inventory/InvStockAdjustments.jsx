@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaArrowDown, FaArrowUp, FaClipboardCheck, FaPlus, FaRedoAlt, FaTimes } from "react-icons/fa";
@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import InventoryShell from "./InventoryShell";
 import { inventoryApi, formatMoney } from "../../services/inventoryApi";
 import AppSelect from "../../components/common/AppSelect";
+import PaginationBar from "../../components/PaginationBar";
 
 const ADJ_TYPES = {
   adjustment: {
@@ -51,6 +52,7 @@ const InvStockAdjustments = () => {
   const [locFilter,  setLocFilter]  = useTabState("/inventory/adjustments:locFilter", "");
   const [typeFilter, setTypeFilter] = useTabState("/inventory/adjustments:typeFilter", "");
   const [page,       setPage]       = useTabState("/inventory/adjustments:page", 1);
+  const [pageSize,   setPageSize]   = useTabState("/inventory/adjustments:pageSize", 50);
   const [showModal,  setShowModal]  = useState(false);
   const [form,       setForm]       = useState(emptyForm());
   const [balance,    setBalance]    = useState(null);
@@ -68,9 +70,9 @@ const InvStockAdjustments = () => {
     staleTime: 5 * 60_000,
   });
   const { data: adjData, isLoading: loading, error, refetch } = useQuery({
-    queryKey: ['inv-stock-adjustments', locFilter, typeFilter, page],
+    queryKey: ['inv-stock-adjustments', locFilter, typeFilter, page, pageSize],
     queryFn: async () => {
-      const res = await inventoryApi.listMovements({ location: locFilter || undefined, type: typeFilter || MANUAL_TYPE_CSV, page, limit: 50 });
+      const res = await inventoryApi.listMovements({ location: locFilter || undefined, type: typeFilter || MANUAL_TYPE_CSV, page, limit: pageSize });
       const list = Array.isArray(res) ? res : (res?.data ?? []);
       return { entries: list, total: res?.total ?? 0 };
     },
@@ -81,8 +83,8 @@ const InvStockAdjustments = () => {
 
   const entries = adjData?.entries ?? [];
   const total = adjData?.total ?? 0;
+  const pages = Math.ceil(total / pageSize) || 1;
 
-  /* Fetch live balance when both product + location are selected */
   useEffect(() => {
     if (!form.product || !form.location) { setBalance(null); return; }
     setLoadingBal(true);
@@ -118,90 +120,83 @@ const InvStockAdjustments = () => {
   const selectedProduct = products.find((p) => p._id === form.product);
 
   return (
-    <InventoryShell
-      title="Stock Adjustments"
-      action={
-        <>
-          <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-            <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
-          </button>
-          <button type="button" onClick={() => setShowModal(true)} className="inline-flex h-8 items-center gap-1.5 bg-[#FF8C00] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#E67E00]">
-            <FaPlus /> New Adjustment
-          </button>
-        </>
-      }
-    >
-      <div className="min-h-[calc(100vh-14rem)] overflow-x-auto border border-slate-200 bg-white shadow-sm">
-        {/* Filter strip */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-slate-200 bg-[#EDF5F1] px-3 py-2">
-          <span className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
-            Adjustments: <strong className="text-[#0B3B2E]">{total}</strong>
-          </span>
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <AppSelect value={locFilter} onChange={(v) => { setLocFilter(v ?? ""); setPage(1); }} options={locations.map((l) => ({ value: l._id, label: l.name }))} placeholder="All Locations" clearable size="sm" />
-            <AppSelect value={typeFilter} onChange={(v) => { setTypeFilter(v ?? ""); setPage(1); }} options={Object.entries(ADJ_TYPES).map(([k, v]) => ({ value: k, label: v.label }))} placeholder="All Types" clearable size="sm" />
+    <InventoryShell lockScroll>
+      <div className="flex h-full flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">
+        {/* Filter + action strip */}
+        <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5">
+          <AppSelect value={locFilter} onChange={(v) => { setLocFilter(v ?? ""); setPage(1); }} options={locations.map((l) => ({ value: l._id, label: l.name }))} placeholder="All Locations" clearable size="sm" />
+          <AppSelect value={typeFilter} onChange={(v) => { setTypeFilter(v ?? ""); setPage(1); }} options={Object.entries(ADJ_TYPES).map(([k, v]) => ({ value: k, label: v.label }))} placeholder="All Types" clearable size="sm" />
+          <div className="ml-auto flex items-center gap-1.5">
+            <button type="button" onClick={refetch} className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+              <FaRedoAlt className={loading ? "animate-spin" : ""} />
+            </button>
+            <button type="button" onClick={() => setShowModal(true)} className="inline-flex h-7 items-center gap-1 bg-[#FF8C00] px-2.5 text-[10px] font-bold text-white hover:bg-[#E67E00]">
+              <FaPlus /> New Adjustment
+            </button>
           </div>
         </div>
 
-        <table className="w-full min-w-[850px] text-xs">
-          <thead className="bg-[#0B3B2E] text-white">
-            <tr>
-              <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Date</th>
-              <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Product</th>
-              <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Location</th>
-              <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Type</th>
-              <th className="px-3 py-2 text-right font-bold uppercase tracking-wide">Qty</th>
-              <th className="px-3 py-2 text-right font-bold uppercase tracking-wide">Unit Cost</th>
-              <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Reason / Notes</th>
-              <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Posted By</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={8} className="px-3 py-12 text-center text-slate-400">Loading…</td></tr>
-            ) : !entries.length ? (
+        <div className="min-h-0 flex-1 overflow-auto">
+          <table className="w-full min-w-[850px] text-xs">
+            <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
               <tr>
-                <td colSpan={8} className="px-3 py-14 text-center">
-                  <FaClipboardCheck className="mx-auto mb-2 text-3xl text-slate-300" />
-                  <p className="text-sm font-semibold text-slate-500">No adjustments found</p>
-                  <p className="mt-0.5 text-xs text-slate-400">Manual corrections, write-offs, opening entries and customer returns appear here.</p>
-                </td>
+                <th className="px-3 py-2 text-left text-[10px] font-extrabold uppercase tracking-widest">Date</th>
+                <th className="px-3 py-2 text-left text-[10px] font-extrabold uppercase tracking-widest">Product</th>
+                <th className="px-3 py-2 text-left text-[10px] font-extrabold uppercase tracking-widest">Location</th>
+                <th className="px-3 py-2 text-left text-[10px] font-extrabold uppercase tracking-widest">Type</th>
+                <th className="px-3 py-2 text-right text-[10px] font-extrabold uppercase tracking-widest">Qty</th>
+                <th className="px-3 py-2 text-right text-[10px] font-extrabold uppercase tracking-widest">Unit Cost</th>
+                <th className="px-3 py-2 text-left text-[10px] font-extrabold uppercase tracking-widest">Reason / Notes</th>
+                <th className="px-3 py-2 text-left text-[10px] font-extrabold uppercase tracking-widest">Posted By</th>
               </tr>
-            ) : entries.map((entry) => {
-              const isIn = Number(entry.qty) > 0;
-              return (
-                <tr key={entry._id} className="border-b border-slate-100 hover:bg-slate-50">
-                  <td className="px-3 py-2 text-slate-500 whitespace-nowrap">
-                    {new Date(entry.createdAt).toLocaleDateString("en-KE", { dateStyle: "short" })}
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={8} className="px-3 py-12 text-center text-slate-400">Loading…</td></tr>
+              ) : !entries.length ? (
+                <tr>
+                  <td colSpan={8} className="px-3 py-14 text-center">
+                    <FaClipboardCheck className="mx-auto mb-2 text-3xl text-slate-300" />
+                    <p className="text-sm font-semibold text-slate-500">No adjustments found</p>
+                    <p className="mt-0.5 text-xs text-slate-400">Manual corrections, write-offs, opening entries and customer returns appear here.</p>
                   </td>
-                  <td className="px-3 py-2">
-                    <div className="font-semibold text-slate-800">{entry.product?.name || "—"}</div>
-                    {entry.product?.sku && <div className="font-mono text-[10px] text-slate-400">{entry.product.sku}</div>}
-                  </td>
-                  <td className="px-3 py-2 text-slate-600">{entry.location?.name || "—"}</td>
-                  <td className="px-3 py-2"><TypePill type={entry.type} /></td>
-                  <td className="px-3 py-2 text-right">
-                    <span className={`inline-flex items-center gap-1 font-bold ${isIn ? "text-emerald-600" : "text-red-600"}`}>
-                      {isIn ? <FaArrowUp className="text-[9px]" /> : <FaArrowDown className="text-[9px]" />}
-                      {Math.abs(entry.qty)} {entry.product?.unitOfMeasure || ""}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-right text-slate-600">{formatMoney(entry.unitCost)}</td>
-                  <td className="px-3 py-2 text-slate-500">{entry.notes || "—"}</td>
-                  <td className="px-3 py-2 text-slate-500">{entry.createdBy?.name || "—"}</td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              ) : entries.map((entry) => {
+                const isIn = Number(entry.qty) > 0;
+                return (
+                  <tr key={entry._id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="px-3 py-2 text-slate-500 whitespace-nowrap">
+                      {new Date(entry.createdAt).toLocaleDateString("en-KE", { dateStyle: "short" })}
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="font-semibold text-slate-800">{entry.product?.name || "—"}</div>
+                      {entry.product?.sku && <div className="font-mono text-[10px] text-slate-400">{entry.product.sku}</div>}
+                    </td>
+                    <td className="px-3 py-2 text-slate-600">{entry.location?.name || "—"}</td>
+                    <td className="px-3 py-2"><TypePill type={entry.type} /></td>
+                    <td className="px-3 py-2 text-right">
+                      <span className={`inline-flex items-center gap-1 font-bold ${isIn ? "text-emerald-600" : "text-red-600"}`}>
+                        {isIn ? <FaArrowUp className="text-[9px]" /> : <FaArrowDown className="text-[9px]" />}
+                        {Math.abs(entry.qty)} {entry.product?.unitOfMeasure || ""}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right text-slate-600">{formatMoney(entry.unitCost)}</td>
+                    <td className="px-3 py-2 text-slate-500">{entry.notes || "—"}</td>
+                    <td className="px-3 py-2 text-slate-500">{entry.createdBy?.name || "—"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
 
-        {total > 50 && (
-          <div className="flex items-center justify-between border-t border-slate-100 px-3 py-2">
-            <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#0B3B2E]">← Previous</button>
-            <span className="text-xs text-slate-500">Page {page} of {Math.ceil(total / 50)}</span>
-            <button type="button" onClick={() => setPage((p) => p + 1)} disabled={entries.length < 50} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#0B3B2E]">Next →</button>
-          </div>
-        )}
+        <PaginationBar
+          page={page} pages={pages} total={total} pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(s) => { setPageSize(s); setPage(1); }}
+          loading={loading}
+          pageSizes={[25, 50, 100, 200]}
+        />
       </div>
 
       {showModal && (
@@ -222,7 +217,6 @@ const InvStockAdjustments = () => {
                 </div>
               </div>
 
-              {/* Live balance panel */}
               {form.product && form.location && (
                 <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs">
                   {loadingBal ? (

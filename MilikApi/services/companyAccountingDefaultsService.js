@@ -242,11 +242,14 @@ const buildCandidateQuery = (businessId, candidate = {}) => {
 };
 
 const findFirstAccount = async (businessId, candidates = []) => {
-  for (const candidate of candidates) {
-    const account = await ChartOfAccount.findOne(buildCandidateQuery(businessId, candidate)).lean();
-    if (account) return account;
-  }
-  return null;
+  if (!candidates.length) return null;
+  // Run all candidate queries in parallel; return the first (highest-priority) hit.
+  const results = await Promise.all(
+    candidates.map((c) =>
+      ChartOfAccount.findOne(buildCandidateQuery(businessId, c)).lean().catch(() => null)
+    )
+  );
+  return results.find(Boolean) ?? null;
 };
 
 const getConfiguredAccountId = async (businessId, field) => {

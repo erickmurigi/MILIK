@@ -3,8 +3,39 @@ import ChartOfAccount from "../../models/ChartOfAccount.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import { toObjectId } from "../../utils/db.js";
 
+const ENTRY_PAGE_SIZE = 500;
+
+const encodeCursor = (entry) =>
+  Buffer.from(JSON.stringify({ d: new Date(entry.transactionDate).toISOString(), i: String(entry._id) })).toString("base64url");
+
+const decodeCursor = (cursor) => {
+  try { return JSON.parse(Buffer.from(cursor, "base64url").toString()); }
+  catch { return null; }
+};
+
+const applyEntryCursor = (filter, after) => {
+  const decoded = after ? decodeCursor(after) : null;
+  if (!decoded) return filter;
+  const afterDate = new Date(decoded.d);
+  const afterId   = toObjectId(decoded.i);
+  if (!afterId) return filter;
+  return {
+    ...filter,
+    $or: [
+      { transactionDate: { $gt: afterDate } },
+      { transactionDate: afterDate, _id: { $gt: afterId } },
+    ],
+  };
+};
+
 const resolveBusinessId = (req) => {
-  const id = req.query?.business || req.query?.company || req.body?.business || req.body?.company;
+  const id =
+    req.query?.business ||
+    req.query?.company ||
+    req.body?.business ||
+    req.body?.company ||
+    req.user?.company?._id ||
+    req.user?.company;
   return toObjectId(id);
 };
 
@@ -30,7 +61,7 @@ export const getBankAccounts = async (req, res, next) => {
   }
 };
 
-// ─── Ledger entries for a given account + period ───────────────────────────────
+// ─── Ledger entries for a given account + period (cursor-paginated) ───────────
 export const getReconciliationEntries = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
@@ -43,23 +74,29 @@ export const getReconciliationEntries = async (req, res, next) => {
     const to   = req.query.to   ? new Date(req.query.to)   : new Date();
     if (to) to.setHours(23, 59, 59, 999);
 
-    const filter = {
+    let baseFilter = {
       business:  businessId,
       accountId,
       status:    { $in: ["approved", "draft"] },
     };
     if (from || to) {
-      filter.transactionDate = {};
-      if (from) filter.transactionDate.$gte = from;
-      if (to)   filter.transactionDate.$lte = to;
+      baseFilter.transactionDate = {};
+      if (from) baseFilter.transactionDate.$gte = from;
+      if (to)   baseFilter.transactionDate.$lte = to;
     }
 
-    const entries = await FinancialLedgerEntry.find(filter)
-      .sort({ transactionDate: 1, createdAt: 1 })
-      .limit(10000)
+    const filter = applyEntryCursor(baseFilter, req.query.after || null);
+
+    const raw = await FinancialLedgerEntry.find(filter)
+      .sort({ transactionDate: 1, _id: 1 })
+      .limit(ENTRY_PAGE_SIZE + 1)
       .lean();
 
-    return res.status(200).json(entries);
+    const hasMore = raw.length > ENTRY_PAGE_SIZE;
+    const entries = hasMore ? raw.slice(0, ENTRY_PAGE_SIZE) : raw;
+    const nextCursor = hasMore ? encodeCursor(entries[entries.length - 1]) : null;
+
+    return res.status(200).json({ entries, nextCursor, hasMore });
   } catch (error) {
     next(error);
   }
@@ -101,23 +138,30 @@ export const getReconciliation = async (req, res, next) => {
     const periodEnd = new Date(recon.periodEnd);
     periodEnd.setHours(23, 59, 59, 999);
 
-    const entries = await FinancialLedgerEntry.find({
+    const baseEntryFilter = {
       business:        recon.business,
       accountId:       recon.account._id,
       transactionDate: { $gte: recon.periodStart, $lte: periodEnd },
       status:          { $in: ["approved", "draft"] },
-    })
-      .sort({ transactionDate: 1, createdAt: 1 })
-      .limit(10000)
+    };
+    const entryFilter = applyEntryCursor(baseEntryFilter, req.query.after || null);
+
+    const raw = await FinancialLedgerEntry.find(entryFilter)
+      .sort({ transactionDate: 1, _id: 1 })
+      .limit(ENTRY_PAGE_SIZE + 1)
       .lean();
 
+    const hasMore = raw.length > ENTRY_PAGE_SIZE;
+    const pageEntries = hasMore ? raw.slice(0, ENTRY_PAGE_SIZE) : raw;
+    const nextCursor = hasMore ? encodeCursor(pageEntries[pageEntries.length - 1]) : null;
+
     const clearedSet = new Set(recon.clearedEntries.map(String));
-    const entriesWithCleared = entries.map((e) => ({
+    const entriesWithCleared = pageEntries.map((e) => ({
       ...e,
       cleared: clearedSet.has(String(e._id)),
     }));
 
-    return res.status(200).json({ ...recon, entries: entriesWithCleared });
+    return res.status(200).json({ ...recon, entries: entriesWithCleared, nextCursor, hasMore });
   } catch (error) {
     next(error);
   }

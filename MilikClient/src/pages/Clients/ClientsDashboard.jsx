@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { FaBuilding, FaFileContract, FaMoneyBillWave, FaChartLine } from 'react-icons/fa';
 import ClientsShell from './ClientsShell';
 import { clientsApi } from '../../services/clientsApi';
+import DashboardCard, { DashboardStatCard } from '../../components/Dashboard/DashboardCard';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -25,35 +26,8 @@ const fmtDate = (v) =>
       })
     : '—';
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-const StatCard = ({ label, value, icon: Icon, tone = 'green', sub }) => {
-  const bg = {
-    green:  'bg-[#0B3B2E] border-[#0B3B2E]',
-    orange: 'bg-[#C8511A] border-[#C8511A]',
-    slate:  'bg-slate-700 border-slate-700',
-    amber:  'bg-amber-700 border-amber-700',
-  }[tone] || 'bg-[#0B3B2E] border-[#0B3B2E]';
-
-  return (
-    <div className={`relative overflow-hidden border ${bg} px-4 py-3 shadow-sm`}>
-      <Icon className="absolute right-3 top-2.5 h-10 w-10 text-white/10" />
-      <p className="text-[9px] font-extrabold uppercase tracking-widest text-white/60">{label}</p>
-      <p className="mt-1.5 text-2xl font-black leading-none text-white">{value}</p>
-      {sub && <p className="mt-1 text-[10px] text-white/50">{sub}</p>}
-    </div>
-  );
-};
-
-const Card = ({ title, right, children, className = '' }) => (
-  <div className={`border border-slate-200 bg-white shadow-sm ${className}`}>
-    <div className="flex min-h-8 flex-wrap items-center justify-between gap-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5">
-      <h2 className="text-[10px] font-black uppercase tracking-widest text-[#0B3B2E]">{title}</h2>
-      {right && <div className="flex items-center gap-2">{right}</div>}
-    </div>
-    {children}
-  </div>
-);
+const StatCard = DashboardStatCard;
+const Card     = DashboardCard;
 
 const daysColor = (days) => {
   if (days <= 30) return 'text-red-600 font-bold';

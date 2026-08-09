@@ -8,6 +8,7 @@ import {
   FaFileAlt, FaFileInvoiceDollar, FaMoneyBillWave, FaWallet,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import DashboardCard, { DashboardStatCard } from "../../components/Dashboard/DashboardCard";
 import { getPropertyById } from "../../redux/propertyRedux";
 import {
   getPropertyLedgerTrialBalance,
@@ -44,28 +45,8 @@ const businessIdFromState = (currentCompany, currentUser) => {
   );
 };
 
-// ─── Design primitives ────────────────────────────────────────────────────────
-const StatCard = ({ label, value, sub, icon: Icon, tone = "green" }) => {
-  const bg = tone === "orange" ? "bg-[#C8511A] border-[#C8511A]" : "bg-[#0B3B2E] border-[#0B3B2E]";
-  return (
-    <div className={`relative overflow-hidden border ${bg} px-4 py-3 shadow-sm`}>
-      {Icon && <Icon className="absolute right-3 top-2.5 h-10 w-10 text-white/10" />}
-      <p className="text-[9px] font-extrabold uppercase tracking-widest text-white/60">{label}</p>
-      <p className="mt-1.5 truncate text-xl font-black leading-none text-white">{value}</p>
-      {sub && <p className="mt-0.5 text-[10px] text-white/50">{sub}</p>}
-    </div>
-  );
-};
-
-const Card = ({ title, right, children, className = "" }) => (
-  <div className={`border border-slate-200 bg-white shadow-sm ${className}`}>
-    <div className="flex min-h-8 flex-wrap items-center justify-between gap-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5">
-      <h2 className="text-[10px] font-black uppercase tracking-widest text-[#0B3B2E]">{title}</h2>
-      {right && <div className="flex items-center gap-2">{right}</div>}
-    </div>
-    {children}
-  </div>
-);
+const StatCard = DashboardStatCard;
+const Card     = DashboardCard;
 
 const Spinner = () => (
   <div className="flex justify-center items-center py-16">

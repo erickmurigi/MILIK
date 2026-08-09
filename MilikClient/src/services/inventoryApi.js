@@ -22,6 +22,7 @@ export const inventoryApi = {
   createProduct:    (b)      => adminRequests.post("/inventory/products", b).then(unwrap),
   updateProduct:    (id, b)  => adminRequests.put(`/inventory/products/${id}`, b).then(unwrap),
   deleteProduct:    (id)     => adminRequests.delete(`/inventory/products/${id}`).then(unwrap),
+  bulkImportProducts: (rows) => adminRequests.post("/inventory/products/bulk-import", { rows }).then((r) => r?.data),
 
   // Suppliers
   listSuppliers:    (p = {}) => adminRequests.get("/inventory/suppliers", { params: p }).then(unwrap),
@@ -53,6 +54,18 @@ export const inventoryApi = {
   updatePurchaseOrder: (id, b)  => adminRequests.put(`/inventory/purchase-orders/${id}`, b).then(unwrap),
   receiveGoods:        (id, b)  => adminRequests.post(`/inventory/purchase-orders/${id}/receive-goods`, b).then(unwrap),
   cancelPurchaseOrder: (id)     => adminRequests.post(`/inventory/purchase-orders/${id}/cancel`).then(unwrap),
+  cancelReceipt:        (poId, receiptId, b) => adminRequests.post(`/inventory/purchase-orders/${poId}/receipts/${receiptId}/cancel`, b).then(unwrap),
+  cancelAllReceiving:   (poId)              => adminRequests.post(`/inventory/purchase-orders/${poId}/cancel-all-receiving`).then(unwrap),
+
+  backfillSupplierApAccounts: () => adminRequests.post("/inventory/suppliers/backfill-ap-accounts").then(unwrap),
+
+  // Supplier payments
+  listSupplierPayments:  (p = {}) => adminRequests.get("/inventory/supplier-payments", { params: p }).then(unwrap),
+  createSupplierPayment: (b)      => adminRequests.post("/inventory/supplier-payments", b).then(unwrap),
+  voidSupplierPayment:   (id)     => adminRequests.post(`/inventory/supplier-payments/${id}/void`).then(unwrap),
+
+  // Posting asset accounts for cashbook picker (inventory-scoped, no GL_ACCESS_MODULES needed)
+  listCashbookAccounts: () => adminRequests.get("/inventory/supplier-payments/cashbook-accounts").then((r) => r?.data ?? []),
 
   // Tills
   listTills:        (p = {}) => adminRequests.get("/inventory/tills", { params: p }).then(unwrap),
@@ -78,6 +91,28 @@ export const inventoryApi = {
   createSale:       (b)      => adminRequests.post("/pos/sales", b).then(unwrap),
   voidSale:         (id, b)  => adminRequests.post(`/pos/sales/${id}/void`, b).then(unwrap),
   getSalesSummary:  (p = {}) => adminRequests.get("/pos/sales/summary", { params: p }).then(unwrap),
+
+  // Tax Groups
+  listTaxGroups:    (p = {}) => adminRequests.get("/inventory/tax-groups", { params: p }).then(unwrap),
+  createTaxGroup:   (b)      => adminRequests.post("/inventory/tax-groups", b).then(unwrap),
+  updateTaxGroup:   (id, b)  => adminRequests.put(`/inventory/tax-groups/${id}`, b).then(unwrap),
+  deleteTaxGroup:   (id)     => adminRequests.delete(`/inventory/tax-groups/${id}`).then(unwrap),
+
+  // Units of Measure
+  listUnits:        (p = {}) => adminRequests.get("/inventory/units", { params: p }).then(unwrap),
+  createUnit:       (b)      => adminRequests.post("/inventory/units", b).then(unwrap),
+  updateUnit:       (id, b)  => adminRequests.put(`/inventory/units/${id}`, b).then(unwrap),
+  deleteUnit:       (id)     => adminRequests.delete(`/inventory/units/${id}`).then(unwrap),
+
+  // Payment Methods
+  listPaymentMethods:    (p = {}) => adminRequests.get("/inventory/payment-methods", { params: p }).then(unwrap),
+  createPaymentMethod:   (b)      => adminRequests.post("/inventory/payment-methods", b).then(unwrap),
+  updatePaymentMethod:   (id, b)  => adminRequests.put(`/inventory/payment-methods/${id}`, b).then(unwrap),
+  deletePaymentMethod:   (id)     => adminRequests.delete(`/inventory/payment-methods/${id}`).then(unwrap),
+
+  // POS / Receipt Settings
+  getPOSSettings:    ()  => adminRequests.get("/inventory/pos-settings").then(unwrap),
+  updatePOSSettings: (b) => adminRequests.put("/inventory/pos-settings", b).then(unwrap),
 };
 
 export const formatMoney = (value) =>

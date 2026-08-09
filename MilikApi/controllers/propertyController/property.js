@@ -1582,7 +1582,7 @@ export const bulkImportProperties = async (req, res, next) => {
       providedCodes.length > 0
         ? Property.find({ propertyCode: { $in: providedCodes }, business: businessId }).select("propertyCode").lean()
         : [],
-      Property.find({ business: businessId }).select("propertyCode").lean(),
+      Property.find({ business: businessId }).select("propertyCode").limit(500).lean(),
     ]);
 
     const existingLRNumbers = new Set(existingByLR.map((p) => p.lrNumber));
@@ -1790,6 +1790,7 @@ export const backfillPropertyAccounts = async (req, res, next) => {
 
     const properties = await Property.find({ business: businessId })
       .select("_id propertyCode propertyName controlAccount")
+      .limit(500)
       .lean();
 
     const results = { total: properties.length, processed: 0, alreadyComplete: 0, failed: 0, errors: [] };

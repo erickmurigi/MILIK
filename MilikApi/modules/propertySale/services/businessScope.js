@@ -3,6 +3,8 @@ import { createError } from "../../../utils/error.js";
 
 export const resolveActiveBusinessId = (req) => {
   const id =
+    req.headers?.["x-active-company-id"] ||
+    req.headers?.["x-company-id"] ||
     req.query.business ||
     req.query.company ||
     req.body?.business ||

@@ -531,7 +531,6 @@ const TenantAgreements = () => {
         toast.success("Tenant agreement created successfully.");
       }
       closeModal();
-      await loadData();
     } catch (error) {
       toast.error(error?.response?.data?.message || error?.message || "Failed to save tenant agreement.");
     } finally {
@@ -547,7 +546,6 @@ const TenantAgreements = () => {
       if (updated?.documentUrl) {
         window.open(updated.documentUrl, "_blank", "noreferrer");
       }
-      await loadData();
     } catch (error) {
       toast.error(error?.response?.data?.message || error?.message || "Failed to generate lease document.");
     } finally {
@@ -559,7 +557,6 @@ const TenantAgreements = () => {
     try {
       await signLease(dispatch, row.id, { signedBy, business: currentCompany?._id });
       toast.success(`${signedBy === "tenant" ? "Tenant" : "Landlord"} signature recorded.`);
-      await loadData();
     } catch (error) {
       toast.error(error?.response?.data?.message || error?.message || "Failed to sign agreement.");
     }
@@ -577,7 +574,6 @@ const TenantAgreements = () => {
         terminationReason: "Terminated from agreements workspace",
       });
       toast.success("Agreement terminated successfully.");
-      await loadData();
     } catch (error) {
       toast.error(error?.response?.data?.message || error?.message || "Failed to terminate agreement.");
     }
@@ -618,7 +614,7 @@ const TenantAgreements = () => {
     try {
       await deleteLease(dispatch, row.id);
       toast.success("Agreement deleted. You may now delete the tenant record.");
-      await loadData();
+      setSelectedAgreements((prev) => prev.filter((id) => id !== row.id));
     } catch (error) {
       toast.error(error?.response?.data?.message || error?.message || "Failed to delete agreement.");
     }
@@ -653,7 +649,6 @@ const TenantAgreements = () => {
     else toast.success(`${succeeded} agreement${succeeded !== 1 ? "s" : ""} deleted.`);
 
     setSelectedAgreements([]);
-    await loadData();
   };
 
   return (

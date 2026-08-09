@@ -298,6 +298,12 @@ FinancialLedgerEntrySchema.pre("updateOne", function blockImmutableUpdate(next) 
   return next(new Error("FinancialLedgerEntry is immutable. Use reversal entries instead of updates."));
 });
 
+// updateMany is normally blocked — only internal service code may pass { _bypassImmutability: true }
+FinancialLedgerEntrySchema.pre("updateMany", function blockImmutableUpdateMany(next) {
+  if (this.getOptions()?._bypassImmutability === true) return next();
+  return next(new Error("FinancialLedgerEntry is immutable. Use reversal entries instead of bulk status updates."));
+});
+
 FinancialLedgerEntrySchema.pre("deleteOne", function blockImmutableDelete(next) {
   return next(new Error("FinancialLedgerEntry is immutable. Use reversal entries instead of deletes."));
 });

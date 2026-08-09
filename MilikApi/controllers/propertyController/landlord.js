@@ -188,7 +188,6 @@ export const createLandlord = async (req, res, next) => {
     }
 
     const newLandlord = new Landlord({
-      ...req.body,
       landlordCode,
       landlordName: landlordNameValue,
       landlordType: landlordTypeValue,

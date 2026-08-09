@@ -29,8 +29,12 @@ export const createInspection = async (req, res, next) => {
       return res.status(400).json({ message: "Business context is required" });
     }
 
+    const safeCreate = {};
+    for (const key of INSPECTION_SAFE_FIELDS) {
+      if (key in req.body) safeCreate[key] = req.body[key];
+    }
     const payload = {
-      ...req.body,
+      ...safeCreate,
       business,
       inspectionNumber: String(req.body?.inspectionNumber || "").trim() || buildInspectionNumber(),
     };

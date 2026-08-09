@@ -6,6 +6,32 @@ import { getAccessibleCompanyIds, hasCompanyActionPermission, isSystemAdminUser 
 import { extractAuthCookieToken } from "../utils/authCookie.js";
 import { isBlacklisted, isBlacklistedAsync } from "../utils/tokenBlacklist.js";
 
+// In-process cache: companyId → { company, cachedAt }
+// Avoids a MongoDB round-trip on every authenticated request.
+// 60-second TTL; max 500 entries (companies change rarely).
+const _companyCache = new Map();
+const COMPANY_CACHE_TTL_MS = 60_000;
+const COMPANY_CACHE_MAX    = 500;
+
+const getCachedCompany = async (companyId) => {
+  const hit = _companyCache.get(companyId);
+  if (hit && Date.now() - hit.cachedAt < COMPANY_CACHE_TTL_MS) return hit.company;
+  const company = await Company.findById(companyId).lean();
+  if (company) {
+    if (_companyCache.size >= COMPANY_CACHE_MAX) {
+      _companyCache.delete(_companyCache.keys().next().value);
+    }
+    _companyCache.set(companyId, { company, cachedAt: Date.now() });
+  } else {
+    _companyCache.delete(companyId);
+  }
+  return company;
+};
+
+export const invalidateCompanyCache = (companyId) => {
+  if (companyId) _companyCache.delete(String(companyId));
+};
+
 const getJWTSecret = () => {
   const secret = process.env.JWT_SECRET;
   if (!secret) {
@@ -100,7 +126,7 @@ const attachResolvedCompany = async (req) => {
     return null;
   }
 
-  const company = await Company.findById(companyId).lean();
+  const company = await getCachedCompany(companyId);
   req.companyContext = company ? serializeCompanyForClient(company, req.user) : null;
   req.userCompany = companyId;
   return req.companyContext;

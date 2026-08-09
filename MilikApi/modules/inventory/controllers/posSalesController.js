@@ -12,6 +12,9 @@ import {
 import { postStockEntry, getMultiProductBalances } from "../services/stockLedger.js";
 import { nextSequenceNumber } from "../services/sequenceService.js";
 import { postPosSaleLedger, reversePosSaleLedger } from "../services/inventoryAccountingService.js";
+import InvPaymentMethod from "../models/InvPaymentMethod.js";
+
+const BUILT_IN_PAYMENT_CODES = new Set(["cash", "mpesa", "card", "credit"]);
 
 const round2 = (n) => Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100;
 
@@ -50,7 +53,11 @@ export const listSales = async (req, res, next) => {
     } else if (req.query.from || req.query.to) {
       filter.createdAt = {};
       if (req.query.from) filter.createdAt.$gte = new Date(req.query.from);
-      if (req.query.to) filter.createdAt.$lte = new Date(req.query.to);
+      if (req.query.to) {
+        const toDate = new Date(req.query.to);
+        toDate.setDate(toDate.getDate() + 1);
+        filter.createdAt.$lt = toDate;
+      }
     }
 
     const limit = Math.min(Math.max(Number(req.query.limit || 30), 1), 100);
@@ -108,10 +115,15 @@ export const createSale = async (req, res, next) => {
     if (!Array.isArray(lines) || !lines.length) throw createError(400, "At least one sale line is required");
     if (!Array.isArray(payments) || !payments.length) throw createError(400, "At least one payment is required");
 
-    const VALID_PAYMENT_METHODS = ["cash", "mpesa", "card", "credit"];
+    // Validate payment methods dynamically — fall back to 4 built-ins if collection is empty
+    const customMethods = await InvPaymentMethod.find({ business, active: true }).select("code").lean();
+    const validCodes = customMethods.length
+      ? new Set(customMethods.map((m) => String(m.code).toLowerCase()))
+      : BUILT_IN_PAYMENT_CODES;
+
     for (const p of payments) {
-      if (!VALID_PAYMENT_METHODS.includes(String(p.method || ""))) {
-        throw createError(400, `Invalid payment method "${p.method}". Must be one of: ${VALID_PAYMENT_METHODS.join(", ")}`);
+      if (!validCodes.has(String(p.method || "").toLowerCase())) {
+        throw createError(400, `Invalid payment method "${p.method}"`);
       }
       if (!p.amount || Number(p.amount) <= 0 || !Number.isFinite(Number(p.amount))) {
         throw createError(400, "Each payment amount must be greater than zero");
@@ -211,27 +223,30 @@ export const createSale = async (req, res, next) => {
       change: round2(Number(amountTendered || paymentTotal) - grandTotal),
       customerName: customerName ? String(customerName).trim() : "",
       customerPhone: customerPhone ? String(customerPhone).trim() : "",
-      cashier: userId,
+      ...(userId ? { cashier: userId } : {}),
       notes: notes ? String(notes).trim() : "",
       status: "completed",
     });
 
-    // Deduct stock for tracked products
-    for (const line of enrichedLines) {
-      if (!line.trackStock) continue;
-      await postStockEntry({
-        business,
-        location: String(location),
-        product: String(line.product),
-        type: "sale",
-        qty: -line.qty,
-        unitCost: line.costPrice,
-        reference: receiptNumber,
-        posSale: sale._id,
-        notes: `POS sale: ${receiptNumber}`,
-        createdBy: userId,
-      });
-    }
+    // Deduct stock for tracked products — parallel across all lines
+    await Promise.all(
+      enrichedLines
+        .filter((line) => line.trackStock)
+        .map((line) =>
+          postStockEntry({
+            business,
+            location: String(location),
+            product: String(line.product),
+            type: "sale",
+            qty: -line.qty,
+            unitCost: line.costPrice,
+            reference: receiptNumber,
+            posSale: sale._id,
+            notes: `POS sale: ${receiptNumber}`,
+            createdBy: userId,
+          })
+        )
+    );
 
     // Post GL entries — non-blocking; GL failure never rejects the sale
     postPosSaleLedger({ businessId: business, sale, userId }).catch((err) =>
@@ -260,21 +275,24 @@ export const voidSale = async (req, res, next) => {
     const stockProducts = await InvProduct.find({ _id: { $in: productIds }, business }).select("trackStock").lean();
     const trackStockMap = Object.fromEntries(stockProducts.map((p) => [String(p._id), p.trackStock]));
 
-    for (const line of sale.lines) {
-      if (!trackStockMap[String(line.product)]) continue;
-      await postStockEntry({
-        business,
-        location: String(sale.location),
-        product: String(line.product),
-        type: "return",
-        qty: line.qty,
-        unitCost: line.costPrice,
-        reference: sale.receiptNumber,
-        posSale: sale._id,
-        notes: `Void of sale ${sale.receiptNumber}: ${voidReason}`,
-        createdBy: userId,
-      });
-    }
+    await Promise.all(
+      sale.lines
+        .filter((line) => trackStockMap[String(line.product)])
+        .map((line) =>
+          postStockEntry({
+            business,
+            location: String(sale.location),
+            product: String(line.product),
+            type: "return",
+            qty: line.qty,
+            unitCost: line.costPrice,
+            reference: sale.receiptNumber,
+            posSale: sale._id,
+            notes: `Void of sale ${sale.receiptNumber}: ${voidReason}`,
+            createdBy: userId,
+          })
+        )
+    );
 
     sale.status = "voided";
     sale.voidedBy = userId;
@@ -308,6 +326,14 @@ export const salesSummary = async (req, res, next) => {
     if (req.query.date) {
       const { start, end } = parseDateRange(req.query.date);
       filter.createdAt = { $gte: start, $lt: end };
+    } else if (req.query.from || req.query.to) {
+      filter.createdAt = {};
+      if (req.query.from) filter.createdAt.$gte = new Date(req.query.from);
+      if (req.query.to) {
+        const toDate = new Date(req.query.to);
+        toDate.setDate(toDate.getDate() + 1);
+        filter.createdAt.$lt = toDate;
+      }
     }
 
     const [[summary], paymentBreakdown] = await Promise.all([

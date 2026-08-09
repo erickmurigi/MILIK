@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FaArrowDown, FaArrowUp, FaExchangeAlt, FaPlus, FaRedoAlt, FaTimes } from "react-icons/fa";
@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import InventoryShell from "./InventoryShell";
 import { inventoryApi, formatMoney } from "../../services/inventoryApi";
 import AppSelect from "../../components/common/AppSelect";
+import PaginationBar from "../../components/PaginationBar";
 
 const TYPE_LABELS = {
   purchase:      { label: "Purchase",     color: "border-emerald-200 bg-emerald-50 text-emerald-700", in: true },
@@ -50,6 +51,7 @@ const InvStockMovements = () => {
   const [from, setFrom] = useTabState("/inventory/stock-movements:from", "");
   const [to, setTo] = useTabState("/inventory/stock-movements:to", "");
   const [page, setPage] = useTabState("/inventory/stock-movements:page", 1);
+  const [pageSize, setPageSize] = useTabState("/inventory/stock-movements:pageSize", 50);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
@@ -65,9 +67,9 @@ const InvStockMovements = () => {
     staleTime: 5 * 60_000,
   });
   const { data: movData, isLoading: loading, error, refetch } = useQuery({
-    queryKey: ['inv-movements', locationFilter, typeFilter, from, to, page],
+    queryKey: ['inv-movements', locationFilter, typeFilter, from, to, page, pageSize],
     queryFn: async () => {
-      const res = await inventoryApi.listMovements({ location: locationFilter || undefined, type: typeFilter || undefined, from: from || undefined, to: to || undefined, page, limit: 50 });
+      const res = await inventoryApi.listMovements({ location: locationFilter || undefined, type: typeFilter || undefined, from: from || undefined, to: to || undefined, page, limit: pageSize });
       const list = Array.isArray(res) ? res : (res?.data ?? []);
       return { entries: list, total: res?.total ?? list.length };
     },
@@ -78,6 +80,7 @@ const InvStockMovements = () => {
 
   const entries = movData?.entries ?? [];
   const total = movData?.total ?? 0;
+  const pages = Math.ceil(total / pageSize) || 1;
 
   const closeModal = () => { setShowModal(false); setForm(emptyForm()); };
 
@@ -103,99 +106,92 @@ const InvStockMovements = () => {
   const qtyNum = Number(form.qty || 0);
 
   return (
-    <InventoryShell
-      title="Stock Movements"
-      action={
-        <>
-          <button type="button" onClick={refetch} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-            <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
-          </button>
-          <button type="button" onClick={() => setShowModal(true)} className="inline-flex h-8 items-center gap-1.5 bg-[#FF8C00] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#E67E00]">
-            <FaPlus /> Manual Entry
-          </button>
-        </>
-      }
-    >
-      <div className="min-h-[calc(100vh-14rem)] overflow-x-auto border border-slate-200 bg-white shadow-sm">
-        {/* Filter strip */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-slate-200 bg-[#EDF5F1] px-3 py-2">
-          <span className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
-            Entries: <strong className="text-[#0B3B2E]">{total}</strong>
-          </span>
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <AppSelect value={locationFilter} onChange={(v) => { setLocationFilter(v ?? ""); setPage(1); }} options={locations.map((l) => ({ value: l._id, label: l.name }))} placeholder="All Locations" clearable size="sm" />
-            <AppSelect value={typeFilter} onChange={(v) => { setTypeFilter(v ?? ""); setPage(1); }} options={Object.entries(TYPE_LABELS).map(([k, v]) => ({ value: k, label: v.label }))} placeholder="All Types" clearable size="sm" />
-            <div className="flex items-center gap-1 text-xs text-slate-500">
-              <span>From</span>
-              <input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(1); }}
-                className="border border-slate-300 bg-white px-2 py-1 text-xs outline-none focus:border-[#0B3B2E]" />
-            </div>
-            <div className="flex items-center gap-1 text-xs text-slate-500">
-              <span>To</span>
-              <input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPage(1); }}
-                className="border border-slate-300 bg-white px-2 py-1 text-xs outline-none focus:border-[#0B3B2E]" />
-            </div>
+    <InventoryShell lockScroll>
+      <div className="flex h-full flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">
+        {/* Filter + action strip */}
+        <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5">
+          <AppSelect value={locationFilter} onChange={(v) => { setLocationFilter(v ?? ""); setPage(1); }} options={locations.map((l) => ({ value: l._id, label: l.name }))} placeholder="All Locations" clearable size="sm" />
+          <AppSelect value={typeFilter} onChange={(v) => { setTypeFilter(v ?? ""); setPage(1); }} options={Object.entries(TYPE_LABELS).map(([k, v]) => ({ value: k, label: v.label }))} placeholder="All Types" clearable size="sm" />
+          <div className="flex items-center gap-1 text-xs text-slate-500">
+            <span>From</span>
+            <input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(1); }}
+              className="border border-slate-300 bg-white px-2 py-1 text-xs outline-none focus:border-[#0B3B2E]" />
+          </div>
+          <div className="flex items-center gap-1 text-xs text-slate-500">
+            <span>To</span>
+            <input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPage(1); }}
+              className="border border-slate-300 bg-white px-2 py-1 text-xs outline-none focus:border-[#0B3B2E]" />
+          </div>
+          <div className="ml-auto flex items-center gap-1.5">
+            <button type="button" onClick={refetch} className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+              <FaRedoAlt className={loading ? "animate-spin" : ""} />
+            </button>
+            <button type="button" onClick={() => setShowModal(true)} className="inline-flex h-7 items-center gap-1 bg-[#FF8C00] px-2.5 text-[10px] font-bold text-white hover:bg-[#E67E00]">
+              <FaPlus /> Manual Entry
+            </button>
           </div>
         </div>
 
-        <table className="w-full min-w-[800px] text-xs">
-          <thead className="bg-[#0B3B2E] text-white">
-            <tr>
-              <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Date</th>
-              <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Product</th>
-              <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Location</th>
-              <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Type</th>
-              <th className="px-3 py-2 text-right font-bold uppercase tracking-wide">Qty</th>
-              <th className="px-3 py-2 text-right font-bold uppercase tracking-wide">Unit Cost</th>
-              <th className="px-3 py-2 text-right font-bold uppercase tracking-wide">Total Cost</th>
-              <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">Reference</th>
-              <th className="px-3 py-2 text-left font-bold uppercase tracking-wide">By</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={9} className="px-3 py-12 text-center text-slate-400">Loading…</td></tr>
-            ) : !entries.length ? (
+        <div className="min-h-0 flex-1 overflow-auto">
+          <table className="w-full min-w-[800px] text-xs">
+            <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
               <tr>
-                <td colSpan={9} className="px-3 py-14 text-center">
-                  <FaExchangeAlt className="mx-auto mb-2 text-3xl text-slate-300" />
-                  <p className="text-sm font-semibold text-slate-500">No stock movements found</p>
-                  {!locationFilter && !typeFilter && !from && !to && (
-                    <p className="mt-0.5 text-xs text-slate-400">Movements are created automatically via purchase orders, sales, and transfers.</p>
-                  )}
-                </td>
+                <th className="px-3 py-2 text-left text-[10px] font-extrabold uppercase tracking-widest">Date</th>
+                <th className="px-3 py-2 text-left text-[10px] font-extrabold uppercase tracking-widest">Product</th>
+                <th className="px-3 py-2 text-left text-[10px] font-extrabold uppercase tracking-widest">Location</th>
+                <th className="px-3 py-2 text-left text-[10px] font-extrabold uppercase tracking-widest">Type</th>
+                <th className="px-3 py-2 text-right text-[10px] font-extrabold uppercase tracking-widest">Qty</th>
+                <th className="px-3 py-2 text-right text-[10px] font-extrabold uppercase tracking-widest">Unit Cost</th>
+                <th className="px-3 py-2 text-right text-[10px] font-extrabold uppercase tracking-widest">Total Cost</th>
+                <th className="px-3 py-2 text-left text-[10px] font-extrabold uppercase tracking-widest">Reference</th>
+                <th className="px-3 py-2 text-left text-[10px] font-extrabold uppercase tracking-widest">By</th>
               </tr>
-            ) : entries.map((entry) => {
-              const isIn = Number(entry.qty) > 0;
-              return (
-                <tr key={entry._id} className="border-b border-slate-100 hover:bg-slate-50">
-                  <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{new Date(entry.createdAt).toLocaleDateString("en-KE")}</td>
-                  <td className="px-3 py-2 font-semibold text-slate-800">{entry.product?.name || "—"}</td>
-                  <td className="px-3 py-2 text-slate-600">{entry.location?.name || "—"}</td>
-                  <td className="px-3 py-2"><TypePill type={entry.type} /></td>
-                  <td className="px-3 py-2 text-right">
-                    <span className={`inline-flex items-center gap-1 font-bold ${isIn ? "text-emerald-600" : "text-red-600"}`}>
-                      {isIn ? <FaArrowUp className="text-[9px]" /> : <FaArrowDown className="text-[9px]" />}
-                      {Math.abs(entry.qty)} {entry.product?.unitOfMeasure || ""}
-                    </span>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={9} className="px-3 py-12 text-center text-slate-400">Loading…</td></tr>
+              ) : !entries.length ? (
+                <tr>
+                  <td colSpan={9} className="px-3 py-14 text-center">
+                    <FaExchangeAlt className="mx-auto mb-2 text-3xl text-slate-300" />
+                    <p className="text-sm font-semibold text-slate-500">No stock movements found</p>
+                    {!locationFilter && !typeFilter && !from && !to && (
+                      <p className="mt-0.5 text-xs text-slate-400">Movements are created automatically via purchase orders, sales, and transfers.</p>
+                    )}
                   </td>
-                  <td className="px-3 py-2 text-right text-slate-600">{formatMoney(entry.unitCost)}</td>
-                  <td className="px-3 py-2 text-right font-bold text-slate-700">{formatMoney(entry.totalCost)}</td>
-                  <td className="px-3 py-2 font-mono text-[10px] text-slate-400">{entry.reference || "—"}</td>
-                  <td className="px-3 py-2 text-slate-500">{entry.createdBy?.name || "—"}</td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              ) : entries.map((entry) => {
+                const isIn = Number(entry.qty) > 0;
+                return (
+                  <tr key={entry._id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{new Date(entry.createdAt).toLocaleDateString("en-KE")}</td>
+                    <td className="px-3 py-2 font-semibold text-slate-800">{entry.product?.name || "—"}</td>
+                    <td className="px-3 py-2 text-slate-600">{entry.location?.name || "—"}</td>
+                    <td className="px-3 py-2"><TypePill type={entry.type} /></td>
+                    <td className="px-3 py-2 text-right">
+                      <span className={`inline-flex items-center gap-1 font-bold ${isIn ? "text-emerald-600" : "text-red-600"}`}>
+                        {isIn ? <FaArrowUp className="text-[9px]" /> : <FaArrowDown className="text-[9px]" />}
+                        {Math.abs(entry.qty)} {entry.product?.unitOfMeasure || ""}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right text-slate-600">{formatMoney(entry.unitCost)}</td>
+                    <td className="px-3 py-2 text-right font-bold text-slate-700">{formatMoney(entry.totalCost)}</td>
+                    <td className="px-3 py-2 font-mono text-[10px] text-slate-400">{entry.reference || "—"}</td>
+                    <td className="px-3 py-2 text-slate-500">{entry.createdBy?.name || "—"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
 
-        {total > 50 && (
-          <div className="flex items-center justify-between border-t border-slate-100 px-3 py-2">
-            <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#0B3B2E]">← Previous</button>
-            <span className="text-xs text-slate-500">Page {page} of {Math.ceil(total / 50)}</span>
-            <button type="button" onClick={() => setPage((p) => p + 1)} disabled={entries.length < 50} className="text-xs font-bold text-slate-600 disabled:opacity-40 hover:text-[#0B3B2E]">Next →</button>
-          </div>
-        )}
+        <PaginationBar
+          page={page} pages={pages} total={total} pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(s) => { setPageSize(s); setPage(1); }}
+          loading={loading}
+          pageSizes={[25, 50, 100, 200]}
+        />
       </div>
 
       {showModal && (

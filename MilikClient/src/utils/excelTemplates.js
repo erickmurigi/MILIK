@@ -2247,3 +2247,112 @@ export const exportTenantsToExcel = (tenants) => {
   document.body.removeChild(link);
   window.URL.revokeObjectURL(url);
 };
+
+// ─── Products Import ──────────────────────────────────────────────────────────
+
+export const downloadProductsTemplate = () => {
+  const wb = XLSX.utils.book_new();
+
+  // Instructions sheet
+  const instructions = [
+    ["PRODUCT IMPORT TEMPLATE"],
+    [""],
+    ["INSTRUCTIONS:"],
+    ["1. Fill in the 'Products' sheet — do not rename or delete columns."],
+    ["2. Name and Selling Price are required. All other columns are optional."],
+    ["3. VAT Rate must be 0, 8, or 16 (percent). Defaults to 16 if blank."],
+    ["4. Track Stock: enter TRUE or FALSE. Defaults to TRUE."],
+    ["5. Serialized: enter TRUE only for items tracked by serial/IMEI number."],
+    ["6. Delete these instruction rows before saving if you prefer, they are ignored."],
+  ];
+  const wsInstr = XLSX.utils.aoa_to_sheet(instructions);
+  wsInstr["!cols"] = [{ wch: 70 }];
+  XLSX.utils.book_append_sheet(wb, wsInstr, "Instructions");
+
+  // Data sheet
+  const headers = [["Name *", "SKU", "Barcode", "Category", "Unit of Measure", "Cost Price", "Selling Price *", "VAT Rate (0/8/16)", "Track Stock (TRUE/FALSE)", "Serialized (TRUE/FALSE)", "Reorder Level", "Description"]];
+  const sample = [
+    ["Monster Energy Drink", "MNSTR-500", "4533235465784", "Beverages", "pcs", "200", "400", "16", "TRUE", "FALSE", "10", "500ml can"],
+    ["Samsung Galaxy A15", "SAM-GA15", "", "Smartphones", "pcs", "25000", "32800", "16", "TRUE", "TRUE", "2", ""],
+    ["Bottled Water 500ml", "", "", "Beverages", "pcs", "30", "50", "0", "TRUE", "FALSE", "50", ""],
+  ];
+  const wsData = XLSX.utils.aoa_to_sheet([...headers, ...sample]);
+  wsData["!cols"] = [22,14,18,16,16,12,16,18,22,22,14,30].map((w) => ({ wch: w }));
+  // Style header row green
+  const range = XLSX.utils.decode_range(wsData["!ref"]);
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const cell = XLSX.utils.encode_cell({ r: 0, c });
+    if (!wsData[cell]) continue;
+    wsData[cell].s = { fill: { fgColor: { rgb: "0B3B2E" } }, font: { color: { rgb: "FFFFFF" }, bold: true } };
+  }
+  XLSX.utils.book_append_sheet(wb, wsData, "Products");
+
+  const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  const blob = new Blob([buf], { type: "application/octet-stream" });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "products_import_template.xlsx";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
+};
+
+export const parseProductsExcel = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const wb = XLSX.read(new Uint8Array(e.target.result), { type: "array" });
+        // Prefer a sheet named "Products", otherwise take first sheet
+        const sheetName = wb.SheetNames.includes("Products") ? "Products" : wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(ws, { raw: false, defval: "" });
+
+        if (!jsonData.length) { reject(new Error("No data found in the file")); return; }
+
+        const valid = [];
+        const errors = [];
+
+        jsonData.forEach((row, i) => {
+          const rowNum = i + 2;
+          const name = (row["Name *"] || row["Name"] || row["name"] || "").toString().trim();
+          const sellingPriceRaw = row["Selling Price *"] || row["Selling Price"] || row["sellingPrice"] || row["selling_price"] || "";
+          const sellingPrice = parseFloat(String(sellingPriceRaw).replace(/,/g, ""));
+          const rowErrors = [];
+
+          if (!name) rowErrors.push("Name is required");
+          if (!sellingPriceRaw || isNaN(sellingPrice) || sellingPrice < 0) rowErrors.push("Selling Price must be a valid non-negative number");
+
+          if (rowErrors.length) { errors.push({ row: rowNum, name: name || "(blank)", errors: rowErrors }); return; }
+
+          const vatRaw = parseInt(row["VAT Rate (0/8/16)"] || row["VAT Rate"] || row["vatRate"] || row["vat"] || "16", 10);
+          const vatRate = [0, 8, 16].includes(vatRaw) ? vatRaw : 16;
+          const trackStockRaw = (row["Track Stock (TRUE/FALSE)"] || row["Track Stock"] || row["trackStock"] || "TRUE").toString().toUpperCase();
+          const serializedRaw = (row["Serialized (TRUE/FALSE)"] || row["Serialized"] || row["serialized"] || "FALSE").toString().toUpperCase();
+
+          valid.push({
+            name,
+            sku: (row["SKU"] || row["sku"] || "").toString().trim().toUpperCase() || null,
+            barcode: (row["Barcode"] || row["barcode"] || "").toString().trim() || null,
+            category: (row["Category"] || row["category"] || "").toString().trim(),
+            unitOfMeasure: (row["Unit of Measure"] || row["Unit"] || row["unit"] || "pcs").toString().trim() || "pcs",
+            costPrice: parseFloat(String(row["Cost Price"] || row["costPrice"] || "0").replace(/,/g, "")) || 0,
+            sellingPrice,
+            vatRate,
+            trackStock: trackStockRaw !== "FALSE",
+            serialized: serializedRaw === "TRUE",
+            reorderLevel: parseInt(row["Reorder Level"] || row["reorderLevel"] || "0", 10) || 0,
+            description: (row["Description"] || row["description"] || "").toString().trim(),
+          });
+        });
+
+        resolve({ valid, errors, total: jsonData.length, validCount: valid.length, errorCount: errors.length });
+      } catch (err) {
+        reject(new Error(err.message || "Failed to parse file"));
+      }
+    };
+    reader.onerror = () => reject(new Error("Could not read file"));
+    reader.readAsArrayBuffer(file);
+  });

@@ -25,7 +25,11 @@ const scopedMaintenanceQuery = (req, id) => {
 // Create maintenance request
 export const createMaintenance = async (req, res, next) => {
   const business = resolveBusinessId(req);
-  const newMaintenance = new Maintenance({ ...req.body, business });
+  const safeCreate = {};
+  for (const key of ["property", "unit", "tenant", ...MAINTENANCE_SAFE_FIELDS]) {
+    if (key in req.body) safeCreate[key] = req.body[key];
+  }
+  const newMaintenance = new Maintenance({ ...safeCreate, business });
 
   try {
     const savedMaintenance = await newMaintenance.save();

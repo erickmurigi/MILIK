@@ -199,7 +199,8 @@ export const reversePayrollGLJournals = async (period, companyId, reversedByUser
       sourceTransactionId: String(period._id),
       status: { $ne: 'reversed' },
     },
-    { $set: { status: 'reversed' } }
+    { $set: { status: 'reversed' } },
+    { _bypassImmutability: true }
   );
 
   return { reversedCount: originals.length };

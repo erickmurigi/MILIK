@@ -136,8 +136,11 @@ const processCompany = async (businessId, settings, billingPeriods, today, force
 
   const systemReq = { user: { isSystemAdmin: true, company: businessId } };
 
-  await Promise.all(
-    activeLeases.map(async (lease) => {
+  // Process in chunks of 50 to avoid saturating the MongoDB connection pool
+  // when companies have hundreds or thousands of active leases.
+  const CHUNK_SIZE = 50;
+  for (let i = 0; i < activeLeases.length; i += CHUNK_SIZE) {
+    await Promise.all(activeLeases.slice(i, i + CHUNK_SIZE).map(async (lease) => {
       if (!lease.tenant || !lease.unit || Number(lease.rentAmount || 0) <= 0) {
         skipped++;
         return;
@@ -196,8 +199,8 @@ const processCompany = async (businessId, settings, billingPeriods, today, force
           errors.push({ leaseId: String(lease._id), message: err?.message || String(err) });
         }
       }
-    })
-  );
+    }));
+  }
 
   // Send notifications after all invoices are created (best-effort)
   if (notificationQueue.length) {

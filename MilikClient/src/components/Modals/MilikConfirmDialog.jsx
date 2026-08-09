@@ -31,8 +31,8 @@ const MilikConfirmDialog = ({
 
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-slate-950/45 backdrop-blur-[2px]" onClick={onCancel} aria-hidden="true" />
-      <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto px-4 py-6 sm:items-center">
+      <div className="fixed inset-0 z-[200] bg-slate-950/45 backdrop-blur-[2px]" onClick={onCancel} aria-hidden="true" />
+      <div className="fixed inset-0 z-[201] flex items-start justify-center overflow-y-auto px-4 py-6 sm:items-center">
         <div
           ref={panelRef}
           className="flex max-h-[80vh] w-full max-w-sm flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl"

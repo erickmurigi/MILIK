@@ -125,7 +125,8 @@ async function reverseDisbursementLedger({ disbursement, userId }) {
   await FinancialLedgerEntry.insertMany(reversals);
   await FinancialLedgerEntry.updateMany(
     { _id: { $in: existing.map((e) => e._id) } },
-    { $set: { status: "reversed" } }
+    { $set: { status: "reversed" } },
+    { _bypassImmutability: true }
   );
 
   const businessId = String(existing[0].business);

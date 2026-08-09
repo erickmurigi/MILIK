@@ -26,10 +26,10 @@ const ACCOUNT_GROUPS = [
 
 const SUBGROUP_OPTIONS_BY_TYPE = {
   asset:     ["Cashbooks", "Bank Accounts", "Current Assets", "Fixed Assets", "Receivables", "Other Assets"],
-  liability: ["Current Liabilities", "Long-term Liabilities", "Payables", "Other Liabilities"],
+  liability: ["Current Liabilities", "Long-term Liabilities", "Payables", "Tax Liabilities", "Other Liabilities"],
   equity:    ["Capital", "Retained Earnings", "Reserves", "Other Equity"],
-  income:    ["Operating Revenue", "Service Revenue", "Commission & Fees", "Other Income"],
-  expense:   ["Cost of Sales", "Operating Expenses", "Administrative Expenses", "Finance Costs", "Other Expenses"],
+  income:    ["Sales Revenue", "Operating Revenue", "Service Revenue", "Commission & Fees", "Other Income"],
+  expense:   ["Cost of Revenue", "Inventory Adjustments", "Cost of Sales", "Operating Expenses", "Administrative Expenses", "Finance Costs", "Other Expenses"],
 };
 
 const NORMAL_BALANCE_BY_TYPE = {
@@ -262,7 +262,13 @@ const ChartOfAccounts = () => {
 
   const effectiveType         = parentAccountForForm?.type || formData.type;
   const effectiveGroup        = parentAccountForForm?.group || normalizeGroup(formData.group, effectiveType);
-  const currentSubGroupOptions = subGroupOptionsForType(effectiveType);
+  const currentSubGroupOptions = useMemo(() => {
+    const predefined = subGroupOptionsForType(effectiveType);
+    const fromAccounts = accounts
+      .filter((a) => String(a.type || "").toLowerCase() === effectiveType && a.subGroup)
+      .map((a) => a.subGroup);
+    return [...new Set([...predefined, ...fromAccounts])];
+  }, [effectiveType, accounts]);
 
   const codeConflict = useMemo(() => {
     if (!formData.code.trim()) return false;
@@ -569,20 +575,33 @@ const ChartOfAccounts = () => {
                             group.classes.map((clsAcc) => (
                               <React.Fragment key={clsAcc.cls}>
                                 {/* Class sub-header */}
-                                <tr className="bg-slate-50 border-y border-slate-200">
+                                <tr className="bg-slate-50 border-y border-slate-200 group/cls">
                                   <td colSpan={6} className="px-3 py-1">
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                                      {clsAcc.cls}
-                                    </span>
-                                    {!clsAcc.isEmpty && (
-                                      <span className="ml-2 text-[10px] text-slate-400">
-                                        {clsAcc.accounts.length}
-                                      </span>
-                                    )}
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                          {clsAcc.cls}
+                                        </span>
+                                        {!clsAcc.isEmpty && (
+                                          <span className="text-[10px] text-slate-400">
+                                            ({clsAcc.accounts.length})
+                                          </span>
+                                        )}
+                                      </div>
+                                      {canCreateCOA && (
+                                        <button
+                                          onClick={() => openCreateModal({ type: group.groupType, subGroup: clsAcc.cls })}
+                                          className="flex items-center gap-0.5 text-[10px] font-semibold text-slate-400 hover:text-[#0B3B2E] opacity-0 group-hover/cls:opacity-100 transition-opacity"
+                                          title={`Add account to ${clsAcc.cls}`}
+                                        >
+                                          <FaPlus size={7} /> Add
+                                        </button>
+                                      )}
+                                    </div>
                                   </td>
                                 </tr>
 
-                                {/* Empty class placeholder with quick-add */}
+                                {/* Empty class placeholder */}
                                 {clsAcc.isEmpty && (
                                   <tr>
                                     <td colSpan={6} className="px-3 py-2 text-center">

@@ -255,6 +255,7 @@ const buildCandidateRows = async ({ businessId, rule, runDate }) => {
     .populate("property", "propertyName propertyCode exemptFromLatePenalties")
     .populate("unit", "unitNumber")
     .sort({ dueDate: 1, createdAt: 1 })
+    .limit(5000)
     .lean();
 
   const periodKey = buildPeriodKey(rule, runDate);
@@ -878,6 +879,7 @@ export const getLatePenaltyBatches = async (req, res) => {
       .populate("items.property", "propertyName propertyCode")
       .populate("items.unit", "unitNumber")
       .sort({ runDate: -1, createdAt: -1 })
+      .limit(50)
       .lean();
 
     // Batch-check invoice statuses across all batches — one query instead of one per batch

@@ -2,6 +2,7 @@ import InvSupplier from "../models/InvSupplier.js";
 import InvPurchaseOrder from "../models/InvPurchaseOrder.js";
 import { createError } from "../../../utils/error.js";
 import { resolveActiveBusinessId, escapeRegex, parseBoolean } from "../services/inventoryScope.js";
+import { resolveSupplierApAccount } from "../services/inventoryAccountingService.js";
 
 export const listSuppliers = async (req, res, next) => {
   try {
@@ -57,6 +58,15 @@ export const createSupplier = async (req, res, next) => {
       address: address ? String(address).trim() : "",
       notes: notes ? String(notes).trim() : "",
     });
+
+    // Auto-create AP sub-ledger account under 2000 — await so the response includes apAccountId
+    try {
+      const apAccount = await resolveSupplierApAccount(String(business), String(supplier._id));
+      supplier.apAccountId = apAccount._id;
+    } catch (err) {
+      console.error("[INV GL] resolveSupplierApAccount failed on create:", err.message);
+    }
+
     res.status(201).json({ success: true, data: supplier });
   } catch (err) {
     next(err);

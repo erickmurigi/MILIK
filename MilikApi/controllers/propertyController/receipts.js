@@ -24,8 +24,25 @@ export async function createReceipt(req, res) {
       fallbackErrorMessage: "No valid company user could be resolved for receipt creation.",
     });
 
+    const body = req.body || {};
     const receipt = await RentPayment.create({
-      ...req.body,
+      amount:               body.amount,
+      date:                 body.date,
+      paymentMethod:        body.paymentMethod,
+      referenceNumber:      body.referenceNumber,
+      description:          body.description,
+      notes:                body.notes,
+      tenant:               body.tenant,
+      property:             body.property,
+      unit:                 body.unit,
+      landlord:             body.landlord,
+      statementPeriodStart: body.statementPeriodStart,
+      statementPeriodEnd:   body.statementPeriodEnd,
+      paymentType:          body.paymentType,
+      cashbookAccountId:    body.cashbookAccountId,
+      allocations:          body.allocations,
+      allocationSummary:    body.allocationSummary,
+      receiptDescription:   body.receiptDescription,
       business,
       ledgerType: "receipts",
       status: "completed",
@@ -56,6 +73,8 @@ export async function createReceipt(req, res) {
 
     res.status(201).json(receipt);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error("[createReceipt]", err);
+    const status = err.statusCode || (err.name === "ValidationError" ? 400 : 500);
+    res.status(status).json({ message: err.statusCode ? err.message : "Receipt creation failed" });
   }
 }

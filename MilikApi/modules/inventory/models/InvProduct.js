@@ -5,7 +5,7 @@ const invProductSchema = new mongoose.Schema(
   {
     business:      { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true, index: true },
     name:          { type: String, required: true, trim: true },
-    sku:           { type: String, trim: true, uppercase: true, default: "" },
+    sku:           { type: String, trim: true, uppercase: true, default: null },
     barcode:       { type: String, trim: true, default: "" },
     category:      { type: mongoose.Schema.Types.ObjectId, ref: "InvCategory", default: null, index: true },
     unitOfMeasure: { type: String, trim: true, default: "pcs" },
@@ -29,5 +29,11 @@ invProductSchema.index({ business: 1, barcode: 1 }, { sparse: true });
 invProductSchema.index({ business: 1, active: 1, name: 1 });
 invProductSchema.index({ business: 1, category: 1 });
 invProductSchema.index({ name: "text", sku: "text", barcode: "text", description: "text" }, { default_language: "none" });
+
+invProductSchema.pre("save", function (next) {
+  if (this.sku === "") this.sku = null;
+  if (this.barcode === "") this.barcode = null;
+  next();
+});
 
 export default mongoose.model("InvProduct", invProductSchema);

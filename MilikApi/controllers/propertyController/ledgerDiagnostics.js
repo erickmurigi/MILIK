@@ -949,6 +949,7 @@ export const getActiveCorrections = async (req, res) => {
     })
       .populate({ path: "accountId", select: "code name" })
       .sort({ createdAt: -1 })
+      .limit(500)
       .lean();
 
     const grouped = {};
@@ -969,7 +970,8 @@ export const getActiveCorrections = async (req, res) => {
 
     return res.status(200).json({ corrections: Object.values(grouped) });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error("[getActiveCorrections]", err);
+    return res.status(500).json({ message: "Failed to load GL corrections" });
   }
 };
 
@@ -1010,7 +1012,7 @@ export const reverseGlCorrectionEntry = async (req, res) => {
     const ids        = corrections.map((e) => e._id);
     const accountIds = [...new Set(corrections.map((e) => String(e.accountId)).filter(Boolean))];
 
-    await FinancialLedgerEntry.updateMany({ _id: { $in: ids } }, { $set: { status: "void" } });
+    await FinancialLedgerEntry.updateMany({ _id: { $in: ids } }, { $set: { status: "void" } }, { _bypassImmutability: true });
 
     aggregateChartOfAccountBalances(businessId, accountIds).catch(() => {});
 
@@ -1052,7 +1054,7 @@ export const voidReversedCorrections = async (req, res) => {
     const ids        = entries.map((e) => e._id);
     const accountIds = [...new Set(entries.map((e) => String(e.accountId)).filter(Boolean))];
 
-    await FinancialLedgerEntry.updateMany({ _id: { $in: ids } }, { $set: { status: "void" } });
+    await FinancialLedgerEntry.updateMany({ _id: { $in: ids } }, { $set: { status: "void" } }, { _bypassImmutability: true });
 
     aggregateChartOfAccountBalances(businessId, accountIds).catch(() => {});
 
@@ -1081,6 +1083,7 @@ export const getGroupEntries = async (req, res) => {
     })
       .populate({ path: "accountId", select: "code name type" })
       .sort({ direction: 1, createdAt: 1 })
+      .limit(200)
       .lean();
 
     return res.status(200).json({
@@ -1129,7 +1132,7 @@ export const voidOrphanedJournalGroup = async (req, res) => {
     const ids        = entries.map((e) => e._id);
     const accountIds = [...new Set(entries.map((e) => String(e.accountId)).filter(Boolean))];
 
-    await FinancialLedgerEntry.updateMany({ _id: { $in: ids } }, { $set: { status: "void" } });
+    await FinancialLedgerEntry.updateMany({ _id: { $in: ids } }, { $set: { status: "void" } }, { _bypassImmutability: true });
 
     aggregateChartOfAccountBalances(businessId, accountIds).catch(() => {});
 

@@ -191,7 +191,7 @@ const AppSelect = ({
   };
 
   const heightCls = compact ? "h-[20px] text-[9px]" : size === "sm" ? "h-7 text-xs" : "h-9 text-sm";
-  const roundedCls = compact ? "rounded-none" : "rounded-lg";
+  const roundedCls = (compact || size === "sm") ? "rounded-none" : "rounded-lg";
   const paddingCls = compact ? "px-1.5" : "px-3";
   const minWidthCls = compact ? "min-w-[70px]" : "min-w-[110px]";
   const hasError = Boolean(error);
@@ -276,7 +276,7 @@ const AppSelect = ({
           <div
             id="app-select-portal"
             style={dropdownStyle}
-            className={compact
+            className={(compact || size === "sm")
               ? "border border-slate-300 bg-white shadow-lg"
               : "rounded-xl border border-slate-200 bg-white shadow-2xl"}
           >

@@ -217,6 +217,10 @@ const InvTills              = lazy(() => import("./pages/Inventory/InvTills"));
 const POSTerminal           = lazy(() => import("./pages/Inventory/POSTerminal"));
 const POSSalesHistory       = lazy(() => import("./pages/Inventory/POSSalesHistory"));
 const POSSessions           = lazy(() => import("./pages/Inventory/POSSessions"));
+const InvTaxGroups          = lazy(() => import("./pages/Inventory/InvTaxGroups"));
+const InvUnitsOfMeasure     = lazy(() => import("./pages/Inventory/InvUnitsOfMeasure"));
+const InvPaymentMethods     = lazy(() => import("./pages/Inventory/InvPaymentMethods"));
+const InvPOSSettings        = lazy(() => import("./pages/Inventory/InvPOSSettings"));
 
 // HR module
 const HRFinancials       = lazy(() => import("./pages/HR/HRFinancials"));
@@ -688,6 +692,10 @@ function App() {
             <Route path="/pos/terminal"              element={<Guard moduleKey="inventory" resource="pos-terminal"><POSTerminal /></Guard>} />
             <Route path="/pos/sales"                 element={<Guard moduleKey="inventory" resource="pos-sales"><POSSalesHistory /></Guard>} />
             <Route path="/pos/sessions"              element={<Guard moduleKey="inventory" resource="pos-sessions"><POSSessions /></Guard>} />
+            <Route path="/inventory/setup/tax-groups"      element={<Guard moduleKey="inventory" resource="inv-locations"><InvTaxGroups /></Guard>} />
+            <Route path="/inventory/setup/units"           element={<Guard moduleKey="inventory" resource="inv-locations"><InvUnitsOfMeasure /></Guard>} />
+            <Route path="/inventory/setup/payment-methods" element={<Guard moduleKey="inventory" resource="inv-locations"><InvPaymentMethods /></Guard>} />
+            <Route path="/inventory/setup/receipt-settings" element={<Guard moduleKey="inventory" resource="inv-locations"><InvPOSSettings /></Guard>} />
 
             {/* ── HR module ─────────────────────────────────────────────── */}
             <Route path="/hr/dashboard"                        element={<Guard moduleKey="hr"><HRDashboard /></Guard>} />

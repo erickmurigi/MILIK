@@ -61,10 +61,8 @@ export const leaseSlice = createSlice({
         },
         deleteLeaseSuccess: (state, action) => {
             state.isFetching = false
-            state.leases.splice(
-                state.leases.findIndex((item) => item._id === action.payload),
-                1
-            )
+            const idx = state.leases.findIndex((item) => item._id === action.payload)
+            if (idx !== -1) state.leases.splice(idx, 1)
         },
         deleteLeaseFailure: (state) => {
             state.isFetching = false

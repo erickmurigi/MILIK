@@ -17,6 +17,7 @@ const populatePO = (q) =>
     .populate("supplier", "name phone email")
     .populate("location", "name type")
     .populate("lines.product", "name sku unitOfMeasure costPrice")
+    .populate("receipts.lines.product", "name sku")
     .populate("createdBy", "name username")
     .populate("updatedBy", "name username");
 
@@ -199,42 +200,67 @@ export const receiveGoods = async (req, res, next) => {
       throw createError(400, "Provide lines with quantities received");
     }
 
+    // Pre-validate all lines and build work items before any async ops
+    const workItems = [];
     for (const recv of receivedLines) {
       const line = order.lines.id(recv.lineId);
       if (!line) throw createError(400, `Line ${recv.lineId} not found on this PO`);
-
       const pending = Number(line.qtyOrdered) - Number(line.qtyReceived);
       const qty = Math.min(Number(recv.qtyReceived || 0), pending);
       if (qty <= 0) continue;
-
       const unitCost = Number(recv.unitCost ?? line.unitCost ?? 0);
       if (unitCost < 0) throw createError(400, "Unit cost cannot be negative");
-
-      const [stockEntry] = await Promise.all([
-        postStockEntry({
-          business,
-          location: String(order.location),
-          product: String(line.product),
-          type: "purchase",
-          qty,
-          unitCost,
-          reference: order.poNumber,
-          purchaseOrder: order._id,
-          notes: `Goods received from PO ${order.poNumber}`,
-          createdBy: userId,
-        }),
-        // Update product cost price to reflect latest purchase cost
-        InvProduct.updateOne({ _id: line.product, business }, { $set: { costPrice: unitCost } }),
-      ]);
-
-      postPurchaseReceiptLedger({ businessId: business, stockEntry, poNumber: order.poNumber, userId }).catch((err) =>
-        console.error("[INV GL] postPurchaseReceiptLedger failed:", err.message)
-      );
-
-      line.qtyReceived = Number(line.qtyReceived) + qty;
-      if (recv.unitCost !== undefined) line.unitCost = unitCost;
-      line.totalCost = Math.round(Number(line.qtyOrdered) * line.unitCost * 100) / 100;
+      workItems.push({ line, qty, unitCost, hasNewCost: recv.unitCost !== undefined });
     }
+
+    // Parallel: stock entries + product cost updates
+    const results = await Promise.all(
+      workItems.map(({ line, qty, unitCost }) =>
+        Promise.all([
+          postStockEntry({
+            business,
+            location: String(order.location),
+            product: String(line.product),
+            type: "purchase",
+            qty,
+            unitCost,
+            reference: order.poNumber,
+            purchaseOrder: order._id,
+            notes: `Goods received from PO ${order.poNumber}`,
+            createdBy: userId,
+          }),
+          InvProduct.updateOne({ _id: line.product, business }, { $set: { costPrice: unitCost } }),
+        ])
+      )
+    );
+
+    // Fire-and-forget GL for each received line
+    results.forEach(([stockEntry]) => {
+      postPurchaseReceiptLedger({ businessId: business, stockEntry, poNumber: order.poNumber, supplierId: order.supplier, userId })
+        .catch((err) => console.error("[INV GL] postPurchaseReceiptLedger failed:", err.message));
+    });
+
+    // Record this receive action as a traceable receipt
+    order.receipts.push({
+      grnRef: req.body.grnRef ? String(req.body.grnRef).trim() : "",
+      receivedAt: new Date(),
+      receivedBy: userId,
+      lines: workItems.map(({ line, qty, unitCost }, i) => ({
+        lineRef:      line._id,
+        product:      line.product,
+        qty,
+        unitCost,
+        stockEntryId: results[i][0]._id,
+      })),
+      status: "active",
+    });
+
+    // Apply in-memory subdocument mutations after all async work completes
+    workItems.forEach(({ line, qty, unitCost, hasNewCost }) => {
+      line.qtyReceived = Number(line.qtyReceived) + qty;
+      if (hasNewCost) line.unitCost = unitCost;
+      line.totalCost = Math.round(Number(line.qtyOrdered) * line.unitCost * 100) / 100;
+    });
 
     const allReceived = order.lines.every(
       (l) => Number(l.qtyReceived) >= Number(l.qtyOrdered)
@@ -278,22 +304,23 @@ export const cancelPurchaseOrder = async (req, res, next) => {
 
       const stockEntryIds = stockEntries.map((e) => String(e._id));
 
-      // Reverse each received line's stock entry (post negative purchase = return to supplier)
-      for (const line of receivedLines) {
-        const unitCost = Number(line.unitCost || 0);
-        await postStockEntry({
-          business,
-          location: String(order.location),
-          product: String(line.product),
-          type: "adjustment",
-          qty: -Number(line.qtyReceived),
-          unitCost,
-          reference: order.poNumber,
-          purchaseOrder: order._id,
-          notes: `PO ${order.poNumber} cancelled — reversing received qty`,
-          createdBy: userId,
-        });
-      }
+      // Reverse each received line's stock entry — parallel
+      await Promise.all(
+        receivedLines.map((line) =>
+          postStockEntry({
+            business,
+            location: String(order.location),
+            product: String(line.product),
+            type: "adjustment",
+            qty: -Number(line.qtyReceived),
+            unitCost: Number(line.unitCost || 0),
+            reference: order.poNumber,
+            purchaseOrder: order._id,
+            notes: `PO ${order.poNumber} cancelled — reversing received qty`,
+            createdBy: userId,
+          })
+        )
+      );
 
       // Reverse GL entries for all received stock entries
       reversePurchaseReceiptLedger({
@@ -308,6 +335,142 @@ export const cancelPurchaseOrder = async (req, res, next) => {
     order.updatedBy = userId;
     await order.save();
     res.json({ success: true, data: order });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Reverses ALL receiving on a PO — works for both legacy (no receipt docs) and modern POs.
+// Moves PO back to "sent" status.
+export const cancelAllReceiving = async (req, res, next) => {
+  try {
+    const business  = resolveActiveBusinessId(req);
+    const userId    = currentUserId(req);
+    const order     = await InvPurchaseOrder.findOne({ _id: req.params.id, business });
+    if (!order) throw createError(404, "Purchase order not found");
+    if (!["received", "partially_received"].includes(order.status)) {
+      throw createError(400, "Only received or partially received orders can have their receiving cancelled");
+    }
+
+    const receivedLines = order.lines.filter((l) => Number(l.qtyReceived) > 0);
+    if (!receivedLines.length) throw createError(400, "No received quantities to reverse");
+
+    const stockEntries = await InvStockEntry.find({
+      business,
+      purchaseOrder: order._id,
+      type: "purchase",
+    }).select("_id").lean();
+    const stockEntryIds = stockEntries.map((e) => String(e._id));
+
+    await Promise.all(
+      receivedLines.map((line) =>
+        postStockEntry({
+          business,
+          location:      String(order.location),
+          product:       String(line.product),
+          type:          "adjustment",
+          qty:           -Number(line.qtyReceived),
+          unitCost:      Number(line.unitCost || 0),
+          reference:     order.poNumber,
+          purchaseOrder: order._id,
+          notes:         `Receiving cancelled — PO ${order.poNumber}`,
+          createdBy:     userId,
+        })
+      )
+    );
+
+    if (stockEntryIds.length) {
+      reversePurchaseReceiptLedger({ businessId: business, stockEntryIds, poNumber: order.poNumber, userId })
+        .catch((err) => console.error("[INV GL] reversePurchaseReceiptLedger failed:", err.message));
+    }
+
+    // Reset all received quantities and clear receipt sub-documents
+    for (const line of order.lines) line.qtyReceived = 0;
+    order.receipts = [];
+    order.status   = "sent";
+    order.receivedAt = null;
+    order.updatedBy  = userId;
+    await order.save();
+
+    const populated = await populatePO(InvPurchaseOrder.findById(order._id)).lean();
+    res.json({ success: true, data: populated });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const cancelReceipt = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const userId = currentUserId(req);
+    const { id, receiptId } = req.params;
+
+    const order = await InvPurchaseOrder.findOne({ _id: id, business });
+    if (!order) throw createError(404, "Purchase order not found");
+
+    const receipt = order.receipts.id(receiptId);
+    if (!receipt) throw createError(404, "Receipt not found on this purchase order");
+    if (receipt.status === "cancelled") throw createError(400, "Receipt is already cancelled");
+
+    // Reverse each received line's stock — parallel
+    await Promise.all(
+      receipt.lines.map((rl) =>
+        postStockEntry({
+          business,
+          location: String(order.location),
+          product:  String(rl.product),
+          type:     "adjustment",
+          qty:      -Number(rl.qty),
+          unitCost: Number(rl.unitCost),
+          reference:     order.poNumber,
+          purchaseOrder: order._id,
+          notes:    `Receipt cancelled — PO ${order.poNumber}`,
+          createdBy: userId,
+        })
+      )
+    );
+
+    // Reverse GL for the stock entries belonging to this receipt
+    const stockEntryIds = receipt.lines.map((rl) => String(rl.stockEntryId)).filter(Boolean);
+    reversePurchaseReceiptLedger({ businessId: business, stockEntryIds, poNumber: order.poNumber, userId })
+      .catch((err) => console.error("[INV GL] reversePurchaseReceiptLedger failed:", err.message));
+
+    // Mark receipt cancelled
+    receipt.status      = "cancelled";
+    receipt.cancelledAt = new Date();
+    receipt.cancelledBy = userId;
+    receipt.cancelReason = req.body.cancelReason ? String(req.body.cancelReason).trim() : "";
+
+    // Recalculate qtyReceived per PO line from remaining active receipts
+    for (const poLine of order.lines) {
+      let total = 0;
+      for (const r of order.receipts) {
+        if (r.status !== "active") continue;
+        for (const rl of r.lines) {
+          if (String(rl.lineRef) === String(poLine._id)) total += Number(rl.qty);
+        }
+      }
+      poLine.qtyReceived = Math.round(total * 1000) / 1000;
+    }
+
+    // Recompute PO status
+    const anyActive      = order.receipts.some((r) => r.status === "active");
+    const anyReceived    = order.lines.some((l) => Number(l.qtyReceived) > 0);
+    const allReceived    = order.lines.every((l) => Number(l.qtyReceived) >= Number(l.qtyOrdered));
+
+    if (!anyActive || !anyReceived) {
+      order.status = ["received", "partially_received"].includes(order.status) ? "sent" : order.status;
+    } else if (allReceived) {
+      order.status = "received";
+    } else {
+      order.status = "partially_received";
+    }
+
+    order.updatedBy = userId;
+    await order.save();
+
+    const populated = await populatePO(InvPurchaseOrder.findById(order._id)).lean();
+    res.json({ success: true, data: populated });
   } catch (err) {
     next(err);
   }

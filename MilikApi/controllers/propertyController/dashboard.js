@@ -21,6 +21,7 @@ const router = express.Router();
 // In-memory dashboard cache — avoids 20+ parallel aggregations on every page mount.
 const dashboardCache = new Map(); // businessId -> { data, expiresAt }
 const DASHBOARD_CACHE_TTL_MS = 60_000; // 60 s
+const DASHBOARD_CACHE_MAX = 200;
 
 // ── Aggregation expression helpers ───────────────────────────────────────────
 
@@ -172,6 +173,7 @@ router.get("/summary", verifyUser, async (req, res, next) => {
       ]),
       ChartOfAccount.find({ business, isPosting: { $ne: false }, isHeader: { $ne: true } })
         .select("_id code name type subGroup")
+        .limit(500)
         .lean(),
       TenantInvoice.countDocuments({
         business,
@@ -411,6 +413,9 @@ router.get("/summary", verifyUser, async (req, res, next) => {
       leasesExpiringSoonCount,
       totalLandlordPayable,
     };
+    if (dashboardCache.size >= DASHBOARD_CACHE_MAX) {
+      dashboardCache.delete(dashboardCache.keys().next().value);
+    }
     dashboardCache.set(cacheKey, { data: payload, expiresAt: Date.now() + DASHBOARD_CACHE_TTL_MS });
     return res.json(payload);
   } catch (err) {

@@ -2529,6 +2529,8 @@ export const getTenantInvoicesList = async (req, res, next) => {
 
     if (paginate) {
       invoiceQuery.skip(skip).limit(limit);
+    } else {
+      invoiceQuery.limit(5000);
     }
 
     const [invoices, totalItems] = await Promise.all([

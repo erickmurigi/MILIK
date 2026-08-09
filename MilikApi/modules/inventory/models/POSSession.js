@@ -23,6 +23,7 @@ const posSessionSchema = new mongoose.Schema(
     totalCash:       { type: Number, default: 0 },
     totalMpesa:      { type: Number, default: 0 },
     totalCard:       { type: Number, default: 0 },
+    totalCredit:     { type: Number, default: 0 },
     totalVoids:      { type: Number, default: 0 },
     salesCount:      { type: Number, default: 0 },
     notes:           { type: String, trim: true, default: "" },

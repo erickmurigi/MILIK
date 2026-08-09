@@ -2,6 +2,25 @@ import mongoose from "mongoose";
 
 const PO_STATUSES = ["draft", "sent", "partially_received", "received", "cancelled"];
 
+const receiptLineSchema = new mongoose.Schema({
+  lineRef:      { type: mongoose.Schema.Types.ObjectId },
+  product:      { type: mongoose.Schema.Types.ObjectId, ref: "InvProduct" },
+  qty:          { type: Number, default: 0 },
+  unitCost:     { type: Number, default: 0 },
+  stockEntryId: { type: mongoose.Schema.Types.ObjectId },
+}, { _id: true });
+
+const receiptSchema = new mongoose.Schema({
+  grnRef:       { type: String, trim: true, default: "" },
+  receivedAt:   { type: Date, default: Date.now },
+  receivedBy:   { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+  lines:        [receiptLineSchema],
+  status:       { type: String, enum: ["active", "cancelled"], default: "active" },
+  cancelledAt:  { type: Date, default: null },
+  cancelledBy:  { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+  cancelReason: { type: String, trim: true, default: "" },
+}, { _id: true });
+
 const poLineSchema = new mongoose.Schema(
   {
     product:      { type: mongoose.Schema.Types.ObjectId, ref: "InvProduct", required: true },
@@ -21,6 +40,7 @@ const invPurchaseOrderSchema = new mongoose.Schema(
     location:     { type: mongoose.Schema.Types.ObjectId, ref: "InvLocation", required: true },  // receive into
     status:       { type: String, enum: PO_STATUSES, default: "draft", index: true },
     lines:        [poLineSchema],
+    receipts:     [receiptSchema],
     orderDate:    { type: Date, default: Date.now },
     expectedDate: { type: Date, default: null },
     receivedAt:   { type: Date, default: null },

@@ -198,7 +198,7 @@ export const stockValuation = async (req, res, next) => {
           as: "productDoc",
         },
       },
-      { $unwind: { path: "$productDoc", preserveNullAndEmpty: false } },
+      { $unwind: { path: "$productDoc", preserveNullAndEmptyArrays: false } },
       {
         $lookup: {
           from: "invlocations",
@@ -207,7 +207,7 @@ export const stockValuation = async (req, res, next) => {
           as: "locationDoc",
         },
       },
-      { $unwind: { path: "$locationDoc", preserveNullAndEmpty: false } },
+      { $unwind: { path: "$locationDoc", preserveNullAndEmptyArrays: false } },
       {
         $project: {
           _id: 0,
