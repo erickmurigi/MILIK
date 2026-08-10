@@ -56,6 +56,7 @@ export const inventoryApi = {
   cancelPurchaseOrder: (id)     => adminRequests.post(`/inventory/purchase-orders/${id}/cancel`).then(unwrap),
   cancelReceipt:        (poId, receiptId, b) => adminRequests.post(`/inventory/purchase-orders/${poId}/receipts/${receiptId}/cancel`, b).then(unwrap),
   cancelAllReceiving:   (poId)              => adminRequests.post(`/inventory/purchase-orders/${poId}/cancel-all-receiving`).then(unwrap),
+  repairReceiptGL:      ()                  => adminRequests.post("/inventory/purchase-orders/repair-gl").then((r) => r?.data),
 
   backfillSupplierApAccounts: () => adminRequests.post("/inventory/suppliers/backfill-ap-accounts").then(unwrap),
 

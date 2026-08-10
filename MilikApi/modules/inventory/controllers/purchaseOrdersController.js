@@ -11,6 +11,108 @@ import InvStockEntry from "../models/InvStockEntry.js";
 import { postStockEntry } from "../services/stockLedger.js";
 import { nextSequenceNumber } from "../services/sequenceService.js";
 import { postPurchaseReceiptLedger, reversePurchaseReceiptLedger } from "../services/inventoryAccountingService.js";
+import User from "../../../models/User.js";
+
+// ─── GL Repair: retroactively post missing receipt GL entries ─────────────────
+// Safe to call multiple times — postPurchaseReceiptLedger has an idempotency guard.
+export const repairReceiptGL = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const userId   = currentUserId(req);
+
+    // When logged in as system admin the token id is "milik-admin" (not a valid ObjectId).
+    // Fall back to the first real user that has access to this company.
+    const resolveRepairUserId = async (order) => {
+      const candidates = [
+        userId,
+        order.updatedBy ? String(order.updatedBy) : null,
+        order.createdBy ? String(order.createdBy) : null,
+      ].filter((v) => v && mongoose.Types.ObjectId.isValid(v));
+      if (candidates.length) return candidates[0];
+
+      const anyUser = await User.findOne({
+        $or: [
+          { company: business },
+          { accessibleCompanies: business },
+          { "companyAssignments.company": business },
+        ],
+      }).select("_id").lean();
+      return anyUser?._id ? String(anyUser._id) : null;
+    };
+
+    // Find all POs that have at least one active receipt without a posted GL
+    const orders = await InvPurchaseOrder.find({
+      business,
+      "receipts.status": "active",
+      "receipts.glStatus": { $ne: "posted" },
+    }).lean();
+
+    if (!orders.length) {
+      return res.json({ success: true, message: "No unposted receipts found", repaired: 0, failed: 0 });
+    }
+
+    let repaired = 0;
+    let failed   = 0;
+    const errors = [];
+
+    for (const order of orders) {
+      const effectiveUserId = await resolveRepairUserId(order);
+      if (!effectiveUserId) {
+        errors.push({ po: order.poNumber, error: "Could not resolve a valid userId for this business" });
+        failed++;
+        continue;
+      }
+
+      const activeReceipts  = (order.receipts || []).filter(
+        (r) => r.status === "active" && r.glStatus !== "posted"
+      );
+
+      for (const receipt of activeReceipts) {
+        // Collect stock entry IDs from this receipt's lines
+        const stockEntryIds = (receipt.lines || [])
+          .map((l) => l.stockEntryId)
+          .filter(Boolean);
+
+        if (!stockEntryIds.length) continue;
+
+        // Load the actual stock entry documents (postPurchaseReceiptLedger needs totalCost etc.)
+        const stockEntries = await InvStockEntry.find({
+          _id: { $in: stockEntryIds },
+          business,
+        }).lean();
+
+        let receiptOk = true;
+        for (const stockEntry of stockEntries) {
+          try {
+            await postPurchaseReceiptLedger({
+              businessId: business,
+              stockEntry,
+              poNumber:   order.poNumber,
+              supplierId: order.supplier,
+              userId:     effectiveUserId,
+            });
+            repaired++;
+          } catch (err) {
+            receiptOk = false;
+            failed++;
+            errors.push({ po: order.poNumber, stockEntry: String(stockEntry._id), error: err.message });
+            console.error("[INV GL REPAIR]", order.poNumber, err.message);
+          }
+        }
+
+        // Update glStatus on the receipt subdocument
+        await InvPurchaseOrder.updateOne(
+          { _id: order._id, "receipts._id": receipt._id },
+          { $set: { "receipts.$.glStatus": receiptOk ? "posted" : "failed" } }
+        );
+      }
+    }
+
+    res.json({ success: true, repaired, failed, errors: errors.length ? errors : undefined });
+  } catch (err) {
+    next(err);
+  }
+};
 
 const populatePO = (q) =>
   q
@@ -213,6 +315,9 @@ export const receiveGoods = async (req, res, next) => {
       workItems.push({ line, qty, unitCost, hasNewCost: recv.unitCost !== undefined });
     }
 
+    // userId fallback: use the PO's creator if the current request token lacks a user id
+    const effectiveUserId = userId || String(order.updatedBy || order.createdBy || "");
+
     // Parallel: stock entries + product cost updates
     const results = await Promise.all(
       workItems.map(({ line, qty, unitCost }) =>
@@ -227,24 +332,40 @@ export const receiveGoods = async (req, res, next) => {
             reference: order.poNumber,
             purchaseOrder: order._id,
             notes: `Goods received from PO ${order.poNumber}`,
-            createdBy: userId,
+            createdBy: effectiveUserId || null,
           }),
           InvProduct.updateOne({ _id: line.product, business }, { $set: { costPrice: unitCost } }),
         ])
       )
     );
 
-    // Fire-and-forget GL for each received line
-    results.forEach(([stockEntry]) => {
-      postPurchaseReceiptLedger({ businessId: business, stockEntry, poNumber: order.poNumber, supplierId: order.supplier, userId })
-        .catch((err) => console.error("[INV GL] postPurchaseReceiptLedger failed:", err.message));
-    });
+    // Await GL posting — failure is logged and stored on the receipt but does not
+    // roll back the stock entry (stock and GL are reconciled via glStatus).
+    let glPosted = true;
+    let glErrorMsg = "";
+    try {
+      await Promise.all(
+        results.map(([stockEntry]) =>
+          postPurchaseReceiptLedger({
+            businessId: business,
+            stockEntry,
+            poNumber: order.poNumber,
+            supplierId: order.supplier,
+            userId: effectiveUserId,
+          })
+        )
+      );
+    } catch (err) {
+      glPosted = false;
+      glErrorMsg = err?.message || String(err);
+      console.error("[INV GL] postPurchaseReceiptLedger failed for PO", order.poNumber, err);
+    }
 
     // Record this receive action as a traceable receipt
     order.receipts.push({
       grnRef: req.body.grnRef ? String(req.body.grnRef).trim() : "",
       receivedAt: new Date(),
-      receivedBy: userId,
+      receivedBy: effectiveUserId || null,
       lines: workItems.map(({ line, qty, unitCost }, i) => ({
         lineRef:      line._id,
         product:      line.product,
@@ -253,6 +374,8 @@ export const receiveGoods = async (req, res, next) => {
         stockEntryId: results[i][0]._id,
       })),
       status: "active",
+      glStatus: glPosted ? "posted" : "failed",
+      glError:  glPosted ? "" : glErrorMsg,
     });
 
     // Apply in-memory subdocument mutations after all async work completes
@@ -323,12 +446,12 @@ export const cancelPurchaseOrder = async (req, res, next) => {
       );
 
       // Reverse GL entries for all received stock entries
-      reversePurchaseReceiptLedger({
-        businessId: business,
-        stockEntryIds,
-        poNumber: order.poNumber,
-        userId,
-      }).catch((err) => console.error("[INV GL] reversePurchaseReceiptLedger failed:", err.message));
+      const effectiveCancelUserId = userId || String(order.updatedBy || order.createdBy || "");
+      try {
+        await reversePurchaseReceiptLedger({ businessId: business, stockEntryIds, poNumber: order.poNumber, userId: effectiveCancelUserId });
+      } catch (err) {
+        console.error("[INV GL] reversePurchaseReceiptLedger failed for PO", order.poNumber, err);
+      }
     }
 
     order.status = "cancelled";
@@ -380,8 +503,12 @@ export const cancelAllReceiving = async (req, res, next) => {
     );
 
     if (stockEntryIds.length) {
-      reversePurchaseReceiptLedger({ businessId: business, stockEntryIds, poNumber: order.poNumber, userId })
-        .catch((err) => console.error("[INV GL] reversePurchaseReceiptLedger failed:", err.message));
+      const effectiveCancelUserId = userId || String(order.updatedBy || order.createdBy || "");
+      try {
+        await reversePurchaseReceiptLedger({ businessId: business, stockEntryIds, poNumber: order.poNumber, userId: effectiveCancelUserId });
+      } catch (err) {
+        console.error("[INV GL] reversePurchaseReceiptLedger failed for PO", order.poNumber, err);
+      }
     }
 
     // Reset all received quantities and clear receipt sub-documents
@@ -432,8 +559,12 @@ export const cancelReceipt = async (req, res, next) => {
 
     // Reverse GL for the stock entries belonging to this receipt
     const stockEntryIds = receipt.lines.map((rl) => String(rl.stockEntryId)).filter(Boolean);
-    reversePurchaseReceiptLedger({ businessId: business, stockEntryIds, poNumber: order.poNumber, userId })
-      .catch((err) => console.error("[INV GL] reversePurchaseReceiptLedger failed:", err.message));
+    const effectiveCancelUserId = userId || String(order.updatedBy || order.createdBy || "");
+    try {
+      await reversePurchaseReceiptLedger({ businessId: business, stockEntryIds, poNumber: order.poNumber, userId: effectiveCancelUserId });
+    } catch (err) {
+      console.error("[INV GL] reversePurchaseReceiptLedger failed for PO", order.poNumber, err);
+    }
 
     // Mark receipt cancelled
     receipt.status      = "cancelled";

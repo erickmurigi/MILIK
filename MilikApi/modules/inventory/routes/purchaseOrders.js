@@ -3,6 +3,7 @@ import { verifyUser, requireCompanyModule } from "../../../controllers/verifyTok
 import {
   listPurchaseOrders, getPurchaseOrder, createPurchaseOrder, updatePurchaseOrder,
   receiveGoods, cancelPurchaseOrder, cancelReceipt, cancelAllReceiving,
+  repairReceiptGL,
 } from "../controllers/purchaseOrdersController.js";
 
 const router = express.Router();
@@ -16,5 +17,6 @@ router.post("/:id/receive-goods",                      receiveGoods);
 router.post("/:id/cancel",                             cancelPurchaseOrder);
 router.post("/:id/receipts/:receiptId/cancel",         cancelReceipt);
 router.post("/:id/cancel-all-receiving",               cancelAllReceiving);
+router.post("/repair-gl",                              repairReceiptGL);
 
 export default router;

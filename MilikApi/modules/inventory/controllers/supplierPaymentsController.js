@@ -74,8 +74,11 @@ export const createSupplierPayment = async (req, res, next) => {
       updatedBy: userId,
     });
 
-    postSupplierPaymentLedger({ businessId: business, payment, userId })
-      .catch((err) => console.error("[INV GL] postSupplierPaymentLedger failed:", err.message));
+    try {
+      await postSupplierPaymentLedger({ businessId: business, payment, userId });
+    } catch (err) {
+      console.error("[INV GL] postSupplierPaymentLedger failed:", err);
+    }
 
     const populated = await populatePayment(InvSupplierPayment.findById(payment._id)).lean();
     res.status(201).json({ success: true, data: populated });
@@ -98,8 +101,11 @@ export const voidSupplierPayment = async (req, res, next) => {
     payment.updatedBy = userId;
     await payment.save();
 
-    reverseSupplierPaymentLedger({ businessId: business, paymentId: payment._id, userId })
-      .catch((err) => console.error("[INV GL] reverseSupplierPaymentLedger failed:", err.message));
+    try {
+      await reverseSupplierPaymentLedger({ businessId: business, paymentId: payment._id, userId });
+    } catch (err) {
+      console.error("[INV GL] reverseSupplierPaymentLedger failed:", err);
+    }
 
     res.json({ success: true, data: payment });
   } catch (err) {

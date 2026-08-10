@@ -19,6 +19,8 @@ const receiptSchema = new mongoose.Schema({
   cancelledAt:  { type: Date, default: null },
   cancelledBy:  { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   cancelReason: { type: String, trim: true, default: "" },
+  glStatus:     { type: String, enum: ["posted", "pending", "failed"], default: "pending" },
+  glError:      { type: String, trim: true, default: "" },
 }, { _id: true });
 
 const poLineSchema = new mongoose.Schema(

@@ -120,9 +120,11 @@ export const createManualEntry = async (req, res, next) => {
       createdBy: userId,
     });
 
-    postStockAdjustmentLedger({ businessId: business, stockEntry: entry, userId }).catch((err) =>
-      console.error("[INV GL] postStockAdjustmentLedger failed:", err.message)
-    );
+    try {
+      await postStockAdjustmentLedger({ businessId: business, stockEntry: entry, userId });
+    } catch (err) {
+      console.error("[INV GL] postStockAdjustmentLedger failed:", err);
+    }
 
     const newBalance = await computeBalance(business, String(location), String(product));
 

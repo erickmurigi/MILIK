@@ -248,10 +248,11 @@ export const createSale = async (req, res, next) => {
         )
     );
 
-    // Post GL entries — non-blocking; GL failure never rejects the sale
-    postPosSaleLedger({ businessId: business, sale, userId }).catch((err) =>
-      console.error("[INV GL] postPosSaleLedger failed:", err.message)
-    );
+    try {
+      await postPosSaleLedger({ businessId: business, sale, userId });
+    } catch (err) {
+      console.error("[INV GL] postPosSaleLedger failed:", err);
+    }
 
     res.status(201).json({ success: true, data: sale });
   } catch (err) {
@@ -300,10 +301,11 @@ export const voidSale = async (req, res, next) => {
     sale.voidReason = String(voidReason).trim();
     await sale.save();
 
-    // Reverse GL entries for the original sale
-    reversePosSaleLedger({ businessId: business, sale, userId }).catch((err) =>
-      console.error("[INV GL] reversePosSaleLedger failed:", err.message)
-    );
+    try {
+      await reversePosSaleLedger({ businessId: business, sale, userId });
+    } catch (err) {
+      console.error("[INV GL] reversePosSaleLedger failed:", err);
+    }
 
     res.json({ success: true, data: sale });
   } catch (err) {

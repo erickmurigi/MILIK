@@ -409,7 +409,7 @@ const InvPurchaseOrders = () => {
               <button type="button" onClick={refetch} className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
                 <FaRedoAlt className={loading ? "animate-spin" : ""} />
               </button>
-              <button type="button" onClick={openCreate} className="inline-flex h-7 items-center gap-1 bg-[#FF8C00] px-2.5 text-[10px] font-bold text-white hover:bg-[#E67E00]">
+<button type="button" onClick={openCreate} className="inline-flex h-7 items-center gap-1 bg-[#FF8C00] px-2.5 text-[10px] font-bold text-white hover:bg-[#E67E00]">
                 <FaPlus /> New PO
               </button>
             </div>
