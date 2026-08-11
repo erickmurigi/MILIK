@@ -29,10 +29,11 @@ import { resolveConfiguredAccountingDefaultAccount } from "../../services/compan
 import { resolveAuditActorUserId, ensureSystemAuditUser } from "../../utils/systemActor.js";
 import { logAuditEvent } from "../../utils/auditLogger.js";
 import SequenceCounter from "../../models/SequenceCounter.js";
+import { resolveBusinessId } from "../../utils/requestContext.js";
+import { escapeRegex } from "../../utils/escapeRegex.js";
+import { createError } from "../../utils/error.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
-
-const escapeRegExp = (value = "") => String(value || "").replace(/[|\\{}()\[\]^$+*?.]/g, "\\$&");
 
 const CATEGORY_TO_SUMMARY = {
   RENT_CHARGE: "rent", DEPOSIT_CHARGE: "deposit", UTILITY_CHARGE: "utility",
@@ -242,7 +243,7 @@ const getTakeOnAllocationRule = (metadata = {}) => {
     };
   }
 
-  if (billItemKey === "deposit") {
+  if (billItemKey === "deposit" || billItemKey.startsWith("deposit:")) {
     return { priorityGroups: ["deposit"], utilityType: "", paymentType: "deposit" };
   }
 
@@ -275,21 +276,6 @@ const resolveTenantOperationalStatus = ({ tenant = null, invoiceSnapshots = [] }
   });
 
   return hasOverdueOutstanding ? "overdue" : "active";
-};
-
-const resolveBusinessId = (req) => {
-  const explicitBusiness =
-    req?.query?.business ||
-    req?.query?.company ||
-    req?.body?.business ||
-    req?.body?.company ||
-    null;
-
-  if (explicitBusiness) {
-    return explicitBusiness;
-  }
-
-  return req?.user?.company?._id || req?.user?.company || req?.user?.business || null;
 };
 
 const authorizePaymentAccess = async (req, payment) => {
@@ -467,7 +453,7 @@ const resolveCashbookAccount = async (businessId, payment) => {
           { code: String(openingBalanceAccountValue).trim() },
           {
             name: {
-              $regex: `^${escapeRegExp(String(openingBalanceAccountValue).trim())}$`,
+              $regex: `^${escapeRegex(String(openingBalanceAccountValue).trim())}$`,
               $options: "i",
             },
           },        ],
@@ -2301,13 +2287,13 @@ export const createPayment = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     if (!businessId || !isValidObjectId(businessId)) {
-      return res.status(400).json({ success: false, message: "Valid business is required to create a receipt." });
+      return next(createError(400, "Valid business is required to create a receipt."));
     }
 
     const tenantId = req.body?.tenant;
     const unitId = req.body?.unit;
     if (!isValidObjectId(tenantId) || !isValidObjectId(unitId)) {
-      return res.status(400).json({ success: false, message: "Valid tenant and unit are required." });
+      return next(createError(400, "Valid tenant and unit are required."));
     }
 
     // Derive all req.body values synchronously — before any async work
@@ -2325,13 +2311,13 @@ export const createPayment = async (req, res, next) => {
 
     // Non-DB validations first — fail fast before hitting the database
     if (!refNumber) {
-      return res.status(400).json({ success: false, message: "Reference number is required for tenant receipts." });
+      return next(createError(400, "Reference number is required for tenant receipts."));
     }
     if (!isDirectToLandlord && !isTakeOnCredit && !normalizedCashbook) {
-      return res.status(400).json({ success: false, message: "Cashbook is required unless this receipt was paid directly to the landlord." });
+      return next(createError(400, "Cashbook is required unless this receipt was paid directly to the landlord."));
     }
     if (isTakeOnCredit && !isConfirmedOnCreate) {
-      return res.status(400).json({ success: false, message: "Credit take-on balances must be saved as confirmed receipts so the opening balance posting stays auditable." });
+      return next(createError(400, "Credit take-on balances must be saved as confirmed receipts so the opening balance posting stays auditable."));
     }
 
     // Phase 1: parallel — tenant lookup, unit lookup, duplicate ref check
@@ -2341,13 +2327,13 @@ export const createPayment = async (req, res, next) => {
       RentPayment.findOne({ business: businessId, referenceNumber: refNumber }).lean(),
     ]);
 
-    if (!tenant) return res.status(404).json({ success: false, message: "Tenant not found for the selected company." });
-    if (!unit) return res.status(404).json({ success: false, message: "Unit not found for the selected company." });
+    if (!tenant) return next(createError(404, "Tenant not found for the selected company."));
+    if (!unit) return next(createError(404, "Unit not found for the selected company."));
     if (String(tenant.unit) !== String(unit._id)) {
-      return res.status(400).json({ success: false, message: "Selected tenant does not belong to the selected unit." });
+      return next(createError(400, "Selected tenant does not belong to the selected unit."));
     }
     if (duplicateRef) {
-      return res.status(400).json({ success: false, message: "Reference number already exists in this company." });
+      return next(createError(400, "Reference number already exists in this company."));
     }
 
     // resolveActorUserId throws with a user-facing message — keep its own try/catch
@@ -2360,7 +2346,7 @@ export const createPayment = async (req, res, next) => {
           fallbackUserId: req.body?.confirmedBy || req.body?.createdBy || null,
         });
       } catch (actorError) {
-        return res.status(400).json({ success: false, message: actorError.message });
+        return next(createError(400, actorError.message));
       }
     }
 
@@ -2390,7 +2376,7 @@ export const createPayment = async (req, res, next) => {
     if (providedReceiptNumber) {
       const duplicateReceipt = await RentPayment.findOne({ business: businessId, receiptNumber: providedReceiptNumber }).lean();
       if (duplicateReceipt) {
-        return res.status(400).json({ success: false, message: "Receipt number already exists in this company." });
+        return next(createError(400, "Receipt number already exists in this company."));
       }
     }
 
@@ -2470,10 +2456,7 @@ export const createPayment = async (req, res, next) => {
           console.error("Failed to recompute receipt state after create-posting rollback:", recoveryError);
         }
 
-        return res.status(500).json({
-          success: false,
-          message: `Receipt was saved but confirmation posting failed: ${postingError.message}`,
-        });
+        return next(createError(500, `Receipt was saved but confirmation posting failed: ${postingError.message}`));
       }
 
       // Recompute is non-fatal — GL posting already committed above
@@ -2504,10 +2487,10 @@ export const createPayment = async (req, res, next) => {
     if (err?.code === 11000) {
       const duplicateFields = Object.keys(err.keyPattern || {});
       if (duplicateFields.includes("referenceNumber")) {
-        return res.status(400).json({ success: false, message: "Reference number already exists in this company." });
+        return next(createError(400, "Reference number already exists in this company."));
       }
       if (duplicateFields.includes("receiptNumber")) {
-        return res.status(400).json({ success: false, message: "Receipt number already exists in this company." });
+        return next(createError(400, "Receipt number already exists in this company."));
       }
     }
     return next(err);
@@ -2547,15 +2530,15 @@ export const batchCreatePayments = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     if (!businessId || !isValidObjectId(businessId)) {
-      return res.status(400).json({ success: false, message: "Valid business is required." });
+      return next(createError(400, "Valid business is required."));
     }
 
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
     if (!items.length) {
-      return res.status(400).json({ success: false, message: "No items provided in the batch." });
+      return next(createError(400, "No items provided in the batch."));
     }
     if (items.length > 100) {
-      return res.status(400).json({ success: false, message: "Batch limit is 100 receipts per request." });
+      return next(createError(400, "Batch limit is 100 receipts per request."));
     }
 
     // Shared defaults (each item can override individually)
@@ -2570,7 +2553,7 @@ export const batchCreatePayments = async (req, res, next) => {
     // Validate: catch within-batch duplicate refNumbers early
     const batchRefs = items.map((it) => String(it?.referenceNumber || "").trim()).filter(Boolean);
     if (new Set(batchRefs).size !== batchRefs.length) {
-      return res.status(400).json({ success: false, message: "Batch contains duplicate reference numbers." });
+      return next(createError(400, "Batch contains duplicate reference numbers."));
     }
 
     // Resolve actor and shared cashbook account once for the whole batch
@@ -2579,7 +2562,7 @@ export const batchCreatePayments = async (req, res, next) => {
       try {
         actorUserId = await resolveActorUserId({ req, business: businessId });
       } catch (e) {
-        return res.status(400).json({ success: false, message: e.message });
+        return next(createError(400, e.message));
       }
     }
 
@@ -2592,7 +2575,7 @@ export const batchCreatePayments = async (req, res, next) => {
           paidDirectToLandlord: false,
         });
       } catch (e) {
-        return res.status(400).json({ success: false, message: e.message });
+        return next(createError(400, e.message));
       }
     }
 
@@ -2852,10 +2835,7 @@ export const getPayments = async (req, res, next) => {
     const business = resolveBusinessId(req);
 
     if (!business) {
-      return res.status(400).json({
-        success: false,
-        message: "Business context is required to fetch receipts.",
-      });
+      return next(createError(400, "Business context is required to fetch receipts."));
     }
 
     const requestedStatus =
@@ -2887,7 +2867,7 @@ export const getPayments = async (req, res, next) => {
       } else {
         const matchedTenants = await Tenant.find({
           business,
-          name: { $regex: new RegExp(`^${escapeRegExp(String(tenant))}$`, "i") },
+          name: { $regex: new RegExp(`^${escapeRegex(String(tenant))}$`, "i") },
         })
           .select("_id")
           .lean();
@@ -2902,7 +2882,7 @@ export const getPayments = async (req, res, next) => {
         propertyQuery._id = property;
       } else {
         propertyQuery.propertyName = {
-          $regex: new RegExp(`^${escapeRegExp(String(property))}$`, "i"),
+          $regex: new RegExp(`^${escapeRegex(String(property))}$`, "i"),
         };
       }
       const matchedProperties = await Property.find(propertyQuery).select("_id").lean();
@@ -2936,7 +2916,7 @@ export const getPayments = async (req, res, next) => {
           unitQuery._id = unit;
         } else {
           unitQuery.unitNumber = {
-            $regex: new RegExp(`^${escapeRegExp(String(unit))}$`, "i"),
+            $regex: new RegExp(`^${escapeRegex(String(unit))}$`, "i"),
           };
         }
       }
@@ -3009,8 +2989,8 @@ export const getPayments = async (req, res, next) => {
       filter.isReversed = true;
     }
 
-    const searchRegex = search ? new RegExp(escapeRegExp(String(search)), "i") : null;
-    const tenantSearchRegex = tenantSearch ? new RegExp(escapeRegExp(String(tenantSearch)), "i") : null;
+    const searchRegex = search ? new RegExp(escapeRegex(String(search)), "i") : null;
+    const tenantSearchRegex = tenantSearch ? new RegExp(escapeRegex(String(tenantSearch)), "i") : null;
     const tenantIdsForSearch = [];
 
     if (tenantSearchRegex || searchRegex) {
@@ -3121,10 +3101,7 @@ export const getPayment = async (req, res, next) => {
 
     const access = await authorizePaymentAccess(req, payment);
     if (!access.allowed) {
-      return res.status(access.status).json({
-        success: false,
-        message: access.message,
-      });
+      return next(createError(access.status, access.message));
     }
 
     return res.status(200).json(payment);
@@ -3139,14 +3116,11 @@ export const getPaymentAllocationOptions = async (req, res, next) => {
 
     const access = await authorizePaymentAccess(req, payment);
     if (!access.allowed) {
-      return res.status(access.status).json({
-        success: false,
-        message: access.message,
-      });
+      return next(createError(access.status, access.message));
     }
 
     if (!payment || payment.ledgerType !== "receipts") {
-      return res.status(404).json({ success: false, message: "Receipt not found." });
+      return next(createError(404, "Receipt not found."));
     }
 
     const isAdminUser = req.user?.isSystemAdmin === true || Boolean(req.user?.superAdminAccess) || Boolean(req.user?.adminAccess);
@@ -3196,21 +3170,15 @@ export const updatePaymentAllocations = async (req, res, next) => {
 
     const access = await authorizePaymentAccess(req, payment);
     if (!access.allowed) {
-      return res.status(access.status).json({
-        success: false,
-        message: access.message.replace("access", "update"),
-      });
+      return next(createError(access.status, access.message.replace("access", "update")));
     }
 
     if (!payment || payment.ledgerType !== "receipts") {
-      return res.status(404).json({ success: false, message: "Receipt not found." });
+      return next(createError(404, "Receipt not found."));
     }
 
     if (payment.isCancelled || payment.isReversed || payment.reversalOf || String(payment.postingStatus || "").toLowerCase() === "reversed") {
-      return res.status(400).json({
-        success: false,
-        message: "Reversed or cancelled receipts cannot be reallocated.",
-      });
+      return next(createError(400, "Reversed or cancelled receipts cannot be reallocated."));
     }
 
     const isAdminUser = req.user?.isSystemAdmin === true || Boolean(req.user?.superAdminAccess) || Boolean(req.user?.adminAccess);
@@ -3222,11 +3190,7 @@ export const updatePaymentAllocations = async (req, res, next) => {
     const isPostedConfirmed = payment.isConfirmed === true && hasPostedLedger;
 
     if (!adminOverride && payment.isConfirmed === true && !isPostedConfirmed) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Confirmed receipts with incomplete posting state cannot be reallocated directly. Reverse and recreate instead.",
-      });
+      return next(createError(400, "Confirmed receipts with incomplete posting state cannot be reallocated directly. Reverse and recreate instead."));
     }
 
     const allocationData = await buildManualReceiptAllocationData({
@@ -3330,10 +3294,7 @@ export const updatePaymentAllocations = async (req, res, next) => {
     const releaseTotal = round2(releaseRows.reduce((sum, row) => sum + Number(row?.appliedAmount || 0), 0));
 
     if (isPostedConfirmed && releaseTotal > 0 && !actorUserId) {
-      return res.status(400).json({
-        success: false,
-        message: "A valid user is required to apply confirmed receipt prepayments to tenant charges.",
-      });
+      return next(createError(400, "A valid user is required to apply confirmed receipt prepayments to tenant charges."));
     }
 
     if (isPostedConfirmed && releaseTotal <= 0 && JSON.stringify(previousAllocations) === JSON.stringify(depositContext.allocations)) {
@@ -3487,17 +3448,11 @@ export const updatePayment = async (req, res, next) => {
 
     const access = await authorizePaymentAccess(req, payment);
     if (!access.allowed) {
-      return res.status(access.status).json({
-        success: false,
-        message: access.message.replace("access", "update"),
-      });
+      return next(createError(access.status, access.message.replace("access", "update")));
     }
 
     if (payment.isConfirmed && payment.postingStatus === "posted") {
-      return res.status(400).json({
-        success: false,
-        message: "Confirmed and posted receipts cannot be edited directly. Reverse and recreate instead.",
-      });
+      return next(createError(400, "Confirmed and posted receipts cannot be edited directly. Reverse and recreate instead."));
     }
 
     const tenantId = req.body?.tenant || payment.tenant;
@@ -3508,24 +3463,15 @@ export const updatePayment = async (req, res, next) => {
       unitId ? Unit.findOne({ _id: unitId, business: payment.business }).select("_id property").lean() : Promise.resolve(null),
     ]);
     if (!tenant) {
-      return res.status(404).json({
-        success: false,
-        message: "Tenant not found for the selected company.",
-      });
+      return next(createError(404, "Tenant not found for the selected company."));
     }
 
     if (!unit) {
-      return res.status(404).json({
-        success: false,
-        message: "Unit not found for the selected company.",
-      });
+      return next(createError(404, "Unit not found for the selected company."));
     }
 
     if (String(tenant.unit) !== String(unit._id)) {
-      return res.status(400).json({
-        success: false,
-        message: "Selected tenant does not belong to the selected unit.",
-      });
+      return next(createError(400, "Selected tenant does not belong to the selected unit."));
     }
 
     const incomingMetadata = req.body?.metadata && typeof req.body.metadata === "object"
@@ -3536,10 +3482,7 @@ export const updatePayment = async (req, res, next) => {
       : null;
 
     if (requestedConfirmedValue !== null && requestedConfirmedValue !== Boolean(payment.isConfirmed)) {
-      return res.status(400).json({
-        success: false,
-        message: "Receipt confirmation state cannot be changed through edit. Use the confirm/unconfirm actions instead.",
-      });
+      return next(createError(400, "Receipt confirmation state cannot be changed through edit. Use the confirm/unconfirm actions instead."));
     }
 
     const isTakeOnCredit = isTakeOnCreditReceipt({ metadata: incomingMetadata });
@@ -3550,10 +3493,7 @@ export const updatePayment = async (req, res, next) => {
 
     const referenceNumber = String(req.body?.referenceNumber || payment.referenceNumber || "").trim();
     if (!referenceNumber) {
-      return res.status(400).json({
-        success: false,
-        message: "Reference number is required for tenant receipts.",
-      });
+      return next(createError(400, "Reference number is required for tenant receipts."));
     }
 
     const duplicateRef = await RentPayment.findOne({
@@ -3563,10 +3503,7 @@ export const updatePayment = async (req, res, next) => {
     }).lean();
 
     if (duplicateRef) {
-      return res.status(400).json({
-        success: false,
-        message: "Reference number already exists in this company.",
-      });
+      return next(createError(400, "Reference number already exists in this company."));
     }
 
     const requestedReceiptNumber = String(
@@ -3581,26 +3518,17 @@ export const updatePayment = async (req, res, next) => {
       }).lean();
 
       if (duplicateReceipt) {
-        return res.status(400).json({
-          success: false,
-          message: "Receipt number already exists in this company.",
-        });
+        return next(createError(400, "Receipt number already exists in this company."));
       }
     }
 
     if (!isDirectToLandlord && !isTakeOnCredit && !normalizedCashbook) {
-      return res.status(400).json({
-        success: false,
-        message: "Cashbook is required unless this receipt was paid directly to the landlord.",
-      });
+      return next(createError(400, "Cashbook is required unless this receipt was paid directly to the landlord."));
     }
 
     const isConfirmedAfterUpdate = Boolean(payment.isConfirmed);
     if (isTakeOnCredit && !isConfirmedAfterUpdate) {
-      return res.status(400).json({
-        success: false,
-        message: "Credit take-on balances must remain confirmed so the opening balance posting stays auditable.",
-      });
+      return next(createError(400, "Credit take-on balances must remain confirmed so the opening balance posting stays auditable."));
     }
 
     const useManualAllocations =
@@ -3684,17 +3612,11 @@ export const updatePayment = async (req, res, next) => {
       const duplicateFields = Object.keys(err.keyPattern || {});
 
       if (duplicateFields.includes("referenceNumber")) {
-        return res.status(400).json({
-          success: false,
-          message: "Reference number already exists in this company.",
-        });
+        return next(createError(400, "Reference number already exists in this company."));
       }
 
       if (duplicateFields.includes("receiptNumber")) {
-        return res.status(400).json({
-          success: false,
-          message: "Receipt number already exists in this company.",
-        });
+        return next(createError(400, "Receipt number already exists in this company."));
       }
     }
 
@@ -3708,10 +3630,7 @@ export const confirmPayment = async (req, res, next) => {
 
     const access = await authorizePaymentAccess(req, existingPayment);
     if (!access.allowed) {
-      return res.status(access.status).json({
-        success: false,
-        message: access.message,
-      });
+      return next(createError(access.status, access.message));
     }
 
     if (existingPayment.isConfirmed && existingPayment.postingStatus === "posted") {
@@ -3725,10 +3644,7 @@ export const confirmPayment = async (req, res, next) => {
       existingPayment.reversalOf ||
       String(existingPayment.postingStatus || "").toLowerCase() === "reversed"
     ) {
-      return res.status(400).json({
-        success: false,
-        message: "Cancelled or reversed receipts cannot be confirmed.",
-      });
+      return next(createError(400, "Cancelled or reversed receipts cannot be confirmed."));
     }
 
     let actorUserId;
@@ -3739,7 +3655,7 @@ export const confirmPayment = async (req, res, next) => {
         fallbackUserId: req.body?.confirmedBy || existingPayment.confirmedBy || null,
       });
     } catch (actorError) {
-      return res.status(400).json({ success: false, message: actorError.message });
+      return next(createError(400, actorError.message));
     }
 
     const confirmationMetadata = getPaymentMetadata(existingPayment);
@@ -3821,10 +3737,7 @@ export const confirmPayment = async (req, res, next) => {
         console.error("Failed to recompute receipt state after confirm-posting rollback:", recoveryError);
       }
 
-      return res.status(500).json({
-        success: false,
-        message: `Receipt confirmation failed because ledger posting did not complete: ${postingError.message}`,
-      });
+      return next(createError(500, `Receipt confirmation failed because ledger posting did not complete: ${postingError.message}`));
     }
 
     // Recompute is non-fatal — GL posting already committed above
@@ -3860,28 +3773,18 @@ export const unconfirmPayment = async (req, res, next) => {
 
     const access = await authorizePaymentAccess(req, payment);
     if (!access.allowed) {
-      return res.status(access.status).json({
-        success: false,
-        message: access.message,
-      });
+      return next(createError(access.status, access.message));
     }
 
     if (!payment.isConfirmed) {
-      return res.status(400).json({
-        success: false,
-        message: "This payment is not confirmed.",
-      });
+      return next(createError(400, "This payment is not confirmed."));
     }
 
     if (
       payment.postingStatus === "posted" ||
       (Array.isArray(payment.ledgerEntries) && payment.ledgerEntries.length > 0)
     ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "This receipt has already been posted to the ledger. Use reversal instead of unconfirming it.",
-      });
+      return next(createError(400, "This receipt has already been posted to the ledger. Use reversal instead of unconfirming it."));
     }
 
     payment.isConfirmed = false;
@@ -3922,21 +3825,15 @@ export const deletePayment = async (req, res, next) => {
 
     const access = await authorizePaymentAccess(req, payment);
     if (!access.allowed) {
-      return res.status(access.status).json({
-        success: false,
-        message: access.message.replace("access", "delete"),
-      });
+      return next(createError(access.status, access.message.replace("access", "delete")));
     }
 
     if (!payment || payment.ledgerType !== "receipts") {
-      return res.status(404).json({ success: false, message: "Receipt not found." });
+      return next(createError(404, "Receipt not found."));
     }
 
     if (payment.isCancelled || payment.reversalOf) {
-      return res.status(400).json({
-        success: false,
-        message: "Cancelled or reversal-entry receipts cannot be deleted.",
-      });
+      return next(createError(400, "Cancelled or reversal-entry receipts cannot be deleted."));
     }
 
     // Special path: delete a reversed receipt by purging its entire GL chain
@@ -4028,10 +3925,7 @@ export const deletePayment = async (req, res, next) => {
       payment.postingStatus === "posted" ||
       (Array.isArray(payment.ledgerEntries) && payment.ledgerEntries.length > 0)
     ) {
-      return res.status(400).json({
-        success: false,
-        message: "Cannot delete a confirmed/posted receipt. Reverse it instead.",
-      });
+      return next(createError(400, "Cannot delete a confirmed/posted receipt. Reverse it instead."));
     }
 
     await RentPayment.findByIdAndDelete(req.params.id);
@@ -4066,10 +3960,7 @@ export const getPaymentSummary = async (req, res, next) => {
       req.user?.isSystemAdmin && business ? business : resolveBusinessId(req);
 
     if (!scopedBusiness) {
-      return res.status(400).json({
-        success: false,
-        message: "Business context is required to fetch receipt summary.",
-      });
+      return next(createError(400, "Business context is required to fetch receipt summary."));
     }
 
     const matchStage = {
@@ -4141,31 +4032,19 @@ export const reversePayment = async (req, res, next) => {
 
     const access = await authorizePaymentAccess(req, payment);
     if (!access.allowed) {
-      return res.status(access.status).json({
-        success: false,
-        message: access.message,
-      });
+      return next(createError(access.status, access.message));
     }
 
     if (!payment.isConfirmed) {
-      return res.status(400).json({
-        success: false,
-        message: "Only confirmed receipts can be reversed.",
-      });
+      return next(createError(400, "Only confirmed receipts can be reversed."));
     }
 
     if (payment.isCancelled || payment.reversalOf) {
-      return res.status(400).json({
-        success: false,
-        message: "Only original confirmed receipts can be reversed.",
-      });
+      return next(createError(400, "Only original confirmed receipts can be reversed."));
     }
 
     if (payment.isReversed) {
-      return res.status(400).json({
-        success: false,
-        message: "Receipt is already reversed.",
-      });
+      return next(createError(400, "Receipt is already reversed."));
     }
 
     const reason = req.body?.reason || "Receipt reversed";
@@ -4179,7 +4058,7 @@ export const reversePayment = async (req, res, next) => {
         fallbackUserId: payment.confirmedBy || payment.createdBy || null,
       });
     } catch (actorError) {
-      return res.status(400).json({ success: false, message: actorError.message });
+      return next(createError(400, actorError.message));
     }
 
     const reversalReceiptNumber = await generateReceiptNumber(businessId);
@@ -4257,10 +4136,7 @@ export const reversePayment = async (req, res, next) => {
       reversalEntry.postingError = reversalError.message || "Ledger reversal failed";
       await reversalEntry.save();
 
-      return res.status(500).json({
-        success: false,
-        message: `Receipt reversal failed because ledger reversal did not complete: ${reversalError.message}`,
-      });
+      return next(createError(500, `Receipt reversal failed because ledger reversal did not complete: ${reversalError.message}`));
     }
 
     emitToCompany(businessId, "payment:reversed", {
@@ -4309,20 +4185,20 @@ export const cancelReversal = async (req, res, next) => {
 
     const access = await authorizePaymentAccess(req, payment);
     if (!access.allowed) {
-      return res.status(access.status).json({ success: false, message: access.message });
+      return next(createError(access.status, access.message));
     }
 
     if (!payment.isReversed || !payment.reversalEntry) {
-      return res.status(400).json({ success: false, message: "Receipt does not have an active reversal." });
+      return next(createError(400, "Receipt does not have an active reversal."));
     }
 
     const reversalDoc = await RentPayment.findById(payment.reversalEntry);
     if (!reversalDoc) {
-      return res.status(404).json({ success: false, message: "Reversal document not found." });
+      return next(createError(404, "Reversal document not found."));
     }
 
     if (reversalDoc.isCancelled) {
-      return res.status(400).json({ success: false, message: "Reversal is already cancelled." });
+      return next(createError(400, "Reversal is already cancelled."));
     }
 
     const businessId = payment.business || resolveBusinessId(req);
@@ -4334,7 +4210,7 @@ export const cancelReversal = async (req, res, next) => {
         fallbackUserId: payment.reversedBy || payment.confirmedBy || null,
       });
     } catch (actorError) {
-      return res.status(400).json({ success: false, message: actorError.message });
+      return next(createError(400, actorError.message));
     }
 
     const reason = (req.body?.reason || "").trim() || "Reversal cancelled by user";

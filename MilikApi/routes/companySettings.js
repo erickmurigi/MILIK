@@ -22,6 +22,7 @@ import {
   updateInventoryAccountingDefaults,
   updateTaxConfiguration,
   updateAutoInvoicing,
+  updateIncomeRules,
 } from "../controllers/propertyController/companySettings.js";
 import { processAutoRentInvoices } from "../services/autoRentInvoicingService.js";
 import { verifyUser } from "../controllers/verifyToken.js";
@@ -78,6 +79,9 @@ router.delete("/:businessId/expenses/:expenseId", verifyUser, deleteExpenseItem)
 router.post("/:businessId/deposits", verifyUser, addDepositType);
 router.put("/:businessId/deposits/:depositTypeId", verifyUser, updateDepositType);
 router.delete("/:businessId/deposits/:depositTypeId", verifyUser, deleteDepositType);
+
+// Income Rules
+router.put("/:businessId/income-rules", verifyUser, updateIncomeRules);
 
 // Auto Invoicing
 router.put("/:businessId/auto-invoicing", verifyUser, updateAutoInvoicing);

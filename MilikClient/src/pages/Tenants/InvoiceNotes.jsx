@@ -1,4 +1,5 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { fmtDate } from "../../utils/dates";
 import { useDispatch, useSelector } from "react-redux";
 import {
   selectCurrentUser,
@@ -72,12 +73,6 @@ const formatCurrency = (value) =>
     minimumFractionDigits: 2,
   }).format(Number(value || 0));
 
-const formatDate = (value) => {
-  if (!value) return "-";
-  const dt = new Date(value);
-  if (Number.isNaN(dt.getTime())) return "-";
-  return dt.toLocaleDateString();
-};
 
 const isPostingAccount = (account) => account?.isHeader !== true && account?.isPosting !== false;
 const isActiveInvoice = (invoice) => !["cancelled", "reversed"].includes(String(invoice?.status || "").toLowerCase());
@@ -235,13 +230,14 @@ const STANDALONE_CHARGE_ITEMS = [
     key: "standalone-service-charge",
     label: "Service Charge",
     category: "OTHER_CHARGE",
-    metadata: { billItemKey: "service_charge", billItemLabel: "Service Charge" },
+    metadata: { billItemKey: "service_charge", billItemLabel: "Service Charge", includeInLandlordStatement: true },
   },
   {
     key: "standalone-late-payment",
     label: "Late Payment",
     category: "LATE_PENALTY_CHARGE",
-    metadata: { billItemKey: "late_payment", billItemLabel: "Late Payment", standaloneDebitNote: true, includeInLandlordStatement: true },
+    // includeInLandlordStatement is omitted here — the backend gates it via incomeRules.latePenaltyBeneficiary
+    metadata: { billItemKey: "late_payment", billItemLabel: "Late Payment", standaloneDebitNote: true },
   },
   {
     key: "standalone-deposit",
@@ -253,13 +249,13 @@ const STANDALONE_CHARGE_ITEMS = [
     key: "standalone-lease-fee",
     label: "Lease Fee",
     category: "OTHER_CHARGE",
-    metadata: { billItemKey: "lease_fee", billItemLabel: "Lease Fee" },
+    metadata: { billItemKey: "lease_fee", billItemLabel: "Lease Fee", includeInLandlordStatement: false },
   },
   {
     key: "standalone-other-charge",
     label: "Other Charge",
     category: "OTHER_CHARGE",
-    metadata: { billItemKey: "other_charge", billItemLabel: "Other Charge" },
+    metadata: { billItemKey: "other_charge", billItemLabel: "Other Charge", includeInLandlordStatement: false },
   },
 ];
 
@@ -507,7 +503,8 @@ const InvoiceNotes = () => {
         ...(item.metadata || {}),
         noteSourceMode: "standalone",
         standaloneDebitNote: true,
-        includeInLandlordStatement: true,
+        // Respect per-item includeInLandlordStatement; only default to true when not explicitly set
+        ...(typeof item.metadata?.includeInLandlordStatement !== "boolean" && { includeInLandlordStatement: true }),
         includeInCategoryTotals: true,
       },
     }));
@@ -1015,11 +1012,11 @@ const InvoiceNotes = () => {
                             <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{note?.tenant?.name || note?.tenantName || "-"}</td>
                             <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{resolvePropertyName(note, propertyMap)}</td>
                             <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{resolveUnitName(note, tenantMap)}</td>
-                            <td className="px-3 py-1 border-r border-gray-100 text-orange-700">{note.description || `${humanizeCategory(note.noteType || note.documentType)} - ${humanizeCategory(note.category || "Charge")}`}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-orange-700">{note.description || note.metadata?.billItemLabel || `${humanizeCategory(note.noteType || note.documentType)} - ${humanizeCategory(note.category || "Charge")}`}</td>
                             <td className="px-3 py-1 border-r border-gray-100 text-slate-700">
                               <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">{humanizeCategory(note.category || "-")}</span>
                             </td>
-                            <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-700">{formatDate(note.noteDate || note.invoiceDate || note.createdAt)}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-700">{fmtDate(note.noteDate || note.invoiceDate || note.createdAt)}</td>
                             <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-700">{note.sourceInvoiceNumber || note?.sourceInvoice?.invoiceNumber || "-"}</td>
                             <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-900">{formatCurrency(note.amount)}</td>
                             <td className="px-3 py-1 border-r border-gray-100 text-center">
@@ -1032,7 +1029,7 @@ const InvoiceNotes = () => {
                                 {paymentState.label}
                               </span>
                             </td>
-                            <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-700">{formatDate(note.createdAt || note.noteDate || note.invoiceDate)}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-700">{fmtDate(note.createdAt || note.noteDate || note.invoiceDate)}</td>
                             <td className="px-3 py-1 text-right" onClick={(event) => event.stopPropagation()}>
                               {canReverseNote(note) ? (
                                 <button
@@ -1065,7 +1062,7 @@ const InvoiceNotes = () => {
                                   <div>
                                     <span className="font-black uppercase tracking-[0.12em] text-emerald-700">Note Details</span>
                                     <p className="mt-1 font-semibold text-slate-900">{note.noteNumber || note.invoiceNumber}</p>
-                                    <p className="text-slate-600">{formatDate(note.noteDate || note.invoiceDate || note.createdAt)}</p>
+                                    <p className="text-slate-600">{fmtDate(note.noteDate || note.invoiceDate || note.createdAt)}</p>
                                     <p className="text-slate-600">{humanizeCategory(note.noteType || note.documentType)}</p>
                                   </div>
                                   <div>
@@ -1082,7 +1079,7 @@ const InvoiceNotes = () => {
                                   </div>
                                   <div>
                                     <span className="font-black uppercase tracking-[0.12em] text-violet-700">Description & Status</span>
-                                    <p className="mt-1 text-slate-700">{note.description || `${humanizeCategory(note.noteType || note.documentType)} - ${humanizeCategory(note.category || "Charge")}`}</p>
+                                    <p className="mt-1 text-slate-700">{note.description || note.metadata?.billItemLabel || `${humanizeCategory(note.noteType || note.documentType)} - ${humanizeCategory(note.category || "Charge")}`}</p>
                                     <p className="mt-1 flex flex-wrap gap-1">
                                       <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase ${getStatusChip(note?.status)}`}>
                                         {note?.status || "posted"}

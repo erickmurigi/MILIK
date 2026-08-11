@@ -249,6 +249,17 @@ const accountingDefaultsSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const incomeRulesSchema = new mongoose.Schema(
+  {
+    latePenaltyBeneficiary: {
+      type: String,
+      enum: ["landlord", "manager"],
+      default: "manager",
+    },
+  },
+  { _id: false }
+);
+
 const CompanySettingsSchema = new mongoose.Schema(
   {
     company: {
@@ -318,6 +329,10 @@ const CompanySettingsSchema = new mongoose.Schema(
           default: [],
         },
       }, { _id: false }),
+      default: () => ({}),
+    },
+    incomeRules: {
+      type: incomeRulesSchema,
       default: () => ({}),
     },
     mriRate: { type: Number, default: 0.075, min: 0, max: 1 },

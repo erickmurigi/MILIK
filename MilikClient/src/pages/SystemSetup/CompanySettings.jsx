@@ -5,6 +5,7 @@ import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import AppSelect from "../../components/common/AppSelect";
+import Modal from "../../components/common/Modal";
 import { useConfirm } from "../../context/ConfirmContext";
 import { adminRequests } from "../../utils/requestMethods";
 import { hasCompanyModule } from "../../utils/companyModules";
@@ -21,13 +22,14 @@ import {
   FaPlus,
   FaReceipt,
   FaSave,
-  FaSpinner,
   FaTimes,
   FaArrowRight,
   FaPowerOff,
   FaCalendarAlt,
   FaPlay,
+  FaBalanceScale,
 } from "react-icons/fa";
+import Spinner from "../../components/common/Spinner";
 
 const MILIK_GREEN = "#0B3B2E";
 
@@ -92,6 +94,11 @@ const TAB_CONFIG = {
   autoInvoicing: {
     label: "Auto Invoicing",
     icon: FaCalendarAlt,
+    requiredModules: ["propertyManagement"],
+  },
+  incomeRules: {
+    label: "Income Rules",
+    icon: FaBalanceScale,
     requiredModules: ["propertyManagement"],
   },
 };
@@ -397,16 +404,6 @@ const Card = ({ title, subtitle, action, children }) => (
   </div>
 );
 
-const StatusBadge = ({ active }) => (
-  <span
-    className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wide ${
-      active ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-100 text-slate-600"
-    }`}
-  >
-    <span className={`h-2 w-2 rounded-full ${active ? "bg-emerald-500" : "bg-slate-400"}`} />
-    {active ? "Active" : "Archived"}
-  </span>
-);
 
 const Input = ({ className = "", ...props }) => (
   <input
@@ -470,27 +467,6 @@ const SettingRow = ({ title, meta, status, children }) => (
   </div>
 );
 
-const Modal = ({ open, title, subtitle, children, onClose, footer }) => {
-  if (!open) return null;
-
-  return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/50 px-4 py-6">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden border border-slate-200 bg-white shadow-2xl">
-        <div className="flex items-center justify-between gap-4 bg-[#0B3B2E] px-4 py-3">
-          <div>
-            <div className="text-[12px] font-bold uppercase tracking-wide text-white">{title}</div>
-            {subtitle ? <div className="mt-0.5 text-[10px] text-[#B7C9C0]">{subtitle}</div> : null}
-          </div>
-          <button onClick={onClose} className="border border-[#2A5C4A] px-3 py-1 text-[11px] font-bold text-white hover:bg-[#0A3127]">
-            Close
-          </button>
-        </div>
-        <div className="max-h-[72vh] overflow-y-auto px-4 py-4">{children}</div>
-        {footer ? <div className="border-t border-slate-200 bg-[#F6FAF8] px-4 py-3">{footer}</div> : null}
-      </div>
-    </div>
-  );
-};
 
 const CompanySettings = () => {
   const confirm = useConfirm();
@@ -538,6 +514,8 @@ const CompanySettings = () => {
   });
   const [savingAutoInvoicing, setSavingAutoInvoicing] = useState(false);
   const [triggeringAutoInvoicing, setTriggeringAutoInvoicing] = useState(false);
+  const [incomeRules, setIncomeRules] = useState({ latePenaltyBeneficiary: "manager" });
+  const [savingIncomeRules, setSavingIncomeRules] = useState(false);
   const [chartAccounts, setChartAccounts] = useState([]);
   const [loadedChartAccountCompanyId, setLoadedChartAccountCompanyId] = useState("");
   const requestedTab = searchParams.get("tab");
@@ -599,6 +577,8 @@ const CompanySettings = () => {
         lastRunSummary: ai.lastRunSummary || null,
         runHistory: Array.isArray(ai.runHistory) ? ai.runHistory : [],
       });
+      const ir = response.data?.incomeRules || {};
+      setIncomeRules({ latePenaltyBeneficiary: ir.latePenaltyBeneficiary || "manager" });
     } catch (error) {
       toast.error(extractErrorMessage(error));
     } finally {
@@ -1111,6 +1091,73 @@ const CompanySettings = () => {
     );
   };
 
+  const saveIncomeRules = async () => {
+    if (!currentCompany?._id) return;
+    setSavingIncomeRules(true);
+    try {
+      await adminRequests.put(`/company-settings/${currentCompany._id}/income-rules`, incomeRules);
+      toast.success("Income rules saved.");
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setSavingIncomeRules(false);
+    }
+  };
+
+  const renderIncomeRulesTab = () => (
+    <div className="space-y-4">
+      <Card
+        title="Landlord Statement — Income Rules"
+        subtitle="Control which charge types flow to the landlord's statement and which are retained as property manager income. These rules apply when generating landlord statements."
+        action={
+          <ActionButton variant="primary" onClick={saveIncomeRules} disabled={savingIncomeRules}>
+            {savingIncomeRules ? <Spinner size="sm" /> : <FaSave />} Save Rules
+          </ActionButton>
+        }
+      >
+        <div className="space-y-6">
+          {/* Fixed rules info */}
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">Fixed rules (not configurable)</p>
+            <div className="space-y-2">
+              {[
+                { label: "Rent", goes: "Landlord", color: "text-emerald-700 bg-emerald-50 border-emerald-200" },
+                { label: "Utilities (water, electricity, garbage, etc.)", goes: "Landlord", color: "text-emerald-700 bg-emerald-50 border-emerald-200" },
+                { label: "Service Charge", goes: "Landlord", color: "text-emerald-700 bg-emerald-50 border-emerald-200" },
+                { label: "Security / Utility Deposits", goes: "Landlord (deposit section)", color: "text-blue-700 bg-blue-50 border-blue-200" },
+                { label: "Lease Fee (placement fee)", goes: "Property Manager", color: "text-rose-700 bg-rose-50 border-rose-200" },
+                { label: "Management Commission", goes: "Property Manager", color: "text-rose-700 bg-rose-50 border-rose-200" },
+                { label: "Other Charge (generic)", goes: "Property Manager", color: "text-rose-700 bg-rose-50 border-rose-200" },
+              ].map(({ label, goes, color }) => (
+                <div key={label} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="font-medium text-slate-700">{label}</span>
+                  <span className={`rounded-full border px-2.5 py-0.5 text-xs font-bold ${color}`}>{goes}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Configurable: Late Penalties */}
+          <div>
+            <p className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">Configurable</p>
+            <AppSelect
+              label="Late Penalty Income"
+              hint="Who receives late payment penalties charged to tenants?"
+              value={incomeRules.latePenaltyBeneficiary}
+              onChange={(v) => setIncomeRules((p) => ({ ...p, latePenaltyBeneficiary: v }))}
+              options={[
+                { value: "manager", label: "Property Manager — keeps late fees as collection incentive" },
+                { value: "landlord", label: "Landlord — late penalties flow to the landlord statement" },
+              ]}
+              getLabel={(o) => o.label}
+              getValue={(o) => o.value}
+            />
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+
   const saveAutoInvoicing = async () => {
     if (!currentCompany?._id) return;
     setSavingAutoInvoicing(true);
@@ -1204,7 +1251,7 @@ const CompanySettings = () => {
         subtitle="Configure when rent invoices are automatically generated each month for active tenants. Invoices are created with an idempotency key — running twice in a month is safe."
         action={
           <ActionButton variant="primary" onClick={saveAutoInvoicing} disabled={savingAutoInvoicing}>
-            {savingAutoInvoicing ? <FaSpinner className="animate-spin" /> : <FaSave />} Save Settings
+            {savingAutoInvoicing ? <Spinner size="sm" /> : <FaSave />} Save Settings
           </ActionButton>
         }
       >
@@ -1305,7 +1352,7 @@ const CompanySettings = () => {
             )}
           </div>
           <ActionButton variant="primary" onClick={triggerAutoInvoicing} disabled={triggeringAutoInvoicing}>
-            {triggeringAutoInvoicing ? <FaSpinner className="animate-spin" /> : <FaPlay />}
+            {triggeringAutoInvoicing ? <Spinner size="sm" /> : <FaPlay />}
             {triggeringAutoInvoicing ? "Running..." : "Run Now"}
           </ActionButton>
         </div>
@@ -1370,7 +1417,7 @@ const CompanySettings = () => {
         subtitle="These are company-wide future-facing defaults for invoices and commission tax handling. Saving here does not restate posted invoices or processed statements."
         action={
           <ActionButton variant="primary" onClick={saveTaxConfiguration} disabled={savingTax}>
-            {savingTax ? <FaSpinner className="animate-spin" /> : <FaSave />} Save Tax Configuration
+            {savingTax ? <Spinner size="sm" /> : <FaSave />} Save Tax Configuration
           </ActionButton>
         }
       >
@@ -1607,7 +1654,7 @@ const CompanySettings = () => {
           subtitle="Default posting accounts for rent, utilities, deposits and commissions. Leaving a field blank keeps the built-in MILIK fallback behavior. Historical entries remain untouched."
           action={
             <ActionButton variant="primary" onClick={saveAccountingDefaults} disabled={savingAccounting || loadingAccounts}>
-              {savingAccounting ? <FaSpinner className="animate-spin" /> : <FaSave />} Save PMS Defaults
+              {savingAccounting ? <Spinner size="sm" /> : <FaSave />} Save PMS Defaults
             </ActionButton>
           }
         >
@@ -1617,7 +1664,7 @@ const CompanySettings = () => {
 
           {loadingAccounts ? (
             <div className="mt-4 flex items-center gap-3 text-sm text-slate-600">
-              <FaSpinner className="animate-spin" /> Loading Chart of Accounts...
+              <Spinner size="sm" /> Loading Chart of Accounts...
             </div>
           ) : (
             renderAccountingDefaultsGrid(ACCOUNTING_DEFAULT_FIELDS, accountingDefaults, setAccountingDefaultField)
@@ -1631,7 +1678,7 @@ const CompanySettings = () => {
           subtitle="Default posting accounts for payroll journals. When a payslip is approved these accounts determine where gross pay, statutory deductions and employer contributions are posted."
           action={
             <ActionButton variant="primary" onClick={saveHrAccountingDefaults} disabled={savingHrAccounting || loadingAccounts}>
-              {savingHrAccounting ? <FaSpinner className="animate-spin" /> : <FaSave />} Save HR Defaults
+              {savingHrAccounting ? <Spinner size="sm" /> : <FaSave />} Save HR Defaults
             </ActionButton>
           }
         >
@@ -1641,7 +1688,7 @@ const CompanySettings = () => {
 
           {loadingAccounts ? (
             <div className="mt-4 flex items-center gap-3 text-sm text-slate-600">
-              <FaSpinner className="animate-spin" /> Loading Chart of Accounts...
+              <Spinner size="sm" /> Loading Chart of Accounts...
             </div>
           ) : (
             renderAccountingDefaultsGrid(HR_ACCOUNTING_DEFAULT_FIELDS, hrAccountingDefaults, setHrAccountingDefaultField)
@@ -1655,7 +1702,7 @@ const CompanySettings = () => {
           subtitle="Default posting accounts for inventory movements, sales revenue, COGS, and purchase clearing. These accounts drive journal entries when stock is bought, sold, or adjusted."
           action={
             <ActionButton variant="primary" onClick={saveInvAccountingDefaults} disabled={savingInvAccounting || loadingAccounts}>
-              {savingInvAccounting ? <FaSpinner className="animate-spin" /> : <FaSave />} Save Inventory Defaults
+              {savingInvAccounting ? <Spinner size="sm" /> : <FaSave />} Save Inventory Defaults
             </ActionButton>
           }
         >
@@ -1665,7 +1712,7 @@ const CompanySettings = () => {
 
           {loadingAccounts ? (
             <div className="mt-4 flex items-center gap-3 text-sm text-slate-600">
-              <FaSpinner className="animate-spin" /> Loading Chart of Accounts...
+              <Spinner size="sm" /> Loading Chart of Accounts...
             </div>
           ) : (
             renderAccountingDefaultsGrid(INV_ACCOUNTING_DEFAULT_FIELDS, invAccountingDefaults, setInvAccountingDefaultField)
@@ -1892,7 +1939,7 @@ const CompanySettings = () => {
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {loading ? (
               <div className="flex h-40 items-center justify-center gap-2 text-sm text-slate-500">
-                <FaSpinner className="animate-spin" /> Loading...
+                <Spinner size="sm" /> Loading...
               </div>
             ) : activeTab === "accounting" ? (
               <div className="flex-1 overflow-auto px-4 py-4">{renderAccountingTab()}</div>
@@ -1900,6 +1947,8 @@ const CompanySettings = () => {
               <div className="flex-1 overflow-auto px-4 py-4">{renderTaxTab()}</div>
             ) : activeTab === "autoInvoicing" ? (
               <div className="flex-1 overflow-auto px-4 py-4">{renderAutoInvoicingTab()}</div>
+            ) : activeTab === "incomeRules" ? (
+              <div className="flex-1 overflow-auto px-4 py-4">{renderIncomeRulesTab()}</div>
             ) : (
               renderCollectionTab(activeTab)
             )}
@@ -1908,25 +1957,25 @@ const CompanySettings = () => {
         </div>
       </div>
 
-      <Modal
-        open={showModal}
-        onClose={closeModal}
-        title={editingItem?._id ? `Edit ${TAB_CONFIG[modalTab].label.slice(0, -1)}` : `Add ${TAB_CONFIG[modalTab].label.slice(0, -1)}`}
-        subtitle="These settings guide future defaults and remain safe for historical accounting records."
-        footer={
-          <div className="flex flex-wrap justify-end gap-2">
-            <ActionButton onClick={closeModal}>
-              <FaTimes /> Cancel
-            </ActionButton>
-            <ActionButton variant="primary" onClick={saveItem} disabled={saving}>
-              {saving ? <FaSpinner className="animate-spin" /> : <FaSave />}
-              {saving ? "Saving..." : editingItem?._id ? "Update" : "Save"}
-            </ActionButton>
-          </div>
-        }
-      >
-        {renderModalBody()}
-      </Modal>
+      {showModal && (
+        <Modal
+          onClose={closeModal}
+          title={editingItem?._id ? `Edit ${TAB_CONFIG[modalTab].label.slice(0, -1)}` : `Add ${TAB_CONFIG[modalTab].label.slice(0, -1)}`}
+          footer={
+            <div className="flex flex-wrap justify-end gap-2">
+              <ActionButton onClick={closeModal}>
+                <FaTimes /> Cancel
+              </ActionButton>
+              <ActionButton variant="primary" onClick={saveItem} disabled={saving}>
+                {saving ? <Spinner size="sm" /> : <FaSave />}
+                {saving ? "Saving..." : editingItem?._id ? "Update" : "Save"}
+              </ActionButton>
+            </div>
+          }
+        >
+          {renderModalBody()}
+        </Modal>
+      )}
     </DashboardLayout>
   );
 };

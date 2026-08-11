@@ -12,6 +12,7 @@ import TenantInvoiceNote from "../models/TenantInvoiceNote.js";
 import ProcessedStatement from "../models/ProcessedStatement.js";
 import LandlordStatement from "../models/LandlordStatement.js";
 import LandlordStatementTenantBalance from "../models/LandlordStatementTenantBalance.js";
+import CompanySettings from "../models/CompanySettings.js";
 import { buildCommissionTaxSnapshot, getCompanyTaxConfiguration } from "./taxCalculationService.js";
 
 const round2 = (value) =>
@@ -1275,7 +1276,7 @@ export const generateLandlordStatement = async ({
   // Round-trip 2: statement window resolution + last-approved lookup in parallel.
   // lastApproved uses statementPeriodStart directly (safe — effectiveStartAt can only be
   // equal to or later than startOfDay(statementPeriodStart), never earlier).
-  const [windowResult, lastApproved] = await Promise.all([
+  const [windowResult, lastApproved, companySettingsDoc] = await Promise.all([
     resolveEffectiveStatementWindow({
       businessId: businessObjectId,
       propertyId: propertyObjectId,
@@ -1295,7 +1296,11 @@ export const generateLandlordStatement = async ({
       .sort({ periodEnd: -1 })
       .select("_id periodEnd approvedAt")
       .lean(),
+    CompanySettings.findOne({ company: businessObjectId }).select("incomeRules").lean(),
   ]);
+
+  const latePenaltyToLandlord =
+    (companySettingsDoc?.incomeRules?.latePenaltyBeneficiary || "manager") === "landlord";
 
   const {
     effectiveStartAt,
@@ -1694,17 +1699,26 @@ export const generateLandlordStatement = async ({
     if (typeof metadata.includeInLandlordStatement === "boolean") {
       return metadata.includeInLandlordStatement;
     }
+    const billItemKey = String(metadata?.billItemKey || "").toLowerCase();
+    // billItemKey overrides category defaults for ambiguous OTHER_CHARGE types
+    if (billItemKey === "service_charge") return true;
+    if (billItemKey === "lease_fee" || billItemKey === "other_charge") return false;
     const cat = String(invoice?.category || "").toUpperCase();
-    if (cat === "LATE_PENALTY_CHARGE" || cat === "OTHER_CHARGE") {
-      return false;
-    }
+    if (cat === "LATE_PENALTY_CHARGE") return latePenaltyToLandlord;
+    if (cat === "OTHER_CHARGE") return false;
     return true;
   };
 
   const shouldIncludeNoteInLandlordStatement = (note = {}) => {
     const metadata = mergeNoteUtilityMetadata(note);
-    // Lease fee is always manager income — never a landlord addition, regardless of stored flag
-    if (metadata.billItemKey === "lease_fee") return false;
+    const bik = String(metadata?.billItemKey || "").toLowerCase();
+    // Hard manager-only keys — never a landlord addition regardless of stored flag
+    if (bik === "lease_fee") return false;
+    if (bik === "other_charge") return false;
+    // Service charge is always landlord income
+    if (bik === "service_charge") return true;
+    // Late payment follows the company income rule (configurable)
+    if (bik === "late_payment") return latePenaltyToLandlord;
     if (typeof metadata.includeInLandlordStatement === "boolean") {
       return metadata.includeInLandlordStatement;
     }
@@ -1712,7 +1726,7 @@ export const generateLandlordStatement = async ({
       return true;
     }
     if (String(note?.category || "").toUpperCase() === "LATE_PENALTY_CHARGE") {
-      return false;
+      return latePenaltyToLandlord;
     }
     return true;
   };

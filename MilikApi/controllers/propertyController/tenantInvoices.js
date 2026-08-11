@@ -932,7 +932,7 @@ const buildDebitNoteAllocationSnapshots = (notes = []) =>
         tenant: note?.tenant,
         amount: round2(Math.abs(Number(note?.amount || 0))),
         invoiceNumber: noteNumber,
-        category: "DEBIT_NOTE",
+        category: note?.category || "DEBIT_NOTE",
         metadata: {
           ...metadata,
           sourceTransactionType: "invoice_note",
@@ -2094,7 +2094,7 @@ export const getTenantInvoiceNotes = async (req, res, next) => {
     if (business) query.business = business;
 
     if (!tenant && !business) {
-      return res.status(400).json({ success: false, message: "At least tenant or business query parameter is required" });
+      return next(createError(400, "At least tenant or business query parameter is required"));
     }
 
     const notes = await TenantInvoiceNote.find(query)
@@ -2117,7 +2117,7 @@ export const getTenantInvoiceNotes = async (req, res, next) => {
 export const getCreditableTenantInvoices = async (req, res, next) => {
   try {
     const { business, tenant } = req.query;
-    if (!business) return res.status(400).json({ error: "business query parameter is required" });
+    if (!business) return next(createError(400, "business query parameter is required"));
     const businessId = String(business);
 
     const tenantIds = tenant
@@ -2699,7 +2699,7 @@ export const createTenantInvoiceNote = async (req, res, next) => {
   try {
     const noteType = String(req.body.noteType || "").toUpperCase();
     if (!TENANT_NOTE_TYPES.includes(noteType)) {
-      return res.status(400).json({ error: "Invalid note type." });
+      return next(createError(400, "Invalid note type."));
     }
 
     const scopedBusinessId = resolveAuthorizedBusinessId(req);
@@ -2771,7 +2771,7 @@ export const createTenantInvoiceNote = async (req, res, next) => {
 
     const isInvoiceLinked = isValidObjectId(sourceInvoiceId);
     if (!isInvoiceLinked && noteType === "CREDIT_NOTE") {
-      return res.status(400).json({ error: "A valid source invoice is required for a credit note." });
+      return next(createError(400, "A valid source invoice is required for a credit note."));
     }
 
     let sourceInvoice = null;
@@ -2782,15 +2782,15 @@ export const createTenantInvoiceNote = async (req, res, next) => {
       }).lean();
 
       if (!sourceInvoice) {
-        return res.status(404).json({ error: "Source invoice not found." });
+        return next(createError(404, "Source invoice not found."));
       }
 
       if (String(sourceInvoice.postingStatus || "") !== "posted") {
-        return res.status(400).json({ error: "Notes can only be created against posted invoices." });
+        return next(createError(400, "Notes can only be created against posted invoices."));
       }
 
       if (["cancelled", "reversed"].includes(String(sourceInvoice.status || "").toLowerCase())) {
-        return res.status(400).json({ error: "Source invoice is not active." });
+        return next(createError(400, "Source invoice is not active."));
       }
     }
 
@@ -2798,11 +2798,11 @@ export const createTenantInvoiceNote = async (req, res, next) => {
     const requestedPropertyId = req.body.propertyId || req.body.property || sourceInvoice?.property || null;
 
     if (!isValidObjectId(requestedTenantId)) {
-      return res.status(400).json({ error: "A valid tenant is required." });
+      return next(createError(400, "A valid tenant is required."));
     }
 
     if (!isValidObjectId(requestedPropertyId)) {
-      return res.status(400).json({ error: "A valid property is required." });
+      return next(createError(400, "A valid property is required."));
     }
 
     const [tenant, property] = await Promise.all([
@@ -2811,18 +2811,18 @@ export const createTenantInvoiceNote = async (req, res, next) => {
     ]);
 
     if (!tenant) {
-      return res.status(404).json({ error: "Tenant not found." });
+      return next(createError(404, "Tenant not found."));
     }
 
     if (!property) {
-      return res.status(404).json({ error: "Property not found." });
+      return next(createError(404, "Property not found."));
     }
 
     const resolvedBusinessId = sourceInvoice?.business || tenant.business || property.business || scopedBusinessId;
     const resolvedUnitId = sourceInvoice?.unit || tenant.unit || req.body.unitId || req.body.unit || null;
 
     if (!isValidObjectId(resolvedUnitId)) {
-      return res.status(400).json({ error: "A valid unit could not be resolved for this tenant." });
+      return next(createError(400, "A valid unit could not be resolved for this tenant."));
     }
 
     const unit = await Unit.findOne({
@@ -2831,15 +2831,12 @@ export const createTenantInvoiceNote = async (req, res, next) => {
     }).lean();
 
     if (!unit) {
-      return res.status(404).json({ error: "Tenant unit not found." });
+      return next(createError(404, "Tenant unit not found."));
     }
 
     const resolvedLandlordId = resolvePrimaryLandlordId({ sourceInvoice, property, tenant });
     if (!isValidObjectId(resolvedLandlordId)) {
-      return res.status(400).json({
-        error:
-          "This property has no valid landlord linked. Open the property, add/select a landlord, mark one as primary, then save the debit note again.",
-      });
+      return next(createError(400, "This property has no valid landlord linked. Open the property, add/select a landlord, mark one as primary, then save the debit note again."));
     }
 
     let actorUserId;
@@ -2850,18 +2847,18 @@ export const createTenantInvoiceNote = async (req, res, next) => {
         bodyCreatedBy: req.body.createdBy || sourceInvoice?.createdBy || tenant.createdBy,
       });
     } catch (actorError) {
-      return res.status(400).json({ error: actorError.message });
+      return next(createError(400, actorError.message));
     }
 
     const noteDate = normalizeDate(req.body.noteDate || req.body.invoiceDate || new Date());
     const amount = Math.abs(Number(req.body.amount || 0));
     if (amount <= 0) {
-      return res.status(400).json({ error: "Amount must be positive." });
+      return next(createError(400, "Amount must be positive."));
     }
 
     const requestedCategory = String(req.body.category || sourceInvoice?.category || "").toUpperCase();
     if (!TENANT_INVOICE_CATEGORIES.includes(requestedCategory)) {
-      return res.status(400).json({ error: "Invalid charge type/category." });
+      return next(createError(400, "Invalid charge type/category."));
     }
 
     let sourceSnapshot = null;
@@ -2875,7 +2872,7 @@ export const createTenantInvoiceNote = async (req, res, next) => {
       );
 
       if (!sourceSnapshot) {
-        return res.status(400).json({ error: "Source invoice snapshot could not be resolved." });
+        return next(createError(400, "Source invoice snapshot could not be resolved."));
       }
     }
 
@@ -2884,20 +2881,18 @@ export const createTenantInvoiceNote = async (req, res, next) => {
         String(sourceSnapshot?.computedStatus || sourceInvoice?.status || "").toLowerCase()
       );
       if (!isOpen) {
-        return res.status(400).json({ error: "Credit notes can only be created against open invoices." });
+        return next(createError(400, "Credit notes can only be created against open invoices."));
       }
 
       const remainingCreditableAmount = round2(
         Number(sourceSnapshot?.remainingCreditableAmount || 0)
       );
       if (remainingCreditableAmount <= 0) {
-        return res.status(400).json({ error: "This invoice has no remaining creditable amount." });
+        return next(createError(400, "This invoice has no remaining creditable amount."));
       }
 
       if (amount > remainingCreditableAmount) {
-        return res.status(400).json({
-          error: `Credit amount cannot exceed remaining creditable amount of ${remainingCreditableAmount}.`,
-        });
+        return next(createError(400, `Credit amount cannot exceed remaining creditable amount of ${remainingCreditableAmount}.`));
       }
     }
 
@@ -2926,7 +2921,7 @@ export const createTenantInvoiceNote = async (req, res, next) => {
     }).lean();
 
     if (duplicate) {
-      return res.status(409).json({ error: "Note number already exists for this business." });
+      return next(createError(409, "Note number already exists for this business."));
     }
 
     const noteMetadata = sourceInvoice
@@ -2941,8 +2936,14 @@ export const createTenantInvoiceNote = async (req, res, next) => {
           ...requestedMetadata,
           noteSourceMode: "standalone",
           standaloneDebitNote: noteType === "DEBIT_NOTE",
-          includeInLandlordStatement: true,
-          includeInCategoryTotals: true,
+          includeInLandlordStatement:
+            typeof requestedMetadata?.includeInLandlordStatement === "boolean"
+              ? requestedMetadata.includeInLandlordStatement
+              : true,
+          includeInCategoryTotals:
+            typeof requestedMetadata?.includeInCategoryTotals === "boolean"
+              ? requestedMetadata.includeInCategoryTotals
+              : true,
         };
 
     const note = await TenantInvoiceNote.create({
@@ -3004,10 +3005,7 @@ export const createTenantInvoiceNote = async (req, res, next) => {
     return res.status(201).json(buildNoteStatementRow(populated));
   } catch (error) {
     if (error?.code === 11000) {
-      return res.status(409).json({
-        success: false,
-        message: "Note number already exists for this business. Please retry so a new number can be reserved safely.",
-      });
+      return next(createError(409, "Note number already exists for this business. Please retry so a new number can be reserved safely."));
     }
     return next(error);
   }
@@ -3017,7 +3015,7 @@ export const reverseTenantInvoiceNote = async (req, res, next) => {
   try {
     const noteId = req.params?.id;
     if (!isValidObjectId(noteId)) {
-      return res.status(400).json({ error: "A valid tenant invoice note id is required." });
+      return next(createError(400, "A valid tenant invoice note id is required."));
     }
 
     const scopedBusinessId = resolveAuthorizedBusinessId(req);
@@ -3027,17 +3025,17 @@ export const reverseTenantInvoiceNote = async (req, res, next) => {
     });
 
     if (!note) {
-      return res.status(404).json({ error: "Invoice note not found." });
+      return next(createError(404, "Invoice note not found."));
     }
 
     const normalizedNoteType = String(note.noteType || "").toUpperCase();
 
     if (!["CREDIT_NOTE", "DEBIT_NOTE"].includes(normalizedNoteType)) {
-      return res.status(400).json({ error: "Only debit and credit notes can be reversed from this workspace." });
+      return next(createError(400, "Only debit and credit notes can be reversed from this workspace."));
     }
 
     if (["cancelled", "reversed"].includes(String(note.status || "").toLowerCase())) {
-      return res.status(400).json({ error: "This debit note is already inactive." });
+      return next(createError(400, "This debit note is already inactive."));
     }
 
     const sourceInvoiceId = String(note.sourceInvoice || "");
@@ -3050,7 +3048,7 @@ export const reverseTenantInvoiceNote = async (req, res, next) => {
       }).lean();
 
       if (!sourceInvoice) {
-        return res.status(404).json({ error: "Source invoice not found for this debit note." });
+        return next(createError(404, "Source invoice not found for this debit note."));
       }
     }
 
@@ -3062,7 +3060,7 @@ export const reverseTenantInvoiceNote = async (req, res, next) => {
         bodyCreatedBy: req.body?.createdBy || note.createdBy,
       });
     } catch (actorError) {
-      return res.status(400).json({ error: actorError.message });
+      return next(createError(400, actorError.message));
     }
 
     const ledgerEntryIds = Array.isArray(note.ledgerEntries) ? note.ledgerEntries.map((entry) => String(entry)) : [];
@@ -3712,17 +3710,17 @@ export const updateTakeOnBalance = async (req, res, next) => {
   try {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(String(id || ""))) {
-      return res.status(400).json({ success: false, message: "Invalid take-on balance id." });
+      return next(createError(400, "Invalid take-on balance id."));
     }
 
     const businessId = ensureBusinessAccess(req, resolveAuthorizedBusinessId(req));
     const invoice = await TenantInvoice.findOne({ _id: id, business: businessId });
     if (!invoice) {
-      return res.status(404).json({ success: false, message: "Take-on balance not found." });
+      return next(createError(404, "Take-on balance not found."));
     }
 
     if (!isTakeOnBalanceInvoice(invoice)) {
-      return res.status(400).json({ success: false, message: "Only take-on balances can be edited here." });
+      return next(createError(400, "Only take-on balances can be edited here."));
     }
 
     const { invoiceSnapshots } = await computeTenantInvoiceSnapshots({
@@ -3731,14 +3729,11 @@ export const updateTakeOnBalance = async (req, res, next) => {
     });
     const snapshot = invoiceSnapshots.find((row) => String(row._id) === String(invoice._id));
     if (!snapshot) {
-      return res.status(400).json({ success: false, message: "Take-on balance snapshot could not be resolved." });
+      return next(createError(400, "Take-on balance snapshot could not be resolved."));
     }
 
     if (Number(snapshot.applied || 0) > 0 || ["paid", "partially_paid"].includes(String(snapshot.computedStatus || invoice.status || "").toLowerCase())) {
-      return res.status(400).json({
-        success: false,
-        message: "Allocated or paid take-on balances cannot be edited. Reverse allocations first.",
-      });
+      return next(createError(400, "Allocated or paid take-on balances cannot be edited. Reverse allocations first."));
     }
 
     let actorUserId;
@@ -3749,17 +3744,17 @@ export const updateTakeOnBalance = async (req, res, next) => {
         bodyCreatedBy: req.body.createdBy || invoice.createdBy,
       });
     } catch (actorError) {
-      return res.status(400).json({ success: false, message: actorError.message });
+      return next(createError(400, actorError.message));
     }
 
     const normalizedCategory = String(req.body.category || invoice.category || "").toUpperCase();
     if (!TENANT_INVOICE_CATEGORIES.includes(normalizedCategory)) {
-      return res.status(400).json({ success: false, message: "Invalid take-on balance category." });
+      return next(createError(400, "Invalid take-on balance category."));
     }
 
     const amount = Math.abs(Number(req.body.amount || invoice.amount || 0));
     if (amount <= 0) {
-      return res.status(400).json({ success: false, message: "Amount must be positive." });
+      return next(createError(400, "Amount must be positive."));
     }
 
     const requestedInvoiceDate = normalizeDate(req.body.invoiceDate || invoice.invoiceDate || new Date());
@@ -3789,7 +3784,7 @@ export const updateTakeOnBalance = async (req, res, next) => {
     ]);
 
     if (!propertyDoc || !unitDoc || !tenantDoc) {
-      return res.status(400).json({ success: false, message: "Take-on balance property, unit, or tenant context is invalid." });
+      return next(createError(400, "Take-on balance property, unit, or tenant context is invalid."));
     }
 
     let postingAccount;
@@ -4068,11 +4063,11 @@ export const createTenantInvoicesBatch = async (req, res, next) => {
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
 
     if (items.length === 0) {
-      return res.status(400).json({ error: "At least one invoice payload is required." });
+      return next(createError(400, "At least one invoice payload is required."));
     }
 
     if (items.length > 1000) {
-      return res.status(400).json({ error: "Batch size too large. Maximum 1000 invoices per batch." });
+      return next(createError(400, "Batch size too large. Maximum 1000 invoices per batch."));
     }
 
     const requestedBusinessId = resolveAuthorizedBusinessId(req, req.body.business || items[0]?.business);
@@ -4083,7 +4078,7 @@ export const createTenantInvoicesBatch = async (req, res, next) => {
     );
 
     if (invalidBusinessItem) {
-      return res.status(400).json({ error: "All batched invoices must belong to the same business." });
+      return next(createError(400, "All batched invoices must belong to the same business."));
     }
 
     await ensureSystemChartOfAccounts(businessId);
@@ -4308,9 +4303,7 @@ export const deleteTenantInvoice = async (req, res, next) => {
     const isPrivilegedUser = Boolean(req?.user?.isSystemAdmin || req?.user?.superAdminAccess);
 
     if (!mongoose.Types.ObjectId.isValid(String(id || ""))) {
-      return res.status(400).json({
-        error: "Invalid invoice id.",
-      });
+      return next(createError(400, "Invalid invoice id."));
     }
     const requestedBusinessId = resolveAuthorizedBusinessId(req);
     let businessId = null;
@@ -4329,23 +4322,17 @@ export const deleteTenantInvoice = async (req, res, next) => {
       : null;
 
     if (!invoice) {
-      return res.status(404).json({
-        error: "Invoice not found.",
-      });
+      return next(createError(404, "Invoice not found."));
     }
 
     const invoiceBusinessId = String(invoice?.business || "");
 
     if (!invoiceBusinessId) {
-      return res.status(400).json({
-        error: "Business context is required.",
-      });
+      return next(createError(400, "Business context is required."));
     }
 
     if (businessId && invoiceBusinessId !== String(businessId)) {
-      return res.status(404).json({
-        error: "Invoice not found.",
-      });
+      return next(createError(404, "Invoice not found."));
     }
 
     if (!isPrivilegedUser) {
@@ -4355,15 +4342,11 @@ export const deleteTenantInvoice = async (req, res, next) => {
     businessId = invoiceBusinessId;
 
     if (["cancelled", "reversed"].includes(String(invoice.status || "").toLowerCase())) {
-      return res.status(400).json({
-        error: "This invoice has already been cancelled or reversed.",
-      });
+      return next(createError(400, "This invoice has already been cancelled or reversed."));
     }
 
     if (["paid", "partially_paid"].includes(String(invoice.status || "").toLowerCase())) {
-      return res.status(400).json({
-        error: "Paid or partially paid invoices cannot be deleted. Reverse receipts first.",
-      });
+      return next(createError(400, "Paid or partially paid invoices cannot be deleted. Reverse receipts first."));
     }
 
     const activeNotesCount = await TenantInvoiceNote.countDocuments({
@@ -4373,9 +4356,7 @@ export const deleteTenantInvoice = async (req, res, next) => {
     });
 
     if (activeNotesCount > 0) {
-      return res.status(400).json({
-        error: "This invoice has active debit or credit notes. Reverse or cancel those notes first.",
-      });
+      return next(createError(400, "This invoice has active debit or credit notes. Reverse or cancel those notes first."));
     }
 
     const canHardDeleteWithoutAuditReversal =
@@ -4420,9 +4401,7 @@ export const deleteTenantInvoice = async (req, res, next) => {
         bodyCreatedBy: invoice.createdBy,
       });
     } catch (actorError) {
-      return res.status(400).json({
-        error: actorError.message,
-      });
+      return next(createError(400, actorError.message));
     }
 
     const touchedAccountIds = new Set();
@@ -4507,8 +4486,8 @@ export const deleteTenantInvoice = async (req, res, next) => {
 export const bulkImportInvoiceNotes = async (req, res, next) => {
   try {
     const rows = Array.isArray(req.body.notes) ? req.body.notes : [];
-    if (rows.length === 0) return res.status(400).json({ error: "No note rows provided." });
-    if (rows.length > 500) return res.status(400).json({ error: "Maximum 500 notes per import." });
+    if (rows.length === 0) return next(createError(400, "No note rows provided."));
+    if (rows.length > 500) return next(createError(400, "Maximum 500 notes per import."));
 
     const scopedBusinessId = resolveAuthorizedBusinessId(req);
 
@@ -4535,7 +4514,7 @@ export const bulkImportInvoiceNotes = async (req, res, next) => {
     try {
       actorUserId = await resolveActorUserId({ req, business: scopedBusinessId, bodyCreatedBy: req.body.createdBy });
     } catch (actorError) {
-      return res.status(400).json({ error: actorError.message });
+      return next(createError(400, actorError.message));
     }
 
     // Batch-prefetch source invoices to eliminate N+1

@@ -7,6 +7,7 @@ import JournalEntry from "../../models/JournalEntry.js";
 import AccountingPeriod from "../../models/AccountingPeriod.js";
 import Tenant from "../../models/Tenant.js";
 import TenantInvoice from "../../models/TenantInvoice.js";
+import TenantInvoiceNote from "../../models/TenantInvoiceNote.js";
 import RentPayment from "../../models/RentPayment.js";
 import Property from "../../models/Property.js";
 import Unit from "../../models/Unit.js";
@@ -25,23 +26,13 @@ import {
   isSelfManagingLandlordExpenseAccount,
 } from "../../utils/accountClassifiers.js";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules.js";
+import { resolveBusinessId } from "../../utils/requestContext.js";
+import { createError } from "../../utils/error.js";
 
 const toObjectId = (value) => {
   const raw = typeof value === "object" && value?._id ? value._id : value;
   if (!raw || !mongoose.Types.ObjectId.isValid(String(raw))) return null;
   return new mongoose.Types.ObjectId(String(raw));
-};
-
-const resolveBusinessId = (req) => {
-  const fromQuery = req.query?.business || req.query?.company;
-  const fromBody = req.body?.business || req.body?.company;
-  const fromUser = req.user?.company?._id || req.user?.company || req.user?.businessId;
-
-  if (req.user?.isSystemAdmin || req.user?.superAdminAccess) {
-    return toObjectId(fromQuery || fromBody || fromUser);
-  }
-
-  return toObjectId(fromUser || fromQuery || fromBody);
 };
 
 const getEntryAmount = (entry = {}) => {
@@ -238,13 +229,13 @@ export const getTrialBalanceReport = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     if (!businessId) {
-      return res.status(400).json({ success: false, error: "A valid business id is required." });
+      return next(createError(400, "A valid business id is required."));
     }
 
     const includeZeroBalances = String(req.query.includeZeroBalances || "false").toLowerCase() === "true";
     const asOfDate = normalizeDate(req.query.asOfDate, true);
     if (!asOfDate) {
-      return res.status(400).json({ success: false, error: "Invalid as-of date supplied." });
+      return next(createError(400, "Invalid as-of date supplied."));
     }
 
     const [accounts, ledgerMap] = await Promise.all([
@@ -308,16 +299,16 @@ export const getIncomeStatementReport = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     if (!businessId) {
-      return res.status(400).json({ success: false, error: "A valid business id is required." });
+      return next(createError(400, "A valid business id is required."));
     }
 
     const startDate = normalizeDate(req.query.startDate || new Date(new Date().getFullYear(), new Date().getMonth(), 1));
     const endDate = normalizeDate(req.query.endDate || new Date(), true);
     if (!startDate || !endDate) {
-      return res.status(400).json({ success: false, error: "Invalid report dates supplied." });
+      return next(createError(400, "Invalid report dates supplied."));
     }
     if (startDate > endDate) {
-      return res.status(400).json({ success: false, error: "Start date cannot be after end date." });
+      return next(createError(400, "Start date cannot be after end date."));
     }
 
     // Optional property scope — filters ledger entries by the property dimension.
@@ -423,13 +414,13 @@ export const getBalanceSheetReport = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     if (!businessId) {
-      return res.status(400).json({ success: false, error: "A valid business id is required." });
+      return next(createError(400, "A valid business id is required."));
     }
 
     const includeZeroBalances = String(req.query.includeZeroBalances || "false").toLowerCase() === "true";
     const asOfDate = normalizeDate(req.query.asOfDate, true);
     if (!asOfDate) {
-      return res.status(400).json({ success: false, error: "Invalid as-of date supplied." });
+      return next(createError(400, "Invalid as-of date supplied."));
     }
 
     const [accounts, ledgerMap] = await Promise.all([
@@ -669,13 +660,13 @@ export const getRentalCollectionReport = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     if (!businessId) {
-      return res.status(400).json({ success: false, error: "A valid business id is required." });
+      return next(createError(400, "A valid business id is required."));
     }
 
     const startDate = normalizeDate(req.query.startDate || req.query.dateFrom || req.query.from);
     const endDate = normalizeDate(req.query.endDate || req.query.dateTo || req.query.to, true);
     if (!startDate || !endDate) {
-      return res.status(400).json({ success: false, error: "Valid start and end dates are required." });
+      return next(createError(400, "Valid start and end dates are required."));
     }
 
     const paymentQuery = buildEffectiveReceiptQuery({
@@ -883,9 +874,7 @@ export const getRentalCollectionReport = async (req, res, next) => {
 export const getTenantPaidBalanceReport = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) {
-      return res.status(400).json({ success: false, error: "A valid business id is required." });
-    }
+    if (!businessId) return next(createError(400, "A valid business id is required."));
 
     const asOfDate = normalizeDate(req.query.asOfDate, true) || normalizeDate(null, true);
     const tenantQuery = { business: businessId, status: { $nin: ["terminated", "moved_out", "evicted"] } };
@@ -899,7 +888,7 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
     // ── Step 1: batch-fetch tenants, units, properties in 3 parallel queries ──
     // Avoids the N+1 problem of cursor+nested-populate (2 queries per tenant).
     const [allTenants, allUnits, allProperties] = await Promise.all([
-      Tenant.find(tenantQuery).select("_id tenantName name unit").sort({ name: 1, createdAt: 1 }).limit(10000).lean(),
+      Tenant.find(tenantQuery).select("_id tenantName name unit additionalUnits").sort({ name: 1, createdAt: 1 }).limit(10000).lean(),
       Unit.find({ business: businessId }).select("_id unitNumber name property").limit(10000).lean(),
       Property.find({ business: businessId }).select("_id propertyName name landlords").limit(10000).lean(),
     ]);
@@ -910,15 +899,21 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
     // ── Step 2: build base rows and apply cheap filters before snapshot cost ──
     const baseRows = allTenants
       .map((tenant) => {
-        const unit = unitMap.get(String(tenant.unit || "")) || {};
-        const property = propMap.get(String(unit.property || "")) || {};
+        const primaryUnit = unitMap.get(String(tenant.unit || "")) || {};
+        const additionalUnitIds = Array.isArray(tenant.additionalUnits) ? tenant.additionalUnits.map(String).filter(Boolean) : [];
+        const additionalUnits = additionalUnitIds.map((id) => unitMap.get(id)).filter(Boolean);
+        const allUnitNumbers = [primaryUnit, ...additionalUnits]
+          .filter((u) => u._id)
+          .map((u) => u.unitNumber || u.name || "")
+          .filter(Boolean);
+        const property = propMap.get(String(primaryUnit.property || "")) || {};
         const landlord = pickPrimaryLandlord(property);
         return {
           tenantId: String(tenant._id),
           tenantName: tenant.tenantName || tenant.name || "Unknown Tenant",
-          unitId: String(unit._id || tenant.unit || ""),
-          unitNumber: unit.unitNumber || unit.name || "N/A",
-          propertyId: String(property._id || unit.property || ""),
+          unitId: String(primaryUnit._id || tenant.unit || ""),
+          unitNumber: allUnitNumbers.length > 0 ? allUnitNumbers.join(", ") : "N/A",
+          propertyId: String(property._id || primaryUnit.property || ""),
           propertyName: property.propertyName || property.name || "N/A",
           landlordId: String(landlord?.landlordId || ""),
           landlordName: landlord?.name || "N/A",
@@ -1014,6 +1009,13 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
       }
     }
 
+    // Sort by property name, then by unit number with natural numeric ordering (1, 2, 10 not 1, 10, 2)
+    allRows.sort((a, b) => {
+      const propCmp = (a.propertyName || "").localeCompare(b.propertyName || "");
+      if (propCmp !== 0) return propCmp;
+      return (a.unitNumber || "").localeCompare(b.unitNumber || "", undefined, { numeric: true, sensitivity: "base" });
+    });
+
     const rows = allRows;
 
     const summary = rows.reduce((acc, row) => {
@@ -1064,13 +1066,13 @@ export const getPropertyIncomeSummaryReport = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     if (!businessId) {
-      return res.status(400).json({ success: false, error: "A valid business id is required." });
+      return next(createError(400, "A valid business id is required."));
     }
 
     const startDate = normalizeDate(req.query.startDate || req.query.dateFrom || req.query.from);
     const endDate = normalizeDate(req.query.endDate || req.query.dateTo || req.query.to, true);
     if (!startDate || !endDate) {
-      return res.status(400).json({ success: false, error: "Valid start and end dates are required." });
+      return next(createError(400, "Valid start and end dates are required."));
     }
 
     // Resolve property scope filter
@@ -1379,16 +1381,16 @@ export const getCashFlowReport = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     if (!businessId) {
-      return res.status(400).json({ success: false, error: "A valid business id is required." });
+      return next(createError(400, "A valid business id is required."));
     }
 
     const startDate = normalizeDate(req.query.startDate || new Date(new Date().getFullYear(), new Date().getMonth(), 1));
     const endDate = normalizeDate(req.query.endDate || new Date(), true);
     if (!startDate || !endDate) {
-      return res.status(400).json({ success: false, error: "Invalid report dates supplied." });
+      return next(createError(400, "Invalid report dates supplied."));
     }
     if (startDate > endDate) {
-      return res.status(400).json({ success: false, error: "Start date cannot be after end date." });
+      return next(createError(400, "Start date cannot be after end date."));
     }
 
     const cashAccounts = await ChartOfAccount.find({
@@ -1518,13 +1520,13 @@ export const getMRITaxSummaryReport = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     if (!businessId) {
-      return res.status(400).json({ success: false, error: "A valid business id is required." });
+      return next(createError(400, "A valid business id is required."));
     }
 
     const startDate = normalizeDate(req.query.startDate || req.query.dateFrom || req.query.from);
     const endDate = normalizeDate(req.query.endDate || req.query.dateTo || req.query.to, true);
     if (!startDate || !endDate) {
-      return res.status(400).json({ success: false, error: "Valid start and end dates are required." });
+      return next(createError(400, "Valid start and end dates are required."));
     }
 
     const settingsDoc = await CompanySettings.findOne({ company: new mongoose.Types.ObjectId(String(businessId)) })
@@ -1665,25 +1667,37 @@ const assignBucket = (daysOverdue) => {
 export const getARAgingReport = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ message: "Missing business" });
+    if (!businessId) return next(createError(400, "Missing business"));
 
     const asOf = req.query.asOf ? new Date(req.query.asOf) : new Date();
     asOf.setHours(23, 59, 59, 999);
 
-    // Fetch outstanding invoices with display fields (property/unit not in snapshot engine).
-    // Unit model uses `unitNumber` (not unitName); Tenant model uses `tenantName` (not name).
-    const invoices = await TenantInvoice.find({
-      business: businessId,
-      status: { $in: ["pending", "partially_paid"] },
-      dueDate: { $lte: asOf },
-    })
-      .populate("tenant", "tenantName name email phone")
-      .populate("property", "propertyName name")
-      .populate("unit", "unitNumber name")
-      .limit(5000)
-      .lean();
+    // Fetch outstanding invoices AND debit notes in parallel — both are receivable documents.
+    const [invoices, debitNotes] = await Promise.all([
+      TenantInvoice.find({
+        business: businessId,
+        status: { $in: ["pending", "partially_paid"] },
+        dueDate: { $lte: asOf },
+      })
+        .populate("tenant", "tenantName name email phone")
+        .populate("property", "propertyName name")
+        .populate("unit", "unitNumber name")
+        .limit(5000)
+        .lean(),
+      TenantInvoiceNote.find({
+        business: businessId,
+        noteType: "DEBIT_NOTE",
+        status: { $nin: ["paid", "cancelled", "reversed"] },
+        noteDate: { $lte: asOf },
+      })
+        .populate("tenant", "tenantName name email phone")
+        .populate("property", "propertyName name")
+        .populate("unit", "unitNumber name")
+        .limit(5000)
+        .lean(),
+    ]);
 
-    if (!invoices.length) {
+    if (!invoices.length && !debitNotes.length) {
       return res.status(200).json({
         success: true,
         asOf,
@@ -1694,7 +1708,10 @@ export const getARAgingReport = async (req, res, next) => {
     }
 
     const tenantIds = [
-      ...new Set(invoices.map((inv) => String(inv.tenant?._id || inv.tenant)).filter(Boolean)),
+      ...new Set([
+        ...invoices.map((inv) => String(inv.tenant?._id || inv.tenant)),
+        ...debitNotes.map((n) => String(n.tenant?._id || n.tenant)),
+      ].filter(Boolean)),
     ];
 
     // Use the same allocation engine as the PM module (handles legacy receipts without stored allocations)
@@ -1744,6 +1761,38 @@ export const getARAgingReport = async (req, res, next) => {
       });
     }
 
+    // Debit notes are separate receivable documents — include them in the aging schedule
+    for (const note of debitNotes) {
+      const outstanding = outstandingMap.get(String(note._id));
+      if (!outstanding || outstanding <= 0) continue;
+
+      const refDate = note.noteDate || note.createdAt;
+      if (!refDate) continue;
+      const applied = round2(note.amount - outstanding);
+      const daysOverdue = Math.floor((asOf - new Date(refDate)) / 86_400_000);
+      const bucket = assignBucket(daysOverdue);
+      totals[bucket] = round2(totals[bucket] + outstanding);
+      totals.total = round2(totals.total + outstanding);
+
+      rows.push({
+        invoiceId: note._id,
+        invoiceNumber: note.noteNumber,
+        tenantId: note.tenant?._id,
+        tenantName: note.tenant?.tenantName || note.tenant?.name || "—",
+        propertyName: note.property?.propertyName || note.property?.name || "—",
+        unitName: note.unit?.unitNumber || note.unit?.name || "—",
+        invoiceDate: refDate,
+        dueDate: refDate,
+        amount: note.amount,
+        applied,
+        outstanding,
+        daysOverdue,
+        bucket,
+        category: note.category || "DEBIT_NOTE",
+        isDebitNote: true,
+      });
+    }
+
     rows.sort((a, b) => b.daysOverdue - a.daysOverdue);
 
     return res.status(200).json({ success: true, asOf, rows, totals, buckets: AGING_BUCKETS });
@@ -1756,7 +1805,7 @@ export const getARAgingReport = async (req, res, next) => {
 export const getAPAgingReport = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ message: "Missing business" });
+    if (!businessId) return next(createError(400, "Missing business"));
 
     const asOf = req.query.asOf ? new Date(req.query.asOf) : new Date();
     asOf.setHours(23, 59, 59, 999);
@@ -1813,7 +1862,7 @@ export const getAPAgingReport = async (req, res, next) => {
 export const getCashMonthlySummary = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ message: "Missing business" });
+    if (!businessId) return next(createError(400, "Missing business"));
 
     const months = Math.max(1, Math.min(24, Number(req.query.months || 6)));
     const from = new Date();
@@ -1904,7 +1953,7 @@ export const getTrialBalanceExceptions = async (req, res, next) => {
       req.query?.business || req.query?.company ||
       req.body?.business || req.body?.company ||
       req.user?.company;
-    if (!businessId) return res.status(400).json({ message: "Business required" });
+    if (!businessId) return next(createError(400, "Business required"));
 
     const bizId = new mongoose.Types.ObjectId(String(businessId));
 
@@ -2014,7 +2063,7 @@ export const getFinancialRatios = async (req, res, next) => {
   try {
     const businessId =
       req.query?.business || req.query?.company || req.user?.company;
-    if (!businessId) return res.status(400).json({ message: "Business required" });
+    if (!businessId) return next(createError(400, "Business required"));
 
     const bizId = new mongoose.Types.ObjectId(String(businessId));
 
@@ -2108,13 +2157,13 @@ export const performYearEndClose = async (req, res, next) => {
   try {
     const businessId =
       req.body?.business || req.body?.company || req.user?.company;
-    if (!businessId) return res.status(400).json({ message: "Business required" });
+    if (!businessId) return next(createError(400, "Business required"));
 
     const { periodId, fiscalYear, narration } = req.body || {};
-    if (!fiscalYear) return res.status(400).json({ message: "fiscalYear (e.g. 2025) is required" });
+    if (!fiscalYear) return next(createError(400, "fiscalYear (e.g. 2025) is required"));
 
     const year = parseInt(fiscalYear, 10);
-    if (!year || year < 2000) return res.status(400).json({ message: "Invalid fiscalYear" });
+    if (!year || year < 2000) return next(createError(400, "Invalid fiscalYear"));
 
     const yearStart = new Date(year, 0, 1, 0, 0, 0, 0);
     const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
@@ -2123,9 +2172,9 @@ export const performYearEndClose = async (req, res, next) => {
     let period = null;
     if (periodId) {
       period = await AccountingPeriod.findOne({ _id: periodId, business: businessId });
-      if (!period) return res.status(404).json({ message: "Accounting period not found" });
-      if (period.status === "open") return res.status(400).json({ message: "Close the period before running year-end close" });
-      if (period.yearEndClosed) return res.status(400).json({ message: "Year-end close has already been run for this period" });
+      if (!period) return next(createError(404, "Accounting period not found"));
+      if (period.status === "open") return next(createError(400, "Close the period before running year-end close"));
+      if (period.yearEndClosed) return next(createError(400, "Year-end close has already been run for this period"));
     }
 
     const bizId = new mongoose.Types.ObjectId(String(businessId));
@@ -2181,7 +2230,7 @@ export const performYearEndClose = async (req, res, next) => {
     await ensureSystemChartOfAccounts(businessId);
     const retainedEarningsAccount = await findSystemAccountByCode(businessId, "3200");
     if (!retainedEarningsAccount) {
-      return res.status(400).json({ message: "Retained Earnings account (3200) not found. Ensure your chart of accounts is set up correctly." });
+      return next(createError(400, "Retained Earnings account (3200) not found. Ensure your chart of accounts is set up correctly."));
     }
 
     // Resolve an income summary account — we use retained earnings directly here
@@ -2245,7 +2294,7 @@ export const performYearEndClose = async (req, res, next) => {
 export const getLiabilitySubledger = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ success: false, message: "Business context is required." });
+    if (!businessId) return next(createError(400, "Business context is required."));
 
     const tab       = String(req.query.tab || "deposits").toLowerCase();
     const asOfDate  = req.query.asOf ? normalizeDate(req.query.asOf, true) : null;
@@ -2575,7 +2624,7 @@ export const getLiabilitySubledger = async (req, res, next) => {
 export const getIncomeMonthlySummary = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
-    if (!businessId) return res.status(400).json({ message: "Missing business" });
+    if (!businessId) return next(createError(400, "Missing business"));
 
     const months = Math.min(Math.max(parseInt(req.query.months || "6", 10), 1), 24);
     const now = new Date();

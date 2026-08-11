@@ -1,5 +1,6 @@
 import CompanySettings from "../../models/CompanySettings.js";
 import mongoose from "mongoose";
+import { createError } from "../../utils/error.js";
 import {
   validateAccountingDefaultAccount,
   validateHrAccountingDefaultAccount,
@@ -253,15 +254,15 @@ const ensureUniqueCollectionName = ({ items = [], name = "", excludeId = null, l
   }
 };
 
-const archiveEmbeddedSetting = async ({ req, res, businessId, itemId, collectionKey, successLabel }) => {
+const archiveEmbeddedSetting = async ({ req, res, next, businessId, itemId, collectionKey, successLabel }) => {
   const settings = await findCompanySettings(businessId);
   if (!settings) {
-    return res.status(404).json({ message: "Settings not found" });
+    return next(createError(404, "Settings not found"));
   }
 
   const item = settings[collectionKey]?.id(itemId);
   if (!item) {
-    return res.status(404).json({ message: `${successLabel} not found` });
+    return next(createError(404, `${successLabel} not found`));
   }
 
   item.isActive = false;
@@ -343,7 +344,7 @@ export const addUtilityType = async (req, res, next) => {
     const category = normalizeText(req.body?.category) || "utility";
 
     if (!name) {
-      return res.status(400).json({ message: "Utility name is required" });
+      return next(createError(400, "Utility name is required"));
     }
 
     const settings = await ensureSettingsDocument(businessId);
@@ -377,17 +378,17 @@ export const updateUtilityType = async (req, res, next) => {
 
     const settings = await findCompanySettings(businessId);
     if (!settings) {
-      return res.status(404).json({ message: "Settings not found" });
+      return next(createError(404, "Settings not found"));
     }
 
     const utility = settings.utilityTypes.id(utilityId);
     if (!utility) {
-      return res.status(404).json({ message: "Utility not found" });
+      return next(createError(404, "Utility not found"));
     }
 
     if (name !== undefined) {
       if (!name) {
-        return res.status(400).json({ message: "Utility name is required" });
+        return next(createError(400, "Utility name is required"));
       }
       ensureUniqueCollectionName({
         items: settings.utilityTypes,
@@ -415,6 +416,7 @@ export const deleteUtilityType = async (req, res, next) => {
     return await archiveEmbeddedSetting({
       req,
       res,
+      next,
       businessId,
       itemId: utilityId,
       collectionKey: "utilityTypes",
@@ -433,7 +435,7 @@ export const addBillingPeriod = async (req, res, next) => {
     const durationInDays = toNumber(req.body?.durationInDays, durationInMonths * 30);
 
     if (!name || durationInMonths <= 0) {
-      return res.status(400).json({ message: "Name and duration in months are required" });
+      return next(createError(400, "Name and duration in months are required"));
     }
 
     const settings = await ensureSettingsDocument(businessId);
@@ -452,7 +454,7 @@ export const addBillingPeriod = async (req, res, next) => {
       (item) => canonicalizeBillingPeriodKey(item?.key || item?.name) === newPeriod.key
     );
     if (duplicateKey) {
-      return res.status(400).json({ message: "Billing period key already exists. Use a different name." });
+      return next(createError(400, "Billing period key already exists. Use a different name."));
     }
 
     settings.billingPeriods.push(newPeriod);
@@ -470,20 +472,20 @@ export const updateBillingPeriod = async (req, res, next) => {
     const { periodId } = req.params;
     const settings = await findCompanySettings(businessId);
     if (!settings) {
-      return res.status(404).json({ message: "Settings not found" });
+      return next(createError(404, "Settings not found"));
     }
 
     ensureSettingsBillingPeriods(settings);
 
     const period = settings.billingPeriods.id(periodId);
     if (!period) {
-      return res.status(404).json({ message: "Billing period not found" });
+      return next(createError(404, "Billing period not found"));
     }
 
     if (req.body?.name !== undefined) {
       const name = normalizeText(req.body.name);
       if (!name) {
-        return res.status(400).json({ message: "Billing period name is required" });
+        return next(createError(400, "Billing period name is required"));
       }
       ensureUniqueCollectionName({
         items: settings.billingPeriods,
@@ -497,7 +499,7 @@ export const updateBillingPeriod = async (req, res, next) => {
     if (req.body?.durationInMonths !== undefined) {
       const durationInMonths = toNumber(req.body.durationInMonths, 0);
       if (durationInMonths <= 0) {
-        return res.status(400).json({ message: "Billing period duration in months must be greater than zero" });
+        return next(createError(400, "Billing period duration in months must be greater than zero"));
       }
       period.durationInMonths = durationInMonths;
       if (req.body?.durationInDays === undefined) {
@@ -521,7 +523,7 @@ export const updateBillingPeriod = async (req, res, next) => {
         canonicalizeBillingPeriodKey(item?.key || item?.name) === period.key
     );
     if (duplicateKey) {
-      return res.status(400).json({ message: "Billing period key already exists. Use a different name." });
+      return next(createError(400, "Billing period key already exists. Use a different name."));
     }
 
     await settings.save();
@@ -538,6 +540,7 @@ export const deleteBillingPeriod = async (req, res, next) => {
     return await archiveEmbeddedSetting({
       req,
       res,
+      next,
       businessId,
       itemId: periodId,
       collectionKey: "billingPeriods",
@@ -557,7 +560,7 @@ export const addCommission = async (req, res, next) => {
     const description = normalizeText(req.body?.description);
 
     if (!name || Number.isNaN(percentage)) {
-      return res.status(400).json({ message: "Name and percentage are required" });
+      return next(createError(400, "Name and percentage are required"));
     }
 
     const settings = await ensureSettingsDocument(businessId);
@@ -587,18 +590,18 @@ export const updateCommission = async (req, res, next) => {
     const { commissionId } = req.params;
     const settings = await findCompanySettings(businessId);
     if (!settings) {
-      return res.status(404).json({ message: "Settings not found" });
+      return next(createError(404, "Settings not found"));
     }
 
     const commission = settings.commissions.id(commissionId);
     if (!commission) {
-      return res.status(404).json({ message: "Commission not found" });
+      return next(createError(404, "Commission not found"));
     }
 
     if (req.body?.name !== undefined) {
       const name = normalizeText(req.body.name);
       if (!name) {
-        return res.status(400).json({ message: "Commission name is required" });
+        return next(createError(400, "Commission name is required"));
       }
       ensureUniqueCollectionName({
         items: settings.commissions,
@@ -627,6 +630,7 @@ export const deleteCommission = async (req, res, next) => {
     return await archiveEmbeddedSetting({
       req,
       res,
+      next,
       businessId,
       itemId: commissionId,
       collectionKey: "commissions",
@@ -647,7 +651,7 @@ export const addExpenseItem = async (req, res, next) => {
     const defaultAmount = toNumber(req.body?.defaultAmount, 0);
 
     if (!name) {
-      return res.status(400).json({ message: "Expense item name is required" });
+      return next(createError(400, "Expense item name is required"));
     }
 
     const settings = await ensureSettingsDocument(businessId);
@@ -678,18 +682,18 @@ export const updateExpenseItem = async (req, res, next) => {
     const { expenseId } = req.params;
     const settings = await findCompanySettings(businessId);
     if (!settings) {
-      return res.status(404).json({ message: "Settings not found" });
+      return next(createError(404, "Settings not found"));
     }
 
     const expenseItem = settings.expenseItems.id(expenseId);
     if (!expenseItem) {
-      return res.status(404).json({ message: "Expense item not found" });
+      return next(createError(404, "Expense item not found"));
     }
 
     if (req.body?.name !== undefined) {
       const name = normalizeText(req.body.name);
       if (!name) {
-        return res.status(400).json({ message: "Expense item name is required" });
+        return next(createError(400, "Expense item name is required"));
       }
       ensureUniqueCollectionName({
         items: settings.expenseItems,
@@ -719,6 +723,7 @@ export const deleteExpenseItem = async (req, res, next) => {
     return await archiveEmbeddedSetting({
       req,
       res,
+      next,
       businessId,
       itemId: expenseId,
       collectionKey: "expenseItems",
@@ -739,11 +744,11 @@ export const addDepositType = async (req, res, next) => {
     const refundable = req.body?.refundable === undefined ? true : Boolean(req.body.refundable);
 
     if (!name) {
-      return res.status(400).json({ message: "Deposit type name is required" });
+      return next(createError(400, "Deposit type name is required"));
     }
 
     if (defaultAmount < 0) {
-      return res.status(400).json({ message: "Default deposit amount cannot be negative" });
+      return next(createError(400, "Default deposit amount cannot be negative"));
     }
 
     const settings = await ensureSettingsDocument(businessId);
@@ -774,18 +779,18 @@ export const updateDepositType = async (req, res, next) => {
     const { depositTypeId } = req.params;
     const settings = await findCompanySettings(businessId);
     if (!settings) {
-      return res.status(404).json({ message: "Settings not found" });
+      return next(createError(404, "Settings not found"));
     }
 
     const depositType = settings.depositTypes.id(depositTypeId);
     if (!depositType) {
-      return res.status(404).json({ message: "Deposit type not found" });
+      return next(createError(404, "Deposit type not found"));
     }
 
     if (req.body?.name !== undefined) {
       const name = normalizeText(req.body.name);
       if (!name) {
-        return res.status(400).json({ message: "Deposit type name is required" });
+        return next(createError(400, "Deposit type name is required"));
       }
       ensureUniqueCollectionName({
         items: settings.depositTypes,
@@ -800,7 +805,7 @@ export const updateDepositType = async (req, res, next) => {
     if (req.body?.defaultAmount !== undefined) {
       const defaultAmount = toNumber(req.body.defaultAmount, 0);
       if (defaultAmount < 0) {
-        return res.status(400).json({ message: "Default deposit amount cannot be negative" });
+        return next(createError(400, "Default deposit amount cannot be negative"));
       }
       depositType.defaultAmount = defaultAmount;
     }
@@ -821,6 +826,7 @@ export const deleteDepositType = async (req, res, next) => {
     return await archiveEmbeddedSetting({
       req,
       res,
+      next,
       businessId,
       itemId: depositTypeId,
       collectionKey: "depositTypes",
@@ -1002,7 +1008,7 @@ export const updateTaxConfiguration = async (req, res, next) => {
     if (req.body?.mriRate !== undefined) {
       const parsedMriRate = Number(req.body.mriRate);
       if (!Number.isFinite(parsedMriRate) || parsedMriRate < 0 || parsedMriRate > 1) {
-        return res.status(400).json({ message: "MRI rate must be between 0 and 1 (e.g. 0.075 for 7.5%)." });
+        return next(createError(400, "MRI rate must be between 0 and 1 (e.g. 0.075 for 7.5%)."));
       }
       settings.mriRate = parsedMriRate;
     }
@@ -1030,6 +1036,37 @@ export const updateTaxConfiguration = async (req, res, next) => {
       taxSettings: settings.taxSettings,
       taxCodes: settings.taxCodes,
       mriRate: settings.mriRate,
+      settings,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const updateIncomeRules = async (req, res, next) => {
+  try {
+    const businessId = resolveAuthorizedBusinessId(req);
+    let settings = await findCompanySettings(businessId);
+    if (!settings) {
+      settings = new CompanySettings({ company: businessId });
+    }
+
+    const { latePenaltyBeneficiary } = req.body || {};
+
+    if (latePenaltyBeneficiary !== undefined) {
+      if (!["landlord", "manager"].includes(latePenaltyBeneficiary)) {
+        return next(createError(400, "latePenaltyBeneficiary must be 'landlord' or 'manager'."));
+      }
+      settings.set("incomeRules.latePenaltyBeneficiary", latePenaltyBeneficiary);
+    }
+
+    settings.markModified("incomeRules");
+    await settings.save();
+    invalidateSettingsCache(String(businessId));
+
+    res.status(200).json({
+      message: "Income rules updated successfully",
+      incomeRules: settings.incomeRules,
       settings,
     });
   } catch (err) {
