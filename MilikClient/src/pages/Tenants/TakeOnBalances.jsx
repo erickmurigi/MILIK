@@ -1,4 +1,5 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { fmtDate } from "../../utils/dates";
 import { buildTenantOption } from "../../utils/tenantUtils";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -18,6 +19,7 @@ import {
   FaMoneyBillWave,
   FaTimes,
   FaSave,
+  FaWrench,
 } from "react-icons/fa";
 import toast from "react-hot-toast";
 import MilikConfirmDialog from "../../components/Modals/MilikConfirmDialog";
@@ -30,6 +32,7 @@ import {
   updateTakeOnBalance,
 } from "../../redux/invoiceApi";
 import { createRentPayment, reverseRentPayment, getChartOfAccounts } from "../../redux/apiCalls";
+import { adminRequests } from "../../utils/requestMethods";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 
@@ -103,16 +106,6 @@ const formatCurrency = (value) =>
     minimumFractionDigits: 2,
   }).format(Number(value || 0));
 
-const formatDate = (value) => {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("en-KE", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-};
 
 const statusMeta = {
   unallocated: { label: "Unallocated", classes: "bg-amber-100 text-amber-800" },
@@ -489,7 +482,7 @@ function TakeOnViewModal({ open, row, onClose }) {
             ["Amount", formatCurrency(row.amount)],
             ["Allocated", formatCurrency(row.allocated)],
             ["Balance", formatCurrency(row.balance)],
-            ["Effective Date", formatDate(row.effectiveDate)],
+            ["Effective Date", fmtDate(row.effectiveDate)],
             [row.entryModel === "receipt" ? "Receipt Number" : "Invoice Number", row.invoiceNumber || "—"],
           ].map(([label, value]) => (
             <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -539,6 +532,7 @@ const TakeOnBalances = () => {
   const [currentPage, setCurrentPage] = useTabState("/tenants/take-on-balances:currentPage", 1);
   const [expandedBalanceId, setExpandedBalanceId] = useState(null);
   const [chartAccounts, setChartAccounts] = useState([]);
+  const [fixingDeposits, setFixingDeposits] = useState(false);
   const propertyOptions = useMemo(() => {
     const map = new Map();
 
@@ -927,6 +921,25 @@ const TakeOnBalances = () => {
     }
   };
 
+  const handleFixTakeOnDeposits = async () => {
+    if (!currentCompany?._id) return;
+    try {
+      setFixingDeposits(true);
+      const res = await adminRequests.post(`/rent-payments/fix-takeon-deposits/${currentCompany._id}`);
+      const { fixed, tenants: affectedTenants = [], errors = 0 } = res.data || {};
+      if (fixed === 0) {
+        toast.success("No misclassified take-on deposit receipts found — everything is already correct.");
+      } else {
+        toast.success(`Fixed ${fixed} take-on deposit receipt(s) across ${affectedTenants.length} tenant(s).${errors > 0 ? ` ${errors} recompute error(s).` : ""}`);
+        await loadRows();
+      }
+    } catch (error) {
+      toast.error(error?.response?.data?.message || error?.message || "Failed to fix take-on deposit classification.");
+    } finally {
+      setFixingDeposits(false);
+    }
+  };
+
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
@@ -1021,6 +1034,7 @@ const TakeOnBalances = () => {
                 <button type="button" onClick={() => { setDraftFilters(emptyFilters); setAppliedFilters(emptyFilters); }} className="h-[20px] shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] font-semibold text-slate-700 shadow-sm hover:bg-slate-100">Reset</button>
                 <button type="button" onClick={loadRows} className={`h-[20px] shrink-0 flex items-center gap-0.5 border border-slate-200 bg-white px-1.5 text-[9px] font-bold text-slate-700 shadow-sm hover:bg-slate-50`}><FaRedoAlt size={7} /> Refresh</button>
                 <button type="button" onClick={openCreateModal} className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaPlus size={7} /> Add Take-On</button>
+                <button type="button" onClick={handleFixTakeOnDeposits} disabled={fixingDeposits} title="Re-classify take-on deposit receipts that were incorrectly saved as rent" className="h-[20px] shrink-0 flex items-center gap-0.5 border border-amber-300 bg-amber-50 px-1.5 text-[9px] font-bold text-amber-800 shadow-sm hover:bg-amber-100 disabled:opacity-60 disabled:cursor-not-allowed"><FaWrench size={7} /> {fixingDeposits ? "Fixing…" : "Fix Deposits"}</button>
               </div>
             </div>
 
@@ -1081,7 +1095,7 @@ const TakeOnBalances = () => {
                             <div className="font-semibold text-slate-900">{formatCurrency(row.balance)}</div>
                             <span className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${meta.classes}`}>{meta.label}</span>
                           </td>
-                          <td className="whitespace-nowrap px-2 py-1 border-r border-gray-100 text-slate-700">{formatDate(row.effectiveDate)}</td>
+                          <td className="whitespace-nowrap px-2 py-1 border-r border-gray-100 text-slate-700">{fmtDate(row.effectiveDate)}</td>
                           <td className="whitespace-nowrap px-2 py-1 text-right">
                             <div className="inline-flex flex-wrap justify-end gap-2 action-buttons">
                               <button

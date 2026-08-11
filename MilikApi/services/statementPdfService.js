@@ -1106,7 +1106,6 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
       rememberPdfBuffer(cacheKey, pdfBuffer);
       return pdfBuffer;
     } catch (error) {
-      if (page) { try { await page.close(); } catch {} }
       const msg = String(error?.message || "");
       const isBrowserDead =
         msg.includes("Protocol error") ||
@@ -1116,6 +1115,7 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
       if (isBrowserDead) await resetBrowser();
       throw error;
     } finally {
+      if (page) { try { await page.close(); } catch {} }
       releasePdfRenderSlot();
     }
   })();

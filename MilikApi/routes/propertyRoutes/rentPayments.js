@@ -13,12 +13,16 @@ import {
   unconfirmPayment,
   reversePayment,
   cancelReversal,
-  getPaymentSummary
+  getPaymentSummary,
+  fixTakeOnDepositClassification
 } from "../../controllers/propertyController/rentPayment.js"
 import { verifyUser } from "../../controllers/verifyToken.js"
 import { generateReceiptPdf } from "../../services/receiptPdfService.js"
 
 const router = express.Router()
+
+// Backfill take-on deposit receipts misclassified as rent (must be before /:id routes)
+router.post("/fix-takeon-deposits/:businessId", verifyUser, fixTakeOnDepositClassification)
 
 // Batch create receipts (must be before /:id routes)
 router.post("/batch", verifyUser, batchCreatePayments)

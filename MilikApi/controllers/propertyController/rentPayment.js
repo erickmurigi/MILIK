@@ -4428,3 +4428,80 @@ export const createAutoReceipt = async ({
   emitToCompany(businessId, "payment:new", saved);
   return RentPayment.findById(saved._id).lean();
 };
+
+// Backfill: fix take-on deposit receipts that were misclassified as paymentType:"rent"
+// because getTakeOnAllocationRule previously only matched billItemKey:"deposit" not "deposit:*"
+export const fixTakeOnDepositClassification = async (req, res, next) => {
+  try {
+    const { businessId } = req.params;
+    if (!businessId) return next(createError(400, "businessId is required"));
+
+    // Find take-on balance receipts with deposit billItemKey misclassified as rent
+    const affected = await RentPayment.find({
+      business: businessId,
+      paymentType: "rent",
+      $and: [
+        {
+          $or: [
+            { "metadata.isTakeOnBalance": true },
+            { "metadata.sourceTransactionType": "tenant_take_on_balance" },
+          ],
+        },
+        {
+          $or: [
+            { "metadata.billItemKey": /^deposit:/i },
+            { "metadata.takeOnBillItemKey": /^deposit:/i },
+          ],
+        },
+      ],
+    }).lean();
+
+    if (affected.length === 0) {
+      return res.status(200).json({ message: "No misclassified take-on deposit receipts found.", fixed: 0 });
+    }
+
+    const tenantIds = new Set();
+    const bulkOps = affected.map((receipt) => {
+      tenantIds.add(String(receipt.tenant));
+      const depositAmt = round2(
+        Math.abs(Number(receipt.allocationSummary?.rent || 0)) + Math.abs(Number(receipt.allocationSummary?.deposit || 0))
+      );
+      const updatedAllocations = (receipt.allocations || []).map((alloc) => ({
+        ...alloc,
+        type: "deposit",
+        allocationBucket: "deposit",
+        billItemKey: alloc.billItemKey || "deposit",
+      }));
+      return {
+        updateOne: {
+          filter: { _id: receipt._id },
+          update: {
+            $set: {
+              paymentType: "deposit",
+              "allocationSummary.deposit": depositAmt,
+              "allocationSummary.rent": 0,
+              allocations: updatedAllocations,
+            },
+          },
+        },
+      };
+    });
+
+    await RentPayment.bulkWrite(bulkOps, { ordered: false });
+
+    // Recompute tenant financial state for all affected tenants
+    const recomputeResults = await Promise.allSettled(
+      [...tenantIds].map((tenantId) => recomputeTenantBalance(tenantId, businessId))
+    );
+    const errors = recomputeResults.filter((r) => r.status === "rejected").length;
+
+    return res.status(200).json({
+      message: `Fixed ${affected.length} misclassified take-on deposit receipt(s).${errors > 0 ? ` ${errors} tenant recompute(s) failed.` : ""}`,
+      fixed: affected.length,
+      tenants: [...tenantIds],
+      errors,
+    });
+  } catch (err) {
+    next(err);
+  }
+};

@@ -2957,11 +2957,14 @@ export const createTenantInvoiceNote = async (req, res, next) => {
       noteType,
       category: requestedCategory,
       amount,
-      description:
-        req.body.description ||
-        (sourceInvoice
-          ? `${noteType === "CREDIT_NOTE" ? "Credit Note" : "Debit Note"} — against ${sourceInvoice.invoiceNumber}`
-          : `${noteType === "CREDIT_NOTE" ? "Credit Note" : "Debit Note"} — standalone`),
+      description: (() => {
+        if (req.body.description) return req.body.description;
+        const noteLabel = noteType === "CREDIT_NOTE" ? "Credit Note" : "Debit Note";
+        if (sourceInvoice) return `${noteLabel} — ${sourceInvoice.invoiceNumber}`;
+        const rawLabel = String(requestedMetadata?.billItemLabel || requestedMetadata?.billItemKey || "").replace(/_/g, " ").trim();
+        const chargeLabel = rawLabel ? rawLabel.replace(/\b\w/g, (c) => c.toUpperCase()) : "";
+        return chargeLabel ? `${chargeLabel} ${noteLabel} — ${noteNumber}` : `${noteLabel} — ${noteNumber}`;
+      })(),
       noteDate,
       status: "posted",
       createdBy: actorUserId,
