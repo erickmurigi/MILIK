@@ -1584,7 +1584,7 @@ const Statements = () => {
           <div className="h-0.5 bg-gradient-to-r from-[#0B3B2E] via-[#1a6b4e] to-[#0B3B2E]" />
 
           {/* Filter grid */}
-          <div className="grid grid-cols-2 items-start gap-x-3 gap-y-2 px-4 py-3 sm:grid-cols-3 xl:grid-cols-7">
+          <div className="grid grid-cols-2 items-start gap-x-2 gap-y-1 px-3 py-1.5 sm:grid-cols-3 xl:grid-cols-7">
             <div>
               <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Statement Type</label>
               <SearchableSelect
@@ -1624,7 +1624,7 @@ const Statements = () => {
                 type="number"
                 value={year}
                 onChange={(e) => setYear(e.target.value)}
-                className="h-8 w-full rounded-md border border-orange-400 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
+                className="h-7 w-full rounded-md border border-orange-400 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
               />
             </div>
 
@@ -1634,7 +1634,7 @@ const Statements = () => {
               </label>
               {latestProcessedCutoffAt ? (
                 // Locked — must continue from the day after the last statement closed
-                <div className="flex h-8 w-full items-center gap-1.5 rounded-md border border-slate-300 bg-slate-100 px-2.5 text-xs font-semibold text-slate-500">
+                <div className="flex h-7 w-full items-center gap-1.5 rounded-md border border-slate-300 bg-slate-100 px-2 text-[11px] font-semibold text-slate-500">
                   <span className="truncate">{periodStart || "—"}</span>
                   <span className="ml-auto shrink-0 rounded bg-slate-200 px-1 py-0.5 text-[9px] font-bold uppercase text-slate-500">locked</span>
                 </div>
@@ -1645,7 +1645,7 @@ const Statements = () => {
                   value={periodStart}
                   max={todayIso}
                   onChange={(e) => setPeriodStart(e.target.value)}
-                  className="h-8 w-full rounded-md border border-orange-400 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
+                  className="h-7 w-full rounded-md border border-orange-400 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                 />
               )}
               <p className="mt-0.5 text-[9px] text-slate-400 truncate">
@@ -1674,7 +1674,7 @@ const Statements = () => {
                   setPeriodEnd(v);
                   setPeriodEndIsCustom(v !== todayIso && v !== "");
                 }}
-                className="h-8 w-full rounded-md border border-orange-400 bg-orange-50 px-2.5 text-xs font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
+                className="h-7 w-full rounded-md border border-orange-400 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
               />
               <p className="mt-0.5 text-[9px] text-slate-400 truncate">
                 {periodEnd && periodEnd !== todayIso
@@ -1689,7 +1689,7 @@ const Statements = () => {
                 type="button"
                 onClick={() => loadDraftWorkspace({ refresh: true })}
                 disabled={!canCreateStatement || !selectedPropertyId || loadingDraft || loadingProcessedContext || !hasValidPeriodSelection}
-                className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-[#0B3B2E] px-4 text-xs font-bold text-white shadow-sm transition-colors hover:bg-[#0a3228] disabled:cursor-not-allowed disabled:opacity-55"
+                className="inline-flex h-7 w-full items-center justify-center gap-1.5 rounded-lg bg-[#0B3B2E] px-4 text-[11px] font-bold text-white shadow-sm transition-colors hover:bg-[#0a3228] disabled:cursor-not-allowed disabled:opacity-55"
               >
                 <FaSyncAlt className={loadingDraft ? "animate-spin" : ""} size={11} />
                 {loadingDraft ? "Loading…" : loadingProcessedContext ? "Checking…" : "Generate"}
@@ -1698,7 +1698,7 @@ const Statements = () => {
           </div>
 
           {/* Tabs + action buttons */}
-          <div className="flex items-center justify-between border-t border-slate-100 px-4">
+          <div className="flex items-center justify-between border-t border-slate-100 px-3">
             <div className="flex items-center">
               {[
                 { id: "workspace", label: "Workspace" },
@@ -1708,7 +1708,7 @@ const Statements = () => {
                   key={tab.id}
                   type="button"
                   onClick={() => setActiveTab(tab.id)}
-                  className={`relative px-4 py-2.5 text-xs font-bold transition-colors ${
+                  className={`relative px-3 py-1.5 text-[11px] font-bold transition-colors ${
                     activeTab === tab.id ? "text-[#0B3B2E]" : "text-slate-400 hover:text-slate-600"
                   }`}
                 >
@@ -1729,7 +1729,7 @@ const Statements = () => {
               )}
             </div>
 
-            <div className="flex items-center gap-1 py-1.5">
+            <div className="flex items-center gap-1 py-1">
               {/* Tertiary: Regenerate */}
               <button
                 type="button"
@@ -2103,7 +2103,7 @@ const Statements = () => {
                         subColor: "text-slate-400",
                       },
                     ].map((kpi) => (
-                      <div key={kpi.label} className="px-4 py-2.5">
+                      <div key={kpi.label} className="px-3 py-1.5">
                         <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">{kpi.label}</p>
                         <p className={`mt-0.5 text-sm font-bold ${kpi.color}`}>{kpi.value}</p>
                         {kpi.sub && <p className={`text-[9px] ${kpi.subColor || "text-slate-400"}`}>{kpi.sub}</p>}
@@ -2118,34 +2118,34 @@ const Statements = () => {
                     <thead className="sticky top-0 z-20">
                       {/* ── Row 1: Group span headers ── */}
                       <tr className="bg-[#0B3B2E]">
-                        <th rowSpan={2} className="sticky left-0 z-30 w-[88px] min-w-[88px] bg-[#0B3B2E] px-3 py-2 text-left align-bottom border-b border-white/10">
+                        <th rowSpan={2} className="sticky left-0 z-30 w-[88px] min-w-[88px] bg-[#0B3B2E] px-2 py-1 text-left align-bottom border-b border-white/10">
                           <div className="text-[11px] font-semibold text-white">Unit</div>
                         </th>
-                        <th rowSpan={2} className="sticky left-[88px] z-30 w-[155px] min-w-[155px] bg-[#0B3B2E] px-3 py-2 text-left align-bottom border-r border-white/10 border-b border-white/10">
+                        <th rowSpan={2} className="sticky left-[88px] z-30 w-[155px] min-w-[155px] bg-[#0B3B2E] px-2 py-1 text-left align-bottom border-r border-white/10 border-b border-white/10">
                           <div className="text-[11px] font-semibold text-white">Tenant</div>
                         </th>
-                        <th rowSpan={2} className="px-3 py-2 text-right align-bottom border-b border-white/10">
+                        <th rowSpan={2} className="px-2 py-1 text-right align-bottom border-b border-white/10">
                           <div className="text-[8px] font-bold uppercase tracking-widest text-white/30 mb-0.5">Ledger</div>
                           <div className="text-[11px] font-semibold text-white">Bal B/F</div>
                         </th>
                         {/* INVOICED group */}
                         <th
                           colSpan={1 + (hasInvoiceVatColumn ? 1 : 0) + statementColumns.length}
-                          className="border-l border-white/10 px-3 py-1.5 text-center"
+                          className="border-l border-white/10 px-2 py-1 text-center"
                         >
                           <div className="text-[8px] font-bold uppercase tracking-widest text-white/40">Invoiced</div>
                         </th>
                         {/* PAID group */}
                         <th
                           colSpan={1 + (hasInvoiceVatColumn ? 1 : 0) + statementColumns.length}
-                          className="border-l border-white/10 px-3 py-1.5 text-center"
+                          className="border-l border-white/10 px-2 py-1 text-center"
                         >
                           <div className="text-[8px] font-bold uppercase tracking-widest text-emerald-300/70">Paid</div>
                         </th>
                         {/* SUMMARY group */}
                         <th
                           colSpan={2}
-                          className="border-l border-white/10 px-3 py-1.5 text-center"
+                          className="border-l border-white/10 px-2 py-1 text-center"
                         >
                           <div className="text-[8px] font-bold uppercase tracking-widest text-white/30">Summary</div>
                         </th>
@@ -2153,11 +2153,11 @@ const Statements = () => {
                       {/* ── Row 2: Individual column names ── */}
                       <tr className="bg-[#0B3B2E] border-t border-white/10">
                         {/* Invoiced sub-columns */}
-                        <th className="border-l border-white/10 px-3 py-2 text-right">
+                        <th className="border-l border-white/10 px-2 py-1 text-right">
                           <div className="text-[11px] font-semibold text-white/90">Rent</div>
                         </th>
                         {hasInvoiceVatColumn && (
-                          <th className="px-3 py-2 text-right">
+                          <th className="px-2 py-1 text-right">
                             <div className="text-[11px] font-semibold text-white/70">VAT</div>
                           </th>
                         )}
@@ -2167,11 +2167,11 @@ const Statements = () => {
                           </th>
                         ))}
                         {/* Paid sub-columns */}
-                        <th className="border-l border-white/10 px-3 py-2 text-right">
+                        <th className="border-l border-white/10 px-2 py-1 text-right">
                           <div className="text-[11px] font-semibold text-emerald-200/90">Rent</div>
                         </th>
                         {hasInvoiceVatColumn && (
-                          <th className="px-3 py-2 text-right">
+                          <th className="px-2 py-1 text-right">
                             <div className="text-[11px] font-semibold text-emerald-200/70">VAT</div>
                           </th>
                         )}
@@ -2181,10 +2181,10 @@ const Statements = () => {
                           </th>
                         ))}
                         {/* Summary sub-columns */}
-                        <th className="border-l border-white/10 px-3 py-2 text-right">
+                        <th className="border-l border-white/10 px-2 py-1 text-right">
                           <div className="text-[11px] font-semibold text-white/90">Total Paid</div>
                         </th>
-                        <th className="px-3 py-2 text-right">
+                        <th className="px-2 py-1 text-right">
                           <div className="text-[11px] font-semibold text-white/90">Bal C/F</div>
                         </th>
                       </tr>
@@ -2234,15 +2234,15 @@ const Statements = () => {
                           return (
                             <tr
                               key={row.unitId ? `u-${row.unitId}` : row._id ? `d-${row._id}` : `n-${row.unitNumber || index}`}
-                              className={`${rowBase} border-b border-slate-100 transition-colors hover:bg-blue-50/20`}
+                              className={`${rowBase} border-b border-slate-100 transition-colors hover:bg-orange-50/70`}
                             >
-                              <td className={`sticky left-0 z-10 w-[88px] min-w-[88px] ${rowBase} ${st.border} px-3 py-2.5 shadow-[2px_0_5px_-3px_rgba(0,0,0,0.07)]`}>
+                              <td className={`sticky left-0 z-10 w-[88px] min-w-[88px] ${rowBase} ${st.border} px-2 py-1 shadow-[2px_0_5px_-3px_rgba(0,0,0,0.07)]`}>
                                 <div className={`text-xs font-semibold ${isVacant ? "text-slate-400" : "text-slate-900"}`}>{row.displayUnitLabel || row.unit || row.unitNumber || "—"}</div>
                                 {Array.isArray(row.allUnitLabels) && row.allUnitLabels.length > 1 && (
                                   <div className="mt-0.5 truncate max-w-[76px] text-[10px] text-slate-400">{row.allUnitLabels.join(", ")}</div>
                                 )}
                               </td>
-                              <td className={`sticky left-[88px] z-10 w-[155px] min-w-[155px] ${rowBase} border-r border-slate-100 px-3 py-2.5 shadow-[2px_0_5px_-3px_rgba(0,0,0,0.07)]`}>
+                              <td className={`sticky left-[88px] z-10 w-[155px] min-w-[155px] ${rowBase} border-r border-slate-100 px-2 py-1 shadow-[2px_0_5px_-3px_rgba(0,0,0,0.07)]`}>
                                 <div className="flex items-center justify-between gap-1">
                                   <div className={`truncate text-xs font-medium ${isVacant ? "text-slate-400 italic" : "text-slate-800"} ${showBadge ? "max-w-[105px]" : "max-w-[135px]"}`}>
                                     {row.tenantName || "—"}
@@ -2260,11 +2260,11 @@ const Statements = () => {
                                 )}
                               </td>
                               {/* Bal B/F — muted, context only */}
-                              <td className="px-3 py-2.5 text-right text-slate-400 text-[11px]">
+                              <td className="px-2 py-1 text-right text-slate-400 text-[10px]">
                                 {(isVacant || isNoBill) ? "—" : (Number(row.openingBalance ?? row.balanceBF ?? 0) !== 0 ? currency(row.openingBalance ?? row.balanceBF ?? 0) : "—")}
                               </td>
                               {/* ── INVOICED block ── */}
-                              <td className={`border-l border-slate-100 px-3 py-2.5 text-right text-xs ${(isVacant || isNoBill) ? "text-slate-300" : "text-slate-700"}`}>
+                              <td className={`border-l border-slate-100 px-2 py-1 text-right text-[11px] ${(isVacant || isNoBill) ? "text-slate-300" : "text-slate-700"}`}>
                                 {(isVacant || isNoBill) ? "—" : currency(row.invoicedRent)}
                               </td>
                               {hasInvoiceVatColumn && (
@@ -2275,26 +2275,26 @@ const Statements = () => {
                               {statementColumns.map((column) => {
                                 const invVal = getPreparedStatementColumnValue(row, column.key, "invoiced");
                                 return (
-                                  <td key={`inv-${row.unitId || row.unitNumber || "row"}-${column.key}`} className={`px-3 py-2.5 text-right text-xs ${(isVacant || isNoBill) ? "text-slate-300" : "text-slate-700"}`}>
+                                  <td key={`inv-${row.unitId || row.unitNumber || "row"}-${column.key}`} className={`px-2 py-1 text-right text-[11px] ${(isVacant || isNoBill) ? "text-slate-300" : "text-slate-700"}`}>
                                     {(isVacant || isNoBill) ? "—" : currency(invVal)}
                                   </td>
                                 );
                               })}
                               {/* ── PAID block ── */}
-                              <td className={`border-l border-slate-100 px-3 py-2.5 text-right text-xs ${paidRentCell.cls}`}>{paidRentCell.text}</td>
+                              <td className={`border-l border-slate-100 px-2 py-1 text-right text-[11px] ${paidRentCell.cls}`}>{paidRentCell.text}</td>
                               {hasInvoiceVatColumn && (
                                 <td className={`px-3 py-2.5 text-right text-[11px] ${paidTaxCell.cls}`}>{paidTaxCell.text}</td>
                               )}
                               {statementColumns.map((column) => {
                                 const padVal = paidCellDisplay(getPreparedStatementColumnValue(row, column.key, "paid"), isVacant, isNoBill);
                                 return (
-                                  <td key={`paid-${row.unitId || row.unitNumber || "row"}-${column.key}`} className={`px-3 py-2.5 text-right text-xs ${padVal.cls}`}>{padVal.text}</td>
+                                  <td key={`paid-${row.unitId || row.unitNumber || "row"}-${column.key}`} className={`px-2 py-1 text-right text-[11px] ${padVal.cls}`}>{padVal.text}</td>
                                 );
                               })}
                               {/* Total Paid */}
-                              <td className={`border-l border-slate-100 px-3 py-2.5 text-right text-xs ${totalPaidCell.cls}`}>{totalPaidCell.text}</td>
+                              <td className={`border-l border-slate-100 px-2 py-1 text-right text-[11px] ${totalPaidCell.cls}`}>{totalPaidCell.text}</td>
                               {/* Bal C/F — positive = arrears (red), negative = credit (green) */}
-                              <td className={`px-3 py-2.5 text-right text-xs ${balCls}`}>
+                              <td className={`px-2 py-1 text-right text-[11px] ${balCls}`}>
                                 {(isVacant || isNoBill) ? "—" : closingBal !== 0 ? currency(closingBal) : "—"}
                               </td>
                             </tr>
@@ -2304,27 +2304,27 @@ const Statements = () => {
                       {/* Totals row */}
                       {preparedRows.length > 0 && (
                         <tr className="border-t-2 border-[#0B3B2E] bg-[#0B3B2E]">
-                          <td className="sticky left-0 z-10 w-[88px] min-w-[88px] bg-[#0B3B2E] px-3 py-3 text-xs font-bold text-white">Totals</td>
-                          <td className="sticky left-[88px] z-10 w-[155px] min-w-[155px] border-r border-white/10 bg-[#0B3B2E] px-3 py-3"></td>
-                          <td className="px-3 py-3 text-right text-xs font-semibold text-white/80">{currency(totals.openingBalance ?? summary.openingBalance ?? 0)}</td>
+                          <td className="sticky left-0 z-10 w-[88px] min-w-[88px] bg-[#0B3B2E] px-2 py-1.5 text-[11px] font-bold text-white">Totals</td>
+                          <td className="sticky left-[88px] z-10 w-[155px] min-w-[155px] border-r border-white/10 bg-[#0B3B2E] px-2 py-1.5"></td>
+                          <td className="px-2 py-1.5 text-right text-[11px] font-semibold text-white/80">{currency(totals.openingBalance ?? summary.openingBalance ?? 0)}</td>
                           {/* Invoiced totals */}
-                          <td className="border-l border-white/10 px-3 py-3 text-right text-xs font-semibold text-white">{currency(totals.invoicedRent ?? summary.rentInvoiced ?? 0)}</td>
+                          <td className="border-l border-white/10 px-2 py-1.5 text-right text-[11px] font-semibold text-white">{currency(totals.invoicedRent ?? summary.rentInvoiced ?? 0)}</td>
                           {hasInvoiceVatColumn && (
-                            <td className="px-3 py-3 text-right text-xs font-semibold text-white/80">{currency(totals.invoicedTax ?? summary.totalInvoiceVatInvoiced ?? 0)}</td>
+                            <td className="px-2 py-1.5 text-right text-[11px] font-semibold text-white/80">{currency(totals.invoicedTax ?? summary.totalInvoiceVatInvoiced ?? 0)}</td>
                           )}
                           {statementColumns.map((column) => (
-                            <td key={`foot-inv-${column.key}`} className="px-3 py-3 text-right text-xs font-semibold text-white">{currency(Number(column?.invoiced || 0))}</td>
+                            <td key={`foot-inv-${column.key}`} className="px-2 py-1.5 text-right text-[11px] font-semibold text-white">{currency(Number(column?.invoiced || 0))}</td>
                           ))}
                           {/* Paid totals */}
-                          <td className="border-l border-white/10 px-3 py-3 text-right text-xs font-bold text-white">{currency(totals.paidRent ?? summary.totalRentReceived ?? 0)}</td>
+                          <td className="border-l border-white/10 px-2 py-1.5 text-right text-[11px] font-bold text-white">{currency(totals.paidRent ?? summary.totalRentReceived ?? 0)}</td>
                           {hasInvoiceVatColumn && (
-                            <td className="px-3 py-3 text-right text-xs font-semibold text-white/80">{currency(totals.paidTax ?? totalInvoiceVatReceived ?? 0)}</td>
+                            <td className="px-2 py-1.5 text-right text-[11px] font-semibold text-white/80">{currency(totals.paidTax ?? totalInvoiceVatReceived ?? 0)}</td>
                           )}
                           {statementColumns.map((column) => (
-                            <td key={`foot-paid-${column.key}`} className="px-3 py-3 text-right text-xs font-bold text-white">{currency(Number(column?.paid || 0))}</td>
+                            <td key={`foot-paid-${column.key}`} className="px-2 py-1.5 text-right text-[11px] font-bold text-white">{currency(Number(column?.paid || 0))}</td>
                           ))}
-                          <td className="border-l border-white/10 px-3 py-3 text-right text-xs font-bold text-white">{currency(totals.totalPaid ?? 0)}</td>
-                          <td className="px-3 py-3 text-right text-xs font-bold text-white">{currency(totals.closingBalance ?? summary.closingBalance ?? 0)}</td>
+                          <td className="border-l border-white/10 px-2 py-1.5 text-right text-[11px] font-bold text-white">{currency(totals.totalPaid ?? 0)}</td>
+                          <td className="px-2 py-1.5 text-right text-[11px] font-bold text-white">{currency(totals.closingBalance ?? summary.closingBalance ?? 0)}</td>
                         </tr>
                       )}
                     </tbody>
@@ -2332,7 +2332,7 @@ const Statements = () => {
 
                   {/* Detail sections */}
                   {hasWorkspaceDetailSections && (
-                    <div className="space-y-5 border-t border-slate-200 bg-slate-50 px-5 py-5">
+                    <div className="space-y-3 border-t border-slate-200 bg-slate-50 px-4 py-3">
                       {depositSettlementRows.length > 0 && (
                         <div>
                           <h4 className="mb-3 border-l-2 border-[#0B3B2E] pl-2.5 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">
@@ -2354,7 +2354,7 @@ const Statements = () => {
                           </div>
                           <div className="space-y-1.5">
                             {depositSettlementAdditionRows.map((item, index) => (
-                              <div key={item._id || item.id || `deposit-settlement-add-${index}`} className="flex items-center justify-between rounded-lg border border-emerald-100 bg-emerald-50/70 px-4 py-2.5">
+                              <div key={item._id || item.id || `deposit-settlement-add-${index}`} className="flex items-center justify-between rounded-lg border border-emerald-100 bg-emerald-50/70 px-3 py-1.5">
                                 <div>
                                   <p className="text-xs text-slate-700">{item.description || "Deposit remittance"}</p>
                                   <p className="mt-0.5 text-[10px] text-slate-400">{item.holder === "landlord" ? "Landlord-held deposit" : "Deposit settlement"}</p>
@@ -2363,7 +2363,7 @@ const Statements = () => {
                               </div>
                             ))}
                             {depositSettlementOffsetRows.map((item, index) => (
-                              <div key={item._id || item.id || `deposit-settlement-offset-${index}`} className="flex items-center justify-between rounded-lg border border-amber-100 bg-amber-50/70 px-4 py-2.5">
+                              <div key={item._id || item.id || `deposit-settlement-offset-${index}`} className="flex items-center justify-between rounded-lg border border-amber-100 bg-amber-50/70 px-3 py-1.5">
                                 <div>
                                   <p className="text-xs text-slate-700">{item.description || "Deposit offset"}</p>
                                   <p className="mt-0.5 text-[10px] text-slate-400">Shown as both addition and deduction for direct landlord deposit receipts</p>
@@ -2398,7 +2398,7 @@ const Statements = () => {
                           </div>
                           <div className="space-y-1.5">
                             {broughtForwardCreditApplicationRows.map((item, index) => (
-                              <div key={item._id || item.id || `bf-credit-${index}`} className="flex items-start justify-between gap-3 rounded-lg border border-sky-100 bg-sky-50/60 px-4 py-2.5">
+                              <div key={item._id || item.id || `bf-credit-${index}`} className="flex items-start justify-between gap-3 rounded-lg border border-sky-100 bg-sky-50/60 px-3 py-1.5">
                                 <div>
                                   <p className="text-xs text-slate-700">{item.description || "Brought forward credit applied"}</p>
                                   <p className="mt-0.5 text-[10px] text-slate-400">
@@ -2427,26 +2427,26 @@ const Statements = () => {
                               <thead className="bg-slate-50">
                                 <tr>
                                   {["Holder", "Opening", "Billed / Adj.", "Received", "Closing"].map((h, i) => (
-                                    <th key={h} className={`px-4 py-2.5 ${i === 0 ? "text-left" : "text-right"} font-semibold text-slate-600`}>{h}</th>
+                                    <th key={h} className={`px-3 py-1.5 ${i === 0 ? "text-left" : "text-right"} font-semibold text-slate-600`}>{h}</th>
                                   ))}
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-100 bg-white">
                                 {depositMemoRows.map((item, index) => (
                                   <tr key={item._id || item.id || item.key || `deposit-memo-${index}`} className="hover:bg-slate-50/60 transition-colors">
-                                    <td className="px-4 py-2.5 text-slate-700">{item.label || item.key || "Deposit memo"}</td>
-                                    <td className="px-4 py-2.5 text-right text-slate-600">{depositMemoCurrency(item.openingBalance)}</td>
-                                    <td className="px-4 py-2.5 text-right text-slate-600">{depositMemoCurrency(item.billed)}</td>
-                                    <td className="px-4 py-2.5 text-right text-slate-600">{depositMemoCurrency(item.received)}</td>
-                                    <td className="px-4 py-2.5 text-right font-semibold text-slate-900">{depositMemoCurrency(item.closingBalance)}</td>
+                                    <td className="px-3 py-1.5 text-slate-700">{item.label || item.key || "Deposit memo"}</td>
+                                    <td className="px-3 py-1.5 text-right text-slate-600">{depositMemoCurrency(item.openingBalance)}</td>
+                                    <td className="px-3 py-1.5 text-right text-slate-600">{depositMemoCurrency(item.billed)}</td>
+                                    <td className="px-3 py-1.5 text-right text-slate-600">{depositMemoCurrency(item.received)}</td>
+                                    <td className="px-3 py-1.5 text-right font-semibold text-slate-900">{depositMemoCurrency(item.closingBalance)}</td>
                                   </tr>
                                 ))}
                                 <tr className="bg-slate-50 font-semibold">
-                                  <td className="px-4 py-2.5 text-slate-700">Total</td>
-                                  <td className="px-4 py-2.5 text-right text-slate-900">{depositMemoCurrency(depositMemoTotals.openingBalance)}</td>
-                                  <td className="px-4 py-2.5 text-right text-slate-900">{depositMemoCurrency(depositMemoTotals.billed)}</td>
-                                  <td className="px-4 py-2.5 text-right text-slate-900">{depositMemoCurrency(depositMemoTotals.received)}</td>
-                                  <td className="px-4 py-2.5 text-right text-slate-900">{depositMemoCurrency(depositMemoTotals.closingBalance)}</td>
+                                  <td className="px-3 py-1.5 text-slate-700">Total</td>
+                                  <td className="px-3 py-1.5 text-right text-slate-900">{depositMemoCurrency(depositMemoTotals.openingBalance)}</td>
+                                  <td className="px-3 py-1.5 text-right text-slate-900">{depositMemoCurrency(depositMemoTotals.billed)}</td>
+                                  <td className="px-3 py-1.5 text-right text-slate-900">{depositMemoCurrency(depositMemoTotals.received)}</td>
+                                  <td className="px-3 py-1.5 text-right text-slate-900">{depositMemoCurrency(depositMemoTotals.closingBalance)}</td>
                                 </tr>
                               </tbody>
                             </table>
@@ -2461,7 +2461,7 @@ const Statements = () => {
                           </h4>
                           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
                             {nonDepositExpenseRows.map((item, index) => (
-                              <div key={item._id || item.id || `expense-${index}`} className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5 last:border-0 odd:bg-white even:bg-slate-50/60">
+                              <div key={item._id || item.id || `expense-${index}`} className="flex items-center justify-between border-b border-slate-100 px-3 py-1.5 last:border-0 odd:bg-white even:bg-slate-50/60">
                                 <span className="text-xs text-slate-700">{item.description || item.name || "Expense"}</span>
                                 <span className="text-xs font-semibold text-slate-900">{currency(item.amount)}</span>
                               </div>
@@ -2477,7 +2477,7 @@ const Statements = () => {
                           </h4>
                           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
                             {nonDepositAdditionRows.map((item, index) => (
-                              <div key={item._id || item.id || `addition-${index}`} className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5 last:border-0 odd:bg-white even:bg-slate-50/60">
+                              <div key={item._id || item.id || `addition-${index}`} className="flex items-center justify-between border-b border-slate-100 px-3 py-1.5 last:border-0 odd:bg-white even:bg-slate-50/60">
                                 <span className="text-xs text-slate-700">{item.description || item.name || "Addition"}</span>
                                 <span className="text-xs font-semibold text-emerald-700">{currency(item.amount)}</span>
                               </div>
@@ -2494,7 +2494,7 @@ const Statements = () => {
                           <p className="mb-2 text-[11px] text-slate-500">Advances already paid against future remittances. Deducted from settlement.</p>
                           <div className="overflow-hidden rounded-xl border border-amber-200 bg-white">
                             {earlyPayoutRows.map((item, index) => (
-                              <div key={item._id || item.id || `early-payout-${index}`} className="flex items-center justify-between border-b border-amber-100 px-4 py-2.5 last:border-0 odd:bg-white even:bg-amber-50/40">
+                              <div key={item._id || item.id || `early-payout-${index}`} className="flex items-center justify-between border-b border-amber-100 px-3 py-1.5 last:border-0 odd:bg-white even:bg-amber-50/40">
                                 <div>
                                   <span className="text-xs text-slate-700">{item.description || "Early payout"}</span>
                                   {item.date && <span className="ml-2 text-[10px] text-slate-400">{new Date(item.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</span>}
@@ -2502,7 +2502,7 @@ const Statements = () => {
                                 <span className="text-xs font-semibold text-amber-700">({currency(item.amount)})</span>
                               </div>
                             ))}
-                            <div className="flex items-center justify-between border-t border-amber-200 bg-amber-50 px-4 py-2.5">
+                            <div className="flex items-center justify-between border-t border-amber-200 bg-amber-50 px-3 py-1.5">
                               <span className="text-xs font-bold text-amber-800">Total early payouts</span>
                               <span className="text-xs font-bold text-amber-800">({currency(Number(summary?.totalEarlyPayouts || 0))})</span>
                             </div>
@@ -2518,7 +2518,7 @@ const Statements = () => {
                           <p className="mb-2 text-[11px] text-slate-500">Landlord advances being recovered through this statement period.</p>
                           <div className="overflow-hidden rounded-xl border border-red-200 bg-white">
                             {advanceRecoveryRows.map((item, index) => (
-                              <div key={item._id || item.id || `advance-recovery-${index}`} className="flex items-center justify-between border-b border-red-100 px-4 py-2.5 last:border-0 odd:bg-white even:bg-red-50/40">
+                              <div key={item._id || item.id || `advance-recovery-${index}`} className="flex items-center justify-between border-b border-red-100 px-3 py-1.5 last:border-0 odd:bg-white even:bg-red-50/40">
                                 <div>
                                   <span className="text-xs text-slate-700">{item.description || "Advance recovery"}</span>
                                   {item.date && <span className="ml-2 text-[10px] text-slate-400">{new Date(item.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</span>}
@@ -2526,7 +2526,7 @@ const Statements = () => {
                                 <span className="text-xs font-semibold text-red-600">({currency(item.amount)})</span>
                               </div>
                             ))}
-                            <div className="flex items-center justify-between border-t border-red-200 bg-red-50 px-4 py-2.5">
+                            <div className="flex items-center justify-between border-t border-red-200 bg-red-50 px-3 py-1.5">
                               <span className="text-xs font-bold text-red-800">Total advance recoveries</span>
                               <span className="text-xs font-bold text-red-800">({currency(Number(summary?.totalAdvanceRecoveries || 0))})</span>
                             </div>
@@ -2611,7 +2611,7 @@ const Statements = () => {
                 <div className="flex-shrink-0 border-t border-slate-200 bg-white shadow-[0_-2px_6px_rgba(0,0,0,0.05)]">
                   <div className="grid grid-cols-2 divide-x divide-slate-100 md:grid-cols-5">
                     {/* Total Invoiced */}
-                    <div className="px-4 py-3">
+                    <div className="px-3 py-2">
                       <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Total Invoiced</p>
                       <p className="mt-1 text-sm font-bold text-slate-700">{currency(collectionStats?.totalInvoiced ?? totals.invoicedRent)}</p>
                       {collectionStats?.rate !== null && collectionStats?.rate !== undefined && (
@@ -2625,7 +2625,7 @@ const Statements = () => {
                       )}
                     </div>
                     {/* Rent Collected */}
-                    <div className="px-4 py-3">
+                    <div className="px-3 py-2">
                       <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Rent Collected</p>
                       <p className={`mt-1 text-sm font-bold ${Number(totals.rentPaid || 0) > 0 ? "text-emerald-700" : "text-slate-400"}`}>
                         {Number(totals.rentPaid || 0) > 0 ? currency(totals.rentPaid) : "—"}
@@ -2635,21 +2635,21 @@ const Statements = () => {
                       )}
                     </div>
                     {/* Utilities Paid */}
-                    <div className="px-4 py-3">
+                    <div className="px-3 py-2">
                       <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Utilities Paid</p>
                       <p className={`mt-1 text-sm font-bold ${Number(totals.utilityPaid || 0) > 0 ? "text-emerald-700" : "text-slate-400"}`}>
                         {Number(totals.utilityPaid || 0) > 0 ? currency(totals.utilityPaid) : "—"}
                       </p>
                     </div>
                     {/* Expenses */}
-                    <div className="px-4 py-3">
+                    <div className="px-3 py-2">
                       <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Expenses</p>
                       <p className={`mt-1 text-sm font-bold ${Number(totals.expenses || 0) > 0 ? "text-amber-700" : "text-slate-400"}`}>
                         {Number(totals.expenses || 0) > 0 ? currency(totals.expenses) : "—"}
                       </p>
                     </div>
                     {/* Net to Landlord */}
-                    <div className={`px-4 py-3 ${settlement.isNegative ? "bg-red-50" : "bg-[#0B3B2E]"}`}>
+                    <div className={`px-3 py-2 ${settlement.isNegative ? "bg-red-50" : "bg-[#0B3B2E]"}`}>
                       <p className={`text-[9px] font-bold uppercase tracking-widest ${settlement.isNegative ? "text-red-500" : "text-green-200/60"}`}>
                         Net to Landlord
                       </p>
@@ -2662,7 +2662,7 @@ const Statements = () => {
                     </div>
                   </div>
                   {directToLandlordAmount > 0 && (
-                    <div className="border-t border-[#0B3B2E]/20 bg-[#EDF5F1] px-4 py-2.5">
+                    <div className="border-t border-[#0B3B2E]/20 bg-[#EDF5F1] px-3 py-1.5">
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div className="flex items-center gap-4 text-xs">
                           <span className="text-slate-600">
