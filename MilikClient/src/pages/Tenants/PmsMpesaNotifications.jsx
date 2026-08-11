@@ -35,6 +35,13 @@ const STATUS_MAP = {
   matched_tenant: "border-amber-300 bg-amber-50 text-amber-700",
 };
 
+const STATUS_META = {
+  captured:  { label: "Captured",  chip: { accent: "border-l-emerald-400", border: "border-emerald-200", bg: "bg-emerald-50",  text: "text-emerald-700" } },
+  unmatched: { label: "Unmatched", chip: { accent: "border-l-amber-400",   border: "border-amber-200",   bg: "bg-amber-50",    text: "text-amber-700"   } },
+  duplicate: { label: "Duplicate", chip: { accent: "border-l-slate-400",   border: "border-slate-200",   bg: "bg-slate-100",   text: "text-slate-600"   } },
+  ignored:   { label: "Ignored",   chip: { accent: "border-l-red-400",     border: "border-red-200",     bg: "bg-red-50",      text: "text-red-600"     } },
+};
+
 // ─── Countdown refresh button — isolated so per-second ticks don't re-render the page ──
 const CountdownButton = React.memo(function CountdownButton({ onRefresh, loading }) {
   const [countdown, setCountdown] = useState(AUTO_RELOAD);
