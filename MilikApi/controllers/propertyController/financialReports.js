@@ -570,6 +570,34 @@ const emptyAllocationTotals = () => ({
   otherApplied: 0,
 });
 
+// Extracts a clean utility name from a UTILITY_CHARGE invoice's metadata or description
+const extractUtilityInvoiceName = (invoice) => {
+  const fromMeta = String(
+    invoice?.metadata?.utilityType ||
+    invoice?.metadata?.meterUtilityType ||
+    invoice?.metadata?.statementUtilityType ||
+    invoice?.metadata?.utilityName ||
+    ""
+  ).trim();
+  if (fromMeta) return fromMeta;
+  const desc = String(invoice?.description || "").split(/[·\-–:,]/)[0].trim();
+  const match = desc.match(/^([A-Za-z][A-Za-z\s]+?)(?:\s+charge|\s+bill|\s+invoice|\s+for|\s+\d|$)/i);
+  return ((match?.[1] || desc).trim().replace(/\s+/g, " ") || "Other").slice(0, 40);
+};
+
+// Builds a per-utility-type applied amount map from a receipt's allocations array
+const buildReceiptUtilityBreakdown = (receipt) => {
+  const breakdown = {};
+  normalizeArray(receipt?.allocations).forEach((row) => {
+    if (String(row?.category || "").toUpperCase() !== "UTILITY_CHARGE") return;
+    const amount = round2(Number(row?.appliedAmount || 0));
+    if (amount <= 0) return;
+    const uType = String(row?.utilityType || row?.metadata?.utilityType || "").trim() || "Other";
+    breakdown[uType] = round2((breakdown[uType] || 0) + amount);
+  });
+  return breakdown;
+};
+
 const buildReceiptAllocationTotals = (receipt = {}) => {
   const totals = emptyAllocationTotals();
   const allocationRows = normalizeArray(receipt?.allocations);
@@ -620,6 +648,7 @@ const buildReceiptRow = (receipt = {}) => {
     landlordName: landlord?.name || "N/A",
     referenceNumber: receipt?.referenceNumber || "",
     description: receipt?.description || "",
+    utilityBreakdown: buildReceiptUtilityBreakdown(receipt),
   };
 };
 
@@ -795,6 +824,7 @@ export const getRentalCollectionReport = async (req, res, next) => {
         unappliedAmount: 0,
         rentApplied: 0,
         utilityApplied: 0,
+        utilityBreakdown: {},
         penaltyApplied: 0,
         tenantIds: new Set(),
         unitIds: new Set(),
@@ -806,6 +836,9 @@ export const getRentalCollectionReport = async (req, res, next) => {
       bucket.unappliedAmount += row.unappliedAmount;
       bucket.rentApplied += row.rentApplied;
       bucket.utilityApplied += row.utilityApplied;
+      Object.entries(row.utilityBreakdown || {}).forEach(([ut, amt]) => {
+        bucket.utilityBreakdown[ut] = round2((bucket.utilityBreakdown[ut] || 0) + amt);
+      });
       bucket.penaltyApplied += row.penaltyApplied;
       if (row.tenantId) bucket.tenantIds.add(String(row.tenantId));
       if (row.unitId) bucket.unitIds.add(String(row.unitId));
@@ -846,6 +879,7 @@ export const getRentalCollectionReport = async (req, res, next) => {
         unappliedAmount: round2(bucket.unappliedAmount),
         rentApplied: round2(bucket.rentApplied),
         utilityApplied: round2(bucket.utilityApplied),
+        utilityBreakdown: Object.fromEntries(Object.entries(bucket.utilityBreakdown).map(([k, v]) => [k, round2(v)])),
         penaltyApplied: round2(bucket.penaltyApplied),
       }))
       .sort((a, b) => a.propertyName.localeCompare(b.propertyName));
@@ -864,6 +898,7 @@ export const getRentalCollectionReport = async (req, res, next) => {
       },
       summary,
       byProperty,
+      allUtilityTypes: [...new Set(filteredRows.flatMap((r) => Object.keys(r.utilityBreakdown || {})))].sort(),
       rows: filteredRows,
     });
   } catch (error) {
@@ -896,32 +931,35 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
     const unitMap = new Map(allUnits.map((u) => [String(u._id), u]));
     const propMap = new Map(allProperties.map((p) => [String(p._id), p]));
 
-    // ── Step 2: build base rows and apply cheap filters before snapshot cost ──
-    const baseRows = allTenants
-      .map((tenant) => {
-        const primaryUnit = unitMap.get(String(tenant.unit || "")) || {};
-        const additionalUnitIds = Array.isArray(tenant.additionalUnits) ? tenant.additionalUnits.map(String).filter(Boolean) : [];
-        const additionalUnits = additionalUnitIds.map((id) => unitMap.get(id)).filter(Boolean);
-        const allUnitNumbers = [primaryUnit, ...additionalUnits]
-          .filter((u) => u._id)
-          .map((u) => u.unitNumber || u.name || "")
-          .filter(Boolean);
-        const property = propMap.get(String(primaryUnit.property || "")) || {};
-        const landlord = pickPrimaryLandlord(property);
-        return {
+    // ── Step 2: build base rows — one row per tenant-unit pair ──
+    const baseRows = [];
+    for (const tenant of allTenants) {
+      const primaryUnit = unitMap.get(String(tenant.unit || "")) || {};
+      const additionalUnitIds = Array.isArray(tenant.additionalUnits) ? tenant.additionalUnits.map(String).filter(Boolean) : [];
+      const additionalUnits = additionalUnitIds.map((id) => unitMap.get(id)).filter(Boolean);
+      const allTenantUnits = [primaryUnit, ...additionalUnits].filter((u) => u._id);
+      const property = propMap.get(String(primaryUnit.property || "")) || {};
+      const landlord = pickPrimaryLandlord(property);
+      const unitsToExpand = allTenantUnits.length > 0 ? allTenantUnits : [primaryUnit];
+      for (let ui = 0; ui < unitsToExpand.length; ui++) {
+        const unit = unitsToExpand[ui];
+        const row = {
           tenantId: String(tenant._id),
           tenantName: tenant.tenantName || tenant.name || "Unknown Tenant",
-          unitId: String(primaryUnit._id || tenant.unit || ""),
-          unitNumber: allUnitNumbers.length > 0 ? allUnitNumbers.join(", ") : "N/A",
+          unitId: String(unit._id || tenant.unit || ""),
+          unitNumber: unit.unitNumber || unit.name || "N/A",
+          isPrimary: ui === 0,
           propertyId: String(property._id || primaryUnit.property || ""),
           propertyName: property.propertyName || property.name || "N/A",
           landlordId: String(landlord?.landlordId || ""),
           landlordName: landlord?.name || "N/A",
         };
-      })
-      .filter((row) => !filterPropertyId || row.propertyId === filterPropertyId)
-      .filter((row) => !filterLandlordId || row.landlordId === filterLandlordId)
-      .filter((row) => !filterSearch || `${row.tenantName} ${row.propertyName} ${row.unitNumber}`.toLowerCase().includes(filterSearch));
+        if (filterPropertyId && row.propertyId !== filterPropertyId) continue;
+        if (filterLandlordId && row.landlordId !== filterLandlordId) continue;
+        if (filterSearch && !`${row.tenantName} ${row.propertyName} ${row.unitNumber}`.toLowerCase().includes(filterSearch)) continue;
+        baseRows.push(row);
+      }
+    }
 
     // ── Step 3: snapshot computation in chunks of 500 ──
     const REPORT_CHUNK = 500;
@@ -940,14 +978,23 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
 
       for (const row of chunkRows) {
         const snapshot = snapshotMap.get(row.tenantId) || { invoiceSnapshots: [], receiptAllocations: [] };
-        const invoices = normalizeArray(snapshot.invoiceSnapshots);
-        const receipts = normalizeArray(snapshot.receiptAllocations);
+        const allInvoices = normalizeArray(snapshot.invoiceSnapshots);
+        // Filter invoices to this specific unit; invoices without a unit fall back to primary row
+        const invoices = row.unitId
+          ? allInvoices.filter((inv) => {
+              const invUnit = String(inv.unit || "");
+              return invUnit === row.unitId || (!invUnit && row.isPrimary);
+            })
+          : allInvoices;
+        // Unapplied credit is a tenant-level concept; only include on primary unit row to avoid double-counting
+        const receipts = row.isPrimary ? normalizeArray(snapshot.receiptAllocations) : [];
 
         let totalInvoiced = 0;
         let totalPaidApplied = 0;
         let outstanding = 0;
         let rentBalance = 0;
         let utilityBalance = 0;
+        const utilityBreakdown = {};
         let penaltyBalance = 0;
         let depositBalance = 0;
         let otherBalance = 0;
@@ -962,8 +1009,11 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
           totalPaidApplied += applied;
           outstanding += remaining;
           if (category === "RENT_CHARGE") rentBalance += remaining;
-          else if (category === "UTILITY_CHARGE") utilityBalance += remaining;
-          else if (category === "LATE_PENALTY_CHARGE") penaltyBalance += remaining;
+          else if (category === "UTILITY_CHARGE") {
+            utilityBalance += remaining;
+            const uName = extractUtilityInvoiceName(invoice);
+            utilityBreakdown[uName] = round2((utilityBreakdown[uName] || 0) + remaining);
+          } else if (category === "LATE_PENALTY_CHARGE") penaltyBalance += remaining;
           else if (category === "DEPOSIT_CHARGE") depositBalance += remaining;
           else otherBalance += remaining;
           if (remaining > 0) {
@@ -999,6 +1049,7 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
           netBalance,
           rentBalance: round2(rentBalance),
           utilityBalance: round2(utilityBalance),
+          utilityBreakdown,
           penaltyBalance: round2(penaltyBalance),
           depositBalance: round2(depositBalance),
           otherBalance: round2(otherBalance),
@@ -1018,15 +1069,18 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
 
     const rows = allRows;
 
+    const seenTenantIds = new Set();
     const summary = rows.reduce((acc, row) => {
       acc.totalInvoiced += row.totalInvoiced;
       acc.totalPaidApplied += row.totalPaidApplied;
       acc.totalOutstanding += row.outstanding;
-      acc.totalUnappliedCredit += row.unappliedCredit;
+      // Only add unapplied credit from primary unit rows to avoid double-counting
+      if (row.isPrimary !== false) acc.totalUnappliedCredit += row.unappliedCredit;
       acc.netBalance += row.netBalance;
       if (row.status === "owing") acc.owingCount += 1;
       if (row.status === "credit") acc.creditCount += 1;
       if (row.status === "settled") acc.settledCount += 1;
+      seenTenantIds.add(row.tenantId);
       return acc;
     }, {
       totalInvoiced: 0,
@@ -1037,8 +1091,9 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
       owingCount: 0,
       creditCount: 0,
       settledCount: 0,
-      tenantCount: rows.length,
+      tenantCount: 0,
     });
+    summary.tenantCount = seenTenantIds.size;
 
     Object.keys(summary).forEach((key) => {
       if (typeof summary[key] === "number" && !key.endsWith("Count") && key !== "tenantCount") summary[key] = round2(summary[key]);
@@ -1055,6 +1110,7 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
         search: req.query.search || "",
       },
       summary,
+      allUtilityTypes: [...new Set(rows.flatMap((r) => Object.keys(r.utilityBreakdown || {})))].sort(),
       rows,
     });
   } catch (error) {

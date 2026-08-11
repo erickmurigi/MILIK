@@ -1563,7 +1563,7 @@ const TopToolbar = ({
                 if (subItem.id === "rental-collection") return { ...subItem, label: "Rent Collection Report" };
                 if (subItem.id === "property-income-summary") return { ...subItem, label: "Income & Expense Summary" };
                 if (subItem.id === "mri-tax-summary") return { ...subItem, label: "Rental Income Tax (MRI)" };
-                if (subItem.id === "paid-balance") return { ...subItem, label: "Collections & Balances" };
+                if (subItem.id === "paid-balance") return { ...subItem, label: "Paid & Balance" };
                 if (subItem.id === "aged-analysis") return { ...subItem, label: "Arrears Analysis" };
                 return subItem;
               }),
